@@ -13,9 +13,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
+import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 
 interface PublicRepairReadyNotificationsProps {
   userId: string
@@ -94,8 +93,6 @@ export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNoti
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
   const repairsHref = `${tenantPrefix}/mis-reparaciones`
-  const supabase = useMemo(() => createClient(), [])
-  const [customerId, setCustomerId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState<RepairStatusNotification[]>([])
   const [seenIds, setSeenIds] = useState<string[]>([])
@@ -210,92 +207,30 @@ export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNoti
     applySeenIds(next)
   }, [applySeenIds])
 
-  const fetchRepairNotifications = useCallback(async (targetCustomerId: string) => {
-    const { data, error } = await supabase
-      .from('repairs')
-      .select('id, ticket_number, device_brand, device_model, updated_at, created_at, status')
-      .eq('customer_id', targetCustomerId)
-      .in('status', NOTIFICATION_STATUSES)
-      .order('updated_at', { ascending: false })
-      .limit(20)
-
-    if (error) {
-      throw error
-    }
-
-    const mapped = (data || []).map((repair: {
-      id: string | number
-      ticket_number?: string | null
-      device_brand?: string | null
-      device_model?: string | null
-      updated_at?: string | null
-      created_at?: string | null
-      status?: string | null
-    }) => {
-      const brand = String(repair?.device_brand || '').trim()
-      const model = String(repair?.device_model || '').trim()
-      const deviceLabel = [brand, model].filter(Boolean).join(' ') || 'Equipo'
-      const rawStatus = String(repair?.status || '').trim().toLowerCase()
-      if (!NOTIFICATION_STATUS_SET.has(rawStatus)) {
-        return null
-      }
-      const status = rawStatus as NotificationRepairStatus
-      const eventKey = `${String(repair.id)}:${status}`
-
-      return {
-        id: String(repair.id),
-        ticketNumber: repair.ticket_number ? String(repair.ticket_number) : null,
-        deviceLabel,
-        updatedAt: String(repair.updated_at || repair.created_at || new Date().toISOString()),
-        status,
-        eventKey,
-      } as RepairStatusNotification
-    }).filter((item): item is RepairStatusNotification => Boolean(item))
-
-    mapped.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    setNotifications(mapped.slice(0, MAX_NOTIFICATIONS))
-  }, [supabase])
-
-  useEffect(() => {
-    if (!userId) {
-      setCustomerId(null)
+  const fetchRepairNotifications = useCallback(async () => {
+    if (!tenantSlug) {
       setNotifications([])
-      setLoading(false)
       return
     }
 
-    let cancelled = false
+    const response = await fetch(
+      withOrgQuery('/api/public/repair-notifications', tenantSlug),
+      { cache: 'no-store' }
+    )
+    const payload = await response.json().catch(() => null)
 
-    const loadCustomer = async () => {
-      setLoading(true)
-      const { data, error } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('profile_id', userId)
-        .maybeSingle()
-
-      if (cancelled) return
-
-      if (error) {
-        setCustomerId(null)
-        setNotifications([])
-        setLoading(false)
-        return
-      }
-
-      setCustomerId(data?.id ? String(data.id) : null)
-      if (!data?.id) {
-        setNotifications([])
-        setLoading(false)
-      }
+    if (!response.ok || payload?.success !== true || !Array.isArray(payload?.data?.notifications)) {
+      throw new Error(payload?.error || 'No se pudieron cargar las notificaciones')
     }
 
-    loadCustomer()
+    const mapped = payload.data.notifications.filter((notification: unknown): notification is RepairStatusNotification => {
+      if (!notification || typeof notification !== 'object') return false
+      const status = (notification as { status?: unknown }).status
+      return typeof status === 'string' && NOTIFICATION_STATUS_SET.has(status)
+    })
 
-    return () => {
-      cancelled = true
-    }
-  }, [supabase, userId])
+    setNotifications(mapped.slice(0, MAX_NOTIFICATIONS))
+  }, [tenantSlug])
 
   useEffect(() => {
     try {
@@ -340,13 +275,17 @@ export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNoti
   }, [applySeenIds, notifications, storageReady])
 
   useEffect(() => {
-    if (!customerId) return
+    if (!tenantSlug) {
+      setNotifications([])
+      setLoading(false)
+      return
+    }
 
     let cancelled = false
 
     const load = async () => {
       try {
-        await fetchRepairNotifications(customerId)
+        await fetchRepairNotifications()
       } catch (error) {
         if (!cancelled) {
           console.error('Failed to load repair notifications:', error)
@@ -364,35 +303,11 @@ export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNoti
       void load()
     }, POLL_INTERVAL_MS)
 
-    const channel = supabase
-      .channel(`public-repair-status-notifications-${customerId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'repairs',
-          filter: `customer_id=eq.${customerId}`,
-        },
-        (payload) => {
-          const nextStatus = (payload.new as { status?: string } | null)?.status
-          const prevStatus = (payload.old as { status?: string } | null)?.status
-          if (
-            (typeof nextStatus === 'string' && NOTIFICATION_STATUS_SET.has(nextStatus.toLowerCase())) ||
-            (typeof prevStatus === 'string' && NOTIFICATION_STATUS_SET.has(prevStatus.toLowerCase()))
-          ) {
-            void load()
-          }
-        }
-      )
-      .subscribe()
-
     return () => {
       cancelled = true
       window.clearInterval(interval)
-      supabase.removeChannel(channel)
     }
-  }, [customerId, fetchRepairNotifications, supabase])
+  }, [fetchRepairNotifications, tenantSlug])
 
   useEffect(() => {
     if (!storageReady || loading) return

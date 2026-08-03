@@ -7,11 +7,9 @@ import { Check, CreditCard, Eye, MapPin, MessageCircle, Package, ShoppingCart, T
 import { PublicProduct } from '@/types/public'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
-import { useAuth } from '@/contexts/auth-context'
 import { usePathname } from 'next/navigation'
 import { formatPrice, cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
-import { WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/roles-permissions'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -46,7 +44,6 @@ export function ProductCard(props: ProductCardProps) {
     !branchName && productBranches && productBranches.length > 0
       ? productBranches.map((branch) => branch.name).join(', ')
       : undefined
-  const { hasPermission } = useAuth()
   const { addProduct } = usePublicCart()
   const { settings: websiteSettings, isLoading: isLoadingWebsiteSettings } = useWebsiteSettings()
   const pathname = usePathname()
@@ -54,8 +51,9 @@ export function ProductCard(props: ProductCardProps) {
   const [quickViewOpen, setQuickViewOpen] = useState(false)
   const [justAdded, setJustAdded] = useState(false)
 
-  const hasWholesalePermission = hasPermission(WHOLESALE_PRICE_PERMISSION)
-  const isWholesale = props.isWholesale ?? hasWholesalePermission
+  // The server only includes wholesale_price after validating access for the
+  // current organization. Never infer storefront pricing from dashboard roles.
+  const isWholesale = props.isWholesale ?? product.wholesale_price != null
 
   // ── Price logic ──────────────────────────────────────────────────────────
   const hasOffer =

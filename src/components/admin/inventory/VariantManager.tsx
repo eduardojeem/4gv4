@@ -79,10 +79,33 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
     [attributes, currentProduct]
   )
 
+  const [createAttrError, setCreateAttrError] = useState<string | null>(null)
+
   // Crear nuevo atributo
   const handleCreateAttribute = async () => {
+    const trimmedName = newAttribute.name.trim()
+    if (!trimmedName) {
+      setCreateAttrError('El nombre del atributo no puede estar vacío.')
+      return
+    }
+
+    // Validación preventiva en cliente
+    const isDuplicate = attributes.some(
+      (attr) => attr.name.toLowerCase().trim() === trimmedName.toLowerCase()
+    )
+    if (isDuplicate) {
+      const msg = `Ya existe un atributo con el nombre "${trimmedName}". Elige un nombre diferente (ej: ${trimmedName} 2, ${trimmedName} Específico).`
+      setCreateAttrError(msg)
+      toast.error('Nombre duplicado', { description: msg })
+      return
+    }
+
+    setCreateAttrError(null)
     try {
-      await createAttribute(newAttribute)
+      await createAttribute({
+        ...newAttribute,
+        name: trimmedName,
+      })
       setNewAttribute({
         name: '',
         type: 'text',
@@ -91,7 +114,11 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
       })
       setShowCreateAttribute(false)
     } catch (error) {
-      console.error('Error creating attribute:', error)
+      const rawMsg = error instanceof Error ? error.message : 'Error al crear atributo'
+      const formattedMsg = rawMsg.includes('Ya existe un atributo')
+        ? `Ya existe un atributo con el nombre "${trimmedName}". Elige un nombre diferente.`
+        : rawMsg
+      setCreateAttrError(formattedMsg)
     }
   }
 
@@ -353,7 +380,10 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
         <TabsContent value="attributes" className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">Gestión de Atributos</h3>
-            <Dialog open={showCreateAttribute} onOpenChange={setShowCreateAttribute}>
+            <Dialog open={showCreateAttribute} onOpenChange={(open) => {
+              setShowCreateAttribute(open)
+              if (!open) setCreateAttrError(null)
+            }}>
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
@@ -365,11 +395,19 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
                   <DialogTitle>Crear Nuevo Atributo</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
+                  {createAttrError && (
+                    <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+                      {createAttrError}
+                    </div>
+                  )}
                   <div>
                     <Label>Nombre del Atributo</Label>
                     <Input
                       value={newAttribute.name}
-                      onChange={(e) => setNewAttribute(prev => ({ ...prev, name: e.target.value }))}
+                      onChange={(e) => {
+                        setCreateAttrError(null)
+                        setNewAttribute(prev => ({ ...prev, name: e.target.value }))
+                      }}
                       placeholder="ej: Color, Talla, Material"
                     />
                   </div>

@@ -3,221 +3,298 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
-    ArrowLeft,
-    Edit,
-    History,
-    MoreVertical,
-    MessageCircle,
-    Phone,
-    Mail,
-    MapPin,
-    Star,
-    Shield,
-    Download
+  ArrowLeft,
+  Edit,
+  History,
+  MessageSquare,
+  Phone,
+  Mail,
+  MapPin,
+  Star,
+  Shield,
+  Download,
+  Copy,
+  Link2,
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react"
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { format } from 'date-fns'
+import { toast } from 'sonner'
 
 import { Customer } from "@/hooks/use-customer-state"
 import { formatCurrency } from "@/lib/currency"
 
 interface CustomerDetailHeaderProps {
-    customer: Customer
-    onBack: () => void
-    onEdit: () => void
-    onViewHistory: () => void
-    compact?: boolean
+  customer: Customer
+  onBack: () => void
+  onEdit: () => void
+  onViewHistory: () => void
+  compact?: boolean
 }
 
 export function CustomerDetailHeader({
-    customer,
-    onBack,
-    onEdit,
-    onViewHistory,
-    compact: _compact,
+  customer,
+  onBack,
+  onEdit,
+  onViewHistory,
+  compact: _compact,
 }: CustomerDetailHeaderProps) {
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'active': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-800'
-            case 'inactive': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300 border-gray-200 dark:border-gray-800'
-            case 'suspended': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 border-red-200 dark:border-red-800'
-            default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300 border-gray-200 dark:border-gray-800'
-        }
+  const getStatusBadge = (status?: string) => {
+    const normalized = String(status || 'active').toLowerCase().trim()
+    if (normalized === 'active' || normalized === 'activo') {
+      return (
+        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
+          Activo
+        </Badge>
+      )
     }
-
-    const getSegmentColor = (segment: string) => {
-        switch (segment) {
-            case 'vip': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-            case 'premium': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-            case 'regular': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-800'
-            case 'wholesale': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300 border-orange-200 dark:border-orange-800'
-            case 'business': return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
-            default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300 border-gray-200 dark:border-gray-800'
-        }
+    if (normalized === 'suspended' || normalized === 'suspendido') {
+      return (
+        <Badge className="bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30">
+          Suspendido
+        </Badge>
+      )
     }
-
-    const exportToPDF = () => {
-        const doc = new jsPDF()
-        const pageW = doc.internal.pageSize.getWidth()
-        
-        doc.setFontSize(20); doc.setFont('helvetica','bold'); doc.setTextColor(37, 99, 235)
-        doc.text('4G - PUNTO DE VENTA', pageW / 2, 22, { align: 'center' })
-        
-        doc.setFontSize(14); doc.setTextColor(0)
-        doc.text('Reporte de Cliente', pageW / 2, 32, { align: 'center' })
-        
-        doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(100)
-        doc.text(`Generado el ${new Date().toLocaleString('es-AR')}`, pageW / 2, 40, { align: 'center' })
-        
-        doc.setTextColor(0)
-        
-        autoTable(doc, { 
-            startY: 50, 
-            head:[['Campo','Valor']], 
-            body:[
-                ['Nombre', customer.name || '-'],
-                ['Email', customer.email || '-'],
-                ['Teléfono', customer.phone || '-'],
-                ['Dirección', customer.address || customer.city || '-'],
-                ['Estado', customer.status === 'active' ? 'Activo' : customer.status || 'Activo'],
-                ['Segmento', customer.segment === 'vip' ? 'VIP' : customer.segment === 'wholesale' ? 'Mayorista' : customer.segment === 'business' ? 'Empresa' : 'Regular'],
-                ['Total Gastado', formatCurrency(customer.lifetime_value || 0)],
-                ['Compras', `${customer.total_purchases || 0}`],
-                ['Crédito', formatCurrency(customer.credit_limit || 0)],
-            ], 
-            theme:'grid', 
-            headStyles:{fillColor:[37,99,235],textColor:255,fontStyle:'bold'},
-            columnStyles:{0:{fontStyle:'bold',cellWidth:60}}, 
-            margin:{left:14,right:14} 
-        })
-        
-        doc.save(`cliente_${customer.name?.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.pdf`)
-    }
-
     return (
-        <div className="space-y-6">
-            {/* Navigation Bar */}
-            <div className="flex items-center justify-between">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onBack}
-                    className="hover:bg-gray-100 dark:hover:bg-gray-800 -ml-2"
-                >
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Volver a Clientes
-                </Button>
-
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={onViewHistory}>
-                        <History className="h-4 w-4 mr-2" />
-                        Historial
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={exportToPDF} className="bg-white dark:bg-slate-900 text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:hover:bg-blue-900/30">
-                        <Download className="h-4 w-4 mr-2" />
-                        Exportar PDF
-                    </Button>
-                    <Button variant="default" size="sm" onClick={onEdit} className="bg-blue-600 hover:bg-blue-700">
-                        <Edit className="h-4 w-4 mr-2" />
-                        Editar
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVertical className="h-4 w-4" />
-                    </Button>
-                </div>
-            </div>
-
-            {/* Main Header Card */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
-                {/* Cover/Banner Area (Optional - currently just a gradient) */}
-                <div className="h-32 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-90 relative">
-                    <div className="absolute inset-0 bg-[url('/patterns/grid.svg')] opacity-20"></div>
-                </div>
-
-                <div className="px-6 pb-6">
-                    <div className="flex flex-col md:flex-row gap-6 items-start -mt-12 relative">
-                        {/* Avatar */}
-                        <div className="relative">
-                            <Avatar className="h-24 w-24 ring-4 ring-white dark:ring-slate-900 shadow-lg bg-white dark:bg-slate-900">
-                                <AvatarImage src={customer.avatar || undefined} alt={customer.name} />
-                                <AvatarFallback className="text-2xl font-bold bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700">
-                                    {customer.name?.split(' ').map(n => n[0]).join('').toUpperCase()}
-                                </AvatarFallback>
-                            </Avatar>
-                            <div className={`absolute bottom-1 right-1 h-5 w-5 rounded-full border-2 border-white dark:border-slate-900 ${customer.status === 'active' ? 'bg-green-500' : 'bg-gray-400'
-                                }`} />
-                        </div>
-
-                        {/* Customer Info */}
-                        <div className="flex-1 pt-14 md:pt-12 space-y-4">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div>
-                                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-                                        {customer.name}
-                                        {customer.segment === 'vip' && <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />}
-                                    </h1>
-                                    <div className="flex items-center gap-3 mt-2">
-                                        <Badge variant="outline" className={getStatusColor(customer.status)}>
-                                            {customer.status === 'active' ? 'Activo' : customer.status}
-                                        </Badge>
-                                        <Badge variant="outline" className={getSegmentColor(customer.segment)}>
-                                            {customer.segment === 'vip' ? 'VIP' :
-                                                customer.segment === 'wholesale' ? 'Mayorista' :
-                                                    customer.segment === 'business' ? 'Empresa' : 'Regular'}
-                                        </Badge>
-                                        {(customer as any).profile_id ? (
-                                            <Badge variant="outline" className="gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
-                                                <Shield className="h-3 w-3" />
-                                                Cuenta vinculada
-                                            </Badge>
-                                        ) : (
-                                            <Badge variant="outline" className="gap-1 border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-                                                Sin cuenta
-                                            </Badge>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Quick Contact Actions */}
-                                <div className="flex items-center gap-2">
-                                    {customer.phone && (
-                                        <Button variant="outline" size="sm" className="gap-2">
-                                            <Phone className="h-4 w-4 text-gray-500" />
-                                            <span className="hidden lg:inline">{customer.phone}</span>
-                                        </Button>
-                                    )}
-                                    {customer.email && (
-                                        <Button variant="outline" size="sm" className="gap-2">
-                                            <Mail className="h-4 w-4 text-gray-500" />
-                                            <span className="hidden lg:inline">Email</span>
-                                        </Button>
-                                    )}
-                                    <Button variant="outline" size="sm" className="gap-2">
-                                        <MessageCircle className="h-4 w-4 text-gray-500" />
-                                        <span className="hidden lg:inline">Mensaje</span>
-                                    </Button>
-                                </div>
-                            </div>
-
-                            {/* Address & Details */}
-                            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-600 dark:text-gray-400">
-                                {customer.address && (
-                                    <div className="flex items-center gap-2">
-                                        <MapPin className="h-4 w-4" />
-                                        {customer.address}
-                                    </div>
-                                )}
-                                <div className="flex items-center gap-2">
-                                    <Shield className="h-4 w-4" />
-                                    ID: {customer.id}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+      <Badge className="bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
+        Inactivo
+      </Badge>
     )
+  }
+
+  const getSegmentBadge = (segment: string) => {
+    switch (segment) {
+      case 'vip':
+        return (
+          <Badge className="bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/30 font-semibold">
+            <Star className="h-3 w-3 mr-1 fill-purple-500 text-purple-500" />
+            VIP
+          </Badge>
+        )
+      case 'premium':
+        return (
+          <Badge className="bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30">
+            Premium
+          </Badge>
+        )
+      case 'wholesale':
+        return (
+          <Badge className="bg-orange-50 text-orange-700 border-orange-300 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/30">
+            Mayorista
+          </Badge>
+        )
+      case 'business':
+        return (
+          <Badge className="bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-500/30">
+            Empresa
+          </Badge>
+        )
+      default:
+        return (
+          <Badge className="bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800/60 dark:text-slate-400">
+            Regular
+          </Badge>
+        )
+    }
+  }
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    toast.success(`${label} copiado al portapapeles`)
+  }
+
+  const handleWhatsApp = () => {
+    if (!customer.phone) return
+    const phone = customer.phone.replace(/\D/g, '')
+    const msg = `Hola ${customer.name}, te contactamos de 4G.`
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
+  }
+
+  const exportToPDF = () => {
+    const doc = new jsPDF()
+    const pageW = doc.internal.pageSize.getWidth()
+
+    doc.setFontSize(20); doc.setFont('helvetica', 'bold'); doc.setTextColor(37, 99, 235)
+    doc.text('4G - PUNTO DE VENTA', pageW / 2, 22, { align: 'center' })
+
+    doc.setFontSize(14); doc.setTextColor(0)
+    doc.text('Reporte de Cliente', pageW / 2, 32, { align: 'center' })
+
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(100)
+    doc.text(`Generado el ${new Date().toLocaleString('es-PY')}`, pageW / 2, 40, { align: 'center' })
+
+    doc.setTextColor(0)
+
+    autoTable(doc, {
+      startY: 50,
+      head: [['Campo', 'Valor']],
+      body: [
+        ['Nombre', customer.name || '-'],
+        ['Email', customer.email || '-'],
+        ['Teléfono', customer.phone || '-'],
+        ['Dirección', customer.address || customer.city || '-'],
+        ['Estado', customer.status === 'active' ? 'Activo' : customer.status || 'Activo'],
+        ['Segmento', customer.segment === 'vip' ? 'VIP' : customer.segment === 'wholesale' ? 'Mayorista' : customer.segment === 'business' ? 'Empresa' : 'Regular'],
+        ['Total Gastado', formatCurrency(customer.lifetime_value || 0)],
+        ['Compras', `${customer.total_purchases || 0}`],
+        ['Crédito', formatCurrency(customer.credit_limit || 0)],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+      margin: { left: 14, right: 14 }
+    })
+
+    doc.save(`cliente_${customer.name?.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.pdf`)
+  }
+
+  const initials = customer.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
+
+  return (
+    <div className="space-y-4">
+      {/* Navigation Top Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onBack}
+          className="gap-1.5 rounded-xl border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Volver a Clientes
+        </Button>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onViewHistory}
+            className="gap-1.5 rounded-xl border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+          >
+            <History className="h-4 w-4 text-slate-500" />
+            <span className="hidden sm:inline">Historial</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToPDF}
+            className="gap-1.5 rounded-xl border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Exportar PDF</span>
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={onEdit}
+            className="gap-1.5 rounded-xl bg-blue-600 font-semibold text-white hover:bg-blue-500"
+          >
+            <Edit className="h-4 w-4" />
+            Editar
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Glass Header Card */}
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#0d1117]">
+        {/* Subtle background glow */}
+        <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -left-12 -bottom-12 h-40 w-40 rounded-full bg-purple-500/10 blur-3xl" />
+
+        <div className="relative flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+          {/* Avatar + Main Information */}
+          <div className="flex flex-col sm:flex-row items-start gap-4">
+            <Avatar className="h-20 w-20 rounded-2xl border-2 border-slate-200 shadow-md dark:border-white/15">
+              <AvatarImage src={customer.avatar || undefined} alt={customer.name} />
+              <AvatarFallback className="text-xl font-bold bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+
+            <div className="space-y-2">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                  {customer.name}
+                </h1>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  {getStatusBadge(customer.status)}
+                  {getSegmentBadge(customer.segment)}
+                  {(customer as any).profile_id ? (
+                    <Badge className="gap-1 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300">
+                      <Shield className="h-3 w-3" />
+                      Cuenta vinculada
+                    </Badge>
+                  ) : (
+                    <Badge className="gap-1 border-slate-200 bg-slate-100 text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
+                      <Link2 className="h-3 w-3" />
+                      Sin cuenta digital
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Quick Details Chips */}
+              <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-600 dark:text-slate-400">
+                {customer.phone && (
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <Phone className="h-3.5 w-3.5 text-slate-400" />
+                    <span>{customer.phone}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(customer.phone, 'Teléfono')}
+                      className="p-0.5 opacity-60 hover:opacity-100 transition-opacity"
+                      title="Copiar teléfono"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+
+                {customer.email && (
+                  <div className="flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="truncate max-w-[200px]">{customer.email}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(customer.email, 'Email')}
+                      className="p-0.5 opacity-60 hover:opacity-100 transition-opacity"
+                      title="Copiar email"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+
+                {(customer.address || customer.city) && (
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                    <span>{customer.address || customer.city}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Direct Quick Contact Actions */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0 md:flex-col md:items-end">
+            {customer.phone && (
+              <Button
+                size="sm"
+                onClick={handleWhatsApp}
+                className="gap-1.5 rounded-xl border border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Escribir por WhatsApp
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }

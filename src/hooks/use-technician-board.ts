@@ -40,8 +40,8 @@ export function useTechnicianBoard() {
                     .select(`
             *,
             ticket_number,
-            customer:customers(id, first_name, last_name, phone, email, customer_code),
-            technician:profiles(id, full_name)
+            customer:customers!customer_id(id, first_name, last_name, phone, email, customer_code),
+            technician:profiles!technician_id(id, full_name)
           `)
                     .order('created_at', { ascending: false })
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { canCreateRepair } from '@/lib/saas/subscription-service'
+import { logger } from '@/lib/logger'
 import {
   isNextResponse,
   resolveRepairRouteContext,
@@ -8,28 +9,28 @@ import {
 const REPAIR_SELECT_VARIANTS = [
   `
     *,
-    customer:customers(id, customer_code, name, first_name, last_name, phone, email),
-    technician:profiles(id, full_name),
+    customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email),
+    technician:profiles!technician_id(id, full_name),
     images:repair_images(id, image_url, description)
   `,
   `
     *,
-    customer:customers(id, name, phone, email),
-    technician:profiles(id, full_name),
+    customer:customers!customer_id(id, name, phone, email),
+    technician:profiles!technician_id(id, full_name),
     images:repair_images(id, image_url, description)
   `,
   `
     *,
-    customer:customers(id, first_name, last_name, phone, email),
-    technician:profiles(id, full_name),
+    customer:customers!customer_id(id, first_name, last_name, phone, email),
+    technician:profiles!technician_id(id, full_name),
     images:repair_images(id, image_url, description)
   `,
 ]
 
 const FULL_REPAIR_SELECT = `
   *,
-  customer:customers(id, name, phone, email),
-  technician:profiles(id, full_name),
+  customer:customers!customer_id(id, name, phone, email),
+  technician:profiles!technician_id(id, full_name),
   images:repair_images(id, image_url, description),
   parts:repair_parts(*),
   notes:repair_notes(*)
@@ -199,8 +200,25 @@ export async function GET(request: NextRequest) {
       if (!isSchemaError) break
     }
 
-    const message = lastError instanceof Error ? lastError.message : 'No se pudieron cargar las reparaciones'
-    return NextResponse.json({ error: message }, { status: 500 })
+    // Los errores de Supabase son objetos planos, no instancias de Error, asi
+    // que `instanceof Error` era siempre falso y la causa real se perdia detras
+    // de un mensaje generico. Se extrae el detalle y ademas se registra.
+    const supabaseError = lastError as { message?: string; code?: string; details?: string; hint?: string } | null
+    const detail = supabaseError?.message || (lastError instanceof Error ? lastError.message : '')
+
+    logger.error('Repairs API GET failed', {
+      error: detail || 'unknown',
+      code: supabaseError?.code,
+      details: supabaseError?.details,
+      hint: supabaseError?.hint,
+      organizationId: ctx.organizationId,
+      branchId: ctx.branchId,
+    })
+
+    return NextResponse.json(
+      { error: detail || 'No se pudieron cargar las reparaciones', code: supabaseError?.code },
+      { status: 500 }
+    )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error interno del servidor'
     return NextResponse.json({ error: message }, { status: 500 })

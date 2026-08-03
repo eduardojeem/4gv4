@@ -14,20 +14,12 @@ import {
  */
 async function assertTargetInActorOrg(
   admin: ReturnType<typeof createAdminSupabase>,
-  actorRole: string,
-  actorId: string,
+  organizationId: string,
   targetUserId: string
 ): Promise<NextResponse | null> {
-  if (actorRole === 'super_admin') return null
-
-  const org = await getCurrentOrganizationContext(actorId)
-  if (!org) {
-    return NextResponse.json({ error: 'Sin organización activa.' }, { status: 403 })
-  }
-
   const [{ data: member }, { data: customer }] = await Promise.all([
-    admin.from('organization_members').select('user_id').eq('organization_id', org.id).eq('user_id', targetUserId).maybeSingle(),
-    admin.from('customers').select('id').eq('organization_id', org.id).eq('profile_id', targetUserId).maybeSingle(),
+    admin.from('organization_members').select('user_id').eq('organization_id', organizationId).eq('user_id', targetUserId).maybeSingle(),
+    admin.from('customers').select('id').eq('organization_id', organizationId).eq('profile_id', targetUserId).maybeSingle(),
   ])
 
   if (!member && !customer) {
@@ -60,9 +52,13 @@ export async function POST(
     }
 
     const admin = createAdminSupabase()
+    const organization = await getCurrentOrganizationContext(authResult.user.id)
+    if (!organization) {
+      return NextResponse.json({ error: 'Sin organización activa.' }, { status: 403 })
+    }
 
     // Autorización a nivel de objeto: el cliente debe pertenecer a la org del admin.
-    const orgGuard = await assertTargetInActorOrg(admin, authResult.role, authResult.user.id, customerId)
+    const orgGuard = await assertTargetInActorOrg(admin, organization.id, customerId)
     if (orgGuard) return orgGuard
 
     // Verificar que el perfil exista
@@ -91,6 +87,7 @@ export async function POST(
         .update({ is_active: true })
         .eq('user_id', customerId)
         .eq('permission', WHOLESALE_PRICE_PERMISSION)
+        .eq('organization_id', organization.id)
         .select('id')
 
       if (reactivateError) {
@@ -103,6 +100,7 @@ export async function POST(
       if (!updatedRows || updatedRows.length === 0) {
         const { error: insertPermError } = await admin.from('user_permissions').insert({
           user_id: customerId,
+          organization_id: organization.id,
           permission: WHOLESALE_PRICE_PERMISSION,
           is_active: true,
         })
@@ -120,6 +118,7 @@ export async function POST(
         .update({ is_active: false })
         .eq('user_id', customerId)
         .eq('permission', WHOLESALE_PRICE_PERMISSION)
+        .eq('organization_id', organization.id)
 
       if (disablePermError) {
         return NextResponse.json(
@@ -153,6 +152,7 @@ export async function POST(
         resource_id: customerId,
         new_values: {
           permission: WHOLESALE_PRICE_PERMISSION,
+          organization_id: organization.id,
           enabled: enable,
           previous_role: previousRole,
           assigned_by: authResult.user.id,
@@ -161,7 +161,7 @@ export async function POST(
       })
     } catch { /* no crítico */ }
 
-    const isWholesale = await resolveWholesaleAccessForUser(admin, customerId)
+    const isWholesale = await resolveWholesaleAccessForUser(admin, customerId, organization.id)
 
     return NextResponse.json({
       success: true,
@@ -190,8 +190,12 @@ export async function GET(
 
     const { id: customerId } = await params
     const admin = createAdminSupabase()
+    const organization = await getCurrentOrganizationContext(authResult.user.id)
+    if (!organization) {
+      return NextResponse.json({ error: 'Sin organización activa.' }, { status: 403 })
+    }
 
-    const orgGuard = await assertTargetInActorOrg(admin, authResult.role, authResult.user.id, customerId)
+    const orgGuard = await assertTargetInActorOrg(admin, organization.id, customerId)
     if (orgGuard) return orgGuard
 
     const { data: profile, error } = await admin.from('profiles').select('role').eq('id', customerId).maybeSingle()
@@ -200,7 +204,7 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const isWholesale = await resolveWholesaleAccessForUser(admin, customerId, profile?.role)
+    const isWholesale = await resolveWholesaleAccessForUser(admin, customerId, organization.id)
     return NextResponse.json({
       isWholesale,
       role: profile?.role ?? null,

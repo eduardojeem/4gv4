@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
+import { deriveTechnicalModules } from '@/lib/saas/plan-modules'
 
 type UpdatePlanBody = {
   name?: unknown
@@ -109,6 +110,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (!plan) {
     return NextResponse.json({ error: 'Plan not found' }, { status: 404 })
+  }
+
+  const { error: technicalPlanError } = await admin
+    .from('plans')
+    .update({ modules: deriveTechnicalModules(plan.tier, plan.features) })
+    .eq('code', String(plan.tier).toUpperCase())
+
+  if (technicalPlanError) {
+    return NextResponse.json(
+      { error: `El plan comercial se guardó, pero no se pudieron sincronizar sus módulos: ${technicalPlanError.message}` },
+      { status: 500 }
+    )
   }
 
   await admin.from('tenant_audit_log').insert({

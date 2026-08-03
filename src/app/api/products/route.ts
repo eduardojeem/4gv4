@@ -20,7 +20,10 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const supplierId = searchParams.get('supplier_id')
     const brand = searchParams.get('brand')
     const requestedStockStatus = searchParams.get('stock_status')
-    const stockStatus = requestedStockStatus === 'low_stock' || requestedStockStatus === 'out_of_stock'
+    const stockStatus = requestedStockStatus === 'low_stock' ||
+      requestedStockStatus === 'out_of_stock' ||
+      requestedStockStatus === 'normal_stock' ||
+      requestedStockStatus === 'high_stock'
       ? requestedStockStatus
       : searchParams.get('in_stock') === 'true' || requestedStockStatus === 'in_stock'
         ? 'in_stock'
@@ -29,6 +32,15 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const priceMaxParam = searchParams.get('price_max')
     const priceMin = priceMinParam === null ? null : Number(priceMinParam)
     const priceMax = priceMaxParam === null ? null : Number(priceMaxParam)
+    const stockMinParam = searchParams.get('stock_min')
+    const stockMaxParam = searchParams.get('stock_max')
+    const stockMin = stockMinParam === null ? null : Number(stockMinParam)
+    const stockMax = stockMaxParam === null ? null : Number(stockMaxParam)
+    const hasImage = searchParams.get('has_image') === 'true'
+    const createdFrom = searchParams.get('created_from')
+    const createdTo = searchParams.get('created_to')
+    const updatedFrom = searchParams.get('updated_from')
+    const updatedTo = searchParams.get('updated_to')
     const isActive = searchParams.get('is_active')
     const featured = searchParams.get('featured')
     const requestedSort = searchParams.get('sort') || 'name'
@@ -107,6 +119,12 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       queryBuilder = queryBuilder.eq('featured', featured === 'true')
     }
 
+    if (hasImage) queryBuilder = queryBuilder.not('image_url', 'is', null)
+    if (createdFrom) queryBuilder = queryBuilder.gte('created_at', createdFrom)
+    if (createdTo) queryBuilder = queryBuilder.lt('created_at', createdTo)
+    if (updatedFrom) queryBuilder = queryBuilder.gte('updated_at', updatedFrom)
+    if (updatedTo) queryBuilder = queryBuilder.lt('updated_at', updatedTo)
+
     if (stockStatus === 'in_stock' && !branchScope.branchId) {
       queryBuilder = queryBuilder.gt('stock_quantity', 0)
     } else if (stockStatus === 'out_of_stock' && !branchScope.branchId) {
@@ -118,8 +136,9 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const from = (page - 1) * perPage
     const to = from + perPage - 1
     const needsInMemoryPagination =
-      stockStatus === 'low_stock' ||
-      (Boolean(branchScope.branchId) && stockStatus !== 'all')
+      stockStatus !== 'all' ||
+      stockMin !== null ||
+      stockMax !== null
 
     queryBuilder = queryBuilder.order(sortColumn, { ascending: sortAscending })
     if (!needsInMemoryPagination) {
@@ -152,11 +171,16 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       : applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped)
     const stockFilteredProducts = branchAwareProducts.filter((product) => {
       const stock = Number(product.stock_quantity || 0)
-      if (stockStatus === 'in_stock') return stock > 0
-      if (stockStatus === 'out_of_stock') return stock <= 0
-      if (stockStatus === 'low_stock') {
-        return stock > 0 && stock <= Number(product.min_stock || 0)
-      }
+      if (stockStatus === 'in_stock' && stock <= 0) return false
+      if (stockStatus === 'out_of_stock' && stock > 0) return false
+      if (stockStatus === 'low_stock' && !(stock > 0 && stock <= Number(product.min_stock || 0))) return false
+      if (
+        stockStatus === 'normal_stock' &&
+        !(stock > Number(product.min_stock || 0) && stock < Number(product.max_stock || 0))
+      ) return false
+      if (stockStatus === 'high_stock' && stock < Number(product.max_stock || 0)) return false
+      if (stockMin !== null && Number.isFinite(stockMin) && stock < stockMin) return false
+      if (stockMax !== null && Number.isFinite(stockMax) && stock > stockMax) return false
       return true
     })
     const filteredProducts = needsInMemoryPagination

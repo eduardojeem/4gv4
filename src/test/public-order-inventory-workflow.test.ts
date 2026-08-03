@@ -15,6 +15,10 @@ const migration = readFileSync(
   resolve(workspace, 'supabase/migrations/20260729220332_harden_public_order_inventory.sql'),
   'utf8'
 )
+const customerLinkMigration = readFileSync(
+  resolve(workspace, 'supabase/migrations/20260802161753_link_public_customers_atomically.sql'),
+  'utf8'
+)
 
 describe('public order inventory workflow', () => {
   it('rejects stock conflicts instead of silently reducing quantities', () => {
@@ -23,7 +27,9 @@ describe('public order inventory workflow', () => {
   })
 
   it('creates public orders and reserves inventory in one transaction', () => {
-    expect(publicOrderRoute).toContain("'create_public_order_atomic'")
+    expect(publicOrderRoute).toContain("'create_public_order_with_customer_account_atomic'")
+    expect(customerLinkMigration).toContain('function public.create_public_order_with_customer_account_atomic')
+    expect(customerLinkMigration).toContain('public.create_public_order_atomic(')
     expect(migration).toContain('function public.create_public_order_atomic')
     expect(migration).toContain('stock_quantity >= item.quantity')
   })

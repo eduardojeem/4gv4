@@ -31,6 +31,7 @@ async function resolveServerPublicOrganization(supabase: SupabaseClient) {
 export async function resolveWholesaleStatus(options?: {
   supabase?: SupabaseClient
   user?: { id: string; user_metadata?: Record<string, unknown> | null } | null
+  organizationId?: string
 }): Promise<{ isWholesale: boolean }> {
   const supabase = options?.supabase ?? (await createClient())
   const user =
@@ -40,12 +41,11 @@ export async function resolveWholesaleStatus(options?: {
 
   if (!user?.id) return { isWholesale: false }
 
-  const metadataRole =
-    user.user_metadata && typeof user.user_metadata.role === 'string'
-      ? user.user_metadata.role
-      : undefined
+  const organizationId = options?.organizationId ??
+    (await resolveServerPublicOrganization(createAdminSupabase() as SupabaseClient))?.id
+  if (!organizationId) return { isWholesale: false }
 
-  const isWholesale = await resolveWholesaleAccessForUser(supabase, user.id, metadataRole)
+  const isWholesale = await resolveWholesaleAccessForUser(supabase, user.id, organizationId)
   return { isWholesale }
 }
 
@@ -189,7 +189,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   // Resolve wholesale status — use caller-supplied value if available to avoid re-querying.
   let isWholesale = filters.isWholesale ?? false
   if (filters.isWholesale === undefined) {
-    const result = await resolveWholesaleStatus()
+    const result = await resolveWholesaleStatus({ organizationId: organization.id })
     isWholesale = result.isWholesale
   }
 
@@ -448,7 +448,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
   // Resolve wholesale status — accept pre-computed value to avoid redundant queries
   let isWholesale = isWholesaleOverride ?? false
   if (isWholesaleOverride === undefined) {
-    const result = await resolveWholesaleStatus()
+    const result = await resolveWholesaleStatus({ organizationId: organization.id })
     isWholesale = result.isWholesale
   }
 

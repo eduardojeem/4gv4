@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useBranch } from '@/contexts/branch-context'
+import { branchHeaders } from '@/lib/branches/client'
 
 export interface Category {
   id: string
@@ -142,14 +143,16 @@ function getDayRange(date: string) {
   return { start: start.toISOString(), end: end.toISOString() }
 }
 
-const STOCK_FILTER_SCAN_LIMIT = 250
-const STOCK_FILTER_MAX_SCANNED_ROWS = 2000
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
 
 export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInventoryProps = {}) {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
   // Paginación y Filtros
@@ -171,15 +174,10 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     lastMovement: '',
   })
 
-  const supabase = createClient()
-
-  const matchesStockStatus = useCallback((product: Product, stockStatus: string) => {
-    if (stockStatus === 'out') return product.stock_quantity === 0
-    if (stockStatus === 'low') return product.stock_quantity <= product.min_stock && product.stock_quantity > 0
-    if (stockStatus === 'high') return product.stock_quantity >= product.max_stock
-    if (stockStatus === 'normal') return product.stock_quantity > product.min_stock && product.stock_quantity < product.max_stock
-    return true
-  }, [])
+  const { selectedBranchId } = useBranch()
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const productRequestRef = useRef<AbortController | null>(null)
+  const hasLoadedProductsRef = useRef(false)
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -190,10 +188,10 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
         throw new Error(payload?.error || 'No se pudieron cargar las categorias')
       }
 
-      setCategories((payload.data || []).map((c: any) => ({
+      setCategories((payload.data || []).map((c: Partial<Category> & { products_count?: number }) => ({
         ...c,
         productCount: c.products_count ?? c.productCount ?? 0
-      })))
+      })) as Category[])
     } catch (err) {
       console.error('Error fetching categories:', err)
     }
@@ -208,137 +206,124 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
         throw new Error(payload?.error || 'No se pudieron cargar los proveedores')
       }
 
-      setSuppliers((payload.data || []).map((s: any) => ({
+      setSuppliers((payload.data || []).map((s: Partial<Supplier> & { products_count?: number }) => ({
         ...s,
         productCount: s.productCount ?? s.products_count ?? 0
-      })))
+      })) as Supplier[])
     } catch (err) {
       console.error('Error fetching suppliers:', err)
     }
   }, [])
 
   const fetchProducts = useCallback(async () => {
-    setLoading(true)
+    productRequestRef.current?.abort()
+    const requestController = new AbortController()
+    productRequestRef.current = requestController
+    const isInitialLoad = !hasLoadedProductsRef.current
+
+    if (isInitialLoad) setLoading(true)
+    else setIsRefreshing(true)
     setError(null)
     try {
-      let baseQuery = supabase
-        .from('products')
-        .select(`
-          *,
-          category:categories(id, name),
-          supplier:suppliers(id, name)
-        `, { count: 'exact' })
-
-      // Aplicar filtros
-      if (filters.search) {
-        baseQuery = baseQuery.or(`name.ilike.%${filters.search}%,sku.ilike.%${filters.search}%,description.ilike.%${filters.search}%`)
+      const params = new URLSearchParams({
+        page: String(page),
+        per_page: String(pageSize),
+        sort: 'created_at',
+        direction: 'desc',
+      })
+      if (selectedBranchId) params.set('strict_branch_stock', 'true')
+      if (debouncedSearch.trim()) params.set('query', debouncedSearch.trim())
+      if (filters.category !== 'all') params.set('category_id', filters.category)
+      if (filters.supplier !== 'all') params.set('supplier_id', filters.supplier)
+      if (filters.status === 'active' || filters.status === 'inactive') {
+        params.set('is_active', String(filters.status === 'active'))
       }
+      if (typeof filters.minPrice === 'number') params.set('price_min', String(filters.minPrice))
+      if (typeof filters.maxPrice === 'number') params.set('price_max', String(filters.maxPrice))
+      if (typeof filters.minStock === 'number') params.set('stock_min', String(filters.minStock))
+      if (typeof filters.maxStock === 'number') params.set('stock_max', String(filters.maxStock))
+      if (filters.hasImage) params.set('has_image', 'true')
 
-      if (filters.category !== 'all') {
-        // Asumiendo que filters.category es el ID o el nombre. Idealmente usar ID.
-        // Si el UI pasa el nombre, habría que buscar el ID o filtrar por relación (más complejo en Supabase JS client directo a veces)
-        // Por simplicidad, asumiremos que se pasa el ID o ajustaremos el componente para pasar ID.
-        // Si es nombre:
-        // query = query.filter('category.name', 'eq', filters.category) -> Esto no funciona directo en join
-        // Mejor filtrar por category_id si es posible.
-        // Por ahora, si filters.category es un UUID, filtramos por category_id
-        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.category)) {
-           baseQuery = baseQuery.eq('category_id', filters.category)
-        }
-      }
-
-      if (filters.supplier !== 'all') {
-        baseQuery = baseQuery.eq('supplier_id', filters.supplier)
-      }
-
-      if (filters.status !== 'all') {
-        baseQuery = baseQuery.eq('status', filters.status)
-      }
-
-      if (typeof filters.minPrice === 'number') {
-        baseQuery = baseQuery.gte('sale_price', filters.minPrice)
-      }
-
-      if (typeof filters.maxPrice === 'number') {
-        baseQuery = baseQuery.lte('sale_price', filters.maxPrice)
-      }
-
-      if (typeof filters.minStock === 'number') {
-        baseQuery = baseQuery.gte('stock_quantity', filters.minStock)
-      }
-
-      if (typeof filters.maxStock === 'number') {
-        baseQuery = baseQuery.lte('stock_quantity', filters.maxStock)
-      }
-
-      if (filters.hasImage) {
-        baseQuery = baseQuery.not('image_url', 'is', null)
-      }
+      const stockStatus = ({
+        out: 'out_of_stock',
+        low: 'low_stock',
+        normal: 'normal_stock',
+        high: 'high_stock',
+      } as Record<string, string>)[filters.stockStatus]
+      if (stockStatus) params.set('stock_status', stockStatus)
 
       const dateAddedRange = filters.dateAdded ? getDayRange(filters.dateAdded) : null
       if (dateAddedRange) {
-        baseQuery = baseQuery.gte('created_at', dateAddedRange.start).lt('created_at', dateAddedRange.end)
+        params.set('created_from', dateAddedRange.start)
+        params.set('created_to', dateAddedRange.end)
       }
-
       const lastMovementRange = filters.lastMovement ? getDayRange(filters.lastMovement) : null
       if (lastMovementRange) {
-        baseQuery = baseQuery.gte('updated_at', lastMovementRange.start).lt('updated_at', lastMovementRange.end)
+        params.set('updated_from', lastMovementRange.start)
+        params.set('updated_to', lastMovementRange.end)
       }
 
-      // Con filtros de stock calculados contra dos columnas, evitamos leer todo el catálogo.
-      // Escaneamos lotes acotados hasta llenar la página solicitada. El total se informa como
-      // mínimo conocido cuando el filtro no puede calcularse completamente en PostgREST.
-      if (filters.stockStatus !== 'all') {
-        const from = (page - 1) * pageSize
-        const wanted = from + pageSize
-        const filteredData: Product[] = []
-        let scanned = 0
-        let hasMoreRows = true
-
-        while (filteredData.length < wanted && scanned < STOCK_FILTER_MAX_SCANNED_ROWS && hasMoreRows) {
-          const rangeFrom = scanned
-          const rangeTo = scanned + STOCK_FILTER_SCAN_LIMIT - 1
-          const { data, error } = await baseQuery
-            .order('created_at', { ascending: false })
-            .range(rangeFrom, rangeTo)
-
-          if (error) throw error
-
-          const batch = (data || []) as Product[]
-          hasMoreRows = batch.length === STOCK_FILTER_SCAN_LIMIT
-          scanned += batch.length
-          filteredData.push(...batch.filter((p) => matchesStockStatus(p, filters.stockStatus)))
-        }
-
-        setProducts(filteredData.slice(from, wanted))
-        setTotalCount(hasMoreRows ? Math.max(filteredData.length, wanted + 1) : filteredData.length)
-        return
+      const response = await fetch(`/api/products?${params.toString()}`, {
+        cache: 'no-store',
+        headers: branchHeaders(selectedBranchId),
+        signal: requestController.signal,
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success || !Array.isArray(payload?.data?.products)) {
+        throw new Error(payload?.error || 'No se pudieron cargar los productos')
       }
 
-      const from = (page - 1) * pageSize
-      const to = from + pageSize - 1
-      const { data, error, count } = await baseQuery
-        .order('created_at', { ascending: false })
-        .range(from, to)
-
-      if (error) throw error
-
-      setProducts((data || []) as Product[])
-      setTotalCount(count || 0)
-
-    } catch (err: any) {
+      setProducts(payload.data.products.map((product: Product & { is_active?: boolean }) => ({
+        ...product,
+        status: product.status || (product.is_active === false ? 'inactive' : 'active'),
+      })))
+      setTotalCount(Number(payload.data.total) || 0)
+      hasLoadedProductsRef.current = true
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
       console.error('Error fetching products:', err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar los productos')
     } finally {
-      setLoading(false)
+      if (productRequestRef.current === requestController) {
+        setLoading(false)
+        setIsRefreshing(false)
+      }
     }
-  }, [supabase, page, pageSize, filters, matchesStockStatus])
+  }, [
+    page,
+    pageSize,
+    selectedBranchId,
+    debouncedSearch,
+    filters.category,
+    filters.supplier,
+    filters.status,
+    filters.stockStatus,
+    filters.minPrice,
+    filters.maxPrice,
+    filters.minStock,
+    filters.maxStock,
+    filters.hasImage,
+    filters.dateAdded,
+    filters.lastMovement,
+  ])
 
   // Carga inicial
   useEffect(() => {
     fetchCategories()
     fetchSuppliers()
   }, [fetchCategories, fetchSuppliers])
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(filters.search)
+    }, 350)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [filters.search])
+
+  useEffect(() => () => {
+    productRequestRef.current?.abort()
+  }, [])
 
   // Recargar productos cuando cambian dependencias
   useEffect(() => {
@@ -361,6 +346,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     filters.dateAdded,
     filters.lastMovement,
     pageSize,
+    selectedBranchId,
   ])
 
   // Operaciones CRUD
@@ -368,7 +354,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     try {
       const response = await fetch('/api/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...branchHeaders(selectedBranchId) },
         body: JSON.stringify(toProductApiPayload(productData)),
       })
       const payload = await response.json().catch(() => null)
@@ -379,8 +365,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
       await fetchProducts()
       return { success: true }
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'No se pudo crear el producto' }
+    } catch (err: unknown) {
+      return { success: false, error: getErrorMessage(err, 'No se pudo crear el producto') }
     }
   }
 
@@ -388,7 +374,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     try {
       const response = await fetch(`/api/products/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...branchHeaders(selectedBranchId) },
         body: JSON.stringify(toProductApiPayload(productData)),
       })
       const payload = await response.json().catch(() => null)
@@ -399,14 +385,17 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
       await fetchProducts()
       return { success: true }
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'No se pudo actualizar el producto' }
+    } catch (err: unknown) {
+      return { success: false, error: getErrorMessage(err, 'No se pudo actualizar el producto') }
     }
   }
 
   const deleteProduct = async (id: string) => {
     try {
-      const response = await fetch(`/api/products/${id}`, { method: 'DELETE' })
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'DELETE',
+        headers: branchHeaders(selectedBranchId),
+      })
       const payload = await response.json().catch(() => null)
 
       if (!response.ok || !payload?.success) {
@@ -415,8 +404,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
       await fetchProducts()
       return { success: true }
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'No se pudo eliminar el producto' }
+    } catch (err: unknown) {
+      return { success: false, error: getErrorMessage(err, 'No se pudo eliminar el producto') }
     }
   }
 
@@ -436,8 +425,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
       await fetchSuppliers()
       return { success: true }
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'No se pudo crear el proveedor' }
+    } catch (err: unknown) {
+      return { success: false, error: getErrorMessage(err, 'No se pudo crear el proveedor') }
     }
   }
 
@@ -456,8 +445,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
       await fetchSuppliers()
       return { success: true }
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'No se pudo actualizar el proveedor' }
+    } catch (err: unknown) {
+      return { success: false, error: getErrorMessage(err, 'No se pudo actualizar el proveedor') }
     }
   }
 
@@ -472,8 +461,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
       await fetchSuppliers()
       return { success: true }
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'No se pudo eliminar el proveedor' }
+    } catch (err: unknown) {
+      return { success: false, error: getErrorMessage(err, 'No se pudo eliminar el proveedor') }
     }
   }
 
@@ -482,6 +471,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     categories,
     suppliers,
     loading,
+    isRefreshing,
     error,
     page,
     setPage,

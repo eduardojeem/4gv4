@@ -278,7 +278,8 @@ async function countMembersByRole(
  */
 async function fetchWholesaleUserIds(
   supabaseAdmin: ReturnType<typeof createAdminSupabase>,
-  userIds?: string[]
+  userIds?: string[],
+  organizationId?: string
 ) {
   let query = supabaseAdmin
     .from('user_permissions')
@@ -288,6 +289,9 @@ async function fetchWholesaleUserIds(
 
   if (userIds && userIds.length > 0) {
     query = query.in('user_id', userIds)
+  }
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
   }
 
   const { data, error } = await query
@@ -373,7 +377,7 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
     let userIds = Array.from(membersByUserId.keys())
 
     if (wholesaleOnly && userIds.length > 0) {
-      const wholesaleIds = await fetchWholesaleUserIds(supabaseAdmin, userIds)
+      const wholesaleIds = await fetchWholesaleUserIds(supabaseAdmin, userIds, context.organizationId)
       userIds = userIds.filter((id) => wholesaleIds.has(id))
     }
 
@@ -413,11 +417,17 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
     if (profileIds.length > 0) {
       const { data: perms } = await supabaseAdmin
         .from('user_permissions')
-        .select('user_id, permission')
+        .select('user_id, permission, organization_id')
         .in('user_id', profileIds)
         .eq('is_active', true)
 
       for (const row of perms ?? []) {
+        if (
+          row.permission === WHOLESALE_PRICE_PERMISSION &&
+          row.organization_id !== context.organizationId
+        ) {
+          continue
+        }
         const uid = String(row.user_id)
         const cur = permissionsByUserId.get(uid) ?? []
         cur.push(String(row.permission))
@@ -771,31 +781,63 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
   if (Array.isArray(body?.permissions)) {
     const { data: currentPermissions, error: currentPermissionsError } = await supabaseAdmin
       .from('user_permissions')
-      .select('permission')
+      .select('permission, organization_id')
       .eq('user_id', userId)
       .eq('is_active', true)
 
     if (currentPermissionsError) throw currentPermissionsError
 
-    const currentSet = new Set<string>((currentPermissions ?? []).map((row) => String(row.permission)))
+    const currentSet = new Set<string>(
+      (currentPermissions ?? [])
+        .filter((row) =>
+          row.permission !== WHOLESALE_PRICE_PERMISSION ||
+          row.organization_id === context.organizationId
+        )
+        .map((row) => String(row.permission))
+    )
     const nextSet = new Set<string>(body.permissions.map((p: unknown) => String(p)))
     const toInsert = Array.from(nextSet).filter((p) => !currentSet.has(p))
     const toRevoke = Array.from(currentSet).filter((p) => !nextSet.has(p))
 
+    if (toInsert.includes(WHOLESALE_PRICE_PERMISSION) && !context.organizationId) {
+      return NextResponse.json(
+        { error: 'Selecciona una organizacion antes de asignar acceso mayorista.' },
+        { status: 400 }
+      )
+    }
+
     if (toInsert.length > 0) {
       const { error } = await supabaseAdmin
         .from('user_permissions')
-        .insert(toInsert.map((p) => ({ user_id: userId, permission: p, is_active: true })))
+        .insert(toInsert.map((p) => ({
+          user_id: userId,
+          organization_id: p === WHOLESALE_PRICE_PERMISSION ? context.organizationId : null,
+          permission: p,
+          is_active: true,
+        })))
       if (error) throw error
     }
 
     // Soft-delete: mark as inactive instead of hard delete for auditability
-    if (toRevoke.length > 0) {
+    const revokeWholesale = toRevoke.includes(WHOLESALE_PRICE_PERMISSION)
+    const revokeGlobal = toRevoke.filter((permission) => permission !== WHOLESALE_PRICE_PERMISSION)
+
+    if (revokeGlobal.length > 0) {
       const { error } = await supabaseAdmin
         .from('user_permissions')
         .update({ is_active: false })
         .eq('user_id', userId)
-        .in('permission', toRevoke)
+        .in('permission', revokeGlobal)
+      if (error) throw error
+    }
+
+    if (revokeWholesale && context.organizationId) {
+      const { error } = await supabaseAdmin
+        .from('user_permissions')
+        .update({ is_active: false })
+        .eq('user_id', userId)
+        .eq('organization_id', context.organizationId)
+        .eq('permission', WHOLESALE_PRICE_PERMISSION)
       if (error) throw error
     }
   }

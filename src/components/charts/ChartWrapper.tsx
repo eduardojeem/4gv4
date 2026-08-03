@@ -184,7 +184,7 @@ export function RevenueChart({ data, height = 300 }: { data: any[], height?: num
       data={data}
       height={height}
       config={[
-        { dataKey: 'month' },
+        { dataKey: 'monthShort' },
         { dataKey: 'totalRevenue', name: 'Ingresos', format: 'currency' }
       ]}
     />
@@ -198,9 +198,8 @@ export function CustomerGrowthChart({ data, height = 300 }: { data: any[], heigh
       data={data}
       height={height}
       config={[
-        { dataKey: 'month' },
-        { dataKey: 'newCustomers', name: 'Nuevos Clientes', format: 'number' },
-        { dataKey: 'activeCustomers', name: 'Clientes Activos', format: 'number' }
+        { dataKey: 'monthShort' },
+        { dataKey: 'newCustomers', name: 'Nuevos Clientes', format: 'number' }
       ]}
     />
   )
@@ -213,7 +212,21 @@ export function SegmentDistributionChart({ data, height = 300 }: { data: any[], 
       data={data}
       height={height}
       config={[
-        { dataKey: 'count', name: 'Clientes', format: 'number' }
+        { dataKey: 'value', name: 'Clientes', format: 'number' }
+      ]}
+      showLegend={true}
+    />
+  )
+}
+
+export function DebtDistributionChart({ data, height = 300 }: { data: any[], height?: number }) {
+  return (
+    <ChartWrapper
+      type="pie"
+      data={data}
+      height={height}
+      config={[
+        { dataKey: 'value', name: 'Clientes', format: 'number' }
       ]}
       showLegend={true}
     />

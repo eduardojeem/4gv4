@@ -143,49 +143,69 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
-        className="!block w-[calc(100%-2rem)] max-w-[420px] overflow-hidden rounded-2xl border-0 p-0 shadow-2xl"
+        className="!block w-[calc(100%-2rem)] max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl dark:border-white/10 dark:bg-[#0d1117] text-slate-900 dark:text-slate-100"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">Detalle de {customer.name}</DialogTitle>
 
         {/* ── Header ── */}
-        <div className="relative bg-slate-900 px-5 pb-4 pt-4 dark:bg-slate-950">
+        <div className="relative bg-slate-900 px-6 pb-5 pt-5 dark:bg-slate-950">
           <button
             type="button"
             onClick={onClose}
-            className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-white/40 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+            className="absolute right-3.5 top-3.5 flex h-7 w-7 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
             aria-label="Cerrar"
           >
             <X className="h-4 w-4" />
           </button>
 
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-sm font-bold text-white">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-base font-bold text-white shadow-md">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="flex items-center gap-1.5 truncate text-sm font-bold text-white">
+              <h2 className="flex items-center gap-2 truncate text-base font-bold text-white">
                 {customer.name}
-                {customer.segment === 'vip' && <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />}
+                {customer.segment === 'vip' && <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />}
               </h2>
-              <div className="mt-1 flex flex-wrap gap-1">
-                <span className={cn('inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium', segment.class)}>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <span className={cn('inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold', segment.class)}>
                   {segment.label}
                 </span>
-                <span className={cn(
-                  'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium',
-                  customer.status === 'active' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
-                )}>
-                  {customer.status === 'active' ? 'Activo' : 'Inactivo'}
-                </span>
+                {(() => {
+                  const normalizedStatus = String(customer.status || 'active').toLowerCase().trim()
+                  const isActive = normalizedStatus === 'active' || normalizedStatus === 'activo'
+                  const isSuspended = normalizedStatus === 'suspended' || normalizedStatus === 'suspendido'
+
+                  if (isActive) {
+                    return (
+                      <span className="inline-flex items-center rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                        <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Activo
+                      </span>
+                    )
+                  }
+                  if (isSuspended) {
+                    return (
+                      <span className="inline-flex items-center rounded-md bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-300">
+                        Suspendido
+                      </span>
+                    )
+                  }
+                  return (
+                    <span className="inline-flex items-center rounded-md bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                      Inactivo
+                    </span>
+                  )
+                })()}
                 {customer.profile_id ? (
-                  <span className="inline-flex items-center gap-0.5 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
-                    <ShieldCheck className="h-2.5 w-2.5" />
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                    <ShieldCheck className="h-3 w-3" />
                     Cuenta
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-0.5 rounded bg-slate-500/30 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
-                    <Link2 className="h-2.5 w-2.5" />
+                  <span className="inline-flex items-center gap-1 rounded-md bg-slate-500/30 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
+                    <Link2 className="h-3 w-3" />
                     Sin cuenta
                   </span>
                 )}

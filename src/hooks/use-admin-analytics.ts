@@ -524,7 +524,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           .lte('created_at', previousTo.toISOString()),
         supabase
           .from('repairs')
-          .select('id, created_at, received_at, completed_at, delivered_at, status, final_cost, estimated_cost, parts_cost, technician_id, branch_id, technician:profiles(id, full_name, email)')
+          .select('id, created_at, received_at, completed_at, delivered_at, status, final_cost, estimated_cost, parts_cost, technician_id, branch_id, technician:profiles!technician_id(id, full_name, email)')
           .gte('created_at', selectedFrom.toISOString())
           .lte('created_at', selectedTo.toISOString()),
         // Previous repairs: only need counts and revenue, minimal fields

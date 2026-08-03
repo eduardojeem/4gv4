@@ -80,7 +80,7 @@ export function useDashboardSearch() {
                         id, 
                         device_model, 
                         status, 
-                        customer:customers(first_name, last_name)
+                        customer:customers!customer_id(first_name, last_name)
                     `)
                     .ilike('device_model', `%${query}%`)
                     .limit(5)

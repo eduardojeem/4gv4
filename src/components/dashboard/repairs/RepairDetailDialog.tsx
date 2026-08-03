@@ -41,6 +41,8 @@ import { getAvailableTransitions } from '@/lib/repairs/state-machine'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { PatternDrawer } from './PatternDrawer'
+import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
+import { RepairWarrantyCase } from './RepairWarrantyCase'
 import { printRepairReceipt, generateRepairShareText, RepairPrintPayload } from '@/lib/repair-receipt'
 import {
   getWarrantyStatus,
@@ -85,6 +87,9 @@ export function RepairDetailDialog({
   onStatusChange
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
+  const [warrantyClaimOpen, setWarrantyClaimOpen] = useState(false)
+  // Al registrar un reclamo se remonta el bloque para que muestre el caso recien creado.
+  const [warrantyCaseVersion, setWarrantyCaseVersion] = useState(0)
   const [showSensitiveData, setShowSensitiveData] = useState(false)
   const [isSendingStatusWhatsApp, setIsSendingStatusWhatsApp] = useState(false)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
@@ -880,6 +885,11 @@ export function RepairDetailDialog({
                         {repair.warrantyNotes}
                       </p>
                     )}
+                    <RepairWarrantyCase
+                      key={warrantyCaseVersion}
+                      repairId={repair.id}
+                      onClaim={() => setWarrantyClaimOpen(true)}
+                    />
                   </div>
                 ) : (
                   <div className="rounded-xl border border-dashed bg-muted/10 p-4 flex items-center gap-3">
@@ -1208,6 +1218,23 @@ export function RepairDetailDialog({
           )}
 
         </DialogFooter>
+
+        <CreateAfterSalesCaseDialog
+          open={warrantyClaimOpen}
+          onOpenChange={setWarrantyClaimOpen}
+          sourceType="repair"
+          repairId={repair.id}
+          customerId={repair.customer?.id}
+          reference={repair.ticketNumber || repair.id.slice(0, 8)}
+          subject={[repair.brand, repair.model].filter(Boolean).join(' ') || repair.device}
+          customerName={repair.customer?.name}
+          allowedRequestTypes={['repair_warranty']}
+          warrantyExpired={getWarrantyStatus(repair.warrantyExpiresAt) === 'expired'}
+          warrantyExpiresLabel={
+            repair.warrantyExpiresAt ? formatWarrantyExpiration(repair.warrantyExpiresAt) : null
+          }
+          onCreated={() => setWarrantyCaseVersion((version) => version + 1)}
+        />
       </DialogContent>
     </Dialog>
   )

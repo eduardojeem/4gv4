@@ -332,201 +332,229 @@ function TableView({
 }) {
   const renderSortIcon = (field: SortField) => {
     if (sortField !== field) return null
-    return sortOrder === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />
+    return sortOrder === 'asc' ? <SortAsc className="h-3.5 w-3.5 text-blue-500" /> : <SortDesc className="h-3.5 w-3.5 text-blue-500" />
   }
 
   return (
-    <Card className="border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+    <Card className="overflow-hidden border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]">
       <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-b border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800/40">
-              <TableHead className="w-12 bg-muted/20 border-border/40">
-                <Checkbox
-                  checked={allSelected || someSelected}
-                  onCheckedChange={onSelectAll}
-                  className="border-gray-300 dark:border-gray-600"
-                />
-              </TableHead>
-              <TableHead 
-                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
-                onClick={() => onSort('name')}
-              >
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
-                  Cliente
-                  {renderSortIcon('name')}
-                </div>
-              </TableHead>
-              <TableHead 
-                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
-                onClick={() => onSort('email')}
-              >
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
-                  Contacto
-                  {renderSortIcon('email')}
-                </div>
-              </TableHead>
-              <TableHead 
-                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
-                onClick={() => onSort('status')}
-              >
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
-                  Estado
-                  {renderSortIcon('status')}
-                </div>
-              </TableHead>
-              <TableHead 
-                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
-                onClick={() => onSort('lifetime_value')}
-              >
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
-                  Valor
-                  {renderSortIcon('lifetime_value')}
-                </div>
-              </TableHead>
-              <TableHead 
-                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
-                onClick={() => onSort('total_purchases')}
-              >
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
-                  Compras
-                  {renderSortIcon('total_purchases')}
-                </div>
-              </TableHead>
-              <TableHead className="bg-muted/20 border-border/40 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
-                Última compra
-              </TableHead>
-              <TableHead 
-                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
-                onClick={() => onSort('last_activity')}
-              >
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
-                  Última Actividad
-                  {renderSortIcon('last_activity')}
-                </div>
-              </TableHead>
-              <TableHead className="bg-muted/20 border-border/40 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
-                Deuda
-              </TableHead>
-              <TableHead className="w-20 bg-muted/20 border-border/40 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground text-right">
-                Acciones
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {customers.map((customer, index) => (
-              <motion.tr
-                key={customer.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="group hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors cursor-pointer border-b border-gray-100 dark:border-slate-800"
-                onClick={() => onViewCustomer(customer)}
-              >
-                <TableCell onClick={(e) => e.stopPropagation()}>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-slate-50/80 dark:bg-white/[0.02]">
+              <TableRow className="border-b border-slate-200 dark:border-white/10 hover:bg-transparent">
+                <TableHead className="w-10 pl-4 py-3">
                   <Checkbox
-                    checked={selectedCustomers.includes(customer.id)}
-                    onCheckedChange={() => onCustomerToggle(customer.id)}
-                    className="border-gray-300 dark:border-gray-600"
+                    checked={allSelected || someSelected}
+                    onCheckedChange={onSelectAll}
+                    className="border-slate-300 dark:border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                   />
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8 ring-2 ring-gray-100 dark:ring-gray-700">
-                      <AvatarImage src={customer.avatar} />
-                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs font-medium">
-                        {(customer.name || 'C').split(' ').map(n => n[0]).join('').toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="font-medium text-gray-900 dark:text-gray-100">{customer.name}</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {customer.customerCode}
-                      </div>
-                    </div>
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer py-3 hover:bg-slate-100/50 dark:hover:bg-white/[0.04] transition-colors"
+                  onClick={() => onSort('name')}
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Cliente
+                    {renderSortIcon('name')}
                   </div>
-                </TableCell>
-                <TableCell>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                      <Mail className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-                      {customer.email}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                      <Phone className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-                      {customer.phone}
-                    </div>
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer py-3 hover:bg-slate-100/50 dark:hover:bg-white/[0.04] transition-colors"
+                  onClick={() => onSort('email')}
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Contacto
+                    {renderSortIcon('email')}
                   </div>
-                </TableCell>
-                <TableCell onClick={(e) => e.stopPropagation()}>
-                  <div className="space-y-2">
-                    {onToggleCustomerStatus ? (
-                      <StatusToggle
-                        status={customer.status}
-                        onToggle={() => onToggleCustomerStatus(customer)}
-                        size="sm"
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer py-3 hover:bg-slate-100/50 dark:hover:bg-white/[0.04] transition-colors"
+                  onClick={() => onSort('status')}
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Estado
+                    {renderSortIcon('status')}
+                  </div>
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer py-3 hover:bg-slate-100/50 dark:hover:bg-white/[0.04] transition-colors"
+                  onClick={() => onSort('lifetime_value')}
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Total Gastado
+                    {renderSortIcon('lifetime_value')}
+                  </div>
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer py-3 hover:bg-slate-100/50 dark:hover:bg-white/[0.04] transition-colors"
+                  onClick={() => onSort('total_purchases')}
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Compras
+                    {renderSortIcon('total_purchases')}
+                  </div>
+                </TableHead>
+                <TableHead className="py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Última Compra
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer py-3 hover:bg-slate-100/50 dark:hover:bg-white/[0.04] transition-colors"
+                  onClick={() => onSort('last_activity')}
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Actividad
+                    {renderSortIcon('last_activity')}
+                  </div>
+                </TableHead>
+                <TableHead className="py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Estado Deuda
+                </TableHead>
+                <TableHead className="w-16 pr-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Acciones
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {customers.map((customer, index) => {
+                const phoneClean = customer.phone?.replace(/\D/g, '') || ''
+                const whatsappUrl = phoneClean ? `https://wa.me/${phoneClean}` : null
+
+                return (
+                  <motion.tr
+                    key={customer.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                    className="group border-b border-slate-100 transition-colors cursor-pointer hover:bg-slate-50/80 dark:border-white/5 dark:hover:bg-white/[0.03]"
+                    onClick={() => onViewCustomer(customer)}
+                  >
+                    <TableCell className="pl-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedCustomers.includes(customer.id)}
+                        onCheckedChange={() => onCustomerToggle(customer.id)}
+                        className="border-slate-300 dark:border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                       />
-                    ) : (
-                      <StatusBadge status={customer.status} size="sm" />
-                    )}
-                    {customer.segment && (
-                      <Badge variant="outline" className="text-xs border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                        {customer.segment}
-                      </Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="font-bold tabular-nums text-foreground">
-                        {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as {total_spent_this_year?: number}).total_spent_this_year ?? customer.lifetime_value) || 0)}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="font-semibold tabular-nums text-foreground">
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9 border border-slate-200 dark:border-white/10 shrink-0">
+                          <AvatarImage src={customer.avatar} />
+                          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs font-bold">
+                            {(customer.name || 'C').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                            {customer.name}
+                            {customer.segment === 'vip' && <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 shrink-0" />}
+                          </div>
+                          <div className="text-xs font-mono text-slate-400 dark:text-slate-500">
+                            {customer.customerCode}
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <div className="space-y-1">
+                        {customer.email && (
+                          <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                            <Mail className="h-3 w-3 text-slate-400 shrink-0" />
+                            <span className="truncate max-w-[160px]">{customer.email}</span>
+                          </div>
+                        )}
+                        {customer.phone && (
+                          <div className="flex items-center gap-1.5 text-xs font-mono text-slate-600 dark:text-slate-400">
+                            <Phone className="h-3 w-3 text-slate-400 shrink-0" />
+                            <span>{customer.phone}</span>
+                            {whatsappUrl && (
+                              <a
+                                href={whatsappUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="ml-1 inline-flex items-center text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300"
+                                title="Escribir por WhatsApp"
+                              >
+                                <MessageCircle className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-col gap-1.5 items-start">
+                        {onToggleCustomerStatus ? (
+                          <StatusToggle
+                            status={customer.status}
+                            onToggle={() => onToggleCustomerStatus(customer)}
+                            size="sm"
+                          />
+                        ) : (
+                          <StatusBadge status={customer.status} size="sm" />
+                        )}
+                        {customer.segment && customer.segment !== 'regular' && (
+                          <Badge variant="outline" className="text-[10px] font-semibold border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                            {customer.segment}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <div className="font-bold tabular-nums text-slate-900 dark:text-white text-sm">
+                        {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as { total_spent_this_year?: number }).total_spent_this_year ?? customer.lifetime_value) || 0)}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <div className="font-semibold tabular-nums text-slate-700 dark:text-slate-300 text-sm">
                         {(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)}
-                  </div>
-                </TableCell>
-                <TableCell>
-                <div className="space-y-1">
-                  <div className="font-semibold text-sm tabular-nums text-foreground">
-                      {formatters.currency((metricsMap[customer.id]?.lastAmount ?? customer.last_purchase_amount ?? 0))}
-                  </div>
-                  <div className="text-[10px] uppercase font-medium text-muted-foreground tracking-wide">
-                    {customer.city || ''}
-                  </div>
-                </div>
-                </TableCell>
-                <TableCell>
-                  <div className="space-y-1">
-                    <div className="text-sm text-gray-700 dark:text-gray-300">
-                      {formatters.date(customer.last_activity)}
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {getRelativeTime(customer.last_activity)}
-                    </div>
-                  </div>
-                </TableCell>
-                {/* Columna deuda */}
-                <TableCell onClick={(e) => e.stopPropagation()}>
-                  <CustomerCreditBadge
-                    creditSummary={creditSummaries[customer.id] ?? null}
-                    variant="compact"
-                    showTooltip
-                  />
-                </TableCell>
-                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                  <CustomerActions
-                    customer={customer}
-                    onView={() => onViewCustomer(customer)}
-                    onEdit={() => onEditCustomer(customer)}
-                    onDelete={() => onDeleteCustomer(customer)}
-                    onToggleStatus={onToggleCustomerStatus ? () => onToggleCustomerStatus(customer) : undefined}
-                  />
-                </TableCell>
-              </motion.tr>
-            ))}
-          </TableBody>
-        </Table>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <div className="space-y-0.5">
+                        <div className="font-medium text-xs tabular-nums text-slate-800 dark:text-slate-200">
+                          {formatters.currency((metricsMap[customer.id]?.lastAmount ?? customer.last_purchase_amount ?? 0))}
+                        </div>
+                        {customer.city && (
+                          <div className="text-[10px] uppercase font-semibold text-slate-400 dark:text-slate-500 tracking-wider">
+                            {customer.city}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <div className="space-y-0.5">
+                        <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                          {formatters.date(customer.last_activity)}
+                        </div>
+                        <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                          {getRelativeTime(customer.last_activity)}
+                        </div>
+                      </div>
+                    </TableCell>
+                    {/* Columna deuda */}
+                    <TableCell className="py-3" onClick={(e) => e.stopPropagation()}>
+                      <CustomerCreditBadge
+                        creditSummary={creditSummaries[customer.id] ?? null}
+                        variant="compact"
+                        showTooltip
+                      />
+                    </TableCell>
+                    <TableCell className="pr-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <CustomerActions
+                        customer={customer}
+                        onView={() => onViewCustomer(customer)}
+                        onEdit={() => onEditCustomer(customer)}
+                        onDelete={() => onDeleteCustomer(customer)}
+                        onToggleStatus={onToggleCustomerStatus ? () => onToggleCustomerStatus(customer) : undefined}
+                      />
+                    </TableCell>
+                  </motion.tr>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   )
@@ -580,7 +608,7 @@ function GridView({
   )
 }
 
-// Componente de tarjeta de cliente mejorada
+// Componente de tarjeta de cliente mejorada (Vista en Cuadrícula)
 function CustomerCard({
   customer,
   selected,
@@ -602,125 +630,161 @@ function CustomerCard({
   metricsMap: Record<string, CustomerMetrics>
   creditSummary?: CustomerCreditSummary | null
 }) {
+  const phoneClean = customer.phone?.replace(/\D/g, '') || ''
+  const whatsappUrl = phoneClean ? `https://wa.me/${phoneClean}` : null
+
   return (
     <Card className={cn(
-      "group hover:shadow-lg transition-all duration-200 cursor-pointer",
-      "border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900",
-      "hover:border-gray-300 dark:hover:border-gray-600",
-      selected && "ring-2 ring-blue-500 dark:ring-blue-400 shadow-lg border-blue-200 dark:border-blue-600"
+      "group relative flex flex-col justify-between transition-all duration-300 overflow-hidden cursor-pointer",
+      "border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]",
+      "hover:border-slate-300 hover:shadow-md dark:hover:border-white/20 dark:hover:shadow-black/40",
+      selected && "ring-2 ring-blue-500 border-blue-300 dark:border-blue-500/50 shadow-md"
     )}>
-      <CardContent className="p-4">
-        {/* Header con checkbox y acciones */}
-        <div className="flex items-start justify-between mb-3">
-          <Checkbox
-            checked={selected}
-            onCheckedChange={onToggle}
-            onClick={(e) => e.stopPropagation()}
-            className="border-gray-300 dark:border-gray-600"
-          />
-          <CustomerActions
-            customer={customer}
-            onView={onView}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onToggleStatus={onToggleStatus}
-          />
-        </div>
-
-        {/* Avatar y nombre */}
-        <div className="flex items-center gap-3 mb-4" onClick={onView}>
-          <Avatar className="h-12 w-12 ring-2 ring-gray-100 dark:ring-gray-700">
-            <AvatarImage src={customer.avatar} />
-            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-medium">
-              {(customer.name || 'C').split(' ').map(n => n[0]).join('').toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold truncate text-gray-900 dark:text-gray-100">{customer.name}</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{customer.customerCode}</p>
-          </div>
-        </div>
-
-        {/* Información de contacto */}
-        <div className="space-y-2 mb-4">
-          <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-            <Mail className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-            <span className="truncate">{customer.email}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-            <Phone className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-            <span>{customer.phone}</span>
-          </div>
-          {customer.city && (
-            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-              <MapPin className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-              <span className="truncate">{customer.city}</span>
+      <CardContent className="p-4 flex flex-col justify-between h-full">
+        <div>
+          {/* Header con checkbox, badges superiores y acciones */}
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={selected}
+                onCheckedChange={onToggle}
+                onClick={(e) => e.stopPropagation()}
+                className="border-slate-300 dark:border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+              />
+              <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                {customer.customerCode}
+              </span>
             </div>
-          )}
-        </div>
+            <div className="flex items-center gap-1">
+              {customer.customer_type === 'premium' && (
+                <Badge className="text-[10px] bg-amber-500/10 text-amber-600 border border-amber-500/20 dark:bg-amber-400/20 dark:text-amber-300">
+                  <Star className="h-3 w-3 mr-1 fill-amber-400 text-amber-400" />
+                  Premium
+                </Badge>
+              )}
+              <CustomerActions
+                customer={customer}
+                onView={onView}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onToggleStatus={onToggleStatus}
+              />
+            </div>
+          </div>
 
-        {/* Estados y badges */}
-        <div className="flex flex-wrap gap-2 mb-4" onClick={(e) => e.stopPropagation()}>
-          {onToggleStatus ? (
-            <StatusToggle
-              status={customer.status}
-              onToggle={onToggleStatus}
-              size="sm"
+          {/* Avatar, Nombre y Segmento */}
+          <div className="flex items-start gap-3 mb-4" onClick={onView}>
+            <Avatar className="h-11 w-11 border border-slate-200 dark:border-white/10 shrink-0 mt-0.5">
+              <AvatarImage src={customer.avatar} />
+              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-sm">
+                {(customer.name || 'C').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-slate-900 dark:text-white truncate flex items-center gap-1 text-base">
+                {customer.name}
+                {customer.segment === 'vip' && <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 shrink-0" />}
+              </h3>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                {onToggleStatus ? (
+                  <StatusToggle
+                    status={customer.status}
+                    onToggle={onToggleStatus}
+                    size="sm"
+                  />
+                ) : (
+                  <StatusBadge status={customer.status} size="sm" />
+                )}
+                {customer.segment && customer.segment !== 'regular' && (
+                  <Badge variant="outline" className="text-[10px] uppercase font-semibold border-slate-200 text-slate-600 dark:border-white/10 dark:text-slate-400">
+                    {customer.segment}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Contacto directo */}
+          <div className="space-y-1.5 mb-4 p-2.5 rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 text-xs">
+            {customer.email && (
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span className="truncate">{customer.email}</span>
+              </div>
+            )}
+            {customer.phone && (
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-2 font-mono">
+                  <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <span>{customer.phone}</span>
+                </div>
+                {whatsappUrl && (
+                  <a
+                    href={whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
+                    title="Escribir por WhatsApp"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    Chat
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Indicador de Deuda */}
+          <div className="mb-4" onClick={(e) => e.stopPropagation()}>
+            <CustomerCreditBadge
+              creditSummary={creditSummary ?? null}
+              variant="compact"
+              showTooltip
             />
-          ) : (
-            <StatusBadge status={customer.status} size="sm" />
-          )}
-          {customer.segment && (
-            <Badge variant="outline" className="text-xs border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-              {customer.segment}
-            </Badge>
-          )}
-          {customer.customer_type === 'premium' && (
-            <Badge className="text-xs bg-gradient-to-r from-yellow-400 to-orange-500 border-0 text-white">
-              <Star className="h-3 w-3 mr-1" />
-              Premium
-            </Badge>
-          )}
-          {/* Indicador de deuda */}
-          <CustomerCreditBadge
-            creditSummary={creditSummary ?? null}
-            variant="compact"
-            showTooltip
-          />
-        </div>
+          </div>
 
-        {/* Métricas */}
-        <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+          {/* Métricas destacadas */}
+          <div className="grid grid-cols-2 gap-2 p-3 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] mb-4">
             <div>
-              <div className="text-[10px] uppercase font-semibold tracking-wide text-muted-foreground mb-1">Valor Total</div>
-              <div className="font-bold tabular-nums text-foreground">
-              {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as {total_spent_this_year?: number}).total_spent_this_year ?? customer.lifetime_value) || 0)}
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Total Gastado</div>
+              <div className="font-bold tabular-nums text-slate-900 dark:text-white text-sm">
+                {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as { total_spent_this_year?: number }).total_spent_this_year ?? customer.lifetime_value) || 0)}
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase font-semibold tracking-wide text-muted-foreground mb-1">Compras</div>
-            <div className="font-bold tabular-nums text-foreground">{(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)}</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Compras</div>
+              <div className="font-bold tabular-nums text-slate-900 dark:text-white text-sm">
+                {(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)}
+              </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase font-semibold tracking-wide text-muted-foreground mb-1">Última compra</div>
-            <div className="font-bold tabular-nums text-foreground">{formatters.currency((metricsMap[customer.id]?.lastAmount ?? customer.last_purchase_amount ?? 0))}</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Última compra</div>
+              <div className="font-semibold tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                {formatters.currency((metricsMap[customer.id]?.lastAmount ?? customer.last_purchase_amount ?? 0))}
+              </div>
             </div>
-          <div>
-            <div className="text-[10px] uppercase font-semibold tracking-wide text-muted-foreground mb-1">Puntos</div>
-            <div className="font-bold tabular-nums text-foreground">{(customer as unknown as {loyalty_points?: number}).loyalty_points ?? 0}</div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Puntos</div>
+              <div className="font-semibold tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                {(customer as unknown as { loyalty_points?: number }).loyalty_points ?? 0}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Última actividad */}
-        <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+        {/* Footer: Última actividad y Ciudad */}
+        <div className="pt-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
+          <div className="flex items-center gap-1.5">
             <Clock className="h-3 w-3" />
-            <span>Última actividad: {getRelativeTime(customer.last_activity)}</span>
+            <span>{getRelativeTime(customer.last_activity)}</span>
           </div>
-          <div className="mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <MapPin className="h-3 w-3" />
-            <span>{customer.city || ''}</span>
-          </div>
+          {customer.city && (
+            <div className="flex items-center gap-1 font-semibold uppercase tracking-wider">
+              <MapPin className="h-3 w-3" />
+              <span>{customer.city}</span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

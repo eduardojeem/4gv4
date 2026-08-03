@@ -48,7 +48,7 @@ export function SaleSummary({
   WHOLESALE_DISCOUNT_RATE,
   formatCurrency
 }: SaleSummaryProps) {
-  const { discount, paymentMethod, creditTerms } = useCheckout()
+  const { discount, paymentMethod, creditTerms, storeCreditApplied } = useCheckout()
   const creditSummary = React.useMemo(() => buildPosCreditSummary(cartCalculations.total, creditTerms), [
     cartCalculations.total,
     creditTerms.count,
@@ -149,6 +149,22 @@ export function SaleSummary({
         <span>{isCreditSale ? 'Total financiado:' : 'Total:'}</span>
         <span className="text-primary">{formatCurrency(displayedTotal)}</span>
       </div>
+
+      {/* El saldo a favor no baja el total: baja lo que hay que cobrar. */}
+      {storeCreditApplied > 0 && (
+        <>
+          <div className="flex justify-between text-sm text-indigo-600 dark:text-indigo-400">
+            <span>Saldo a favor aplicado:</span>
+            <span>- {formatCurrency(storeCreditApplied)}</span>
+          </div>
+          <div className="flex justify-between font-bold">
+            <span>A cobrar:</span>
+            <span className="text-primary">
+              {formatCurrency(Math.max(0, displayedTotal - storeCreditApplied))}
+            </span>
+          </div>
+        </>
+      )}
 
       {/* Información adicional */}
       {isWholesale && (

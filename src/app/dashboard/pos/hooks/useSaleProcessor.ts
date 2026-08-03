@@ -1,6 +1,14 @@
 /**
- * Hook para procesar ventas en el POS
- * Centraliza toda la lógica de procesamiento de ventas
+ * ATENCION: este hook NO se usa.
+ *
+ * El POS procesa sus ventas desde `page.tsx`, que llama a `processSale` de
+ * `usePOSProducts` y termina en `/api/pos/process-sale` (RPC transaccional
+ * `process_pos_sale_atomic_v3`). Este archivo quedo de una version anterior y
+ * su `persistSaleToSupabase` ni siquiera compila contra el esquema actual: no
+ * setea `code` ni `branch_id`, que son NOT NULL.
+ *
+ * Se deja porque borrarlo excede el alcance del cambio que lo detecto, pero no
+ * agregues logica aca: no se ejecuta.
  */
 
 import { useCallback } from 'react'

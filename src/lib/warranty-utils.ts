@@ -53,6 +53,32 @@ export function calculateWarrantyExpiration(
  * @param expiresAt - Warranty expiration date
  * @returns Warranty status
  */
+/**
+ * Fecha de vencimiento anclada al momento en que la garantia realmente empieza:
+ * cuando el cliente recibe el equipo.
+ *
+ * Antes se calculaba desde `new Date()` (el instante de la edicion), asi que el
+ * cliente perdia todos los dias entre que se cargaba la garantia y la entrega.
+ *
+ * Orden de anclaje: entrega > finalizacion > sin fecha (la garantia todavia no
+ * empezo y se resolvera al entregar).
+ */
+export function resolveWarrantyExpiration(
+  warrantyMonths: number,
+  anchors: { deliveredAt?: string | null; completedAt?: string | null }
+): string | null {
+  const months = Number(warrantyMonths || 0)
+  if (!Number.isFinite(months) || months <= 0) return null
+
+  const anchor = anchors.deliveredAt || anchors.completedAt
+  if (!anchor) return null
+
+  const start = new Date(anchor)
+  if (!Number.isFinite(start.getTime())) return null
+
+  return calculateWarrantyExpiration(start, months).toISOString()
+}
+
 export function getWarrantyStatus(expiresAt: Date | string | null): WarrantyStatus {
   if (!expiresAt) return 'none'
   

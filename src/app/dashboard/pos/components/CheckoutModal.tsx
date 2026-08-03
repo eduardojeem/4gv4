@@ -30,6 +30,7 @@ import { useCreditSystem } from '@/hooks/use-credit-system'
 import { CartItem } from '../types'
 import { Badge } from '@/components/ui/badge'
 import { PaymentMethods } from './checkout/PaymentMethods'
+import { StoreCreditPanel } from './checkout/StoreCreditPanel'
 import { CustomerSelection } from './checkout/CustomerSelection'
 import { SaleSummary } from './checkout/SaleSummary'
 import { PromotionsSection } from './checkout/PromotionsSection'
@@ -141,7 +142,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     notes,
     setNotes,
     creditTerms,
-    paymentSplit
+    paymentSplit,
+    storeCreditApplied
   } = useCheckout()
 
   const {
@@ -149,9 +151,14 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     selectedCustomer
   } = usePOSCustomer()
 
+  // Lo que falta cobrar despues de aplicar el saldo a favor. El total de la
+  // venta no cambia: cambia cuanto hay que cobrar por otros medios, asi que
+  // tanto el pago mixto como el financiado se calculan sobre esto.
+  const amountDue = Math.max(0, cartCalculations.total - storeCreditApplied)
+
   const mixedPaymentValidation = React.useMemo(
-    () => getMixedPaymentValidation(cartCalculations.total, paymentSplit),
-    [cartCalculations.total, paymentSplit]
+    () => getMixedPaymentValidation(amountDue, paymentSplit),
+    [amountDue, paymentSplit]
   )
 
   // Sistema de creditos
@@ -167,13 +174,13 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   
   // Verificar si el cliente puede comprar a credito
   const creditPlan = React.useMemo(() => buildCreditInstallmentPlan({
-    principalAmount: cartCalculations.total,
+    principalAmount: amountDue,
     interestRate: creditTerms.interestRate,
     installmentCount: creditTerms.count,
     frequency: creditTerms.frequency,
-  }), [cartCalculations.total, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
+  }), [amountDue, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
   const canUseCredit = activeCustomer && canSellOnCredit(activeCustomer, creditPlan.financedTotal)
-  const displayTotal = paymentMethod === 'credit' ? creditPlan.financedTotal : cartCalculations.total
+  const displayTotal = paymentMethod === 'credit' ? creditPlan.financedTotal : amountDue
   const creditSummary = activeCustomer ? getCreditSummary(activeCustomer) : null
   return (
     <Dialog open={isCheckoutOpen} onOpenChange={(open) => !open && onCancel()}>
@@ -433,8 +440,15 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               </div>
             )}
 
-            <PaymentMethods
+            <StoreCreditPanel
+              key={selectedCustomer || 'sin-cliente'}
+              customerId={selectedCustomer}
               cartTotal={cartCalculations.total}
+              formatCurrency={formatCurrency}
+            />
+
+            <PaymentMethods
+              cartTotal={amountDue}
               canUseCredit={canUseCredit}
               creditSummary={creditSummary || undefined}
               formatCurrency={formatCurrency}
@@ -522,7 +536,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                         !isRegisterOpen ||
                         paymentStatus === 'processing' ||
                         !paymentMethod ||
-                        (paymentMethod === 'cash' && cashReceived < cartCalculations.total) ||
+                        (paymentMethod === 'cash' && cashReceived < amountDue) ||
                         (paymentMethod === 'card' && cardNumber.length < 4) ||
                         (paymentMethod === 'transfer' && !transferReference)
                       }

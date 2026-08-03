@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveWarrantyExpiration } from '@/lib/warranty-utils'
 import {
   fetchRepairById,
   isNextResponse,
@@ -41,6 +42,23 @@ export async function POST(request: NextRequest, context: RouteParams) {
 
     if (note) {
       updateData.solution = note
+    }
+
+    // La entrega es el momento en que la garantia empieza a correr de verdad,
+    // asi que la fecha de vencimiento se fija aca a partir de los meses
+    // configurados. Sin esto el cliente perdia los dias entre que se cargaba la
+    // garantia y el retiro del equipo.
+    const { data: currentRepair } = await ctx.supabase
+      .from('repairs')
+      .select('warranty_months')
+      .eq('id', id)
+      .eq('organization_id', ctx.organizationId)
+      .eq('branch_id', ctx.branchId)
+      .maybeSingle()
+
+    const warrantyMonths = Number(currentRepair?.warranty_months || 0)
+    if (warrantyMonths > 0) {
+      updateData.warranty_expires_at = resolveWarrantyExpiration(warrantyMonths, { deliveredAt: now })
     }
 
     const { data, error } = await ctx.supabase

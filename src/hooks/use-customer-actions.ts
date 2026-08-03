@@ -9,7 +9,21 @@ interface UseCustomerActionsProps {
 }
 
 async function readApiResponse(response: Response) {
-  const result = await response.json()
+  // La respuesta puede no ser JSON: una pagina de error del servidor, un
+  // redirect a login o un proxy devuelven HTML. Hacer `response.json()` a ciegas
+  // lanzaba «Unexpected token '<'», que no le dice nada a nadie.
+  const raw = await response.text()
+  let result: { success?: boolean; error?: string; [key: string]: unknown }
+
+  try {
+    result = JSON.parse(raw)
+  } catch {
+    throw new Error(
+      response.status === 401 || response.status === 403
+        ? 'Tu sesión expiró. Volvé a iniciar sesión.'
+        : `El servidor respondió de forma inesperada (HTTP ${response.status}). Intenta nuevamente.`
+    )
+  }
 
   if (!response.ok || !result.success) {
     throw new Error(result.error || 'Error procesando clientes')
@@ -74,15 +88,46 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
 
   const refreshCustomers = useCallback(async (): Promise<Customer[] | undefined> => {
     try {
-      const result = await readApiResponse(await fetch('/api/customers?page=1&limit=1000'))
-      const customers = (result.data || []).map(mapRawToCustomer)
+      // La API topea el limite en 200 por pagina: pedir 1000 devolvia solo los
+      // primeros 200 y, como el filtrado es en memoria, el resto de los
+      // clientes quedaba invisible (no aparecian ni al buscarlos).
+      const PAGE_SIZE = 200
+      const MAX_PAGES = 50
+      const raw: unknown[] = []
+      let total = 0
 
-      logger.info('Customers refreshed', { count: customers.length })
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        try {
+          const result = await readApiResponse(await fetch(`/api/customers?page=${page}&limit=${PAGE_SIZE}`))
+          const batch = (result.data as unknown[]) || []
+          const reportedTotal = (result.pagination as { total?: number } | undefined)?.total
+          raw.push(...batch)
+          total = reportedTotal ?? raw.length
+          if (batch.length < PAGE_SIZE || raw.length >= total) break
+        } catch (pageError) {
+          // La primera pagina si es fatal: sin ella no hay nada que mostrar.
+          if (page === 1) throw pageError
+          // En las siguientes se conserva lo ya cargado en lugar de perder todo.
+          logger.warn('Stopped paginating customers after a failed page', {
+            page,
+            loaded: raw.length,
+            error: pageError instanceof Error ? pageError.message : String(pageError),
+          })
+          break
+        }
+      }
+
+      const customers = raw.map(mapRawToCustomer)
+
+      if (total > customers.length) {
+        logger.warn('Customer list truncated by page cap', { loaded: customers.length, total })
+      }
+      logger.info('Customers refreshed', { count: customers.length, total })
 
       if (setState) {
         setState(prev => {
           const itemsPerPage = prev.pagination.itemsPerPage
-          const totalItems = result.pagination?.total || customers.length
+          const totalItems = total || customers.length
           const totalPages = Math.ceil(totalItems / itemsPerPage)
           const page = 1
           const start = (page - 1) * itemsPerPage
@@ -194,14 +239,17 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       toast.success("Cliente eliminado exitosamente")
       return { success: true }
     } catch (error: any) {
+      // El servidor explica por que no se puede borrar (creditos, reparaciones):
+      // ese mensaje es el util, no uno generico.
+      const serverMessage = error instanceof Error ? error.message : ''
       const appError = error instanceof AppError ? error : new AppError(
         ErrorCode.DATABASE_ERROR,
-        "Error al eliminar cliente",
+        serverMessage || "Error al eliminar cliente",
         { originalError: error, customerId: id }
       )
 
       logger.error('Customer deletion failed', appError)
-      toast.error(appError.message)
+      toast.error('No se pudo eliminar el cliente', { description: appError.message })
       return { success: false, error: appError }
     }
   }, [setState])
@@ -296,20 +344,24 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
         return { success: false, error: `Limite de ${MAX_BULK_DELETE} registros excedido` }
       }
 
-      await readApiResponse(await fetch(`/api/customers?ids=${encodeURIComponent(customerIds.join(','))}`, { method: 'DELETE' }))
+      // El servidor devuelve cuantos borro realmente: un id de otra
+      // organizacion se filtra y no debe contarse como eliminado.
+      const result = await readApiResponse(await fetch(`/api/customers?ids=${encodeURIComponent(customerIds.join(','))}`, { method: 'DELETE' }))
+      const deleted = Number(result.deleted ?? customerIds.length)
       await refreshCustomers()
-      toast.success(`${customerIds.length} cliente(s) eliminado(s)`)
-      return { success: true, deleted: customerIds.length }
+      toast.success(`${deleted} cliente(s) eliminado(s)`)
+      return { success: true, deleted }
     } catch (error: any) {
-      toast.error("Error en eliminacion masiva: " + error.message)
+      toast.error('No se pudieron eliminar los clientes', { description: error?.message })
       return { success: false, error }
     }
   }, [refreshCustomers])
 
   const addNote = useCallback(async (customerId: string, note: string) => {
     try {
-      const result = await readApiResponse(await fetch(`/api/customers?page=1&limit=1&search=${encodeURIComponent(customerId)}`))
-      const raw = (result.data || []).find((customer: any) => customer.id === customerId)
+      const result = await readApiResponse(await fetch(`/api/customers?id=${encodeURIComponent(customerId)}&limit=1`))
+      const customersList = Array.isArray(result.data) ? result.data : []
+      const raw = customersList.find((customer: any) => customer.id === customerId)
       const currentNotes = raw?.notes || ''
       const timestamp = new Date().toISOString()
       const notes = currentNotes ? `${currentNotes}\n\n[${timestamp}] ${note}` : `[${timestamp}] ${note}`
@@ -324,8 +376,9 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
 
   const addTag = useCallback(async (customerId: string, tag: string) => {
     try {
-      const result = await readApiResponse(await fetch(`/api/customers?page=1&limit=1&search=${encodeURIComponent(customerId)}`))
-      const raw = (result.data || []).find((customer: any) => customer.id === customerId)
+      const result = await readApiResponse(await fetch(`/api/customers?id=${encodeURIComponent(customerId)}&limit=1`))
+      const customersList = Array.isArray(result.data) ? result.data : []
+      const raw = customersList.find((customer: any) => customer.id === customerId)
       const tags = Array.from(new Set([...(raw?.tags || []), tag]))
       await updateCustomer(customerId, { tags })
       toast.success("Etiqueta agregada exitosamente")
@@ -338,8 +391,9 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
 
   const removeTag = useCallback(async (customerId: string, tag: string) => {
     try {
-      const result = await readApiResponse(await fetch(`/api/customers?page=1&limit=1&search=${encodeURIComponent(customerId)}`))
-      const raw = (result.data || []).find((customer: any) => customer.id === customerId)
+      const result = await readApiResponse(await fetch(`/api/customers?id=${encodeURIComponent(customerId)}&limit=1`))
+      const customersList = Array.isArray(result.data) ? result.data : []
+      const raw = customersList.find((customer: any) => customer.id === customerId)
       const tags = (raw?.tags || []).filter((item: string) => item !== tag)
       await updateCustomer(customerId, { tags })
       toast.success("Etiqueta eliminada exitosamente")

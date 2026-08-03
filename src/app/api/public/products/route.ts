@@ -45,10 +45,11 @@ export async function GET(request: NextRequest) {
 
     const authSupabase = await createClient()
 
-    const { data: { session } } = await authSupabase.auth.getSession()
+    const { data: { user } } = await authSupabase.auth.getUser()
     const { isWholesale } = await resolveWholesaleStatus({
       supabase: authSupabase,
-      user: session?.user ?? null,
+      user: user ?? null,
+      organizationId: organization.id,
     })
 
     // Build query - only active products, never select wholesale_price for non-wholesale
@@ -172,7 +173,11 @@ export async function GET(request: NextRequest) {
         organization: toPublicOrganizationPayload(organization),
       },
     })
-    response.headers.set('Cache-Control', 'public, max-age=30, s-maxage=60')
+    response.headers.set('Vary', 'Cookie')
+    response.headers.set(
+      'Cache-Control',
+      user ? 'private, no-store' : 'public, max-age=30, s-maxage=60'
+    )
     return response
   } catch (error) {
     logger.error('Public products API error', { error })

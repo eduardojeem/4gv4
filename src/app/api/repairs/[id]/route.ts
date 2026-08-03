@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveWarrantyExpiration } from '@/lib/warranty-utils'
 import {
   assertRepairExists,
   fetchRepairById,
@@ -43,7 +44,10 @@ const REPAIR_FIELD_MAP: Record<string, string> = {
   warrantyNotes: 'warranty_notes',
 }
 
-function buildRepairUpdate(payload: Record<string, unknown>) {
+function buildRepairUpdate(
+  payload: Record<string, unknown>,
+  anchors: { deliveredAt?: string | null; completedAt?: string | null } = {}
+) {
   const updateData: Record<string, unknown> = {}
 
   for (const [uiField, dbField] of Object.entries(REPAIR_FIELD_MAP)) {
@@ -53,14 +57,13 @@ function buildRepairUpdate(payload: Record<string, unknown>) {
   }
 
   if (payload.warrantyMonths !== undefined) {
-    const months = Number(payload.warrantyMonths || 0)
-    if (months > 0) {
-      const expirationDate = new Date()
-      expirationDate.setMonth(expirationDate.getMonth() + months)
-      updateData.warranty_expires_at = expirationDate.toISOString()
-    } else {
-      updateData.warranty_expires_at = null
-    }
+    // La garantia corre desde que el cliente recibe el equipo. Si todavia no se
+    // entrego ni finalizo, queda en null: la fecha definitiva se fija al
+    // entregar (ver /api/repairs/[id]/delivery).
+    updateData.warranty_expires_at = resolveWarrantyExpiration(
+      Number(payload.warrantyMonths || 0),
+      anchors
+    )
   }
 
   if (Object.keys(updateData).length > 0) {
@@ -121,7 +124,7 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
     // Verificar que la reparación no está en estado terminal
     const { data: current } = await ctx.supabase
       .from('repairs')
-      .select('id, status')
+      .select('id, status, delivered_at, completed_at')
       .eq('id', id)
       .eq('organization_id', ctx.organizationId)
       .eq('branch_id', ctx.branchId)
@@ -140,7 +143,10 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
 
     const body = await request.json().catch(() => ({})) as Record<string, unknown>
     const { parts, notes, images, ...repairPayload } = body
-    const updateData = buildRepairUpdate(repairPayload)
+    const updateData = buildRepairUpdate(repairPayload, {
+      deliveredAt: current.delivered_at as string | null,
+      completedAt: current.completed_at as string | null,
+    })
 
     if (Object.keys(updateData).length > 0) {
       const { data, error } = await ctx.supabase

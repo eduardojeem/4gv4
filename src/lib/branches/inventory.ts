@@ -83,12 +83,6 @@ export function applyBranchInventoryToProducts<T extends { id: string; stock_qua
   stockMap: Map<string, number>,
   branchScoped: boolean
 ): Array<T & { branch_stock_quantity?: number }> {
-  // If branch_inventory has no data at all, fall back to global stock
-  // This handles the case where the table exists but hasn't been populated yet
-  if (branchScoped && stockMap.size === 0) {
-    return products.map((product) => ({ ...product }))
-  }
-
   return products.map((product) => {
     if (stockMap.has(product.id)) {
       const branchStock = Number(stockMap.get(product.id) || 0)
@@ -100,12 +94,11 @@ export function applyBranchInventoryToProducts<T extends { id: string; stock_qua
     }
 
     if (branchScoped) {
-      // Product exists in catalog but not in this branch's inventory.
-      // Preserve the global stock_quantity instead of zeroing it — the branch
-      // hasn't been populated yet, so the global value is the best we have.
+      // A catalog product without a row in the selected branch has no stock there.
       return {
         ...product,
-        branch_stock_quantity: product.stock_quantity ?? 0,
+        stock_quantity: 0,
+        branch_stock_quantity: 0,
       }
     }
 

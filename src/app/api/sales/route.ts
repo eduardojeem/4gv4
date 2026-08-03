@@ -24,7 +24,7 @@ export const GET = withTenantAuth({ permission: 'pos.sales.read', module: 'pos' 
       .from('sales')
       .select(`
         *,
-        customer:customers(id, first_name, last_name, phone),
+        customer:customers!customer_id(id, first_name, last_name, phone),
         sale_items(
           *,
           product:products(id, name, sku)
@@ -207,7 +207,7 @@ export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'po
       .from('sales')
       .select(`
         *,
-        customer:customers(id, first_name, last_name),
+        customer:customers!customer_id(id, first_name, last_name),
         sale_items(*, product:products(id, name, sku))
       `)
       .eq('id', sale.id)

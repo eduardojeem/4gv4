@@ -15,6 +15,7 @@ export type UseCustomerMetricsOptions = {
   timeRange?: '3months' | '6months' | '12months'
   includeInactive?: boolean
   segmentBy?: 'segment' | 'city' | 'customer_type'
+  creditSummaries?: Record<string, { total_pending?: number; current_balance?: number }>
 }
 
 // Map de métricas por cliente (para listas)
@@ -65,10 +66,22 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
   const totalCustomers = customers.length
   const totalRevenue = customers.reduce((sum, c) => sum + ((c as any).total_spent_this_year ?? c.lifetime_value ?? 0), 0)
   const avgCustomerValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0
-  const activeCustomers = customers.filter(c => c.status === 'active').length
-  const inactiveCustomers = customers.filter(c => c.status === 'inactive').length
-  const suspendedCustomers = customers.filter(c => c.status === 'suspended').length
-  const vipCustomers = customers.filter(c => c.segment === 'vip').length
+  const activeCustomers = customers.filter(c => {
+    const st = String(c.status || 'active').toLowerCase().trim()
+    return st === 'active' || st === 'activo'
+  }).length
+  const inactiveCustomers = customers.filter(c => {
+    const st = String(c.status || '').toLowerCase().trim()
+    return st === 'inactive' || st === 'inactivo'
+  }).length
+  const suspendedCustomers = customers.filter(c => {
+    const st = String(c.status || '').toLowerCase().trim()
+    return st === 'suspended' || st === 'suspendido'
+  }).length
+  const vipCustomers = customers.filter(c => {
+    const seg = String(c.segment || '').toLowerCase().trim()
+    return seg === 'vip'
+  }).length
 
   // Ingresos reales por mes desde la tabla `sales` (clave "YYYY-M").
   // Si la consulta falla, monthlyData cae al estimado homogéneo anterior.
@@ -126,7 +139,10 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
       d.setMonth(now.getMonth() - i)
       const monthShort = d.toLocaleString('es-ES', { month: 'short' })
       const newCustomers = customers.filter(c => {
-        const reg = new Date(c.registration_date)
+        const dateStr = c.registration_date || c.created_at
+        if (!dateStr) return false
+        const reg = new Date(dateStr)
+        if (isNaN(reg.getTime())) return false
         return reg.getMonth() === d.getMonth() && reg.getFullYear() === d.getFullYear()
       }).length
 
@@ -165,9 +181,45 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
 
   const retentionRate = totalCustomers > 0 ? Math.round((activeCustomers / totalCustomers) * 1000) / 10 : 0
 
+  const creditSummaries = options?.creditSummaries || {}
+
+  const getCustomerDebt = (c: Customer) => {
+    const summary = creditSummaries[c.id]
+    const summaryPending = summary ? Number(summary.total_pending ?? summary.current_balance ?? 0) : 0
+    const customerPending = Number(c.current_balance || c.pending_amount || 0)
+    return Math.max(0, summaryPending || customerPending)
+  }
+
+  const totalDebt = customers.reduce((sum, c) => sum + getCustomerDebt(c), 0)
+  const customersWithDebt = customers.filter(c => getCustomerDebt(c) > 0).length
+
+  const debtDistribution = useMemo(() => {
+    let alDia = 0
+    let deudaBaja = 0 // < 500.000
+    let deudaMedia = 0 // 500.000 - 2.000.000
+    let deudaAlta = 0 // > 2.000.000
+
+    customers.forEach(c => {
+      const debt = getCustomerDebt(c)
+      if (debt === 0) alDia++
+      else if (debt < 500000) deudaBaja++
+      else if (debt < 2000000) deudaMedia++
+      else deudaAlta++
+    })
+
+    return [
+      { name: 'Al día', value: alDia, color: '#10b981' },
+      { name: 'Deuda Baja (< 500k)', value: deudaBaja, color: '#3b82f6' },
+      { name: 'Deuda Media (500k - 2M)', value: deudaMedia, color: '#f59e0b' },
+      { name: 'Deuda Alta (> 2M)', value: deudaAlta, color: '#ef4444' },
+    ].filter(item => item.value > 0)
+  }, [customers, creditSummaries])
+
   return {
     totalCustomers,
     totalRevenue,
+    totalDebt,
+    customersWithDebt,
     avgCustomerValue,
     retentionRate,
     activeCustomers: includeInactive ? activeCustomers : undefined,
@@ -176,6 +228,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
     vipCustomers,
     monthlyData,
     segmentDistribution,
+    debtDistribution,
     topCustomers
   }
 }

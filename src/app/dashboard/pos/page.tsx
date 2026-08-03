@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 import { toast } from 'sonner'
+import { redeemStoreCredit } from '@/lib/after-sales/redeem-store-credit'
 import { showAddToCartToast } from '@/lib/pos-toasts'
 import { ReceiptGenerator } from '@/components/pos/ReceiptGenerator'
 import { createReceiptData, printReceipt, downloadReceipt, shareReceipt } from '@/lib/receipt-utils'
@@ -220,7 +221,8 @@ function POSPageContent() {
     setPaymentSplit,
     addPaymentSplit,
     removePaymentSplit,
-    resetCheckoutState
+    resetCheckoutState,
+    storeCreditApplied,
   } = useCheckout()
   
 
@@ -1365,6 +1367,13 @@ function POSPageContent() {
         if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
           throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta'))
         }
+
+        // El saldo a favor se consume recien con la venta confirmada.
+        await redeemStoreCredit({
+          customerId: selectedCustomer,
+          saleId: saleResult?.saleId,
+          amount: storeCreditApplied,
+        })
         const persistedReceipt = {
           ...receiptData,
           receiptNumber: saleResult?.saleId
@@ -1522,6 +1531,13 @@ function POSPageContent() {
       if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
         throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta'))
       }
+
+      // El saldo a favor se consume recien con la venta confirmada.
+      await redeemStoreCredit({
+        customerId: selectedCustomer,
+        saleId: saleResult?.saleId,
+        amount: storeCreditApplied,
+      })
       const persistedReceipt = {
         ...receiptData,
         receiptNumber: saleResult?.saleId

@@ -7,7 +7,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Info, Plus, RefreshCw, Warehouse } from "lucide-react";
+import { AlertCircle, Info, Plus, RefreshCw, Warehouse, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -135,6 +135,7 @@ export default function ProductsPage() {
   const [serverSearch, setServerSearch] = useState("");
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const [showGuide, setShowGuide] = useState(true);
   const canCreateProducts =
     hasPermission("products.create") ||
     hasPermission("products.create") ||
@@ -632,54 +633,60 @@ export default function ProductsPage() {
         </Alert>
 
         {/* Guía de funcionamiento de catálogo de productos */}
-        <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-          <details className="group">
-            <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-              <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Catálogo de Productos?
-              </div>
-              <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-                <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-                <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-              </div>
-            </summary>
-            <CardContent className="pt-0 pb-5 text-xs">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                  <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                    Ficha y Precios
-                  </h4>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Registra la información clave de cada ítem: código SKU, descripción y costos de compra/venta. Esta información alimenta automáticamente la facturación en el POS y los repuestos en soporte técnico.
-                  </p>
+        {showGuide && (
+          <Card className="relative bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+            <button
+              type="button"
+              onClick={() => setShowGuide(false)}
+              className="absolute right-3 top-3 z-10 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/10 transition-colors"
+              title="Ocultar guía permanentemente durante esta sesión"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <details className="group">
+              <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3 pr-10">
+                <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                  <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Catálogo de Productos?
                 </div>
-                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                  <h4 className="font-semibold text-foreground flex items-center gap-2">
-                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                    Stock y Alertas
-                  </h4>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Configura los mínimos recomendados y ajusta las existencias de la sucursal seleccionada. Las alertas se calculan sobre ese inventario, no sobre el stock de otras sedes.
-                  </p>
+                <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+                  <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+                  <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
                 </div>
-                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                  <h4 className="font-semibold text-foreground flex items-center gap-2">
-                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                    Acciones Masivas
-                  </h4>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Selecciona múltiples artículos para realizar importaciones o exportaciones mediante plantillas CSV, así como habilitar, deshabilitar o duplicar productos de manera ágil.
-                  </p>
+              </summary>
+              <CardContent className="pt-0 pb-5 text-xs">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                    <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                      Ficha y Precios
+                    </h4>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Registra la información clave de cada ítem: código SKU, descripción y costos de compra/venta. Esta información alimenta automáticamente la facturación en el POS y los repuestos en soporte técnico.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                    <h4 className="font-semibold text-foreground flex items-center gap-2">
+                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                      Stock y Alertas
+                    </h4>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Configura los mínimos recomendados y ajusta las existencias de la sucursal seleccionada. Las alertas se calculan sobre ese inventario, no sobre el stock de otras sedes.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                    <h4 className="font-semibold text-foreground flex items-center gap-2">
+                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                      Acciones Masivas
+                    </h4>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Selecciona múltiples artículos para realizar importaciones o exportaciones mediante plantillas CSV, así como habilitar, deshabilitar o duplicar productos de manera ágil.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </details>
-        </Card>
-
-        {/* Metrics Grid */}
-        <MetricsGrid metrics={globalMetrics} onMetricClick={handleMetricClick} />
-
+              </CardContent>
+            </details>
+          </Card>
+        )}
         {/* Search and Actions Bar */}
         <SearchAndActionsBar
           searchQuery={searchQuery}

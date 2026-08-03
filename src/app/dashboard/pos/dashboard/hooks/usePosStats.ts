@@ -93,7 +93,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     created_at,
                     total:total_amount,
                     payment_method,
-                    customer:customers(name),
+                    customer:customers!customer_id(name),
                     sale_items(
                         quantity,
                         subtotal,

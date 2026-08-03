@@ -45,6 +45,11 @@ interface CheckoutContextType {
   discount: number
   setDiscount: (discount: number) => void
 
+  // Saldo a favor del cliente aplicado a esta venta. No es un descuento: la
+  // venta vale lo mismo, cambia con que se paga.
+  storeCreditApplied: number
+  setStoreCreditApplied: (amount: number) => void
+
   // Términos de la venta a crédito (cuotas / frecuencia / interés)
   creditTerms: CreditTerms
   setCreditTerms: (terms: CreditTerms) => void
@@ -79,6 +84,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   const [splitAmount, setSplitAmount] = useState<number>(0)
   const [notes, setNotes] = useState('')
   const [discount, setDiscount] = useState<number>(0)
+  const [storeCreditApplied, setStoreCreditApplied] = useState<number>(0)
   const [creditTerms, setCreditTerms] = useState<CreditTerms>(DEFAULT_CREDIT_TERMS)
 
   const [paymentSplit, setPaymentSplit] = useState<PaymentSplit[]>([])
@@ -119,6 +125,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     setSplitAmount(0)
     setNotes('')
     setDiscount(0)
+    setStoreCreditApplied(0)
     setCreditTerms(DEFAULT_CREDIT_TERMS)
     setPaymentSplit([])
   }, [])
@@ -155,6 +162,8 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
       setNotes,
       discount,
       setDiscount,
+      storeCreditApplied,
+      setStoreCreditApplied,
       creditTerms,
       setCreditTerms,
       paymentSplit,

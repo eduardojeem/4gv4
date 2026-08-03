@@ -53,10 +53,11 @@ export async function GET(
 
     const authSupabase = await createClient()
 
-    const { data: { session } } = await authSupabase.auth.getSession()
+    const { data: { user } } = await authSupabase.auth.getUser()
     const { isWholesale } = await resolveWholesaleStatus({
       supabase: authSupabase,
-      user: session?.user ?? null,
+      user: user ?? null,
+      organizationId: organization.id,
     })
 
     const selectFields = isWholesale
@@ -155,10 +156,16 @@ export async function GET(
       barcode: finalProduct.barcode,
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: publicProduct,
     })
+    response.headers.set('Vary', 'Cookie')
+    response.headers.set(
+      'Cache-Control',
+      user ? 'private, no-store' : 'public, max-age=30, s-maxage=60'
+    )
+    return response
   } catch (error) {
     logger.error('Public product detail API error', { error })
     return NextResponse.json(

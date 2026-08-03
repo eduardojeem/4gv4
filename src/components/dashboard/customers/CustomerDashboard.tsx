@@ -30,7 +30,7 @@ import {
   CreditCard,
   Plus,
   RefreshCw,
-  ArrowUpCircle, ArrowDownCircle, MoreHorizontal, Info
+  ArrowUpCircle, ArrowDownCircle, MoreHorizontal, Info, X
 } from 'lucide-react'
 import { ImprovedMetricCard } from './ImprovedMetricCard'
 // Componentes cargados dinámicamente para reducir el peso inicial
@@ -151,6 +151,7 @@ export function CustomerDashboard() {
   // Quick view modal
   const [quickViewCustomer, setQuickViewCustomer] = useState<Customer | null>(null)
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([])
+  const [showGuide, setShowGuide] = useState(true)
 
   // Calculate stats including credit metrics
   const totalCustomers = customers.length
@@ -677,50 +678,60 @@ export function CustomerDashboard() {
         </motion.div>
 
         {/* Guía de funcionamiento de CRM/Clientes */}
-        <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-          <details className="group">
-            <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-              <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la sección de Clientes (CRM)?
-              </div>
-              <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-                <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-                <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-              </div>
-            </summary>
-            <CardContent className="pt-0 pb-5 text-xs">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                  <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                    Registro de Clientes
-                  </h4>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Mantén una lista organizada de clientes con sus teléfonos, e-mails e identificación fiscal (RUC/CI). Registra clientes rápidos o detallados según la necesidad de facturación o reparación.
-                  </p>
+        {showGuide && (
+          <Card className="relative bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+            <button
+              type="button"
+              onClick={() => setShowGuide(false)}
+              className="absolute right-3 top-3 z-10 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/10 transition-colors"
+              title="Ocultar guía permanentemente durante esta sesión"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <details className="group">
+              <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3 pr-10">
+                <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                  <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la sección de Clientes (CRM)?
                 </div>
-                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                  <h4 className="font-semibold text-foreground flex items-center gap-2">
-                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                    Historial y Trazabilidad
-                  </h4>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Visualiza el historial completo de compras, órdenes de servicio técnico asociadas y comportamiento de pagos. Esto te permite evaluar el valor de vida del cliente.
-                  </p>
+                <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+                  <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+                  <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
                 </div>
-                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                  <h4 className="font-semibold text-foreground flex items-center gap-2">
-                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                    Cartera y Cuenta Corriente
-                  </h4>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Controla el saldo pendiente, cuotas activas y fechas de vencimiento de los créditos otorgados. El CRM te alertará en tiempo real sobre cuentas con retrasos de pago.
-                  </p>
+              </summary>
+              <CardContent className="pt-0 pb-5 text-xs">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                    <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                      Registro de Clientes
+                    </h4>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Mantén una lista organizada de clientes con sus teléfonos, e-mails e identificación fiscal (RUC/CI). Registra clientes rápidos o detallados según la necesidad de facturación o reparación.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                    <h4 className="font-semibold text-foreground flex items-center gap-2">
+                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                      Historial y Trazabilidad
+                    </h4>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Visualiza el historial completo de compras, órdenes de servicio técnico asociadas y comportamiento de pagos. Esto te permite evaluar el valor de vida del cliente.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                    <h4 className="font-semibold text-foreground flex items-center gap-2">
+                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                      Cartera y Cuenta Corriente
+                    </h4>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Lleva el control de créditos, deudas acumuladas y saldos a favor. Podrás enviar recordatorios directos por WhatsApp con un solo clic.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </details>
-        </Card>
+              </CardContent>
+            </details>
+          </Card>
+        )}
 
         {/* Stats Cards */}
         <motion.div
@@ -1050,7 +1061,13 @@ export function CustomerDashboard() {
 
             <TabsContent value="analytics" className="mt-0">
               <Suspense fallback={<div className="p-4"><Skeleton className="h-24 w-full" /></div>}>
-                <AnalyticsDashboard customers={customers} mode="interactive" showPredictions={true} showComparisons={true} />
+                <AnalyticsDashboard
+                  customers={customers}
+                  creditSummaries={creditSummaries}
+                  mode="interactive"
+                  showPredictions={true}
+                  showComparisons={true}
+                />
               </Suspense>
             </TabsContent>
 

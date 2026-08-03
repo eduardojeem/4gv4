@@ -83,12 +83,16 @@ export function StatusBadge({
   onStatusChange,
   className 
 }: StatusBadgeProps) {
-  const config = statusConfig[status] ?? {
-    label: 'Desconocido',
-    icon: AlertTriangle,
-    className: 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-700/50',
-    dotColor: 'bg-gray-400'
-  }
+  const normalizedKey = (() => {
+    const raw = String(status || 'active').toLowerCase().trim()
+    if (raw === 'active' || raw === 'activo') return 'active'
+    if (raw === 'inactive' || raw === 'inactivo') return 'inactive'
+    if (raw === 'suspended' || raw === 'suspendido') return 'suspended'
+    if (raw === 'pending' || raw === 'pendiente') return 'pending'
+    return 'active'
+  })()
+
+  const config = statusConfig[normalizedKey]
   const sizeStyles = sizeConfig[size] ?? sizeConfig.md
   const Icon = config.icon
 
@@ -181,7 +185,8 @@ export function StatusToggle({
   size = 'md',
   className 
 }: StatusToggleProps) {
-  const isActive = status === 'active'
+  const rawStatus = String(status || 'active').toLowerCase().trim()
+  const isActive = rawStatus === 'active' || rawStatus === 'activo'
   const sizeStyles = sizeConfig[size]
 
   return (

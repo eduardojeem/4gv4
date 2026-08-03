@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 
 const customerSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -43,12 +44,76 @@ function normalizeCustomerPayload(payload: z.infer<typeof customerSchema>) {
   }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+type CustomerBlocker = { id: string; name: string; credits: number; repairs: number }
+
+function describeBlockers(blocked: CustomerBlocker) {
+  const parts: string[] = []
+  if (blocked.credits > 0) parts.push(`${blocked.credits} credito(s) con su historial de pagos`)
+  if (blocked.repairs > 0) parts.push(`${blocked.repairs} reparacion(es)`)
+  return parts.join(' y ')
+}
+
+/**
+ * Devuelve los clientes que tienen historial que se perderia (o que impide) el
+ * borrado. Las consultas fallidas se tratan como "sin historial" para no
+ * bloquear la operacion si alguna tabla no existe en la instalacion.
+ */
+async function findCustomersWithHistory(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  ids: string[]
+): Promise<CustomerBlocker[]> {
+  const { data: rows } = await supabase
+    .from('customers')
+    .select('id, name')
+    .in('id', ids)
+    .eq('organization_id', organizationId)
+
+  const names = new Map((rows ?? []).map((row) => [String(row.id), String(row.name ?? 'Cliente')]))
+  if (names.size === 0) return []
+
+  const [creditsResult, repairsResult] = await Promise.all([
+    supabase.from('customer_credits').select('customer_id').in('customer_id', ids),
+    supabase.from('repairs').select('customer_id').in('customer_id', ids),
+  ])
+
+  const countBy = (rows: Array<{ customer_id?: unknown }> | null) => {
+    const map = new Map<string, number>()
+    for (const row of rows ?? []) {
+      const key = String(row.customer_id ?? '')
+      if (key) map.set(key, (map.get(key) ?? 0) + 1)
+    }
+    return map
+  }
+
+  const creditsByCustomer = countBy(creditsResult.error ? null : creditsResult.data)
+  const repairsByCustomer = countBy(repairsResult.error ? null : repairsResult.data)
+
+  if (creditsResult.error) logger.warn('Could not check customer credits before delete', { error: creditsResult.error.message })
+  if (repairsResult.error) logger.warn('Could not check customer repairs before delete', { error: repairsResult.error.message })
+
+  const blocked: CustomerBlocker[] = []
+  for (const [id, name] of names) {
+    const credits = creditsByCustomer.get(id) ?? 0
+    const repairs = repairsByCustomer.get(id) ?? 0
+    if (credits > 0 || repairs > 0) blocked.push({ id, name, credits, repairs })
+  }
+
+  return blocked
+}
+
 export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'crm' }, async (request, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const page = Math.max(1, Number(searchParams.get('page') || 1))
     const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit') || 50)))
-    const search = searchParams.get('search')?.trim()
+    // Sanitizado: se interpola en un filtro `.or(...)` de PostgREST.
+    const search = sanitizeSearchTerm(searchParams.get('search'))
+    // Busqueda directa por id: el `search` de texto no consulta la columna id,
+    // asi que resolver un cliente por UUID requiere su propio parametro.
+    const idParam = searchParams.get('id')?.trim()
     const status = searchParams.get('status')
     const customerType = searchParams.get('customer_type')
     const segment = searchParams.get('segment')
@@ -61,6 +126,8 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       .from('customers')
       .select('*', { count: 'exact' })
       .eq('organization_id', organization.id)
+
+    if (idParam) query = query.eq('id', idParam)
 
     if (search) {
       query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,customer_code.ilike.%${search}%`)
@@ -165,16 +232,41 @@ export const DELETE = withTenantAuth({ permission: 'crm.customers.manage', modul
       return NextResponse.json({ success: false, error: 'Customer ID is required' }, { status: 400 })
     }
 
+    const invalidIds = ids.filter((id) => !UUID_RE.test(id))
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ success: false, error: 'Hay identificadores de cliente invalidos.' }, { status: 400 })
+    }
+
     const supabase = await createClient()
-    const { error } = await supabase
+
+    // Borrar un cliente arrastra en cascada sus creditos, cuotas y PAGOS
+    // registrados, y las reparaciones lo bloquean por ON DELETE RESTRICT.
+    // Antes de borrar se revisa que no haya historial que perder.
+    const blocked = await findCustomersWithHistory(supabase, organization.id, ids)
+
+    if (blocked.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: blocked.length === 1
+          ? `No se puede eliminar a ${blocked[0].name}: ${describeBlockers(blocked[0])}. Desactivalo en lugar de eliminarlo para conservar su historial.`
+          : `No se pueden eliminar ${blocked.length} clientes porque tienen historial asociado. Desactivalos en lugar de eliminarlos.`,
+        code: 'CUSTOMER_HAS_HISTORY',
+        blocked,
+      }, { status: 409 })
+    }
+
+    const { data, error } = await supabase
       .from('customers')
       .delete()
       .in('id', ids)
       .eq('organization_id', organization.id)
+      .select('id')
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, deleted: ids.length })
+    // Se informa lo realmente borrado: un id de otra organizacion se filtra por
+    // organization_id y no debe contarse como eliminado.
+    return NextResponse.json({ success: true, deleted: (data ?? []).length })
   } catch (error) {
     logger.error('Customers API DELETE error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo eliminar el cliente.' }, { status: 500 })

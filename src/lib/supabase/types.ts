@@ -3853,6 +3853,7 @@ export interface Database {
         Row: {
           id: string
           user_id: string | null
+          organization_id: string | null
           permission: string
           granted_by: string | null
           granted_at: string | null
@@ -3863,6 +3864,7 @@ export interface Database {
         Insert: {
           id?: string
           user_id?: string | null
+          organization_id?: string | null
           permission: string
           granted_by?: string | null
           granted_at?: string | null
@@ -3873,6 +3875,7 @@ export interface Database {
         Update: {
           id?: string
           user_id?: string | null
+          organization_id?: string | null
           permission?: string
           granted_by?: string | null
           granted_at?: string | null

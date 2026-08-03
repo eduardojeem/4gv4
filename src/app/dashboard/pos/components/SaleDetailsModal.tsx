@@ -8,11 +8,12 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/currency'
 import { useSales } from '@/hooks/useSales'
-import { Calendar, User, CreditCard, FileText, ShoppingCart, Receipt, Printer } from 'lucide-react'
+import { Calendar, User, CreditCard, FileText, ShoppingCart, Receipt, Printer, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createReceiptData, printReceipt, CompanyInfo } from '@/lib/receipt-utils'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { config } from '@/lib/config'
+import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
 
 interface SaleDetailsModalProps {
   isOpen: boolean
@@ -25,6 +26,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
   const { settings } = useSharedSettings()
   const [loading, setLoading] = useState(false)
   const [sale, setSale] = useState<any>(null)
+  const [afterSalesOpen, setAfterSalesOpen] = useState(false)
 
   const handlePrintReceipt = () => {
     if (!sale) return
@@ -119,10 +121,16 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
               Consulta el resumen completo de la venta, sus items y la información del comprobante.
             </DialogDescription>
             {!loading && sale && (
-                <Button variant="outline" size="sm" onClick={handlePrintReceipt}>
-                    <Printer className="mr-2 h-4 w-4" />
-                    Imprimir Copia
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setAfterSalesOpen(true)}>
+                        <ShieldAlert className="mr-2 h-4 w-4" />
+                        Posventa
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handlePrintReceipt}>
+                        <Printer className="mr-2 h-4 w-4" />
+                        Imprimir Copia
+                    </Button>
+                </div>
             )}
           </div>
         </DialogHeader>
@@ -280,6 +288,32 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
             </>
           )}
         </div>
+
+        {sale && (
+          <CreateAfterSalesCaseDialog
+            open={afterSalesOpen}
+            onOpenChange={setAfterSalesOpen}
+            sourceType="sale"
+            saleId={sale.id}
+            customerId={sale.customer_id || null}
+            reference={sale.sale_number || sale.id?.slice(0, 8)}
+            customerName={sale.customer_name || null}
+            allowedRequestTypes={['product_warranty', 'exchange', 'return']}
+            saleItems={(sale.sale_items || sale.items || []).map((item: {
+              id: string | number
+              product_id?: string | null
+              product_name?: string
+              name?: string
+              products?: { name?: string } | null
+              quantity?: number | string
+            }) => ({
+              id: String(item.id),
+              product_id: item.product_id ?? null,
+              name: item.product_name || item.name || item.products?.name || 'Producto',
+              quantity: Number(item.quantity) || 1,
+            }))}
+          />
+        )}
       </DialogContent>
     </Dialog>
   )

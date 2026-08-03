@@ -9,7 +9,7 @@ export default function InventoryPage() {
                 module="inventory_admin"
                 requiredPlan="Basic"
                 title="Inventario avanzado no incluido"
-                description="Esta seccion incluye proveedores, control de stock, movimientos, variantes, promociones y reportes. Activa Inventario avanzado en el plan o subi a Basic para usarla."
+                description="Esta sección incluye proveedores, stock por sucursal, movimientos, variantes, promociones y reportes. Activa Inventario avanzado en el plan o sube a Basic para usarla."
             >
                 <Suspense fallback={<div className="p-4">Cargando inventario...</div>}>
                     <InventoryManagement />

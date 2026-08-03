@@ -1,12 +1,22 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+  SelectGroup,
+  SelectLabel,
+  SelectSeparator,
+} from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -17,7 +27,9 @@ import InventoryReports from '@/components/admin/reports/inventory-reports'
 import SupplierManagement from '@/components/admin/inventory/supplier-management'
 import { PromotionManager } from '@/components/admin/inventory/PromotionManager'
 import { VariantManager } from '@/components/admin/inventory/VariantManager'
+import { ProductModal } from '@/components/dashboard/product-modal'
 import { useInventory, Product } from '@/hooks/use-inventory'
+import { useBranch } from '@/contexts/branch-context'
 import {
   Package,
   Plus,
@@ -35,9 +47,38 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
-  Info
+  Info,
+  Building2,
+  ArrowUpRight,
+  Warehouse,
+  History,
+  Bell,
+  Truck,
+  FolderTree,
+  Percent,
+  BarChart3,
+  SlidersHorizontal,
+  RotateCcw
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
+import { EmptyState } from '@/components/ui/empty-state'
+import { formatCurrency } from '@/lib/currency'
+
+const operationTabs = [
+  { value: 'products', label: 'Catálogo', icon: Package },
+  { value: 'stock-control', label: 'Stock por sucursal', icon: Warehouse },
+  { value: 'movements', label: 'Movimientos', icon: History },
+  { value: 'alerts', label: 'Alertas', icon: Bell },
+] as const
+
+const managementTabs = [
+  { value: 'suppliers', label: 'Proveedores', icon: Truck },
+  { value: 'categories', label: 'Categorías', icon: FolderTree },
+  { value: 'variants', label: 'Variantes', icon: Layers },
+  { value: 'promotions', label: 'Promociones', icon: Percent },
+  { value: 'reports', label: 'Reportes', icon: BarChart3 },
+  { value: 'search', label: 'Búsqueda avanzada', icon: SlidersHorizontal },
+] as const
 
 interface ValidationError {
   field: string
@@ -63,11 +104,13 @@ interface AdvancedSearchFilter {
 }
 
 export default function InventoryManagement() {
+  const { selectedBranch, loading: branchLoading } = useBranch()
   const {
     products,
     categories,
     suppliers,
     loading,
+    isRefreshing,
     error,
     page,
     setPage,
@@ -323,6 +366,19 @@ export default function InventoryManagement() {
   const hasNextPage = page * pageSize < totalCount
   const rangeStart = totalCount === 0 ? 0 : ((page - 1) * pageSize) + 1
   const rangeEnd = totalCount === 0 ? 0 : Math.min(page * pageSize, totalCount)
+  const hasCatalogFilters = Boolean(
+    filters.search.trim() || filters.category !== 'all' || filters.stockStatus !== 'all'
+  )
+
+  const clearCatalogFilters = () => {
+    setPage(1)
+    setFilters((current) => ({
+      ...current,
+      search: '',
+      category: 'all',
+      stockStatus: 'all',
+    }))
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -341,30 +397,45 @@ export default function InventoryManagement() {
       )}
 
       {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50/60 via-indigo-50/40 to-background p-6 shadow-sm dark:border-blue-900/30 dark:from-blue-950/20 dark:via-indigo-950/10 dark:to-gray-900">
-        <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-500/5 blur-2xl pointer-events-none" />
-        <div className="absolute -left-10 -bottom-10 h-32 w-32 rounded-full bg-indigo-500/5 blur-2xl pointer-events-none" />
-
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="border-b border-slate-200 dark:border-white/10 pb-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3.5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-blue-200/50 bg-white shadow-sm dark:border-blue-800 dark:bg-gray-800">
-              <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md">
+              <Package className="h-6 w-6" />
             </div>
-            <div>
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
+            <div className="min-w-0">
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
                 Gestión de Inventario
               </h2>
-              <p className="text-sm text-muted-foreground mt-0.5">Control inteligente, trazabilidad de stock y variantes del catálogo</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <span>Catálogo, existencias y trazabilidad</span>
+                <Badge variant="outline" className="max-w-full gap-1.5 rounded-md font-semibold border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                  <span className="truncate">
+                    {branchLoading ? 'Cargando sucursal...' : `Stock: ${selectedBranch?.name || 'sin sucursal activa'}`}
+                  </span>
+                </Badge>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" size="sm" asChild className="h-9 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10">
+              <Link href="/dashboard/products">
+                Productos <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild className="h-9 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10">
+              <Link href="/admin/branches">
+                Sucursales <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
+            </Button>
             <Button
               variant="outline"
               onClick={handleExportProducts}
-              className="h-10 rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-900/40 dark:text-blue-400 dark:hover:bg-blue-950/20"
+              className="h-9 rounded-xl border-slate-200 bg-white text-xs dark:border-white/10 dark:bg-[#0d1117]"
             >
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="h-3.5 w-3.5 mr-1.5" />
               Exportar CSV
             </Button>
             <Button
@@ -374,53 +445,53 @@ export default function InventoryManagement() {
                 setActionError('')
                 setIsAddDialogOpen(true)
               }}
-              className="h-10 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md shadow-blue-100 dark:shadow-none"
+              className="h-9 rounded-xl bg-blue-600 text-white hover:bg-blue-500 shadow-sm text-xs"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
               Nuevo Producto
             </Button>
           </div>
         </div>
       </div>
 
-      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+      <Card className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]">
         <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Inventario?
+          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
+              <Info className="h-4 w-4 text-blue-500" /> ¿Cómo funciona la Gestión de Inventario?
             </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+            <div className="select-none text-xs font-semibold text-slate-400">
               <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
               <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
             </div>
           </summary>
-          <CardContent className="pt-0 pb-5">
-            <div className="grid gap-4 sm:grid-cols-3 text-xs">
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+          <CardContent className="pt-0 pb-4">
+            <div className="grid gap-4 text-xs sm:grid-cols-3">
+              <div className="space-y-1 border-l-2 border-blue-500 pl-3">
+                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">1</Badge>
                   Productos y Catálogo
                 </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Registra productos con su SKU, precio de compra/venta y stock. Puedes agruparlos por categorías y asociar proveedores para simplificar el reabastecimiento.
+                <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
+                  El producto, SKU, precios y categoría forman parte del catálogo compartido entre sucursales.
                 </p>
               </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+              <div className="space-y-1 border-l-2 border-amber-500 pl-3">
+                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center rounded-full text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">2</Badge>
                   Control y Alertas de Stock
                 </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Configura un stock mínimo y máximo para cada artículo. El sistema marcará automáticamente como "Bajo" o "Agotado" aquellos ítems que requieran atención inmediata.
+                <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
+                  Las existencias corresponden a la sucursal activa seleccionada en la cabecera.
                 </p>
               </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+              <div className="space-y-1 border-l-2 border-emerald-500 pl-3">
+                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center rounded-full text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">3</Badge>
                   Movimientos e Historial
                 </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Cada entrada, salida o ajuste manual queda registrado en el historial de movimientos de stock con fecha, cantidad y responsable, garantizando plena trazabilidad.
+                <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
+                  Usa ajustes o transferencias para modificar stock de forma auditada.
                 </p>
               </div>
             </div>
@@ -429,193 +500,253 @@ export default function InventoryManagement() {
       </Card>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: Total */}
-        <Card className="group relative overflow-hidden border border-border/85 hover:border-blue-500/30 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 dark:bg-gray-800">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500" />
-          <CardContent className="p-5 flex justify-between items-center">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-muted-foreground">Total Productos</p>
-              <p className="text-3xl font-extrabold text-foreground tracking-tight">{totalCount}</p>
-            </div>
-            <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 transition-colors group-hover:bg-blue-100 dark:group-hover:bg-blue-950/50">
-              <Package className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI 2: Stock Bajo */}
-        <Card className="group relative overflow-hidden border border-border/85 hover:border-yellow-500/30 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 dark:bg-gray-800">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-yellow-500" />
-          <CardContent className="p-5 flex justify-between items-center">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-muted-foreground">Stock Bajo / Crítico</p>
-              <p className="text-3xl font-extrabold text-foreground tracking-tight">{stats.lowStock}</p>
-            </div>
-            <div className="p-3 rounded-xl bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 transition-colors group-hover:bg-yellow-100 dark:group-hover:bg-yellow-950/50">
-              <AlertTriangle className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI 3: Valor */}
-        <Card className="group relative overflow-hidden border border-border/85 hover:border-emerald-500/30 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 dark:bg-gray-800">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500" />
-          <CardContent className="p-5 flex justify-between items-center">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-muted-foreground">Valor Estimado</p>
-              <p className="text-3xl font-extrabold text-foreground tracking-tight">Gs. {stats.totalValue.toLocaleString()}</p>
-            </div>
-            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 transition-colors group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950/50">
-              <GSIcon className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI 4: Margen */}
-        <Card className="group relative overflow-hidden border border-border/85 hover:border-purple-500/30 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 dark:bg-gray-800">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-purple-500" />
-          <CardContent className="p-5 flex justify-between items-center">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-muted-foreground">Margen Promedio</p>
-              <p className="text-3xl font-extrabold text-foreground tracking-tight">{stats.avgMargin.toFixed(1)}%</p>
-            </div>
-            <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 transition-colors group-hover:bg-purple-100 dark:group-hover:bg-purple-950/50">
-              <TrendingUp className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {[
+          { label: 'Total de productos', value: totalCount.toLocaleString(), icon: Package, tone: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-500/20' },
+          { label: 'Stock bajo (Lote)', value: stats.lowStock.toLocaleString(), icon: AlertTriangle, tone: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-500/20' },
+          { label: 'Valor del Lote (Costo)', value: formatCurrency(stats.totalValue), icon: GSIcon, tone: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-500/20' },
+          { label: 'Margen Promedio', value: `${stats.avgMargin.toFixed(1)}%`, icon: TrendingUp, tone: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-100 dark:bg-purple-500/20' },
+        ].map(({ label, value, icon: Icon, tone, bg }) => (
+          <Card key={label} className="border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</p>
+                <p className="text-xl font-bold tracking-tight text-slate-900 dark:text-white tabular-nums">{value}</p>
+              </div>
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${bg}`}>
+                <Icon className={`h-5 w-5 ${tone}`} />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <div className="w-full overflow-x-auto pb-1">
-          <TabsList className="flex h-10 w-max min-w-full justify-start gap-1 bg-muted/50 dark:bg-gray-900/50 p-1 rounded-lg border dark:border-gray-700">
-            <TabsTrigger value="products">Productos</TabsTrigger>
-            <TabsTrigger value="categories">Categorías</TabsTrigger>
-            <TabsTrigger value="variants">Variantes</TabsTrigger>
-            <TabsTrigger value="promotions">Promociones</TabsTrigger>
-            <TabsTrigger value="suppliers">Proveedores</TabsTrigger>
-            <TabsTrigger value="search">Búsqueda</TabsTrigger>
-            <TabsTrigger value="stock-control">Control Stock</TabsTrigger>
-            <TabsTrigger value="movements">Movimientos</TabsTrigger>
-            <TabsTrigger value="alerts">Alertas</TabsTrigger>
-            <TabsTrigger value="reports">Reportes</TabsTrigger>
-          </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0 space-y-5">
+        <div className="lg:hidden">
+          <Select value={activeTab} onValueChange={setActiveTab}>
+            <SelectTrigger className="h-11 w-full rounded-lg border-border bg-card px-3 shadow-sm" aria-label="Seleccionar sección de inventario">
+              <SelectValue placeholder="Seleccionar sección" />
+            </SelectTrigger>
+            <SelectContent className="max-h-[70vh]">
+              <SelectGroup>
+                <SelectLabel className="font-semibold uppercase">Operación</SelectLabel>
+                {operationTabs.map(({ value, label, icon: Icon }) => (
+                  <SelectItem key={value} value={value}>
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel className="font-semibold uppercase">Gestión</SelectLabel>
+                {managementTabs.map(({ value, label, icon: Icon }) => (
+                  <SelectItem key={value} value={value}>
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
 
+        <aside className="hidden min-w-0 lg:block">
+          <nav className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#0d1117]" aria-label="Secciones de inventario">
+            <div className="mb-3 border-b border-slate-100 dark:border-white/5 px-2 pb-3">
+              <p className="text-xs font-bold text-slate-900 dark:text-white">Secciones</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">Navegación de inventario</p>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Operación</p>
+                <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 bg-transparent p-0 xl:grid-cols-4">
+                  {operationTabs.map(({ value, label, icon: Icon }) => (
+                    <TabsTrigger
+                      key={value}
+                      value={value}
+                      className="h-10 min-w-0 justify-center gap-2 rounded-md border border-transparent px-2.5 text-xs font-semibold text-slate-600 shadow-none transition-colors hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-white/5 data-[state=active]:border-blue-600 data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-blue-600 dark:data-[state=active]:text-white"
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">{label}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+              <div className="border-t border-slate-100 dark:border-white/5 pt-3">
+                <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Gestión</p>
+                <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 bg-transparent p-0 xl:grid-cols-3 2xl:grid-cols-6">
+                  {managementTabs.map(({ value, label, icon: Icon }) => (
+                    <TabsTrigger
+                      key={value}
+                      value={value}
+                      className="h-10 min-w-0 justify-center gap-2 rounded-md border border-transparent px-2.5 text-xs font-semibold text-slate-600 shadow-none transition-colors hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-white/5 data-[state=active]:border-blue-600 data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-blue-600 dark:data-[state=active]:text-white"
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">{label}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </div>
+          </nav>
+        </aside>
+
+        <div className="min-w-0">
+
         <TabsContent value="products" className="space-y-6">
-          {/* Filtros */}
-          <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]" aria-labelledby="catalog-title">
+            <div className="border-b border-slate-100 dark:border-white/5 p-4">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h3 id="catalog-title" className="font-bold text-slate-900 dark:text-white">Catálogo de productos</h3>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    Precios y datos compartidos; stock correspondiente a <span className="font-semibold">{selectedBranch?.name || 'la sucursal activa'}</span>.
+                  </p>
+                </div>
+                <div className="flex min-h-8 items-center gap-2 self-start sm:self-auto">
+                  {isRefreshing && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Actualizando
+                    </span>
+                  )}
+                  {hasCatalogFilters && (
+                    <Button variant="ghost" size="sm" onClick={clearCatalogFilters} className="h-8 rounded-xl text-xs text-slate-500 hover:text-slate-900">
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                      Limpiar filtros
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[minmax(16rem,1fr)_12rem_12rem]">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input 
-                    placeholder="Buscar..." 
-                    className="pl-10 dark:bg-gray-900 dark:border-gray-700"
+                    placeholder="Buscar por nombre, SKU o descripción..."
+                    className="pl-9 h-9 text-xs rounded-xl border-slate-200 dark:border-white/10 dark:bg-[#161b22] dark:text-white"
                     value={filters.search}
                     onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                   />
                 </div>
                 <Select value={filters.category} onValueChange={(val) => setFilters(prev => ({ ...prev, category: val }))}>
-                  <SelectTrigger className="w-full sm:w-48 dark:bg-gray-900 dark:border-gray-700">
+                  <SelectTrigger className="w-full h-9 text-xs rounded-xl border-slate-200 dark:border-white/10 dark:bg-[#161b22] dark:text-white">
                     <SelectValue placeholder="Categoría" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="all">Todas las categorías</SelectItem>
                     {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={filters.stockStatus} onValueChange={(val) => setFilters(prev => ({ ...prev, stockStatus: val }))}>
-                  <SelectTrigger className="w-full sm:w-48 dark:bg-gray-900 dark:border-gray-700">
+                  <SelectTrigger className="w-full h-9 text-xs rounded-xl border-slate-200 dark:border-white/10 dark:bg-[#161b22] dark:text-white">
                     <SelectValue placeholder="Stock" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="low">Bajo</SelectItem>
+                    <SelectItem value="all">Todos los stocks</SelectItem>
+                    <SelectItem value="low">Stock bajo</SelectItem>
                     <SelectItem value="out">Agotado</SelectItem>
-                    <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="high">Alto</SelectItem>
+                    <SelectItem value="normal">Stock normal</SelectItem>
+                    <SelectItem value="high">Stock alto</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
           {/* Tabla */}
-          <Card className="dark:bg-gray-800 dark:border-gray-700 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="bg-gray-50 dark:bg-gray-900/50 border-b dark:border-gray-700">
+                <thead className="border-b border-slate-100 bg-slate-50/50 dark:border-white/5 dark:bg-white/[0.02]">
                   <tr>
-                    <th className="p-4 font-semibold text-gray-900 dark:text-gray-100">Producto</th>
-                    <th className="p-4 font-semibold text-gray-900 dark:text-gray-100">SKU</th>
-                    <th className="p-4 font-semibold text-gray-900 dark:text-gray-100">Categoría</th>
-                    <th className="p-4 font-semibold text-gray-900 dark:text-gray-100">Precio</th>
-                    <th className="p-4 font-semibold text-gray-900 dark:text-gray-100">Stock</th>
-                    <th className="p-4 font-semibold text-gray-900 dark:text-gray-100">Estado</th>
-                    <th className="p-4 text-right font-semibold text-gray-900 dark:text-gray-100">Acciones</th>
+                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Producto</th>
+                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">SKU</th>
+                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Categoría</th>
+                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Precio / Costo</th>
+                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Stock</th>
+                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado</th>
+                    <th className="p-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y dark:divide-gray-700">
+                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-gray-500 dark:text-gray-400">
-                        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                        Cargando productos...
+                      <td colSpan={7} className="p-8 text-center text-slate-400">
+                        <Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin text-blue-500" />
+                        Cargando catálogo...
                       </td>
                     </tr>
                   ) : products.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-gray-500 dark:text-gray-400">
-                        No se encontraron productos.
+                      <td colSpan={7} className="p-0">
+                        <EmptyState
+                          icon={Package}
+                          title={hasCatalogFilters ? 'No hay resultados' : 'Todavía no hay productos'}
+                          description={hasCatalogFilters
+                            ? 'Prueba con otros términos o elimina los filtros aplicados.'
+                            : 'Crea el primer producto para comenzar a controlar existencias.'}
+                          action={hasCatalogFilters
+                            ? { label: 'Limpiar filtros', onClick: clearCatalogFilters, icon: RotateCcw }
+                            : {
+                                label: 'Nuevo producto',
+                                onClick: () => {
+                                  setFormData({})
+                                  setValidationErrors([])
+                                  setActionError('')
+                                  setIsAddDialogOpen(true)
+                                },
+                                icon: Plus,
+                              }}
+                          className="py-14"
+                        />
                       </td>
                     </tr>
                   ) : (
                     products.map((product) => {
                       const stockInfo = getStockStatus(product)
                       return (
-                        <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                          <td className="p-4">
-                            <p className="font-medium text-gray-900 dark:text-gray-100">{product.name}</p>
-                            {product.description && <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px]">{product.description}</p>}
+                        <tr key={product.id} className="transition-colors hover:bg-slate-50/80 dark:hover:bg-white/[0.02]">
+                          <td className="p-3.5">
+                            <p className="font-semibold text-slate-900 dark:text-white text-xs">{product.name}</p>
+                            {product.description && <p className="max-w-[240px] truncate text-[11px] text-slate-400">{product.description}</p>}
                           </td>
-                          <td className="p-4"><Badge variant="outline" className="dark:border-gray-600 dark:text-gray-300">{product.sku}</Badge></td>
-                          <td className="p-4"><Badge variant="secondary" className="dark:bg-gray-700 dark:text-gray-300">{product.category?.name || '-'}</Badge></td>
-                          <td className="p-4">
-                            <p className="font-medium dark:text-gray-200">${product.sale_price.toLocaleString()}</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Costo: ${product.purchase_price.toLocaleString()}</p>
+                          <td className="p-3.5"><Badge variant="outline" className="text-[11px] font-mono border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400">{product.sku}</Badge></td>
+                          <td className="p-3.5"><Badge variant="secondary" className="text-[11px] bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300">{product.category?.name || '-'}</Badge></td>
+                          <td className="p-3.5">
+                            <p className="font-semibold tabular-nums text-xs text-slate-900 dark:text-white">{formatCurrency(product.sale_price)}</p>
+                            <p className="text-[11px] tabular-nums text-slate-400">Costo: {formatCurrency(product.purchase_price)}</p>
                           </td>
-                          <td className="p-4">
+                          <td className="p-3.5">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium dark:text-gray-200">{product.stock_quantity}</span>
-                              <Badge className={`text-xs ${stockInfo.color}`}>{stockInfo.text}</Badge>
+                              <span className="min-w-6 font-bold tabular-nums text-xs text-slate-900 dark:text-white">{product.stock_quantity}</span>
+                              <Badge className={`text-[10px] px-2 py-0.5 border-0 ${stockInfo.color}`}>{stockInfo.text}</Badge>
                             </div>
                           </td>
-                          <td className="p-4">
-                            <Badge className={getStatusBadge(product)}>
+                          <td className="p-3.5">
+                            <Badge className={`text-[10px] px-2 py-0.5 border-0 ${getStatusBadge(product)}`}>
                               {product.status === 'active' ? 'Activo' : 'Inactivo'}
                             </Badge>
                           </td>
-                          <td className="p-4 text-right">
-                            <div className="flex justify-end gap-2">
+                          <td className="p-3.5 text-right">
+                            <div className="flex justify-end gap-1">
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="h-7 w-7 rounded-lg hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-500/20"
                                 onClick={() => {
                                   setSelectedProduct(product)
                                   setIsVariantDialogOpen(true)
                                 }}
-                                title="Gestionar Variantes"
+                                title="Gestionar variantes"
+                                aria-label={`Gestionar variantes de ${product.name}`}
                               >
-                                <Layers className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                <Layers className="h-3.5 w-3.5 text-purple-500" />
                               </Button>
-                              <Button variant="ghost" size="icon" onClick={() => openEditDialog(product)} title="Editar Producto">
-                                <Edit className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-500/20" onClick={() => openEditDialog(product)} title="Editar producto" aria-label={`Editar ${product.name}`}>
+                                <Edit className="h-3.5 w-3.5 text-blue-500" />
                               </Button>
-                              <Button variant="ghost" size="icon" onClick={() => { setSelectedProduct(product); setIsDeleteDialogOpen(true); }} title="Eliminar Producto">
-                                <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+                              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/20" onClick={() => { setSelectedProduct(product); setIsDeleteDialogOpen(true); }} title="Eliminar producto" aria-label={`Eliminar ${product.name}`}>
+                                <Trash2 className="h-3.5 w-3.5 text-rose-500" />
                               </Button>
                             </div>
                           </td>
@@ -627,40 +758,46 @@ export default function InventoryManagement() {
               </table>
             </div>
             {/* Paginación */}
-            <div className="p-4 border-t dark:border-gray-700 flex justify-between items-center">
-              <span className="text-sm text-gray-500 dark:text-gray-400">
+            <div className="flex items-center justify-between border-t p-3 dark:border-gray-700">
+              <span className="text-xs text-muted-foreground">
                 Mostrando {rangeStart} - {rangeEnd} de {totalCount}
               </span>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>
+                <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading} aria-label="Página anterior">
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={!hasNextPage || loading}>
+                <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(p => p + 1)} disabled={!hasNextPage || loading} aria-label="Página siguiente">
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
-          </Card>
+          </section>
         </TabsContent>
 
         <TabsContent value="categories">
-          {/* Reutilizar Categories visualmente pero con datos reales */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {categories.map(cat => (
-              <Card key={cat.id} className="dark:bg-gray-800 dark:border-gray-700">
-                <CardHeader className="border-b dark:border-gray-700 bg-blue-50/50 dark:bg-blue-900/10">
-                  <CardTitle className="text-blue-800 dark:text-blue-300 flex items-center">
-                    <Tag className="h-5 w-5 mr-2" />
-                    {cat.name}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <p className="text-2xl font-bold dark:text-gray-100">{cat.productCount || 0}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Productos</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <section className="overflow-hidden rounded-lg border bg-card">
+            <div className="border-b p-4">
+              <h3 className="font-semibold text-foreground">Categorías</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">Organización del catálogo compartido.</p>
+            </div>
+            {categories.length === 0 ? (
+              <EmptyState icon={FolderTree} title="No hay categorías" description="Crea categorías desde la sección de Productos para organizar el catálogo." />
+            ) : (
+              <div className="divide-y">
+                {categories.map((category) => (
+                  <div key={category.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+                        <Tag className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <p className="truncate text-sm font-medium text-foreground">{category.name}</p>
+                    </div>
+                    <Badge variant="secondary" className="rounded-md">{category.productCount || 0} productos</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </TabsContent>
 
         <TabsContent value="variants">
@@ -760,126 +897,37 @@ export default function InventoryManagement() {
         <TabsContent value="reports">
           <InventoryReports />
         </TabsContent>
+        </div>
       </Tabs>
 
-      {/* Dialogs: Create/Edit Product */}
-      <Dialog open={isAddDialogOpen || isEditDialogOpen} onOpenChange={(open) => {
-        if (!open) { setIsAddDialogOpen(false); setIsEditDialogOpen(false); }
-      }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
-          <DialogHeader>
-            <DialogTitle className="dark:text-gray-100">{isEditDialogOpen ? 'Editar Producto' : 'Nuevo Producto'}</DialogTitle>
-            <DialogDescription className="dark:text-gray-400">Complete la información del producto.</DialogDescription>
-          </DialogHeader>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-            <div className="space-y-4">
-              <h4 className="font-semibold dark:text-gray-200 border-b dark:border-gray-700 pb-2">Información Básica</h4>
-              <div className="space-y-2">
-                <Label className="dark:text-gray-300">Nombre *</Label>
-                <Input 
-                  value={formData.name || ''} 
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className={`dark:bg-gray-900 dark:border-gray-600 ${getFieldError('name') ? 'border-red-500' : ''}`}
-                />
-                {getFieldError('name') && <p className="text-xs text-red-500">{getFieldError('name')}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label className="dark:text-gray-300">SKU *</Label>
-                <Input 
-                  value={formData.sku || ''} 
-                  onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                  className={`dark:bg-gray-900 dark:border-gray-600 ${getFieldError('sku') ? 'border-red-500' : ''}`}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="dark:text-gray-300">Categoría *</Label>
-                <Select value={formData.category_id} onValueChange={val => setFormData({ ...formData, category_id: val })}>
-                  <SelectTrigger className="dark:bg-gray-900 dark:border-gray-600"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>
-                    {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="dark:text-gray-300">Proveedor *</Label>
-                <Select value={formData.supplier_id} onValueChange={val => setFormData({ ...formData, supplier_id: val })}>
-                  <SelectTrigger className="dark:bg-gray-900 dark:border-gray-600"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>
-                    {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="font-semibold dark:text-gray-200 border-b dark:border-gray-700 pb-2">Precios y Stock</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="dark:text-gray-300">Costo *</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.purchase_price ?? ''}
-                    onChange={e => setFormData({ ...formData, purchase_price: parseNumberInput(e.target.value, parseFloat) })}
-                    className={`dark:bg-gray-900 dark:border-gray-600 ${getFieldError('purchase_price') ? 'border-red-500' : ''}`}
-                  />
-                  {getFieldError('purchase_price') && <p className="text-xs text-red-500">{getFieldError('purchase_price')}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label className="dark:text-gray-300">Precio Venta *</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.sale_price ?? ''}
-                    onChange={e => setFormData({ ...formData, sale_price: parseNumberInput(e.target.value, parseFloat) })}
-                    className={`dark:bg-gray-900 dark:border-gray-600 ${getFieldError('sale_price') ? 'border-red-500' : ''}`}
-                  />
-                  {getFieldError('sale_price') && <p className="text-xs text-red-500">{getFieldError('sale_price')}</p>}
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label className="dark:text-gray-300">Stock *</Label>
-                  <Input
-                    type="number"
-                    value={formData.stock_quantity ?? ''}
-                    onChange={e => setFormData({ ...formData, stock_quantity: parseNumberInput(e.target.value, parseInt) })}
-                    className={`dark:bg-gray-900 dark:border-gray-600 ${getFieldError('stock_quantity') ? 'border-red-500' : ''}`}
-                  />
-                  {getFieldError('stock_quantity') && <p className="text-xs text-red-500">{getFieldError('stock_quantity')}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label className="dark:text-gray-300">Min</Label>
-                  <Input
-                    type="number"
-                    value={formData.min_stock ?? ''}
-                    onChange={e => setFormData({ ...formData, min_stock: parseNumberInput(e.target.value, parseInt) })}
-                    className="dark:bg-gray-900 dark:border-gray-600"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="dark:text-gray-300">Max</Label>
-                  <Input
-                    type="number"
-                    value={formData.max_stock ?? ''}
-                    onChange={e => setFormData({ ...formData, max_stock: parseNumberInput(e.target.value, parseInt) })}
-                    className="dark:bg-gray-900 dark:border-gray-600"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsAddDialogOpen(false); setIsEditDialogOpen(false); }}>Cancelar</Button>
-            <Button onClick={isEditDialogOpen ? handleEditProduct : handleAddProduct} disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {isSubmitting && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
-              {isEditDialogOpen ? 'Guardar Cambios' : 'Crear Producto'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Dialogs: Create/Edit Product - Sincronizado con ProductModal completo de Dashboard */}
+      <ProductModal
+        product={(selectedProduct as any) || null}
+        isOpen={isAddDialogOpen || isEditDialogOpen}
+        onClose={() => {
+          setIsAddDialogOpen(false)
+          setIsEditDialogOpen(false)
+          setSelectedProduct(null)
+        }}
+        categories={categories as any}
+        brands={[]}
+        suppliers={suppliers as any}
+        onSave={async (productData) => {
+          if (isEditDialogOpen && selectedProduct) {
+            const result = await updateProduct(selectedProduct.id, productData as any)
+            if (!result.success) throw new Error(result.error || 'No fue posible actualizar el producto')
+            setSuccessMessage('Producto actualizado correctamente')
+          } else {
+            const result = await createProduct(productData as any)
+            if (!result.success) throw new Error(result.error || 'No fue posible crear el producto')
+            setSuccessMessage('Producto creado correctamente')
+          }
+          setIsAddDialogOpen(false)
+          setIsEditDialogOpen(false)
+          setSelectedProduct(null)
+          setTimeout(() => setSuccessMessage(''), 3000)
+        }}
+      />
 
       {/* Delete Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

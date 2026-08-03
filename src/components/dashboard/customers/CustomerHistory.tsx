@@ -740,7 +740,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
               Compras ({purchases.length})
             </TabsTrigger>
             <TabsTrigger value="timeline" className={isCompact ? "p-1 sm:p-2 text-xs" : "p-2 sm:p-3 text-sm"}>
-              Timeline
+              Cronología
             </TabsTrigger>
           </TabsList>
 
