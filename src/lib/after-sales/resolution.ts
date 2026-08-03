@@ -310,6 +310,43 @@ export async function applyRestock(params: {
   return { restocked: units }
 }
 
+/**
+ * Descuenta del stock el producto que el cliente se lleva en un cambio.
+ *
+ * Es la contrapartida de `applyRestock`: en un cambio entra una unidad y sale
+ * otra. Antes el reemplazo se despachaba por fuera del sistema y el stock
+ * quedaba con una unidad de mas.
+ */
+export async function applyReplacement(params: {
+  supabase: SupabaseServerClient
+  productId: string | null
+  quantity: number | null
+  caseLabel: string
+}): Promise<{ dispatched: number } | null> {
+  const { supabase, productId, quantity, caseLabel } = params
+
+  if (!productId) return null
+
+  const units = Math.max(1, Math.trunc(Number(quantity) || 1))
+
+  const { error } = await supabase.rpc('update_product_stock', {
+    product_id: productId,
+    quantity_change: -units,
+    movement_type: 'exit',
+    reason: `Cambio posventa ${caseLabel}`,
+    notes: `Producto entregado en reemplazo por el caso ${caseLabel}`,
+  })
+
+  if (error) {
+    throw new AfterSalesResolutionError(
+      `No se pudo descontar del stock el producto de reemplazo: ${error.message}`,
+      400
+    )
+  }
+
+  return { dispatched: units }
+}
+
 /** Sucursal del origen del caso, para saber contra qué caja reintegrar. */
 export async function resolveCaseBranch(params: {
   supabase: SupabaseServerClient

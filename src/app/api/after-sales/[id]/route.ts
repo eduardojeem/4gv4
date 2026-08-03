@@ -4,8 +4,17 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import {
+  isLegacyAfterSalesStatus,
+  normalizeAfterSalesCase,
+  normalizeAfterSalesRequestType,
+  normalizeAfterSalesStatus,
+  serializeAfterSalesStatus,
+  type AfterSalesStatus,
+} from '@/lib/after-sales/compat'
+import {
   AfterSalesResolutionError,
   applyRefund,
+  applyReplacement,
   applyRestock,
   createWarrantyRepair,
   defaultRestockAction,
@@ -13,7 +22,7 @@ import {
   type RestockAction,
 } from '@/lib/after-sales/resolution'
 
-type CaseStatus = 'open' | 'approved' | 'rejected' | 'completed' | 'cancelled'
+type CaseStatus = AfterSalesStatus
 
 /**
  * Transiciones validas de un caso de posventa. `rejected`, `completed` y
@@ -70,7 +79,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     if (error) throw error
     if (!data) return NextResponse.json({ success: false, error: 'Caso no encontrado.' }, { status: 404 })
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data: normalizeAfterSalesCase(data) })
   } catch (error) {
     logger.error('After-sales detail API error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo cargar el caso.' }, { status: 500 })
@@ -90,7 +99,7 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
     const supabase = await createClient()
     const { data: current, error: currentError } = await supabase
       .from('after_sales_cases')
-      .select('status, request_type, case_number, repair_id, sale_id, customer_id, product_id, quantity, refund_amount, generated_repair_id')
+      .select('status, request_type, case_number, repair_id, sale_id, customer_id, product_id, quantity, refund_amount, replacement_product_id, replacement_quantity, generated_repair_id, notes')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -98,12 +107,23 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
     if (currentError) throw currentError
     if (!current) return NextResponse.json({ success: false, error: 'Caso no encontrado.' }, { status: 404 })
 
-    const currentStatus = (current.status ?? 'open') as CaseStatus
+    const currentStatus = normalizeAfterSalesStatus(current.status)
+    const currentRequestType = normalizeAfterSalesRequestType(current.request_type)
     const nextStatus = validation.data.status
     const now = new Date().toISOString()
     const patch: Record<string, unknown> = { updated_at: now }
 
+    if (nextStatus === 'rejected' && (!validation.data.notes || validation.data.notes.trim().length < 5)) {
+      return NextResponse.json(
+        { success: false, error: 'Indicá el motivo del rechazo.' },
+        { status: 400 }
+      )
+    }
+
     if (nextStatus) {
+      if (!currentStatus) {
+        return NextResponse.json({ success: false, error: 'El estado actual del caso no es válido.' }, { status: 409 })
+      }
       if (!ALLOWED_TRANSITIONS[currentStatus]?.includes(nextStatus)) {
         return NextResponse.json({
           success: false,
@@ -113,7 +133,7 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
         }, { status: 409 })
       }
 
-      patch.status = nextStatus
+      patch.status = serializeAfterSalesStatus(nextStatus, isLegacyAfterSalesStatus(current.status))
       if (nextStatus === 'approved') patch.approved_at = now
       // Todo cierre deja constancia de quien y cuando lo resolvio.
       if (['rejected', 'completed', 'cancelled'].includes(nextStatus)) {
@@ -122,7 +142,11 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
       }
     }
 
-    if ('notes' in validation.data) patch.notes = validation.data.notes || null
+    if ('notes' in validation.data) {
+      patch.notes = nextStatus === 'rejected'
+        ? [current.notes?.trim(), `Motivo de rechazo: ${validation.data.notes?.trim()}`].filter(Boolean).join('\n\n')
+        : validation.data.notes || null
+    }
     if ('refund_amount' in validation.data) patch.refund_amount = validation.data.refund_amount ?? null
     if ('refund_method' in validation.data) patch.refund_method = validation.data.refund_method ?? null
     if ('restock_action' in validation.data) patch.restock_action = validation.data.restock_action ?? null
@@ -134,10 +158,11 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
       warrantyRepair?: { repairId: string; ticketNumber: string | null }
       refund?: { method: string; amount: number }
       restock?: { restocked: number; action: RestockAction }
+      replacement?: { dispatched: number }
     } = {}
 
     try {
-      if (nextStatus === 'approved' && current.request_type === 'repair_warranty' && current.repair_id) {
+      if (nextStatus === 'approved' && currentRequestType === 'repair_warranty' && current.repair_id) {
         const created = await createWarrantyRepair({
           supabase,
           organizationId: organization.id,
@@ -154,7 +179,7 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
         // La mercaderia se mueve antes que la plata: si el reingreso falla, no
         // queremos haber sacado el efectivo de la caja.
         const restockAction = (validation.data.restock_action
-          ?? defaultRestockAction(current.request_type as string)) as RestockAction
+          ?? defaultRestockAction(currentRequestType ?? String(current.request_type))) as RestockAction
 
         const restocked = await applyRestock({
           supabase,
@@ -166,6 +191,15 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
 
         patch.restock_action = restockAction
         if (restocked) sideEffect = { ...sideEffect, restock: { ...restocked, action: restockAction } }
+
+        // En un cambio entra una unidad y sale otra.
+        const dispatched = await applyReplacement({
+          supabase,
+          productId: current.replacement_product_id,
+          quantity: current.replacement_quantity,
+          caseLabel: current.case_number || id.slice(0, 8),
+        })
+        if (dispatched) sideEffect = { ...sideEffect, replacement: dispatched }
 
         const amount = Number(validation.data.refund_amount ?? current.refund_amount ?? 0)
         const method = validation.data.refund_method
@@ -222,7 +256,7 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data, ...sideEffect })
+    return NextResponse.json({ success: true, data: normalizeAfterSalesCase(data), ...sideEffect })
   } catch (error) {
     logger.error('After-sales update API error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo actualizar el caso.' }, { status: 500 })

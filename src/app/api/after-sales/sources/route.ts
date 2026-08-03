@@ -26,7 +26,8 @@ interface SaleRow {
     id: string
     product_id: string | null
     quantity: number | null
-    products?: { name: string | null } | { name: string | null }[] | null
+    unit_price: number | null
+    products?: { name: string | null; image_url: string | null } | { name: string | null; image_url: string | null }[] | null
   }> | null
 }
 
@@ -66,7 +67,7 @@ export const GET = withTenantAuth(
           .select(
             `id, code, total_amount, created_at,
              customers:customers!customer_id(name),
-             sale_items(id, product_id, quantity, products(name))`
+             sale_items(id, product_id, quantity, unit_price, products(name, image_url))`
           )
           .eq('organization_id', organization.id)
 
@@ -88,7 +89,9 @@ export const GET = withTenantAuth(
             id: item.id,
             product_id: item.product_id,
             name: firstOf(item.products)?.name || 'Producto',
+            imageUrl: firstOf(item.products)?.image_url ?? null,
             quantity: Number(item.quantity) || 1,
+            unitPrice: Number(item.unit_price) || 0,
           })),
         }))
 

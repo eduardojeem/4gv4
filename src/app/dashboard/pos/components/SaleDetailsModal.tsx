@@ -304,13 +304,16 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
               product_id?: string | null
               product_name?: string
               name?: string
-              products?: { name?: string } | null
+              products?: { name?: string; image_url?: string | null } | null
+              unit_price?: number | string
               quantity?: number | string
             }) => ({
               id: String(item.id),
               product_id: item.product_id ?? null,
               name: item.product_name || item.name || item.products?.name || 'Producto',
               quantity: Number(item.quantity) || 1,
+              unitPrice: Number(item.unit_price) || 0,
+              imageUrl: item.products?.image_url ?? null,
             }))}
           />
         )}

@@ -3,6 +3,15 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import {
+  getAfterSalesRequestTypeAliases,
+  getAfterSalesSourceTypeAliases,
+  getAfterSalesStatusAliases,
+  normalizeAfterSalesCase,
+  type AfterSalesRequestType,
+  type AfterSalesSourceType,
+  type AfterSalesStatus,
+} from '@/lib/after-sales/compat'
 
 /**
  * Casos de posventa: garantias, cambios y devoluciones.
@@ -28,6 +37,9 @@ const createCaseSchema = z.object({
   reason: z.string().trim().min(1).max(1000),
   notes: z.string().trim().max(2000).optional().nullable(),
   refund_amount: z.number().min(0).optional().nullable(),
+  replacement_product_id: z.string().uuid().optional().nullable(),
+  replacement_quantity: z.number().int().min(1).max(10000).optional().nullable(),
+  price_difference: z.number().optional().nullable(),
 })
   // Replica en la aplicacion el CHECK de la tabla, para devolver un 400 con
   // mensaje claro en lugar de un 500 con el error crudo de Postgres.
@@ -41,7 +53,7 @@ const createCaseSchema = z.object({
   })
 
 const SELECT_COLUMNS =
-  'id, case_number, source_type, request_type, status, customer_id, repair_id, sale_id, sale_item_id, product_id, quantity, reason, notes, refund_amount, refund_method, restock_action, generated_repair_id, approved_at, resolved_at, created_by, resolved_by, created_at, updated_at'
+  'id, case_number, source_type, request_type, status, customer_id, repair_id, sale_id, sale_item_id, product_id, quantity, reason, notes, refund_amount, refund_method, restock_action, replacement_product_id, replacement_quantity, price_difference, generated_repair_id, approved_at, resolved_at, created_by, resolved_by, created_at, updated_at'
 
 export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'crm' }, async (request, { organization }) => {
   try {
@@ -64,22 +76,22 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       // PostgREST no tenga que adivinar la relacion.
       .select(
         `${SELECT_COLUMNS},
-         repairs:repairs!repair_id(ticket_number, device_brand, device_model, warranty_type, warranty_months),
+         repairs:repairs!repair_id(ticket_number, device_brand, device_model, warranty_type, warranty_months, warranty_expires_at, problem_description, delivered_at, final_cost),
          sales:sales!sale_id(code, total_amount, created_at),
-         products:products!product_id(name, sku),
+         products:products!product_id(name, sku, image_url),
          customers:customers!customer_id(name, phone)`,
         { count: 'exact' }
       )
       .eq('organization_id', organization.id)
 
     if (status && status !== 'all' && (STATUSES as readonly string[]).includes(status)) {
-      query = query.eq('status', status)
+      query = query.in('status', getAfterSalesStatusAliases(status as AfterSalesStatus))
     }
     if (requestType && requestType !== 'all' && (REQUEST_TYPES as readonly string[]).includes(requestType)) {
-      query = query.eq('request_type', requestType)
+      query = query.in('request_type', getAfterSalesRequestTypeAliases(requestType as AfterSalesRequestType))
     }
     if (sourceType && sourceType !== 'all' && (SOURCE_TYPES as readonly string[]).includes(sourceType)) {
-      query = query.eq('source_type', sourceType)
+      query = query.in('source_type', getAfterSalesSourceTypeAliases(sourceType as AfterSalesSourceType))
     }
     if (customerId) query = query.eq('customer_id', customerId)
     if (repairId) query = query.eq('repair_id', repairId)
@@ -100,6 +112,23 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       new Set(rows.map((row) => row.generated_repair_id).filter((value): value is string => Boolean(value)))
     )
 
+    // `replacement_product_id` no tiene FK (misma razon que generated_repair_id),
+    // asi que el producto de reemplazo se resuelve con una segunda consulta.
+    const replacementIds = Array.from(
+      new Set(rows.map((row) => row.replacement_product_id).filter((value): value is string => Boolean(value)))
+    )
+
+    let replacementById = new Map<string, { name: string | null; image_url: string | null }>()
+    if (replacementIds.length > 0) {
+      const { data: replacements } = await supabase
+        .from('products')
+        .select('id, name, image_url')
+        .eq('organization_id', organization.id)
+        .in('id', replacementIds)
+
+      replacementById = new Map((replacements ?? []).map((row) => [row.id, { name: row.name, image_url: row.image_url }]))
+    }
+
     let generatedById = new Map<string, { ticket_number: string | null }>()
     if (generatedIds.length > 0) {
       const { data: generated } = await supabase
@@ -111,9 +140,10 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       generatedById = new Map((generated ?? []).map((row) => [row.id, { ticket_number: row.ticket_number }]))
     }
 
-    const enriched = rows.map((row) => ({
+    const enriched = rows.map((row) => normalizeAfterSalesCase({
       ...row,
       generated_repair: row.generated_repair_id ? generatedById.get(row.generated_repair_id) ?? null : null,
+      replacement_product: row.replacement_product_id ? replacementById.get(row.replacement_product_id) ?? null : null,
     }))
 
     return NextResponse.json({
@@ -183,24 +213,31 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
     const sourceValue = input.source_type === 'repair' ? input.repair_id : input.sale_id
 
     if (sourceValue) {
-      const { data: openCase, error: openError } = await supabase
+      let openQuery = supabase
         .from('after_sales_cases')
         .select('id, case_number, status')
         .eq('organization_id', organization.id)
         .eq(sourceColumn, sourceValue)
         // Acotado al mismo tipo: una venta puede tener a la vez una devolucion
-        // de un producto y una garantia de otro, pero no dos garantias iguales.
-        .eq('request_type', input.request_type)
-        .in('status', ['open', 'approved'])
-        .limit(1)
-        .maybeSingle()
+        // y una garantia, pero no dos garantias iguales sobre lo mismo.
+        .in('request_type', getAfterSalesRequestTypeAliases(input.request_type))
+        .in('status', [...getAfterSalesStatusAliases('open'), ...getAfterSalesStatusAliases('approved')])
+
+      // Y acotado a la LINEA de venta: una venta de tres productos puede tener
+      // un cambio por cada uno. Sin esto, reclamar el segundo producto rebotaba
+      // contra el caso del primero.
+      if (input.sale_item_id) {
+        openQuery = openQuery.eq('sale_item_id', input.sale_item_id)
+      }
+
+      const { data: openCase, error: openError } = await openQuery.limit(1).maybeSingle()
 
       if (openError) throw openError
       if (openCase) {
         return NextResponse.json(
           {
             success: false,
-            error: `Ya hay un caso ${openCase.status === 'open' ? 'abierto' : 'aprobado'} (${openCase.case_number || openCase.id.slice(0, 8)}) de este tipo para este origen. Resolvé ese antes de abrir otro.`,
+            error: `Ya hay un caso ${getAfterSalesStatusAliases('open').includes(String(openCase.status)) ? 'abierto' : 'aprobado'} (${openCase.case_number || openCase.id.slice(0, 8)}) de este tipo para este producto. Resolvé ese antes de abrir otro.`,
             data: openCase,
           },
           { status: 409 }
@@ -224,6 +261,9 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
         reason: input.reason,
         notes: input.notes || null,
         refund_amount: input.refund_amount ?? null,
+        replacement_product_id: input.replacement_product_id ?? null,
+        replacement_quantity: input.replacement_quantity ?? null,
+        price_difference: input.price_difference ?? null,
         created_by: user.id,
       })
       .select(SELECT_COLUMNS)
@@ -231,7 +271,7 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
 
     if (insertError) throw insertError
 
-    return NextResponse.json({ success: true, data }, { status: 201 })
+    return NextResponse.json({ success: true, data: normalizeAfterSalesCase(data) }, { status: 201 })
   } catch (error) {
     logger.error('After-sales API POST error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo registrar el caso de posventa.' }, { status: 500 })

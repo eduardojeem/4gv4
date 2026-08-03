@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -28,6 +29,8 @@ import {
 import { ChevronDown, Eye, HelpCircle, Inbox, Plus, RefreshCw, Search, ShoppingBag, Wrench, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { normalizeAfterSalesCase } from '@/lib/after-sales/compat'
+import { ProductThumb } from '@/components/suppliers/order-ui'
 import { CreateAfterSalesCaseDialog } from './CreateAfterSalesCaseDialog'
 import {
     NEXT_ACTIONS,
@@ -62,9 +65,16 @@ interface AfterSalesCase {
         device_model: string | null
         warranty_type?: string | null
         warranty_months?: number | null
+        warranty_expires_at?: string | null
+        problem_description?: string | null
+        delivered_at?: string | null
+        final_cost?: number | null
     } | null
     sales?: { code: string | null; total_amount: number | null; created_at: string | null } | null
-    products?: { name: string | null; sku: string | null } | null
+    products?: { name: string | null; sku: string | null; image_url?: string | null } | null
+    replacement_product?: { name: string | null; image_url: string | null } | null
+    replacement_quantity?: number | null
+    price_difference?: number | null
     customers?: { name: string | null; phone: string | null } | null
     generated_repair?: {
         ticket_number: string | null
@@ -105,26 +115,51 @@ export function AfterSalesDashboard() {
     const [statusFilter, setStatusFilter] = useState<'all' | CaseStatus>('all')
     const [typeFilter, setTypeFilter] = useState<'all' | RequestType>('all')
     const [pendingId, setPendingId] = useState<string | null>(null)
+    // Los totales se cuentan en la base: calcularlos sobre la pagina cargada
+    // los dejaba cortos apenas la organizacion pasaba los 200 casos.
+    const [totals, setTotals] = useState<{
+        open: number; approved: number; completed: number; rejected: number
+        refunds: number; quarantined: number
+    } | null>(null)
+    const [totalCases, setTotalCases] = useState(0)
     const [confirming, setConfirming] = useState<{ item: AfterSalesCase; status: CaseStatus; label: string } | null>(null)
     const [selectedCase, setSelectedCase] = useState<AfterSalesCase | null>(null)
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
     const [refundAmount, setRefundAmount] = useState('')
     const [refundMethod, setRefundMethod] = useState<'cash' | 'store_credit' | null>(null)
     const [restockAction, setRestockAction] = useState<'sellable' | 'quarantine' | 'none'>('none')
+    const [rejectionReason, setRejectionReason] = useState('')
 
     const loadCases = useCallback(async (options?: { isSilent?: boolean }) => {
         if (!options?.isSilent) {
             setLoading(true)
         }
         try {
+            try {
+                const summaryRes = await fetch('/api/after-sales/summary', { cache: 'no-store' })
+                if (summaryRes.ok) {
+                    const summaryPayload = await summaryRes.json().catch(() => null)
+                    if (summaryPayload?.success && summaryPayload.data) {
+                        setTotals(summaryPayload.data)
+                    }
+                }
+            } catch {
+                /* los totales son accesorios: la lista manda */
+            }
+
             const response = await fetch('/api/after-sales?limit=200', { cache: 'no-store' })
-            const payload = await response.json().catch(() => null) as { success?: boolean; data?: AfterSalesCase[]; error?: string } | null
+            const payload = await response.json().catch(() => null) as { success?: boolean; data?: AfterSalesCase[]; error?: string; pagination?: { total?: number } } | null
 
             if (!response.ok || payload?.success === false) {
                 throw new Error(payload?.error || 'No se pudieron cargar los casos.')
             }
 
-            setCases(Array.isArray(payload?.data) ? payload.data : [])
+            setCases(
+                Array.isArray(payload?.data)
+                    ? payload.data.map((item) => normalizeAfterSalesCase(item as unknown as Record<string, unknown>) as unknown as AfterSalesCase)
+                    : []
+            )
+            setTotalCases(Number(payload?.pagination?.total) || 0)
         } catch (error) {
             toast.error('No se pudieron cargar los casos de posventa', {
                 description: error instanceof Error ? error.message : 'Intenta nuevamente.',
@@ -150,13 +185,23 @@ export function AfterSalesDashboard() {
         })
     }, [cases, search, statusFilter, typeFilter])
 
-    const summary = useMemo(() => ({
+    const summary = useMemo(() => totals ?? {
         open: cases.filter((item) => item.status === 'open').length,
         approved: cases.filter((item) => item.status === 'approved').length,
+        completed: cases.filter((item) => item.status === 'completed').length,
+        rejected: cases.filter((item) => item.status === 'rejected').length,
         refunds: cases
             .filter((item) => item.status === 'completed')
             .reduce((sum, item) => sum + (Number(item.refund_amount) || 0), 0),
-    }), [cases])
+        quarantined: 0,
+    }, [cases, totals])
+
+    /** Dias que lleva abierto un caso, para que los viejos salten a la vista. */
+    const ageInDays = (iso: string) => {
+        const created = new Date(iso).getTime()
+        if (!Number.isFinite(created)) return 0
+        return Math.floor((Date.now() - created) / 86400000)
+    }
 
     const hasFilters = search.trim() !== '' || statusFilter !== 'all' || typeFilter !== 'all'
 
@@ -199,6 +244,7 @@ export function AfterSalesDashboard() {
             setConfirming(null)
             setRefundAmount('')
             setRefundMethod(null)
+            setRejectionReason('')
             await loadCases({ isSilent: true })
         } catch (error) {
             toast.error('No se pudo actualizar el caso', {
@@ -294,28 +340,82 @@ export function AfterSalesDashboard() {
                 </details>
             </Card>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-                <Card>
-                    <CardContent className="p-4">
-                        <p className="text-xs text-muted-foreground">Abiertos</p>
-                        <p className="mt-1 text-2xl font-semibold tabular-nums">{summary.open}</p>
-                        <p className="text-xs text-muted-foreground">Esperando resolución</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4">
-                        <p className="text-xs text-muted-foreground">Aprobados</p>
-                        <p className="mt-1 text-2xl font-semibold tabular-nums">{summary.approved}</p>
-                        <p className="text-xs text-muted-foreground">Pendientes de completar</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4">
-                        <p className="text-xs text-muted-foreground">Reembolsado</p>
-                        <p className="mt-1 text-2xl font-semibold tabular-nums">{formatMoney(summary.refunds)}</p>
-                        <p className="text-xs text-muted-foreground">En casos completados</p>
-                    </CardContent>
-                </Card>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {([
+                    {
+                        key: 'open' as const,
+                        label: 'Abiertos',
+                        value: String(summary.open),
+                        hint: 'Esperando resolucion',
+                        filter: 'open' as const,
+                        accent: 'border-slate-200 dark:border-white/10',
+                    },
+                    {
+                        key: 'approved' as const,
+                        label: 'Aprobados',
+                        value: String(summary.approved),
+                        hint: 'Pendientes de completar',
+                        filter: 'approved' as const,
+                        accent: 'border-blue-200 dark:border-blue-900/40',
+                    },
+                    {
+                        key: 'refunds' as const,
+                        label: 'Reintegrado',
+                        value: formatMoney(summary.refunds),
+                        hint: 'En casos completados',
+                        filter: null,
+                        accent: 'border-emerald-200 dark:border-emerald-900/40',
+                    },
+                    {
+                        key: 'quarantined' as const,
+                        label: 'Mercaderia con falla',
+                        value: `${summary.quarantined} u.`,
+                        hint: 'Devuelta, no vendible',
+                        filter: null,
+                        accent: 'border-amber-200 dark:border-amber-900/40',
+                    },
+                ] as Array<{
+                    key: string; label: string; value: string; hint: string
+                    filter: CaseStatus | null; accent: string
+                }>).map((card) => {
+                    // Solo filtran las tarjetas accionables. Antes "Reintegrado" y
+                    // "Mercaderia con falla" filtraban por completado, y como esos
+                    // casos no tienen acciones, la lista quedaba sin botones sin
+                    // que se entendiera por que.
+                    const clickable = card.filter !== null
+                    const active = clickable && statusFilter === card.filter
+                    const toggle = () => {
+                        if (!clickable) return
+                        setStatusFilter(active ? 'all' : card.filter!)
+                    }
+                    return (
+                        <Card
+                            key={card.key}
+                            role={clickable ? 'button' : undefined}
+                            tabIndex={clickable ? 0 : undefined}
+                            onClick={toggle}
+                            onKeyDown={(event) => {
+                                if (!clickable) return
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault()
+                                    toggle()
+                                }
+                            }}
+                            className={cn(
+                                'transition-all',
+                                clickable && 'cursor-pointer hover:shadow-sm',
+                                card.accent,
+                                active && 'ring-2 ring-blue-500/40'
+                            )}
+                        >
+                            <CardContent className="p-4">
+                                <p className="text-xs text-muted-foreground">{card.label}</p>
+                                <p className="mt-1 text-2xl font-semibold tabular-nums">{card.value}</p>
+                                <p className="text-xs text-muted-foreground">{card.hint}</p>
+                            </CardContent>
+                        </Card>
+                    )
+                })}
             </div>
 
             <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/20 p-3">
@@ -393,6 +493,39 @@ export function AfterSalesDashboard() {
                     </CardContent>
                 </Card>
             ) : (
+                <>
+                {/* Un filtro activo explica por que faltan casos o botones. */}
+                {hasFilters && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/60 px-3 py-2 text-xs dark:border-blue-900/40 dark:bg-blue-950/20">
+                        <span className="font-medium text-blue-900 dark:text-blue-200">Filtro activo:</span>
+                        {statusFilter !== 'all' && (
+                            <Badge variant="outline" className={STATUS_META[statusFilter]?.className}>
+                                {STATUS_META[statusFilter]?.label}
+                            </Badge>
+                        )}
+                        {typeFilter !== 'all' && (
+                            <Badge variant="outline" className={REQUEST_META[typeFilter]?.className}>
+                                {REQUEST_META[typeFilter]?.label}
+                            </Badge>
+                        )}
+                        {search.trim() && (
+                            <Badge variant="outline">Busqueda: {search.trim()}</Badge>
+                        )}
+                        <span className="text-blue-800/80 dark:text-blue-300/80">
+                            {visibleCases.length} de {cases.length} casos
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="ml-auto h-7 text-xs text-blue-900 dark:text-blue-200"
+                            onClick={() => { setSearch(''); setStatusFilter('all'); setTypeFilter('all') }}
+                        >
+                            <X className="mr-1 h-3 w-3" />
+                            Ver todos
+                        </Button>
+                    </div>
+                )}
+
                 <ul role="list" className="space-y-2">
                     {visibleCases.map((item) => {
                         const requestMeta = REQUEST_META[item.request_type] ?? REQUEST_META.return
@@ -408,6 +541,13 @@ export function AfterSalesDashboard() {
                                         <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border', requestMeta.className)}>
                                             <RequestIcon className="h-4 w-4" />
                                         </span>
+                                        {item.products?.name ? (
+                                            <ProductThumb
+                                                url={item.products.image_url}
+                                                name={item.products.name}
+                                                size={44}
+                                            />
+                                        ) : null}
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span className="font-mono text-sm font-semibold">{item.case_number || 'Sin número'}</span>
@@ -416,29 +556,43 @@ export function AfterSalesDashboard() {
                                             </div>
                                             <p className="mt-1.5 text-sm">{item.reason}</p>
                                             <p className="mt-1 text-xs text-muted-foreground">
-                                                {item.quantity > 1 ? `${item.quantity} unidades · ` : ''}
-                                                Origen: {item.source_type === 'repair' ? 'reparación' : 'venta'} ·
-                                                {' '}Abierto el {formatDate(item.created_at)}
-                                                {item.resolved_at ? ` · Resuelto el ${formatDate(item.resolved_at)}` : ''}
+                                                {item.products?.name || item.repairs?.ticket_number || (item.source_type === 'repair' ? 'Reparación' : 'Venta')}
+                                                {item.quantity > 1 ? ` · ${item.quantity} u.` : ''}
+                                                {item.customers?.name ? ` · ${item.customers.name}` : ''}
+                                            </p>
+                                            <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                                                <span>Abierto el {formatDate(item.created_at)}</span>
+                                                {/* Un reclamo abierto que se estanca es plata y confianza que se pierden. */}
+                                                {item.status === 'open' && ageInDays(item.created_at) >= 7 && (
+                                                    <span className={cn(
+                                                        'rounded px-1.5 py-0.5 font-medium',
+                                                        ageInDays(item.created_at) >= 15
+                                                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                                                            : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                                                    )}>
+                                                        hace {ageInDays(item.created_at)} días
+                                                    </span>
+                                                )}
+                                                {item.resolved_at ? <span>· Resuelto el {formatDate(item.resolved_at)}</span> : null}
                                             </p>
                                         </div>
                                     </div>
 
-                                    <div className="flex shrink-0 flex-col items-end gap-2">
+                                    <div className="flex w-full shrink-0 flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
                                         {item.refund_amount != null ? (
                                             <span className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{formatMoney(item.refund_amount)}</span>
                                         ) : null}
                                         {actions.length === 0 && (
-                                            <span className="text-[11px] text-muted-foreground text-right max-w-[190px]">
+                                            <span className="text-[11px] text-muted-foreground sm:mr-auto">
                                                 Este caso ya está {statusMeta.label.toLowerCase()} y no admite más cambios.
                                                 Si hace falta, registrá uno nuevo.
                                             </span>
                                         )}
-                                        <div className="flex flex-wrap items-center gap-1.5">
+                                        <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                className="h-8 gap-1 text-xs"
+                                                className="h-9 flex-1 gap-1 text-xs sm:flex-none"
                                                 onClick={() => setSelectedCase(item)}
                                             >
                                                 <Eye className="h-3.5 w-3.5" />
@@ -452,7 +606,7 @@ export function AfterSalesDashboard() {
                                                         variant={action.status === 'approved' || action.status === 'completed' ? 'default' : 'outline'}
                                                         size="sm"
                                                         className={cn(
-                                                            'h-8 gap-1.5 text-xs',
+                                                            'h-9 flex-1 gap-1.5 text-xs sm:flex-none',
                                                             action.status === 'approved' && 'bg-blue-600 hover:bg-blue-700 text-white',
                                                             action.status === 'completed' && 'bg-emerald-600 hover:bg-emerald-700 text-white',
                                                             action.destructive && 'text-destructive hover:text-destructive'
@@ -482,11 +636,19 @@ export function AfterSalesDashboard() {
                         )
                     })}
                 </ul>
+                </>
+            )}
+
+            {/* La lista trae 200 por pedido: decirlo evita creer que no hay mas. */}
+            {totalCases > cases.length && (
+                <p className="text-center text-xs text-muted-foreground">
+                    Mostrando {cases.length} de {totalCases} casos. Usá los filtros o el buscador para acotar.
+                </p>
             )}
 
             {/* Case Detail Dialog */}
             <Dialog open={Boolean(selectedCase)} onOpenChange={(open) => !open && setSelectedCase(null)}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
                     <DialogHeader className="space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                             <DialogTitle className="font-mono text-lg">
@@ -494,6 +656,21 @@ export function AfterSalesDashboard() {
                             </DialogTitle>
                             {selectedCase && (
                                 <>
+                                    {/* El origen primero: decide todo lo demas (que se repone,
+                                        si genera retrabajo, contra que garantia se mide). */}
+                                    <Badge
+                                        variant="outline"
+                                        className={cn(
+                                            'gap-1',
+                                            selectedCase.source_type === 'repair'
+                                                ? 'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200'
+                                                : 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200'
+                                        )}
+                                    >
+                                        {selectedCase.source_type === 'repair'
+                                            ? <><Wrench className="h-3 w-3" /> Reparación</>
+                                            : <><ShoppingBag className="h-3 w-3" /> Venta</>}
+                                    </Badge>
                                     <Badge variant="outline" className={REQUEST_META[selectedCase.request_type]?.className}>
                                         {REQUEST_META[selectedCase.request_type]?.label}
                                     </Badge>
@@ -511,7 +688,7 @@ export function AfterSalesDashboard() {
                     </DialogHeader>
 
                     {selectedCase && (
-                        <div className="space-y-4 py-1">
+                        <div className="grid gap-4 py-1 lg:grid-cols-2">
                             {/* Que se reclama: el bloque cambia segun el origen */}
                             {selectedCase.source_type === 'repair' ? (
                                 <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3.5 dark:border-blue-900/40 dark:bg-blue-950/20">
@@ -533,6 +710,26 @@ export function AfterSalesDashboard() {
                                                 <dd className="font-medium">{selectedCase.repairs?.device_brand} {selectedCase.repairs?.device_model}</dd>
                                             </div>
                                         )}
+                                        {selectedCase.repairs?.problem_description && (
+                                            <div className="flex justify-between gap-3">
+                                                <dt className="shrink-0 opacity-70">Falla original</dt>
+                                                <dd className="min-w-0 truncate text-right font-medium">
+                                                    {selectedCase.repairs.problem_description}
+                                                </dd>
+                                            </div>
+                                        )}
+                                        {selectedCase.repairs?.delivered_at && (
+                                            <div className="flex justify-between gap-3">
+                                                <dt className="opacity-70">Entregada</dt>
+                                                <dd className="font-medium">{formatDate(selectedCase.repairs.delivered_at)}</dd>
+                                            </div>
+                                        )}
+                                        {selectedCase.repairs?.final_cost != null && (
+                                            <div className="flex justify-between gap-3">
+                                                <dt className="opacity-70">Cobrado</dt>
+                                                <dd className="font-medium">{formatMoney(selectedCase.repairs.final_cost)}</dd>
+                                            </div>
+                                        )}
                                         {selectedCase.repairs?.warranty_months ? (
                                             <div className="flex justify-between gap-3">
                                                 <dt className="opacity-70">Cobertura original</dt>
@@ -546,6 +743,19 @@ export function AfterSalesDashboard() {
                                                 </dd>
                                             </div>
                                         ) : null}
+                                        {selectedCase.repairs?.warranty_expires_at && (
+                                            <div className="flex justify-between gap-3">
+                                                <dt className="opacity-70">Garantía vence</dt>
+                                                <dd className={cn(
+                                                    'font-semibold',
+                                                    new Date(selectedCase.repairs.warranty_expires_at).getTime() < Date.now()
+                                                        && 'text-amber-600 dark:text-amber-400'
+                                                )}>
+                                                    {formatDate(selectedCase.repairs.warranty_expires_at)}
+                                                    {new Date(selectedCase.repairs.warranty_expires_at).getTime() < Date.now() ? ' (vencida)' : ''}
+                                                </dd>
+                                            </div>
+                                        )}
                                     </dl>
 
                                     {selectedCase.generated_repair?.ticket_number ? (
@@ -575,13 +785,50 @@ export function AfterSalesDashboard() {
                                         )}
                                     </div>
                                     <dl className="mt-2 space-y-1 text-xs text-violet-900 dark:text-violet-200">
-                                        <div className="flex justify-between gap-3">
+                                        <div className="flex items-center justify-between gap-3">
                                             <dt className="opacity-70">Producto</dt>
-                                            <dd className="font-medium text-right">
-                                                {selectedCase.products?.name || 'Sin producto asociado'}
-                                                {selectedCase.products?.sku ? <span className="opacity-70"> · {selectedCase.products.sku}</span> : null}
+                                            <dd className="flex min-w-0 items-center gap-2 text-right font-medium">
+                                                <span className="min-w-0 truncate">
+                                                    {selectedCase.products?.name || 'Sin producto asociado'}
+                                                    {selectedCase.products?.sku ? <span className="opacity-70"> · {selectedCase.products.sku}</span> : null}
+                                                </span>
+                                                {selectedCase.products?.name && (
+                                                    <ProductThumb
+                                                        url={selectedCase.products.image_url}
+                                                        name={selectedCase.products.name}
+                                                        size={40}
+                                                    />
+                                                )}
                                             </dd>
                                         </div>
+
+                                        {selectedCase.replacement_product && (
+                                            <div className="mt-1 flex items-center justify-between gap-3 border-t border-violet-200 pt-2 dark:border-violet-900/40">
+                                                <dt className="opacity-70">Se lleva en cambio</dt>
+                                                <dd className="flex min-w-0 items-center gap-2 text-right font-medium">
+                                                    <span className="min-w-0 truncate">
+                                                        {selectedCase.replacement_product.name}
+                                                        {selectedCase.replacement_quantity ? <span className="opacity-70"> · {selectedCase.replacement_quantity} u.</span> : null}
+                                                    </span>
+                                                    <ProductThumb
+                                                        url={selectedCase.replacement_product.image_url}
+                                                        name={selectedCase.replacement_product.name || 'Producto'}
+                                                        size={40}
+                                                    />
+                                                </dd>
+                                            </div>
+                                        )}
+
+                                        {selectedCase.price_difference != null && selectedCase.price_difference !== 0 && (
+                                            <div className="flex justify-between gap-3">
+                                                <dt className="opacity-70">Diferencia</dt>
+                                                <dd className="font-semibold">
+                                                    {selectedCase.price_difference > 0
+                                                        ? `El cliente abona ${formatMoney(selectedCase.price_difference)}`
+                                                        : `Se le devuelven ${formatMoney(Math.abs(selectedCase.price_difference))}`}
+                                                </dd>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between gap-3">
                                             <dt className="opacity-70">Cantidad reclamada</dt>
                                             <dd className="font-medium">{selectedCase.quantity} u.</dd>
@@ -603,7 +850,7 @@ export function AfterSalesDashboard() {
                             )}
 
                             {/* Lo que dijo el cliente y lo que anoto el mostrador */}
-                            <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-3">
                                 <div>
                                     <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                                         Motivo del cliente
@@ -625,7 +872,7 @@ export function AfterSalesDashboard() {
 
                             {/* Resolucion: que paso con la plata y con la mercaderia */}
                             {(selectedCase.refund_amount != null || selectedCase.restock_action) && (
-                                <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="grid gap-2 sm:grid-cols-2 lg:col-span-2">
                                     {selectedCase.refund_amount != null && (
                                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/40 dark:bg-emerald-950/20">
                                             <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
@@ -669,8 +916,8 @@ export function AfterSalesDashboard() {
                             )}
 
                             {/* Linea de tiempo */}
-                            <div className="rounded-xl border bg-muted/20 p-3">
-                                <ol className="space-y-1.5 text-xs">
+                            <div className="rounded-xl border bg-muted/20 p-3 lg:col-span-2">
+                                <ol className="space-y-1.5 text-xs sm:flex sm:items-center sm:gap-6 sm:space-y-0">
                                     <li className="flex justify-between gap-3">
                                         <span className="text-muted-foreground">Abierto</span>
                                         <span className="font-medium">{formatDate(selectedCase.created_at)}</span>
@@ -686,7 +933,17 @@ export function AfterSalesDashboard() {
                                 </ol>
                             </div>
 
-                            <DialogFooter className="pt-2 flex flex-wrap items-center justify-end gap-2 border-t">
+                            <DialogFooter className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t lg:col-span-2">
+                                {/* Que implica el proximo paso, para no tener que saberlo de memoria. */}
+                                <p className="mr-auto max-w-md text-left text-[11px] text-muted-foreground">
+                                    {selectedCase.status === 'open'
+                                        ? selectedCase.request_type === 'repair_warranty'
+                                            ? 'Aprobar crea la reparación de retrabajo sin costo. Rechazar cierra el caso sin efectos.'
+                                            : 'Aprobar habilita completarlo. Recién al completar se mueve el dinero y la mercadería.'
+                                        : selectedCase.status === 'approved'
+                                            ? 'Al completar se aplica el reintegro y el destino de la mercadería.'
+                                            : `Este caso ya está ${STATUS_META[selectedCase.status]?.label.toLowerCase()} y no admite más cambios.`}
+                                </p>
                                 <Button variant="outline" size="sm" onClick={() => setSelectedCase(null)}>
                                     Cerrar
                                 </Button>
@@ -736,6 +993,7 @@ export function AfterSalesDashboard() {
                     setConfirming(null)
                     setRefundAmount('')
                     setRefundMethod(null)
+                    setRejectionReason('')
                 }}
             >
                 <AlertDialogContent>
@@ -841,6 +1099,39 @@ export function AfterSalesDashboard() {
                         </div>
                     )}
 
+                    {confirming?.status === 'rejected' && (
+                        <div className="space-y-2">
+                            <label htmlFor="rejection-reason" className="text-sm font-medium">
+                                Motivo del rechazo <span className="text-destructive">*</span>
+                            </label>
+                            <Textarea
+                                id="rejection-reason"
+                                value={rejectionReason}
+                                onChange={(event) => setRejectionReason(event.target.value)}
+                                placeholder="Explicá por qué no corresponde aprobar este reclamo..."
+                                rows={3}
+                                maxLength={1000}
+                            />
+                            <div className="flex flex-wrap gap-1.5" aria-label="Motivos frecuentes de rechazo">
+                                {['Fuera del plazo', 'Daño por mal uso', 'No se comprobó la falla', 'No cumple la política'].map((reason) => (
+                                    <Button
+                                        key={reason}
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-[11px]"
+                                        onClick={() => setRejectionReason(reason)}
+                                    >
+                                        {reason}
+                                    </Button>
+                                ))}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                                El motivo quedará guardado en las notas internas del caso.
+                            </p>
+                        </div>
+                    )}
+
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={Boolean(pendingId)}>Volver</AlertDialogCancel>
                         <AlertDialogAction
@@ -857,10 +1148,16 @@ export function AfterSalesDashboard() {
                                                 ? { refund_amount: parsedRefund, refund_method: refundMethod }
                                                 : {}),
                                         }
-                                        : undefined
+                                        : confirming.status === 'rejected'
+                                            ? { notes: rejectionReason.trim() }
+                                            : undefined
                                 )
                             }}
-                            disabled={Boolean(pendingId) || (needsRefundMethod && !refundMethod)}
+                            disabled={
+                                Boolean(pendingId)
+                                || (needsRefundMethod && !refundMethod)
+                                || (confirming?.status === 'rejected' && rejectionReason.trim().length < 5)
+                            }
                         >
                             {pendingId ? 'Aplicando…' : 'Confirmar'}
                         </AlertDialogAction>

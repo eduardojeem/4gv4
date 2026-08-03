@@ -17,6 +17,7 @@ import { Loader2, Search, ShieldAlert, ShoppingBag, TriangleAlert, Wrench, X } f
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { REQUEST_META, formatMoney, type RequestType, type SourceType } from './after-sales-meta'
+import { ProductThumb } from '@/components/suppliers/order-ui'
 
 /** Origen encontrado por la busqueda, ya normalizado por la API. */
 interface OriginResult {
@@ -36,6 +37,17 @@ export interface AfterSalesSaleItem {
     product_id: string | null
     name: string
     quantity: number
+    imageUrl?: string | null
+    unitPrice?: number
+}
+
+/** Producto candidato a entregarse en reemplazo dentro de un cambio. */
+interface ReplacementProduct {
+    id: string
+    name: string
+    imageUrl: string | null
+    price: number
+    stock: number
 }
 
 interface CreateAfterSalesCaseDialogProps {
@@ -94,6 +106,11 @@ export function CreateAfterSalesCaseDialog({
     const [originResults, setOriginResults] = useState<OriginResult[]>([])
     const [originLoading, setOriginLoading] = useState(false)
     const [pickedOrigin, setPickedOrigin] = useState<OriginResult | null>(null)
+    // Reemplazo: solo aplica a los cambios, donde el cliente se lleva otro producto.
+    const [replacementQuery, setReplacementQuery] = useState('')
+    const [replacementResults, setReplacementResults] = useState<ReplacementProduct[]>([])
+    const [replacement, setReplacement] = useState<ReplacementProduct | null>(null)
+    const [replacementQty, setReplacementQty] = useState(1)
     const [submitting, setSubmitting] = useState(false)
 
     // Cada apertura arranca limpia: reutilizar el borrador anterior lleva a
@@ -111,6 +128,10 @@ export function CreateAfterSalesCaseDialog({
         setPickedOrigin(null)
         setOriginQuery('')
         setOriginResults([])
+        setReplacement(null)
+        setReplacementQuery('')
+        setReplacementResults([])
+        setReplacementQty(1)
     }, [open, allowedRequestTypes, saleItems])
 
     // Si el dialogo se abrio sin origen hay que elegirlo primero.
@@ -135,9 +156,21 @@ export function CreateAfterSalesCaseDialog({
     const hasItems = effectiveSourceType === 'sale' && Array.isArray(effectiveItems) && effectiveItems.length > 0
     const selectedItem = hasItems ? effectiveItems.find((item) => item.id === selectedItemId) ?? null : null
     const showRefund = requestType === 'return'
+    const showReplacement = requestType === 'exchange'
+
+    // Diferencia del cambio: lo que se lleva menos lo que devuelve.
+    // Positiva la abona el cliente; negativa se le devuelve a el.
+    const priceDifference =
+        showReplacement && replacement
+            ? replacement.price * replacementQty - (selectedItem?.unitPrice ?? 0) * quantity
+            : null
     const trimmedReason = reason.trim()
     const canSubmit =
-        originChosen && trimmedReason.length > 0 && !submitting && (!hasItems || Boolean(selectedItem))
+        originChosen &&
+        trimmedReason.length > 0 &&
+        !submitting &&
+        (!hasItems || Boolean(selectedItem)) &&
+        (!showReplacement || Boolean(replacement))
 
     // Al cambiar de tipo de origen el reclamo anterior deja de tener sentido.
     useEffect(() => {
@@ -146,6 +179,39 @@ export function CreateAfterSalesCaseDialog({
         setSelectedItemId('')
         setRequestType(originType === 'repair' ? 'repair_warranty' : 'product_warranty')
     }, [originType, needsOrigin])
+
+    // Catalogo para el reemplazo, con el mismo respiro que la busqueda de origen.
+    useEffect(() => {
+        if (!open || !showReplacement || replacement) return
+        let cancelled = false
+
+        const timer = setTimeout(async () => {
+            try {
+                const response = await fetch(
+                    `/api/products?query=${encodeURIComponent(replacementQuery)}&limit=8`
+                )
+                const payload = await response.json().catch(() => null)
+                if (cancelled) return
+                const rows = (payload?.data ?? payload?.products ?? []) as Array<Record<string, unknown>>
+                setReplacementResults(
+                    rows.slice(0, 8).map((row) => ({
+                        id: String(row.id),
+                        name: String(row.name ?? 'Producto'),
+                        imageUrl: (row.image_url as string | null) ?? null,
+                        price: Number(row.sale_price ?? 0),
+                        stock: Number(row.stock_quantity ?? 0),
+                    }))
+                )
+            } catch {
+                if (!cancelled) setReplacementResults([])
+            }
+        }, 300)
+
+        return () => {
+            cancelled = true
+            clearTimeout(timer)
+        }
+    }, [open, showReplacement, replacement, replacementQuery])
 
     // Busqueda con respiro, para no disparar una consulta por tecla.
     useEffect(() => {
@@ -200,6 +266,9 @@ export function CreateAfterSalesCaseDialog({
                     reason: trimmedReason,
                     notes: notes.trim() || null,
                     refund_amount: parsedRefund,
+                    replacement_product_id: showReplacement ? replacement?.id ?? null : null,
+                    replacement_quantity: showReplacement ? replacementQty : null,
+                    price_difference: showReplacement ? priceDifference : null,
                 }),
             })
 
@@ -445,8 +514,11 @@ export function CreateAfterSalesCaseDialog({
                                                     : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-[#161b22] dark:hover:bg-white/5'
                                             )}
                                         >
-                                            <span className="min-w-0 text-xs font-semibold text-slate-900 dark:text-white truncate">
-                                                {item.name}
+                                            <span className="flex min-w-0 items-center gap-2.5">
+                                                <ProductThumb url={item.imageUrl} name={item.name} size={40} />
+                                                <span className="min-w-0 truncate text-xs font-semibold text-slate-900 dark:text-white">
+                                                    {item.name}
+                                                </span>
                                             </span>
                                             <span className="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">
                                                 {item.quantity} u.
@@ -504,6 +576,106 @@ export function CreateAfterSalesCaseDialog({
                             className="rounded-xl text-xs leading-relaxed resize-none"
                         />
                     </div>
+
+                    {showReplacement && (
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                                Producto que se lleva <span className="text-rose-500">*</span>
+                            </Label>
+
+                            {replacement ? (
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-violet-500 bg-violet-50/80 p-2.5 dark:border-violet-500 dark:bg-violet-950/30">
+                                    <div className="flex min-w-0 items-center gap-2.5">
+                                        <ProductThumb url={replacement.imageUrl} name={replacement.name} size={40} />
+                                        <div className="min-w-0">
+                                            <p className="truncate text-xs font-semibold text-slate-900 dark:text-white">{replacement.name}</p>
+                                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                {formatMoney(replacement.price)} · stock {replacement.stock}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex shrink-0 items-center gap-2">
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            value={replacementQty}
+                                            onChange={(event) => setReplacementQty(Math.max(1, Number(event.target.value) || 1))}
+                                            className="h-8 w-16 rounded-lg text-xs"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 text-[11px]"
+                                            onClick={() => setReplacement(null)}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="relative">
+                                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                                        <Input
+                                            value={replacementQuery}
+                                            onChange={(event) => setReplacementQuery(event.target.value)}
+                                            placeholder="Buscar el producto de reemplazo..."
+                                            className="h-9 rounded-xl pl-8 text-xs"
+                                        />
+                                    </div>
+                                    <div className="max-h-44 space-y-1.5 overflow-y-auto pr-0.5">
+                                        {replacementResults.length === 0 && (
+                                            <p className="py-3 text-center text-[11px] text-slate-400">
+                                                Escribí para buscar en el catálogo.
+                                            </p>
+                                        )}
+                                        {replacementResults.map((product) => (
+                                            <button
+                                                key={product.id}
+                                                type="button"
+                                                onClick={() => setReplacement(product)}
+                                                disabled={product.stock <= 0}
+                                                className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-2 text-left transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-[#161b22] dark:hover:bg-white/5"
+                                            >
+                                                <span className="flex min-w-0 items-center gap-2.5">
+                                                    <ProductThumb url={product.imageUrl} name={product.name} size={36} />
+                                                    <span className="min-w-0 truncate text-xs font-semibold text-slate-900 dark:text-white">
+                                                        {product.name}
+                                                    </span>
+                                                </span>
+                                                <span className="shrink-0 text-right">
+                                                    <span className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                                                        {formatMoney(product.price)}
+                                                    </span>
+                                                    <span className={cn(
+                                                        'block text-[10px]',
+                                                        product.stock > 0 ? 'text-slate-400' : 'text-rose-500'
+                                                    )}>
+                                                        {product.stock > 0 ? `stock ${product.stock}` : 'sin stock'}
+                                                    </span>
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+
+                            {replacement && (
+                                <p className="rounded-lg border border-violet-200 bg-violet-50/60 p-2.5 text-[11px] leading-relaxed text-violet-800 dark:border-violet-900/40 dark:bg-violet-950/20 dark:text-violet-300">
+                                    Al completar el caso, {replacementQty} u. de este producto salen del stock y la unidad
+                                    devuelta vuelve según el destino que elijas.
+                                    {priceDifference != null && priceDifference !== 0 && (
+                                        <span className="mt-1 block font-semibold">
+                                            {priceDifference > 0
+                                                ? `El cliente abona ${formatMoney(priceDifference)} de diferencia.`
+                                                : `Se le devuelven ${formatMoney(Math.abs(priceDifference))} al cliente.`}
+                                        </span>
+                                    )}
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     {showRefund && (
                         <div className="space-y-1.5">
