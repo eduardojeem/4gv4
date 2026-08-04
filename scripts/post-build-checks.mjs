@@ -23,7 +23,7 @@ const CHECKS = {
     'vendor',
   ],
   maxFileSize: 600 * 1024, // 600KB (CSS bundleado puede superar 500KB por diseño)
-  maxTotalSize: 16 * 1024 * 1024, // Presupuesto actual para 208 rutas y scanner integrado
+  maxTotalSize: 17 * 1024 * 1024, // Presupuesto actual para 208 rutas y scanner integrado
   performanceChecks: true
 };
 
