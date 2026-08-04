@@ -63,7 +63,11 @@ export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityP
             return (
               <Link
                 key={repair.id}
-                href={`${repairsHref}?search=${repair.id}`}
+                // La pagina de destino no lee ningun parametro `search`: acepta
+                // el id o el numero de ticket como segmento de ruta. Con
+                // `?search=` el link caia siempre en el buscador general,
+                // ignorando la reparacion puntual en la que se hizo click.
+                href={`${repairsHref}/${repair.id}`}
                 className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/50"
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">

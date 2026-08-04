@@ -167,7 +167,11 @@ export async function GET(req: NextRequest) {
   }
 }
 
-const TECHNICIAN_ROLES = new Set(['technician', 'tecnico'])
+// 'admin' entra a proposito: en un taller chico el dueño-admin tambien arma
+// equipos y necesita poder autoasignarse una reparacion. 'super_admin' queda
+// afuera porque es el rol de plataforma SaaS (suscripciones, usuarios entre
+// organizaciones), no un rol operativo de ningun taller puntual.
+const TECHNICIAN_ROLES = new Set(['technician', 'tecnico', 'admin'])
 
 function normalizeRole(role: string): string {
   return role

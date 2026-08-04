@@ -12,8 +12,9 @@
  * - CustomerSelector para búsqueda y creación inline de clientes
  */
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { formatCurrency } from '@/lib/currency'
+import { useAuth } from '@/contexts/auth-context'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -242,6 +243,29 @@ export function RepairFormDialogV2({
     control,
     name: 'notes'
   })
+
+  // Mano de obra automática: labor = costo final - repuestos. Arranca
+  // apagado a propósito: al editar una reparación existente, prender esto
+  // por defecto recalcularía en silencio un costo que el técnico ya cargó
+  // a mano, sin que nadie lo haya pedido.
+  const [autoLaborCost, setAutoLaborCost] = useState(false)
+  const { user } = useAuth()
+  const watchedParts = watch('parts')
+  const watchedFinalCost = watch('finalCost')
+  const watchedTechnicianId = watch('devices.0.technician')
+
+  const partsCostForLabor = useMemo(
+    () => (watchedParts || []).reduce((sum, part) => sum + (Number(part.cost) || 0) * (Number(part.quantity) || 0), 0),
+    [watchedParts]
+  )
+
+  useEffect(() => {
+    if (!autoLaborCost || watchedFinalCost === null || watchedFinalCost === undefined) return
+    const derived = Math.max(0, Math.round((watchedFinalCost - partsCostForLabor) * 100) / 100)
+    if (derived !== watch('laborCost')) {
+      setValue('laborCost', derived, { shouldDirty: true, shouldValidate: true })
+    }
+  }, [autoLaborCost, watchedFinalCost, partsCostForLabor, setValue, watch])
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -1388,6 +1412,11 @@ export function RepairFormDialogV2({
               parts={watch('parts') || []}
               disabled={isSubmitting}
               error={errors.finalCost?.message || errors.laborCost?.message}
+              autoLaborCost={autoLaborCost}
+              onAutoLaborCostChange={setAutoLaborCost}
+              technicianId={watchedTechnicianId}
+              technicianName={technicians.find((tech) => tech.id === watchedTechnicianId)?.name}
+              canViewCommission={user?.role === 'admin' || user?.role === 'super_admin'}
             />
 
             {/* Warranty Section */}

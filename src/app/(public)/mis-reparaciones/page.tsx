@@ -20,6 +20,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false }
 }
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+
 type RepairRow = {
   id: string
   ticket_number: string | null
@@ -109,7 +113,8 @@ export default async function MisReparacionesPage() {
     customerQuery = customerQuery.eq('organization_id', organization.id)
   }
 
-  const { data: customerData } = await customerQuery.maybeSingle()
+  const { data: customerData, error: custErr } = await customerQuery.maybeSingle()
+  console.log('Customer fetch:', customerData?.id, custErr)
 
   if (organization && (!membership || membership.status !== 'active' || !customerData)) {
     redirect(`${tenantPrefix}/cliente/login?next=${encodeURIComponent(repairsHref)}`)
@@ -117,7 +122,12 @@ export default async function MisReparacionesPage() {
 
   if (customerData) {
     customerName = customerData.name || ''
-    let repairsQuery = supabase
+    
+    // BUG FIX: Bypass the restrictive branch RLS policy for repairs since customers do not have branch access.
+    // This is secure because customerData is already verified via user token RLS.
+    const adminSupabase = createAdminSupabase()
+    
+    let repairsQuery = adminSupabase
       .from('repairs')
       .select('id, ticket_number, device_type, device_brand, device_model, problem_description, status, created_at, final_cost, estimated_cost')
       .eq('customer_id', customerData.id)
@@ -126,9 +136,11 @@ export default async function MisReparacionesPage() {
       repairsQuery = repairsQuery.eq('organization_id', organization.id)
     }
 
-    const { data: repairsData } = await repairsQuery
+    const { data: repairsData, error: repErr } = await repairsQuery
       .order('created_at', { ascending: false })
       .limit(50)
+      
+    console.log('Repairs fetch:', repairsData?.length, repErr)
 
     repairs = (repairsData as RepairRow[] | null) ?? []
   }
@@ -163,9 +175,9 @@ export default async function MisReparacionesPage() {
               { label: 'En curso', value: activeRepairs.length, icon: Wrench, color: 'text-orange-600 bg-orange-50 dark:bg-orange-950/30' },
               { label: 'Completadas', value: completedRepairs.length, icon: CheckCircle2, color: 'text-green-600 bg-green-50 dark:bg-green-950/30' },
               {
-                label: 'Gastado',
-                value: formatCurrency(repairs.reduce((s, r) => s + (r.final_cost || r.estimated_cost || 0), 0)),
-                icon: Banknote,
+                label: 'Para retirar',
+                value: repairs.filter(r => r.status === 'listo').length,
+                icon: Ticket,
                 color: 'text-purple-600 bg-purple-50 dark:bg-purple-950/30'
               },
             ].map(stat => {
@@ -204,7 +216,7 @@ export default async function MisReparacionesPage() {
                       <CardContent className="p-5 space-y-4">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <p className="font-mono text-xs font-semibold text-muted-foreground">{r.ticket_number || r.id.slice(0, 8)}</p>
+                            <p className="font-mono text-xs font-semibold text-muted-foreground">{r.ticket_number || r.id.slice(0, 8).toUpperCase()}</p>
                             <p className="mt-0.5 text-base font-bold text-foreground truncate">{device}</p>
                           </div>
                           <StatusBadge status={r.status} />
@@ -252,7 +264,7 @@ export default async function MisReparacionesPage() {
                       <div className="flex items-center gap-4 px-5 py-4 hover:bg-muted/40 transition-colors group">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-mono text-xs text-muted-foreground">{r.ticket_number || r.id.slice(0, 8)}</p>
+                            <p className="font-mono text-xs text-muted-foreground">{r.ticket_number || r.id.slice(0, 8).toUpperCase()}</p>
                             <StatusBadge status={r.status} />
                           </div>
                           <p className="mt-0.5 text-sm font-semibold text-foreground">{device}</p>

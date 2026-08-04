@@ -21,7 +21,10 @@ import {
   Loader2, 
   Info,
   X,
-  Save
+  Save,
+  Pencil,
+  Ban,
+  BadgeCheck
 } from 'lucide-react'
 import Link from 'next/link'
 import { z } from 'zod'
@@ -37,7 +40,7 @@ const authorizedPersonSchema = z.object({
   relationship: z.string().optional()
 })
 
-type AuthorizedPerson = z.infer<typeof authorizedPersonSchema> & { id: string }
+type AuthorizedPerson = z.infer<typeof authorizedPersonSchema> & { id: string; is_active?: boolean }
 
 export default function AuthorizedPersonsPage() {
   const { user, loading: loadingAuth } = useAuth()
@@ -49,6 +52,7 @@ export default function AuthorizedPersonsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [authorizedPersons, setAuthorizedPersons] = useState<AuthorizedPerson[]>([])
   const [isAdding, setIsAdding] = useState(false)
+  const [editingPerson, setEditingPerson] = useState<AuthorizedPerson | null>(null)
   const [formData, setFormData] = useState({
     full_name: '',
     document_number: '',
@@ -75,7 +79,6 @@ export default function AuthorizedPersonsPage() {
         .from('authorized_persons')
         .select('*')
         .eq('profile_id', user.id)
-        .eq('is_active', true)
         .order('created_at', { ascending: false })
 
       if (organizationId) {
@@ -89,7 +92,6 @@ export default function AuthorizedPersonsPage() {
           .from('authorized_persons')
           .select('*')
           .eq('profile_id', user.id)
-          .eq('is_active', true)
           .order('created_at', { ascending: false })
         data = fallback.data
         error = fallback.error
@@ -148,39 +150,96 @@ export default function AuthorizedPersonsPage() {
         organizationId = organization?.id ?? null
       }
 
-      const insertPayload = {
-        ...formData,
-        profile_id: user.id,
-        ...(organizationId ? { organization_id: organizationId } : {}),
+      if (editingPerson) {
+        // UPDATE EXISTING
+        const updatePayload = {
+          ...formData,
+          updated_at: new Date().toISOString()
+        }
+
+        const { data, error } = await supabase
+          .from('authorized_persons')
+          .update(updatePayload)
+          .eq('id', editingPerson.id)
+          .eq('profile_id', user.id)
+          .select()
+          .single()
+        
+        if (error) throw error
+
+        toast.success('Autorización actualizada correctamente')
+        setAuthorizedPersons(authorizedPersons.map(p => p.id === editingPerson.id ? data : p))
+      } else {
+        // INSERT NEW
+        const insertPayload = {
+          ...formData,
+          profile_id: user.id,
+          ...(organizationId ? { organization_id: organizationId } : {}),
+        }
+
+        let { data, error } = await supabase
+          .from('authorized_persons')
+          .insert([insertPayload])
+          .select()
+          .single()
+
+        if (error && organizationId && error.message?.includes('organization_id')) {
+          const fallback = await supabase
+            .from('authorized_persons')
+            .insert([{ ...formData, profile_id: user.id }])
+            .select()
+            .single()
+          data = fallback.data
+          error = fallback.error
+        }
+
+        if (error) throw error
+
+        toast.success('Persona autorizada agregada correctamente')
+        setAuthorizedPersons([data, ...authorizedPersons])
       }
 
-      let { data, error } = await supabase
+      setIsAdding(false)
+      setEditingPerson(null)
+      setFormData({ full_name: '', document_number: '', phone: '', relationship: '' })
+    } catch (error) {
+      console.error('Error saving authorized person:', error)
+      toast.error('No se pudo guardar la autorización')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleEditClick = (person: AuthorizedPerson) => {
+    setEditingPerson(person)
+    setFormData({
+      full_name: person.full_name,
+      document_number: person.document_number,
+      phone: person.phone || '',
+      relationship: person.relationship || ''
+    })
+    setIsAdding(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleToggleStatus = async (person: AuthorizedPerson) => {
+    try {
+      const newStatus = !person.is_active
+      const { data, error } = await supabase
         .from('authorized_persons')
-        .insert([insertPayload])
+        .update({ is_active: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', person.id)
+        .eq('profile_id', user?.id)
         .select()
         .single()
 
-      if (error && organizationId && error.message?.includes('organization_id')) {
-        const fallback = await supabase
-          .from('authorized_persons')
-          .insert([{ ...formData, profile_id: user.id }])
-          .select()
-          .single()
-        data = fallback.data
-        error = fallback.error
-      }
-
       if (error) throw error
 
-      toast.success('Persona autorizada agregada correctamente')
-      setAuthorizedPersons([data, ...authorizedPersons])
-      setIsAdding(false)
-      setFormData({ full_name: '', document_number: '', phone: '', relationship: '' })
+      toast.success(newStatus ? 'Autorización reactivada' : 'Autorización suspendida')
+      setAuthorizedPersons(authorizedPersons.map(p => p.id === person.id ? data : p))
     } catch (error) {
-      console.error('Error adding authorized person:', error)
-      toast.error('No se pudo agregar a la persona autorizada')
-    } finally {
-      setSubmitting(false)
+      console.error('Error toggling status:', error)
+      toast.error('Error al cambiar el estado de la autorización')
     }
   }
 
@@ -262,10 +321,10 @@ export default function AuthorizedPersonsPage() {
                 <Card className="border-none shadow-2xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/20">
                   <CardHeader className="flex flex-row items-center justify-between">
                     <div>
-                      <CardTitle>Agregar Persona Autorizada</CardTitle>
-                      <CardDescription>Completa los datos de la persona que autorizas.</CardDescription>
+                      <CardTitle>{editingPerson ? 'Editar Persona Autorizada' : 'Agregar Persona Autorizada'}</CardTitle>
+                      <CardDescription>{editingPerson ? 'Modifica los datos de la persona.' : 'Completa los datos de la persona que autorizas.'}</CardDescription>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => setIsAdding(false)} className="rounded-full">
+                    <Button variant="ghost" size="icon" onClick={() => { setIsAdding(false); setEditingPerson(null); }} className="rounded-full">
                       <X className="h-5 w-5" />
                     </Button>
                   </CardHeader>
@@ -327,7 +386,7 @@ export default function AuthorizedPersonsPage() {
                       </div>
                     </CardContent>
                     <CardFooter className="flex justify-end gap-3 pt-2">
-                      <Button type="button" variant="ghost" onClick={() => setIsAdding(false)} className="rounded-xl">
+                      <Button type="button" variant="ghost" onClick={() => { setIsAdding(false); setEditingPerson(null); }} className="rounded-xl">
                         Cancelar
                       </Button>
                       <Button 
@@ -376,17 +435,24 @@ export default function AuthorizedPersonsPage() {
                       exit={{ opacity: 0, scale: 0.9 }}
                       transition={{ delay: index * 0.05 }}
                     >
-                      <Card className="group border-none shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-md hover:shadow-2xl transition-all duration-300 hover:scale-[1.01] border border-white/10">
+                      <Card className={cn("group border-none shadow-xl backdrop-blur-md hover:shadow-2xl transition-all duration-300 hover:scale-[1.01] border border-white/10", person.is_active === false ? "bg-slate-200/50 dark:bg-slate-800/50 opacity-75 grayscale-[0.5]" : "bg-white/60 dark:bg-slate-900/60")}>
                         <CardContent className="p-6">
                           <div className="flex items-start justify-between">
                             <div className="flex gap-4">
-                              <div className="h-12 w-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600">
+                              <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center", person.is_active === false ? "bg-slate-300 text-slate-500 dark:bg-slate-700 dark:text-slate-400" : "bg-blue-500/10 text-blue-600")}>
                                 <User className="h-6 w-6" />
                               </div>
                               <div>
-                                <h3 className="font-bold text-lg text-slate-900 dark:text-white line-clamp-1">
-                                  {person.full_name}
-                                </h3>
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-bold text-lg text-slate-900 dark:text-white line-clamp-1">
+                                    {person.full_name}
+                                  </h3>
+                                  {person.is_active === false && (
+                                    <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10 dark:bg-red-900/20 dark:text-red-400">
+                                      Suspendido
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex flex-col gap-1 mt-1">
                                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <IdCard className="h-3.5 w-3.5" />
@@ -407,14 +473,35 @@ export default function AuthorizedPersonsPage() {
                                 </div>
                               </div>
                             </div>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              onClick={() => handleDeletePerson(person.id)}
-                              className="text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
-                            >
-                              <Trash2 className="h-5 w-5" />
-                            </Button>
+                            <div className="flex flex-col sm:flex-row items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleEditClick(person)}
+                                className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors"
+                                title="Editar"
+                              >
+                                <Pencil className="h-5 w-5" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleToggleStatus(person)}
+                                className={cn("rounded-xl transition-colors", person.is_active !== false ? "text-slate-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20" : "text-slate-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20")}
+                                title={person.is_active !== false ? "Suspender" : "Activar"}
+                              >
+                                {person.is_active !== false ? <Ban className="h-5 w-5" /> : <BadgeCheck className="h-5 w-5" />}
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleDeletePerson(person.id)}
+                                className="text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="h-5 w-5" />
+                              </Button>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>

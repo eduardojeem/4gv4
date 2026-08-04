@@ -74,6 +74,10 @@ export async function GET(
       )
     }
     
+    // Support both ticket_number (e.g. "R-2026-00042") and raw UUID id
+    // (used as fallback when a repair has no ticket_number assigned yet)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticketId)
+
     // Fetch repair data with specific fields only
     let repairQuery = supabase
       .from('repairs')
@@ -97,7 +101,12 @@ export async function GET(
         customer_id,
         organization_id
       `)
-      .eq('ticket_number', ticketId)
+
+    if (isUUID) {
+      repairQuery = repairQuery.or(`ticket_number.eq.${ticketId},id.eq.${ticketId}`)
+    } else {
+      repairQuery = repairQuery.eq('ticket_number', ticketId)
+    }
 
     if (organization) {
       repairQuery = repairQuery.eq('organization_id', organization.id)
@@ -123,9 +132,12 @@ export async function GET(
       )
     }
 
+    // When a repair has no ticket_number yet, the link uses the UUID id.
+    // The token was generated with that UUID as ticketNumber, so we must
+    // compare against whichever value was actually used to identify the repair.
     const isTokenAuthorized = isPublicRepairSessionAuthorized(session, {
       repairId: repair.id,
-      ticketNumber: repair.ticket_number,
+      ticketNumber: repair.ticket_number ?? repair.id,
       organizationId: repair.organization_id,
     })
 

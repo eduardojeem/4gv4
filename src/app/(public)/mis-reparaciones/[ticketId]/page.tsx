@@ -30,6 +30,8 @@ async function fetchRepairServerSide(
 
     if (token) {
       const session = await verifyPublicToken(token)
+      // session.ticketNumber may be either the ticket_number or the repair UUID
+      // (the latter is used as fallback when ticket_number is not yet assigned)
       if (session && session.ticketNumber === ticketId) {
         isTokenAuthorized = true
       }
@@ -57,7 +59,15 @@ async function fetchRepairServerSide(
       return null
     }
 
-    let repairQuery = supabase
+    // Support both ticket_number (e.g. "R-2026-00042") and raw UUID id
+    // (used as fallback when a repair has no ticket_number assigned yet)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticketId)
+    
+    // BUG FIX: Bypass the restrictive branch RLS policy for repairs since customers do not have branch access.
+    // This is secure because we enforce customerIdForUser (or verifyHash/token) immediately below.
+    const adminSupabase = createAdminSupabase()
+    
+    let repairQuery = adminSupabase
       .from('repairs')
       .select(`
         id, ticket_number, device_brand, device_model, device_type,
@@ -65,7 +75,12 @@ async function fetchRepairServerSide(
         estimated_cost, final_cost, warranty_months, warranty_type,
         estimated_completion, completed_at, technician_id, customer_id
       `)
-      .eq('ticket_number', ticketId)
+
+    if (isUUID) {
+      repairQuery = repairQuery.or(`ticket_number.eq.${ticketId},id.eq.${ticketId}`)
+    } else {
+      repairQuery = repairQuery.eq('ticket_number', ticketId)
+    }
 
     if (organization) {
       repairQuery = repairQuery.eq('organization_id', organization.id)

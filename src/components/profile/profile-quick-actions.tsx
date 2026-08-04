@@ -9,8 +9,12 @@ interface ProfileQuickActionsProps {
   tenantPrefix?: string
 }
 
+import { ChangePasswordDialog } from './change-password-dialog'
+
 export function ProfileQuickActions({ role, tenantPrefix = '' }: ProfileQuickActionsProps) {
-  const isStaff = role === 'admin' || role === 'vendedor' || role === 'tecnico'
+  // 'super_admin' es mas privilegiado que 'admin' y quedaba afuera de esta
+  // lista, asi que ese rol no veia el acceso al panel desde su propio perfil.
+  const isStaff = role === 'admin' || role === 'super_admin' || role === 'vendedor' || role === 'tecnico'
   const repairsHref = tenantPrefix ? `${tenantPrefix}/mis-reparaciones` : '/mis-reparaciones'
   const authorizedHref = tenantPrefix ? `${tenantPrefix}/perfil/autorizados` : '/perfil/autorizados'
 
@@ -18,6 +22,9 @@ export function ProfileQuickActions({ role, tenantPrefix = '' }: ProfileQuickAct
     <div className="flex flex-col gap-3">
       {/* Main actions */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <ChangePasswordDialog />
+        </div>
         <Link
           href={repairsHref}
           className="group flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
@@ -59,7 +66,7 @@ export function ProfileQuickActions({ role, tenantPrefix = '' }: ProfileQuickAct
                 Panel de Administracion
               </h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {role === 'admin'
+                {role === 'admin' || role === 'super_admin'
                   ? 'Accede al panel completo del sistema'
                   : role === 'vendedor'
                   ? 'Accede al dashboard de ventas'
@@ -72,7 +79,7 @@ export function ProfileQuickActions({ role, tenantPrefix = '' }: ProfileQuickAct
                     Dashboard
                   </Link>
                 </Button>
-                {role === 'admin' && (
+                {(role === 'admin' || role === 'super_admin') && (
                   <Button asChild variant="outline" size="sm" className="h-8">
                     <Link href="/admin">
                       <Settings className="mr-1.5 h-3.5 w-3.5" />

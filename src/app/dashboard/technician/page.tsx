@@ -25,6 +25,7 @@ import type { RepairFormData as PersistRepairFormData } from '@/contexts/Repairs
 import type { Repair } from '@/types/repairs'
 import { RepairList } from '@/components/dashboard/repairs/RepairList'
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
+import { RepairDeliveryDialog } from '@/components/dashboard/repairs/RepairDeliveryDialog'
 import { cn } from '@/lib/utils'
 
 type TechnicianRepairUpdatePayload = Omit<Partial<Repair>, 'images' | 'parts' | 'notes'> & {
@@ -92,6 +93,8 @@ export default function TechnicianPanel() {
     createRepair,
     addImages,
     refreshRepairs,
+    updateStatus,
+    deliverRepair,
   } = useTechnicianBoard()
 
   const { technicians } = useTechnicians()
@@ -103,6 +106,7 @@ export default function TechnicianPanel() {
   const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [detailRepair, setDetailRepair] = useState<Repair | null>(null)
+  const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
 
   const filteredRepairs = useMemo(() => {
     if (!searchTerm) return repairs
@@ -488,6 +492,15 @@ export default function TechnicianPanel() {
           setIsDetailOpen(false)
           handleEditRepair(repair)
         }}
+        onDeliver={(repair) => setDeliverTarget(repair)}
+        onStatusChange={updateStatus}
+      />
+
+      <RepairDeliveryDialog
+        open={!!deliverTarget}
+        repair={deliverTarget}
+        onOpenChange={(open) => !open && setDeliverTarget(null)}
+        onConfirm={async (id, outcome, note) => { await deliverRepair(id, outcome, note) }}
       />
     </div>
   )

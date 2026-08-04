@@ -13,14 +13,21 @@
  */
 
 import React, { useMemo } from 'react'
-import { Calculator, DollarSign, Wrench, Package, Receipt, AlertTriangle } from 'lucide-react'
+import { Calculator, DollarSign, Wrench, Package, Receipt, AlertTriangle, Percent, Sparkles } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { formatCurrency } from '@/lib/currency'
 import { calculateRepairTotal, type RepairCalculationInput } from '@/lib/pos-calculator'
+import { useTechnicianCompensation } from '@/hooks/use-technician-compensation'
+import { commissionableAmount } from '@/lib/technician/earnings'
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100
+}
 
 interface RepairPart {
   name: string
@@ -32,24 +39,38 @@ interface RepairCostCalculatorProps {
   // Costos base
   laborCost: number
   onLaborCostChange: (cost: number) => void
-  
+
   // Costo final (editable)
   finalCost: number | null
   onFinalCostChange: (cost: number | null) => void
-  
+
   // Repuestos (calculado automáticamente)
   parts: RepairPart[]
-  
+
   // Configuración
   taxRate?: number
   pricesIncludeTax?: boolean
-  
+
   // Estado
   disabled?: boolean
   showBreakdown?: boolean
-  
+
   // Validación
   error?: string
+
+  // Mano de obra automática: cuando está activo, laborCost se deriva como
+  // costo final - repuestos en vez de tipearse a mano. El cálculo en sí vive
+  // en el formulario padre (es quien controla laborCost); acá solo se
+  // muestra el estado y se deshabilita el campo mientras está activo.
+  autoLaborCost?: boolean
+  onAutoLaborCostChange?: (value: boolean) => void
+
+  // Previsualización de comisión del técnico asignado. Requiere permiso
+  // (compensación es dato sensible): si `canViewCommission` es false no se
+  // pide nada al servidor, para no gastar una llamada que va a rebotar 403.
+  technicianId?: string | null
+  technicianName?: string | null
+  canViewCommission?: boolean
 }
 
 export function RepairCostCalculator({
@@ -61,6 +82,11 @@ export function RepairCostCalculator({
   taxRate = 10,
   pricesIncludeTax = true,
   disabled = false,
+  autoLaborCost = false,
+  onAutoLaborCostChange,
+  technicianId,
+  technicianName,
+  canViewCommission = false,
   showBreakdown = true,
   error
 }: RepairCostCalculatorProps) {
@@ -87,7 +113,30 @@ export function RepairCostCalculator({
   // Diferencia entre costo final y estimado
   const costDifference = finalCost !== null ? finalCost - estimatedCost : 0
   const hasCostDifference = Math.abs(costDifference) > 0.01
-  
+
+  // Con mano de obra automática, si lo que se cobra no alcanza a cubrir los
+  // repuestos el resultado sería negativo: se avisa en vez de guardarlo así.
+  const autoLaborWouldBeNegative =
+    autoLaborCost && finalCost !== null && finalCost - partsCost < 0
+
+  const compensationEnabled = canViewCommission && Boolean(technicianId)
+  const { compensation, isLoading: isLoadingCompensation } = useTechnicianCompensation(
+    technicianId || '',
+    compensationEnabled
+  )
+
+  // Reusa la misma fórmula que liquida los sueldos (`computeEarnings` en
+  // `lib/technician/earnings.ts`) para que esta previsualización nunca se
+  // desalinee de lo que el técnico realmente va a cobrar.
+  const commissionPreview = useMemo(() => {
+    if (!compensationEnabled || !compensation || compensation.commission_rate <= 0) return null
+    const base = commissionableAmount(compensation, {
+      labor_cost: laborCost || 0,
+      final_cost: finalCost ?? estimatedCost,
+    })
+    return round2(base * (compensation.commission_rate / 100))
+  }, [compensationEnabled, compensation, laborCost, finalCost, estimatedCost])
+
   return (
     <Card className="shadow-lg border-2 hover:border-primary/30 transition-colors bg-gradient-to-br from-white to-emerald-50/30 dark:from-slate-900 dark:to-emerald-950/20 dark:border-slate-800 dark:hover:border-primary/50">
       <CardHeader className="pb-5 bg-gradient-to-r from-emerald-50/50 to-transparent dark:from-emerald-950/30 dark:to-transparent">
@@ -107,10 +156,23 @@ export function RepairCostCalculator({
           
           {/* Costo de Mano de Obra */}
           <div className="space-y-3 p-4 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/40 dark:to-blue-900/30 border-2 border-blue-200 dark:border-blue-900/50">
-            <Label className="text-sm font-semibold flex items-center gap-2 text-blue-900 dark:text-blue-300">
-              <Wrench className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              Costo de Mano de Obra
-            </Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-sm font-semibold flex items-center gap-2 text-blue-900 dark:text-blue-300">
+                <Wrench className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                Costo de Mano de Obra
+              </Label>
+              {onAutoLaborCostChange && (
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
+                  <Switch
+                    checked={autoLaborCost}
+                    onCheckedChange={onAutoLaborCostChange}
+                    disabled={disabled}
+                    aria-label="Calcular mano de obra automáticamente"
+                  />
+                </div>
+              )}
+            </div>
             <div className="relative">
               <DollarSign className="absolute left-3 top-3.5 h-5 w-5 text-blue-600 dark:text-blue-400" />
               <Input
@@ -120,10 +182,21 @@ export function RepairCostCalculator({
                 value={laborCost || ''}
                 onChange={(e) => onLaborCostChange(parseFloat(e.target.value) || 0)}
                 placeholder="0.00"
-                className="pl-11 h-14 text-lg font-semibold border-blue-300 dark:border-blue-800 focus:border-blue-500 dark:focus:border-blue-600 bg-white dark:bg-slate-900"
-                disabled={disabled}
+                className="pl-11 h-14 text-lg font-semibold border-blue-300 dark:border-blue-800 focus:border-blue-500 dark:focus:border-blue-600 bg-white dark:bg-slate-900 disabled:opacity-80"
+                disabled={disabled || autoLaborCost}
               />
             </div>
+            {autoLaborCost && (
+              <p className="text-[11px] text-blue-700 dark:text-blue-400">
+                = Costo final − Repuestos. Se recalcula solo al cambiar cualquiera de los dos.
+              </p>
+            )}
+            {autoLaborWouldBeNegative && (
+              <p className="flex items-center gap-1.5 text-[11px] font-medium text-red-600 dark:text-red-400">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                El costo final no cubre los repuestos: la mano de obra quedaría en negativo.
+              </p>
+            )}
           </div>
           
           {/* Costo de Repuestos (Solo lectura) */}
@@ -257,7 +330,36 @@ export function RepairCostCalculator({
               <span className="font-medium">{error}</span>
             </div>
           )}
-          
+
+          {/* Comisión del técnico: solo visible para quien puede ver compensación
+              (dato sensible) y solo si el técnico asignado tiene % configurado. */}
+          {compensationEnabled && isLoadingCompensation && (
+            <div className="text-xs text-muted-foreground p-3 rounded-lg border border-dashed">
+              Calculando comisión del técnico...
+            </div>
+          )}
+          {commissionPreview !== null && (
+            <div className="flex items-center justify-between gap-3 p-4 rounded-xl border-2 border-violet-200 dark:border-violet-900/50 bg-gradient-to-r from-violet-50 to-violet-100/50 dark:from-violet-950/40 dark:to-violet-900/30 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-violet-600 dark:bg-violet-700 flex items-center justify-center shrink-0">
+                  <Percent className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-violet-900 dark:text-violet-300">
+                    Comisión estimada{technicianName ? ` — ${technicianName}` : ''}
+                  </p>
+                  <p className="text-xs text-violet-700 dark:text-violet-400">
+                    {compensation.commission_rate}% sobre{' '}
+                    {compensation.commission_base === 'labor' ? 'mano de obra' : 'costo final'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-xl font-bold text-violet-900 dark:text-violet-200">
+                {formatCurrency(commissionPreview)}
+              </span>
+            </div>
+          )}
+
           {/* Información adicional */}
           <div className="text-xs text-emerald-700 dark:text-emerald-300 space-y-2 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-lg p-4 border border-emerald-200 dark:border-emerald-900">
             <p className="flex items-start gap-2">

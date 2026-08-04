@@ -8,14 +8,15 @@ import { logger } from '@/lib/logger'
 
 export function useTechnicianBoardV2() {
     // Usar el contexto global para datos
-    const { 
-        repairs: allRepairs, 
-        isLoading, 
+    const {
+        repairs: allRepairs,
+        isLoading,
         updateRepair: globalUpdateRepair,
         createRepair: globalCreateRepair,
         addImages: globalAddImages,
         refreshRepairs,
-        updateStatus
+        updateStatus,
+        deliverRepair
     } = useRepairs()
     
     const { user } = useAuth()
@@ -101,12 +102,20 @@ export function useTechnicianBoardV2() {
         })
 
         try {
-            // Usar la función del contexto global para actualizar
+            // updateStatus ya valida contra la state machine del lado del
+            // servidor (ej. "Se requiere un técnico asignado para pasar a
+            // reparación") y muestra su propio toast con el motivo real.
+            // Antes, si devolvía false, acá se fabricaba un segundo error
+            // genérico que pisaba ese mensaje: el usuario veía un aviso vago
+            // y en consola quedaba un objeto sin el detalle util.
             const success = await updateStatus(draggedRepairId, status)
             if (!success) {
-                throw new Error(`No se pudo actualizar el estado de ${previousStatus} a ${status}`)
+                await refreshRepairs()
             }
         } catch (error) {
+            // Defensivo: updateStatus no debería lanzar (siempre devuelve
+            // boolean), pero si algo inesperado se escapa, se registra con
+            // el mensaje real y se revierte el cambio optimista igual.
             const errorMessage = error instanceof Error ? error.message : 'Error desconocido al actualizar estado'
             logger.error('Error updating repair status', {
                 repairId: draggedRepairId,
@@ -114,9 +123,9 @@ export function useTechnicianBoardV2() {
                 toStatus: status,
                 error: errorMessage
             })
-            
-            toast.error(`Error: ${errorMessage}. Revirtiendo cambios...`)
-            
+
+            toast.error(`Error inesperado al actualizar el estado: ${errorMessage}`)
+
             // Revertir cambios recargando datos
             await refreshRepairs()
         } finally {
@@ -183,6 +192,11 @@ type RepairUpdateData = Omit<Partial<Repair>, 'images' | 'parts' | 'notes'> & {
         updateRepair,
         createRepair,
         addImages,
-        refreshRepairs
+        refreshRepairs,
+        // Se exponen para que el detalle de reparación pueda ofrecer los
+        // mismos atajos que ya tiene /dashboard/repairs (cambiar de estado y
+        // entregar sin salir del modal), en vez de forzar pasar por "Editar".
+        updateStatus,
+        deliverRepair
     }
 }

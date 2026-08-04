@@ -4,6 +4,7 @@ import { AvatarUpload } from '@/components/profile/avatar-upload'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { WhatsAppButton } from '@/components/ui/whatsapp-button'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { cn } from '@/lib/utils'
 import { Calendar, LogOut, Mail, MessageCircle } from 'lucide-react'
 
@@ -29,9 +30,15 @@ interface ProfileHeaderProps {
 }
 
 export function ProfileHeader({
-  name, email, role, createdAt, avatarUrl, phone, userId, onAvatarChange, onLogout
+  name, email, role, createdAt, avatarUrl, userId, onAvatarChange, onLogout
 }: ProfileHeaderProps) {
   const roleInfo = ROLE_CONFIG[role || 'cliente'] || ROLE_CONFIG.cliente
+  // El boton de WhatsApp de la cabecera es "hablar con la empresa": debe
+  // marcar al numero de soporte, no al telefono del propio cliente que esta
+  // viendo su perfil (antes se pasaba `phone`, el dato del cliente, asi que
+  // el boton le abria un chat de WhatsApp a si mismo).
+  const { settings } = useSharedSettings()
+  const supportPhone = settings.companyPhone
 
   return (
     <section className="relative overflow-hidden border-b border-border bg-card">
@@ -82,9 +89,9 @@ export function ProfileHeader({
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            {phone && (
+            {supportPhone && (
               <WhatsAppButton
-                phone={phone}
+                phone={supportPhone}
                 message="Hola! Quisiera consultar sobre mi reparacion."
                 variant="outline"
                 size="sm"
