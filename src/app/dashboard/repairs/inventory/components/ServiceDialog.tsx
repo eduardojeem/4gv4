@@ -24,7 +24,7 @@ import { useInventory } from '../context/InventoryContext'
 import { logger } from '@/lib/logger'
 import type { Product } from '@/types/product-unified'
 import { toast } from 'sonner'
-import { DollarSign, Wrench } from 'lucide-react'
+import { DollarSign, Wrench, Info } from 'lucide-react'
 
 interface ServiceDialogProps {
   open: boolean
@@ -117,6 +117,20 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
               : "Crea un nuevo servicio de reparación para usar en órdenes de trabajo."}
           </DialogDescription>
         </DialogHeader>
+
+        {!service && (
+          <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-lg p-3 text-sm text-blue-800 dark:text-blue-300 mt-2">
+            <div className="font-semibold flex items-center gap-1.5 mb-1">
+              <Info className="w-4 h-4" /> ¿Cómo funciona esto?
+            </div>
+            <ul className="list-disc pl-5 space-y-1 text-xs">
+              <li><strong>SKU:</strong> Se genera automáticamente al crear.</li>
+              <li><strong>Visibilidad:</strong> Por defecto es "Oculto" para que no aparezca en la web hasta que estés listo.</li>
+              <li><strong>Precios:</strong> El sistema usará el <em>Precio Mayorista</em> si el cliente tiene cuenta mayorista. El <em>Costo</em> es solo interno para medir tus ganancias.</li>
+            </ul>
+          </div>
+        )}
+
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
