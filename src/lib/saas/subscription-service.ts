@@ -2,7 +2,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
 import type { ModuleTrial } from './plan-features'
 
-export type ResourceType = 'users' | 'branches' | 'cashRegisters' | 'products' | 'categories'
+export type ResourceType = 'users' | 'branches' | 'cashRegisters' | 'products' | 'categories' | 'repairs' | 'services'
 export type PlanCode = 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE'
 
 export interface PlanRecord {
@@ -72,6 +72,8 @@ export interface OrganizationUsage {
   cashRegisters: number
   products: number
   categories: number
+  repairs: number
+  services: number
 }
 
 export interface OrganizationSubscriptionState {
@@ -93,10 +95,10 @@ export interface OrganizationSubscriptionState {
 // Fallback de seguridad. La fuente de verdad es la tabla `plans` (sincronizada desde
 // subscription_plans por trigger); estos valores solo se usan si la DB no devuelve límites.
 export const DEFAULT_LIMITS: Record<PlanCode, Record<string, number | null>> = {
-  FREE: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null, repairs: 20 },
-  BASIC: { users: 10, branches: 2, cashRegisters: 3, products: 500, categories: null, repairs: 150 },
-  PRO: { users: 25, branches: 5, cashRegisters: 10, products: 5000, categories: null, repairs: null },
-  ENTERPRISE: { users: null, branches: null, cashRegisters: null, products: null, categories: null, repairs: null },
+  FREE: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null, repairs: 20, services: 50 },
+  BASIC: { users: 10, branches: 2, cashRegisters: 3, products: 500, categories: null, repairs: 150, services: 200 },
+  PRO: { users: 25, branches: 5, cashRegisters: 10, products: 5000, categories: null, repairs: null, services: 5000 },
+  ENTERPRISE: { users: null, branches: null, cashRegisters: null, products: null, categories: null, repairs: null, services: null },
 }
 
 const DEFAULT_PLAN: PlanRecord = {
@@ -314,16 +316,32 @@ async function countStaffMembers(organizationId: string) {
   return count || 0
 }
 
+async function countServices(organizationId: string) {
+  const supabase = createAdminSupabase()
+  const { count, error } = await supabase
+    .from('products')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .eq('unit_measure', 'servicio')
+
+  if (error) {
+    throw new Error(`No se pudieron contar los servicios: ${error.message}`)
+  }
+  return count || 0
+}
+
 export async function getOrganizationUsage(organizationId: string): Promise<OrganizationUsage> {
-  const [users, branches, cashRegisters, products, categories] = await Promise.all([
+  const [users, branches, cashRegisters, products, categories, repairs, services] = await Promise.all([
     countStaffMembers(organizationId),
     countRows('branches', organizationId),
     countCashRegisters(organizationId),
     countRows('products', organizationId),
     countRows('categories', organizationId),
+    countRows('repairs', organizationId),
+    countServices(organizationId)
   ])
 
-  return { users, branches, cashRegisters, products, categories }
+  return { users, branches, cashRegisters, products, categories, repairs, services }
 }
 
 export async function getCommercialPlanPrices(): Promise<Record<string, number>> {
@@ -747,8 +765,10 @@ export async function assessPlanChange(
     cashRegisters: 'Cajas',
     products: 'Productos',
     categories: 'Categorías',
+    repairs: 'Reparaciones',
+    services: 'Servicios',
   }
-  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'products', 'categories']
+  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'products', 'categories', 'repairs', 'services']
   const conflictingResources: PlanChangeConflict[] = []
 
   for (const key of countResources) {

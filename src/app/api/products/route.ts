@@ -256,7 +256,9 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
     }
     
     const validated = validationResult.data
-    const planGate = await canCreateResource(organization.id, 'products')
+    const resourceType = validated.unit_measure === 'servicio' ? 'services' : 'products'
+    const resourceLabel = resourceType === 'services' ? 'servicio' : 'producto'
+    const planGate = await canCreateResource(organization.id, resourceType)
 
     if (!planGate.allowed) {
       const planName = planGate.plan?.name || planGate.plan?.code || 'actual'
@@ -265,12 +267,12 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         {
           success: false,
           error: planGate.blocked
-            ? 'No se puede crear el producto porque la suscripcion esta suspendida o cancelada. Reactiva la suscripcion para habilitar mas productos.'
+            ? `No se puede crear el ${resourceLabel} porque la suscripcion esta suspendida o cancelada. Reactiva la suscripcion para habilitar mas.`
             : planGate.expired
-              ? `No hay cupo para crear este producto. Como el plan vencio, la organizacion quedo con el limite Free de ${limitText} productos. Elimina productos que no uses o actualiza el plan.`
-              : `No hay cupo para crear este producto. El plan ${planName} permite ${limitText} productos. Elimina productos que no uses o actualiza el plan.`,
+              ? `No hay cupo para crear este ${resourceLabel}. Como el plan vencio, la organizacion quedo con el limite Free de ${limitText} ${resourceType}. Elimina ${resourceType} que no uses o actualiza el plan.`
+              : `No hay cupo para crear este ${resourceLabel}. El plan ${planName} permite ${limitText} ${resourceType}. Elimina ${resourceType} que no uses o actualiza el plan.`,
           code: planGate.blocked ? 'SUBSCRIPTION_BLOCKED' : 'PLAN_LIMIT_REACHED',
-          resource: 'products',
+          resource: resourceType,
           current: planGate.current,
           limit: planGate.limit,
         },
