@@ -15,6 +15,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { formatCurrency } from '@/lib/currency'
 import { useAuth } from '@/contexts/auth-context'
+import { cn } from '@/lib/utils'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -44,6 +45,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import {
   RepairFormSchema,
@@ -58,7 +60,7 @@ import { AppError } from '@/lib/errors'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { useSubscriptionStatus, repairPhotoLimit } from '@/contexts/SubscriptionStatusContext'
 import { UpgradeHint } from '@/components/admin/PlanGate'
-import { RepairCostCalculator } from './repairs/RepairCostCalculator'
+import { RepairCostCalculator, type CostCalculationMode } from './repairs/RepairCostCalculator'
 import { Repair } from '@/types/repairs'
 
 export type RepairFormMode = 'add' | 'edit'
@@ -175,6 +177,64 @@ export function RepairFormDialogV2({
     }
   }, [inventorySearchOpen, inventorySearchQuery])
 
+  // Buscador de servicios (ej. "Cambio de pantalla") para autocompletar el
+  // Costo Estimado por dispositivo. Un servicio es un producto con
+  // unit_measure='servicio' o en la categoría "Servicios" — el mismo
+  // criterio que ya usa InventoryContext para separar servicios de repuestos
+  // físicos, así que se repite acá en vez de inventar uno nuevo.
+  const [serviceSearchIndex, setServiceSearchIndex] = useState<number | null>(null)
+  const [serviceSearchQuery, setServiceSearchQuery] = useState('')
+  const [serviceResults, setServiceResults] = useState<Array<{
+    id: string
+    name: string
+    sale_price?: number | null
+    wholesale_price?: number | null
+    unit_measure?: string | null
+    category?: { name?: string | null } | null
+    brand?: string | null
+    tags?: string[] | null
+  }>>([])
+  const [loadingServices, setLoadingServices] = useState(false)
+
+  useEffect(() => {
+    if (serviceSearchIndex === null) {
+      setServiceResults([])
+      setServiceSearchQuery('')
+      return
+    }
+
+    const controller = new AbortController()
+    setLoadingServices(true)
+
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/products?per_page=30&query=${encodeURIComponent(serviceSearchQuery)}`,
+          { signal: controller.signal }
+        )
+        const payload = await res.json().catch(() => ({}))
+        const list = Array.isArray(payload?.data?.products) ? payload.data.products : []
+        const services = list.filter((p: { unit_measure?: string; category?: { name?: string } }) => {
+          const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
+          const isServiceCategory = (p.category?.name || '').toLowerCase().includes('servicio')
+          return isServiceUnit || isServiceCategory
+        })
+        setServiceResults(services)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setServiceResults([])
+        }
+      } finally {
+        setLoadingServices(false)
+      }
+    }, 250)
+
+    return () => {
+      clearTimeout(t)
+      controller.abort()
+    }
+  }, [serviceSearchIndex, serviceSearchQuery])
+
   // Select schema based on quick mode
   const resolver = zodResolver(quickMode ? RepairFormQuickSchema : RepairFormSchema) as unknown as import('react-hook-form').Resolver<RepairFormData>
 
@@ -244,14 +304,43 @@ export function RepairFormDialogV2({
     name: 'notes'
   })
 
-  // Mano de obra automática: labor = costo final - repuestos. Arranca
-  // apagado a propósito: al editar una reparación existente, prender esto
-  // por defecto recalcularía en silencio un costo que el técnico ya cargó
-  // a mano, sin que nadie lo haya pedido.
-  const [autoLaborCost, setAutoLaborCost] = useState(false)
+  // Cálculo automático de costos: repuestos + (mano de obra o total, según el
+  // modo) derivan el tercero. Arranca en 'manual' a propósito: al editar una
+  // reparación existente, un modo automático por defecto recalcularía en
+  // silencio un costo que el técnico ya cargó a mano, sin que nadie lo pidiera.
+  const [calculationMode, setCalculationMode] = useState<CostCalculationMode>('manual')
   const { user } = useAuth()
   const watchedParts = watch('parts')
   const watchedFinalCost = watch('finalCost')
+  const watchedLaborCost = watch('laborCost')
+
+  // Estado mayorista del cliente elegido, para saber qué precio de servicio
+  // ofrecer. Solo se puede saber si el cliente tiene cuenta vinculada (el
+  // caso más común en un mostrador es que no la tenga): sin eso, no hay
+  // mayorista que detectar y se usa el precio normal.
+  const [customerIsWholesale, setCustomerIsWholesale] = useState(false)
+  const watchedCustomerId = watch('existingCustomerId')
+
+  useEffect(() => {
+    if (!watchedCustomerId) {
+      setCustomerIsWholesale(false)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/customers/${watchedCustomerId}/wholesale-status`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        if (!cancelled && payload?.success) setCustomerIsWholesale(Boolean(payload.data?.isWholesale))
+      })
+      .catch(() => {
+        // Sin verificación posible, se asume precio normal: es el default
+        // más seguro (nunca aplica un descuento sin poder confirmarlo).
+        if (!cancelled) setCustomerIsWholesale(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [watchedCustomerId])
   const watchedTechnicianId = watch('devices.0.technician')
 
   const partsCostForLabor = useMemo(
@@ -260,12 +349,22 @@ export function RepairFormDialogV2({
   )
 
   useEffect(() => {
-    if (!autoLaborCost || watchedFinalCost === null || watchedFinalCost === undefined) return
-    const derived = Math.max(0, Math.round((watchedFinalCost - partsCostForLabor) * 100) / 100)
-    if (derived !== watch('laborCost')) {
-      setValue('laborCost', derived, { shouldDirty: true, shouldValidate: true })
+    if (calculationMode === 'labor-from-final') {
+      if (watchedFinalCost === null || watchedFinalCost === undefined) return
+      const derived = Math.max(0, Math.round((watchedFinalCost - partsCostForLabor) * 100) / 100)
+      if (derived !== watch('laborCost')) {
+        setValue('laborCost', derived, { shouldDirty: true, shouldValidate: true })
+      }
+      return
     }
-  }, [autoLaborCost, watchedFinalCost, partsCostForLabor, setValue, watch])
+
+    if (calculationMode === 'final-from-labor') {
+      const derived = Math.round(((watchedLaborCost || 0) + partsCostForLabor) * 100) / 100
+      if (derived !== watch('finalCost')) {
+        setValue('finalCost', derived, { shouldDirty: true, shouldValidate: true })
+      }
+    }
+  }, [calculationMode, watchedFinalCost, watchedLaborCost, partsCostForLabor, setValue, watch])
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -290,7 +389,12 @@ export function RepairFormDialogV2({
           description: '',
           accessType: 'none',
           images: [],
-          technician: '',
+          // Si quien crea el ticket aparece en la lista de técnicos, se
+          // autoasigna. Antes quedaba "Sin asignar" siempre, incluso cuando
+          // un técnico creaba su propia reparación desde su propia agenda:
+          // un clic de más, y si se olvidaba, la reparación no podía pasar
+          // a "reparación" hasta que alguien se acordara de asignarla.
+          technician: user?.id && technicians.some((tech) => tech.id === user.id) ? user.id : '',
           estimatedCost: 0
         }],
         parts: initialData?.parts || [],
@@ -303,7 +407,7 @@ export function RepairFormDialogV2({
       })
       setSelectedQuickCustomer(null)
     }
-  }, [open, initialData, reset])
+  }, [open, initialData, reset, user?.id, technicians])
 
   useEffect(() => {
     if (open) {
@@ -761,11 +865,126 @@ export function RepairFormDialogV2({
 
                         {/* Estimated Cost */}
                         <div className="space-y-1.5">
-                          <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
-                            <DollarSign className="h-3 w-3 text-primary" />
-                            Costo Estimado
-                            <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
-                          </Label>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
+                              <DollarSign className="h-3 w-3 text-primary" />
+                              Costo Estimado
+                              <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
+                            </Label>
+                            <Popover
+                              open={serviceSearchIndex === index}
+                              onOpenChange={(isOpen) => setServiceSearchIndex(isOpen ? index : null)}
+                            >
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                                >
+                                  <Search className="h-3 w-3" />
+                                  Buscar servicio
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent align="end" className="w-80 p-0">
+                                <div className="p-2.5 border-b">
+                                  <div className="relative">
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                    <Input
+                                      value={serviceSearchQuery}
+                                      onChange={(e) => setServiceSearchQuery(e.target.value)}
+                                      placeholder="Ej: Cambio de pantalla..."
+                                      className="pl-8 h-8 text-xs"
+                                      autoFocus
+                                    />
+                                  </div>
+                                </div>
+                                <div className="max-h-64 overflow-y-auto p-1.5">
+                                  {loadingServices ? (
+                                    <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      Buscando...
+                                    </div>
+                                  ) : serviceResults.length === 0 ? (
+                                    <p className="py-6 text-center text-xs text-muted-foreground">
+                                      {serviceSearchQuery
+                                        ? 'Sin servicios que coincidan.'
+                                        : 'Escribí para buscar un servicio.'}
+                                    </p>
+                                  ) : (
+                                    serviceResults.map((svc) => {
+                                      const price = customerIsWholesale && svc.wholesale_price
+                                        ? svc.wholesale_price
+                                        : (svc.sale_price ?? 0)
+                                      return (
+                                        <button
+                                          key={svc.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setValue(`devices.${index}.estimatedCost`, price, {
+                                              shouldDirty: true,
+                                              shouldValidate: true,
+                                            })
+                                            // Si el problema todavía no se cargó, se completa con el
+                                            // nombre del servicio. No pisa lo que ya se haya escrito.
+                                            if (!watch(`devices.${index}.issue`)) {
+                                              setValue(`devices.${index}.issue`, svc.name, { shouldDirty: true })
+                                            }
+
+                                            // Autocompletar Tipo, Marca y Modelo desde el servicio
+                                            const deviceTypeTag = svc.tags?.find((t: string) => t.startsWith('deviceType:'))?.split(':')[1]
+                                            const deviceModelTag = svc.tags?.find((t: string) => t.startsWith('model:'))?.split(':')[1]
+
+                                            const setVal = setValue as any;
+                                            const watchVal = watch as any;
+
+                                            if (deviceTypeTag && !watchVal(`devices.${index}.deviceType`)) {
+                                              setVal(`devices.${index}.deviceType`, deviceTypeTag, { shouldDirty: true, shouldValidate: true })
+                                            }
+                                            if (svc.brand && !watchVal(`devices.${index}.deviceBrand`)) {
+                                              setVal(`devices.${index}.deviceBrand`, svc.brand, { shouldDirty: true, shouldValidate: true })
+                                            }
+                                            if (deviceModelTag && !watchVal(`devices.${index}.deviceModel`)) {
+                                              setVal(`devices.${index}.deviceModel`, deviceModelTag, { shouldDirty: true, shouldValidate: true })
+                                            }
+
+                                            // El servicio también carga la Mano de Obra de la
+                                            // calculadora compartida, pero solo cuando no hay
+                                            // ambigüedad: un solo equipo (la calculadora es
+                                            // compartida entre todos, no por equipo) y en modo
+                                            // manual (si ya está derivando labor del total, pisarlo
+                                            // acá lo dejaría mostrado como "automático" con un valor
+                                            // que en realidad se cargó a mano).
+                                            const alsoSetLabor = fields.length === 1 && calculationMode === 'manual'
+                                            if (alsoSetLabor) {
+                                              setValue('laborCost', price, { shouldDirty: true, shouldValidate: true })
+                                            }
+
+                                            toast.success(`"${svc.name}" — ${formatCurrency(price)}`, {
+                                              description: [
+                                                customerIsWholesale && svc.wholesale_price ? 'Precio mayorista aplicado.' : null,
+                                                alsoSetLabor ? 'Se cargó también como Mano de Obra.' : null,
+                                              ].filter(Boolean).join(' ') || undefined,
+                                            })
+                                            setServiceSearchIndex(null)
+                                          }}
+                                          className="flex w-full items-center justify-between gap-2 rounded-lg p-2 text-left text-xs hover:bg-muted/70"
+                                        >
+                                          <span className="min-w-0 truncate font-medium">{svc.name}</span>
+                                          <span className="shrink-0 font-semibold text-primary">
+                                            {formatCurrency(price)}
+                                          </span>
+                                        </button>
+                                      )
+                                    })
+                                  )}
+                                </div>
+                                {customerIsWholesale && (
+                                  <div className="border-t px-2.5 py-1.5 text-[10px] text-violet-600 dark:text-violet-400">
+                                    Cliente mayorista: se muestra el precio mayorista cuando está cargado.
+                                  </div>
+                                )}
+                              </PopoverContent>
+                            </Popover>
+                          </div>
                           <div className="relative">
                             <DollarSign className="absolute left-2.5 top-2 h-4 w-4 text-primary" />
                             <Input
@@ -1412,8 +1631,8 @@ export function RepairFormDialogV2({
               parts={watch('parts') || []}
               disabled={isSubmitting}
               error={errors.finalCost?.message || errors.laborCost?.message}
-              autoLaborCost={autoLaborCost}
-              onAutoLaborCostChange={setAutoLaborCost}
+              calculationMode={calculationMode}
+              onCalculationModeChange={setCalculationMode}
               technicianId={watchedTechnicianId}
               technicianName={technicians.find((tech) => tech.id === watchedTechnicianId)?.name}
               canViewCommission={user?.role === 'admin' || user?.role === 'super_admin'}
@@ -1669,19 +1888,39 @@ export function RepairFormDialogV2({
             </div>
           ) : inventoryProducts.length > 0 ? (
             <div className="grid gap-2.5">
-              {inventoryProducts.map((product) => (
+              {inventoryProducts.map((product) => {
+                // null/undefined = sin control de stock para ese producto
+                // (se permite igual); 0 explícito sí bloquea: agregar un
+                // repuesto sin unidades disponibles solo genera un costo que
+                // después no se puede cubrir físicamente.
+                const outOfStock = product.stock_quantity === 0
+                const alreadyAdded = partsFields.some((field, index) => watch(`parts.${index}.productId`) === product.id)
+
+                return (
                 <div
                   key={product.id}
-                  className="flex items-center justify-between p-3.5 border rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-900/40 cursor-pointer transition-all duration-200"
+                  className={cn(
+                    'flex items-center justify-between p-3.5 border rounded-2xl transition-all duration-200',
+                    outOfStock
+                      ? 'opacity-60 cursor-not-allowed bg-slate-50/50 dark:bg-slate-900/20'
+                      : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/40'
+                  )}
                   onClick={() => {
+                    if (outOfStock) {
+                      toast.error(`"${product.name}" no tiene stock disponible`)
+                      return
+                    }
                     appendPart({
                       name: product.name,
                       cost: product.offer_price || product.sale_price || 0,
                       quantity: 1,
                       supplier: 'Inventario Local',
-                      partNumber: product.sku || ''
+                      partNumber: product.sku || '',
+                      productId: product.id
                     })
-                    toast.success(`Repuesto "${product.name}" agregado`)
+                    toast.success(`Repuesto "${product.name}" agregado`, {
+                      description: alreadyAdded ? 'Ya habías agregado este repuesto: se sumó otra línea.' : undefined
+                    })
                     setInventorySearchOpen(false)
                   }}
                 >
@@ -1695,10 +1934,10 @@ export function RepairFormDialogV2({
                           SKU: {product.sku}
                         </Badge>
                       )}
-                      <span>
-                        Stock: {product.stock_quantity !== null && product.stock_quantity !== undefined
-                          ? `${product.stock_quantity} disp.`
-                          : 'Ilimitado'}
+                      <span className={outOfStock ? 'text-red-600 dark:text-red-400 font-bold' : ''}>
+                        {product.stock_quantity !== null && product.stock_quantity !== undefined
+                          ? outOfStock ? 'Sin stock' : `Stock: ${product.stock_quantity} disp.`
+                          : 'Stock: ilimitado'}
                       </span>
                     </div>
                   </div>
@@ -1706,12 +1945,19 @@ export function RepairFormDialogV2({
                     <strong className="text-sm font-black text-cyan-600 dark:text-cyan-400">
                       {formatCurrency(product.offer_price || product.sale_price || 0)}
                     </strong>
-                    <Button type="button" size="sm" variant="secondary" className="h-7 px-3 text-xs font-bold rounded-lg">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 px-3 text-xs font-bold rounded-lg"
+                      disabled={outOfStock}
+                    >
                       Seleccionar
                     </Button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <div className="text-center py-20">

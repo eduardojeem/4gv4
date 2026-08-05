@@ -42,7 +42,10 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
     cost: '',
     description: '',
     // Los servicios nuevos quedan ocultos en la web por defecto.
-    visibility: 'hidden'
+    visibility: 'hidden',
+    deviceType: '',
+    brand: '',
+    model: ''
   })
 
   useEffect(() => {
@@ -53,7 +56,10 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
         wholesalePrice: service.wholesale_price ? String(service.wholesale_price) : '',
         cost: String(service.purchase_price || ''),
         description: service.description || '',
-        visibility: service.visibility || 'public'
+        visibility: service.visibility || 'public',
+        deviceType: service.tags?.find(t => t.startsWith('deviceType:'))?.split(':')[1] || '',
+        brand: service.brand || '',
+        model: service.tags?.find(t => t.startsWith('model:'))?.split(':')[1] || ''
       })
     } else {
       setFormData({
@@ -63,7 +69,10 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
         cost: '',
         description: '',
         // Nuevo servicio: oculto en la web por defecto.
-        visibility: 'hidden'
+        visibility: 'hidden',
+        deviceType: '',
+        brand: '',
+        model: ''
       })
     }
   }, [service, open])
@@ -76,6 +85,10 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
 
     setIsSubmitting(true)
     try {
+      const tags: string[] = []
+      if (formData.deviceType) tags.push(`deviceType:${formData.deviceType}`)
+      if (formData.model) tags.push(`model:${formData.model}`)
+
       const serviceData: any = {
         name: formData.name,
         description: formData.description,
@@ -83,6 +96,8 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
         wholesale_price: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : null,
         purchase_price: formData.cost ? parseFloat(formData.cost) : 0,
         visibility: formData.visibility,
+        brand: formData.brand || null,
+        tags: tags.length > 0 ? tags : null
       }
 
       if (service) {
@@ -223,6 +238,58 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
               </div>
             </div>
           </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="deviceType" className="text-sm font-semibold">
+                Tipo (Autocompletar)
+              </Label>
+              <Select
+                value={formData.deviceType}
+                onValueChange={(value) => setFormData({ ...formData, deviceType: value })}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="bg-background/50">
+                  <SelectValue placeholder="Ej: Smartphone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="smartphone">Smartphone</SelectItem>
+                  <SelectItem value="laptop">Laptop</SelectItem>
+                  <SelectItem value="tablet">Tablet</SelectItem>
+                  <SelectItem value="desktop">Desktop</SelectItem>
+                  <SelectItem value="accessory">Accesorio</SelectItem>
+                  <SelectItem value="other">Otro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="brand" className="text-sm font-semibold">
+                Marca (Autocompletar)
+              </Label>
+              <Input
+                id="brand"
+                placeholder="Ej: Apple, Samsung..."
+                value={formData.brand}
+                onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                className="focus:ring-2 focus:ring-blue-500 bg-background/50"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="model" className="text-sm font-semibold">
+                Modelo (Autocompletar)
+              </Label>
+              <Input
+                id="model"
+                placeholder="Ej: iPhone 13..."
+                value={formData.model}
+                onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                className="focus:ring-2 focus:ring-blue-500 bg-background/50"
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="description" className="text-sm font-semibold">
               Descripción / Notas
