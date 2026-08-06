@@ -1,9 +1,16 @@
 "use client";
+
+import { useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PrioritizationSettings } from "@/components/repairs/admin/PrioritizationSettings";
+import { WarrantyPolicySettings } from "@/components/repairs/admin/WarrantyPolicySettings";
 import { defaultPriorityConfig } from "@/services/repair-priority";
 import { RepairOrder } from "@/types/repairs";
+import { ShieldCheck, SlidersHorizontal } from "lucide-react";
 
 export default function RepairsSettingsPage() {
+  const [activeTab, setActiveTab] = useState("garantias");
+
   const sampleRepairs: RepairOrder[] = [
     {
       id: "R-1001",
@@ -41,12 +48,36 @@ export default function RepairsSettingsPage() {
   ];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold">Configuración de Prioridad</h1>
-        <p className="text-muted-foreground">Ajusta pesos y reglas para el sistema de priorización.</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          ⚙️ Configuración de Reparaciones y Taller
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Gestiona las políticas de garantía predeterminadas, términos legales y reglas de priorización del taller.
+        </p>
       </div>
-      <PrioritizationSettings sampleRepairs={sampleRepairs} initialConfig={defaultPriorityConfig} />
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
+        <TabsList className="grid w-full grid-cols-2 max-w-md bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <TabsTrigger value="garantias" className="gap-2 rounded-lg font-semibold text-xs sm:text-sm">
+            <ShieldCheck className="h-4 w-4 text-amber-500" />
+            Política de Garantías
+          </TabsTrigger>
+          <TabsTrigger value="prioridad" className="gap-2 rounded-lg font-semibold text-xs sm:text-sm">
+            <SlidersHorizontal className="h-4 w-4 text-blue-500" />
+            Priorización
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="garantias" className="space-y-4">
+          <WarrantyPolicySettings />
+        </TabsContent>
+
+        <TabsContent value="prioridad" className="space-y-4">
+          <PrioritizationSettings sampleRepairs={sampleRepairs} initialConfig={defaultPriorityConfig} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

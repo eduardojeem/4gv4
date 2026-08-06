@@ -12,7 +12,7 @@
  * - CustomerSelector para búsqueda y creación inline de clientes
  */
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatCurrency } from '@/lib/currency'
 import { useAuth } from '@/contexts/auth-context'
 import { cn } from '@/lib/utils'
@@ -62,6 +62,8 @@ import { useSubscriptionStatus, repairPhotoLimit } from '@/contexts/Subscription
 import { UpgradeHint } from '@/components/admin/PlanGate'
 import { RepairCostCalculator, type CostCalculationMode } from './repairs/RepairCostCalculator'
 import { PAYMENT_METHODS } from './repairs/RepairPaymentDialog'
+import { useCashRegister } from '@/hooks/useCashRegister'
+import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashRegisterDialog'
 import { Repair } from '@/types/repairs'
 
 export type RepairFormMode = 'add' | 'edit'
@@ -379,6 +381,38 @@ export function RepairFormDialogV2({
   // silencio un costo que el técnico ya cargó a mano, sin que nadie lo pidiera.
   const [calculationMode, setCalculationMode] = useState<CostCalculationMode>('manual')
   const { user } = useAuth()
+
+  // Estado de caja para el adelanto: si está cerrada, el campo se bloquea y
+  // se ofrece abrirla ahí mismo en vez de dejar cargar un monto que el
+  // cobro real (al guardar) va a rechazar igual por falta de caja abierta.
+  const cashRegister = useCashRegister()
+  const [cajaChecked, setCajaChecked] = useState(false)
+  const [cajaAbierta, setCajaAbierta] = useState(false)
+  const [isOpenRegisterDialogOpen, setIsOpenRegisterDialogOpen] = useState(false)
+  const [openingAmount, setOpeningAmount] = useState('')
+  const [openingNote, setOpeningNote] = useState('')
+  const [isOpeningRegister, setIsOpeningRegister] = useState(false)
+
+  // checkOpenSession cambia de identidad en cada chequeo (depende de
+  // currentSession): se guarda en un ref para poder llamar siempre a la
+  // versión más nueva desde un callback de identidad estable, sin meterlo
+  // en un array de dependencias y sin quedarse con una versión vieja.
+  const checkOpenSessionRef = useRef(cashRegister.checkOpenSession)
+  useEffect(() => {
+    checkOpenSessionRef.current = cashRegister.checkOpenSession
+  })
+
+  const refreshCajaStatus = useCallback(async () => {
+    const session = await checkOpenSessionRef.current()
+    setCajaAbierta(!!session)
+    setCajaChecked(true)
+    return !!session
+  }, [])
+
+  useEffect(() => {
+    if (mode !== 'add') return
+    void refreshCajaStatus()
+  }, [mode, refreshCajaStatus])
   const watchedParts = watch('parts')
   const watchedFinalCost = watch('finalCost')
   const watchedLaborCost = watch('laborCost')
@@ -1776,6 +1810,23 @@ export function RepairFormDialogV2({
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4 space-y-4">
+                  {cajaChecked && !cajaAbierta && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5">
+                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                        La caja está cerrada: no se puede registrar un adelanto hasta abrirla.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                        onClick={() => setIsOpenRegisterDialogOpen(true)}
+                      >
+                        Abrir caja
+                      </Button>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="depositAmount" className="text-sm font-medium">Monto del adelanto</Label>
@@ -1786,14 +1837,14 @@ export function RepairFormDialogV2({
                         step="0.01"
                         {...register('depositAmount', { valueAsNumber: true })}
                         placeholder="0"
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || !cajaAbierta}
                       />
                       {errors.depositAmount && (
                         <p className="text-xs text-red-500">{errors.depositAmount.message}</p>
                       )}
                     </div>
 
-                    {(watch('depositAmount') ?? 0) > 0 && (
+                    {cajaAbierta && (watch('depositAmount') ?? 0) > 0 && (
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Método de pago</Label>
                         <div className="grid grid-cols-3 gap-1.5">
@@ -1823,7 +1874,7 @@ export function RepairFormDialogV2({
                     )}
                   </div>
 
-                  {(watch('depositAmount') ?? 0) > 0 && PAYMENT_METHODS.find((m) => m.id === watch('depositMethod'))?.requiresRef && (
+                  {cajaAbierta && (watch('depositAmount') ?? 0) > 0 && PAYMENT_METHODS.find((m) => m.id === watch('depositMethod'))?.requiresRef && (
                     <div className="space-y-2">
                       <Label htmlFor="depositReference" className="text-sm font-medium">
                         {watch('depositMethod') === 'card' ? 'N° de Autorización' : 'N° de Referencia'}
@@ -1837,7 +1888,7 @@ export function RepairFormDialogV2({
                     </div>
                   )}
 
-                  {(watch('depositAmount') ?? 0) > 0 && !watch('depositMethod') && (
+                  {cajaAbierta && (watch('depositAmount') ?? 0) > 0 && !watch('depositMethod') && (
                     <p className="text-xs text-amber-600 dark:text-amber-400">
                       Elegí un método de pago para el adelanto.
                     </p>
@@ -1857,15 +1908,51 @@ export function RepairFormDialogV2({
                   </div>
                   <div>
                     <CardTitle className="text-base font-bold text-amber-800 dark:text-amber-300">
-                      🛡️ Garantía
+                      🛡️ Configuración de Garantía del Servicio
                     </CardTitle>
                     <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
-                      Configure la garantía de la reparación
+                      Establece el tiempo de cobertura y cláusulas que figurarán en el comprobante del cliente
                     </p>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-4 space-y-4">
+                {/* Atajos Rápidos de Selección */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-amber-900 dark:text-amber-300 uppercase tracking-wider">
+                    Atajos Rápidos de Duración
+                  </Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { months: 0, label: 'Sin Garantía' },
+                      { months: 1, label: '1 Mes' },
+                      { months: 3, label: '3 Meses (Estándar)' },
+                      { months: 6, label: '6 Meses' },
+                      { months: 12, label: '1 Año' },
+                    ].map((preset) => {
+                      const active = watch('warrantyMonths') === preset.months
+                      return (
+                        <Button
+                          key={preset.months}
+                          type="button"
+                          variant={active ? 'default' : 'outline'}
+                          size="sm"
+                          disabled={isSubmitting}
+                          onClick={() => setValue('warrantyMonths', preset.months, { shouldDirty: true, shouldValidate: true })}
+                          className={cn(
+                            'h-7 text-xs rounded-lg transition-all',
+                            active
+                              ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm font-semibold'
+                              : 'border-amber-200 dark:border-amber-900/60 hover:bg-amber-100/50 dark:hover:bg-amber-950/40 text-amber-900 dark:text-amber-300'
+                          )}
+                        >
+                          {preset.label}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Warranty Months */}
                   <div className="space-y-2">
@@ -1887,13 +1974,13 @@ export function RepairFormDialogV2({
                             <SelectValue placeholder="Seleccionar duración" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="0">Sin garantía</SelectItem>
+                            <SelectItem value="0">Sin garantía (0 meses)</SelectItem>
                             <SelectItem value="1">1 mes</SelectItem>
                             <SelectItem value="3">3 meses (recomendado)</SelectItem>
                             <SelectItem value="6">6 meses</SelectItem>
-                            <SelectItem value="12">1 año</SelectItem>
-                            <SelectItem value="24">2 años</SelectItem>
-                            <SelectItem value="36">3 años</SelectItem>
+                            <SelectItem value="12">1 año (12 meses)</SelectItem>
+                            <SelectItem value="24">2 años (24 meses)</SelectItem>
+                            <SelectItem value="36">3 años (36 meses)</SelectItem>
                           </SelectContent>
                         </Select>
                       )}
@@ -1939,8 +2026,8 @@ export function RepairFormDialogV2({
                             </SelectItem>
                             <SelectItem value="full">
                               <div className="flex flex-col">
-                                <span className="font-medium">Completa</span>
-                                <span className="text-xs text-muted-foreground">Cubre mano de obra y repuestos</span>
+                                <span className="font-medium">Completa (Mano de obra + Repuestos)</span>
+                                <span className="text-xs text-muted-foreground">Cobertura integral recomendada</span>
                               </div>
                             </SelectItem>
                           </SelectContent>
@@ -1956,15 +2043,49 @@ export function RepairFormDialogV2({
                   </div>
                 </div>
 
-                {/* Warranty Notes */}
+                {/* Warranty Notes with Template Chips */}
                 <div className="space-y-2">
-                  <Label htmlFor="warrantyNotes" className="text-sm font-medium flex items-center gap-2">
-                    Notas Adicionales
-                    <span className="text-xs text-muted-foreground font-normal">(opcional)</span>
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="warrantyNotes" className="text-sm font-medium flex items-center gap-2">
+                      Notas y Condiciones Especiales
+                      <span className="text-xs text-muted-foreground font-normal">(opcional)</span>
+                    </Label>
+                  </div>
+
+                  {/* Plantillas Rápidas de Cláusulas */}
+                  {watch('warrantyMonths') > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[11px] text-muted-foreground font-medium">Insertar cláusula rápida:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          'Aplica únicamente a la pieza sustituida.',
+                          'No cubre daños por humedad, agua o líquidos.',
+                          'No cubre caídas, golpes o fracturas de cristal.',
+                          'Garantía de batería por ciclos de carga.',
+                          'Conserve el comprobante para reclamos.',
+                        ].map((clause) => (
+                          <button
+                            key={clause}
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => {
+                              const current = watch('warrantyNotes') || ''
+                              if (current.includes(clause)) return
+                              const updated = current ? `${current}\n• ${clause}` : `• ${clause}`
+                              setValue('warrantyNotes', updated, { shouldDirty: true })
+                            }}
+                            className="text-[11px] px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                          >
+                            + {clause}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <Textarea
                     id="warrantyNotes"
-                    placeholder="Ej: Incluye repuestos originales, no cubre daños por líquidos..."
+                    placeholder="Ej: La garantía aplica sobre la pantalla cambiada. Excluye daños por humedad o golpes posteriores..."
                     className={`min-h-[80px] resize-none ${errors.warrantyNotes ? 'border-red-500' : ''}`}
                     disabled={isSubmitting || watch('warrantyMonths') === 0}
                     {...register('warrantyNotes')}
@@ -1976,7 +2097,7 @@ export function RepairFormDialogV2({
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Estas notas aparecerán en el comprobante de reparación
+                    Estas notas aparecerán en la sección 🛡️ Garantía del comprobante impreso o PDF.
                   </p>
                 </div>
 
