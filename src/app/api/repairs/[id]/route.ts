@@ -15,6 +15,7 @@ type RepairPartInput = {
   quantity?: unknown
   supplier?: unknown
   partNumber?: unknown
+  productId?: unknown
 }
 
 type RepairNoteInput = {
@@ -81,6 +82,7 @@ function normalizeParts(parts: RepairPartInput[], repairId: string) {
     quantity: Number(part.quantity || 1),
     supplier: typeof part.supplier === 'string' && part.supplier.trim() ? part.supplier.trim() : null,
     part_number: typeof part.partNumber === 'string' && part.partNumber.trim() ? part.partNumber.trim() : null,
+    product_id: typeof part.productId === 'string' && part.productId.trim() ? part.productId.trim() : null,
   })).filter((part) => part.part_name.length > 0)
 }
 

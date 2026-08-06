@@ -295,7 +295,7 @@ export function useCashRegister() {
     }, [selectedBranchId, supabase])
 
     // Check for open session
-    const checkOpenSession = useCallback(async (registerId: string) => {
+    const checkOpenSession = useCallback(async (registerId?: string) => {
         try {
             if (!config.supabase.isConfigured || !supabase) {
                 if (currentSession) return currentSession
@@ -316,19 +316,40 @@ export function useCashRegister() {
                 return null
             }
 
-            // Fetch session first (using cash_closures as session table)
-            let sessionQuery = supabase
-                .from('cash_closures')
-                .select('*')
-                .eq('register_id', registerId)
-                .is('date', null)
-                .order('created_at', { ascending: false })
-                .limit(1)
+            let session = null
 
-            sessionQuery = withBranchFilter(sessionQuery, selectedBranchId)
-            const { data: session, error: sessionError } = await sessionQuery.maybeSingle()
+            // 1. Check for explicit registerId first (if not 'principal')
+            if (registerId && registerId !== 'principal') {
+                let sessionQuery = supabase
+                    .from('cash_closures')
+                    .select('*')
+                    .eq('register_id', registerId)
+                    .is('date', null)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
 
-            if (sessionError) throw sessionError
+                sessionQuery = withBranchFilter(sessionQuery, selectedBranchId)
+                const { data, error } = await sessionQuery.maybeSingle()
+                if (!error && data) {
+                    session = data
+                }
+            }
+
+            // 2. Fallback: Search for ANY open session in the current branch
+            if (!session) {
+                let branchSessionQuery = supabase
+                    .from('cash_closures')
+                    .select('*')
+                    .is('date', null)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+
+                branchSessionQuery = withBranchFilter(branchSessionQuery, selectedBranchId)
+                const { data: branchSession, error: branchError } = await branchSessionQuery.maybeSingle()
+                if (!branchError && branchSession) {
+                    session = branchSession
+                }
+            }
 
             if (session) {
                 // Fetch movements separately
@@ -343,7 +364,6 @@ export function useCashRegister() {
 
                 if (movementsError) {
                     console.error('Error fetching session movements:', movementsError)
-                    // Continue with empty movements if fail
                 }
 
                 const fullSession = {
@@ -366,8 +386,8 @@ export function useCashRegister() {
                  console.warn('Network error checking open session, using local fallback if available')
             }
 
-            // On error (e.g. network), if we have a valid local session for this register, keep it alive
-            if (currentSession && currentSession.register_id === registerId) {
+            // On error (e.g. network), if we have a valid local session, keep it alive
+            if (currentSession && (!registerId || currentSession.register_id === registerId || registerId === 'principal')) {
                 console.warn('Using local session as fallback due to check error')
                 return currentSession
             }

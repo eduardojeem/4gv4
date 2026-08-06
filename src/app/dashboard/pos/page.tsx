@@ -968,6 +968,15 @@ function POSPageContent() {
   // Unified Cart + Repairs Calculations
   const unifiedCalculations = useMemo(() => {
     // 1. Calculate Repair Costs
+    //
+    // OJO: esto tiene que coincidir con lo que cobra el RPC
+    // process_pos_sale_atomic_v2 en el servidor, que recalcula el total de
+    // reparaciones de forma independiente a partir de repairs.final_cost /
+    // estimated_cost (NO resta paid_amount) y rechaza el pago si el monto
+    // pagado no calza exacto con ese total (PAYMENT_TOTAL_MISMATCH). Restar
+    // acá lo ya cobrado (p.ej. un adelanto por "Cobrar Aquí") rompería el
+    // checkout con esa reparación en vez de cobrar de menos. Mientras el RPC
+    // no soporte saldo parcial, esto se queda igual que antes: costo bruto.
     const repairDetails = selectedRepairs.map(repair => {
       const laborCost = repair.final_cost || repair.estimated_cost || 0
       // Repairs in POS don't have separate parts cost in this context
@@ -1085,6 +1094,11 @@ function POSPageContent() {
   }, [customers, selectedCustomer, unifiedCalculations.subtotal, generalDiscount, vipAutoApplied])
 
   // Adapter for POSCart items
+  //
+  // Precio = costo bruto (final_cost / estimated_cost), no el saldo pendiente:
+  // el RPC del servidor cobra el total bruto de la reparación sin restar lo
+  // ya pagado (ver nota en unifiedCalculations más abajo). Mostrar acá un
+  // saldo menor generaría un monto que el checkout rechaza por no calzar.
   const combinedCartItems = useMemo(() => {
     const repairItems: CartItem[] = selectedRepairs.map(repair => ({
       id: repair.id,

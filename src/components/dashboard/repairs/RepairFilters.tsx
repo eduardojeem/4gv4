@@ -47,14 +47,22 @@ export const RepairFilters = memo<RepairFiltersProps>(function RepairFilters({
 }: RepairFiltersProps) {
 
     // Optimize active filters count calculation
-    const activeFiltersCount = useMemo(() => {
+    // Estado ahora tiene su propio selector visible, fuera del popover: no
+    // cuenta para el badge de "Filtros Avanzados", que solo debe reflejar lo
+    // que hay escondido ahí adentro (Prioridad, Técnico, Fechas).
+    const advancedFiltersCount = useMemo(() => {
         let count = 0
-        if (statusFilter !== 'all') count++
         if (priorityFilter !== 'all') count++
         if (technicianFilter && technicianFilter !== 'all') count++
         if (dateRange?.from || dateRange?.to) count++
         return count
-    }, [statusFilter, priorityFilter, technicianFilter, dateRange])
+    }, [priorityFilter, technicianFilter, dateRange])
+
+    // Este sí incluye Estado: controla el botón "Limpiar" general y el
+    // resumen de "Filtros activos" de abajo, que deben reflejar todo.
+    const activeFiltersCount = useMemo(() => {
+        return advancedFiltersCount + (statusFilter !== 'all' ? 1 : 0)
+    }, [advancedFiltersCount, statusFilter])
 
     const clearFilters = () => {
         setStatusFilter('all')
@@ -91,18 +99,44 @@ export const RepairFilters = memo<RepairFiltersProps>(function RepairFilters({
 
                 {/* Quick Filter Buttons */}
                 <div className="flex gap-2">
+                    {/* Estado: filtro directo junto a la tabla, visible sin
+                        tener que abrir "Filtros Avanzados". Antes estaba
+                        escondido adentro de ese popover. */}
+                    <Select
+                        value={statusFilter}
+                        onValueChange={(v) => setStatusFilter(v as RepairStatus | 'all')}
+                    >
+                        <SelectTrigger className="h-10 w-[180px]">
+                            <SelectValue placeholder="Estado" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos los estados</SelectItem>
+                            {Object.entries(statusConfig).map(([key, config]) => {
+                                const Icon = config.icon
+                                return (
+                                    <SelectItem key={key} value={key}>
+                                        <div className="flex items-center gap-2">
+                                            <Icon className="h-4 w-4" />
+                                            <span>{config.label}</span>
+                                        </div>
+                                    </SelectItem>
+                                )
+                            })}
+                        </SelectContent>
+                    </Select>
+
                     <Popover>
                         <PopoverTrigger asChild>
                             <Button
-                                variant={activeFiltersCount > 0 ? "default" : "outline"}
+                                variant={advancedFiltersCount > 0 ? "default" : "outline"}
                                 size="default"
                                 className="gap-2"
                             >
                                 <SlidersHorizontal className="h-4 w-4" />
                                 Filtros Avanzados
-                                {activeFiltersCount > 0 && (
+                                {advancedFiltersCount > 0 && (
                                     <Badge variant="secondary" className="ml-1 bg-white dark:bg-muted/90 text-foreground dark:text-foreground border border-muted dark:border-muted/60">
-                                        {activeFiltersCount}
+                                        {advancedFiltersCount}
                                     </Badge>
                                 )}
                             </Button>
@@ -111,7 +145,7 @@ export const RepairFilters = memo<RepairFiltersProps>(function RepairFilters({
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
                                     <h4 className="font-semibold text-sm">Filtros Avanzados</h4>
-                                    {activeFiltersCount > 0 && (
+                                    {advancedFiltersCount > 0 && (
                                         <Button
                                             variant="ghost"
                                             size="sm"
@@ -124,33 +158,6 @@ export const RepairFilters = memo<RepairFiltersProps>(function RepairFilters({
                                 </div>
 
                                 <Separator />
-
-                                {/* Status Filter */}
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-medium">Estado</Label>
-                                    <Select
-                                        value={statusFilter}
-                                        onValueChange={(v) => setStatusFilter(v as RepairStatus | 'all')}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">Todos los estados</SelectItem>
-                                            {Object.entries(statusConfig).map(([key, config]) => {
-                                                const Icon = config.icon
-                                                return (
-                                                    <SelectItem key={key} value={key}>
-                                                        <div className="flex items-center gap-2">
-                                                            <Icon className="h-4 w-4" />
-                                                            <span>{config.label}</span>
-                                                        </div>
-                                                    </SelectItem>
-                                                )
-                                            })}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
 
                                 {/* Priority Filter */}
                                 <div className="space-y-2">

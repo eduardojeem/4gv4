@@ -11,19 +11,22 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
-import { PosDashboardHeader } from './components/PosDashboardHeader'
+import { PosDashboardHeader, type PosDashboardViewTab } from './components/PosDashboardHeader'
 import { PosStatsGrid } from './components/PosStatsGrid'
 import { SalesTrendChart } from './components/SalesTrendChart'
 import { PaymentDistributionChart } from './components/PaymentDistributionChart'
 import { TopProductsCard } from './components/TopProductsCard'
 import { RecentTransactionsList } from './components/RecentTransactionsList'
 import { CreditStatsCards } from './components/CreditStatsCards'
+import { RepairPosStatsCards } from './components/RepairPosStatsCards'
+import { ProfitStatsCards } from './components/ProfitStatsCards'
 
 export default function POSDashboard() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: new Date(),
     to: new Date(),
   })
+  const [activeViewTab, setActiveViewTab] = useState<PosDashboardViewTab>('all')
 
   const { stats, loading, error, refetch } = usePosStats(dateRange)
   const [refreshing, setRefreshing] = useState(false)
@@ -50,7 +53,7 @@ export default function POSDashboard() {
         ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
       ].join('\n')
 
-      const blob = new Blob(['﻿', csvContent], { type: 'text/csv;charset=utf-8;' })
+      const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.setAttribute('href', url)
@@ -73,7 +76,7 @@ export default function POSDashboard() {
     toast.success('Datos actualizados')
   }
 
-  if (loading && !stats.totalTransactions) {
+  if (loading && !stats.totalTransactions && !stats.repairStats.deliveredCount) {
     return (
       <div className="mx-auto flex max-w-[1480px] flex-col items-center justify-center gap-3 py-24">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
@@ -102,12 +105,14 @@ export default function POSDashboard() {
 
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
-      {/* Header con refresh inline */}
+      {/* Header con pestañas de vista y filtro de fecha */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <PosDashboardHeader
           dateRange={dateRange}
           setDateRange={setDateRange}
           onExport={handleExport}
+          activeViewTab={activeViewTab}
+          setActiveViewTab={setActiveViewTab}
         />
       </div>
 
@@ -116,7 +121,7 @@ export default function POSDashboard() {
         <details className="group">
           <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
             <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Dashboard del POS?
+              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Dashboard del POS y Taller?
             </div>
             <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
               <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
@@ -124,32 +129,42 @@ export default function POSDashboard() {
             </div>
           </summary>
           <CardContent className="pt-0 pb-5 text-xs">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-4">
               <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
                 <h4 className="font-semibold text-foreground flex items-center gap-1.5">
                   <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
                   Filtro por Rango Fechas
                 </h4>
                 <p className="text-muted-foreground leading-relaxed">
-                  Usa el selector de calendario en la cabecera para filtrar las estadísticas. Puedes analizar las ventas de hoy, ayer, los últimos 7 días o cualquier rango personalizado.
+                  Usa los atajos (Hoy, 7 días, Este mes) o el calendario para filtrar ventas, créditos y reparaciones.
                 </p>
               </div>
               <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
                 <h4 className="font-semibold text-foreground flex items-center gap-2">
                   <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                  Distribución y Tendencia
+
+                  Filtro por Módulo
                 </h4>
                 <p className="text-muted-foreground leading-relaxed">
-                  Compara los métodos de cobro más utilizados (efectivo, tarjeta, transferencia) en el gráfico circular y monitorea la tendencia de ventas brutas a lo largo de las horas o días.
+                  Usa los botones superiores para conmutar entre Vista General, Solo Ventas, Solo Reparaciones del Taller o Análisis de Ganancias.
                 </p>
               </div>
               <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
                 <h4 className="font-semibold text-foreground flex items-center gap-2">
                   <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                  Créditos y Top Ventas
+                  Métricas de Taller
                 </h4>
                 <p className="text-muted-foreground leading-relaxed">
-                  Supervisa la cartera de créditos emitidos desde el POS y visualiza rápidamente cuáles son los productos más vendidos del catálogo en el periodo seleccionado.
+                  Monitorea el total presupuestado de reparaciones ingresadas, recaudación por reparaciones entregadas y equipos en taller.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-2">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">4</Badge>
+                  Ganancias y Márgenes
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Calcula la ganancia bruta considerando costo de mercadería vendida (CMV) y recaudación total del taller.
                 </p>
               </div>
             </div>
@@ -157,7 +172,7 @@ export default function POSDashboard() {
         </details>
       </Card>
 
-      {/* Refresh footer (small) */}
+      {/* Refresh footer */}
       <div className="flex justify-end -mt-2">
         <Button
           variant="ghost"
@@ -171,23 +186,40 @@ export default function POSDashboard() {
         </Button>
       </div>
 
-      {/* Stats */}
-      <PosStatsGrid stats={stats} />
+      {/* 1. KPIs Generales de Ventas (visible en 'all' o 'sales') */}
+      {(activeViewTab === 'all' || activeViewTab === 'sales') && (
+        <PosStatsGrid stats={stats} />
+      )}
 
-      {/* Credit stats (si aplica) */}
-      <CreditStatsCards stats={stats} />
+      {/* 2. Tarjetas de Reparaciones / Taller (visible en 'all' o 'repairs') */}
+      {(activeViewTab === 'all' || activeViewTab === 'repairs') && (
+        <RepairPosStatsCards stats={stats} />
+      )}
 
-      {/* Charts row */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <SalesTrendChart data={stats.dailySales} />
-        <PaymentDistributionChart data={stats.paymentMethods} />
-      </div>
+      {/* 3. Tarjetas de Ganancias & Rentabilidad (visible en 'all' o 'profit') */}
+      {(activeViewTab === 'all' || activeViewTab === 'profit') && (
+        <ProfitStatsCards stats={stats} />
+      )}
 
-      {/* Bottom row */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <RecentTransactionsList sales={stats.recentSales} />
-        <TopProductsCard products={stats.topProducts} />
-      </div>
+      {/* 4. Créditos (visible en 'all' o 'sales') */}
+      {(activeViewTab === 'all' || activeViewTab === 'sales') && (
+        <CreditStatsCards stats={stats} />
+      )}
+
+      {/* 5. Gráficos y Tablas */}
+      {(activeViewTab === 'all' || activeViewTab === 'sales' || activeViewTab === 'profit') && (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+            <SalesTrendChart data={stats.dailySales} />
+            <PaymentDistributionChart data={stats.paymentMethods} />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+            <RecentTransactionsList sales={stats.recentSales} />
+            <TopProductsCard products={stats.topProducts} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

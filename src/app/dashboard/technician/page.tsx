@@ -3,6 +3,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { logger } from '@/lib/logger'
 import { toast } from 'sonner'
+import { useAuth } from '@/contexts/auth-context'
+import { mapLegacyRoleToOrganizationRole, roleHasPermission } from '@/lib/saas/permissions'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -80,6 +82,11 @@ function MetricCard({
 // ---------------------------------------------------------------------------
 
 export default function TechnicianPanel() {
+  // Declarado antes del hook para poder pasárselo como callback de "soltaste
+  // una tarjeta en Entregado": abre el diálogo de entrega en vez de marcar
+  // entregado en silencio con el drag.
+  const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
+
   const {
     repairs,
     kanbanOrder,
@@ -95,9 +102,20 @@ export default function TechnicianPanel() {
     refreshRepairs,
     updateStatus,
     deliverRepair,
-  } = useTechnicianBoard()
+  } = useTechnicianBoard({ onRequestDeliver: setDeliverTarget })
 
   const { technicians } = useTechnicians()
+
+  // El rol 'technician' (SaaS) no tiene 'repairs.orders.create' — solo
+  // 'read'/'update'. Quien registra el ingreso de un equipo es vendedor,
+  // manager o admin; el técnico gestiona lo que ya está creado. Sin este
+  // chequeo, un técnico podía completar todo el formulario de alta y
+  // recibir un 403 recién al enviarlo.
+  const { user } = useAuth()
+  const canCreateRepair = roleHasPermission(
+    mapLegacyRoleToOrganizationRole(user?.role),
+    'repairs.orders.create'
+  )
 
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
@@ -106,7 +124,6 @@ export default function TechnicianPanel() {
   const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [detailRepair, setDetailRepair] = useState<Repair | null>(null)
-  const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
 
   const filteredRepairs = useMemo(() => {
     if (!searchTerm) return repairs
@@ -359,18 +376,20 @@ export default function TechnicianPanel() {
             <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
             Actualizar
           </Button>
-          <Button
-            size="sm"
-            className="gap-2"
-            onClick={() => {
-              setDialogMode('add')
-              setSelectedRepair(undefined)
-              setIsDialogOpen(true)
-            }}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nueva reparación
-          </Button>
+          {canCreateRepair && (
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={() => {
+                setDialogMode('add')
+                setSelectedRepair(undefined)
+                setIsDialogOpen(true)
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Nueva reparación
+            </Button>
+          )}
         </div>
       </header>
 
@@ -500,7 +519,8 @@ export default function TechnicianPanel() {
         open={!!deliverTarget}
         repair={deliverTarget}
         onOpenChange={(open) => !open && setDeliverTarget(null)}
-        onConfirm={async (id, outcome, note) => { await deliverRepair(id, outcome, note) }}
+        onConfirm={async (id, payload) => { await deliverRepair(id, payload.outcome, payload.note) }}
+        allowPayment={false}
       />
     </div>
   )

@@ -62,6 +62,10 @@ export const DeviceTypeEnum = z.enum([
   'other'
 ], 'Selecciona un tipo de dispositivo valido')
 
+// Métodos válidos para un adelanto al recibir el equipo. Sin 'credit': un
+// adelanto es plata que entra ahora; financiar "ahora" no tiene sentido.
+export const DepositMethodEnum = z.enum(['cash', 'card', 'transfer'], 'Selecciona un metodo de pago valido')
+
 export const AccessTypeEnum = z.enum([
   'none',
   'pin',
@@ -171,7 +175,10 @@ export const RepairPartSchema = z.object({
     .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG),
   quantity: z.number().min(1, 'La cantidad debe ser al menos 1'),
   supplier: z.string().optional().or(z.literal('')),
-  partNumber: z.string().optional().or(z.literal(''))
+  partNumber: z.string().optional().or(z.literal('')),
+  // Presente solo si el repuesto se eligió del inventario local; un repuesto
+  // cargado a mano (proveedor externo, por ejemplo) no tiene product_id.
+  productId: z.string().optional().nullable()
 })
 
 export const RepairNoteSchema = z.object({
@@ -248,6 +255,24 @@ export const RepairFormSchema = z.object({
     .string()
     .max(500, 'Las notas de garantia son demasiado largas (maximo 500 caracteres)')
     .optional()
+    .or(z.literal('')),
+
+  // Adelanto opcional al recibir el equipo. Solo aplica con un solo
+  // dispositivo (con varios, el formulario ya obliga a costos compartidos).
+  depositAmount: z
+    .number()
+    .min(0, 'El adelanto no puede ser negativo')
+    .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG)
+    .optional()
+    .nullable()
+    .default(null),
+
+  depositMethod: DepositMethodEnum.optional().nullable().default(null),
+
+  depositReference: z
+    .string()
+    .max(100, 'La referencia es demasiado larga (maximo 100 caracteres)')
+    .optional()
     .or(z.literal(''))
 })
 
@@ -300,6 +325,24 @@ export const RepairFormQuickSchema = z.object({
   warrantyNotes: z
     .string()
     .max(500, 'Las notas de garantia son demasiado largas (maximo 500 caracteres)')
+    .optional()
+    .or(z.literal('')),
+
+  // Adelanto opcional al recibir el equipo. Solo aplica con un solo
+  // dispositivo (con varios, el formulario ya obliga a costos compartidos).
+  depositAmount: z
+    .number()
+    .min(0, 'El adelanto no puede ser negativo')
+    .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG)
+    .optional()
+    .nullable()
+    .default(null),
+
+  depositMethod: DepositMethodEnum.optional().nullable().default(null),
+
+  depositReference: z
+    .string()
+    .max(100, 'La referencia es demasiado larga (maximo 100 caracteres)')
     .optional()
     .or(z.literal(''))
 })

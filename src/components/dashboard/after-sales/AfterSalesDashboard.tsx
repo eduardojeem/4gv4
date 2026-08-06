@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -109,6 +110,7 @@ const RESTOCK_OPTIONS: Array<{
 ]
 
 export function AfterSalesDashboard() {
+    const searchParams = useSearchParams()
     const [cases, setCases] = useState<AfterSalesCase[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
@@ -129,6 +131,12 @@ export function AfterSalesDashboard() {
     const [refundMethod, setRefundMethod] = useState<'cash' | 'store_credit' | null>(null)
     const [restockAction, setRestockAction] = useState<'sellable' | 'quarantine' | 'none'>('none')
     const [rejectionReason, setRejectionReason] = useState('')
+
+    useEffect(() => {
+        if (searchParams?.get('new') === 'true') {
+            setIsCreateDialogOpen(true)
+        }
+    }, [searchParams])
 
     const loadCases = useCallback(async (options?: { isSilent?: boolean }) => {
         if (!options?.isSilent) {

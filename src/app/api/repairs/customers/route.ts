@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
+import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 import { logger } from '@/lib/logger'
 
 const repairCustomerSchema = z.object({
@@ -34,15 +35,38 @@ function normalizeCustomerPayload(payload: z.infer<typeof repairCustomerSchema>)
 const readPermissions = ['repairs.orders.read', 'crm.customers.read'] as const
 const writePermissions = ['repairs.orders.create', 'repairs.orders.update', 'crm.customers.manage'] as const
 
-export const GET = withTenantAuth({ permission: [...readPermissions], module: 'repairs' }, async (_request, { organization }) => {
+export const GET = withTenantAuth({ permission: [...readPermissions], module: 'repairs' }, async (request, { organization }) => {
   try {
+    // Sin `q`, esto traía los 200 clientes más recientes y el selector
+    // filtraba esa lista fija en el navegador: un cliente que no estuviera
+    // entre esos 200 era imposible de encontrar sin importar qué se
+    // escribiera, porque nunca llegaba a pedirse. Con `q`, la búsqueda es
+    // server-side y alcanza a cualquier cliente de la organización.
+    const { searchParams } = new URL(request.url)
+    const term = sanitizeSearchTerm(searchParams.get('q'))
+
     const supabase = await createClient()
-    const { data, error } = await supabase
+    let query = supabase
       .from('customers')
       .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')
       .eq('organization_id', organization.id)
+
+    if (term) {
+      const digits = term.replace(/\D/g, '')
+      const orFilters = [
+        `name.ilike.%${term}%`,
+        `email.ilike.%${term}%`,
+        `customer_code.ilike.%${term}%`,
+      ]
+      // Buscar por teléfono solo si el término tiene dígitos: de lo
+      // contrario `phone.ilike.%%` matchea todo y arruina el resto del filtro.
+      if (digits) orFilters.push(`phone.ilike.%${digits}%`)
+      query = query.or(orFilters.join(','))
+    }
+
+    const { data, error } = await query
       .order('created_at', { ascending: false })
-      .limit(200)
+      .limit(term ? 50 : 20)
 
     if (error) throw error
 

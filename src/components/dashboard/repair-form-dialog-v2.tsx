@@ -61,6 +61,7 @@ import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { useSubscriptionStatus, repairPhotoLimit } from '@/contexts/SubscriptionStatusContext'
 import { UpgradeHint } from '@/components/admin/PlanGate'
 import { RepairCostCalculator, type CostCalculationMode } from './repairs/RepairCostCalculator'
+import { PAYMENT_METHODS } from './repairs/RepairPaymentDialog'
 import { Repair } from '@/types/repairs'
 
 export type RepairFormMode = 'add' | 'edit'
@@ -83,6 +84,67 @@ const deviceTypeOptions = [
   { value: 'accessory', label: 'Accesorio', icon: Smartphone },
   { value: 'other', label: 'Otro', icon: Smartphone }
 ] as const
+
+// Marcas conocidas + palabras que casi siempre implican una marca aunque el
+// texto no la nombre ("iPhone" nunca es de otra marca que Apple). Sirve para
+// adivinar marca/tipo/modelo a partir del NOMBRE del servicio (ej. "Cambio
+// Pantalla iPhone 13 Pro"), que es texto libre que cada organización carga a
+// su gusto — no hay un campo estructurado de marca/modelo en el catálogo de
+// servicios. Por eso esto es una heurística de mejor esfuerzo, no una
+// búsqueda exacta: puede no acertar, y quien complete el formulario siempre
+// puede corregir lo que se autocompletó.
+const SERVICE_NAME_DEVICE_HINTS: Array<{
+  keyword: string
+  brand: string
+  deviceType: 'smartphone' | 'tablet' | 'laptop' | 'desktop'
+}> = [
+  { keyword: 'iphone', brand: 'Apple', deviceType: 'smartphone' },
+  { keyword: 'ipad', brand: 'Apple', deviceType: 'tablet' },
+  { keyword: 'macbook', brand: 'Apple', deviceType: 'laptop' },
+  { keyword: 'imac', brand: 'Apple', deviceType: 'desktop' },
+  { keyword: 'galaxy tab', brand: 'Samsung', deviceType: 'tablet' },
+  { keyword: 'galaxy', brand: 'Samsung', deviceType: 'smartphone' },
+  { keyword: 'redmi', brand: 'Xiaomi', deviceType: 'smartphone' },
+  { keyword: 'poco', brand: 'Xiaomi', deviceType: 'smartphone' },
+  { keyword: 'mi pad', brand: 'Xiaomi', deviceType: 'tablet' },
+  { keyword: 'moto ', brand: 'Motorola', deviceType: 'smartphone' },
+]
+
+const KNOWN_DEVICE_BRANDS = [
+  'Apple', 'Samsung', 'Xiaomi', 'Huawei', 'Motorola', 'LG', 'Sony',
+  'Lenovo', 'HP', 'Dell', 'Asus', 'Acer', 'Nokia', 'OnePlus', 'Oppo', 'Vivo', 'ZTE', 'Realme'
+]
+
+function guessDeviceFromServiceName(serviceName: string): {
+  brand?: string
+  deviceType?: 'smartphone' | 'tablet' | 'laptop' | 'desktop'
+  model?: string
+} {
+  const lower = serviceName.toLowerCase()
+
+  // Prioridad 1: palabras que implican marca y tipo a la vez (iPhone, Galaxy...).
+  const hint = SERVICE_NAME_DEVICE_HINTS.find((h) => lower.includes(h.keyword))
+  if (hint) {
+    const anchorIndex = lower.indexOf(hint.keyword)
+    const afterAnchor = serviceName.slice(anchorIndex + hint.keyword.length).trim()
+    return {
+      brand: hint.brand,
+      deviceType: hint.deviceType,
+      model: afterAnchor || undefined,
+    }
+  }
+
+  // Prioridad 2: el nombre de una marca conocida aparece literal (ej. "Cambio
+  // batería Sony Xperia"). No hay pista de tipo en este caso, se deja vacío.
+  const brand = KNOWN_DEVICE_BRANDS.find((b) => lower.includes(b.toLowerCase()))
+  if (brand) {
+    const anchorIndex = lower.indexOf(brand.toLowerCase())
+    const afterAnchor = serviceName.slice(anchorIndex + brand.length).trim()
+    return { brand, model: afterAnchor || undefined }
+  }
+
+  return {}
+}
 
 const priorityOptions = [
   { value: 'low', label: 'Baja', color: 'bg-green-100 text-green-700' },
@@ -191,10 +253,14 @@ export function RepairFormDialogV2({
     wholesale_price?: number | null
     unit_measure?: string | null
     category?: { name?: string | null } | null
-    brand?: string | null
-    tags?: string[] | null
   }>>([])
   const [loadingServices, setLoadingServices] = useState(false)
+  // Decide qué pasa al elegir un servicio: si su precio ya incluye repuestos
+  // (el repuesto que se agregue después se descuenta de la mano de obra para
+  // que el total no se mueva) o si es solo mano de obra (el repuesto suma
+  // arriba). No hay forma de adivinar esto del catálogo — cada organización
+  // arma sus precios distinto — así que lo elige quien está cargando.
+  const [serviceIncludesParts, setServiceIncludesParts] = useState(false)
 
   useEffect(() => {
     if (serviceSearchIndex === null) {
@@ -282,7 +348,10 @@ export function RepairFormDialogV2({
       finalCost: initialData?.finalCost || null,
       warrantyMonths: initialData?.warrantyMonths ?? 3,
       warrantyType: initialData?.warrantyType || 'full',
-      warrantyNotes: initialData?.warrantyNotes || ''
+      warrantyNotes: initialData?.warrantyNotes || '',
+      depositAmount: null,
+      depositMethod: null,
+      depositReference: ''
     }
   })
 
@@ -417,6 +486,13 @@ export function RepairFormDialogV2({
 
   // Handle form submission
   const onSubmitForm = async (data: RepairFormData) => {
+    // El monto del adelanto no exige método a nivel schema (así no se
+    // valida un método sin monto por defecto); acá sí es obligatorio si
+    // hay algo cargado, para no perder de qué manera cobrar.
+    if ((data.depositAmount ?? 0) > 0 && !data.depositMethod) {
+      toast.error('Elegí un método de pago para el adelanto, o dejá el monto en blanco.')
+      return
+    }
     setIsSubmitting(true)
     try {
       const didSubmit = await onSubmit(data)
@@ -885,7 +961,7 @@ export function RepairFormDialogV2({
                                 </button>
                               </PopoverTrigger>
                               <PopoverContent align="end" className="w-80 p-0">
-                                <div className="p-2.5 border-b">
+                                <div className="p-2.5 border-b space-y-2">
                                   <div className="relative">
                                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                                     <Input
@@ -896,6 +972,23 @@ export function RepairFormDialogV2({
                                       autoFocus
                                     />
                                   </div>
+                                  {fields.length === 1 && (
+                                    <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer">
+                                      <Switch
+                                        checked={serviceIncludesParts}
+                                        onCheckedChange={setServiceIncludesParts}
+                                        className="h-4 w-7 [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3"
+                                      />
+                                      <span>
+                                        El precio del servicio ya incluye repuestos
+                                        {serviceIncludesParts && (
+                                          <span className="block text-primary">
+                                            Si agregás un repuesto después, se descuenta de la mano de obra: el total no cambia.
+                                          </span>
+                                        )}
+                                      </span>
+                                    </label>
+                                  )}
                                 </div>
                                 <div className="max-h-64 overflow-y-auto p-1.5">
                                   {loadingServices ? (
@@ -929,39 +1022,62 @@ export function RepairFormDialogV2({
                                               setValue(`devices.${index}.issue`, svc.name, { shouldDirty: true })
                                             }
 
-                                            // Autocompletar Tipo, Marca y Modelo desde el servicio
-                                            const deviceTypeTag = svc.tags?.find((t: string) => t.startsWith('deviceType:'))?.split(':')[1]
-                                            const deviceModelTag = svc.tags?.find((t: string) => t.startsWith('model:'))?.split(':')[1]
-
-                                            const setVal = setValue as any;
-                                            const watchVal = watch as any;
-
-                                            if (deviceTypeTag && !watchVal(`devices.${index}.deviceType`)) {
-                                              setVal(`devices.${index}.deviceType`, deviceTypeTag, { shouldDirty: true, shouldValidate: true })
+                                            // Tipo, marca y modelo: el catálogo de servicios no tiene
+                                            // estos como campos propios (solo nombre y precio), así
+                                            // que se infieren del NOMBRE del servicio. Es una
+                                            // heurística de texto, no un dato exacto — por eso solo
+                                            // completa lo que esté VACÍO, nunca pisa lo ya escrito.
+                                            const guess = guessDeviceFromServiceName(svc.name)
+                                            if (guess.deviceType && !watch(`devices.${index}.deviceType`)) {
+                                              setValue(`devices.${index}.deviceType`, guess.deviceType, {
+                                                shouldDirty: true,
+                                                shouldValidate: true,
+                                              })
                                             }
-                                            if (svc.brand && !watchVal(`devices.${index}.deviceBrand`)) {
-                                              setVal(`devices.${index}.deviceBrand`, svc.brand, { shouldDirty: true, shouldValidate: true })
+                                            if (guess.brand && !watch(`devices.${index}.brand`)) {
+                                              setValue(`devices.${index}.brand`, guess.brand, {
+                                                shouldDirty: true,
+                                                shouldValidate: true,
+                                              })
                                             }
-                                            if (deviceModelTag && !watchVal(`devices.${index}.deviceModel`)) {
-                                              setVal(`devices.${index}.deviceModel`, deviceModelTag, { shouldDirty: true, shouldValidate: true })
+                                            if (guess.model && !watch(`devices.${index}.model`)) {
+                                              setValue(`devices.${index}.model`, guess.model, {
+                                                shouldDirty: true,
+                                                shouldValidate: true,
+                                              })
                                             }
 
-                                            // El servicio también carga la Mano de Obra de la
-                                            // calculadora compartida, pero solo cuando no hay
-                                            // ambigüedad: un solo equipo (la calculadora es
-                                            // compartida entre todos, no por equipo) y en modo
-                                            // manual (si ya está derivando labor del total, pisarlo
-                                            // acá lo dejaría mostrado como "automático" con un valor
-                                            // que en realidad se cargó a mano).
-                                            const alsoSetLabor = fields.length === 1 && calculationMode === 'manual'
-                                            if (alsoSetLabor) {
+                                            // El servicio también carga la calculadora compartida,
+                                            // pero solo cuando no hay ambigüedad de a cuál equipo
+                                            // corresponde: un solo equipo en el formulario (la
+                                            // calculadora es compartida entre todos, no por equipo).
+                                            //
+                                            // Dos caminos según si el precio ya incluye repuestos:
+                                            // - Ya incluye: se fija como Costo Final y se pasa a modo
+                                            //   "labor = final - repuestos", así que un repuesto que
+                                            //   se agregue después se descuenta de la mano de obra y
+                                            //   el total sigue en el mismo precio pactado.
+                                            // - Es solo mano de obra: se fija como Mano de Obra en
+                                            //   modo manual (como antes), y un repuesto que se agregue
+                                            //   suma arriba, como corresponde si no estaba incluido.
+                                            const affectsCalculator = fields.length === 1
+                                            let calculatorNote: string | null = null
+                                            if (affectsCalculator && serviceIncludesParts) {
+                                              setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
+                                              setCalculationMode('labor-from-final')
+                                              calculatorNote = 'Se cargó como Costo Final. Si agregás un repuesto, el total no cambia.'
+                                            } else if (affectsCalculator && calculationMode === 'manual') {
                                               setValue('laborCost', price, { shouldDirty: true, shouldValidate: true })
+                                              calculatorNote = 'Se cargó también como Mano de Obra.'
                                             }
 
                                             toast.success(`"${svc.name}" — ${formatCurrency(price)}`, {
                                               description: [
                                                 customerIsWholesale && svc.wholesale_price ? 'Precio mayorista aplicado.' : null,
-                                                alsoSetLabor ? 'Se cargó también como Mano de Obra.' : null,
+                                                calculatorNote,
+                                                (guess.brand || guess.model || guess.deviceType)
+                                                  ? 'Tipo/marca/modelo sugeridos: revisalos antes de guardar.'
+                                                  : null,
                                               ].filter(Boolean).join(' ') || undefined,
                                             })
                                             setServiceSearchIndex(null)
@@ -1637,6 +1753,98 @@ export function RepairFormDialogV2({
               technicianName={technicians.find((tech) => tech.id === watchedTechnicianId)?.name}
               canViewCommission={user?.role === 'admin' || user?.role === 'super_admin'}
             />
+
+            {/* Adelanto al recibir: solo tiene sentido con un equipo. Con
+                varios, el formulario ya obliga a costos compartidos (ver
+                hasSharedRepairData en page.tsx), así que un solo adelanto
+                repartido entre reparaciones distintas sería ambiguo. */}
+            {mode === 'add' && fields.length === 1 && (
+              <Card className="shadow-lg border-2 border-emerald-200 dark:border-emerald-900/50 hover:border-emerald-400 dark:hover:border-emerald-700 transition-all duration-200 bg-gradient-to-br from-white to-emerald-50/20 dark:from-slate-900/50 dark:to-emerald-950/10">
+                <CardHeader className="pb-3 bg-gradient-to-r from-emerald-50/50 to-transparent dark:from-emerald-950/30 dark:to-transparent border-b border-emerald-100 dark:border-emerald-900/30">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 flex items-center justify-center shadow-lg">
+                      <DollarSign className="h-[18px] w-[18px] text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base font-bold text-emerald-800 dark:text-emerald-300">
+                        Adelanto <span className="font-normal text-muted-foreground">(opcional)</span>
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
+                        Si el cliente paga algo al dejar el equipo, se cobra al guardar
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="depositAmount" className="text-sm font-medium">Monto del adelanto</Label>
+                      <Input
+                        id="depositAmount"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        {...register('depositAmount', { valueAsNumber: true })}
+                        placeholder="0"
+                        disabled={isSubmitting}
+                      />
+                      {errors.depositAmount && (
+                        <p className="text-xs text-red-500">{errors.depositAmount.message}</p>
+                      )}
+                    </div>
+
+                    {(watch('depositAmount') ?? 0) > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Método de pago</Label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {PAYMENT_METHODS.filter((m) => m.id !== 'credit').map((m) => {
+                            const Icon = m.icon
+                            const isSelected = watch('depositMethod') === m.id
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => setValue('depositMethod', m.id as 'cash' | 'card' | 'transfer', { shouldDirty: true })}
+                                disabled={isSubmitting}
+                                className={cn(
+                                  'flex flex-col items-center gap-1 rounded-lg border-2 p-2 text-[11px] font-medium transition-all',
+                                  isSelected
+                                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                    : 'border-border hover:border-muted-foreground/40 hover:bg-muted/30 text-muted-foreground'
+                                )}
+                              >
+                                <Icon className="h-4 w-4" />
+                                {m.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {(watch('depositAmount') ?? 0) > 0 && PAYMENT_METHODS.find((m) => m.id === watch('depositMethod'))?.requiresRef && (
+                    <div className="space-y-2">
+                      <Label htmlFor="depositReference" className="text-sm font-medium">
+                        {watch('depositMethod') === 'card' ? 'N° de Autorización' : 'N° de Referencia'}
+                      </Label>
+                      <Input
+                        id="depositReference"
+                        {...register('depositReference')}
+                        placeholder={watch('depositMethod') === 'card' ? 'Últimos 4 dígitos' : 'Número de referencia'}
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  )}
+
+                  {(watch('depositAmount') ?? 0) > 0 && !watch('depositMethod') && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Elegí un método de pago para el adelanto.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Warranty Section */}
             <Card className="shadow-lg border-2 border-amber-200 dark:border-amber-900/50 hover:border-amber-400 dark:hover:border-amber-700 transition-all duration-200 bg-gradient-to-br from-white to-amber-50/20 dark:from-slate-900/50 dark:to-amber-950/10">

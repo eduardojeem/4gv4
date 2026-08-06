@@ -42,7 +42,7 @@ import { RepairDeleteDialog } from '@/components/dashboard/repairs/RepairDeleteD
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import { RepairSuccessDialog } from '@/components/dashboard/repairs/RepairSuccessDialog'
 import { RepairCardsView } from '@/components/dashboard/repairs/RepairCardsView'
-import { RepairDeliveryDialog } from '@/components/dashboard/repairs/RepairDeliveryDialog'
+import { RepairDeliveryDialog, type RepairDeliveryConfirmPayload } from '@/components/dashboard/repairs/RepairDeliveryDialog'
 import { RepairPaymentDialog, type RepairPaymentResult } from '@/components/dashboard/repairs/RepairPaymentDialog'
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
 import type { RepairFormData } from '@/schemas'
@@ -302,7 +302,10 @@ function RepairsPageContent() {
       toast.success(result.markDelivered ? `${baseMsg} y equipo entregado` : `${baseMsg} exitosamente`)
     } catch (err) {
       logger.error('Error registering payment', { error: err })
-      toast.error('Error al registrar el pago')
+      // Mostrar el motivo real (ej. "No hay caja abierta...") en vez de un
+      // genérico: si no, el guardrail nuevo del backend queda invisible y
+      // el cajero no sabe por qué se rechazó el cobro.
+      toast.error(err instanceof Error ? err.message : 'Error al registrar el pago')
       throw err
     }
   }, [refreshRepairs, selectedBranchId])
@@ -351,6 +354,31 @@ function RepairsPageContent() {
             images: Array.isArray(d.images) ? d.images : []
           }
           const created = await createRepair(payload)
+
+          // Adelanto al crear: solo aplica con un solo equipo (con varios,
+          // el bloqueo de arriba ya obliga a costos compartidos, así que
+          // repartir un adelanto entre reparaciones distintas sería
+          // ambiguo). No aborta la creación si falla el cobro — la
+          // reparación ya quedó guardada; se avisa aparte para cobrarlo
+          // después. Reusa el mismo endpoint ya blindado (revisa caja
+          // abierta, acumula el pago, deja nota) en vez de duplicar lógica.
+          if (created && data.devices.length === 1 && (data.depositAmount ?? 0) > 0 && data.depositMethod) {
+            try {
+              await handleQuickPayConfirm(created.id, {
+                method: data.depositMethod,
+                amount: data.depositAmount!,
+                reference: data.depositReference || undefined,
+                note: 'Adelanto registrado al recibir el equipo',
+              })
+            } catch {
+              // El motivo real (ej. "no hay caja abierta") ya se mostró en
+              // un toast desde handleQuickPayConfirm.
+              toast.warning(
+                `Reparación ${created.ticketNumber || ''} creada, pero no se pudo registrar el adelanto. Cobralo después desde Reparaciones.`
+              )
+            }
+          }
+
           return created
         })
 
@@ -490,7 +518,7 @@ function RepairsPageContent() {
       return false
     }
     return false
-  }, [dialogMode, selectedRepair, createRepair, updateRepair, technicianOptions])
+  }, [dialogMode, selectedRepair, createRepair, updateRepair, technicianOptions, handleQuickPayConfirm])
 
   const handleGlobalSearch = useCallback(({ query }: { query: string }) => {
     if (!query || query.length < 2) return []
@@ -833,6 +861,7 @@ function RepairsPageContent() {
               onStatusChange={async (id, status) => { await updateStatus(id, status) }}
               onEdit={handleEditRepair}
               onView={handleViewRepair}
+              onRequestDeliver={setDeliverTarget}
             />
           </div>
         ) : (
@@ -949,7 +978,24 @@ function RepairsPageContent() {
         open={!!deliverTarget}
         repair={deliverTarget}
         onOpenChange={(open) => !open && setDeliverTarget(null)}
-        onConfirm={async (id, outcome, note) => { await deliverRepair(id, outcome, note) }}
+        onConfirm={async (id, payload: RepairDeliveryConfirmPayload) => {
+          if (payload.payment && payload.payment.amount > 0) {
+            // Cobra y entrega en un solo paso, reusando el mismo endpoint de
+            // pago que "Cobrar Aquí" (soporta markDelivered + outcome).
+            await handleQuickPayConfirm(id, {
+              method: payload.payment.method,
+              amount: payload.payment.amount,
+              reference: payload.payment.reference,
+              interestRate: payload.payment.interestRate,
+              installments: payload.payment.installments,
+              markDelivered: true,
+              outcome: payload.outcome,
+              note: payload.note,
+            })
+          } else {
+            await deliverRepair(id, payload.outcome, payload.note)
+          }
+        }}
       />
 
       <RepairPaymentDialog

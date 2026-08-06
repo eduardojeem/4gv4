@@ -108,15 +108,26 @@ function SalesHistoryList({
 
     if (Array.isArray(repairs)) {
       repairs.forEach((repair: any) => {
+        const cost = (repair.final_cost ?? repair.estimated_cost) || 0
+        const statusLower = (repair.status || 'recibido').toLowerCase()
+        const isDelivered = statusLower === 'entregado' || Boolean(repair.delivered_at)
+        const isPaid = repair.payment_status === 'pagado' || (repair.paid_amount != null && repair.paid_amount >= cost && cost > 0)
+        const isPartialPaid = !isPaid && (repair.paid_amount ?? 0) > 0
+
         items.push({
           id: `repair-${repair.id}`,
           type: 'repair',
           date: repair.created_at || new Date().toISOString(),
-          title: `Reparación: ${repair.device_brand} ${repair.device_model}`,
+          title: `Reparación: ${repair.device_brand || ''} ${repair.device_model || ''}`.trim(),
           description: repair.problem_description || 'Sin descripción',
-          amount: (repair.final_cost ?? repair.estimated_cost) || 0,
-          status: repair.status || 'pending'
-        })
+          amount: cost,
+          status: statusLower,
+          ticketNumber: repair.ticket_number,
+          isDelivered,
+          isPaid,
+          isPartialPaid,
+          paidAmount: repair.paid_amount,
+        } as any)
       })
     }
 
@@ -152,25 +163,28 @@ function SalesHistoryList({
   const getRepairStatusLabel = (status: string) => {
     switch (status.toLowerCase()) {
       case 'entregado': return 'Entregado'
-      case 'listo': return 'Listo'
+      case 'listo': return 'Listo para Retiro'
       case 'cancelado': return 'Cancelado'
       case 'reparacion': return 'En Reparación'
       case 'diagnostico': return 'En Diagnóstico'
-      case 'pending': return 'Pendiente'
+      case 'pausado': return 'Pausado'
+      case 'recibido': return 'Recibido'
       default: return status.charAt(0).toUpperCase() + status.slice(1)
     }
   }
 
   const getRepairStatusBadgeStyles = (status: string) => {
     const s = status.toLowerCase()
-    if (s === 'entregado' || s === 'listo' || s === 'completed') {
-      return 'bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-300'
-    } else if (s === 'cancelado' || s === 'cancelled') {
-      return 'bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-300'
-    } else if (s === 'reparacion' || s === 'diagnostico' || s === 'in_progress') {
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300'
+    if (s === 'entregado') {
+      return 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300'
+    } else if (s === 'listo') {
+      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold animate-pulse'
+    } else if (s === 'cancelado') {
+      return 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300'
+    } else if (s === 'reparacion' || s === 'diagnostico') {
+      return 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300'
     } else {
-      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300'
+      return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
     }
   }
 
@@ -184,7 +198,7 @@ function SalesHistoryList({
       </div>
 
       <div className="space-y-3">
-        {visibleActivities.map((activity, index: number) => (
+        {visibleActivities.map((activity: any, index: number) => (
           <motion.div 
             key={activity.id}
             initial={{ opacity: 0, y: 20 }}
@@ -196,7 +210,7 @@ function SalesHistoryList({
               <div className={`p-2.5 rounded-xl text-white shadow-sm flex-shrink-0 bg-gradient-to-br ${
                 activity.type === 'sale' 
                   ? 'from-blue-500 to-indigo-600' 
-                  : 'from-orange-500 to-amber-600'
+                  : 'from-amber-500 to-orange-600'
               }`}>
                 {activity.type === 'sale' ? (
                   <CreditCard className="h-4.5 w-4.5" />
@@ -205,9 +219,16 @@ function SalesHistoryList({
                 )}
               </div>
               <div className="min-w-0">
-                <p className="font-semibold text-gray-900 dark:text-white truncate">
-                  {activity.title}
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-gray-900 dark:text-white truncate">
+                    {activity.title}
+                  </p>
+                  {activity.ticketNumber && (
+                    <Badge variant="outline" className="font-mono text-[10px] px-1.5 h-4">
+                      #{activity.ticketNumber}
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                   {activity.description}
                 </p>
@@ -225,7 +246,7 @@ function SalesHistoryList({
                 </div>
               </div>
             </div>
-            <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1.5 flex-shrink-0">
+            <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-center gap-1.5 flex-shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
               <p className="font-bold tabular-nums text-base text-foreground">
                 {formatCurrency(activity.amount)}
               </p>
@@ -241,12 +262,45 @@ function SalesHistoryList({
                   {activity.status === 'paid' ? 'Venta Pagada' : 'Pendiente'}
                 </Badge>
               ) : (
-                <Badge 
-                  className={`${getRepairStatusBadgeStyles(activity.status)} border-0 text-[10px] px-2 py-0.5`}
-                >
-                  <CheckCircle className="h-2.5 w-2.5 mr-1" />
-                  {getRepairStatusLabel(activity.status)}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                  {/* Badge 1: Estado de Reparación */}
+                  <Badge 
+                    className={`${getRepairStatusBadgeStyles(activity.status)} border-0 text-[10px] px-2 py-0.5`}
+                  >
+                    <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                    {getRepairStatusLabel(activity.status)}
+                  </Badge>
+
+                  {/* Badge 2: Retiro / Entrega */}
+                  {activity.isDelivered ? (
+                    <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-0 text-[10px] px-2 py-0.5">
+                      📦 Retirado
+                    </Badge>
+                  ) : activity.status === 'listo' ? (
+                    <Badge className="bg-emerald-500 text-white border-0 text-[10px] px-2 py-0.5 animate-pulse font-semibold">
+                      🏬 Listo p/ Retiro
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-0 text-[10px] px-2 py-0.5">
+                      🛠 En Taller
+                    </Badge>
+                  )}
+
+                  {/* Badge 3: Estado de Pago */}
+                  {activity.isPaid ? (
+                    <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-0 text-[10px] px-2 py-0.5">
+                      💳 Pagado
+                    </Badge>
+                  ) : activity.isPartialPaid ? (
+                    <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-0 text-[10px] px-2 py-0.5">
+                      ⚡ Parcial
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300 border-0 text-[10px] px-2 py-0.5">
+                      ⏳ Deuda Pendiente
+                    </Badge>
+                  )}
+                </div>
               )}
             </div>
           </motion.div>

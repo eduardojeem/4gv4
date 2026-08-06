@@ -55,6 +55,10 @@ export interface RepairPart {
   quantity: number
   supplier: string
   partNumber: string
+  /** Producto de inventario del que salió este repuesto. Sin esto no hay
+   *  forma de descontar stock ni de saber qué repuestos vinieron del
+   *  inventario vs. de un proveedor externo. */
+  productId?: string | null
 }
 
 export interface RepairImage {

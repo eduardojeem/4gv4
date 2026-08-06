@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { AfterSalesDashboard } from '@/components/dashboard/after-sales/AfterSalesDashboard'
 
 export const metadata: Metadata = {
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 }
 
 export default function AfterSalesPage() {
-  return <AfterSalesDashboard />
+  return (
+    <Suspense fallback={null}>
+      <AfterSalesDashboard />
+    </Suspense>
+  )
 }

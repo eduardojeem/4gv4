@@ -31,6 +31,7 @@ interface SupabaseRepairPart {
     quantity: number
     supplier?: string
     part_number?: string
+    product_id?: string | null
 }
 
 interface SupabaseRepairNote {
@@ -151,7 +152,8 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
             cost: p.unit_cost,
             quantity: p.quantity,
             supplier: p.supplier || '',
-            partNumber: p.part_number || ''
+            partNumber: p.part_number || '',
+            productId: p.product_id ?? null
         })),
         images: Array.isArray(r.images)
             ? r.images.map((img: SupabaseRepairImage) => ({

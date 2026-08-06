@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { startOfDay, format, parseISO, endOfDay, eachDayOfInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -18,6 +18,21 @@ export interface PosStats {
         count: number
         averageTicket: number
         pendingAmount: number
+    }
+    repairStats: {
+        totalAmount: number
+        deliveredAmount: number
+        deliveredCount: number
+        readyAmount: number
+        readyCount: number
+        activeCount: number
+    }
+    profitStats: {
+        totalCost: number
+        salesProfit: number
+        repairProfit: number
+        totalProfit: number
+        profitMargin: number
     }
 }
 
@@ -43,6 +58,21 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             count: 0,
             averageTicket: 0,
             pendingAmount: 0
+        },
+        repairStats: {
+            totalAmount: 0,
+            deliveredAmount: 0,
+            deliveredCount: 0,
+            readyAmount: 0,
+            readyCount: 0,
+            activeCount: 0
+        },
+        profitStats: {
+            totalCost: 0,
+            salesProfit: 0,
+            repairProfit: 0,
+            totalProfit: 0,
+            profitMargin: 0
         }
     })
     const [loading, setLoading] = useState(true)
@@ -60,7 +90,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             const from = startOfDay(dateRange.from).toISOString()
             const to = endOfDay(dateRange.to || dateRange.from).toISOString()
 
-            // 1. Fetch Sales Summary (No items, fast)
+            // 1. Fetch Sales Summary
             const salesPromise = supabase
                 .from('sales')
                 .select(`
@@ -73,7 +103,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 .lte('created_at', to)
                 .order('created_at', { ascending: false })
 
-            // 2. Fetch Credits (Fast)
+            // 2. Fetch Credits
             const creditsPromise = supabase
                 .from('customer_credits')
                 .select(`
@@ -85,7 +115,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 .gte('created_at', from)
                 .lte('created_at', to)
 
-            // 3. Fetch Recent Sales (Limit 10, with details)
+            // 3. Fetch Recent Sales
             const recentPromise = supabase
                 .from('sales')
                 .select(`
@@ -105,71 +135,152 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 .order('created_at', { ascending: false })
                 .limit(10)
 
-            // 4. Fetch Items for Top Products (Flat list, optimized)
-            // We use sale_items joined with sales to filter by date
-            const itemsPromise = supabase
-                .from('sale_items')
+            // 4. Fetch Repairs created in date range
+            const repairsCreatedPromise = supabase
+                .from('repairs')
                 .select(`
-                    quantity,
-                    subtotal,
-                    product:products(name),
-                    sale:sales!inner(created_at)
+                    id,
+                    created_at,
+                    delivered_at,
+                    status,
+                    final_cost,
+                    estimated_cost,
+                    paid_amount
                 `)
-                .gte('sale.created_at', from)
-                .lte('sale.created_at', to)
+                .gte('created_at', from)
+                .lte('created_at', to)
 
-            // Execute in parallel
+            // 5. Fetch Repairs delivered in date range
+            const repairsDeliveredPromise = supabase
+                .from('repairs')
+                .select(`
+                    id,
+                    created_at,
+                    delivered_at,
+                    status,
+                    final_cost,
+                    estimated_cost,
+                    paid_amount
+                `)
+                .gte('delivered_at', from)
+                .lte('delivered_at', to)
+
+            // 6. Fetch Ready Repairs
+            const repairsReadyPromise = supabase
+                .from('repairs')
+                .select(`
+                    id,
+                    final_cost,
+                    estimated_cost,
+                    paid_amount
+                `)
+                .eq('status', 'listo')
+
+            // 7. Fetch Active Repairs Count
+            const repairsActivePromise = supabase
+                .from('repairs')
+                .select('id', { count: 'exact', head: true })
+                .in('status', ['recibido', 'diagnostico', 'reparacion', 'en_reparacion', 'pausado'])
+
+            // Execute parallel primary queries
             const [
                 { data: salesData, error: salesError },
                 { data: creditData, error: creditError },
                 { data: recentData, error: recentError },
-                { data: itemsData, error: itemsError }
+                { data: repairsCreatedData, error: repairsCreatedError },
+                { data: repairsDeliveredData, error: repairsDeliveredError },
+                { data: repairsReadyData },
+                { count: repairsActiveCount }
             ] = await Promise.all([
                 salesPromise,
                 creditsPromise,
                 recentPromise,
-                itemsPromise
+                repairsCreatedPromise,
+                repairsDeliveredPromise,
+                repairsReadyPromise,
+                repairsActivePromise
             ])
 
             if (salesError) throw salesError
             if (recentError) console.error('Error fetching recent:', recentError)
-            if (itemsError) console.error('Error fetching items:', itemsError)
-            
+            if (creditError) console.error('Error fetching credits:', creditError)
+            if (repairsCreatedError) console.error('Error fetching repairs created:', repairsCreatedError)
+            if (repairsDeliveredError) console.error('Error fetching repairs delivered:', repairsDeliveredError)
+
+            // --- Secondary Query: Fetch items for the retrieved sale IDs ---
+            const saleIds = (salesData || []).map(s => s.id)
+            let itemsData: any[] = []
+
+            if (saleIds.length > 0) {
+                const { data: items, error: itemsError } = await supabase
+                    .from('sale_items')
+                    .select(`
+                        quantity,
+                        subtotal,
+                        sale_id,
+                        product:products(name, cost_price, price)
+                    `)
+                    .in('sale_id', saleIds)
+
+                if (itemsError) {
+                    console.error('Error fetching items:', itemsError)
+                } else {
+                    itemsData = items || []
+                }
+            }
+
             // --- Processing ---
 
-            // Calculate KPIs - Basic sales data first
             const totalSales = salesData?.reduce((acc, sale) => acc + (sale.total || 0), 0) || 0
             const totalTransactions = salesData?.length || 0
-            
-            if (creditError) console.error('Error fetching credits:', creditError)
+            const averageTicket = totalTransactions > 0 ? totalSales / totalTransactions : 0
 
             const credits = creditData || []
-            
-            // Calculate Credit Stats
             const creditTotalAmount = credits.reduce((sum, c) => sum + (c.principal || 0), 0)
             const creditCount = credits.length
             const creditAvgTicket = creditCount > 0 ? creditTotalAmount / creditCount : 0
-            
             const creditPendingAmount = credits
                 .filter(c => c.status === 'active' || c.status === 'defaulted')
                 .reduce((sum, c) => sum + (c.principal || 0), 0)
 
-            // Calculate KPIs using sales as source of truth
-            const averageTicket = totalTransactions > 0 ? totalSales / totalTransactions : 0
+            // Process Repairs Stats
+            type RepairRow = { id: string; final_cost?: number | null; estimated_cost?: number | null; paid_amount?: number | null; status?: string; delivered_at?: string | null }
+            const repairsCreated = (repairsCreatedData || []) as unknown as RepairRow[]
+            const repairTotalAmount = repairsCreated.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
 
-            // Process Top Products from Flat Items List
+            const repairsDelivered = (repairsDeliveredData || []) as unknown as RepairRow[]
+            const repairDeliveredAmount = repairsDelivered.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? r.paid_amount ?? 0) || 0), 0)
+            const repairDeliveredCount = repairsDelivered.length
+
+            const repairsReady = (repairsReadyData || []) as unknown as RepairRow[]
+            const repairReadyAmount = repairsReady.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
+            const repairReadyCount = repairsReady.length
+            const repairActiveCount = repairsActiveCount || 0
+
+            // Process Profit & Margin Stats
+            let totalCost = 0
             const productMap = new Map<string, { name: string; sales: number; revenue: number }>()
 
-            itemsData?.forEach((item: any) => {
+            itemsData.forEach((item: any) => {
                 const name = item.product?.name || 'Producto eliminado'
-                const current = productMap.get(name) || { name, sales: 0, revenue: 0 }
+                const costPrice = Number(item.product?.cost_price || 0)
+                const qty = Number(item.quantity || 0)
+                const subtotal = Number(item.subtotal || 0)
 
+                totalCost += costPrice * qty
+
+                const current = productMap.get(name) || { name, sales: 0, revenue: 0 }
                 productMap.set(name, {
                     name,
-                    sales: current.sales + (item.quantity || 0),
-                    revenue: current.revenue + (item.subtotal || 0)
+                    sales: current.sales + qty,
+                    revenue: current.revenue + subtotal
                 })
             })
+
+            const salesProfit = totalSales > totalCost ? totalSales - totalCost : 0
+            const repairProfit = repairDeliveredAmount
+            const totalProfit = salesProfit + repairProfit
+            const profitMargin = totalSales > 0 ? (salesProfit / totalSales) * 100 : 0
 
             const topProducts = Array.from(productMap.values())
                 .sort((a, b) => b.sales - a.sales)
@@ -185,7 +296,6 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
 
             const daysMap = new Map<string, { date: string; fullDate: string; sales: number; transactions: number }>()
 
-            // Initialize all days with 0
             daysInInterval.forEach(day => {
                 const key = format(day, 'dd/MM')
                 daysMap.set(key, {
@@ -196,7 +306,6 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 })
             })
 
-            // Fill with data
             salesData?.forEach((sale: any) => {
                 const d = parseISO(sale.created_at)
                 const key = format(d, 'dd/MM')
@@ -215,7 +324,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             salesData?.forEach((sale: any) => {
                 let method = sale.payment_method || 'Otros'
                 if (method === 'cash' || method === 'efectivo') method = 'Efectivo'
-                else if (method === 'card' || method === 'tarjeta') method = 'Tarjeta' // Removed 'credit' from here to separate it if it exists
+                else if (method === 'card' || method === 'tarjeta') method = 'Tarjeta'
                 else if (method === 'credit') method = 'Credito'
                 else if (method === 'transfer' || method === 'transferencia') method = 'Transferencia'
                 else method = method.charAt(0).toUpperCase() + method.slice(1)
@@ -245,8 +354,8 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             }))
 
             setStats({
-                totalSales: totalSales,
-                totalTransactions: totalTransactions,
+                totalSales,
+                totalTransactions,
                 averageTicket,
                 topProduct,
                 dailySales,
@@ -258,6 +367,21 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     count: creditCount,
                     averageTicket: creditAvgTicket,
                     pendingAmount: creditPendingAmount
+                },
+                repairStats: {
+                    totalAmount: repairTotalAmount,
+                    deliveredAmount: repairDeliveredAmount,
+                    deliveredCount: repairDeliveredCount,
+                    readyAmount: repairReadyAmount,
+                    readyCount: repairReadyCount,
+                    activeCount: repairActiveCount
+                },
+                profitStats: {
+                    totalCost,
+                    salesProfit,
+                    repairProfit,
+                    totalProfit,
+                    profitMargin
                 }
             })
 
@@ -275,4 +399,3 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
 
     return { stats, loading, error, refetch: fetchStats }
 }
-

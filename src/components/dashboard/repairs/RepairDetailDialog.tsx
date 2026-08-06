@@ -528,6 +528,18 @@ export function RepairDetailDialog({
                       "hover:bg-slate-100 dark:hover:bg-slate-900 border border-slate-200 dark:border-slate-800"
                     )}
                     onClick={async () => {
+                      // "Entregado" nunca se hace con un cambio de estado plano:
+                      // así no se preguntaba si funcionó ni se ofrecía cobrar,
+                      // y la reparación quedaba entregada (y hasta sin fecha de
+                      // garantía) en un solo click sin querer. Se redirige al
+                      // mismo flujo del botón "Entregar".
+                      if (nextStatus === 'entregado') {
+                        if (onDeliver) {
+                          onClose()
+                          onDeliver(repair)
+                        }
+                        return
+                      }
                       setIsUpdatingStatus(true)
                       try {
                         const success = await onStatusChange(repair.id, nextStatus)

@@ -177,7 +177,7 @@ function rewriteForbiddenResponse(
   return applyResponseCookies(NextResponse.rewrite(url), source)
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const legacyPublicRedirect = redirectLegacyPublicPath(request)
   if (legacyPublicRedirect) {
     return legacyPublicRedirect

@@ -94,10 +94,16 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
     const [optimisticCustomer, setOptimisticCustomer] = useState<Customer | null>(null)
     const debouncedSearch = useDebounce(searchValue, 300)
 
-    const refreshCustomers = useCallback(async () => {
+    // La búsqueda va al servidor, no filtra una lista fija en el navegador.
+    // Antes se traían los 200 clientes más recientes una sola vez y se
+    // filtraban acá: un cliente que no estuviera entre esos 200 (cualquiera
+    // con más de 200 clientes más nuevos que él) era imposible de encontrar
+    // sin importar qué se escribiera en el buscador.
+    const refreshCustomers = useCallback(async (term?: string) => {
         try {
             setIsLoading(true)
-            const response = await fetch('/api/repairs/customers', { cache: 'no-store' })
+            const query = term ? `?q=${encodeURIComponent(term)}` : ''
+            const response = await fetch(`/api/repairs/customers${query}`, { cache: 'no-store' })
             const payload = await response.json().catch(() => null) as { success?: boolean; data?: RepairCustomerRow[]; error?: string } | null
 
             if (!response.ok || !payload?.success) {
@@ -115,8 +121,8 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
     }, [])
 
     useEffect(() => {
-        void refreshCustomers()
-    }, [refreshCustomers])
+        void refreshCustomers(debouncedSearch)
+    }, [refreshCustomers, debouncedSearch])
 
     const selectedCustomer = useMemo(() => {
         const fromList = customers.find(c => c.id === value)
@@ -134,17 +140,11 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
         }
     }, [customers, initialCustomer, optimisticCustomer, value])
 
-    const filteredCustomers = useMemo(() => {
-        if (!debouncedSearch) return customers.slice(0, 50)
-        const lower = debouncedSearch.toLowerCase()
-        const digits = debouncedSearch.replace(/\D/g, '')
-        const normalize = (p?: string) => (p || '').replace(/\D/g, '')
-        return customers.filter(c =>
-            (c.name || '').toLowerCase().includes(lower) ||
-            normalize(c.phone).includes(digits) ||
-            (c.email || '').toLowerCase().includes(lower)
-        ).slice(0, 50)
-    }, [customers, debouncedSearch])
+    // `customers` ya viene filtrado del servidor (ver refreshCustomers):
+    // filtrar de nuevo acá era buscar dentro de una búsqueda ya hecha, con el
+    // riesgo de que un resultado real quedara afuera por una regla de texto
+    // ligeramente distinta a la del servidor.
+    const filteredCustomers = customers
 
     const recentCustomers = useMemo(() => {
         try {
@@ -229,13 +229,17 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                     <PopoverContent className="z-[70] w-[400px] p-0" align="start">
                         <div className="flex items-center justify-between px-3 py-2">
                             <div className="text-xs text-muted-foreground">
-                                {isLoading ? 'Cargando clientes...' : `${customers.length} clientes`}
+                                {isLoading
+                                    ? 'Buscando...'
+                                    : debouncedSearch
+                                        ? `${customers.length} resultado${customers.length === 1 ? '' : 's'}`
+                                        : `${customers.length} recientes`}
                             </div>
                             <div className="flex items-center gap-2">
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => void refreshCustomers()}
+                                    onClick={() => void refreshCustomers(debouncedSearch)}
                                     disabled={disabled || isLoading}
                                     className="h-8"
                                 >

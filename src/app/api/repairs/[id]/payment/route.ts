@@ -57,6 +57,43 @@ export async function POST(request: NextRequest, context: RouteParams) {
       )
     }
 
+    // Igual que el POS: sin caja abierta no se cobra (a crédito no aplica,
+    // no mueve caja). Antes esto era "best-effort": si no había caja
+    // abierta, el cobro se guardaba en la reparación igual y el movimiento
+    // de caja se perdía en silencio (solo un console.warn en el server),
+    // sin que nadie en el mostrador se enterara ni quedara rastro en el
+    // arqueo o el cierre Z.
+    let cashSessionId: string | null = null
+    if (!isCredit) {
+      const { data: openSessions, error: sessionsError } = await ctx.supabase
+        .from('cash_closures')
+        .select('id, register_id, branch_id')
+        .eq('organization_id', ctx.organizationId)
+        .eq('branch_id', ctx.branchId)
+        .is('date', null)
+        .order('created_at', { ascending: false })
+
+      if (sessionsError) throw sessionsError
+
+      const openSessionsList = (openSessions ?? []) as Array<{
+        id: string
+        register_id: string | null
+        branch_id: string | null
+      }>
+      const targetSession =
+        openSessionsList.find((session) => (session.register_id ?? '').toLowerCase() === 'principal') ??
+        openSessionsList[0] ??
+        null
+
+      if (!targetSession) {
+        return NextResponse.json(
+          { error: 'No hay una caja abierta en esta sucursal. Abrí caja antes de cobrar la reparación.' },
+          { status: 409 }
+        )
+      }
+      cashSessionId = targetSession.id
+    }
+
     // Estado actual del cobro: los pagos se ACUMULAN (antes `paid_amount` se
     // sobreescribía, así que un segundo pago parcial borraba el primero) y se
     // bloquea el cobro de una reparación ya saldada para evitar duplicados en
@@ -223,57 +260,35 @@ export async function POST(request: NextRequest, context: RouteParams) {
       )
     }
 
-    // Reflejar el cobro en la caja abierta de la organización (misma convención
-    // que el POS: se registran todos los métodos, etiquetados con
-    // payment_method). Sin esto, los cobros hechos desde la sección de
-    // reparaciones no aparecían en el arqueo ni en el cierre Z — solo los
-    // cobrados vía POS quedaban en caja. Best-effort: si no hay caja abierta,
-    // el pago queda registrado en la reparación igual.
-    // A crédito NO se toca caja: no entra efectivo, la deuda vive en créditos.
-    if (!isCredit) {
-      try {
-        const { data: openSessions } = await ctx.supabase
-          .from('cash_closures')
-          .select('id, register_id, branch_id')
-          .eq('organization_id', ctx.organizationId)
-          .eq('branch_id', ctx.branchId)
-          .is('date', null)
-          .order('created_at', { ascending: false })
+    // Reflejar el cobro en la caja que ya se confirmó abierta más arriba
+    // (misma convención que el POS: se registran todos los métodos,
+    // etiquetados con payment_method). A crédito no aplica: no entra
+    // efectivo, la deuda vive en créditos.
+    if (!isCredit && cashSessionId) {
+      const { error: cashMovementError } = await ctx.supabase
+        .from('cash_movements')
+        .insert({
+          session_id: cashSessionId,
+          type: 'cash_in',
+          amount,
+          reason: `Cobro reparación ${ticketLabel}`,
+          payment_method: method,
+          created_by: ctx.userId,
+          created_at: now,
+          organization_id: ctx.organizationId,
+          branch_id: ctx.branchId,
+        })
 
-        const sessions = (openSessions ?? []) as Array<{
-          id: string
-          register_id: string | null
-          branch_id: string | null
-        }>
-        const targetSession =
-          sessions.find((session) => (session.register_id ?? '').toLowerCase() === 'principal') ??
-          sessions[0] ??
-          null
-
-        if (targetSession) {
-          const { error: cashMovementError } = await ctx.supabase
-            .from('cash_movements')
-            .insert({
-              session_id: targetSession.id,
-              type: 'cash_in',
-              amount,
-              reason: `Cobro reparación ${ticketLabel}`,
-              payment_method: method,
-              created_by: ctx.userId,
-              created_at: now,
-              organization_id: ctx.organizationId,
-              branch_id: ctx.branchId,
-            })
-
-          if (cashMovementError) throw cashMovementError
-        } else {
-          console.warn('[repairs/payment] Cobro sin caja abierta; no se registró movimiento', {
-            repairId: id,
-            organizationId: ctx.organizationId,
-          })
-        }
-      } catch (cashError) {
-        console.warn('[repairs/payment] No se pudo registrar el cobro en caja:', cashError)
+      if (cashMovementError) {
+        // El cobro en la reparación ya se confirmó (arriba). No se revierte
+        // por un fallo acá (poco probable, ya se validó que la caja estaba
+        // abierta segundos antes) — se deja rastro en logs para reconciliar
+        // a mano en vez de devolver un 500 sobre un cobro que sí se guardó.
+        console.error('[repairs/payment] Cobro confirmado pero falló el movimiento de caja:', {
+          repairId: id,
+          organizationId: ctx.organizationId,
+          error: cashMovementError,
+        })
       }
     }
 

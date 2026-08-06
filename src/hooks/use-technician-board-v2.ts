@@ -6,7 +6,16 @@ import type { RepairFormData as PersistRepairFormData } from '@/contexts/Repairs
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
 
-export function useTechnicianBoardV2() {
+interface UseTechnicianBoardV2Options {
+    /**
+     * Soltar una tarjeta en la columna "Entregado" no la entrega directo:
+     * abre el mismo diálogo que el botón "Entregar" (pregunta resultado y
+     * ofrece cobrar) en vez de marcar entregado en silencio con el drag.
+     */
+    onRequestDeliver?: (repair: Repair) => void
+}
+
+export function useTechnicianBoardV2(options?: UseTechnicianBoardV2Options) {
     // Usar el contexto global para datos
     const {
         repairs: allRepairs,
@@ -88,6 +97,12 @@ export function useTechnicianBoardV2() {
 
         if (previousStatus === status) {
             setDraggedRepairId(null)
+            return
+        }
+
+        if (status === 'entregado') {
+            setDraggedRepairId(null)
+            options?.onRequestDeliver?.(repairToMove)
             return
         }
 

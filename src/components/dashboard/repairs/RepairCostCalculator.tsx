@@ -13,14 +13,14 @@
  */
 
 import React, { useMemo } from 'react'
-import { Calculator, DollarSign, Wrench, Package, Receipt, AlertTriangle, Percent, Sparkles } from 'lucide-react'
+import { Calculator, DollarSign, Wrench, Package, Receipt, AlertTriangle, Percent, Sparkles, Lock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Switch } from '@/components/ui/switch'
 import { formatCurrency } from '@/lib/currency'
+import { cn } from '@/lib/utils'
 import { calculateRepairTotal, type RepairCalculationInput } from '@/lib/pos-calculator'
 import { useTechnicianCompensation } from '@/hooks/use-technician-compensation'
 import { commissionableAmount } from '@/lib/technician/earnings'
@@ -34,6 +34,17 @@ interface RepairPart {
   cost: number
   quantity: number
 }
+
+/**
+ * Qué campo se deja fijo y cuál se deriva. Tres modos, no dos booleans
+ * independientes: con dos interruptores por separado se podían activar los
+ * dos a la vez y quedaba ambiguo cuál manda.
+ *
+ * - manual:       los tres campos son independientes (comportamiento original).
+ * - labor-from-final: se carga el costo final -> mano de obra = final - repuestos.
+ * - final-from-labor: se carga la mano de obra -> costo final = mano de obra + repuestos.
+ */
+export type CostCalculationMode = 'manual' | 'labor-from-final' | 'final-from-labor'
 
 interface RepairCostCalculatorProps {
   // Costos base
@@ -58,12 +69,11 @@ interface RepairCostCalculatorProps {
   // Validación
   error?: string
 
-  // Mano de obra automática: cuando está activo, laborCost se deriva como
-  // costo final - repuestos en vez de tipearse a mano. El cálculo en sí vive
-  // en el formulario padre (es quien controla laborCost); acá solo se
-  // muestra el estado y se deshabilita el campo mientras está activo.
-  autoLaborCost?: boolean
-  onAutoLaborCostChange?: (value: boolean) => void
+  // Qué campo se deriva automáticamente. El cálculo en sí vive en el
+  // formulario padre (es quien controla laborCost/finalCost); acá solo se
+  // muestra el modo activo y se deshabilita el campo que se deriva.
+  calculationMode?: CostCalculationMode
+  onCalculationModeChange?: (mode: CostCalculationMode) => void
 
   // Previsualización de comisión del técnico asignado. Requiere permiso
   // (compensación es dato sensible): si `canViewCommission` es false no se
@@ -82,8 +92,8 @@ export function RepairCostCalculator({
   taxRate = 10,
   pricesIncludeTax = true,
   disabled = false,
-  autoLaborCost = false,
-  onAutoLaborCostChange,
+  calculationMode = 'manual',
+  onCalculationModeChange,
   technicianId,
   technicianName,
   canViewCommission = false,
@@ -114,10 +124,13 @@ export function RepairCostCalculator({
   const costDifference = finalCost !== null ? finalCost - estimatedCost : 0
   const hasCostDifference = Math.abs(costDifference) > 0.01
 
-  // Con mano de obra automática, si lo que se cobra no alcanza a cubrir los
-  // repuestos el resultado sería negativo: se avisa en vez de guardarlo así.
+  const isLaborDerived = calculationMode === 'labor-from-final'
+  const isFinalDerived = calculationMode === 'final-from-labor'
+
+  // Si lo que se cobra no alcanza a cubrir los repuestos, la mano de obra
+  // derivada daría negativa: se avisa en vez de guardarlo así.
   const autoLaborWouldBeNegative =
-    autoLaborCost && finalCost !== null && finalCost - partsCost < 0
+    isLaborDerived && finalCost !== null && finalCost - partsCost < 0
 
   const compensationEnabled = canViewCommission && Boolean(technicianId)
   const { compensation, isLoading: isLoadingCompensation } = useTechnicianCompensation(
@@ -150,29 +163,60 @@ export function RepairCostCalculator({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 pt-6">
-        
+
+        {/* Selector de modo: qué campo se deriva y cuál se carga a mano.
+            Uno solo de los tres botones puede estar activo a la vez, así no
+            hay ambigüedad sobre quién manda cuando dos valores podrían
+            derivarse entre sí. */}
+        {onCalculationModeChange && (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" />
+              Cálculo automático
+            </Label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {(
+                [
+                  { mode: 'manual' as const, label: 'Manual', hint: 'Cargás los tres a mano' },
+                  { mode: 'labor-from-final' as const, label: 'Mano de obra = Total − Repuestos', hint: 'Cargás repuestos + total' },
+                  { mode: 'final-from-labor' as const, label: 'Total = Mano de obra + Repuestos', hint: 'Cargás repuestos + mano de obra' },
+                ]
+              ).map((option) => (
+                <button
+                  key={option.mode}
+                  type="button"
+                  onClick={() => onCalculationModeChange(option.mode)}
+                  disabled={disabled}
+                  className={cn(
+                    'rounded-lg border-2 p-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                    calculationMode === option.mode
+                      ? 'border-emerald-500 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/40'
+                      : 'border-transparent bg-muted/40 hover:bg-muted/70'
+                  )}
+                >
+                  <p className={cn(
+                    'text-xs font-semibold',
+                    calculationMode === option.mode ? 'text-emerald-800 dark:text-emerald-300' : 'text-foreground'
+                  )}>
+                    {option.label}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{option.hint}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Costos Base */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
+
           {/* Costo de Mano de Obra */}
           <div className="space-y-3 p-4 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/40 dark:to-blue-900/30 border-2 border-blue-200 dark:border-blue-900/50">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="text-sm font-semibold flex items-center gap-2 text-blue-900 dark:text-blue-300">
-                <Wrench className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                Costo de Mano de Obra
-              </Label>
-              {onAutoLaborCostChange && (
-                <div className="flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
-                  <Switch
-                    checked={autoLaborCost}
-                    onCheckedChange={onAutoLaborCostChange}
-                    disabled={disabled}
-                    aria-label="Calcular mano de obra automáticamente"
-                  />
-                </div>
-              )}
-            </div>
+            <Label className="text-sm font-semibold flex items-center gap-2 text-blue-900 dark:text-blue-300">
+              <Wrench className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              Costo de Mano de Obra
+              {isLaborDerived && <Lock className="h-3 w-3 text-blue-500 dark:text-blue-400" />}
+            </Label>
             <div className="relative">
               <DollarSign className="absolute left-3 top-3.5 h-5 w-5 text-blue-600 dark:text-blue-400" />
               <Input
@@ -183,10 +227,10 @@ export function RepairCostCalculator({
                 onChange={(e) => onLaborCostChange(parseFloat(e.target.value) || 0)}
                 placeholder="0.00"
                 className="pl-11 h-14 text-lg font-semibold border-blue-300 dark:border-blue-800 focus:border-blue-500 dark:focus:border-blue-600 bg-white dark:bg-slate-900 disabled:opacity-80"
-                disabled={disabled || autoLaborCost}
+                disabled={disabled || isLaborDerived}
               />
             </div>
-            {autoLaborCost && (
+            {isLaborDerived && (
               <p className="text-[11px] text-blue-700 dark:text-blue-400">
                 = Costo final − Repuestos. Se recalcula solo al cambiar cualquiera de los dos.
               </p>
@@ -198,7 +242,7 @@ export function RepairCostCalculator({
               </p>
             )}
           </div>
-          
+
           {/* Costo de Repuestos (Solo lectura) */}
           <div className="space-y-3 p-4 rounded-xl bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/40 dark:to-green-900/30 border-2 border-green-200 dark:border-green-900/50">
             <Label className="text-sm font-semibold flex items-center gap-2 text-green-900 dark:text-green-300">
@@ -271,8 +315,9 @@ export function RepairCostCalculator({
             <Label className="text-base font-semibold flex items-center gap-2 text-emerald-900 dark:text-emerald-300">
               <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               Costo Final de la Reparación
+              {isFinalDerived && <Lock className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />}
             </Label>
-            {finalCost !== null && (
+            {finalCost !== null && !isFinalDerived && (
               <button
                 type="button"
                 onClick={() => onFinalCostChange(null)}
@@ -283,7 +328,7 @@ export function RepairCostCalculator({
               </button>
             )}
           </div>
-          
+
           <div className="relative">
             <DollarSign className="absolute left-4 top-4 h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             <Input
@@ -296,17 +341,22 @@ export function RepairCostCalculator({
                 onFinalCostChange(value === '' ? null : parseFloat(value) || 0)
               }}
               placeholder={`${formatCurrency(estimatedCost)} (estimado)`}
-              className={`pl-14 h-16 text-xl font-bold border-2 ${
-                hasCostDifference 
-                  ? costDifference > 0 
-                    ? 'border-orange-400 dark:border-orange-700 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950/40 dark:to-orange-900/30 text-orange-900 dark:text-orange-200' 
+              className={`pl-14 h-16 text-xl font-bold border-2 disabled:opacity-80 ${
+                hasCostDifference
+                  ? costDifference > 0
+                    ? 'border-orange-400 dark:border-orange-700 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950/40 dark:to-orange-900/30 text-orange-900 dark:text-orange-200'
                     : 'border-green-400 dark:border-green-700 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950/40 dark:to-green-900/30 text-green-900 dark:text-green-200'
                   : 'border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900'
               } ${error ? 'border-red-500 dark:border-red-700' : ''}`}
-              disabled={disabled}
+              disabled={disabled || isFinalDerived}
             />
           </div>
-          
+          {isFinalDerived && (
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+              = Mano de obra + Repuestos. Se recalcula solo al cambiar cualquiera de los dos.
+            </p>
+          )}
+
           {/* Diferencia de Costo */}
           {hasCostDifference && finalCost !== null && (
             <div className={`flex items-center gap-3 text-sm p-4 rounded-xl border-2 shadow-md ${
@@ -339,24 +389,35 @@ export function RepairCostCalculator({
             </div>
           )}
           {commissionPreview !== null && (
-            <div className="flex items-center justify-between gap-3 p-4 rounded-xl border-2 border-violet-200 dark:border-violet-900/50 bg-gradient-to-r from-violet-50 to-violet-100/50 dark:from-violet-950/40 dark:to-violet-900/30 shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-violet-600 dark:bg-violet-700 flex items-center justify-center shrink-0">
-                  <Percent className="h-4 w-4 text-white" />
+            <div className="p-4 rounded-xl border-2 border-violet-200 dark:border-violet-900/50 bg-gradient-to-r from-violet-50 to-violet-100/50 dark:from-violet-950/40 dark:to-violet-900/30 shadow-md">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-violet-600 dark:bg-violet-700 flex items-center justify-center shrink-0">
+                    <Percent className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-violet-900 dark:text-violet-300">
+                      Comisión estimada{technicianName ? ` — ${technicianName}` : ''}
+                    </p>
+                    <p className="text-xs text-violet-700 dark:text-violet-400">
+                      {compensation.commission_rate}% sobre{' '}
+                      {compensation.commission_base === 'labor' ? 'mano de obra' : 'costo final'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-violet-900 dark:text-violet-300">
-                    Comisión estimada{technicianName ? ` — ${technicianName}` : ''}
-                  </p>
-                  <p className="text-xs text-violet-700 dark:text-violet-400">
-                    {compensation.commission_rate}% sobre{' '}
-                    {compensation.commission_base === 'labor' ? 'mano de obra' : 'costo final'}
-                  </p>
-                </div>
+                <span className="text-xl font-bold text-violet-900 dark:text-violet-200">
+                  {formatCurrency(commissionPreview)}
+                </span>
               </div>
-              <span className="text-xl font-bold text-violet-900 dark:text-violet-200">
-                {formatCurrency(commissionPreview)}
-              </span>
+              {/* La comisión recién se liquida cuando la reparación llega al
+                  estado configurado (`accrual_status`): mostrarla sin esta
+                  aclaración se podía leer como "ya ganado", incluso en una
+                  reparación que todavía ni se diagnosticó. */}
+              <p className="mt-2.5 pt-2.5 border-t border-violet-200/60 dark:border-violet-800/40 text-[11px] text-violet-700/80 dark:text-violet-400/80">
+                Se liquida recién cuando la reparación llegue a{' '}
+                <strong>{compensation.accrual_status === 'entregado' ? 'entregado' : 'lista o entregada'}</strong>
+                . Por ahora es solo una proyección.
+              </p>
             </div>
           )}
 

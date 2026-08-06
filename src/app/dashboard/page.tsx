@@ -27,6 +27,9 @@ import {
   ClipboardList,
   Store,
   Globe,
+  RotateCcw,
+  PackageCheck,
+  CheckCircle2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -185,6 +188,22 @@ export default function DashboardPage() {
     { title: 'Reparaciones', value: '—', icon: Wrench, tone: 'red', href: '/dashboard/repairs' },
   ])
 
+  const [repairStats, setRepairStats] = useState<{
+    todayCount: number
+    todayAmount: number
+    deliveredCount: number
+    deliveredAmount: number
+    readyCount: number
+    readyAmount: number
+  }>({
+    todayCount: 0,
+    todayAmount: 0,
+    deliveredCount: 0,
+    deliveredAmount: 0,
+    readyCount: 0,
+    readyAmount: 0,
+  })
+
   // Caja / Cash Register integration
   const { user } = useAuth()
   const {
@@ -195,27 +214,25 @@ export default function DashboardPage() {
     loading: registerLoading,
   } = useCashRegister()
 
-  const [activeRegisterId, setActiveRegisterId] = useState<string>('principal')
+  const [activeRegisterId, setActiveRegisterId] = useState<string>('')
   const [isOpenRegisterDialogOpen, setIsOpenRegisterDialogOpen] = useState(false)
   const [openingAmount, setOpeningAmount] = useState('')
   const [openingNote, setOpeningNote] = useState('')
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false)
   const [closingCountedAmount, setClosingCountedAmount] = useState('')
 
-  // Sync active register with localstorage on mount
+  // Sync active register with branch & localstorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('pos_active_register_id') ?? 'principal'
-      setActiveRegisterId(saved)
-    }
-  }, [])
+    if (typeof window === 'undefined') return
+    const storageKey = `pos_active_register_id:${selectedBranchId || 'unscoped'}`
+    const saved = localStorage.getItem(storageKey) || localStorage.getItem('pos_active_register_id') || 'principal'
+    setActiveRegisterId(saved)
+  }, [selectedBranchId])
 
   // Check open session
   useEffect(() => {
-    if (activeRegisterId) {
-      checkOpenSession(activeRegisterId)
-    }
-  }, [activeRegisterId, checkOpenSession])
+    checkOpenSession(activeRegisterId || undefined)
+  }, [activeRegisterId, selectedBranchId, checkOpenSession])
 
   const parsedOpeningAmount = useMemo(() => {
     const n = Number(openingAmount)
@@ -265,6 +282,9 @@ export default function DashboardPage() {
         { data: productsStock },
         { count: repairsActiveCount },
         { data: salesWeek },
+        { data: repairsTodayData },
+        { data: repairsDeliveredData },
+        { data: repairsReadyData },
       ] = await Promise.all([
         withBranchFilter(
           supabase.from('sales').select('total:total_amount,status,created_at')
@@ -292,7 +312,53 @@ export default function DashboardPage() {
             .gte('created_at', last7Days[0].toISOString()).in('status', [...COMPLETED_SALE_STATUSES]),
           selectedBranchId,
         ),
+        // Reparaciones ingresadas hoy
+        withBranchFilter(
+          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, created_at')
+            .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
+          selectedBranchId,
+        ),
+        // Reparaciones entregadas hoy
+        withBranchFilter(
+          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, delivered_at')
+            .or(`delivered_at.gte.${startOfDay.toISOString()},status.eq.entregado`),
+          selectedBranchId,
+        ),
+        // Reparaciones listas para retiro
+        withBranchFilter(
+          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount')
+            .eq('status', 'listo'),
+          selectedBranchId,
+        ),
       ])
+
+      type RepairItem = { final_cost?: number | null; estimated_cost?: number | null; paid_amount?: number | null; status?: string; delivered_at?: string | null; created_at?: string }
+
+      const todayList = (repairsTodayData || []) as unknown as RepairItem[]
+      const todayCount = todayList.length
+      const todayAmount = todayList.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
+
+      const deliveredRaw = (repairsDeliveredData || []) as unknown as RepairItem[]
+      const deliveredTodayList = deliveredRaw.filter(r => {
+        if (!r.delivered_at) return r.status === 'entregado'
+        const d = new Date(r.delivered_at)
+        return d >= startOfDay && d <= endOfDay
+      })
+      const deliveredCount = deliveredTodayList.length
+      const deliveredAmount = deliveredTodayList.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? r.paid_amount ?? 0) || 0), 0)
+
+      const readyList = (repairsReadyData || []) as unknown as RepairItem[]
+      const readyCount = readyList.length
+      const readyAmount = readyList.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
+
+      setRepairStats({
+        todayCount,
+        todayAmount,
+        deliveredCount,
+        deliveredAmount,
+        readyCount,
+        readyAmount,
+      })
 
       type SaleRow = { total: number; status: string; created_at: string }
       const salesRows = (salesToday || []) as unknown as SaleRow[]
@@ -418,6 +484,7 @@ export default function DashboardPage() {
   const quickActions = [
     { title: 'Nueva venta', icon: ShoppingCart, href: '/dashboard/pos', tone: 'indigo' as const },
     { title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs?new=true', tone: 'amber' as const },
+    { title: 'Nueva devolución', icon: RotateCcw, href: '/dashboard/after-sales?new=true', tone: 'violet' as const },
     { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers?new=true', tone: 'violet' as const },
     { title: 'Nuevo producto', icon: Package, href: '/dashboard/products?new=true', tone: 'emerald' as const },
     { title: 'Ver reportes', icon: BarChart3, href: '/dashboard/reports', tone: 'cyan' as const },
@@ -514,6 +581,16 @@ export default function DashboardPage() {
             </Link>
           </Button>
           <Button
+            asChild
+            size="sm"
+            className="gap-2 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
+          >
+            <Link href="/dashboard/after-sales?new=true">
+              <RotateCcw className="h-3.5 w-3.5" />
+              Nueva devolución
+            </Link>
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             className="gap-2"
@@ -541,6 +618,98 @@ export default function DashboardPage() {
         {stats.map((stat) => (
           <KpiCard key={stat.title} stat={stat} loading={loadingStats} />
         ))}
+      </section>
+
+      {/* Resumen Financiero de Reparaciones del Día */}
+      <section className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/90 via-orange-50/40 to-amber-50/50 p-5 shadow-sm dark:border-amber-900/40 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200/60 pb-3.5 dark:border-amber-900/40">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm dark:bg-amber-600">
+              <Wrench className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  Resumen Financiero de Reparaciones
+                </h2>
+                <Badge variant="outline" className="border-amber-300 bg-amber-100/80 text-amber-900 dark:border-amber-800 dark:bg-amber-900/50 dark:text-amber-200 text-[10px] font-bold">
+                  Hoy
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Montos por reparaciones ingresadas, equipos entregados y listos para retiro
+              </p>
+            </div>
+          </div>
+          <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 text-xs border-amber-300 bg-white/80 hover:bg-amber-100 dark:border-amber-800 dark:bg-slate-900 dark:hover:bg-amber-950/40">
+            <Link href="/dashboard/repairs">
+              Ver Taller
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </Button>
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          {/* Card 1: Monto por reparaciones ingresadas hoy */}
+          <div className="flex flex-col justify-between rounded-xl border border-white/80 bg-white/95 p-4 shadow-sm transition-all hover:shadow-md dark:border-white/10 dark:bg-[#0d1117]/90">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                  Monto Ingresado Hoy
+                </p>
+                <div className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">
+                  {loadingStats ? <Skeleton className="h-7 w-28" /> : formatCurrency(repairStats.todayAmount)}
+                </div>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                <Wrench className="h-5 w-5" />
+              </div>
+            </div>
+            <p className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+              <span className="font-bold text-slate-800 dark:text-slate-200">{repairStats.todayCount}</span> orden{repairStats.todayCount !== 1 ? 'es' : ''} ingresada{repairStats.todayCount !== 1 ? 's' : ''} hoy
+            </p>
+          </div>
+
+          {/* Card 2: Monto de reparaciones entregadas hoy */}
+          <div className="flex flex-col justify-between rounded-xl border border-white/80 bg-white/95 p-4 shadow-sm transition-all hover:shadow-md dark:border-white/10 dark:bg-[#0d1117]/90">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                  Entregadas Hoy
+                </p>
+                <div className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">
+                  {loadingStats ? <Skeleton className="h-7 w-28" /> : formatCurrency(repairStats.deliveredAmount)}
+                </div>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                <PackageCheck className="h-5 w-5" />
+              </div>
+            </div>
+            <p className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+              <span className="font-bold text-slate-800 dark:text-slate-200">{repairStats.deliveredCount}</span> equipo{repairStats.deliveredCount !== 1 ? 's' : ''} retirado{repairStats.deliveredCount !== 1 ? 's' : ''} hoy
+            </p>
+          </div>
+
+          {/* Card 3: Monto listo para retiro */}
+          <div className="flex flex-col justify-between rounded-xl border border-white/80 bg-white/95 p-4 shadow-sm transition-all hover:shadow-md dark:border-white/10 dark:bg-[#0d1117]/90">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">
+                  Lista p/ Retiro
+                </p>
+                <div className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">
+                  {loadingStats ? <Skeleton className="h-7 w-28" /> : formatCurrency(repairStats.readyAmount)}
+                </div>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+            </div>
+            <p className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+              <span className="font-bold text-slate-800 dark:text-slate-200">{repairStats.readyCount}</span> listo{repairStats.readyCount !== 1 ? 's' : ''} esperando retiro
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* Actions + Activity */}
@@ -622,6 +791,7 @@ export default function DashboardPage() {
           { href: '/dashboard/products', icon: Boxes, label: 'Inventario', sub: 'Catálogo y stock' },
           { href: '/dashboard/orders', icon: Receipt, label: 'Órdenes', sub: 'Historial y estado' },
           { href: '/dashboard/customers', icon: ClipboardList, label: 'Clientes', sub: 'CRM y contactos' },
+          { href: '/dashboard/after-sales', icon: RotateCcw, label: 'Posventa y Devoluciones', sub: 'Garantías y reclamos' },
           { href: '/marketplace', icon: Globe, label: 'Marketplace', sub: 'Explorar empresas y productos' },
           { href: orgSlug ? `/${orgSlug}/inicio` : '/marketplace/empresas', icon: Store, label: 'Mi tienda pública', sub: 'Ver cómo te ven los clientes' },
         ].map(({ href, icon: Icon, label, sub }) => (

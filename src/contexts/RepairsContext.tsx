@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
+import { logger } from '@/lib/logger'
 
 // ============================================================================
 // Types
@@ -22,6 +23,7 @@ type RepairPartFormInput = {
     quantity?: number
     supplier?: string
     partNumber?: string
+    productId?: string | null
 }
 type RepairNoteFormInput = {
     id?: string | number
@@ -109,22 +111,63 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     const supabase = useMemo(() => createClient(), [])
 
     const fetchRepairsWithCustomerFallback = useCallback(async () => {
-        const response = await fetch('/api/repairs?pageSize=100', {
-            headers: branchHeaders(selectedBranchId),
-            cache: 'no-store',
-        })
+        // La API topea pageSize en 100 y solo se pedía la página 1: todo lo
+        // que quedara después de esas 100 reparaciones más recientes quedaba
+        // invisible para siempre (ni con scroll, ni con los filtros, ni
+        // buscándola por nombre, porque el filtrado corre en memoria sobre lo
+        // que ya se cargó). El mismo problema que hubo con clientes, mismo
+        // arreglo: paginar hasta traer todo, con un techo de seguridad.
+        const PAGE_SIZE = 100
+        const MAX_PAGES = 20
+        const raw: unknown[] = []
+        let total = 0
 
-        const payload = await response.json().catch(() => null) as { repairs?: unknown[]; pagination?: { total: number }; error?: string } | null
+        for (let page = 1; page <= MAX_PAGES; page++) {
+            try {
+                const response = await fetch(`/api/repairs?page=${page}&pageSize=${PAGE_SIZE}`, {
+                    headers: branchHeaders(selectedBranchId),
+                    cache: 'no-store',
+                })
+                const payload = await response.json().catch(() => null) as {
+                    repairs?: unknown[]
+                    pagination?: { total?: number }
+                    error?: string
+                } | null
 
-        if (!response.ok) {
-            return {
-                data: [],
-                total: 0,
-                error: new Error(payload?.error || 'No se pudieron cargar las reparaciones'),
+                if (!response.ok) {
+                    if (page === 1) {
+                        return {
+                            data: [],
+                            total: 0,
+                            error: new Error(payload?.error || 'No se pudieron cargar las reparaciones'),
+                        }
+                    }
+                    logger.warn('Stopped paginating repairs after a failed page', { page, loaded: raw.length })
+                    break
+                }
+
+                const batch = payload?.repairs || []
+                raw.push(...batch)
+                total = payload?.pagination?.total ?? raw.length
+                if (batch.length < PAGE_SIZE || raw.length >= total) break
+            } catch (pageError) {
+                if (page === 1) throw pageError
+                // Páginas siguientes: se conserva lo ya cargado en vez de
+                // perder todo por un fallo puntual de red.
+                logger.warn('Stopped paginating repairs after a request error', {
+                    page,
+                    loaded: raw.length,
+                    error: pageError instanceof Error ? pageError.message : String(pageError),
+                })
+                break
             }
         }
 
-        return { data: payload?.repairs || [], total: payload?.pagination?.total ?? 0, error: null }
+        if (total > raw.length) {
+            logger.warn('Repair list truncated by page cap', { loaded: raw.length, total })
+        }
+
+        return { data: raw, total, error: null }
     }, [selectedBranchId])
 
     // Fetch all repairs
@@ -201,6 +244,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                         quantity: p.quantity,
                         supplier: p.supplier,
                         part_number: p.partNumber,
+                        product_id: p.productId || null,
                     })) ?? [],
                     notes: notes?.map((n) => ({
                         note_text: n.text,

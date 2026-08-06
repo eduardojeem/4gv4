@@ -32,6 +32,12 @@ interface RepairKanbanProps {
     onStatusChange: (id: string, status: RepairStatus) => Promise<void>
     onEdit: (repair: Repair) => void
     onView?: (repair: Repair) => void
+    /**
+     * Soltar una tarjeta en la columna "Entregado" no la entrega directo:
+     * abre el mismo diálogo que el botón "Entregar" (pregunta resultado y
+     * ofrece cobrar) para no marcar entregado en silencio arrastrando.
+     */
+    onRequestDeliver?: (repair: Repair) => void
 }
 
 const dropAnimation: DropAnimation = {
@@ -44,7 +50,7 @@ const dropAnimation: DropAnimation = {
     }),
 }
 
-export function RepairKanban({ repairs, onStatusChange, onEdit, onView }: RepairKanbanProps) {
+export function RepairKanban({ repairs, onStatusChange, onEdit, onView, onRequestDeliver }: RepairKanbanProps) {
     const [activeId, setActiveId] = useState<string | null>(null)
     const [kanbanOrder, setKanbanOrder] = useState<Record<RepairStatus, string[]>>(() => {
         const initial: Record<RepairStatus, string[]> = {
@@ -123,6 +129,16 @@ export function RepairKanban({ repairs, onStatusChange, onEdit, onView }: Repair
                     break
                 }
             }
+        }
+
+        if (newStatus === 'entregado') {
+            // No se entrega con un simple drag: se pregunta el resultado y se
+            // ofrece cobrar, igual que el botón "Entregar". La tarjeta no se
+            // mueve sola; se mueve de verdad cuando el diálogo confirma y
+            // llega el estado actualizado por props.
+            const draggedRepair = repairs.find(r => r.id === activeRepairId)
+            if (draggedRepair) onRequestDeliver?.(draggedRepair)
+            return
         }
 
         if (newStatus) {

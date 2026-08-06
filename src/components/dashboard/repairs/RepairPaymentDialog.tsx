@@ -14,16 +14,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import {
   Banknote,
   CreditCard,
   Smartphone,
-  CheckCircle2,
-  PackageX,
-  Wrench,
   Loader2,
   DollarSign,
   CalendarClock,
@@ -37,7 +33,8 @@ export interface RepairPaymentResult {
   method: QuickPayMethod
   amount: number
   reference?: string
-  markDelivered: boolean
+  /** Solo lo usa el flujo de entrega (RepairDeliveryDialog), que cobra y entrega en un paso. */
+  markDelivered?: boolean
   outcome?: RepairDeliveryOutcome
   note?: string
   /** Solo para method === 'credit'. */
@@ -52,24 +49,23 @@ interface RepairPaymentDialogProps {
   onConfirm: (repairId: string, result: RepairPaymentResult) => Promise<void>
 }
 
-const METHODS: { id: QuickPayMethod; label: string; icon: React.ElementType; requiresRef: boolean }[] = [
+// Se exportan para que RepairDeliveryDialog reuse el mismo selector de método
+// y de cuotas al cobrar en el momento de la entrega, en vez de duplicarlos.
+export const PAYMENT_METHODS: { id: QuickPayMethod; label: string; icon: React.ElementType; requiresRef: boolean }[] = [
   { id: 'cash',     label: 'Efectivo',       icon: Banknote,    requiresRef: false },
   { id: 'card',     label: 'Tarjeta',        icon: CreditCard,  requiresRef: true  },
   { id: 'transfer', label: 'Transferencia',  icon: Smartphone,  requiresRef: true  },
   { id: 'credit',   label: 'Crédito',        icon: CalendarClock, requiresRef: false },
 ]
 
-const FREQUENCIES: { id: CreditFrequency; label: string }[] = [
+export const CREDIT_FREQUENCIES: { id: CreditFrequency; label: string }[] = [
   { id: 'weekly',   label: 'Semanal'   },
   { id: 'biweekly', label: 'Quincenal' },
   { id: 'monthly',  label: 'Mensual'   },
 ]
 
-const OUTCOMES: { value: RepairDeliveryOutcome; label: string; icon: React.ElementType; cls: string }[] = [
-  { value: 'repaired',     label: 'Reparado',     icon: CheckCircle2, cls: 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' },
-  { value: 'withdrawn',    label: 'Retirado',     icon: PackageX,     cls: 'border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' },
-  { value: 'unrepairable', label: 'Sin reparar',  icon: Wrench,       cls: 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' },
-]
+const METHODS = PAYMENT_METHODS
+const FREQUENCIES = CREDIT_FREQUENCIES
 
 export function RepairPaymentDialog({
   open,
@@ -77,13 +73,15 @@ export function RepairPaymentDialog({
   onOpenChange,
   onConfirm,
 }: RepairPaymentDialogProps) {
-  const total = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
+  // Saldo real pendiente: si ya se cobró algo antes (a cuenta, o desde el
+  // POS), no tiene sentido sugerir el costo total de nuevo.
+  const totalDue = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
+  const alreadyPaid = repair?.paidAmount ?? 0
+  const balanceDue = Math.max(0, totalDue - alreadyPaid)
 
   const [method, setMethod] = useState<QuickPayMethod>('cash')
   const [amount, setAmount] = useState('')
   const [reference, setReference] = useState('')
-  const [markDelivered, setMarkDelivered] = useState(true)
-  const [outcome, setOutcome] = useState<RepairDeliveryOutcome>('repaired')
   const [note, setNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   // Términos de crédito (solo aplican con method === 'credit')
@@ -98,8 +96,6 @@ export function RepairPaymentDialog({
     setMethod('cash')
     setAmount('')
     setReference('')
-    setMarkDelivered(true)
-    setOutcome('repaired')
     setNote('')
     setInstallmentCount('3')
     setFrequency('monthly')
@@ -125,8 +121,6 @@ export function RepairPaymentDialog({
         method,
         amount: parsed,
         reference: reference.trim() || undefined,
-        markDelivered,
-        outcome: markDelivered ? outcome : undefined,
         note: note.trim() || undefined,
         ...(isCredit ? { interestRate: rate, installments: { count, frequency } } : {}),
       })
@@ -154,7 +148,7 @@ export function RepairPaymentDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-emerald-500" />
-            Cobrar Reparación
+            Registrar Pago a Cuenta
           </DialogTitle>
           <DialogDescription asChild>
             <div className="space-y-1 mt-1">
@@ -169,18 +163,28 @@ export function RepairPaymentDialog({
               <p className="text-xs text-muted-foreground">
                 {repair.brand} {repair.model} — {repair.issue}
               </p>
+              <p className="text-xs text-muted-foreground">
+                Cobro a cuenta: no marca el equipo como entregado. Para entregar, usá el botón &quot;Entregar&quot;.
+              </p>
             </div>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto px-1">
-          {/* Monto total destacado */}
+          {/* Saldo pendiente destacado */}
           <div className="flex items-center justify-between rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 px-4 py-3">
-            <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Total a cobrar</span>
+            <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
+              {alreadyPaid > 0 ? 'Saldo pendiente' : 'Total a cobrar'}
+            </span>
             <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-              {formatCurrency(total)}
+              {formatCurrency(balanceDue)}
             </span>
           </div>
+          {alreadyPaid > 0 && (
+            <p className="text-xs text-muted-foreground -mt-2">
+              Ya se registraron {formatCurrency(alreadyPaid)} de {formatCurrency(totalDue)}.
+            </p>
+          )}
 
           {/* Método de pago */}
           <div className="space-y-2">
@@ -218,16 +222,16 @@ export function RepairPaymentDialog({
               min={0}
               value={amount}
               onChange={e => setAmount(e.target.value)}
-              placeholder={total.toString()}
+              placeholder={balanceDue.toString()}
               className="text-lg font-semibold"
               disabled={isSubmitting}
             />
             <button
               type="button"
               className="text-xs text-primary underline-offset-2 hover:underline"
-              onClick={() => setAmount(total.toString())}
+              onClick={() => setAmount(balanceDue.toString())}
             >
-              Usar total exacto ({formatCurrency(total)})
+              Usar saldo pendiente ({formatCurrency(balanceDue)})
             </button>
           </div>
 
@@ -308,42 +312,6 @@ export function RepairPaymentDialog({
                 placeholder={method === 'card' ? 'Últimos 4 dígitos' : 'Número de referencia'}
                 disabled={isSubmitting}
               />
-            </div>
-          )}
-
-          {/* Toggle entregar */}
-          <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
-            <div>
-              <p className="text-sm font-medium">Entregar equipo ahora</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Marcar como entregado al confirmar</p>
-            </div>
-            <Switch
-              checked={markDelivered}
-              onCheckedChange={setMarkDelivered}
-              disabled={isSubmitting}
-            />
-          </div>
-
-          {/* Resultado de entrega */}
-          {markDelivered && (
-            <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-              <Label>Resultado de la reparación</Label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {OUTCOMES.map(({ value, label, icon: Icon, cls }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setOutcome(value)}
-                    className={cn(
-                      'flex flex-col items-center gap-1 rounded border-2 p-2 text-center text-[11px] font-medium transition-all',
-                      outcome === value ? cls : 'border-border bg-background text-muted-foreground hover:bg-muted/30'
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {label}
-                  </button>
-                ))}
-              </div>
             </div>
           )}
 

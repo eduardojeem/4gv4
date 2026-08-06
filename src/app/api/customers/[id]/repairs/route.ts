@@ -30,7 +30,7 @@ export async function GET(
 
     const { data: repairs, error } = await supabase
       .from('repairs')
-      .select('id, ticket_number, device_brand, device_model, status, final_cost, created_at')
+      .select('id, ticket_number, device_brand, device_model, problem_description, status, final_cost, estimated_cost, paid_amount, payment_status, delivered_at, created_at')
       .eq('customer_id', customerId)
       .eq('organization_id', organization.id)
       .order('created_at', { ascending: false })
