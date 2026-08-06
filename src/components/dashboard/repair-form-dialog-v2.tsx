@@ -1595,13 +1595,36 @@ export function RepairFormDialogV2({
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
                           {/* Número de item */}
                           <div className="md:col-span-12 flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-600 dark:to-orange-700 flex items-center justify-center text-xs font-bold text-white shadow-sm">
                                 {index + 1}
                               </div>
                               <span className="text-sm font-semibold text-orange-800 dark:text-orange-300">Repuesto {index + 1}</span>
+
+                              {watch(`parts.${index}.productId`) ? (
+                                <Badge variant="outline" className="bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800 text-[11px] gap-1">
+                                  <Package className="h-3 w-3 text-cyan-600 dark:text-cyan-400" />
+                                  Inventario Local
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setValue(`parts.${index}.productId`, undefined, { shouldDirty: true })
+                                      toast.info(`Repuesto "${watch(`parts.${index}.name`)}" desvinculado del inventario local`)
+                                    }}
+                                    className="ml-1 px-1 py-0.2 rounded hover:bg-red-100 dark:hover:bg-red-950 text-red-600 font-bold transition-colors"
+                                    title="Desvincular del inventario local (convertir en repuesto manual)"
+                                  >
+                                    ✕
+                                  </button>
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 text-[11px]">
+                                  ✏️ Repuesto Manual
+                                </Badge>
+                              )}
+
                               {total > 0 && (
-                                <Badge variant="secondary" className="ml-2 bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border-orange-300 dark:border-orange-800">
+                                <Badge variant="secondary" className="bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border-orange-300 dark:border-orange-800">
                                   Total: {formatCurrency(total)}
                                 </Badge>
                               )}
@@ -2181,6 +2204,31 @@ export function RepairFormDialogV2({
       onCustomerCreated={handleQuickCustomerCreated}
       onCustomerUpdated={handleQuickCustomerUpdated}
       customerToEdit={editingCustomer}
+    />
+
+    {/* Abrir caja, para poder registrar el adelanto */}
+    <OpenCashRegisterDialog
+      open={isOpenRegisterDialogOpen}
+      onOpenChange={setIsOpenRegisterDialogOpen}
+      amount={openingAmount}
+      onAmountChange={setOpeningAmount}
+      note={openingNote}
+      onNoteChange={setOpeningNote}
+      isSubmitting={isOpeningRegister}
+      onSubmit={async (amount, note) => {
+        setIsOpeningRegister(true)
+        try {
+          const opened = await cashRegister.openRegister('principal', amount, undefined, note)
+          if (opened) {
+            await refreshCajaStatus()
+            setIsOpenRegisterDialogOpen(false)
+            setOpeningAmount('')
+            setOpeningNote('')
+          }
+        } finally {
+          setIsOpeningRegister(false)
+        }
+      }}
     />
 
     {/* Inventory Product Selector Modal */}
