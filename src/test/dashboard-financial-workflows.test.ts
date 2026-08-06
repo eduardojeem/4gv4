@@ -27,6 +27,10 @@ const cashMovementEnumCastMigration = readFileSync(
   resolve(workspace, 'supabase/migrations/20260802193000_fix_cash_movement_enum_cast.sql'),
   'utf8'
 )
+const repairBalanceDueMigration = readFileSync(
+  resolve(workspace, 'supabase/migrations/20260805090000_charge_repair_balance_due.sql'),
+  'utf8'
+)
 
 describe('dashboard financial workflow contracts', () => {
   it.each([
@@ -241,5 +245,47 @@ describe('dashboard financial workflow contracts', () => {
     expect(posPage).toContain('onDiscountChange={setGeneralDiscount}')
     expect(posPage).toContain('payment_status')
     expect(checkout).toContain("repair.payment_status !== 'pagado'")
+  })
+
+  it('charges a linked repair its outstanding balance, not its gross cost', () => {
+    // Regression test: linking a repair that already has a deposit
+    // (repairs.paid_amount, collected via the repairs screen's "Cobrar
+    // Aquí" flow) used to bill the full final_cost/estimated_cost again in
+    // both the client total and the RPC's independently recomputed total —
+    // a real double charge. Both sides must now price it as the balance due.
+    const posPage = readFileSync(resolve(workspace, 'src/app/dashboard/pos/page.tsx'), 'utf8')
+    const checkout = readFileSync(
+      resolve(workspace, 'src/app/dashboard/pos/components/CheckoutModal.tsx'),
+      'utf8'
+    )
+    const repairCharge = readFileSync(
+      resolve(workspace, 'src/app/dashboard/pos/lib/repair-charge.ts'),
+      'utf8'
+    )
+
+    // Client: neither the unified cart totals nor the linked-repair cart
+    // item may price a repair from its gross cost alone anymore.
+    expect(posPage).not.toContain('repair.final_cost || repair.estimated_cost || 0')
+    expect(posPage).toContain('getRepairBalanceDue(repair)')
+    expect(checkout).toContain('getRepairBalanceDue(repair)')
+    expect(repairCharge).toContain('Math.max(0,')
+
+    // Server: repairs_subtotal (v2) subtracts paid_amount, and the
+    // REPAIR_ALREADY_PAID guard (v3) also catches a balance that's already
+    // fully covered, even without an explicit 'pagado' status.
+    expect(repairBalanceDueMigration).toContain('function public.process_pos_sale_atomic_v2')
+    expect(repairBalanceDueMigration).toContain('function public.process_pos_sale_atomic_v3')
+    expect(repairBalanceDueMigration).toContain(
+      'greatest(0, coalesce(repair.final_cost, repair.estimated_cost, 0) - coalesce(repair.paid_amount, 0))'
+    )
+    expect(repairBalanceDueMigration).toContain('REPAIR_ALREADY_PAID')
+    expect(repairBalanceDueMigration).toContain(
+      "coalesce(repair.final_cost, repair.estimated_cost, 0) - coalesce(repair.paid_amount, 0) <= 0"
+    )
+
+    // A 'parcial' repair is deliberately NOT added to the paid-blocklist:
+    // it should work end-to-end, charging only the remainder.
+    expect(repairBalanceDueMigration).toContain("in ('pagado', 'paid')")
+    expect(repairBalanceDueMigration).not.toContain("in ('pagado', 'paid', 'parcial')")
   })
 })

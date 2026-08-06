@@ -90,6 +90,7 @@ import { branchHeaders } from '@/lib/branches/client'
 import { buildQuickItemPayload, getQuickItemApiError } from './lib/quick-item'
 import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
 import { getMixedPaymentValidation } from './lib/payment-validation'
+import { getRepairBalanceDue } from './lib/repair-charge'
 
 const getErrorMessage = (e: unknown) => {
   if (!e) return 'Unknown error'
@@ -969,7 +970,9 @@ function POSPageContent() {
   const unifiedCalculations = useMemo(() => {
     // 1. Calculate Repair Costs
     const repairDetails = selectedRepairs.map(repair => {
-      const laborCost = repair.final_cost || repair.estimated_cost || 0
+      // Saldo pendiente: no volver a cobrar lo que ya se pagó como anticipo
+      // (p.ej. desde "Cobrar Aquí" en Reparaciones, que acumula paid_amount).
+      const laborCost = getRepairBalanceDue(repair)
       // Repairs in POS don't have separate parts cost in this context
       return calculateRepairTotal({
         laborCost,
@@ -1086,20 +1089,28 @@ function POSPageContent() {
 
   // Adapter for POSCart items
   const combinedCartItems = useMemo(() => {
-    const repairItems: CartItem[] = selectedRepairs.map(repair => ({
-      id: repair.id,
-      name: `Reparación: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
-      price: repair.final_cost || repair.estimated_cost || 0,
-      quantity: 1,
-      isService: true,
-      // Add required fields for CartItem type safety
-      stock: 0,
-      subtotal: repair.final_cost || repair.estimated_cost || 0,
-      category: 'service',
-      // Prevent wholesale discount application in SaleSummary by setting wholesalePrice = price
-      wholesalePrice: repair.final_cost || repair.estimated_cost || 0,
-      sku: 'SERVICE'
-    }))
+    const repairItems: CartItem[] = selectedRepairs.map(repair => {
+      // Saldo pendiente: idem unifiedCalculations, para que el precio mostrado
+      // en el carrito coincida con lo que realmente se cobra.
+      const balanceDue = getRepairBalanceDue(repair)
+      const hasPriorPayment = (repair.paid_amount || 0) > 0
+      return {
+        id: repair.id,
+        name: hasPriorPayment
+          ? `Reparación (saldo): ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`
+          : `Reparación: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
+        price: balanceDue,
+        quantity: 1,
+        isService: true,
+        // Add required fields for CartItem type safety
+        stock: 0,
+        subtotal: balanceDue,
+        category: 'service',
+        // Prevent wholesale discount application in SaleSummary by setting wholesalePrice = price
+        wholesalePrice: balanceDue,
+        sku: 'SERVICE'
+      }
+    })
 
     return [...cart, ...repairItems]
   }, [cart, selectedRepairs])

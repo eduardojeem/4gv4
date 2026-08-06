@@ -37,6 +37,7 @@ import { PromotionsSection } from './checkout/PromotionsSection'
 import type { Promotion } from '@/types/promotion'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { getMixedPaymentValidation } from '../lib/payment-validation'
+import { getRepairBalanceDue } from '../lib/repair-charge'
 
 import { useCheckout } from '../contexts/CheckoutContext'
 import { usePOSCustomer } from '../contexts/POSCustomerContext'
@@ -49,6 +50,7 @@ type CheckoutRepair = {
   created_at: string
   final_cost?: number | null
   estimated_cost?: number | null
+  paid_amount?: number | null
   notes?: string | null
   payment_status?: string | null
 }
@@ -355,10 +357,12 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                         </div>
                                         <div className="text-right shrink-0 ml-2">
                                            <div className="font-bold text-sm">
-                                              {formatCurrency(repair.final_cost || repair.estimated_cost || 0)}
+                                              {formatCurrency(getRepairBalanceDue(repair))}
                                            </div>
                                            <div className="text-[10px] text-muted-foreground">
-                                              {repair.final_cost ? 'Costo Final' : 'Estimado'}
+                                              {(repair.paid_amount || 0) > 0
+                                                 ? 'Saldo pendiente'
+                                                 : repair.final_cost ? 'Costo Final' : 'Estimado'}
                                            </div>
                                         </div>
                                      </div>
@@ -366,6 +370,11 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                      {/* Expanded Details (only if selected) */}
                                      {isSelected && (
                                         <div className="px-3 pb-3 pt-0 animate-in slide-in-from-top-1 duration-200">
+                                           {(repair.paid_amount || 0) > 0 && (
+                                              <div className="mt-1 mb-2 text-[11px] text-muted-foreground">
+                                                 Costo total {formatCurrency(repair.final_cost || repair.estimated_cost || 0)} · ya pagado {formatCurrency(repair.paid_amount || 0)}
+                                              </div>
+                                           )}
                                            {repair.notes && (
                                               <div className="mt-1 mb-2 text-xs bg-background/50 p-2 rounded border text-muted-foreground flex gap-2 items-start">
                                                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
