@@ -183,7 +183,6 @@ export const ServiceSchema = z.object({
 
 // Esquema para array de servicios
 export const ServicesSchema = z.array(ServiceSchema)
-  .min(1, 'Debe haber al menos 1 servicio')
   .max(10, 'Máximo 10 servicios permitidos')
 
 // Esquema para un testimonio individual

@@ -44,6 +44,7 @@ CREATE POLICY "Admins can manage website settings"
     );
 
 -- 4. Ensure default data exists for all required keys
+/*
 INSERT INTO public.website_settings (key, value)
 VALUES 
 ('company_info', '{
@@ -66,16 +67,7 @@ VALUES
   "satisfaction": "98%",
   "avgTime": "24-48h"
 }'::jsonb),
-('services', '[
-  {
-    "id": "screens",
-    "title": "Reparación de pantallas",
-    "description": "Reemplazo de pantallas rotas con repuestos originales y garantía",
-    "icon": "wrench",
-    "color": "blue",
-    "benefits": ["Repuestos originales", "Instalación en 1 hora"]
-  }
-]'::jsonb),
+('services', '[]'::jsonb),
 ('testimonials', '[]'::jsonb),
 ('maintenance_mode', '{
   "enabled": false,
@@ -83,7 +75,8 @@ VALUES
   "message": "Estamos realizando mejoras en nuestro sitio. Volveremos pronto.",
   "estimatedEnd": ""
 }'::jsonb)
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT DO NOTHING;
+*/
 
 -- 5. Trigger for updated_at
 CREATE OR REPLACE FUNCTION public.update_website_settings_updated_at()

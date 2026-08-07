@@ -133,8 +133,19 @@ export function ServicesPageClient({ services, companyName, whatsapp }: Services
 
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16 lg:px-8">
         <div className="space-y-14">
-          {categories.map((category) => {
-            const categoryServices = activeServices.filter(
+          {categories.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-16 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                <Wrench className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="mt-4 text-lg font-bold">Próximamente</h3>
+              <p className="mt-2 text-sm text-muted-foreground max-w-sm">
+                En este momento estamos actualizando nuestro catálogo de servicios. Por favor, revisá más tarde o contactanos directamente.
+              </p>
+            </div>
+          ) : (
+            categories.map((category) => {
+              const categoryServices = activeServices.filter(
               (service) => (service.category || 'General') === category
             )
 
@@ -261,7 +272,7 @@ export function ServicesPageClient({ services, companyName, whatsapp }: Services
                 </div>
               </section>
             )
-          })}
+          }))}
         </div>
       </div>
     </div>

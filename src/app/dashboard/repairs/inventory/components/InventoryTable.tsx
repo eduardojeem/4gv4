@@ -135,25 +135,13 @@ const InventoryRow = memo(({
         </Badge>
       </TableCell>
 
-      {/* Control de Stock Ajustable In-Line */}
-      <TableCell className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+      {/* Stock en Depósito */}
+      <TableCell className="py-3.5 px-4">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              disabled={stock <= 0}
-              onClick={() => onStockAdjust(product, -1)}
-              className="h-6 w-6 rounded-md hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/50 border-slate-200 dark:border-slate-700 transition-all shrink-0"
-              title="Disminuir stock en 1"
-            >
-              <Minus className="h-3 w-3" />
-            </Button>
-
             <span
               className={cn(
-                'font-bold text-sm min-w-[28px] text-center px-1 py-0.5 rounded-md transition-colors',
+                'font-extrabold text-sm px-2 py-0.5 rounded-md transition-colors font-mono',
                 isOutOfStock
                   ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40'
                   : isLowStock
@@ -161,19 +149,8 @@ const InventoryRow = memo(({
                   : 'text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-800/80'
               )}
             >
-              {stock}
+              {stock} u.
             </span>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => onStockAdjust(product, 1)}
-              className="h-6 w-6 rounded-md hover:bg-emerald-100 hover:text-emerald-600 dark:hover:bg-emerald-950/50 border-slate-200 dark:border-slate-700 transition-all shrink-0"
-              title="Aumentar stock en 1"
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
           </div>
 
           {/* Micro Barra de Nivel de Stock */}

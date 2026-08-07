@@ -198,10 +198,15 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
   const updateInventoryProduct = useCallback(async (id: string, productData: any) => {
     try {
       const result = await updateProduct(id, productData)
-      
+
       if (result.success) {
         toast.success("Producto actualizado exitosamente")
         await refreshData()
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('product-updated', { detail: { id, ...productData } }))
+          window.dispatchEvent(new Event('inventory-updated'))
+        }
       } else {
         throw new Error(result.error)
       }

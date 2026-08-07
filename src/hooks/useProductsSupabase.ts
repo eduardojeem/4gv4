@@ -1329,6 +1329,22 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     fetchProducts()
   }, [enabled, filters, sort, pagination, fetchProducts])
 
+  // Escuchar eventos de actualización global para sincronizar con /dashboard/repairs/inventory y /dashboard/products
+  useEffect(() => {
+    const handleSync = () => {
+      fetchProducts().catch(err => console.error('Error auto-syncing products:', err))
+      fetchDashboardStats().catch(err => console.error('Error auto-syncing stats:', err))
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('product-updated', handleSync)
+      window.addEventListener('inventory-updated', handleSync)
+      return () => {
+        window.removeEventListener('product-updated', handleSync)
+        window.removeEventListener('inventory-updated', handleSync)
+      }
+    }
+  }, [fetchProducts, fetchDashboardStats])
+
   // Memoizar valores calculados
   const memoizedValues = useMemo(() => ({
     products,

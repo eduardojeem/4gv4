@@ -1,5 +1,6 @@
 'use client'
 
+import React, { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -35,10 +36,14 @@ export function FeaturedProducts() {
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )
 
+  const [isMounted, setIsMounted] = useState(false)
+  useEffect(() => setIsMounted(true), [])
+
   const products = data ?? []
+  const effectiveIsLoading = !isMounted || isLoading
 
   // Nothing to sell yet → don't render an empty section.
-  if (!isLoading && (error || products.length === 0)) return null
+  if (!effectiveIsLoading && (error || products.length === 0)) return null
 
   return (
     <section id="productos" className="bg-background py-16 md:py-20">
@@ -64,7 +69,7 @@ export function FeaturedProducts() {
           </Button>
         </div>
 
-        {isLoading ? (
+        {effectiveIsLoading ? (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="aspect-[3/4] animate-pulse rounded-2xl border border-border/60 bg-muted/40" />
