@@ -44,7 +44,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import type { Product } from '@/types/product-unified'
-import { formatPrice } from '@/lib/utils'
+import { formatPrice, cn } from '@/lib/utils'
 
 export function ServicesTab() {
   const { services, loading, deleteItem, updateService } = useInventory()
@@ -202,47 +202,47 @@ export function ServicesTab() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
+        <CardContent className="pt-4">
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-950/60 shadow-sm overflow-hidden">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800">
                 <TableRow>
-                  <TableHead className="w-[30%]">Servicio</TableHead>
-                  <TableHead className="w-[20%] hidden md:table-cell">Descripción</TableHead>
-                  
+                  <TableHead className="w-[30%] font-bold text-slate-900 dark:text-slate-100 text-xs py-3">Servicio</TableHead>
+                  <TableHead className="w-[20%] hidden md:table-cell font-bold text-slate-900 dark:text-slate-100 text-xs py-3">Descripción</TableHead>
+
                   {/* Conditionally show columns based on viewMode */}
                   {(viewMode === 'all' || viewMode === 'retail') && (
-                    <TableHead>Precio Cliente</TableHead>
+                    <TableHead className="font-bold text-slate-900 dark:text-slate-100 text-xs py-3">Precio Cliente</TableHead>
                   )}
-                  
+
                   {(viewMode === 'all' || viewMode === 'wholesale') && (
-                    <TableHead>Precio Mayorista</TableHead>
+                    <TableHead className="font-bold text-slate-900 dark:text-slate-100 text-xs py-3">Precio Mayorista</TableHead>
                   )}
-                  
+
                   {viewMode === 'all' && (
                     <>
-                      <TableHead>Costo Base</TableHead>
-                      <TableHead>Visibilidad</TableHead>
-                      <TableHead className="text-right">Margen</TableHead>
+                      <TableHead className="font-bold text-slate-900 dark:text-slate-100 text-xs py-3">Costo Base</TableHead>
+                      <TableHead className="font-bold text-slate-900 dark:text-slate-100 text-xs py-3">Visibilidad Web</TableHead>
+                      <TableHead className="text-right font-bold text-slate-900 dark:text-slate-100 text-xs py-3">Margen %</TableHead>
                     </>
                   )}
-                  
-                  <TableHead className="text-right w-[100px]">Acciones</TableHead>
+
+                  <TableHead className="text-right w-[140px] font-bold text-slate-900 dark:text-slate-100 text-xs py-3">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={viewMode === 'all' ? 7 : 4} className="text-center py-8">
-                      <RefreshCw className="h-6 w-6 animate-spin mx-auto" />
+                    <TableCell colSpan={viewMode === 'all' ? 7 : 4} className="text-center py-12">
+                      <RefreshCw className="h-6 w-6 animate-spin mx-auto text-emerald-600 dark:text-emerald-400" />
                     </TableCell>
                   </TableRow>
                 ) : filteredServices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={viewMode === 'all' ? 7 : 4} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={viewMode === 'all' ? 7 : 4} className="text-center py-12 text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
-                        <Package className="h-12 w-12 opacity-50" />
-                        <p>No hay servicios registrados.</p>
+                        <Package className="h-12 w-12 opacity-40 text-emerald-500" />
+                        <p className="font-medium text-sm">No hay servicios registrados en este filtro.</p>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -250,77 +250,84 @@ export function ServicesTab() {
                   filteredServices.map((service) => {
                     const margin = (service.sale_price || 0) - (service.purchase_price || 0)
                     const marginPercent = service.sale_price ? (margin / service.sale_price) * 100 : 0
-                    
+
                     return (
-                      <TableRow key={service.id} className="hover:bg-muted/50 transition-colors">
-                        <TableCell className="font-medium">
-                          <div className="flex flex-col">
-                            <span>{service.name}</span>
-                            <span className="md:hidden text-xs text-muted-foreground truncate max-w-[200px]">
-                              {service.description}
-                            </span>
+                      <TableRow key={service.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-900/60 transition-colors border-b border-slate-100 dark:border-slate-800/80">
+                        <TableCell className="font-medium py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-200/50 dark:border-emerald-800/50">
+                              <Wrench className="h-4 w-4" />
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-semibold text-sm text-slate-900 dark:text-slate-100 truncate">{service.name}</span>
+                              <span className="md:hidden text-xs text-muted-foreground truncate max-w-[180px]">
+                                {service.description}
+                              </span>
+                            </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground hidden md:table-cell">
+                        <TableCell className="text-xs text-muted-foreground hidden md:table-cell py-3.5">
                           {service.description || "-"}
                         </TableCell>
-                        
+
                         {/* Retail Price Column */}
                         {(viewMode === 'all' || viewMode === 'retail') && (
-                          <TableCell>
-                            <span className="font-bold text-blue-600 dark:text-blue-400">
+                          <TableCell className="py-3.5">
+                            <span className="font-bold text-sm text-blue-600 dark:text-blue-400">
                               {formatPrice(service.sale_price || 0)}
                             </span>
                           </TableCell>
                         )}
-                        
+
                         {/* Wholesale Price Column */}
                         {(viewMode === 'all' || viewMode === 'wholesale') && (
-                          <TableCell>
-                            <span className="font-bold text-purple-600 dark:text-purple-400">
+                          <TableCell className="py-3.5">
+                            <span className="font-bold text-sm text-purple-600 dark:text-purple-400">
                               {service.wholesale_price ? formatPrice(service.wholesale_price) : '-'}
                             </span>
                           </TableCell>
                         )}
-                        
+
                         {/* Cost, Visibility & Margin Columns (Only in 'all' mode) */}
                         {viewMode === 'all' && (
                           <>
-                            <TableCell>
-                              <span className="text-sm text-muted-foreground">
+                            <TableCell className="py-3.5">
+                              <span className="text-xs text-muted-foreground font-mono">
                                 {formatPrice(service.purchase_price || 0)}
                               </span>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="py-3.5">
                               {getVisibilityBadge(service.visibility || 'public')}
                             </TableCell>
-                            <TableCell className="text-right">
-                              <Badge 
-                                className={`font-semibold ${
-                                  marginPercent >= 50 ? 'bg-green-500 hover:bg-green-600 text-white' :
+                            <TableCell className="text-right py-3.5">
+                              <Badge
+                                className={cn(
+                                  "font-semibold text-xs px-2 py-0.5 rounded-full shadow-sm",
+                                  marginPercent >= 50 ? 'bg-emerald-500 hover:bg-emerald-600 text-white' :
                                   marginPercent >= 30 ? 'bg-blue-500 hover:bg-blue-600 text-white' :
                                   marginPercent >= 15 ? 'bg-amber-500 hover:bg-amber-600 text-white' :
                                   'bg-red-500 hover:bg-red-600 text-white'
-                                }`}
+                                )}
                               >
                                 {marginPercent.toFixed(0)}%
                               </Badge>
                             </TableCell>
                           </>
                         )}
-                        
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
+
+                        <TableCell className="text-right py-3.5">
+                          <div className="flex justify-end gap-1">
                             <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => handleToggleWeb(service)}
                               disabled={togglingId === service.id}
-                              className={`h-8 w-8 ${
+                              className={cn(
+                                "h-8 w-8 rounded-lg transition-colors",
                                 (service.visibility || 'public') === 'public'
-                                  ? 'hover:bg-green-50 text-green-600 dark:hover:bg-green-950/20'
-                                  : 'hover:bg-gray-100 text-gray-400 dark:hover:bg-gray-800'
-                              }`}
+                                  ? 'hover:bg-emerald-50 text-emerald-600 dark:hover:bg-emerald-950/40'
+                                  : 'hover:bg-slate-100 text-slate-400 dark:hover:bg-slate-800'
+                              )}
                               title={
                                 (service.visibility || 'public') === 'public'
                                   ? 'Visible en la web — clic para ocultar'
@@ -328,39 +335,39 @@ export function ServicesTab() {
                               }
                             >
                               {togglingId === service.id ? (
-                                <RefreshCw className="h-4 w-4 animate-spin" />
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                               ) : (service.visibility || 'public') === 'public' ? (
-                                <Globe className="h-4 w-4" />
+                                <Globe className="h-3.5 w-3.5" />
                               ) : (
-                                <EyeOff className="h-4 w-4" />
+                                <EyeOff className="h-3.5 w-3.5" />
                               )}
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => handleView(service)}
-                              className="hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/20 h-8 w-8"
+                              className="hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/40 h-8 w-8 rounded-lg"
                               title="Ver detalles"
                             >
-                              <Eye className="h-4 w-4" />
+                              <Eye className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => handleEdit(service)}
-                              className="hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/20 h-8 w-8"
+                              className="hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/40 h-8 w-8 rounded-lg"
                               title="Editar"
                             >
-                              <Pencil className="h-4 w-4" />
+                              <Pencil className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20 h-8 w-8" 
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 h-8 w-8 rounded-lg"
                               onClick={() => handleDelete(service)}
                               title="Eliminar"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
                             </Button>
                           </div>
                         </TableCell>

@@ -109,7 +109,12 @@ export const Sidebar = memo(function Sidebar() {
         ])
         // Incluye agotados (stock 0): también requieren reposición.
         const lowStock = (lowStockData || []).filter(p => Number(p.stock_quantity ?? 0) <= Number(p.min_stock ?? 5)).length
-        setSidebarBadges({ repairs: repairs || 0, lowStock })
+        const nextRepairs = repairs || 0
+        // Devolver la misma referencia cuando no cambió nada deja que React
+        // no vuelva a renderizar el sidebar cada 5 minutos sin motivo real.
+        setSidebarBadges(prev =>
+          prev.repairs === nextRepairs && prev.lowStock === lowStock ? prev : { repairs: nextRepairs, lowStock }
+        )
       } catch { /* ignore errors */ }
     }
     fetchBadges()

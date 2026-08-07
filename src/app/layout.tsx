@@ -11,6 +11,7 @@ import { DEFAULT_SYSTEM_COLOR_SCHEME } from "@/lib/theme/color-schemes";
 import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from "@/lib/platform/branding";
 import "./globals.css";
 import { PredictivePrefetchInit } from "@/components/util/PredictivePrefetchInit";
+import { ThemeInitScript } from "@/components/util/ThemeInitScript";
 import { RegionalSettingsBoundary } from "@/components/providers/regional-settings-boundary";
 
 
@@ -50,23 +51,15 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning data-color-scheme={DEFAULT_SYSTEM_COLOR_SCHEME}>
       <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  const theme = localStorage.getItem('theme');
-                  const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  if (theme === 'dark' || (!theme && systemPrefersDark)) {
-                    document.documentElement.classList.add('dark');
-                  } else {
-                    document.documentElement.classList.add('light');
-                  }
-                } catch (e) {}
-              })()
-            `,
-          }}
-        />
+        {/* Script anti-flash de tema, inyectado vía useServerInsertedHTML
+            (ver ThemeInitScript) en vez de un <script>/<Script> JSX normal:
+            tanto el <script> crudo como next/script strategy="beforeInteractive"
+            disparan "Encountered a script tag while rendering React component"
+            en Next 16 + React 19 (warning conocido, reportado también contra
+            next-themes/shadcn/HeroUI). El script en sí funciona bien en SSR;
+            useServerInsertedHTML es el mecanismo soportado para inyectar HTML
+            directo al stream sin que React lo trate como un nodo a reconciliar. */}
+        <ThemeInitScript />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased theme-transition`}

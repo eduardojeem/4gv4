@@ -598,6 +598,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const nextUser = nextSession?.user
 
+        // Supabase refresca el token solo al volver a una pestaña (el SDK
+        // chequea visibilidad y refresca si corresponde), y eso dispara este
+        // mismo evento con event === 'TOKEN_REFRESHED'. Si sigue siendo el
+        // mismo usuario, no hay nada que recargar: antes esto pegaba a
+        // /api/auth/profile y armaba un `user` nuevo en cada cambio de
+        // pestaña, re-renderizando los 50+ componentes que leen useAuth()
+        // solo por eso. Se actualiza igual el token (session sí cambió de
+        // verdad), pero sin tocar perfil/rol/permisos, que no cambiaron.
+        if (event === 'TOKEN_REFRESHED' && nextUser && latestUserRef.current?.id === nextUser.id) {
+          setSession(nextSession)
+          return
+        }
+
         try {
           setSession(nextSession)
 
