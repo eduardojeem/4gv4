@@ -970,14 +970,9 @@ function POSPageContent() {
   const unifiedCalculations = useMemo(() => {
     // 1. Calculate Repair Costs
     //
-    // OJO: esto tiene que coincidir con lo que cobra el RPC
-    // process_pos_sale_atomic_v2 en el servidor, que recalcula el total de
-    // reparaciones de forma independiente a partir de repairs.final_cost /
-    // estimated_cost (NO resta paid_amount) y rechaza el pago si el monto
-    // pagado no calza exacto con ese total (PAYMENT_TOTAL_MISMATCH). Restar
-    // acá lo ya cobrado (p.ej. un adelanto por "Cobrar Aquí") rompería el
-    // checkout con esa reparación en vez de cobrar de menos. Mientras el RPC
-    // no soporte saldo parcial, esto se queda igual que antes: costo bruto.
+    // Cobra el saldo pendiente (getRepairBalanceDue), no el costo bruto: el
+    // RPC process_pos_sale_atomic_v2 en el servidor recalcula el total de la
+    // misma forma (resta paid_amount), así que ambos lados coinciden.
     const repairDetails = selectedRepairs.map(repair => {
       // Saldo pendiente: no volver a cobrar lo que ya se pagó como anticipo
       // (p.ej. desde "Cobrar Aquí" en Reparaciones, que acumula paid_amount).

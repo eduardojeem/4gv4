@@ -265,26 +265,19 @@ export function RepairDeliveryDialog({
               </div>
 
               {selected === 'repaired' && (
-                alreadyPaid > 0 ? (
-                  <p className="rounded-md border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
-                    No se puede cobrar por POS: ya hay {formatCurrency(alreadyPaid)} registrados en esta
-                    reparación y el POS cobraría el total de nuevo. Cobrá el saldo acá abajo.
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!repair.customer?.id) return
-                      handleClose()
-                      window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
-                    }}
-                    disabled={!repair.customer?.id}
-                    className="flex w-full items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-left text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <span>Cobrar por POS: cuenta como venta del día</span>
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                  </button>
-                )
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!repair.customer?.id) return
+                    handleClose()
+                    window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
+                  }}
+                  disabled={!repair.customer?.id}
+                  className="flex w-full items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-left text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span>Cobrar por POS: cuenta como venta del día</span>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                </button>
               )}
 
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
