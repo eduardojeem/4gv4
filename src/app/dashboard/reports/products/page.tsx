@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { motion  } from '../../../../components/ui/motion'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { useSubscriptionStatus, canExportReports } from '@/contexts/SubscriptionStatusContext'
 import {
   BarChart3,
@@ -63,8 +64,7 @@ export default function ProductReportsPage() {
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<any[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [pdfFeedback, setPdfFeedback] = useState<string | null>(null)
-  
+
   // Datos para gráficas
   const [salesTrendData, setSalesTrendData] = useState<any[]>([])
   const [categoryData, setCategoryData] = useState<any[]>([])
@@ -420,10 +420,13 @@ export default function ProductReportsPage() {
         doc.save(`${filename}.pdf`)
       }
 
+      const formatLabel = fileFormat === 'csv' ? 'CSV' : fileFormat === 'excel' ? 'Excel' : 'PDF'
+      toast.success(`Reporte de productos exportado en ${formatLabel}.`)
     } catch (error) {
       console.error('Error al exportar:', error)
-      setPdfFeedback('No se pudo generar el archivo. Intentá de nuevo.')
-      setTimeout(() => setPdfFeedback(null), 5000)
+      toast.error('No se pudo generar el archivo. Intentá de nuevo.', {
+        description: error instanceof Error ? error.message : undefined,
+      })
     } finally {
       setIsExporting(false)
     }
@@ -431,11 +434,6 @@ export default function ProductReportsPage() {
 
   return (
     <div className="min-h-screen">
-      {pdfFeedback && (
-        <div className="fixed bottom-4 right-4 z-50 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm shadow-lg max-w-sm">
-          {pdfFeedback}
-        </div>
-      )}
       {/* Header mejorado */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}

@@ -2,6 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { TabsContent } from '@/components/ui/tabs'
@@ -247,6 +248,11 @@ export function ReportsProductsTab({
           </div>
           <div className="flex justify-end mt-4">
             <Button variant="outline" onClick={() => {
+              if (visibleProducts.length === 0) {
+                toast.warning('No hay productos para exportar con los filtros actuales.')
+                return
+              }
+              try {
               const BOM = '\uFEFF'
               const headers = ['Rank', 'Producto', 'Categoría', 'Ventas', ...(canViewCost ? ['Ganancia'] : []), 'Cantidad', 'Participación %']
               const rows = visibleProducts.map((p, i) => [String(i + 1), p.name, p.category || '', String(p.sales), ...(canViewCost ? [String(p.profit)] : []), String(p.quantity), ((p.share || 0).toFixed(1))])
@@ -257,6 +263,12 @@ export function ReportsProductsTab({
               a.href = url
               a.download = `top-productos-${new Date().toISOString().slice(0, 10)}.csv`
               a.click(); window.URL.revokeObjectURL(url)
+              toast.success(`CSV con ${rows.length} producto${rows.length === 1 ? '' : 's'} descargado.`)
+              } catch (error) {
+                toast.error('No se pudo generar el CSV.', {
+                  description: error instanceof Error ? error.message : undefined,
+                })
+              }
             }}>Exportar Top (CSV)</Button>
           </div>
         </CardContent>

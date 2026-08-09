@@ -41,6 +41,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { toast } from 'sonner'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { Input } from '@/components/ui/input'
 import { chartColors } from '@/utils/chart-utils'
@@ -631,6 +632,7 @@ export default function ReportsPage() {
   const formatDelta = (value: number | null) => value === null ? 'N/A' : `${value > 0 ? '+' : ''}${value.toFixed(1)}%`
 
   const exportReport = (type: string) => {
+    try {
     const BOM = '\uFEFF'
     if (type === 'ventas') {
       const headers = ['Fecha','Ventas','Órdenes','Clientes']
@@ -642,6 +644,11 @@ export default function ReportsPage() {
       a.href = url
       a.download = `reporte-ventas-${new Date().toISOString().slice(0,10)}.csv`
       a.click(); window.URL.revokeObjectURL(url)
+      if (rows.length === 0) {
+        toast.warning('CSV descargado, pero no hay ventas en el período seleccionado.')
+      } else {
+        toast.success(`CSV de ventas descargado (${rows.length} fila${rows.length === 1 ? '' : 's'}).`)
+      }
     } else if (type === 'reparaciones') {
       const headers = ['Fecha','Cantidad']
       const rows = repairsTrend.map(d => [d.date, d.count])
@@ -652,6 +659,17 @@ export default function ReportsPage() {
       a.href = url
       a.download = `reporte-reparaciones-${new Date().toISOString().slice(0,10)}.csv`
       a.click(); window.URL.revokeObjectURL(url)
+      if (rows.length === 0) {
+        toast.warning('CSV descargado, pero no hay reparaciones en el período seleccionado.')
+      } else {
+        toast.success(`CSV de reparaciones descargado (${rows.length} fila${rows.length === 1 ? '' : 's'}).`)
+      }
+    }
+    } catch (error) {
+      logger.error('Error exporting CSV report', { type, error })
+      toast.error('No se pudo generar el CSV.', {
+        description: error instanceof Error ? error.message : undefined,
+      })
     }
   }
 
