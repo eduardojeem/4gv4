@@ -19,6 +19,17 @@ import { Tooltip } from 'recharts/es6/component/Tooltip'
 import { LineChart } from 'recharts/es6/chart/LineChart'
 import { Line } from 'recharts/es6/cartesian/Line'
 
+// Sanitiza una celda CSV: previene inyección de fórmulas y escapa comas/comillas/saltos.
+// (Misma lógica que csvCell en reports/page.tsx — este export no la traía y armaba
+// las filas con join(',') crudo, así que un nombre de producto con coma corría las
+// columnas, y uno que empezara con =/+/-/@ podía ejecutarse como fórmula en Excel.)
+function csvCell(value: unknown): string {
+  let text = value === null || value === undefined ? '' : String(value)
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`
+  if (/[",\n\r]/.test(text)) text = `"${text.replace(/"/g, '""')}"`
+  return text
+}
+
 type ProductData = {
   id?: string
   name: string
@@ -239,7 +250,7 @@ export function ReportsProductsTab({
               const BOM = '\uFEFF'
               const headers = ['Rank', 'Producto', 'Categoría', 'Ventas', ...(canViewCost ? ['Ganancia'] : []), 'Cantidad', 'Participación %']
               const rows = visibleProducts.map((p, i) => [String(i + 1), p.name, p.category || '', String(p.sales), ...(canViewCost ? [String(p.profit)] : []), String(p.quantity), ((p.share || 0).toFixed(1))])
-              const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+              const csv = [headers.join(','), ...rows.map(r => r.map(csvCell).join(','))].join('\n')
               const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' })
               const url = window.URL.createObjectURL(blob)
               const a = document.createElement('a')

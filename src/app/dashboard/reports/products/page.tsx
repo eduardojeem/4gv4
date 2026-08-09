@@ -44,6 +44,9 @@ import { createClient } from '@/lib/supabase/client'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
 import { cn } from '@/lib/utils'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
 
 // Datos mock eliminados
 
@@ -53,6 +56,10 @@ export default function ProductReportsPage() {
   const reportBrand = organizationName || 'Mi Negocio'
   const supabase = useMemo(() => createClient(), [])
   const canViewCost = useCanViewCost()
+  // Sin esto, esta página mezclaba ventas y stock de todas las sucursales
+  // sin avisar — a diferencia de /dashboard/reports (la página principal),
+  // que sí respeta la sucursal seleccionada en todas sus consultas.
+  const { selectedBranchId } = useBranch()
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<any[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -79,7 +86,7 @@ export default function ProductReportsPage() {
       setLoading(true)
       setErrorMsg(null)
       try {
-        const { data: productsData, error: productsError } = await supabase
+        const { data: productsRaw, error: productsError } = await supabase
           .from('products')
           .select(`
             *,
@@ -89,16 +96,34 @@ export default function ProductReportsPage() {
 
         if (productsError) throw productsError
 
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('sale_items')
-          .select(`
-            product_id,
-            quantity,
-            unit_price,
-            subtotal,
-            product:products(name, category:categories(name), sale_price, purchase_price),
-            sale:sales!inner(created_at, status)
-          `)
+        // El catálogo de productos es compartido entre sucursales (misma
+        // convención que /dashboard/products): no se filtra la fila, se le
+        // pisa stock_quantity con el stock real de la sucursal elegida.
+        const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+          supabase as unknown as BranchInventoryClient,
+          selectedBranchId,
+          (productsRaw ?? []).map((p: { id: string }) => p.id)
+        )
+        const productsData = applyBranchInventoryToProducts(
+          (productsRaw ?? []) as Array<{ id: string; stock_quantity?: number | null; [key: string]: unknown }>,
+          stockMap,
+          branchScoped
+        )
+
+        const { data: itemsData, error: itemsError } = await withBranchFilter(
+          supabase
+            .from('sale_items')
+            .select(`
+              product_id,
+              quantity,
+              unit_price,
+              subtotal,
+              product:products(name, category:categories(name), sale_price, purchase_price),
+              sale:sales!inner(created_at, status, branch_id)
+            `),
+          selectedBranchId,
+          'sale.branch_id'
+        )
 
         if (itemsError) throw itemsError
 
@@ -201,7 +226,7 @@ export default function ProductReportsPage() {
       }
     }
     fetchData()
-  }, [supabase, dateRange])
+  }, [supabase, dateRange, selectedBranchId])
 
   // Filtrar datos basado en los filtros seleccionados
   const filteredData = useMemo(() => {

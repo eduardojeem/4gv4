@@ -451,12 +451,17 @@ export default function ReportsPage() {
         let totalCost = 0
         let totalLabor = 0
         let totalParts = 0
+        let costedCount = 0
         let tatSumDays = 0
         let tatCount = 0
 
         safeRepairs.forEach((r: any) => {
-          const baseDate = r.received_at || r.created_at
-          const dateKey = baseDate ? toLocalDateKey(baseDate) : null
+          // Se agrupa por created_at, el mismo campo que filtra la consulta
+          // de arriba (gte/lte dateRange). Antes se agrupaba por
+          // received_at cuando existía, y como esa fecha puede caer fuera
+          // del rango elegido, el gráfico de tendencia mostraba barras en
+          // fechas que el usuario nunca seleccionó.
+          const dateKey = r.created_at ? toLocalDateKey(r.created_at) : null
           if (dateKey) trendMap[dateKey] = (trendMap[dateKey] || 0) + 1
 
           const st = r.status || 'desconocido'
@@ -468,6 +473,11 @@ export default function ReportsPage() {
           totalCost += fc
           totalLabor += lc
           totalParts += pc
+          // Solo cuenta para el promedio de costo si ya tiene costo cargado:
+          // si no, dividir por el total de reparaciones (incluidas las que
+          // todavía están en diagnóstico/reparación, sin cotizar) hundía el
+          // promedio artificialmente.
+          if (fc > 0 || lc > 0 || pc > 0) costedCount += 1
 
           if (r.status === 'entregado' && r.received_at && r.completed_at) {
             completed += 1
@@ -497,9 +507,9 @@ export default function ReportsPage() {
 
         const totalRepairs = safeRepairs.length
         const completionRate = totalRepairs > 0 ? (completed / totalRepairs) * 100 : 0
-        const avgCost = totalRepairs > 0 ? totalCost / totalRepairs : 0
-        const avgLabor = totalRepairs > 0 ? totalLabor / totalRepairs : 0
-        const avgParts = totalRepairs > 0 ? totalParts / totalRepairs : 0
+        const avgCost = costedCount > 0 ? totalCost / costedCount : 0
+        const avgLabor = costedCount > 0 ? totalLabor / costedCount : 0
+        const avgParts = costedCount > 0 ? totalParts / costedCount : 0
         const avgTATDays = tatCount > 0 ? tatSumDays / tatCount : 0
         setRepairsMetrics({ total: totalRepairs, completionRate, avgCost, avgTATDays, avgLabor, avgParts })
 
@@ -510,6 +520,15 @@ export default function ReportsPage() {
         let overallProfit = 0
 
         safeSaleItems.forEach((item: any) => {
+          // safeSaleItems se trae con el rango ampliado (unión con
+          // categoryDateRange, que tiene su propio selector de fecha
+          // independiente) para que el gráfico de categorías pueda cubrir
+          // su propia ventana. Acá hay que volver a acotar al dateRange
+          // principal: si no, "Top Productos" y "Ganancia Estimada" traían
+          // ventas de fuera del período que el usuario eligió arriba.
+          const itemCreated = item?.sale?.created_at ? new Date(item.sale.created_at) : null
+          if (!itemCreated || itemCreated < dateRange.from || itemCreated > dateRange.to) return
+
           const pid = item.product_id || item.product?.id
           const productName = item.product?.name || 'Desconocido'
           const categoryName = item.product?.category?.name || 'Sin categoría'
@@ -1075,7 +1094,13 @@ export default function ReportsPage() {
                   <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                     {retentionRate.toFixed(0)}%
                   </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Tasa de Retención</p>
+                  {/* No es retención real (eso compararía contra un período
+                      anterior): es qué % de los clientes que compraron en
+                      ESTE período volvieron a comprar más de una vez dentro
+                      del mismo período. El nombre anterior ("Tasa de
+                      Retención") prometía algo distinto de lo que calcula. */}
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Compradores Recurrentes</p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500">2+ compras en el período</p>
                 </div>
                 <div className="rounded-lg border border-gray-200 p-4 text-center dark:border-slate-800">
                   <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">
