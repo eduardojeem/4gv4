@@ -2,23 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth } from '@/lib/api/withAdminAuth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { WebsiteSettingKey } from '@/types/website-settings'
-import { validateSetting } from '@/lib/validation/website-settings'
+import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-settings'
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
-
-const VALID_KEYS: WebsiteSettingKey[] = [
-  'company_info',
-  'hero_stats',
-  'hero_content',
-  'offers_section',
-  'services',
-  'testimonials',
-  'maintenance_mode',
-  'process_steps',
-  'process_flows',
-  'checkout',
-]
 
 // Rate limiting: Máximo 10 actualizaciones por minuto por usuario
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
@@ -58,7 +44,7 @@ async function handler(
     const { key } = await context.params
 
     // Validar key
-    if (!VALID_KEYS.includes(key as WebsiteSettingKey)) {
+    if (!isWebsiteSettingKey(key)) {
       console.warn('Invalid setting key attempted', { key, userId: context.user.id })
       return NextResponse.json(
         { success: false, error: 'Invalid setting key' },
@@ -184,6 +170,7 @@ async function handler(
     // Registrar actualización en audit_log
     try {
       await supabase.from('audit_log').insert({
+        organization_id: orgId,
         user_id: context.user.id,
         action: 'update_website_setting',
         resource: 'website_settings',

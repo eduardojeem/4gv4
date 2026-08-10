@@ -157,8 +157,7 @@ export function useAdminWebsiteSettings() {
 
   const { data, error, isLoading } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, fetcher)
 
-  // Optimistic update helper
-  const updateSetting = async <K extends keyof WebsiteSettings>(key: K, value: WebsiteSettings[K]) => {
+  const updateSettings = async (values: Partial<WebsiteSettings>) => {
     const previous = data
 
     try {
@@ -167,13 +166,13 @@ export function useAdminWebsiteSettings() {
       // Optimistically update cache
       await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, (current?: WebsiteSettings) => {
         if (!current) return current ?? null
-        return { ...current, [key]: value } as WebsiteSettings
+        return { ...current, ...values } as WebsiteSettings
       }, false)
 
-      const res = await fetch(`${ADMIN_WEBSITE_SETTINGS_CACHE_KEY}/${key}`, {
+      const res = await fetch(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value })
+        body: JSON.stringify({ values })
       })
 
       const body = await res.json().catch(() => ({}))
@@ -182,10 +181,10 @@ export function useAdminWebsiteSettings() {
         throw new Error(msg)
       }
 
-      const persistedValue = body?.data ?? value
+      const persistedValues = body?.data ?? values
       await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, (current?: WebsiteSettings) => {
         if (!current) return current ?? null
-        return { ...current, [key]: persistedValue } as WebsiteSettings
+        return { ...current, ...persistedValues } as WebsiteSettings
       }, false)
 
       // Revalidate to ensure server truth
@@ -200,6 +199,9 @@ export function useAdminWebsiteSettings() {
       setIsSaving(false)
     }
   }
+
+  const updateSetting = async <K extends keyof WebsiteSettings>(key: K, value: WebsiteSettings[K]) =>
+    updateSettings({ [key]: value } as Pick<WebsiteSettings, K>)
 
   const initializeMissingSettings = async () => {
     try {
@@ -255,6 +257,7 @@ export function useAdminWebsiteSettings() {
     isSaving,
     isInitializing,
     updateSetting,
+    updateSettings,
     initializeMissingSettings,
     refetch: () => mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
   }

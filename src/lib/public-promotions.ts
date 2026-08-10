@@ -33,6 +33,25 @@ export function isPromotionActive(promotion: PublicPromotion, now = new Date()) 
   return true
 }
 
+export function buildPublicOfferCandidateFilter(promotions: PublicPromotion[], now = new Date()) {
+  const activeAutomaticPromotions = promotions
+    .filter((promotion) => promotion.public_mode === 'automatic')
+    .filter((promotion) => promotion.type === 'percentage' && isPromotionActive(promotion, now))
+
+  const productIds = Array.from(new Set(
+    activeAutomaticPromotions.flatMap((promotion) => promotion.applicable_products ?? []),
+  ))
+  const categoryIds = Array.from(new Set(
+    activeAutomaticPromotions.flatMap((promotion) => promotion.applicable_categories ?? []),
+  ))
+  const filters = ['has_offer.eq.true']
+
+  if (productIds.length > 0) filters.push(`id.in.(${productIds.join(',')})`)
+  if (categoryIds.length > 0) filters.push(`category_id.in.(${categoryIds.join(',')})`)
+
+  return filters.join(',')
+}
+
 function appliesToLine(promotion: PublicPromotion, line: Pick<PublicPromotionCartLine, 'product_id' | 'category_id'>) {
   const hasProducts = Boolean(promotion.applicable_products?.length)
   const hasCategories = Boolean(promotion.applicable_categories?.length)

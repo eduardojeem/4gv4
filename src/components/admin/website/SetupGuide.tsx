@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { 
   CheckCircle2, Circle, Compass, ChevronDown, ChevronUp, Sparkles,
-  Building2, Tag, Briefcase, Footprints, ShoppingCart, Info
+  Building2, Tag, Briefcase, Footprints, ShoppingCart, Info, GalleryHorizontalEnd
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -44,6 +44,7 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
   const company = settings.company_info
   const heroContent = settings.hero_content
   const offers = settings.offers_section
+  const carousel = settings.promotional_carousel
   const services = settings.services || []
   const processSteps = settings.process_steps || []
   const processFlows = settings.process_flows || []
@@ -66,6 +67,14 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
       description: 'Título principal y estadísticas clave',
       isCompleted: !!(heroContent?.title?.trim() && heroContent.title !== 'Reparación profesional para tu equipo'),
       tip: 'Personaliza el mensaje principal del banner para llamar la atención del cliente al entrar al sitio.'
+    },
+    {
+      id: 'carousel',
+      label: 'Carrusel',
+      icon: GalleryHorizontalEnd,
+      description: 'Mensajes promocionales destacados',
+      isCompleted: carousel?.enabled !== true || carousel.slides.some(slide => slide.active),
+      tip: 'El carrusel es opcional. Si lo activás, publicá al menos una diapositiva completa.'
     },
     {
       id: 'offers',
@@ -124,24 +133,12 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
   const allCompleted = completedCount === steps.length
 
   return (
-    <Card className={cn(
-      "relative overflow-hidden transition-all duration-300 shadow-md border bg-gradient-to-br",
-      allCompleted 
-        ? "from-emerald-50/40 via-background to-background border-emerald-200 dark:from-emerald-950/10 dark:border-emerald-900/30" 
-        : "from-blue-50/40 via-background to-background border-border dark:from-blue-950/5"
-    )}>
-      {/* Decorative glow */}
-      {allCompleted && (
-        <div className="absolute right-0 top-0 -mr-16 -mt-16 w-32 h-32 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
-      )}
-      {!allCompleted && (
-        <div className="absolute right-0 top-0 -mr-16 -mt-16 w-32 h-32 rounded-full bg-blue-500/10 blur-2xl pointer-events-none" />
-      )}
+    <Card className={cn('overflow-hidden border shadow-none', allCompleted && 'border-emerald-300 dark:border-emerald-900')}>
 
       <CardHeader className="p-5 pb-3 flex flex-row items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-md border",
             allCompleted 
               ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800" 
               : "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800"
@@ -164,7 +161,7 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
             </CardDescription>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={toggleCollapse} className="h-8 w-8 text-muted-foreground rounded-lg">
+        <Button variant="ghost" size="icon" onClick={toggleCollapse} aria-label={isCollapsed ? 'Expandir guía' : 'Contraer guía'} className="h-8 w-8 text-muted-foreground">
           {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
         </Button>
       </CardHeader>
@@ -199,7 +196,7 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
                   type="button"
                   onClick={() => onTabChange(step.id)}
                   className={cn(
-                    "text-left flex items-start gap-3 rounded-xl border p-3 transition-all hover:scale-[1.01] active:scale-[0.99]",
+                    "text-left flex items-start gap-3 rounded-md border p-3 transition-colors",
                     isActive 
                       ? "border-primary bg-primary/5 ring-1 ring-primary/10 shadow-sm" 
                       : "border-border bg-card hover:bg-muted/30 hover:border-muted-foreground/30",
@@ -234,7 +231,7 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
 
         {/* Selected tab tip card */}
         {!isCollapsed && (
-          <div className="flex items-start gap-2.5 rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
+          <div className="flex items-start gap-2.5 rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
             <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
             <div className="space-y-0.5">
               <span className="font-semibold text-foreground">

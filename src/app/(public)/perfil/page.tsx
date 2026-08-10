@@ -1,9 +1,26 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { fetchCustomerActivity } from './actions'
 import { headers } from 'next/headers'
 import { getPublicTenantPathPrefix } from '@/lib/public/tenant-path'
 import { ProfileClient } from './profile-client'
+import { EMPTY_CUSTOMER_ACCOUNT_SUMMARY } from '@/lib/profile/customer-account-summary'
+import type { ProfileOrder } from '@/components/profile/profile-orders'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
+
+interface RecentProfileRepair {
+  id: string
+  ticket_number?: string | null
+  brand?: string
+  model?: string
+  status: string
+  created_at: string
+  final_cost?: number | null
+  estimated_cost?: number | null
+  paid_amount?: number | null
+  payment_status?: string | null
+}
 
 export default async function CustomerProfilePage() {
   const supabase = await createClient()
@@ -22,48 +39,40 @@ export default async function CustomerProfilePage() {
 
   let organizationId: string | null = null
   if (tenantSlug) {
-    const { data: organization } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('slug', tenantSlug)
-      .maybeSingle()
-    organizationId = organization?.id ?? null
+    const organization = await resolvePublicOrganizationBySlug(tenantSlug, createAdminSupabase())
+    if (!organization) notFound()
+    organizationId = organization.id
   }
 
   const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', user.id).single()
 
-  let customerQuery = supabase.from('customers').select('id').eq('profile_id', user.id)
-  if (organizationId) customerQuery = customerQuery.eq('organization_id', organizationId)
-  const { data: customerData } = await customerQuery
+  let stats = { totalRepairs: 0, activeRepairs: 0, readyRepairs: 0, deliveredRepairs: 0, totalOrders: 0 }
+  let accountSummary = EMPTY_CUSTOMER_ACCOUNT_SUMMARY
+  let recentRepairs: RecentProfileRepair[] = []
+  let recentOrders: ProfileOrder[] = []
 
-  const customerIds = (customerData || []).map(r => r.id).filter((id): id is string => typeof id === 'string' && id.length > 0)
-
-  let stats = { totalRepairs: 0, activeRepairs: 0, completedRepairs: 0, totalOrders: 0 }
-  let recentRepairs: any[] = []
-  let recentOrders: any[] = []
-
-  if (customerIds.length > 0) {
-    const { repairs, history, orders, ordersCount } = await fetchCustomerActivity(customerIds, organizationId)
-    const activeStatuses = ['recibido', 'diagnostico', 'reparacion', 'listo', 'pausado']
-    stats = {
-      totalRepairs: repairs?.length || 0,
-      activeRepairs: repairs?.filter(r => activeStatuses.includes(r.status)).length || 0,
-      completedRepairs: repairs?.filter(r => r.status === 'entregado').length || 0,
-      totalOrders: ordersCount || 0,
-    }
-    recentRepairs = history || []
-    recentOrders = (orders || []).map((order: any) => ({
-      id: order.id,
-      order_number: order.order_number,
-      status: order.status,
-      payment_status: order.payment_status,
-      fulfillment_type: order.fulfillment_type,
-      customer_address: order.customer_address,
-      estimated_delivery_date: order.estimated_delivery_date,
-      total: Number(order.total || 0),
-      created_at: order.created_at,
-    }))
+  const activity = await fetchCustomerActivity(organizationId)
+  const { history, orders, ordersCount } = activity
+  accountSummary = activity.accountSummary
+  stats = {
+    totalRepairs: accountSummary.equipment.total,
+    activeRepairs: accountSummary.equipment.active,
+    readyRepairs: accountSummary.equipment.ready,
+    deliveredRepairs: accountSummary.equipment.delivered,
+    totalOrders: ordersCount || 0,
   }
+  recentRepairs = history || []
+  recentOrders = (orders || []).map((order) => ({
+    id: order.id,
+    order_number: order.order_number,
+    status: order.status,
+    payment_status: order.payment_status,
+    fulfillment_type: order.fulfillment_type,
+    customer_address: order.customer_address,
+    estimated_delivery_date: order.estimated_delivery_date,
+    total: Number(order.total || 0),
+    created_at: order.created_at,
+  }))
 
   const profileData = {
     name: profileRow?.full_name || user.user_metadata?.full_name || '',
@@ -81,6 +90,7 @@ export default async function CustomerProfilePage() {
       userId={user.id} 
       tenantPrefix={tenantPrefix} 
       stats={stats}
+      accountSummary={accountSummary}
       recentRepairs={recentRepairs}
       recentOrders={recentOrders}
     />

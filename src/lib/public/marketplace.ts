@@ -1,6 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import type { PublicProduct } from '@/types/public'
-import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
+import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapPublicPromotion } from '@/lib/public-promotions'
 
 export type MarketplaceOrganization = {
   id: string
@@ -19,6 +19,7 @@ export type MarketplaceProduct = PublicProduct & {
   organization_id: string
   organization_name: string
   organization_slug: string
+  created_at?: string | null
 }
 
 export type MarketplaceCategory = {
@@ -62,6 +63,7 @@ type ProductRow = {
   images: string[] | null
   unit_measure: string | null
   barcode: string | null
+  created_at?: string | null
   categories?: { id: string; name: string } | { id: string; name: string }[] | null
   organizations?: { id: string; name: string; slug: string } | { id: string; name: string; slug: string }[] | null
 }
@@ -270,7 +272,12 @@ export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]>
   })
 
   return Array.from(categories.values())
-    .map(({ organizationIds, ...category }) => category)
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      product_count: category.product_count,
+      organization_count: category.organization_count,
+    }))
     .sort((a, b) => b.product_count - a.product_count)
 }
 
@@ -328,7 +335,11 @@ export async function getMarketplaceBrands(limit = 50): Promise<MarketplaceBrand
   })
 
   return Array.from(brands.values())
-    .map(({ organizationIds, nameCounts, ...brand }) => brand)
+    .map((brand) => ({
+      name: brand.name,
+      product_count: brand.product_count,
+      organization_count: brand.organization_count,
+    }))
     .sort((a, b) => b.product_count - a.product_count)
     .slice(0, limit)
 }
@@ -386,19 +397,6 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
     return []
   }
 
-  const { data, error } = await supabase
-    .from('products')
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)')
-    .eq('organization_id', organization.id)
-    .eq('is_active', true)
-    .eq('visibility', 'public')
-    .eq('has_offer', true)
-    .order('featured', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(50)
-
-  if (error || !data) return []
-
   const { data: promotionRows } = await supabase
     .from('promotions')
     .select('*')
@@ -407,6 +405,21 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
     .eq('is_active', true)
 
   const automaticPromotions = (promotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
+  const offerCandidateFilter = buildPublicOfferCandidateFilter(automaticPromotions)
+
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, created_at, categories(id, name)')
+    .eq('organization_id', organization.id)
+    .eq('is_active', true)
+    .eq('visibility', 'public')
+    .or(offerCandidateFilter)
+    .order('featured', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (error || !data) return []
+
   const rows = data as unknown as ProductRow[]
 
   return rows
@@ -428,7 +441,8 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
         organization_id: organization.id,
         organization_name: organization.name,
         organization_slug: organization.slug,
+        created_at: product.created_at ?? null,
       }
     })
-    .filter((p) => p.has_offer && p.offer_price != null && p.offer_price < p.sale_price)
+    .filter((product) => Boolean(product.has_offer && product.offer_price && product.offer_price < product.sale_price))
 }

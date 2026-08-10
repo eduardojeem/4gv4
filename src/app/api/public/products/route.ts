@@ -5,7 +5,7 @@ import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
 import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
-import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
+import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapPublicPromotion } from '@/lib/public-promotions'
 import { parsePublicProductsQuery } from '@/lib/public/products-query'
 
 // Sanitize search input to prevent PostgREST injection
@@ -52,10 +52,18 @@ export async function GET(request: NextRequest) {
       organizationId: organization.id,
     })
 
+    const { data: automaticPromotionRows } = await supabase
+      .from('promotions')
+      .select('*')
+      .eq('organization_id', organization.id)
+      .eq('public_mode', 'automatic')
+      .eq('is_active', true)
+    const automaticPromotions = (automaticPromotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
+
     // Build query - only active products, never select wholesale_price for non-wholesale
     const selectFields = isWholesale
-      ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
-      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+      ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, category:categories(id, name)'
+      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, category:categories(id, name)'
 
     let queryBuilder = supabase.from('products')
       .select(selectFields as '*', { count: 'exact' })
@@ -68,6 +76,10 @@ export async function GET(request: NextRequest) {
       queryBuilder = queryBuilder.in('visibility', ['public', 'wholesale'])
     } else {
       queryBuilder = queryBuilder.eq('visibility', 'public')
+    }
+
+    if (hasOffer) {
+      queryBuilder = queryBuilder.or(buildPublicOfferCandidateFilter(automaticPromotions))
     }
 
     // Apply search filter with sanitized input
@@ -121,15 +133,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform to PublicProduct type - hide sensitive data
-    const { data: automaticPromotionRows } = await supabase
-      .from('promotions')
-      .select('*')
-      .eq('organization_id', organization.id)
-      .eq('public_mode', 'automatic')
-      .eq('is_active', true)
-    const automaticPromotions = (automaticPromotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
-
-    const publicProducts: PublicProduct[] = (products || []).map((p: Record<string, unknown>) => {
+    const publicProducts: Array<PublicProduct & { created_at: string | null }> = (products || []).map((p: Record<string, unknown>) => {
       const category = Array.isArray(p.category) ? p.category[0] : p.category
       const cat = category as { id: string; name: string } | null
       const priced = applyAutomaticPromotionToProduct({
@@ -159,6 +163,7 @@ export async function GET(request: NextRequest) {
         images: p.images as string[] | null,
         unit_measure: p.unit_measure as string,
         barcode: p.barcode as string | null,
+        created_at: p.created_at ? String(p.created_at) : null,
       }
     }).filter((product) => !hasOffer || Boolean(product.has_offer && product.offer_price))
 

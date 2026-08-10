@@ -23,6 +23,7 @@ export interface ProfileOrder {
 
 interface ProfileOrdersProps {
   orders: ProfileOrder[]
+  totalCount?: number
   tenantPrefix?: string
 }
 
@@ -46,7 +47,7 @@ function isDeliveryOrder(value: string) {
   return normalizeStatus(value) === 'DELIVERY'
 }
 
-export function ProfileOrders({ orders, tenantPrefix = '' }: ProfileOrdersProps) {
+export function ProfileOrders({ orders, totalCount = orders.length, tenantPrefix = '' }: ProfileOrdersProps) {
   const trackHref = tenantPrefix ? `${tenantPrefix}/track` : '/track'
 
   return (
@@ -58,7 +59,7 @@ export function ProfileOrders({ orders, tenantPrefix = '' }: ProfileOrdersProps)
         </div>
         {orders.length > 0 && (
           <Badge variant="outline" className="text-[10px]">
-            {orders.length}
+            {totalCount}
           </Badge>
         )}
       </div>

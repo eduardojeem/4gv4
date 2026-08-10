@@ -29,6 +29,18 @@ const categoryShowcase = readFileSync(
   resolve(workspace, 'src/components/public/inicio/CategoryShowcase.tsx'),
   'utf8'
 )
+const heroSection = readFileSync(
+  resolve(workspace, 'src/components/public/inicio/HeroSection.tsx'),
+  'utf8'
+)
+const featuredProducts = readFileSync(
+  resolve(workspace, 'src/components/public/inicio/FeaturedProducts.tsx'),
+  'utf8'
+)
+const organizationReviews = readFileSync(
+  resolve(workspace, 'src/components/public/inicio/OrganizationReviews.tsx'),
+  'utf8'
+)
 const servicesPage = readFileSync(
   resolve(workspace, 'src/app/(public)/servicios/ServicesPageClient.tsx'),
   'utf8'
@@ -100,6 +112,21 @@ describe('public storefront hardening', () => {
 
   it('keeps the category skeleton stable through the first client render', () => {
     expect(categoryShowcase).toContain('if (!mounted || isLoading)')
+  })
+
+  it('keeps home product cards readable on narrow screens', () => {
+    expect(featuredProducts).toContain('grid grid-cols-1 gap-4 sm:grid-cols-2')
+    expect(featuredProducts).not.toContain('grid grid-cols-2 gap-4')
+  })
+
+  it('keeps the secondary hero panel out of the mobile first viewport', () => {
+    expect(heroSection).toContain('hidden lg:flex')
+    expect(heroSection).toContain('py-10 text-white sm:py-14 lg:py-16')
+  })
+
+  it('keeps cached reviews stable during hydration', () => {
+    expect(organizationReviews).toContain('const mounted = useSyncExternalStore(')
+    expect(organizationReviews).toContain('const hydratedData = mounted ? data : undefined')
   })
 
   it('prefixes internal service links with the active tenant', () => {

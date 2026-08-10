@@ -19,8 +19,9 @@ async function fetchRepairServerSide(
     const cookieStore = await cookies()
     const headerStore = await headers()
     const organizationSlug = headerStore.get('x-tenant-slug')
+    const adminSupabase = createAdminSupabase()
     const organization = organizationSlug
-      ? await resolvePublicOrganizationBySlug(organizationSlug, createAdminSupabase())
+      ? await resolvePublicOrganizationBySlug(organizationSlug, adminSupabase)
       : null
     if (organizationSlug && !organization) {
       return null
@@ -44,14 +45,22 @@ async function fetchRepairServerSide(
     let customerIdForUser: string | null = null
 
     if (user && organization) {
-      const { data: customerData } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('profile_id', user.id)
-        .eq('organization_id', organization.id)
-        .maybeSingle()
+      const [{ data: customerData }, { data: membership }] = await Promise.all([
+        adminSupabase
+          .from('customers')
+          .select('id')
+          .eq('profile_id', user.id)
+          .eq('organization_id', organization.id)
+          .maybeSingle(),
+        adminSupabase
+          .from('organization_members')
+          .select('status')
+          .eq('user_id', user.id)
+          .eq('organization_id', organization.id)
+          .maybeSingle(),
+      ])
 
-      customerIdForUser = customerData?.id ?? null
+      customerIdForUser = membership?.status === 'active' ? customerData?.id ?? null : null
     }
 
     // 2. If no token/hash/customer session, can't authorize
@@ -63,16 +72,14 @@ async function fetchRepairServerSide(
     // (used as fallback when a repair has no ticket_number assigned yet)
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticketId)
     
-    // BUG FIX: Bypass the restrictive branch RLS policy for repairs since customers do not have branch access.
-    // This is secure because we enforce customerIdForUser (or verifyHash/token) immediately below.
-    const adminSupabase = createAdminSupabase()
-    
+    // Customer accounts do not have branch-level staff permissions. This
+    // privileged read is constrained by the customer, token, or QR checks.
     let repairQuery = adminSupabase
       .from('repairs')
       .select(`
         id, ticket_number, device_brand, device_model, device_type,
         problem_description, status, priority, created_at,
-        estimated_cost, final_cost, warranty_months, warranty_type,
+        estimated_cost, final_cost, paid_amount, payment_status, warranty_months, warranty_type,
         estimated_completion, completed_at, technician_id, customer_id
       `)
 
@@ -97,7 +104,7 @@ async function fetchRepairServerSide(
     // 3. If using hash, verify it
     if (!isTokenAuthorized && verifyHash) {
       const [customerResult] = await Promise.all([
-        supabase.from('customers').select('name').eq('id', repair.customer_id).single(),
+        adminSupabase.from('customers').select('name').eq('id', repair.customer_id).single(),
       ])
       const customerName = customerResult.data?.name || ''
       const repairDate = new Date(repair.created_at)
@@ -112,10 +119,10 @@ async function fetchRepairServerSide(
     // 4. Fetch related data
     const [technicianResult, customerResult, statusHistoryResult] = await Promise.all([
       repair.technician_id
-        ? supabase.from('profiles').select('full_name').eq('id', repair.technician_id).single()
+        ? adminSupabase.from('profiles').select('full_name').eq('id', repair.technician_id).single()
         : Promise.resolve({ data: null }),
-      supabase.from('customers').select('name, phone').eq('id', repair.customer_id).single(),
-      supabase
+      adminSupabase.from('customers').select('name, phone').eq('id', repair.customer_id).single(),
+      adminSupabase
         .from('repair_status_history')
         .select('status, note, created_at')
         .eq('repair_id', repair.id)
@@ -136,6 +143,8 @@ async function fetchRepairServerSide(
       completedAt: repair.completed_at || null,
       estimatedCost: repair.estimated_cost || 0,
       finalCost: repair.final_cost,
+      paidAmount: repair.paid_amount,
+      paymentStatus: repair.payment_status,
       warrantyMonths: repair.warranty_months,
       warrantyType: repair.warranty_type,
       statusHistory: statusHistoryResult.data || [],

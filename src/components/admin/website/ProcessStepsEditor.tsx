@@ -42,7 +42,6 @@ import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import {
   createProcessStepsFromTemplate,
   getConfiguredProcessFlows,
-  getProcessSaveOrder,
   PROCESS_STEP_TEMPLATES,
   type ProcessStepTemplateId,
 } from '@/lib/website/process-steps'
@@ -81,8 +80,7 @@ export function ProcessStepsEditor() {
     isLoading,
     error,
     isSaving,
-    updateSetting,
-    refetch,
+    updateSettings,
   } = useAdminWebsiteSettings()
   const [flowsDraft, setFlowsDraft] = useState<ProcessFlow[] | null>(null)
   const [processEnabledDraft, setProcessEnabledDraft] = useState<boolean | null>(null)
@@ -125,37 +123,6 @@ export function ProcessStepsEditor() {
     )
   }
 
-  const persistFlows = async (): Promise<boolean> => {
-    if (flowsDraft === null) return true
-
-    const result = await updateSetting('process_flows', normalizeFlows(flows))
-    if (!result.success) {
-      toast.error(result.error || 'No se pudieron guardar los procesos')
-      return false
-    }
-
-    setFlowsDraft(null)
-    return true
-  }
-
-  const persistVisibility = async (): Promise<boolean> => {
-    if (processEnabledDraft === null) return true
-
-    const newCompanyInfo = {
-      ...defaults.company_info,
-      ...settings?.company_info,
-      processSectionEnabled: processEnabledDraft,
-    }
-    const result = await updateSetting('company_info', newCompanyInfo)
-    if (!result.success) {
-      toast.error(result.error || 'No se pudo guardar la visibilidad de la sección')
-      return false
-    }
-
-    setProcessEnabledDraft(null)
-    return true
-  }
-
   const handleSave = async () => {
     const invalidFlow = flows.find(
       (flow) =>
@@ -181,22 +148,26 @@ export function ProcessStepsEditor() {
       return
     }
 
-    const saveOrder = getProcessSaveOrder({
-      hasStepsChanges: flowsDraft !== null,
-      visibilityDraft: processEnabledDraft,
+    const result = await updateSettings({
+      ...(flowsDraft !== null ? { process_flows: normalizeFlows(flows) } : {}),
+      ...(processEnabledDraft !== null
+        ? {
+            company_info: {
+              ...defaults.company_info,
+              ...settings?.company_info,
+              processSectionEnabled: processEnabledDraft,
+            },
+          }
+        : {}),
     })
 
-    for (const target of saveOrder) {
-      const success =
-        target === 'steps'
-          ? await persistFlows()
-          : await persistVisibility()
-      if (!success) {
-        await refetch()
-        return
-      }
+    if (!result.success) {
+      toast.error(result.error || 'No se pudieron guardar los procesos')
+      return
     }
 
+    setFlowsDraft(null)
+    setProcessEnabledDraft(null)
     toast.success('Procesos actualizados', {
       icon: <Check className="h-4 w-4" />,
     })

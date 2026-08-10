@@ -3,6 +3,7 @@ export interface CompanyInfo {
   phone: string
   email: string
   address: string
+  mapsUrl?: string
   hours: {
     weekdays: string
     saturday: string
@@ -33,6 +34,7 @@ export interface HeroStats {
 }
 
 export interface HeroContent {
+  enabled?: boolean
   badge: string
   title: string
   subtitle: string
@@ -48,6 +50,32 @@ export interface OffersSectionSettings {
   title: string
   subtitle: string
   accentColor: 'brand' | 'rose' | 'amber' | 'orange' | 'emerald' | 'blue' | 'sky' | 'violet' | 'fuchsia' | 'red' | 'teal'
+}
+
+export interface PromotionalCarouselSlide {
+  id: string
+  title: string
+  message: string
+  imageUrl: string
+  imageAlt: string
+  ctaText?: string
+  ctaHref?: string
+  active: boolean
+  textTone: 'light' | 'dark'
+  contentAlign: 'left' | 'center' | 'right'
+}
+
+export interface PromotionalCarouselSettings {
+  enabled: boolean
+  autoplay: boolean
+  intervalSeconds: number
+  slides: PromotionalCarouselSlide[]
+}
+
+export interface ServicesSectionSettings {
+  badge: string
+  title: string
+  subtitle: string
 }
 
 export interface Service {
@@ -160,16 +188,17 @@ export interface CheckoutSettings {
 
 export interface WebsiteSettings {
   company_info: CompanyInfo
-  hero_stats: HeroStats
-  hero_content: HeroContent
-  offers_section: OffersSectionSettings
+  hero_content?: HeroContent
+  hero_stats?: HeroStats
+  offers_section?: OffersSectionSettings
+  promotional_carousel?: PromotionalCarouselSettings
+  services_section?: ServicesSectionSettings
   services: Service[]
   testimonials: Testimonial[]
   process_steps: ProcessStep[]
   process_flows: ProcessFlow[]
-  maintenance_mode: MaintenanceMode
-  checkout: CheckoutSettings
+  maintenance_mode?: MaintenanceMode
+  checkout?: CheckoutSettings
 }
 
 export type WebsiteSettingKey = keyof WebsiteSettings
-

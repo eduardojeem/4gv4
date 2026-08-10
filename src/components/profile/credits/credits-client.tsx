@@ -1,7 +1,7 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { CreditSummary } from './credit-summary'
@@ -50,7 +50,7 @@ export function CreditsClient({ organizationSlug = '' }: { organizationSlug?: st
   const [payments, setPayments] = useState<CreditPayment[]>([])
   const [error, setError] = useState<string | null>(null)
   
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
   useEffect(() => {
@@ -141,7 +141,7 @@ export function CreditsClient({ organizationSlug = '' }: { organizationSlug?: st
         // Primero obtenemos los IDs de los créditos
         const creditIds = creditsData?.map(c => c.id) || []
         
-        let paymentsData: any[] = []
+        let paymentsData: CreditPayment[] = []
         if (creditIds.length > 0) {
           const { data: paymentsRes, error: paymentsError } = await supabase
             .from('credit_payments')
@@ -153,7 +153,7 @@ export function CreditsClient({ organizationSlug = '' }: { organizationSlug?: st
             console.error('Payments fetch error:', paymentsError)
             throw paymentsError
           }
-          paymentsData = paymentsRes || []
+          paymentsData = (paymentsRes || []) as CreditPayment[]
         }
 
         // Formatear créditos
@@ -164,7 +164,7 @@ export function CreditsClient({ organizationSlug = '' }: { organizationSlug?: st
           start_date: c.start_date,
           created_at: c.created_at,
           status: c.status as 'active' | 'completed' | 'defaulted' | 'cancelled',
-          installments: c.credit_installments.map((i: any) => ({
+          installments: c.credit_installments.map((i) => ({
              id: i.id,
              installment_number: i.installment_number,
              due_date: i.due_date,
@@ -175,22 +175,25 @@ export function CreditsClient({ organizationSlug = '' }: { organizationSlug?: st
         }))
 
         setCredits(formattedCredits)
-        setPayments(paymentsData as CreditPayment[])
+        setPayments(paymentsData)
 
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const errorData = typeof err === 'object' && err !== null
+          ? err as Record<string, unknown>
+          : {}
         console.error('Error fetching data details:', {
           error: err,
           type: typeof err,
-          keys: typeof err === 'object' ? Object.keys(err) : [],
+          keys: Object.keys(errorData),
           stringified: JSON.stringify(err)
         })
         
         const fallback = 'Error al cargar los datos'
         const message =
-          err?.message ||
-          err?.error_description ||
-          err?.details ||
-          err?.hint ||
+          (typeof errorData.message === 'string' ? errorData.message : '') ||
+          (typeof errorData.error_description === 'string' ? errorData.error_description : '') ||
+          (typeof errorData.details === 'string' ? errorData.details : '') ||
+          (typeof errorData.hint === 'string' ? errorData.hint : '') ||
           (typeof err === 'string' ? err : '') ||
           fallback
         
@@ -248,7 +251,7 @@ export function CreditsClient({ organizationSlug = '' }: { organizationSlug?: st
           No tienes créditos registrados en tu cuenta actualmente.
         </p>
         <Button asChild variant="default" className="shadow-sm">
-          <Link href="/">Explorar Productos</Link>
+          <Link href={organizationSlug ? `/${organizationSlug}/productos` : '/productos'}>Explorar productos</Link>
         </Button>
       </motion.div>
     )
@@ -336,7 +339,7 @@ export function CreditsClient({ organizationSlug = '' }: { organizationSlug?: st
         </TabsContent>
 
         <TabsContent value="all" className="space-y-6">
-          {credits.map((credit, idx) => (
+          {credits.map((credit) => (
             <CreditCard key={credit.id} credit={credit} />
           ))}
         </TabsContent>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyAutomaticPromotionToProduct,
+  buildPublicOfferCandidateFilter,
   evaluatePublicCoupon,
   type PublicPromotion,
 } from '@/lib/public-promotions'
@@ -43,6 +44,24 @@ describe('public promotions', () => {
 
     expect(result.has_offer).toBe(false)
     expect(result.offer_price).toBeNull()
+  })
+
+  it('includes automatic promotion targets in the database offer filter', () => {
+    const filter = buildPublicOfferCandidateFilter([
+      automatic,
+      { ...automatic, id: 'category-offer', applicable_products: [], applicable_categories: ['category-1'] },
+    ])
+
+    expect(filter).toBe('has_offer.eq.true,id.in.(product-1),category_id.in.(category-1)')
+  })
+
+  it('does not include expired automatic promotions in the database offer filter', () => {
+    const filter = buildPublicOfferCandidateFilter(
+      [{ ...automatic, end_date: '2026-01-01T00:00:00.000Z' }],
+      new Date('2026-02-01T00:00:00.000Z'),
+    )
+
+    expect(filter).toBe('has_offer.eq.true')
   })
 
   it('validates a public coupon against eligible cart lines', () => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import { Star, Send, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -128,7 +128,7 @@ function ReviewForm({ onSuccess, tenantSlug }: { onSuccess: () => void; tenantSl
     } finally {
       setSubmitting(false)
     }
-  }, [name, email, rating, comment, onSuccess])
+  }, [name, email, rating, comment, onSuccess, tenantSlug])
 
   if (status === 'success') {
     return (
@@ -267,6 +267,11 @@ function RatingSummary({ average, count }: { average: number; count: number }) {
 export function OrganizationReviews() {
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  )
 
   const { data, mutate } = useSWR<ReviewsResponse>(
     withOrgQuery('/api/public/reviews?limit=6', tenantSlug),
@@ -275,9 +280,10 @@ export function OrganizationReviews() {
   )
 
   const [showAll, setShowAll] = useState(false)
-  const reviews = data?.data?.reviews ?? []
-  const stats = data?.data?.stats ?? { average: 0, count: 0 }
-  const total = data?.data?.pagination?.total ?? 0
+  const hydratedData = mounted ? data : undefined
+  const reviews = hydratedData?.data?.reviews ?? []
+  const stats = hydratedData?.data?.stats ?? { average: 0, count: 0 }
+  const total = hydratedData?.data?.pagination?.total ?? 0
 
   const displayedReviews = showAll ? reviews : reviews.slice(0, 3)
 

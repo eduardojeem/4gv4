@@ -93,6 +93,7 @@ export default async function ServicesPage({ organizationId, organizationName }:
       services={services}
       companyName={companyName}
       whatsapp={whatsapp}
+      sectionText={settings?.services_section}
     />
   )
 }

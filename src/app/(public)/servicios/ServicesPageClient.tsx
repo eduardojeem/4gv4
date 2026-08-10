@@ -16,12 +16,13 @@ import { usePublicTenantPrefix } from '@/lib/public/tenant-client'
 import { prefixPublicTenantPath } from '@/lib/public/tenant-path-shared'
 import { cn } from '@/lib/utils'
 import { formatWhatsAppPhone, openWhatsApp } from '@/lib/whatsapp'
-import type { Service } from '@/types/website-settings'
+import type { Service, ServicesSectionSettings } from '@/types/website-settings'
 
 interface ServicesPageClientProps {
   services: Service[]
   companyName: string
   whatsapp: string
+  sectionText?: ServicesSectionSettings
 }
 
 function categoryId(category: string) {
@@ -45,7 +46,7 @@ const CARD_BG: Record<string, string> = {
   sky:     'from-sky-500 to-blue-600',
 }
 
-export function ServicesPageClient({ services, companyName, whatsapp }: ServicesPageClientProps) {
+export function ServicesPageClient({ services, companyName, whatsapp, sectionText }: ServicesPageClientProps) {
   const { tenantPrefix } = usePublicTenantPrefix()
   const activeServices = useMemo(
     () => services.filter((service) => service.active !== false),
@@ -89,13 +90,13 @@ export function ServicesPageClient({ services, companyName, whatsapp }: Services
           <div>
             <Badge className="border-primary/20 bg-primary/10 text-primary hover:bg-primary/10">
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              Servicios disponibles
+              {sectionText?.badge || 'Servicios disponibles'}
             </Badge>
             <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight text-foreground sm:text-5xl">
-              Soluciones y servicios para el dia a dia
+              {sectionText?.title || 'Soluciones y servicios para el día a día'}
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
-              Conocé los servicios de {companyName}, compará opciones y consultá directamente con nuestro equipo.
+              {sectionText?.subtitle || `Conocé los servicios de ${companyName}, compará opciones y consultá directamente con nuestro equipo.`}
             </p>
 
             <div className="mt-7 flex flex-wrap gap-2">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { createElement, useEffect, useRef, useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Badge } from '@/components/ui/badge'
 import {
   Loader2, Save, Briefcase, Wrench, Shield, Package, Check, Plus, Trash2,
   Smartphone, Monitor, Battery, Cpu, Zap, Headset, ArrowUp, ArrowDown,
@@ -20,7 +19,7 @@ import {
   Tag, Timer, ExternalLink, Star, ChevronDown, ChevronUp, Globe2,
   ListTodo, LayoutGrid, Rocket
 } from 'lucide-react'
-import { Service } from '@/types/website-settings'
+import { Service, ServicesSectionSettings } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getActivePublicServices } from '@/lib/website/services'
 import { formatPrice, cn } from '@/lib/utils'
@@ -124,7 +123,7 @@ function ServiceCardPreview({ service }: { service: Service }) {
       <div className="p-4 space-y-3">
         <div className="flex items-start gap-3">
           <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border', colorLight)}>
-            <IconComp className="h-5 w-5" />
+            {createElement(IconComp, { className: 'h-5 w-5' })}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap gap-1.5 items-center">
@@ -196,8 +195,9 @@ interface ImportableProduct {
 // ─────────────────────────────────────────────
 
 export function ServicesManager() {
-  const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
+  const { settings, isLoading, error, isSaving, updateSetting, updateSettings } = useAdminWebsiteSettings()
   const [servicesDraft, setServicesDraft] = useState<Service[] | null>(null)
+  const [sectionDraft, setSectionDraft] = useState<ServicesSectionSettings | null>(null)
 
   // Modal edición
   const [editOpen, setEditOpen]           = useState(false)
@@ -227,12 +227,11 @@ export function ServicesManager() {
   const defaults = getWebsiteSettingsDefaults()
   const services      = servicesDraft ?? settings?.services ?? defaults.services
   const savedServices = settings?.services ?? defaults.services
-  const hasChanges    = servicesDraft !== null
+  const sectionText   = sectionDraft ?? settings?.services_section ?? defaults.services_section
+  const hasChanges    = servicesDraft !== null || sectionDraft !== null
 
   const activeCount    = getActivePublicServices(services).length
   const savedActive    = getActivePublicServices(savedServices).length
-  const hiddenCount    = services.length - activeCount
-  const readyCount     = services.filter(isServiceReady).length
   const pageEnabled    = settings?.company_info?.servicesPageEnabled !== false
   const pagePublished  = pageEnabled && savedActive > 0
 
@@ -263,8 +262,15 @@ export function ServicesManager() {
       toast.error('Hay servicios incompletos', { description: 'Revisa título (mín. 3 letras), descripción (mín. 10) y al menos 1 beneficio.' })
       return
     }
-    const r = await updateSetting('services', services)
-    if (r.success) { toast.success('Catálogo guardado'); setServicesDraft(null) }
+    const r = await updateSettings({
+      services,
+      ...(sectionDraft ? { services_section: sectionDraft } : {}),
+    })
+    if (r.success) {
+      toast.success('Cambios guardados')
+      setServicesDraft(null)
+      setSectionDraft(null)
+    }
     else toast.error(r.error || 'Error al guardar')
   }
 
@@ -362,7 +368,10 @@ export function ServicesManager() {
       const res  = await fetch('/api/products?per_page=100&is_active=true')
       if (!res.ok) throw new Error()
       const body = await res.json()
-      const all: any[] = body.data?.products ?? body.products ?? []
+      const all = (body.data?.products ?? body.products ?? []) as Array<ImportableProduct & {
+        unit_measure?: string
+        product_type?: string
+      }>
       setImportProducts(
         all
           .filter(p => (p.unit_measure || '').toLowerCase() === 'servicio' || p.product_type === 'service')
@@ -459,7 +468,7 @@ export function ServicesManager() {
             { done: step1Done, num: 1, label: 'Agrega servicios', sub: `${services.length} cargado${services.length !== 1 ? 's' : ''}`, icon: ListTodo },
             { done: step2Done, num: 2, label: 'Actívalos',         sub: `${activeCount} activo${activeCount !== 1 ? 's' : ''}`,       icon: Eye },
             { done: step3Done, num: 3, label: 'Publica la página', sub: step3Done ? 'Online ✓' : 'Activa el switch →',                  icon: Globe },
-          ].map(({ done, num, label, sub, icon: Icon }) => (
+          ].map(({ done, num, label, sub }) => (
             <div key={num} className={cn(
               'flex items-center gap-2.5 rounded-xl border p-2.5 transition-colors',
               done ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-border bg-background'
@@ -485,6 +494,45 @@ export function ServicesManager() {
             La página está activa pero sin servicios visibles. Activa al menos uno.
           </div>
         )}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════
+          TEXTOS DE LA SECCIÓN
+      ══════════════════════════════════════════════════════ */}
+      <div className="rounded-2xl border bg-card p-5 sm:p-6 shadow-sm">
+        <div className="mb-4">
+          <h3 className="text-sm font-bold text-foreground">Textos de la sección</h3>
+          <p className="text-xs text-muted-foreground mt-1">Configurá el título y la descripción que aparecerán arriba de tu catálogo.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label className="text-xs font-semibold">Etiqueta (Opcional)</Label>
+            <Input
+              value={sectionText.badge || ''}
+              onChange={(e) => setSectionDraft({ ...sectionText, badge: e.target.value })}
+              placeholder="Ej. Lo que hacemos"
+              className="h-9 text-sm"
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label className="text-xs font-semibold">Título de la sección</Label>
+            <Input
+              value={sectionText.title || ''}
+              onChange={(e) => setSectionDraft({ ...sectionText, title: e.target.value })}
+              placeholder="Ej. Nuestros servicios"
+              className="h-9 text-sm font-medium"
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label className="text-xs font-semibold">Subtítulo o descripción</Label>
+            <Textarea
+              value={sectionText.subtitle || ''}
+              onChange={(e) => setSectionDraft({ ...sectionText, subtitle: e.target.value })}
+              placeholder="Breve descripción debajo del título..."
+              className="min-h-[80px] resize-none text-sm"
+            />
+          </div>
+        </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════
@@ -603,7 +651,7 @@ export function ServicesManager() {
           </div>
         ) : filteredServices.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Sin resultados para "<span className="font-medium">{searchQuery}</span>"
+            Sin resultados para &quot;<span className="font-medium">{searchQuery}</span>&quot;
           </p>
         ) : (
           filteredServices.map(service => {
@@ -1074,7 +1122,7 @@ export function ServicesManager() {
                 <div>
                   <p className="text-sm font-semibold">Sin servicios para importar</p>
                   <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
-                    Crea servicios en <strong>/dashboard/repairs/inventory</strong> con unidad "servicio".
+                    Crea servicios en <strong>/dashboard/repairs/inventory</strong> con unidad &quot;servicio&quot;.
                   </p>
                 </div>
               </div>
@@ -1119,7 +1167,8 @@ export function ServicesManager() {
                           checked={checked}
                           onCheckedChange={v => {
                             const n = new Set(selectedIds)
-                            v ? n.add(p.id) : n.delete(p.id)
+                            if (v) n.add(p.id)
+                            else n.delete(p.id)
                             setSelectedIds(n)
                           }}
                           className="mt-0.5"

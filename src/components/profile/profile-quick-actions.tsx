@@ -1,7 +1,7 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { ChevronRight, LayoutDashboard, Settings, Shield, Wrench } from 'lucide-react'
+import { ChevronRight, LayoutDashboard, Settings, Shield, WalletCards, Wrench } from 'lucide-react'
 import Link from 'next/link'
 
 interface ProfileQuickActionsProps {
@@ -16,15 +16,13 @@ export function ProfileQuickActions({ role, tenantPrefix = '' }: ProfileQuickAct
   // lista, asi que ese rol no veia el acceso al panel desde su propio perfil.
   const isStaff = role === 'admin' || role === 'super_admin' || role === 'vendedor' || role === 'tecnico'
   const repairsHref = tenantPrefix ? `${tenantPrefix}/mis-reparaciones` : '/mis-reparaciones'
+  const creditsHref = tenantPrefix ? `${tenantPrefix}/perfil/creditos` : '/perfil/creditos'
   const authorizedHref = tenantPrefix ? `${tenantPrefix}/perfil/autorizados` : '/perfil/autorizados'
 
   return (
     <div className="flex flex-col gap-3">
       {/* Main actions */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <ChangePasswordDialog />
-        </div>
         <Link
           href={repairsHref}
           className="group flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
@@ -35,6 +33,20 @@ export function ProfileQuickActions({ role, tenantPrefix = '' }: ProfileQuickAct
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground">Rastrear equipo</p>
             <p className="text-xs text-muted-foreground">Ver estado en tiempo real</p>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        </Link>
+
+        <Link
+          href={creditsHref}
+          className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
+            <WalletCards className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">Créditos y cuotas</p>
+            <p className="text-xs text-muted-foreground">Deudas, vencimientos y pagos</p>
           </div>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link>
@@ -52,6 +64,10 @@ export function ProfileQuickActions({ role, tenantPrefix = '' }: ProfileQuickAct
           </div>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link>
+
+        <div className="sm:col-span-2">
+          <ChangePasswordDialog />
+        </div>
       </div>
 
       {/* Admin/Staff access */}

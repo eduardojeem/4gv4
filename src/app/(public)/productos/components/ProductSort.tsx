@@ -29,7 +29,7 @@ export function ProductSort() {
 
   return (
     <Select value={sort} onValueChange={handleSortChange}>
-      <SelectTrigger className="w-[150px] h-9 rounded-lg text-sm">
+      <SelectTrigger className="w-[150px] h-9 rounded-lg text-sm" aria-label="Ordenar productos">
         <SelectValue placeholder="Ordenar" />
       </SelectTrigger>
       <SelectContent>

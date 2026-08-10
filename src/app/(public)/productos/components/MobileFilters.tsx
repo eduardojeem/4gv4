@@ -46,13 +46,18 @@ export function MobileFilters({ activeFiltersCount, ...props }: MobileFiltersPro
           )}
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-[92vw] max-w-sm overflow-y-auto">
+      <SheetContent side="left" className="flex w-[92vw] max-w-sm flex-col overflow-hidden">
         <SheetHeader>
           <SheetTitle>Filtros</SheetTitle>
-          <SheetDescription>Refina tu busqueda</SheetDescription>
+          <SheetDescription>Elegí los criterios para encontrar productos más rápido.</SheetDescription>
         </SheetHeader>
-        <div className="mt-6">
-          <ProductFilters {...props} />
+        <div className="mt-5 flex-1 overflow-y-auto pr-1">
+          <ProductFilters {...props} hideHeader />
+        </div>
+        <div className="border-t border-border pt-4">
+          <Button type="button" className="w-full rounded-md" onClick={() => setOpen(false)}>
+            Ver productos
+          </Button>
         </div>
       </SheetContent>
     </Sheet>

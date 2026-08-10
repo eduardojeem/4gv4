@@ -11,14 +11,14 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
-import { Loader2, Save, Sparkles, TrendingUp, Check, Eye } from 'lucide-react'
+import { Loader2, Save, Sparkles, TrendingUp, Check, Eye, EyeOff } from 'lucide-react'
 import { HeroContent, HeroStats } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 
 export function HeroEditor() {
-  const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
+  const { settings, isLoading, error, isSaving, updateSettings } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults()
   const [heroContentDraft, setHeroContentDraft] = useState<HeroContent | null>(null)
   const [heroStatsDraft, setHeroStatsDraft] = useState<HeroStats | null>(null)
@@ -64,8 +64,14 @@ export function HeroEditor() {
     if (!hasChanges) return
 
     const nextErrors: Record<string, string> = {}
-    if (!heroContent.title || heroContent.title.trim().length < 3) {
-      nextErrors.title = 'El título debe tener al menos 3 caracteres.'
+    if (!heroContent.badge || heroContent.badge.trim().length < 3) {
+      nextErrors.badge = 'La etiqueta debe tener al menos 3 caracteres.'
+    }
+    if (!heroContent.title || heroContent.title.trim().length < 10) {
+      nextErrors.title = 'El título debe tener al menos 10 caracteres.'
+    }
+    if (!heroContent.subtitle || heroContent.subtitle.trim().length < 10) {
+      nextErrors.subtitle = 'El subtítulo debe tener al menos 10 caracteres.'
     }
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
@@ -74,15 +80,13 @@ export function HeroEditor() {
     }
     setErrors({})
 
-    const tasks: Promise<{ success: boolean; error?: string }>[] = []
-    if (heroContentDraft !== null) tasks.push(updateSetting('hero_content', heroContent))
-    if (heroStatsDraft !== null) tasks.push(updateSetting('hero_stats', heroStats))
+    const result = await updateSettings({
+      ...(heroContentDraft !== null ? { hero_content: heroContent } : {}),
+      ...(heroStatsDraft !== null ? { hero_stats: heroStats } : {}),
+    })
 
-    const results = await Promise.all(tasks)
-    const failed = results.find((r) => !r.success)
-
-    if (failed) {
-      toast.error(failed.error || 'Error al guardar')
+    if (!result.success) {
+      toast.error(result.error || 'Error al guardar')
       return
     }
 
@@ -110,17 +114,43 @@ export function HeroEditor() {
 
   return (
     <form onSubmit={handleSave} className="space-y-6 pb-24 md:pb-6">
+      <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${heroContent.enabled !== false ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+            {heroContent.enabled !== false ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
+          </div>
+          <div>
+            <p className="text-sm font-semibold">Mostrar Hero en la página de inicio</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Al ocultarlo se conserva todo el contenido para volver a publicarlo más adelante.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 sm:justify-end">
+          <span className={`text-xs font-semibold ${heroContent.enabled !== false ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+            {heroContent.enabled !== false ? 'Publicado' : 'Oculto'}
+          </span>
+          <Switch
+            checked={heroContent.enabled !== false}
+            onCheckedChange={(checked) => updateContent('enabled', checked)}
+            aria-label="Mostrar Hero en la página de inicio"
+          />
+        </div>
+      </div>
+
       {/* Live preview */}
-      <Card className="overflow-hidden">
+      <Card className="relative overflow-hidden">
         <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2">
           <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             <Eye className="h-3.5 w-3.5" />
             Vista previa
           </span>
-          <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+          <span className={`text-xs font-semibold ${heroContent.enabled !== false ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+            {heroContent.enabled !== false ? 'Visible' : 'No publicado'}
+          </span>
         </div>
         <div
-          className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} px-6 py-10 text-white`}
+          className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} px-6 py-10 text-white transition-opacity ${heroContent.enabled !== false ? '' : 'opacity-45'}`}
           data-custom-brand={hasValidCustomBrand ? '' : undefined}
           style={customBrandStyle}
         >
@@ -193,6 +223,17 @@ export function HeroEditor() {
             </div>
           </div>
         </div>
+        {heroContent.enabled === false && (
+          <div className="absolute inset-x-0 bottom-0 top-9 z-20 flex items-center justify-center bg-background/45 p-6 backdrop-blur-[1px]">
+            <div className="flex items-center gap-3 rounded-md border bg-background px-4 py-3 shadow-lg">
+              <EyeOff className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-semibold">Hero oculto</p>
+                <p className="text-xs text-muted-foreground">La vista pública comenzará con la siguiente sección activa.</p>
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Hero content */}
@@ -206,8 +247,13 @@ export function HeroEditor() {
               onChange={(e) => updateContent('badge', e.target.value)}
               placeholder="✨ Más de 10 años de experiencia"
               maxLength={100}
+              aria-invalid={!!errors.badge}
               className="h-11"
             />
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className={errors.badge ? 'text-destructive' : 'text-muted-foreground'}>{errors.badge || 'Etiqueta breve sobre el título.'}</span>
+              <span className="shrink-0 text-muted-foreground">{heroContent.badge.length}/100</span>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -221,7 +267,10 @@ export function HeroEditor() {
               aria-invalid={!!errors.title}
               className="h-11"
             />
-            {errors.title && <p className="text-xs text-destructive">{errors.title}</p>}
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className={errors.title ? 'text-destructive' : 'text-muted-foreground'}>{errors.title || 'Explicá la propuesta principal en una frase.'}</span>
+              <span className="shrink-0 text-muted-foreground">{heroContent.title.length}/150</span>
+            </div>
           </div>
 
             <div className="space-y-2">
@@ -233,8 +282,13 @@ export function HeroEditor() {
                 placeholder="Diagnóstico gratuito • Garantía de 6 meses • Técnicos certificados"
                 rows={2}
                 maxLength={300}
+                aria-invalid={!!errors.subtitle}
                 className="text-sm"
               />
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className={errors.subtitle ? 'text-destructive' : 'text-muted-foreground'}>{errors.subtitle || 'Complementá el título con beneficios concretos.'}</span>
+                <span className="shrink-0 text-muted-foreground">{heroContent.subtitle.length}/300</span>
+              </div>
             </div>
           </div>
         </SectionCard>
@@ -337,35 +391,39 @@ export function HeroEditor() {
       </SectionCard>
 
       {/* Save bar */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 md:sticky md:bottom-6 md:justify-end">
+      <div className="fixed inset-x-4 bottom-4 z-50 flex items-center justify-between gap-3 rounded-lg border bg-background/95 p-3 shadow-lg backdrop-blur md:sticky md:inset-x-auto md:bottom-4">
+        <div className="hidden min-w-0 md:block">
+          <p className="text-sm font-medium">{hasChanges ? 'Cambios pendientes' : 'Hero actualizado'}</p>
+          <p className="text-xs text-muted-foreground">{heroContent.enabled !== false ? 'La sección se mostrará al guardar.' : 'La sección se ocultará al guardar.'}</p>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
         {hasChanges && (
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             onClick={() => {
               setHeroContentDraft(null)
               setHeroStatsDraft(null)
               setErrors({})
             }}
-            className="h-14 rounded-full px-6 shadow-2xl bg-background/80 backdrop-blur border md:h-12 md:rounded-xl md:px-4"
           >
             Descartar
           </Button>
         )}
-        <Button type="submit" disabled={isSaving || !hasChanges} size="lg" className="h-14 rounded-full px-8 shadow-2xl md:h-12 md:rounded-xl md:px-6">
+        <Button type="submit" disabled={isSaving || !hasChanges}>
           {isSaving ? (
             <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              <span className="hidden md:inline">Guardando...</span>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Guardando...
             </>
           ) : (
             <>
-              <Save className="mr-2 h-5 w-5" />
-              <span className="hidden md:inline">Guardar hero</span>
-              <span className="md:hidden">Guardar</span>
+              <Save className="mr-2 h-4 w-4" />
+              Guardar Hero
             </>
           )}
         </Button>
+        </div>
       </div>
     </form>
   )

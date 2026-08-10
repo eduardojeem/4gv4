@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { HeroSection } from '@/components/public/inicio/HeroSection'
+import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
 import { CategoryShowcase } from '@/components/public/inicio/CategoryShowcase'
 import { FeaturedProducts } from '@/components/public/inicio/FeaturedProducts'
 import { OffersCarousel } from '@/components/public/inicio/OffersCarousel'
@@ -78,16 +79,32 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
   }, [phone, email])
 
   const brand = getBrandTheme(company_info.brandColor)
+  const heroVisible = hero_content.enabled !== false
+  const promotionalCarouselVisible = Boolean(
+    settings.promotional_carousel?.enabled &&
+    settings.promotional_carousel.slides.some((slide) => slide.active)
+  )
 
   return (
     <div className="flex flex-col">
-      <HeroSection
-        companyInfo={company_info}
-        heroStats={hero_stats}
-        heroContent={hero_content}
-        brand={brand}
-        phoneClean={phoneClean}
-        contactHref={contactHref}
+      {!heroVisible && !promotionalCarouselVisible && (
+        <h1 className="sr-only">{company_info.name || 'Inicio'}</h1>
+      )}
+
+      {heroVisible && (
+        <HeroSection
+          companyInfo={company_info}
+          heroStats={hero_stats}
+          heroContent={hero_content}
+          brand={brand}
+          phoneClean={phoneClean}
+          contactHref={contactHref}
+        />
+      )}
+
+      <PromotionalCarousel
+        settings={settings.promotional_carousel}
+        isPageLead={!heroVisible && promotionalCarouselVisible}
       />
 
       {/* ── Sales-first sections ── */}

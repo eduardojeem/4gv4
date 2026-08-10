@@ -18,13 +18,11 @@ export function ProductSearch() {
   // Sincronizar desde la URL solo cuando el cambio es externo (chip "quitar
   // búsqueda", back/forward) y no el eco de nuestro propio push — así no se
   // pisa lo que el usuario sigue tecleando durante la transición.
-  const [lastUrlQuery, setLastUrlQuery] = useState(urlQuery)
-  if (lastUrlQuery !== urlQuery) {
-    setLastUrlQuery(urlQuery)
-    if (urlQuery !== lastPushed) {
-      setValue(urlQuery)
-    }
-  }
+  useEffect(() => {
+    if (urlQuery === lastPushed) return
+    const frame = window.requestAnimationFrame(() => setValue(urlQuery))
+    return () => window.cancelAnimationFrame(frame)
+  }, [urlQuery, lastPushed])
 
   useEffect(() => {
     const timeout = setTimeout(() => {
