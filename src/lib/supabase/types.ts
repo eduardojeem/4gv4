@@ -1867,6 +1867,7 @@ export interface Database {
           user_id: string | null
           created_at: string | null
           branch_id: string
+          organization_id: string
         }
         Insert: {
           id?: string
@@ -1883,6 +1884,7 @@ export interface Database {
           user_id?: string | null
           created_at?: string | null
           branch_id: string
+          organization_id: string
         }
         Update: {
           id?: string
@@ -1899,6 +1901,7 @@ export interface Database {
           user_id?: string | null
           created_at?: string | null
           branch_id?: string
+          organization_id?: string
         }
         Relationships: []
       }
@@ -2775,6 +2778,7 @@ export interface Database {
           part_number: string | null
           quantity: number
           unit_cost: number
+          unit_price: number
           total_cost: number | null
           supplier: string | null
           status: string | null
@@ -2788,6 +2792,7 @@ export interface Database {
           part_number?: string | null
           quantity: number
           unit_cost: number
+          unit_price: number
           total_cost?: number | null
           supplier?: string | null
           status?: string | null
@@ -2801,6 +2806,7 @@ export interface Database {
           part_number?: string | null
           quantity?: number
           unit_cost?: number
+          unit_price?: number
           total_cost?: number | null
           supplier?: string | null
           status?: string | null
@@ -2903,6 +2909,11 @@ export interface Database {
           final_cost: number | null
           labor_cost: number | null
           parts_cost: number | null
+          pricing_mode: string
+          discount_amount: number
+          price_override_reason: string | null
+          pricing_updated_by: string | null
+          pricing_updated_at: string | null
           location: string | null
           warranty_months: number | null
           warranty_expires_at: string | null
@@ -2953,6 +2964,11 @@ export interface Database {
           final_cost?: number | null
           labor_cost?: number | null
           parts_cost?: number | null
+          pricing_mode?: string
+          discount_amount?: number
+          price_override_reason?: string | null
+          pricing_updated_by?: string | null
+          pricing_updated_at?: string | null
           location?: string | null
           warranty_months?: number | null
           warranty_expires_at?: string | null
@@ -3003,6 +3019,11 @@ export interface Database {
           final_cost?: number | null
           labor_cost?: number | null
           parts_cost?: number | null
+          pricing_mode?: string
+          discount_amount?: number
+          price_override_reason?: string | null
+          pricing_updated_by?: string | null
+          pricing_updated_at?: string | null
           location?: string | null
           warranty_months?: number | null
           warranty_expires_at?: string | null

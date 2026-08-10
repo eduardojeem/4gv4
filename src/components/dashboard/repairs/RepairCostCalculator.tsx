@@ -22,6 +22,8 @@ import { Separator } from '@/components/ui/separator'
 import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { calculateRepairTotal, type RepairCalculationInput } from '@/lib/pos-calculator'
+import { calculateRepairPricing, type RepairPricingMode } from '@/lib/repairs/pricing'
+import { getCurrencyFractionDigits } from '@/lib/currency'
 import { useTechnicianCompensation } from '@/hooks/use-technician-compensation'
 import { commissionableAmount } from '@/lib/technician/earnings'
 
@@ -32,6 +34,7 @@ function round2(value: number): number {
 interface RepairPart {
   name: string
   cost: number
+  internalCost?: number
   quantity: number
 }
 
@@ -40,11 +43,11 @@ interface RepairPart {
  * independientes: con dos interruptores por separado se podían activar los
  * dos a la vez y quedaba ambiguo cuál manda.
  *
- * - manual:       los tres campos son independientes (comportamiento original).
- * - labor-from-final: se carga el costo final -> mano de obra = final - repuestos.
- * - final-from-labor: se carga la mano de obra -> costo final = mano de obra + repuestos.
+ * - automatic: el total se deriva de mano de obra, repuestos y descuento.
+ * - budget: el presupuesto fija el total y deriva la mano de obra.
+ * - manual: permite ajustar ambos importes con permisos y motivo de auditoria.
  */
-export type CostCalculationMode = 'manual' | 'labor-from-final' | 'final-from-labor'
+export type CostCalculationMode = RepairPricingMode
 
 interface RepairCostCalculatorProps {
   // Costos base
@@ -54,6 +57,13 @@ interface RepairCostCalculatorProps {
   // Costo final (editable)
   finalCost: number | null
   onFinalCostChange: (cost: number | null) => void
+  discountAmount?: number
+  onDiscountAmountChange?: (amount: number) => void
+  paidAmount?: number
+  currency?: string
+  canUseManual?: boolean
+  overrideReason?: string
+  onOverrideReasonChange?: (reason: string) => void
 
   // Repuestos (calculado automáticamente)
   parts: RepairPart[]
@@ -88,11 +98,18 @@ export function RepairCostCalculator({
   onLaborCostChange,
   finalCost,
   onFinalCostChange,
+  discountAmount = 0,
+  onDiscountAmountChange,
+  paidAmount = 0,
+  currency = 'PYG',
+  canUseManual = false,
+  overrideReason = '',
+  onOverrideReasonChange,
   parts = [],
   taxRate = 10,
   pricesIncludeTax = true,
   disabled = false,
-  calculationMode = 'manual',
+  calculationMode = 'automatic',
   onCalculationModeChange,
   technicianId,
   technicianName,
@@ -101,10 +118,16 @@ export function RepairCostCalculator({
   error
 }: RepairCostCalculatorProps) {
   
-  // Calcular costo total de repuestos
-  const partsCost = useMemo(() => {
-    return parts.reduce((total, part) => total + (part.cost * part.quantity), 0)
-  }, [parts])
+  const pricing = useMemo(() => calculateRepairPricing({
+    mode: calculationMode,
+    currency,
+    laborCost,
+    finalCost,
+    discountAmount,
+    paidAmount,
+    parts,
+  }), [calculationMode, currency, laborCost, finalCost, discountAmount, paidAmount, parts])
+  const partsCost = pricing.partsPrice
   
   // Calcular totales usando la calculadora existente
   const calculation = useMemo(() => {
@@ -112,25 +135,26 @@ export function RepairCostCalculator({
       laborCost: laborCost || 0,
       partsCost,
       taxRate,
-      pricesIncludeTax
+      pricesIncludeTax,
+      discountAmount,
     }
     return calculateRepairTotal(input)
-  }, [laborCost, partsCost, taxRate, pricesIncludeTax])
+  }, [laborCost, partsCost, taxRate, pricesIncludeTax, discountAmount])
   
   // Costo estimado (calculado automáticamente)
-  const estimatedCost = calculation.total
+  const estimatedCost = pricing.estimatedTotal
   
   // Diferencia entre costo final y estimado
   const costDifference = finalCost !== null ? finalCost - estimatedCost : 0
   const hasCostDifference = Math.abs(costDifference) > 0.01
 
-  const isLaborDerived = calculationMode === 'labor-from-final'
-  const isFinalDerived = calculationMode === 'final-from-labor'
+  const isLaborDerived = calculationMode === 'budget'
+  const isFinalDerived = calculationMode === 'automatic'
 
   // Si lo que se cobra no alcanza a cubrir los repuestos, la mano de obra
   // derivada daría negativa: se avisa en vez de guardarlo así.
   const autoLaborWouldBeNegative =
-    isLaborDerived && finalCost !== null && finalCost - partsCost < 0
+    isLaborDerived && finalCost !== null && finalCost + discountAmount - partsCost < 0
 
   const compensationEnabled = canViewCommission && Boolean(technicianId)
   const { compensation, isLoading: isLoadingCompensation } = useTechnicianCompensation(
@@ -150,16 +174,78 @@ export function RepairCostCalculator({
     return round2(base * (compensation.commission_rate / 100))
   }, [compensationEnabled, compensation, laborCost, finalCost, estimatedCost])
 
+  const handleLaborInputChange = (rawValue: string) => {
+    const nextLaborCost = rawValue === '' ? 0 : Number(rawValue) || 0
+    onLaborCostChange(nextLaborCost)
+
+    if (calculationMode === 'automatic') {
+      const nextPricing = calculateRepairPricing({
+        mode: 'automatic',
+        currency,
+        laborCost: nextLaborCost,
+        discountAmount,
+        paidAmount,
+        parts,
+      })
+      onFinalCostChange(nextPricing.customerTotal)
+    }
+  }
+
+  const handleFinalCostInputChange = (rawValue: string) => {
+    const nextFinalCost = rawValue === '' ? null : Number(rawValue) || 0
+    onFinalCostChange(nextFinalCost)
+
+    if (calculationMode === 'budget') {
+      const nextPricing = calculateRepairPricing({
+        mode: 'budget',
+        currency,
+        laborCost,
+        finalCost: nextFinalCost,
+        discountAmount,
+        paidAmount,
+        parts,
+      })
+      onLaborCostChange(nextPricing.laborCost)
+    }
+  }
+
+  const handleCalculationModeChange = (nextMode: CostCalculationMode) => {
+    if (!onCalculationModeChange || nextMode === calculationMode) return
+
+    onCalculationModeChange(nextMode)
+
+    if (nextMode === 'budget') {
+      // Un presupuesto debe ser ingresado expresamente. Reutilizar el total
+      // automatico anterior lo registraba como acordado sin intervencion.
+      onFinalCostChange(null)
+      onLaborCostChange(0)
+      return
+    }
+
+    if (nextMode === 'automatic') {
+      const nextPricing = calculateRepairPricing({
+        mode: 'automatic',
+        currency,
+        laborCost,
+        discountAmount,
+        paidAmount,
+        parts,
+      })
+      onFinalCostChange(nextPricing.customerTotal)
+    }
+  }
+
   return (
-    <Card className="shadow-lg border-2 hover:border-primary/30 transition-colors bg-gradient-to-br from-white to-emerald-50/30 dark:from-slate-900 dark:to-emerald-950/20 dark:border-slate-800 dark:hover:border-primary/50">
-      <CardHeader className="pb-5 bg-gradient-to-r from-emerald-50/50 to-transparent dark:from-emerald-950/30 dark:to-transparent">
-        <CardTitle className="flex items-center gap-3 text-xl">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 flex items-center justify-center shadow-md">
-            <Calculator className="h-5 w-5 text-white" />
+    <Card className="border shadow-sm">
+      <CardHeader className="border-b bg-muted/30 pb-4">
+        <CardTitle className="flex items-center gap-3 text-lg">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Calculator className="h-4 w-4" />
           </div>
-          <span className="bg-gradient-to-r from-emerald-700 to-emerald-600 dark:from-emerald-400 dark:to-emerald-500 bg-clip-text text-transparent font-bold">
-            Calculadora de Costos
-          </span>
+          <div>
+            <span className="font-semibold">Calculadora de costos</span>
+            <p className="mt-0.5 text-xs font-normal text-muted-foreground">Define lo que se cobra y revisa el desglose antes de guardar.</p>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 pt-6">
@@ -174,18 +260,20 @@ export function RepairCostCalculator({
               <Sparkles className="h-3.5 w-3.5" />
               Cálculo automático
             </Label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className={cn('grid grid-cols-1 gap-2 sm:grid-cols-2', canUseManual && 'lg:grid-cols-3')}>
               {(
                 [
-                  { mode: 'manual' as const, label: 'Manual', hint: 'Cargás los tres a mano' },
-                  { mode: 'labor-from-final' as const, label: 'Mano de obra = Total − Repuestos', hint: 'Cargás repuestos + total' },
-                  { mode: 'final-from-labor' as const, label: 'Total = Mano de obra + Repuestos', hint: 'Cargás repuestos + mano de obra' },
+                  { mode: 'automatic' as const, label: 'Calcular total', hint: 'Mano de obra + repuestos - descuento' },
+                  { mode: 'budget' as const, label: 'Usar presupuesto', hint: 'El total acordado define la mano de obra' },
+                  ...(canUseManual
+                    ? [{ mode: 'manual' as const, label: 'Manual avanzado', hint: 'Administrador define ambos valores' }]
+                    : []),
                 ]
               ).map((option) => (
                 <button
                   key={option.mode}
                   type="button"
-                  onClick={() => onCalculationModeChange(option.mode)}
+                  onClick={() => handleCalculationModeChange(option.mode)}
                   disabled={disabled}
                   className={cn(
                     'rounded-lg border-2 p-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60',
@@ -207,32 +295,60 @@ export function RepairCostCalculator({
           </div>
         )}
 
+        {onDiscountAmountChange && (
+          <div className="grid gap-4 rounded-lg border bg-muted/20 p-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="repair-discount">Descuento</Label>
+              <Input
+                id="repair-discount"
+                type="number"
+                min="0"
+                step={getCurrencyFractionDigits(currency) === 0 ? '1' : '0.01'}
+                value={discountAmount || ''}
+                onChange={(event) => onDiscountAmountChange(Number(event.target.value) || 0)}
+                disabled={disabled}
+              />
+              <p className="text-[11px] text-muted-foreground">Se descuenta del subtotal antes de definir el total.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Pagado</p>
+                <p className="mt-1 font-semibold">{formatCurrency(pricing.paidAmount)}</p>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Saldo</p>
+                <p className="mt-1 font-semibold">{formatCurrency(pricing.balance)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Costos Base */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
           {/* Costo de Mano de Obra */}
-          <div className="space-y-3 p-4 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/40 dark:to-blue-900/30 border-2 border-blue-200 dark:border-blue-900/50">
-            <Label className="text-sm font-semibold flex items-center gap-2 text-blue-900 dark:text-blue-300">
-              <Wrench className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              Costo de Mano de Obra
+          <div className="space-y-3 rounded-lg border bg-background p-4">
+            <Label className="flex items-center gap-2 text-sm font-semibold">
+              <Wrench className="h-4 w-4 text-primary" />
+              Mano de obra
               {isLaborDerived && <Lock className="h-3 w-3 text-blue-500 dark:text-blue-400" />}
             </Label>
             <div className="relative">
               <DollarSign className="absolute left-3 top-3.5 h-5 w-5 text-blue-600 dark:text-blue-400" />
               <Input
                 type="number"
-                step="0.01"
+                step={getCurrencyFractionDigits(currency) === 0 ? '1' : '0.01'}
                 min="0"
                 value={laborCost || ''}
-                onChange={(e) => onLaborCostChange(parseFloat(e.target.value) || 0)}
+                onChange={(e) => handleLaborInputChange(e.target.value)}
                 placeholder="0.00"
-                className="pl-11 h-14 text-lg font-semibold border-blue-300 dark:border-blue-800 focus:border-blue-500 dark:focus:border-blue-600 bg-white dark:bg-slate-900 disabled:opacity-80"
+                className="h-12 pl-11 text-lg font-semibold disabled:opacity-80"
                 disabled={disabled || isLaborDerived}
               />
             </div>
             {isLaborDerived && (
               <p className="text-[11px] text-blue-700 dark:text-blue-400">
-                = Costo final − Repuestos. Se recalcula solo al cambiar cualquiera de los dos.
+                = Total acordado + descuento - repuestos.
               </p>
             )}
             {autoLaborWouldBeNegative && (
@@ -243,12 +359,12 @@ export function RepairCostCalculator({
             )}
           </div>
 
-          {/* Costo de Repuestos (Solo lectura) */}
-          <div className="space-y-3 p-4 rounded-xl bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/40 dark:to-green-900/30 border-2 border-green-200 dark:border-green-900/50">
-            <Label className="text-sm font-semibold flex items-center gap-2 text-green-900 dark:text-green-300">
-              <Package className="h-4 w-4 text-green-600 dark:text-green-400" />
-              Costo de Repuestos
-              <Badge variant="secondary" className="text-xs bg-green-200 dark:bg-green-900/50 text-green-800 dark:text-green-300">
+          {/* Precio de repuestos (solo lectura) */}
+          <div className="space-y-3 rounded-lg border bg-background p-4">
+            <Label className="flex items-center gap-2 text-sm font-semibold">
+              <Package className="h-4 w-4 text-primary" />
+              Precio de repuestos
+              <Badge variant="secondary" className="text-xs">
                 {parts.length} {parts.length === 1 ? 'item' : 'items'}
               </Badge>
             </Label>
@@ -257,13 +373,13 @@ export function RepairCostCalculator({
               <Input
                 type="text"
                 value={formatCurrency(partsCost)}
-                className="pl-11 h-14 text-lg font-semibold bg-white dark:bg-slate-900 border-green-300 dark:border-green-800"
+                className="h-12 pl-11 text-lg font-semibold"
                 disabled
                 readOnly
               />
             </div>
             {parts.length > 0 && (
-              <div className="text-xs text-green-800 dark:text-green-300 space-y-1 bg-white/60 dark:bg-slate-900/60 rounded-lg p-2 border border-green-200 dark:border-green-900">
+              <div className="space-y-1 rounded-md border bg-muted/20 p-2 text-xs">
                 {parts.map((part, index) => (
                   <div key={index} className="flex justify-between">
                     <span className="font-medium">{part.name} (x{part.quantity})</span>
@@ -280,28 +396,28 @@ export function RepairCostCalculator({
         {/* Desglose de Cálculo */}
         {showBreakdown && (
           <div className="space-y-4">
-            <h4 className="font-semibold text-base flex items-center gap-2 text-emerald-900 dark:text-emerald-300">
-              <Receipt className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              Desglose Automático
+            <h4 className="flex items-center gap-2 text-base font-semibold">
+              <Receipt className="h-5 w-5 text-primary" />
+              Desglose automático
             </h4>
             
-            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/40 dark:to-emerald-900/30 rounded-xl p-5 space-y-4 border-2 border-emerald-200 dark:border-emerald-900/50 shadow-inner">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="flex justify-between p-3 bg-white dark:bg-slate-900 rounded-lg border border-emerald-200 dark:border-emerald-900">
-                  <span className="text-emerald-800 dark:text-emerald-300 font-medium">Subtotal (sin IVA):</span>
-                  <span className="font-bold text-emerald-900 dark:text-emerald-200">{formatCurrency(calculation.subtotal)}</span>
+            <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <div className="flex justify-between rounded-md border bg-background p-3">
+                  <span className="font-medium text-muted-foreground">Subtotal (sin IVA):</span>
+                  <span className="font-bold">{formatCurrency(calculation.subtotal)}</span>
                 </div>
-                <div className="flex justify-between p-3 bg-white dark:bg-slate-900 rounded-lg border border-emerald-200 dark:border-emerald-900">
-                  <span className="text-emerald-800 dark:text-emerald-300 font-medium">IVA ({taxRate}%):</span>
-                  <span className="font-bold text-emerald-900 dark:text-emerald-200">{formatCurrency(calculation.taxAmount)}</span>
+                <div className="flex justify-between rounded-md border bg-background p-3">
+                  <span className="font-medium text-muted-foreground">IVA ({taxRate}%):</span>
+                  <span className="font-bold">{formatCurrency(calculation.taxAmount)}</span>
                 </div>
               </div>
               
               <Separator className="bg-emerald-300 dark:bg-emerald-800" />
               
-              <div className="flex justify-between font-bold p-4 bg-gradient-to-r from-emerald-600 to-emerald-700 dark:from-emerald-700 dark:to-emerald-800 rounded-lg text-white shadow-md">
-                <span className="text-lg">Total Estimado:</span>
-                <span className="text-2xl">{formatCurrency(estimatedCost)}</span>
+              <div className="flex items-center justify-between rounded-md bg-primary p-4 font-bold text-primary-foreground">
+                <span className="text-base sm:text-lg">Total estimado:</span>
+                <span className="text-xl sm:text-2xl">{formatCurrency(estimatedCost)}</span>
               </div>
             </div>
           </div>
@@ -317,14 +433,14 @@ export function RepairCostCalculator({
               Costo Final de la Reparación
               {isFinalDerived && <Lock className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />}
             </Label>
-            {finalCost !== null && !isFinalDerived && (
+            {finalCost !== null && calculationMode === 'manual' && (
               <button
                 type="button"
                 onClick={() => onFinalCostChange(null)}
                 className="text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 font-medium hover:underline"
                 disabled={disabled}
               >
-                Usar costo estimado
+                Restablecer al estimado
               </button>
             )}
           </div>
@@ -333,13 +449,10 @@ export function RepairCostCalculator({
             <DollarSign className="absolute left-4 top-4 h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             <Input
               type="number"
-              step="0.01"
+              step={getCurrencyFractionDigits(currency) === 0 ? '1' : '0.01'}
               min="0"
               value={finalCost ?? ''}
-              onChange={(e) => {
-                const value = e.target.value
-                onFinalCostChange(value === '' ? null : parseFloat(value) || 0)
-              }}
+              onChange={(e) => handleFinalCostInputChange(e.target.value)}
               placeholder={`${formatCurrency(estimatedCost)} (estimado)`}
               className={`pl-14 h-16 text-xl font-bold border-2 disabled:opacity-80 ${
                 hasCostDifference
@@ -353,8 +466,35 @@ export function RepairCostCalculator({
           </div>
           {isFinalDerived && (
             <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-              = Mano de obra + Repuestos. Se recalcula solo al cambiar cualquiera de los dos.
+              = Mano de obra + repuestos - descuento.
             </p>
+          )}
+          {isLaborDerived && finalCost === null && (
+            <p className="text-[11px] font-medium text-blue-700 dark:text-blue-400">
+              Ingresá el total acordado para calcular la mano de obra.
+            </p>
+          )}
+
+          {(discountAmount > 0 || (calculationMode === 'manual' && pricing.customerTotal < pricing.partsPrice)) && onOverrideReasonChange && (
+            <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+              <Label htmlFor="repair-price-override">Motivo del ajuste</Label>
+              <Input
+                id="repair-price-override"
+                value={overrideReason}
+                onChange={(event) => onOverrideReasonChange(event.target.value)}
+                placeholder="Ej: garantía comercial o autorización gerencial"
+                maxLength={300}
+                disabled={disabled}
+              />
+              <p className="text-[11px] text-amber-800 dark:text-amber-300">Obligatorio para auditar descuentos y excepciones de precio.</p>
+            </div>
+          )}
+
+          {canViewCommission && (
+            <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/20 p-3 text-sm">
+              <div><p className="text-xs text-muted-foreground">Costo interno</p><p className="font-semibold">{formatCurrency(pricing.partsInternalCost)}</p></div>
+              <div><p className="text-xs text-muted-foreground">Margen bruto</p><p className={cn('font-semibold', pricing.margin < 0 && 'text-red-600')}>{formatCurrency(pricing.margin)}</p></div>
+            </div>
           )}
 
           {/* Diferencia de Costo */}

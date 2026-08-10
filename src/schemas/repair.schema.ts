@@ -173,12 +173,26 @@ export const RepairPartSchema = z.object({
     .number()
     .min(0, 'El costo no puede ser negativo')
     .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG),
-  quantity: z.number().min(1, 'La cantidad debe ser al menos 1'),
+  internalCost: z
+    .number()
+    .min(0, 'El costo interno no puede ser negativo')
+    .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG)
+    .optional(),
+  quantity: z.number().int('La cantidad debe ser entera').min(1, 'La cantidad debe ser al menos 1'),
+  stockAvailable: z.number().int().min(0).optional().nullable(),
   supplier: z.string().optional().or(z.literal('')),
   partNumber: z.string().optional().or(z.literal('')),
   // Presente solo si el repuesto se eligió del inventario local; un repuesto
   // cargado a mano (proveedor externo, por ejemplo) no tiene product_id.
   productId: z.string().optional().nullable()
+}).superRefine((part, ctx) => {
+  if (part.productId && part.stockAvailable !== null && part.stockAvailable !== undefined && part.quantity > part.stockAvailable) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['quantity'],
+      message: `Solo hay ${part.stockAvailable} unidades disponibles en esta sucursal`,
+    })
+  }
 })
 
 export const RepairNoteSchema = z.object({
@@ -186,6 +200,22 @@ export const RepairNoteSchema = z.object({
   text: z.string().min(1, 'La nota no puede estar vacia'),
   isInternal: z.boolean().default(false)
 })
+
+export const RepairPricingModeEnum = z.enum(['automatic', 'budget', 'manual'])
+
+const RepairPricingFields = {
+  pricingMode: RepairPricingModeEnum.default('automatic'),
+  discountAmount: z
+    .number()
+    .min(0, 'El descuento no puede ser negativo')
+    .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG)
+    .default(0),
+  priceOverrideReason: z
+    .string()
+    .max(300, 'El motivo no puede superar 300 caracteres')
+    .optional()
+    .or(z.literal('')),
+}
 
 export const WarrantyTypeEnum = z.enum(['labor', 'parts', 'full'], 'Selecciona un tipo de garantia valido')
 
@@ -242,6 +272,8 @@ export const RepairFormSchema = z.object({
     .optional()
     .nullable()
     .default(null),
+
+  ...RepairPricingFields,
 
   warrantyMonths: z
     .number()
@@ -313,6 +345,8 @@ export const RepairFormQuickSchema = z.object({
     .optional()
     .nullable()
     .default(null),
+
+  ...RepairPricingFields,
 
   warrantyMonths: z
     .number()

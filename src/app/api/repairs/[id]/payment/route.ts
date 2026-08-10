@@ -6,6 +6,7 @@ import {
 } from '@/app/api/repairs/_lib'
 import { createCreditAccount, CreditAccountError } from '@/lib/credits/create-credit-account'
 import { normalizeCreditFrequency, normalizeInstallmentCount } from '@/lib/credits/installments'
+import { RepairPaymentAmountError, validateRepairPaymentAmount } from '@/lib/repairs/payment-limits'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -125,6 +126,15 @@ export async function POST(request: NextRequest, context: RouteParams) {
       )
     }
 
+    const previouslyPaid = Number(currentRepair.paid_amount) || 0
+    const totalDue = Number(currentRepair.final_cost ?? currentRepair.estimated_cost) || 0
+    validateRepairPaymentAmount({
+      totalDue,
+      paidAmount: previouslyPaid,
+      amount,
+      isCredit,
+    })
+
     const ticketLabel = currentRepair.ticket_number || id.slice(0, 8).toUpperCase()
 
     // Cobro a crédito: se financia el monto creando una cuenta de crédito
@@ -174,12 +184,10 @@ export async function POST(request: NextRequest, context: RouteParams) {
       creditInfo = { creditId: result.creditId, financedTotal: result.financedTotal }
     }
 
-    const previouslyPaid = Number(currentRepair.paid_amount) || 0
     // A crédito, el monto financiado salda la reparación por completo (la deuda
     // pasa al crédito). En efectivo/tarjeta/transferencia, se acumula.
     const totalPaid = isCredit ? (currentRepair.final_cost ?? currentRepair.estimated_cost ?? amount) : previouslyPaid + amount
     // El total a cobrar es el costo final si está definido; si no, el estimado.
-    const totalDue = Number(currentRepair.final_cost ?? currentRepair.estimated_cost) || 0
     // A crédito queda saldada; si no, según lo acumulado vs total.
     const isSettled = isCredit || totalDue <= 0 || totalPaid >= totalDue
 
@@ -235,6 +243,9 @@ export async function POST(request: NextRequest, context: RouteParams) {
     updateQuery = currentRepair.payment_status
       ? updateQuery.eq('payment_status', currentRepair.payment_status)
       : updateQuery.is('payment_status', null)
+    updateQuery = currentRepair.paid_amount === null || currentRepair.paid_amount === undefined
+      ? updateQuery.is('paid_amount', null)
+      : updateQuery.eq('paid_amount', currentRepair.paid_amount)
 
     const { data, error } = await updateQuery.select('id').maybeSingle()
 
@@ -309,6 +320,9 @@ export async function POST(request: NextRequest, context: RouteParams) {
 
     return NextResponse.json({ repair })
   } catch (error) {
+    if (error instanceof RepairPaymentAmountError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 422 })
+    }
     if (error instanceof CreditAccountError) {
       return NextResponse.json({ error: error.message }, { status: error.status })
     }

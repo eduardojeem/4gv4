@@ -28,6 +28,7 @@ interface SupabaseRepairPart {
     id: string | number
     part_name: string
     unit_cost: number
+    unit_price?: number | null
     quantity: number
     supplier?: string
     part_number?: string
@@ -60,6 +61,12 @@ interface SupabaseRepair {
     estimated_cost?: number
     final_cost?: number
     labor_cost?: number
+    pricing_mode?: string
+    discount_amount?: number
+    price_override_reason?: string
+    pricing_updated_at?: string
+    payment_status?: string
+    paid_amount?: number
     technician?: SupabaseTechnician | SupabaseTechnician[]
     location?: string
     warranty?: string
@@ -121,6 +128,12 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         estimatedCost: r.estimated_cost || 0,
         finalCost: r.final_cost ?? null,
         laborCost: r.labor_cost || 0,
+        pricingMode: (r.pricing_mode as Repair['pricingMode']) || 'automatic',
+        discountAmount: Number(r.discount_amount) || 0,
+        priceOverrideReason: r.price_override_reason || undefined,
+        pricingUpdatedAt: r.pricing_updated_at || null,
+        paymentStatus: (r.payment_status as Repair['paymentStatus']) || 'pendiente',
+        paidAmount: Number(r.paid_amount) || 0,
         technician: tech ? {
             name: tech.full_name || tech.email,
             id: tech.id
@@ -149,7 +162,8 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         parts: (r.parts || []).map((p: SupabaseRepairPart) => ({
             id: Number(p.id) || 0, // Fallback if UUID
             name: p.part_name,
-            cost: p.unit_cost,
+            cost: p.unit_price ?? p.unit_cost,
+            internalCost: p.unit_cost,
             quantity: p.quantity,
             supplier: p.supplier || '',
             partNumber: p.part_number || '',

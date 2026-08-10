@@ -6,20 +6,22 @@
  */
 
 import { render, screen, fireEvent } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RepairCostCalculator } from '../RepairCostCalculator'
 
 // Mock de las dependencias
-jest.mock('@/lib/currency', () => ({
-  formatCurrency: (amount: number) => `$${amount.toFixed(2)}`
+vi.mock('@/lib/currency', () => ({
+  formatCurrency: (amount: number) => `$${amount.toFixed(2)}`,
+  getCurrencyFractionDigits: () => 2,
 }))
 
-jest.mock('@/lib/pos-calculator', () => ({
-  calculateRepairTotal: (input: any) => ({
+vi.mock('@/lib/pos-calculator', () => ({
+  calculateRepairTotal: (input: { laborCost: number; partsCost: number; taxRate: number }) => ({
     laborCost: input.laborCost,
     partsCost: input.partsCost,
     subtotal: input.laborCost + input.partsCost,
-    taxAmount: (input.laborCost + input.partsCost) * 0.10,
-    total: (input.laborCost + input.partsCost) * 1.10,
+    taxAmount: (input.laborCost + input.partsCost) * (input.taxRate / 100),
+    total: (input.laborCost + input.partsCost) * (1 + input.taxRate / 100),
     breakdown: {
       laborTax: input.laborCost * 0.10,
       partsTax: input.partsCost * 0.10,
@@ -29,12 +31,18 @@ jest.mock('@/lib/pos-calculator', () => ({
   })
 }))
 
+vi.mock('@/hooks/use-technician-compensation', () => ({
+  useTechnicianCompensation: () => ({ compensation: null, isLoading: false })
+}))
+
 describe('RepairCostCalculator', () => {
   const defaultProps = {
     laborCost: 100,
-    onLaborCostChange: jest.fn(),
+    onLaborCostChange: vi.fn(),
     finalCost: null,
-    onFinalCostChange: jest.fn(),
+    onFinalCostChange: vi.fn(),
+    calculationMode: 'manual' as const,
+    canUseManual: true,
     parts: [
       { name: 'Pantalla', cost: 200, quantity: 1 },
       { name: 'Batería', cost: 50, quantity: 2 }
@@ -42,15 +50,15 @@ describe('RepairCostCalculator', () => {
   }
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it('renderiza correctamente con props básicas', () => {
     render(<RepairCostCalculator {...defaultProps} />)
     
-    expect(screen.getByText('Calculadora de Costos')).toBeInTheDocument()
-    expect(screen.getByText('Costo de Mano de Obra')).toBeInTheDocument()
-    expect(screen.getByText('Costo de Repuestos')).toBeInTheDocument()
+    expect(screen.getByText('Calculadora de costos')).toBeInTheDocument()
+    expect(screen.getByText('Mano de obra')).toBeInTheDocument()
+    expect(screen.getByText('Precio de repuestos')).toBeInTheDocument()
   })
 
   it('calcula correctamente el costo de repuestos', () => {
@@ -65,10 +73,10 @@ describe('RepairCostCalculator', () => {
   it('muestra el desglose de costos cuando showBreakdown es true', () => {
     render(<RepairCostCalculator {...defaultProps} showBreakdown={true} />)
     
-    expect(screen.getByText('Desglose Automático')).toBeInTheDocument()
+    expect(screen.getByText('Desglose automático')).toBeInTheDocument()
     expect(screen.getByText('Subtotal (sin IVA):')).toBeInTheDocument()
     expect(screen.getByText('IVA (10%):')).toBeInTheDocument()
-    expect(screen.getByText('Total Estimado:')).toBeInTheDocument()
+    expect(screen.getByText('Total estimado:')).toBeInTheDocument()
   })
 
   it('llama onLaborCostChange cuando se cambia el costo de mano de obra', () => {
@@ -78,6 +86,52 @@ describe('RepairCostCalculator', () => {
     fireEvent.change(laborInput, { target: { value: '150' } })
     
     expect(defaultProps.onLaborCostChange).toHaveBeenCalledWith(150)
+  })
+
+  it('recalcula el total al borrar la mano de obra en modo automático', () => {
+    const props = {
+      ...defaultProps,
+      calculationMode: 'automatic' as const,
+      finalCost: 400,
+    }
+    render(<RepairCostCalculator {...props} />)
+
+    fireEvent.change(screen.getByDisplayValue('100'), { target: { value: '' } })
+
+    expect(props.onLaborCostChange).toHaveBeenCalledWith(0)
+    expect(props.onFinalCostChange).toHaveBeenCalledWith(300)
+  })
+
+  it('limpia los importes derivados al iniciar un presupuesto', () => {
+    const onCalculationModeChange = vi.fn()
+    const props = {
+      ...defaultProps,
+      calculationMode: 'automatic' as const,
+      finalCost: 400,
+      onCalculationModeChange,
+    }
+    render(<RepairCostCalculator {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Usar presupuesto/ }))
+
+    expect(onCalculationModeChange).toHaveBeenCalledWith('budget')
+    expect(props.onFinalCostChange).toHaveBeenCalledWith(null)
+    expect(props.onLaborCostChange).toHaveBeenCalledWith(0)
+  })
+
+  it('deriva la mano de obra desde el presupuesto ingresado', () => {
+    const props = {
+      ...defaultProps,
+      calculationMode: 'budget' as const,
+      laborCost: 0,
+      finalCost: null,
+    }
+    render(<RepairCostCalculator {...props} />)
+
+    fireEvent.change(screen.getByPlaceholderText(/estimado/), { target: { value: '500' } })
+
+    expect(props.onFinalCostChange).toHaveBeenCalledWith(500)
+    expect(props.onLaborCostChange).toHaveBeenCalledWith(200)
   })
 
   it('llama onFinalCostChange cuando se cambia el costo final', () => {
@@ -111,7 +165,7 @@ describe('RepairCostCalculator', () => {
     expect(screen.getByText(/Descuento de/)).toBeInTheDocument()
   })
 
-  it('muestra el botón "Usar costo estimado" cuando hay un costo final', () => {
+  it('muestra el botón para restablecer el estimado cuando hay un costo final', () => {
     const props = {
       ...defaultProps,
       finalCost: 400
@@ -119,10 +173,10 @@ describe('RepairCostCalculator', () => {
     
     render(<RepairCostCalculator {...props} />)
     
-    expect(screen.getByText('Usar costo estimado')).toBeInTheDocument()
+    expect(screen.getByText('Restablecer al estimado')).toBeInTheDocument()
   })
 
-  it('resetea el costo final al hacer clic en "Usar costo estimado"', () => {
+  it('resetea el costo final al hacer clic en "Restablecer al estimado"', () => {
     const props = {
       ...defaultProps,
       finalCost: 400
@@ -130,7 +184,7 @@ describe('RepairCostCalculator', () => {
     
     render(<RepairCostCalculator {...props} />)
     
-    const resetButton = screen.getByText('Usar costo estimado')
+    const resetButton = screen.getByText('Restablecer al estimado')
     fireEvent.click(resetButton)
     
     expect(defaultProps.onFinalCostChange).toHaveBeenCalledWith(null)
@@ -188,9 +242,9 @@ describe('RepairCostCalculator - Integración con pos-calculator', () => {
   it('usa correctamente la configuración de IVA', () => {
     const props = {
       laborCost: 100,
-      onLaborCostChange: jest.fn(),
+      onLaborCostChange: vi.fn(),
       finalCost: null,
-      onFinalCostChange: jest.fn(),
+      onFinalCostChange: vi.fn(),
       parts: [{ name: 'Test', cost: 100, quantity: 1 }],
       taxRate: 15, // IVA personalizado
       pricesIncludeTax: false

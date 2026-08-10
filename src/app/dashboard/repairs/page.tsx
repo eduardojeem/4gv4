@@ -8,9 +8,8 @@ import { logger } from '@/lib/logger'
 
 // Icons
 import {
-  Users, BarChart3, MessageSquare, Package, RefreshCw, ChevronLeft, ChevronRight, Info
+  Users, BarChart3, MessageSquare, Package, RefreshCw, ChevronLeft, ChevronRight
 } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
 
 // UI Components
 import { Button } from '@/components/ui/button'
@@ -90,6 +89,19 @@ function RepairsPageContent() {
   const { technicians } = useTechnicians()
   const { settings: sharedSettings } = useSharedSettings()
   const { selectedBranchId, selectedBranch } = useBranch()
+  const repairListCompanyInfo = useMemo(() => ({
+    name: sharedSettings.companyName,
+    phone: sharedSettings.companyPhone,
+    address: sharedSettings.companyAddress,
+    email: sharedSettings.companyEmail,
+    logo: sharedSettings.companyLogo || undefined
+  }), [
+    sharedSettings.companyAddress,
+    sharedSettings.companyEmail,
+    sharedSettings.companyLogo,
+    sharedSettings.companyName,
+    sharedSettings.companyPhone
+  ])
 
   // New unified filter hook
   const {
@@ -346,6 +358,9 @@ function RepairsPageContent() {
             estimated_cost: d.estimatedCost || 0,
             laborCost: data.laborCost || 0,
             finalCost: data.finalCost,
+            pricingMode: data.pricingMode,
+            discountAmount: data.discountAmount,
+            priceOverrideReason: data.priceOverrideReason,
             warrantyMonths: data.warrantyMonths,
             warrantyType: data.warrantyType,
             warrantyNotes: data.warrantyNotes,
@@ -398,7 +413,6 @@ function RepairsPageContent() {
 
         if (failedCount > 0) {
           toast.warning(`Se crearon ${validRepairs.length} de ${createdRepairs.length} reparaciones. Revisá el listado antes de reintentar.`)
-          return true
         }
 
         if (validRepairs.length > 0) {
@@ -500,6 +514,9 @@ function RepairsPageContent() {
           estimatedCost: d.estimatedCost,
           laborCost: data.laborCost || 0,
           finalCost: data.finalCost,
+          pricingMode: data.pricingMode,
+          discountAmount: data.discountAmount,
+          priceOverrideReason: data.priceOverrideReason,
           warrantyMonths: data.warrantyMonths,
           warrantyType: data.warrantyType,
           warrantyNotes: data.warrantyNotes,
@@ -518,7 +535,7 @@ function RepairsPageContent() {
       return false
     }
     return false
-  }, [dialogMode, selectedRepair, createRepair, updateRepair, technicianOptions, handleQuickPayConfirm])
+  }, [dialogMode, selectedRepair, createRepair, updateRepair, technicianOptions, handleQuickPayConfirm, repairListCompanyInfo])
 
   const handleGlobalSearch = useCallback(({ query }: { query: string }) => {
     if (!query || query.length < 2) return []
@@ -578,6 +595,9 @@ function RepairsPageContent() {
         urgency: selectedRepair.urgency === 'urgent' ? 'high' : 'medium',
         laborCost: selectedRepair.laborCost || 0,
         finalCost: selectedRepair.finalCost,
+        pricingMode: selectedRepair.pricingMode,
+        discountAmount: selectedRepair.discountAmount,
+        priceOverrideReason: selectedRepair.priceOverrideReason || '',
         warrantyMonths: selectedRepair.warrantyMonths ?? 3,
         warrantyType: selectedRepair.warrantyType || 'full',
         warrantyNotes: selectedRepair.warrantyNotes || '',
@@ -661,19 +681,6 @@ function RepairsPageContent() {
     })
   }, [uiFiltered, calendarDate])
 
-  const repairListCompanyInfo = useMemo(() => ({
-    name: sharedSettings.companyName,
-    phone: sharedSettings.companyPhone,
-    address: sharedSettings.companyAddress,
-    email: sharedSettings.companyEmail,
-    logo: sharedSettings.companyLogo || undefined
-  }), [
-    sharedSettings.companyAddress,
-    sharedSettings.companyEmail,
-    sharedSettings.companyLogo,
-    sharedSettings.companyName,
-    sharedSettings.companyPhone
-  ])
   const hasActiveFilters = !!(
     searchTerm ||
     statusFilter !== 'all' ||

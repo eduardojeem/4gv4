@@ -25,6 +25,7 @@ export type DbRepairStatus = RepairStatus
 export type RepairPriority = 'low' | 'medium' | 'high'
 export type RepairUrgency = 'normal' | 'urgent'
 export type RepairDeliveryOutcome = 'repaired' | 'unrepairable' | 'withdrawn'
+export type RepairPricingMode = 'automatic' | 'budget' | 'manual'
 export type DeviceType = 'smartphone' | 'tablet' | 'laptop' | 'desktop' | 'accessory' | 'other'
 
 export interface Customer {
@@ -52,7 +53,9 @@ export interface RepairPart {
   id: number
   name: string
   cost: number
+  internalCost?: number
   quantity: number
+  stockAvailable?: number | null
   supplier: string
   partNumber: string
   /** Producto de inventario del que salió este repuesto. Sin esto no hay
@@ -92,6 +95,10 @@ export interface Repair {
   estimatedCost: number
   finalCost: number | null
   laborCost: number
+  pricingMode?: RepairPricingMode
+  discountAmount?: number
+  priceOverrideReason?: string
+  pricingUpdatedAt?: string | null
   estimatedDuration?: number  // Duración estimada en minutos
   technician: Technician | null
   location: string

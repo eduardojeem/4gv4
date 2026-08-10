@@ -90,6 +90,9 @@ export function RepairPaymentDialog({
   const [interestRate, setInterestRate] = useState('0')
 
   const isCredit = method === 'credit'
+  const parsedAmount = parseFloat(amount) || 0
+  const amountExceedsBalance = parsedAmount > balanceDue
+  const invalidCreditAmount = isCredit && parsedAmount !== balanceDue
 
   const handleClose = () => {
     if (isSubmitting) return
@@ -107,6 +110,7 @@ export function RepairPaymentDialog({
     if (!repair) return
     const parsed = parseFloat(amount)
     if (!parsed || parsed <= 0) return
+    if (parsed > balanceDue || (isCredit && parsed !== balanceDue)) return
 
     const selectedMethod = METHODS.find(m => m.id === method)
     if (selectedMethod?.requiresRef && !reference.trim()) return
@@ -138,7 +142,7 @@ export function RepairPaymentDialog({
   const creditFinanced = creditPrincipal * (1 + (Math.max(0, Number(interestRate) || 0) / 100))
   const creditPerInstallment = creditCount > 0 ? creditFinanced / creditCount : 0
 
-  const canConfirm = !!parseFloat(amount) && parseFloat(amount) > 0 &&
+  const canConfirm = parsedAmount > 0 && !amountExceedsBalance && !invalidCreditAmount && balanceDue > 0 &&
     (!METHODS.find(m => m.id === method)?.requiresRef || reference.trim().length > 0) &&
     (!isCredit || creditCount >= 1)
 
@@ -197,7 +201,10 @@ export function RepairPaymentDialog({
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setMethod(m.id)}
+                    onClick={() => {
+                      setMethod(m.id)
+                      if (m.id === 'credit') setAmount(balanceDue.toString())
+                    }}
                     className={cn(
                       'flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 text-xs font-medium transition-all',
                       selected
@@ -220,12 +227,19 @@ export function RepairPaymentDialog({
               id="pay-amount"
               type="number"
               min={0}
+              max={balanceDue}
               value={amount}
               onChange={e => setAmount(e.target.value)}
               placeholder={balanceDue.toString()}
               className="text-lg font-semibold"
               disabled={isSubmitting}
             />
+            {amountExceedsBalance && (
+              <p className="text-xs text-red-600">El monto supera el saldo pendiente.</p>
+            )}
+            {invalidCreditAmount && !amountExceedsBalance && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">El crédito debe cubrir el saldo completo.</p>
+            )}
             <button
               type="button"
               className="text-xs text-primary underline-offset-2 hover:underline"

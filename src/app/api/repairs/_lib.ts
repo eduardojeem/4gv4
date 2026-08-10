@@ -18,6 +18,7 @@ export type RepairRouteContext = {
   supabase: ReturnType<typeof createAdminSupabase>
   userId: string
   role: string
+  organizationRole: string
   organizationId: string
   branchId: string
 }
@@ -81,6 +82,7 @@ export async function resolveRepairRouteContext(
     supabase: createAdminSupabase(),
     userId: staffAuth.user.id,
     role: staffAuth.role,
+    organizationRole: organization.role,
     organizationId: organization.id,
     branchId: branchScope.branchId,
   }

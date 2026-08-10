@@ -14,13 +14,15 @@ import { logger } from '@/lib/logger'
 // ============================================================================
 
 // Importar tipos centralizados
-import { Repair, RepairStatus, RepairPriority, RepairDeliveryOutcome } from '@/types/repairs'
+import { Repair, RepairStatus, RepairPriority, RepairDeliveryOutcome, RepairPricingMode } from '@/types/repairs'
 
 type SupabaseRepairPayload = Parameters<typeof mapSupabaseRepairToUi>[0]
 type RepairPartFormInput = {
     name?: string
     cost?: number
+    internalCost?: number
     quantity?: number
+    stockAvailable?: number | null
     supplier?: string
     partNumber?: string
     productId?: string | null
@@ -47,6 +49,9 @@ export interface RepairFormData {
     estimated_cost?: number
     laborCost?: number
     finalCost?: number | null
+    pricingMode?: RepairPricingMode
+    discountAmount?: number
+    priceOverrideReason?: string
     warrantyMonths?: number
     warrantyType?: 'labor' | 'parts' | 'full'
     warrantyNotes?: string
@@ -225,22 +230,23 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     diagnosis: repairData.description,
                     access_type: repairData.accessType || 'none',
                     access_password: repairData.accessPassword || null,
-                    status: 'recibido',
                     priority: repairData.priority,
                     urgency: repairData.urgency,
                     technician_id: repairData.technician_id || null,
                     estimated_cost: repairData.estimated_cost,
                     labor_cost: repairData.laborCost || 0,
                     final_cost: repairData.finalCost,
+                    pricing_mode: repairData.pricingMode || 'automatic',
+                    discount_amount: repairData.discountAmount || 0,
+                    price_override_reason: repairData.priceOverrideReason || null,
                     warranty_months: repairData.warrantyMonths || 0,
                     warranty_type: repairData.warrantyType || 'full',
                     warranty_notes: repairData.warrantyNotes || null,
                     warranty_expires_at: warrantyExpiresAt,
-                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
-                    received_at: new Date().toISOString(),
                     parts: parts?.map((p) => ({
                         part_name: p.name,
-                        unit_cost: p.cost,
+                        unit_price: p.cost,
+                        unit_cost: p.internalCost,
                         quantity: p.quantity,
                         supplier: p.supplier,
                         part_number: p.partNumber,

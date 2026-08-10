@@ -15,13 +15,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatCurrency } from '@/lib/currency'
 import { useAuth } from '@/contexts/auth-context'
+import { useBranch } from '@/contexts/branch-context'
+import { branchHeaders } from '@/lib/branches/client'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { calculateRepairPricing, validateRepairPricing } from '@/lib/repairs/pricing'
 import { cn } from '@/lib/utils'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
-  Save, X, User, Phone, Mail, Smartphone, Laptop, Tablet,
+  Save, User, Phone, Mail, Smartphone, Laptop, Tablet,
   AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign, Calculator, FileText,
-  Search, Loader2
+  Search, Loader2, Maximize2, Minimize2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -148,6 +152,21 @@ function guessDeviceFromServiceName(serviceName: string): {
   return {}
 }
 
+function findFirstErrorPath(value: unknown, prefix = ''): string | null {
+  if (!value || typeof value !== 'object') return null
+
+  const record = value as Record<string, unknown>
+  if (typeof record.message === 'string' && prefix) return prefix
+
+  for (const [key, nestedValue] of Object.entries(record)) {
+    if (key === 'message' || key === 'type' || key === 'ref' || key === 'types' || key === 'root') continue
+    const path = findFirstErrorPath(nestedValue, prefix ? `${prefix}.${key}` : key)
+    if (path) return path
+  }
+
+  return null
+}
+
 const priorityOptions = [
   { value: 'low', label: 'Baja', color: 'bg-green-100 text-green-700' },
   { value: 'medium', label: 'Media', color: 'bg-yellow-100 text-yellow-700' },
@@ -186,6 +205,8 @@ export function RepairFormDialogV2({
 }: RepairFormDialogV2Props) {
   const formId = 'repair-form-dialog-form'
   const { planCode } = useSubscriptionStatus()
+  const { selectedBranchId } = useBranch()
+  const { settings: sharedSettings } = useSharedSettings()
   const photoLimit = repairPhotoLimit(planCode)
   const [quickMode, setQuickMode] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -202,6 +223,7 @@ export function RepairFormDialogV2({
     sku?: string | null
     sale_price?: number | null
     offer_price?: number | null
+    purchase_price?: number | null
     stock_quantity?: number | null
   }>>([])
   const [loadingInventory, setLoadingInventory] = useState(false)
@@ -220,8 +242,11 @@ export function RepairFormDialogV2({
     const t = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/products?per_page=15&query=${encodeURIComponent(inventorySearchQuery)}`,
-          { signal: controller.signal }
+          `/api/products?per_page=15&strict_branch_stock=true&query=${encodeURIComponent(inventorySearchQuery)}`,
+          {
+            signal: controller.signal,
+            headers: branchHeaders(selectedBranchId),
+          }
         )
         const payload = await res.json().catch(() => ({}))
         const productsList = Array.isArray(payload?.data?.products) ? payload.data.products : []
@@ -239,7 +264,7 @@ export function RepairFormDialogV2({
       clearTimeout(t)
       controller.abort()
     }
-  }, [inventorySearchOpen, inventorySearchQuery])
+  }, [inventorySearchOpen, inventorySearchQuery, selectedBranchId])
 
   // Buscador de servicios (ej. "Cambio de pantalla") para autocompletar el
   // Costo Estimado por dispositivo. Un servicio es un producto con
@@ -278,7 +303,10 @@ export function RepairFormDialogV2({
       try {
         const res = await fetch(
           `/api/products?per_page=30&query=${encodeURIComponent(serviceSearchQuery)}`,
-          { signal: controller.signal }
+          {
+            signal: controller.signal,
+            headers: branchHeaders(selectedBranchId),
+          }
         )
         const payload = await res.json().catch(() => ({}))
         const list = Array.isArray(payload?.data?.products) ? payload.data.products : []
@@ -301,7 +329,7 @@ export function RepairFormDialogV2({
       clearTimeout(t)
       controller.abort()
     }
-  }, [serviceSearchIndex, serviceSearchQuery])
+  }, [serviceSearchIndex, serviceSearchQuery, selectedBranchId])
 
   // Select schema based on quick mode
   const resolver = zodResolver(quickMode ? RepairFormQuickSchema : RepairFormSchema) as unknown as import('react-hook-form').Resolver<RepairFormData>
@@ -314,6 +342,7 @@ export function RepairFormDialogV2({
     control,
     formState: { errors, isValid, submitCount },
     watch,
+    getValues,
     setValue,
     reset,
     setFocus,
@@ -346,8 +375,11 @@ export function RepairFormDialogV2({
       }],
       parts: initialData?.parts || [],
       notes: initialData?.notes || [],
-      laborCost: initialData?.laborCost || 0,
-      finalCost: initialData?.finalCost || null,
+      laborCost: initialData?.laborCost ?? 0,
+      finalCost: initialData?.finalCost ?? null,
+      pricingMode: initialData?.pricingMode || 'automatic',
+      discountAmount: initialData?.discountAmount || 0,
+      priceOverrideReason: initialData?.priceOverrideReason || '',
       warrantyMonths: initialData?.warrantyMonths ?? 3,
       warrantyType: initialData?.warrantyType || 'full',
       warrantyNotes: initialData?.warrantyNotes || '',
@@ -375,11 +407,7 @@ export function RepairFormDialogV2({
     name: 'notes'
   })
 
-  // Cálculo automático de costos: repuestos + (mano de obra o total, según el
-  // modo) derivan el tercero. Arranca en 'manual' a propósito: al editar una
-  // reparación existente, un modo automático por defecto recalcularía en
-  // silencio un costo que el técnico ya cargó a mano, sin que nadie lo pidiera.
-  const [calculationMode, setCalculationMode] = useState<CostCalculationMode>('manual')
+  const [calculationMode, setCalculationMode] = useState<CostCalculationMode>(initialData?.pricingMode || 'automatic')
   const { user } = useAuth()
 
   // Estado de caja para el adelanto: si está cerrada, el campo se bloquea y
@@ -416,6 +444,7 @@ export function RepairFormDialogV2({
   const watchedParts = watch('parts')
   const watchedFinalCost = watch('finalCost')
   const watchedLaborCost = watch('laborCost')
+  const watchedDiscountAmount = watch('discountAmount')
 
   // Estado mayorista del cliente elegido, para saber qué precio de servicio
   // ofrecer. Solo se puede saber si el cliente tiene cuenta vinculada (el
@@ -446,32 +475,44 @@ export function RepairFormDialogV2({
   }, [watchedCustomerId])
   const watchedTechnicianId = watch('devices.0.technician')
 
-  const partsCostForLabor = useMemo(
-    () => (watchedParts || []).reduce((sum, part) => sum + (Number(part.cost) || 0) * (Number(part.quantity) || 0), 0),
-    [watchedParts]
-  )
+  const calculatedPricing = useMemo(() => calculateRepairPricing({
+    mode: calculationMode,
+    currency: sharedSettings.currency,
+    laborCost: watchedLaborCost,
+    finalCost: watchedFinalCost,
+    discountAmount: watchedDiscountAmount,
+    paidAmount: repair?.paidAmount || 0,
+    parts: watchedParts,
+  }), [calculationMode, sharedSettings.currency, watchedLaborCost, watchedFinalCost, watchedDiscountAmount, repair?.paidAmount, watchedParts])
 
   useEffect(() => {
-    if (calculationMode === 'labor-from-final') {
+    if (calculationMode === 'budget') {
       if (watchedFinalCost === null || watchedFinalCost === undefined) return
-      const derived = Math.max(0, Math.round((watchedFinalCost - partsCostForLabor) * 100) / 100)
-      if (derived !== watch('laborCost')) {
-        setValue('laborCost', derived, { shouldDirty: true, shouldValidate: true })
+      if (calculatedPricing.laborCost !== watchedLaborCost) {
+        setValue('laborCost', calculatedPricing.laborCost, { shouldDirty: true, shouldValidate: true })
       }
       return
     }
 
-    if (calculationMode === 'final-from-labor') {
-      const derived = Math.round(((watchedLaborCost || 0) + partsCostForLabor) * 100) / 100
-      if (derived !== watch('finalCost')) {
-        setValue('finalCost', derived, { shouldDirty: true, shouldValidate: true })
+    if (calculationMode === 'automatic') {
+      if (calculatedPricing.customerTotal !== watchedFinalCost) {
+        setValue('finalCost', calculatedPricing.customerTotal, { shouldDirty: true, shouldValidate: true })
       }
     }
-  }, [calculationMode, watchedFinalCost, watchedLaborCost, partsCostForLabor, setValue, watch])
+  }, [calculationMode, calculatedPricing.customerTotal, calculatedPricing.laborCost, watchedFinalCost, watchedLaborCost, setValue])
 
-  // Reset form when dialog opens/closes
+  // Reset only once per dialog session. Technician data can arrive after the
+  // dialog opens and must never erase fields the operator already completed.
+  const dialogSessionRef = useRef<string | null>(null)
   useEffect(() => {
-    if (open) {
+    if (!open) {
+      dialogSessionRef.current = null
+      return
+    }
+
+    const sessionKey = `${mode}:${repair?.id || 'new'}`
+    if (dialogSessionRef.current !== sessionKey) {
+      dialogSessionRef.current = sessionKey
       reset({
         customerName: initialData?.customerName || '',
         customerPhone: initialData?.customerPhone || '',
@@ -502,15 +543,30 @@ export function RepairFormDialogV2({
         }],
         parts: initialData?.parts || [],
         notes: initialData?.notes || [],
-        laborCost: initialData?.laborCost || 0,
-        finalCost: initialData?.finalCost || null,
+        laborCost: initialData?.laborCost ?? 0,
+        finalCost: initialData?.finalCost ?? null,
+        pricingMode: initialData?.pricingMode || 'automatic',
+        discountAmount: initialData?.discountAmount || 0,
+        priceOverrideReason: initialData?.priceOverrideReason || '',
         warrantyMonths: initialData?.warrantyMonths ?? 3,
         warrantyType: initialData?.warrantyType || 'full',
-        warrantyNotes: initialData?.warrantyNotes || ''
+        warrantyNotes: initialData?.warrantyNotes || '',
+        depositAmount: initialData?.depositAmount ?? null,
+        depositMethod: initialData?.depositMethod ?? null,
+        depositReference: initialData?.depositReference || ''
       })
       setSelectedQuickCustomer(null)
+      setCalculationMode(initialData?.pricingMode || 'automatic')
     }
-  }, [open, initialData, reset, user?.id, technicians])
+  }, [open, mode, repair?.id, initialData, reset, user?.id, technicians])
+
+  useEffect(() => {
+    if (!open || mode !== 'add' || !user?.id) return
+    if (!technicians.some((tech) => tech.id === user.id)) return
+    if (getValues('devices.0.technician')) return
+
+    setValue('devices.0.technician', user.id, { shouldDirty: false, shouldValidate: true })
+  }, [getValues, mode, open, setValue, technicians, user?.id])
 
   useEffect(() => {
     if (open) {
@@ -529,7 +585,85 @@ export function RepairFormDialogV2({
     }
     setIsSubmitting(true)
     try {
-      const didSubmit = await onSubmit(data)
+      const isBasicBatch = mode === 'add' && data.devices.length > 1
+      const baseSubmissionData = quickMode || isBasicBatch
+        ? {
+            ...data,
+            parts: [],
+            notes: [],
+            laborCost: 0,
+            finalCost: null,
+            pricingMode: 'automatic' as const,
+            discountAmount: 0,
+            priceOverrideReason: '',
+            warrantyMonths: 0,
+            warrantyNotes: '',
+            depositAmount: null,
+            depositMethod: null,
+            depositReference: '',
+          }
+        : data
+      const effectivePricingMode: CostCalculationMode = quickMode || isBasicBatch ? 'automatic' : calculationMode
+      const pricing = calculateRepairPricing({
+        mode: effectivePricingMode,
+        currency: sharedSettings.currency,
+        laborCost: baseSubmissionData.laborCost,
+        finalCost: baseSubmissionData.finalCost,
+        discountAmount: baseSubmissionData.discountAmount,
+        paidAmount: repair?.paidAmount || 0,
+        parts: baseSubmissionData.parts,
+      })
+      const violations = validateRepairPricing({
+        mode: effectivePricingMode,
+        currency: sharedSettings.currency,
+        laborCost: baseSubmissionData.laborCost,
+        finalCost: baseSubmissionData.finalCost,
+        discountAmount: baseSubmissionData.discountAmount,
+        paidAmount: repair?.paidAmount || 0,
+        parts: baseSubmissionData.parts,
+      })
+      if (violations.includes('DISCOUNT_EXCEEDS_SUBTOTAL')) {
+        toast.error('El descuento no puede superar el subtotal de la reparación.')
+        return
+      }
+      if (violations.includes('FINAL_REQUIRED')) {
+        toast.error('Ingresa el total acordado con el cliente.')
+        return
+      }
+      if (violations.includes('FINAL_BELOW_PARTS_PRICE')) {
+        toast.error('El presupuesto no cubre el precio de los repuestos.')
+        return
+      }
+      if (violations.includes('FINAL_BELOW_PAID_AMOUNT')) {
+        toast.error('El total no puede ser menor que el monto ya pagado.')
+        return
+      }
+      if (pricing.discountAmount > 0 && (baseSubmissionData.priceOverrideReason || '').trim().length < 5) {
+        toast.error('Especifica el motivo del descuento.')
+        return
+      }
+      if (effectivePricingMode === 'manual' && pricing.customerTotal < pricing.partsPrice && (baseSubmissionData.priceOverrideReason || '').trim().length < 5) {
+        toast.error('Especifica el motivo del precio manual por debajo de los repuestos.')
+        return
+      }
+      if ((baseSubmissionData.depositAmount ?? 0) > pricing.customerTotal) {
+        toast.error('El adelanto no puede superar el total de la reparación.')
+        return
+      }
+      const hasPricingDetails = pricing.laborCost > 0 || pricing.partsPrice > 0 || baseSubmissionData.finalCost !== null
+      const submissionData = baseSubmissionData.devices.length === 1 && hasPricingDetails
+        ? {
+            ...baseSubmissionData,
+            laborCost: pricing.laborCost,
+            finalCost: pricing.customerTotal,
+            pricingMode: effectivePricingMode,
+            devices: [{
+              ...baseSubmissionData.devices[0],
+              estimatedCost: pricing.customerTotal,
+            }],
+          }
+        : { ...baseSubmissionData, pricingMode: effectivePricingMode }
+      const didSubmit = await onSubmit(submissionData)
       if (!didSubmit) return
       onClose()
     } catch (error) {
@@ -572,12 +706,39 @@ export function RepairFormDialogV2({
     }
   }
 
+  const handleAddDevice = () => {
+    const values = getValues()
+    const hasIndividualDetails =
+      (values.parts?.length ?? 0) > 0 ||
+      (values.notes?.length ?? 0) > 0 ||
+      (values.laborCost ?? 0) > 0 ||
+      values.finalCost !== null ||
+      (values.depositAmount ?? 0) > 0
+
+    if (hasIndividualDetails) {
+      toast.error('Los costos, repuestos, notas y adelantos corresponden a un solo equipo. Quita esos datos antes de agregar otro.')
+      return
+    }
+
+    append({
+      deviceType: 'smartphone',
+      brand: '',
+      model: '',
+      issue: '',
+      description: '',
+      accessType: 'none',
+      images: [],
+      technician: '',
+      estimatedCost: 0
+    })
+  }
+
   // Focus first error field on submit
   useEffect(() => {
     if (submitCount > 0 && Object.keys(errors).length > 0) {
-      const firstErrorField = Object.keys(errors)[0]
-      if (firstErrorField && firstErrorField !== 'root') {
-        setFocus(firstErrorField as keyof RepairFormData)
+      const firstErrorField = findFirstErrorPath(errors)
+      if (firstErrorField) {
+        setFocus(firstErrorField as Parameters<typeof setFocus>[0])
       }
     }
   }, [errors, setFocus, submitCount])
@@ -587,8 +748,8 @@ export function RepairFormDialogV2({
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className={`overflow-hidden flex flex-col p-0 transition-all duration-300 rounded-2xl border-border/60 shadow-2xl max-sm:w-screen max-sm:h-[100dvh] max-sm:max-w-full max-sm:rounded-none ${isFullscreen ? 'sm:w-[98vw] sm:max-w-[98vw] sm:h-[96vh] sm:max-h-[96vh]' : 'sm:w-[92vw] sm:max-w-5xl sm:h-[88vh] sm:max-h-[88vh]'} dark:bg-slate-950 dark:border-slate-800`}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
+      <DialogContent className={`overflow-hidden flex flex-col p-0 transition-all duration-300 rounded-lg border-border/60 shadow-xl max-sm:w-screen max-sm:h-[100dvh] max-sm:max-w-full max-sm:rounded-none ${isFullscreen ? 'sm:w-[98vw] sm:max-w-[98vw] sm:h-[96vh] sm:max-h-[96vh]' : 'sm:w-[94vw] sm:max-w-6xl sm:h-[90vh] sm:max-h-[90vh]'} dark:bg-slate-950 dark:border-slate-800`}>
         <DialogHeader className="flex-shrink-0 px-4 sm:px-6 py-3.5 border-b border-border bg-muted/20 dark:border-slate-800">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
@@ -617,25 +778,18 @@ export function RepairFormDialogV2({
                 onClick={() => setIsFullscreen(!isFullscreen)}
                 className="h-9 w-9"
                 title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+                aria-label={isFullscreen ? "Salir de pantalla completa" : "Ver en pantalla completa"}
               >
-                {isFullscreen ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-                  </svg>
-                )}
+                {isFullscreen ? <Minimize2 className="h-[18px] w-[18px]" /> : <Maximize2 className="h-[18px] w-[18px]" />}
               </Button>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 bg-gradient-to-b from-background to-muted/10 dark:from-slate-950 dark:to-slate-900/50">
-          <form id={formId} onSubmit={handleSubmit(onSubmitForm)} className="space-y-5 max-w-[1800px] mx-auto">
+        <div className="flex-1 overflow-y-auto bg-muted/20 px-3 py-4 sm:px-6 sm:py-5 dark:bg-slate-950">
+          <form id={formId} onSubmit={handleSubmit(onSubmitForm)} className="mx-auto max-w-[1800px] space-y-5">
             {/* Quick Mode Toggle */}
-            <div className="flex items-center justify-between px-4 py-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200/70 dark:border-amber-800/50">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200/70 bg-amber-50 px-3 py-3 sm:px-4 dark:border-amber-800/50 dark:bg-amber-950/30">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-amber-400/90 dark:bg-amber-500 flex items-center justify-center shrink-0">
                   <Zap className="h-4.5 w-4.5 text-white" />
@@ -645,7 +799,7 @@ export function RepairFormDialogV2({
                     Modo Rápido
                   </Label>
                   <p className="text-xs text-amber-700 dark:text-amber-300">
-                    Validación simplificada para registro rápido
+                    Solo cliente, equipo, problema y asignación
                   </p>
                 </div>
               </div>
@@ -657,8 +811,31 @@ export function RepairFormDialogV2({
               />
             </div>
 
+            <nav aria-label="Secciones del formulario" className="sticky top-0 z-10 rounded-lg border bg-background/95 p-2 shadow-sm backdrop-blur">
+              <ol className="grid grid-cols-3 gap-1">
+                {[
+                  { id: 'repair-customer-section', number: 1, label: 'Cliente' },
+                  { id: 'repair-device-section', number: 2, label: 'Equipo' },
+                  { id: 'repair-details-section', number: 3, label: quickMode ? 'Asignación' : 'Detalles' },
+                ].map((step) => (
+                  <li key={step.id}>
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById(step.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      className="flex h-9 w-full items-center justify-center gap-2 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:text-sm"
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                        {step.number}
+                      </span>
+                      <span className="truncate">{step.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </nav>
+
             {/* Sección 1: Información del Cliente (Ancho Completo) */}
-            <Card className={sectionCardClass}>
+            <Card id="repair-customer-section" className={`${sectionCardClass} scroll-mt-16`}>
               <CardHeader className={`pb-3 ${sectionHeaderClass}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -764,7 +941,7 @@ export function RepairFormDialogV2({
             </Card>
 
             {/* Sección 2: Dispositivos a Reparar (Ancho Completo) */}
-            <Card className={sectionCardClass}>
+            <Card id="repair-device-section" className={`${sectionCardClass} scroll-mt-16`}>
               <CardHeader className={`pb-3 ${sectionHeaderClass}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -785,17 +962,7 @@ export function RepairFormDialogV2({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => append({
-                        deviceType: 'smartphone',
-                        brand: '',
-                        model: '',
-                        issue: '',
-                        description: '',
-                        accessType: 'none',
-                        images: [],
-                        technician: '',
-                        estimatedCost: 0
-                      })}
+                      onClick={handleAddDevice}
                       className="h-8 gap-1.5 hover:bg-primary/10 hover:text-primary transition-colors text-xs"
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -1098,7 +1265,8 @@ export function RepairFormDialogV2({
                                             let calculatorNote: string | null = null
                                             if (affectsCalculator && serviceIncludesParts) {
                                               setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
-                                              setCalculationMode('labor-from-final')
+                                              setCalculationMode('budget')
+                                              setValue('pricingMode', 'budget', { shouldDirty: true })
                                               calculatorNote = 'Se cargó como Costo Final. Si agregás un repuesto, el total no cambia.'
                                             } else if (affectsCalculator && calculationMode === 'manual') {
                                               setValue('laborCost', price, { shouldDirty: true, shouldValidate: true })
@@ -1425,7 +1593,7 @@ export function RepairFormDialogV2({
             </Card>
 
             {/* Sección 3: Prioridad y Urgencia (Ancho Completo) */}
-            <Card className={sectionCardClass}>
+            <Card id="repair-details-section" className={`${sectionCardClass} scroll-mt-16`}>
               <CardHeader className={`pb-3 ${sectionHeaderClass}`}>
                 <div className="flex items-center gap-3">
                   <div className={sectionIconClass}>
@@ -1512,12 +1680,14 @@ export function RepairFormDialogV2({
               </CardContent>
             </Card>
 
-            {mode === 'add' && fields.length > 1 && (
+            {!quickMode && mode === 'add' && fields.length > 1 && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                Los repuestos, notas y costos se aplican al lote completo. Para registrar costos o piezas distintas por equipo, crea cada reparación por separado.
+                El alta múltiple registra los datos básicos de cada equipo. Para cargar repuestos, notas, costos, adelantos o garantía, crea cada reparación por separado.
               </div>
             )}
 
+            {!quickMode && (mode !== 'add' || fields.length === 1) && (
+              <>
             {/* Secciones de ancho completo: Repuestos, Notas y Calculadora */}
             {/* Parts */}
             <Card className="shadow-lg border-2 hover:border-primary/30 transition-colors bg-gradient-to-br from-white to-orange-50/30 dark:from-slate-900 dark:to-orange-950/20 dark:border-slate-800 dark:hover:border-primary/50 mt-4">
@@ -1562,7 +1732,9 @@ export function RepairFormDialogV2({
                       onClick={() => appendPart({
                         name: '',
                         cost: 0,
+                        internalCost: 0,
                         quantity: 1,
+                        stockAvailable: null,
                         supplier: '',
                         partNumber: ''
                       })}
@@ -1587,6 +1759,8 @@ export function RepairFormDialogV2({
                 {partsFields.map((field, index) => {
                   const cost = watch(`parts.${index}.cost`) || 0
                   const quantity = watch(`parts.${index}.quantity`) || 0
+                  const productId = watch(`parts.${index}.productId`)
+                  const stockAvailable = watch(`parts.${index}.stockAvailable`)
                   const total = cost * quantity
                   
                   return (
@@ -1601,7 +1775,7 @@ export function RepairFormDialogV2({
                               </div>
                               <span className="text-sm font-semibold text-orange-800 dark:text-orange-300">Repuesto {index + 1}</span>
 
-                              {watch(`parts.${index}.productId`) ? (
+                              {productId ? (
                                 <Badge variant="outline" className="bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800 text-[11px] gap-1">
                                   <Package className="h-3 w-3 text-cyan-600 dark:text-cyan-400" />
                                   Inventario Local
@@ -1609,6 +1783,7 @@ export function RepairFormDialogV2({
                                     type="button"
                                     onClick={() => {
                                       setValue(`parts.${index}.productId`, undefined, { shouldDirty: true })
+                                      setValue(`parts.${index}.stockAvailable`, null, { shouldDirty: true })
                                       toast.info(`Repuesto "${watch(`parts.${index}.name`)}" desvinculado del inventario local`)
                                     }}
                                     className="ml-1 px-1 py-0.2 rounded hover:bg-red-100 dark:hover:bg-red-950 text-red-600 font-bold transition-colors"
@@ -1619,7 +1794,7 @@ export function RepairFormDialogV2({
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 text-[11px]">
-                                  ✏️ Repuesto Manual
+                                  Repuesto manual
                                 </Badge>
                               )}
 
@@ -1660,11 +1835,11 @@ export function RepairFormDialogV2({
                             )}
                           </div>
 
-                          {/* Costo Unitario */}
-                          <div className="md:col-span-2 space-y-2">
+                          {/* Precio cobrado al cliente */}
+                          <div className="md:col-span-3 space-y-2">
                             <Label className="text-sm font-medium flex items-center gap-1">
                               <DollarSign className="h-3 w-3 text-orange-600 dark:text-orange-400" />
-                              Costo Unit.
+                              Precio al cliente
                             </Label>
                             <div className="relative">
                               <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-orange-600 dark:text-orange-400" />
@@ -1677,6 +1852,35 @@ export function RepairFormDialogV2({
                                 placeholder="0.00"
                               />
                             </div>
+                            {errors.parts?.[index]?.cost && (
+                              <p className="flex items-center gap-1 text-xs text-red-500">
+                                <AlertCircle className="h-3 w-3" />
+                                {errors.parts[index]?.cost?.message}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Costo real para margen y reportes */}
+                          <div className="md:col-span-2 space-y-2">
+                            <Label className="text-sm font-medium">Costo interno</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              disabled={Boolean(productId)}
+                              className="font-medium"
+                              {...register(`parts.${index}.internalCost`, { valueAsNumber: true })}
+                              placeholder={productId ? 'Desde inventario' : '0.00'}
+                            />
+                            <p className="text-[11px] leading-4 text-muted-foreground">
+                              {productId ? 'Se toma del costo de compra del producto.' : 'Se usa para calcular el margen; no se muestra al cliente.'}
+                            </p>
+                            {errors.parts?.[index]?.internalCost && (
+                              <p className="flex items-center gap-1 text-xs text-red-500">
+                                <AlertCircle className="h-3 w-3" />
+                                {errors.parts[index]?.internalCost?.message}
+                              </p>
+                            )}
                           </div>
 
                           {/* Cantidad */}
@@ -1688,14 +1892,24 @@ export function RepairFormDialogV2({
                             <Input 
                               type="number"
                               min="1"
+                              max={productId && stockAvailable !== null && stockAvailable !== undefined ? stockAvailable : undefined}
                               className="border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600 font-semibold text-center" 
                               {...register(`parts.${index}.quantity`, { valueAsNumber: true })} 
                               placeholder="1"
                             />
+                            {productId && stockAvailable !== null && stockAvailable !== undefined && (
+                              <p className="text-[11px] text-muted-foreground">Disponible: {stockAvailable}</p>
+                            )}
+                            {errors.parts?.[index]?.quantity && (
+                              <p className="flex items-center gap-1 text-xs text-red-500">
+                                <AlertCircle className="h-3 w-3" />
+                                {errors.parts[index]?.quantity?.message}
+                              </p>
+                            )}
                           </div>
 
                           {/* Proveedor */}
-                          <div className="md:col-span-3 space-y-2">
+                          <div className="md:col-span-2 space-y-2">
                             <Label className="text-sm font-medium flex items-center gap-1">
                               <Package className="h-3 w-3 text-orange-600 dark:text-orange-400" />
                               Proveedor
@@ -1798,14 +2012,25 @@ export function RepairFormDialogV2({
             {/* Cost Calculator */}
             <RepairCostCalculator
               laborCost={watch('laborCost') || 0}
-              onLaborCostChange={(cost) => setValue('laborCost', cost)}
+              onLaborCostChange={(cost) => setValue('laborCost', cost, { shouldDirty: true, shouldValidate: true })}
               finalCost={watch('finalCost')}
-              onFinalCostChange={(cost) => setValue('finalCost', cost)}
+              onFinalCostChange={(cost) => setValue('finalCost', cost, { shouldDirty: true, shouldValidate: true })}
+              discountAmount={watch('discountAmount') || 0}
+              onDiscountAmountChange={(amount) => setValue('discountAmount', amount, { shouldDirty: true, shouldValidate: true })}
+              paidAmount={repair?.paidAmount || 0}
+              currency={sharedSettings.currency}
               parts={watch('parts') || []}
               disabled={isSubmitting}
               error={errors.finalCost?.message || errors.laborCost?.message}
               calculationMode={calculationMode}
-              onCalculationModeChange={setCalculationMode}
+              onCalculationModeChange={(nextMode) => {
+                setCalculationMode(nextMode)
+                setValue('pricingMode', nextMode, { shouldDirty: true })
+              }}
+              canUseManual={user?.role === 'admin' || user?.role === 'super_admin'}
+              overrideReason={watch('priceOverrideReason') || ''}
+              onOverrideReasonChange={(reason) => setValue('priceOverrideReason', reason, { shouldDirty: true, shouldValidate: true })}
+              taxRate={sharedSettings.taxRate}
               technicianId={watchedTechnicianId}
               technicianName={technicians.find((tech) => tech.id === watchedTechnicianId)?.name}
               canViewCommission={user?.role === 'admin' || user?.role === 'super_admin'}
@@ -2156,13 +2381,15 @@ export function RepairFormDialogV2({
                 )}
               </CardContent>
             </Card>
+              </>
+            )}
           </form>
         </div>
 
         {/* Form Actions */}
-        <DialogFooter className="flex-shrink-0 px-4 py-3 border-t border-border bg-background dark:border-slate-800">
-          <div className="flex items-center justify-between w-full gap-3">
-            <div className="text-sm min-w-0">
+        <DialogFooter className="flex-shrink-0 border-t border-border bg-background px-3 py-3 sm:px-4 dark:border-slate-800">
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="min-h-5 min-w-0 text-sm">
               {!isValid && Object.keys(errors).length > 0 && (
                 <span className="flex items-center gap-2 text-red-600 dark:text-red-400 font-medium text-xs sm:text-sm">
                   <AlertCircle className="h-4 w-4 shrink-0" />
@@ -2170,7 +2397,7 @@ export function RepairFormDialogV2({
                 </span>
               )}
             </div>
-            <div className="flex gap-2 shrink-0">
+            <div className="grid w-full shrink-0 grid-cols-2 gap-2 sm:flex sm:w-auto">
               <Button
                 type="button"
                 variant="outline"
@@ -2183,7 +2410,7 @@ export function RepairFormDialogV2({
                 form={formId}
                 type="submit"
                 disabled={isSubmitting}
-                className="min-w-[150px]"
+                className="min-w-0 sm:min-w-[150px]"
               >
                 <Save className="h-4 w-4 mr-2" />
                 {isSubmitting ? 'Guardando...' : mode === 'add' ? 'Crear Reparación' : 'Guardar Cambios'}
@@ -2271,7 +2498,7 @@ export function RepairFormDialogV2({
                 // repuesto sin unidades disponibles solo genera un costo que
                 // después no se puede cubrir físicamente.
                 const outOfStock = product.stock_quantity === 0
-                const alreadyAdded = partsFields.some((field, index) => watch(`parts.${index}.productId`) === product.id)
+                const alreadyAddedIndex = partsFields.findIndex((field, index) => watch(`parts.${index}.productId`) === product.id)
 
                 return (
                 <div
@@ -2287,17 +2514,32 @@ export function RepairFormDialogV2({
                       toast.error(`"${product.name}" no tiene stock disponible`)
                       return
                     }
+                    if (alreadyAddedIndex >= 0) {
+                      const currentQuantity = watch(`parts.${alreadyAddedIndex}.quantity`) || 0
+                      const nextQuantity = currentQuantity + 1
+                      if (product.stock_quantity !== null && product.stock_quantity !== undefined && nextQuantity > product.stock_quantity) {
+                        toast.error(`Solo hay ${product.stock_quantity} unidades de "${product.name}" en esta sucursal`)
+                        return
+                      }
+                      setValue(`parts.${alreadyAddedIndex}.quantity`, nextQuantity, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                      toast.success(`Cantidad de "${product.name}" actualizada a ${nextQuantity}`)
+                      setInventorySearchOpen(false)
+                      return
+                    }
                     appendPart({
                       name: product.name,
                       cost: product.offer_price || product.sale_price || 0,
+                      internalCost: product.purchase_price ?? undefined,
                       quantity: 1,
+                      stockAvailable: product.stock_quantity ?? null,
                       supplier: 'Inventario Local',
                       partNumber: product.sku || '',
                       productId: product.id
                     })
-                    toast.success(`Repuesto "${product.name}" agregado`, {
-                      description: alreadyAdded ? 'Ya habías agregado este repuesto: se sumó otra línea.' : undefined
-                    })
+                    toast.success(`Repuesto "${product.name}" agregado`)
                     setInventorySearchOpen(false)
                   }}
                 >
