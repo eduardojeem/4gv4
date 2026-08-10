@@ -313,6 +313,14 @@ function isBetween(date: Date | null, from: Date, to: Date): boolean {
   return true
 }
 
+// Una reparación cancelada nunca facturó: el cliente no siguió adelante, no
+// entró plata. Contarla como ingreso (o como carga de trabajo del técnico)
+// infla los números. Cubre las variantes de estado que usa el sistema.
+function isCancelledRepairStatus(status: unknown): boolean {
+  const value = String(status || '').toLowerCase()
+  return value === 'cancelado' || value === 'cancelada' || value === 'cancelled' || value === 'anulado'
+}
+
 function formatMoney(value: number): string {
   return new Intl.NumberFormat('es-PY', {
     style: 'currency',
@@ -609,6 +617,12 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         .filter((repair) => filters.branch === 'all' || String(repair.branch_id || 'principal') === filters.branch)
       const previousRepairs = ((previousRepairsResponse.data || []) as RepairRecord[])
         .filter((repair) => filters.branch === 'all' || String(repair.branch_id || 'principal') === filters.branch)
+      // Para plata (ingresos, ganancia, carga real del técnico) se excluyen
+      // las canceladas: nunca facturaron. selectedRepairs se conserva completo
+      // para conteos operativos y el gráfico de estados, que sí deben mostrar
+      // las canceladas como una categoría más.
+      const revenueRepairs = selectedRepairs.filter((repair) => !isCancelledRepairStatus(repair.status))
+      const previousRevenueRepairs = previousRepairs.filter((repair) => !isCancelledRepairStatus(repair.status))
       const allClosures = (cashClosuresResponse.data || []) as CashClosureRecord[]
       const allMovements = (cashMovementsResponse.data || []) as CashMovementRecord[]
       const allAlerts = (cashAlertsResponse.data || []) as CashAlertRecord[]
@@ -770,11 +784,11 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       })()
 
       const selectedPosRevenue = sumSales(selectedSales)
-      const selectedRepairRevenue = selectedRepairs.reduce((sum, repair) => {
+      const selectedRepairRevenue = revenueRepairs.reduce((sum, repair) => {
         return sum + toNumber(repair.final_cost ?? repair.estimated_cost)
       }, 0)
       const currentGrossRevenue = selectedPosRevenue + selectedRepairRevenue
-      const previousGrossRevenue = sumSales(previousSales) + previousRepairs.reduce((sum, repair) => {
+      const previousGrossRevenue = sumSales(previousSales) + previousRevenueRepairs.reduce((sum, repair) => {
         return sum + toNumber(repair.final_cost ?? repair.estimated_cost)
       }, 0)
 
@@ -783,7 +797,9 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         const purchasePrice = toNumber(item.product?.purchase_price)
         return sum + (quantity * purchasePrice)
       }, 0)
-      const repairDirectCost = selectedRepairs.reduce((sum, repair) => sum + toNumber(repair.parts_cost), 0)
+      // Costo directo de repuestos: solo de las que facturan. Contar el costo
+      // de una cancelada (sin contar su ingreso) hundiría la ganancia estimada.
+      const repairDirectCost = revenueRepairs.reduce((sum, repair) => sum + toNumber(repair.parts_cost), 0)
       const withdrawals = scopedMovements
         .filter((movement) => movement.type === 'cash_out')
         .reduce((sum, movement) => sum + toNumber(movement.amount), 0)
@@ -797,9 +813,11 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
 
       const selectedOrderCount = selectedSales.length
       const averageTicket = selectedOrderCount > 0 ? selectedPosRevenue / selectedOrderCount : 0
+      // "En proceso" = ni entregada, ni lista, ni cancelada. Antes una
+      // cancelada contaba como reparación activa (carga de trabajo fantasma).
       const activeRepairs = selectedRepairs.filter((repair) => {
         const status = String(repair.status || '').toLowerCase()
-        return !['entregado', 'listo'].includes(status)
+        return !['entregado', 'listo'].includes(status) && !isCancelledRepairStatus(status)
       }).length
       const completedRepairs = selectedRepairs.filter((repair) => String(repair.status || '').toLowerCase() === 'entregado').length
       const unresolvedAlerts = scopedAlerts.filter((alert) => !alert.is_resolved).length
@@ -945,7 +963,12 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
 
       selectedRepairs.forEach((repair) => {
         const status = String(repair.status || 'sin estado')
+        // El gráfico de estados sí muestra las canceladas (categoría válida).
         repairStatusMap.set(status, (repairStatusMap.get(status) || 0) + 1)
+
+        // Pero el ranking de técnicos no: una cancelada no es carga real ni
+        // facturación, así que no suma ni a "activas" ni a "revenue".
+        if (isCancelledRepairStatus(status)) return
 
         const technicianId = String(repair.technician_id || repair.technician?.id || 'unassigned')
         const current = technicianStats.get(technicianId) || {
@@ -1037,7 +1060,8 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         trendMap.set(key, current)
       })
 
-      selectedRepairs.forEach((repair) => {
+      // El gráfico de tendencia refleja ingreso: las canceladas no aportan.
+      revenueRepairs.forEach((repair) => {
         const repairDate = toDate(repair.created_at)
         if (!repairDate) return
         const bucketDate = useWeeklyBuckets
@@ -1173,7 +1197,10 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
             label: 'Reparaciones en curso',
             value: String(activeRepairs),
             rawValue: activeRepairs,
-            delta: percentChange(activeRepairs, previousRepairs.filter((repair) => String(repair.status || '').toLowerCase() !== 'entregado').length),
+            delta: percentChange(activeRepairs, previousRepairs.filter((repair) => {
+              const status = String(repair.status || '').toLowerCase()
+              return status !== 'entregado' && !isCancelledRepairStatus(status)
+            }).length),
             tone: activeRepairs > 0 ? 'info' : 'neutral',
             helper: `${formatMoney(selectedRepairRevenue)} facturados en taller`,
           },

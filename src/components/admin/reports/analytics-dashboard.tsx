@@ -531,6 +531,34 @@ export default function AnalyticsDashboard() {
         </SectionFrame>
 
         <SectionFrame
+          title="Dinero: ingresos vs gastos"
+          description="Cuánto entró, cuánto salió y cuánto quedó de ganancia. Se compara con el periodo anterior."
+          badge={<SectionBadge>Finanzas</SectionBadge>}
+          className="xl:col-span-4"
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniStat label="Entró" value={formatCurrency(snapshot.finance.grossRevenue)} tone="info" />
+            <MiniStat label="Salió" value={formatCurrency(snapshot.finance.visibleExpenses)} tone="warning" />
+            <MiniStat label="Quedó" value={formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
+            <MiniStat label="Margen" value={`${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
+          </div>
+
+          <div ref={financeRef} className="mt-6 h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={snapshot.financeComparison}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={70} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="ingresos" fill="#2563eb" radius={[10, 10, 0, 0]} name="Ingresos" />
+                <Bar dataKey="egresos" fill="#d97706" radius={[10, 10, 0, 0]} name="Egresos" />
+                <Bar dataKey="ganancia" fill="#0f766e" radius={[10, 10, 0, 0]} name="Ganancia" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </SectionFrame>
+
+        <SectionFrame
           title="Lo que deberías saber"
           description="Alertas y observaciones importantes del periodo: qué mejoró, qué necesita atención y dónde hay riesgo."
           badge={<SectionBadge>Alertas</SectionBadge>}
@@ -695,7 +723,7 @@ export default function AnalyticsDashboard() {
           title="Taller de reparaciones"
           description="Cuántas reparaciones hay en curso, cuántas se entregaron, cuánto tardan en promedio y cuánto facturó el taller."
           badge={<SectionBadge>Taller</SectionBadge>}
-          className="xl:col-span-6"
+          className="xl:col-span-8"
         >
           <div className="grid gap-3 md:grid-cols-4">
             <MiniStat label="En curso" value={String(snapshot.repairs.activeCount)} tone="info" />
@@ -736,34 +764,6 @@ export default function AnalyticsDashboard() {
                 </div>
               ))}
             </div>
-          </div>
-        </SectionFrame>
-
-        <SectionFrame
-          title="Dinero: ingresos vs gastos"
-          description="Cuánto entró, cuánto salió y cuánto quedó de ganancia. Se compara con el periodo anterior."
-          badge={<SectionBadge>Finanzas</SectionBadge>}
-          className="xl:col-span-6"
-        >
-          <div className="grid gap-3 md:grid-cols-4">
-            <MiniStat label="Entró" value={formatCurrency(snapshot.finance.grossRevenue)} tone="info" />
-            <MiniStat label="Salió" value={formatCurrency(snapshot.finance.visibleExpenses)} tone="warning" />
-            <MiniStat label="Quedó" value={formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
-            <MiniStat label="Margen" value={`${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
-          </div>
-
-          <div ref={financeRef} className="mt-6 h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={snapshot.financeComparison}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-                <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={70} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="ingresos" fill="#2563eb" radius={[10, 10, 0, 0]} name="Ingresos" />
-                <Bar dataKey="egresos" fill="#d97706" radius={[10, 10, 0, 0]} name="Egresos" />
-                <Bar dataKey="ganancia" fill="#0f766e" radius={[10, 10, 0, 0]} name="Ganancia" />
-              </BarChart>
-            </ResponsiveContainer>
           </div>
         </SectionFrame>
 
