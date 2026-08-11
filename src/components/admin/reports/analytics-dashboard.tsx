@@ -702,7 +702,12 @@ export default function AnalyticsDashboard() {
           className="xl:col-span-4"
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <MiniStat label="Clientes nuevos" value={String(snapshot.customers.newCount)} tone="info" />
+            <MiniStat
+              label="Clientes nuevos"
+              value={String(snapshot.customers.newCount)}
+              tone="info"
+              hint={branch !== 'all' ? 'Todo el negocio (los clientes no son por sucursal)' : undefined}
+            />
             <MiniStat label="Volvieron a comprar" value={String(snapshot.customers.recurrentCount)} tone="success" />
             <MiniStat label="% que vuelven" value={`${snapshot.customers.recurrenceRate.toFixed(1)}%`} tone={snapshot.customers.recurrenceRate >= 35 ? 'success' : 'neutral'} />
             <MiniStat label="Crecimiento" value={formatPercent(snapshot.customers.growth)} tone={snapshot.customers.growth !== null && snapshot.customers.growth >= 0 ? 'success' : 'warning'} />
