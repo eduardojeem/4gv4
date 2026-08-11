@@ -135,9 +135,16 @@ export interface AdminAnalyticsSnapshot {
   }
 }
 
+export interface AnalyticsBranchOption {
+  id: string
+  name: string
+  city?: string | null
+  code?: string | null
+}
+
 interface HookState {
   snapshot: AdminAnalyticsSnapshot
-  branchOptions: Array<{ id: string; name: string }>
+  branchOptions: AnalyticsBranchOption[]
   loading: boolean
   refreshing: boolean
   error: string | null
@@ -653,30 +660,26 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           .map((item) => item.product_id)
       )
 
-      // Resolve branch names for the filter selector
-      let branchOptions: Array<{ id: string; name: string }> = []
+      // Opciones de sucursal para el filtro. Se traen de /api/branches (mismo
+      // origen que el selector global), que scopea por organización EN EL
+      // SERVIDOR e incluye ciudad/código. Antes esto consultaba la tabla
+      // `branches` directo desde el cliente sin filtro de organization_id,
+      // confiando solo en RLS: podía listar sucursales de otras organizaciones,
+      // mostraba únicamente el nombre (sucursales homónimas indistinguibles) y
+      // el fallback pintaba UUIDs crudos como nombre.
+      let branchOptions: AnalyticsBranchOption[] = []
       try {
-        const { data: branchesData } = await supabase
-          .from('branches')
-          .select('id, name')
-          .eq('is_active', true)
-          .order('name', { ascending: true })
+        const branchesResponse = await fetch('/api/branches', { cache: 'no-store' })
+        const branchesPayload = await branchesResponse.json().catch(() => null) as {
+          branches?: Array<{ id: string; name: string; city?: string | null; code?: string | null; is_active?: boolean | null }>
+        } | null
 
-        if (branchesData && branchesData.length > 0) {
-          branchOptions = branchesData.map(b => ({ id: b.id, name: b.name }))
-        } else {
-          // Fallback: use branch_ids from closures
-          const uniqueIds = Array.from(
-            new Set(allClosures.map((c) => String(c.branch_id || 'principal')).filter(Boolean))
-          )
-          branchOptions = uniqueIds.map(id => ({ id, name: id }))
-        }
-      } catch {
-        // branches table might not exist
-        const uniqueIds = Array.from(
-          new Set(allClosures.map((c) => String(c.branch_id || 'principal')).filter(Boolean))
-        )
-        branchOptions = uniqueIds.map(id => ({ id, name: id }))
+        branchOptions = (branchesPayload?.branches ?? [])
+          .filter((b) => b.is_active !== false)
+          .map((b) => ({ id: b.id, name: b.name, city: b.city ?? null, code: b.code ?? null }))
+      } catch (branchOptionsError) {
+        console.warn('[analytics] branch options fetch failed:', branchOptionsError)
+        branchOptions = []
       }
 
       const closureMap = new Map<string, CashClosureRecord>()

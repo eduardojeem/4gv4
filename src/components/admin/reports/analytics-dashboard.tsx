@@ -416,11 +416,20 @@ export default function AnalyticsDashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas las sucursales</SelectItem>
-                  {branchOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
+                  {branchOptions.map((option) => {
+                    // Subtítulo para distinguir sucursales con nombre igual o parecido.
+                    const subtitle = [option.city, option.code].filter(Boolean).join(' · ')
+                    return (
+                      <SelectItem key={option.id} value={option.id}>
+                        <div className="flex min-w-0 flex-col">
+                          <span className="truncate">{option.name}</span>
+                          {subtitle ? (
+                            <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
+                          ) : null}
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
 
@@ -576,14 +585,17 @@ export default function AnalyticsDashboard() {
             ))}
           </div>
 
+          {/* "Clientes que vuelven" es el único dato que no tiene sección
+              propia en otro lado, así que se queda acá. Margen, cajas abiertas
+              y poco stock se quitaron: ya se muestran en Dinero, Estado de
+              cajas e Inventario respectivamente — repetirlos era ruido. */}
           <Separator className="my-6" />
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-            <MiniStat label="Margen de ganancia" value={`${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
-            <MiniStat label="Clientes que vuelven" value={`${snapshot.customers.recurrenceRate.toFixed(1)}%`} tone={snapshot.customers.recurrenceRate >= 35 ? 'success' : 'info'} />
-            <MiniStat label="Cajas abiertas" value={String(snapshot.operations.openRegisters)} tone="info" />
-            <MiniStat label="Productos con poco stock" value={String(snapshot.inventory.lowStockCount)} tone={snapshot.inventory.lowStockCount > 0 ? 'warning' : 'success'} />
-          </div>
+          <MiniStat
+            label="Clientes que vuelven"
+            value={`${snapshot.customers.recurrenceRate.toFixed(1)}%`}
+            tone={snapshot.customers.recurrenceRate >= 35 ? 'success' : 'info'}
+          />
         </SectionFrame>
 
         <SectionFrame
