@@ -183,3 +183,6 @@ next.config.*.ts
 public/sw.js
 public/workbox-*.js
 public/worker-*.js
+
+# Superpowers visual brainstorming sessions
+.superpowers/
