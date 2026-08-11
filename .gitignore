@@ -186,3 +186,4 @@ public/worker-*.js
 
 # Superpowers visual brainstorming sessions
 .superpowers/
+.worktrees/
