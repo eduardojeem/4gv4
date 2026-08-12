@@ -5,7 +5,55 @@ import type {
   FinanceSummary,
   FinancialPayableLine,
   FinancialSummaryInput,
+  FinancialRevenueLine,
 } from './types'
+import { MAX_FINANCE_AMOUNT } from './types'
+
+function isFinanceAmount(value: number): boolean {
+  return (
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= MAX_FINANCE_AMOUNT &&
+    Math.abs(value - Number(value.toFixed(2))) < 0.000_000_001
+  )
+}
+
+function assertFinanceAmount(value: number, field: string): void {
+  if (!isFinanceAmount(value)) {
+    throw new RangeError(`${field} must be a numeric(14,2) amount.`)
+  }
+}
+
+function assertRevenueLine(line: FinancialRevenueLine, index: number): void {
+  assertFinanceAmount(line.amount, `revenue[${index}].amount`)
+  assertFinanceAmount(line.cashAmount, `revenue[${index}].cashAmount`)
+
+  if (line.cashAmount > line.amount) {
+    throw new RangeError(
+      `revenue[${index}].cashAmount cannot exceed revenue[${index}].amount.`,
+    )
+  }
+}
+
+function assertPayableLine(line: FinancialPayableLine, group: string, index: number): void {
+  assertFinanceAmount(line.amount, `${group}[${index}].amount`)
+  assertFinanceAmount(line.paidAmount, `${group}[${index}].paidAmount`)
+
+  if (line.paidAmount > line.amount) {
+    throw new RangeError(
+      `${group}[${index}].paidAmount cannot exceed ${group}[${index}].amount.`,
+    )
+  }
+}
+
+function assertFinancialSummaryInput(input: FinancialSummaryInput): void {
+  input.revenue.forEach(assertRevenueLine)
+  input.directCosts.forEach((line, index) =>
+    assertPayableLine(line, 'directCosts', index),
+  )
+  input.expenses.forEach((line, index) => assertPayableLine(line, 'expenses', index))
+  input.payroll.forEach((line, index) => assertPayableLine(line, 'payroll', index))
+}
 
 const sumAmounts = (lines: FinancialPayableLine[]): number =>
   lines.reduce((total, line) => total + line.amount, 0)
@@ -16,6 +64,8 @@ const sumPaidAmounts = (lines: FinancialPayableLine[]): number =>
 export function calculateFinancialSummary(
   input: FinancialSummaryInput,
 ): FinanceSummary {
+  assertFinancialSummaryInput(input)
+
   const revenue = input.revenue.reduce((total, line) => total + line.amount, 0)
   const collected = input.revenue.reduce(
     (total, line) => total + line.cashAmount,
@@ -40,7 +90,8 @@ export function calculateFinancialSummary(
             },
           ],
   )
-  const grossProfit = revenue - directCosts
+  const complete = coverageWarnings.length === 0
+  const grossProfit = complete ? revenue - directCosts : null
 
   return {
     accrued: {
@@ -49,14 +100,17 @@ export function calculateFinancialSummary(
       grossProfit,
       operatingExpenses,
       payrollCost,
-      netProfit: grossProfit - operatingExpenses - payrollCost,
+      netProfit:
+        grossProfit === null
+          ? null
+          : grossProfit - operatingExpenses - payrollCost,
     },
     cash: {
       collected,
       paid,
       netCashFlow: collected - paid,
     },
-    complete: coverageWarnings.length === 0,
+    complete,
     coverageWarnings,
   }
 }

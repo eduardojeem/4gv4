@@ -1,5 +1,7 @@
 export type FinancePaymentMethod = 'cash' | 'bank_transfer' | 'other'
 
+export const MAX_FINANCE_AMOUNT = 999_999_999_999.99
+
 export interface FinanceFilters {
   startDate: string
   endDate: string
@@ -42,10 +44,10 @@ export interface FinanceSummary {
   accrued: {
     revenue: number
     directCosts: number
-    grossProfit: number
+    grossProfit: number | null
     operatingExpenses: number
     payrollCost: number
-    netProfit: number
+    netProfit: number | null
   }
   cash: {
     collected: number

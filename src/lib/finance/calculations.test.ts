@@ -28,9 +28,43 @@ describe('calculateFinancialSummary', () => {
     })
 
     expect(result.complete).toBe(false)
+    expect(result.accrued.grossProfit).toBeNull()
+    expect(result.accrued.netProfit).toBeNull()
     expect(result.coverageWarnings[0]).toMatchObject({
       code: 'MISSING_DIRECT_COST',
     })
+  })
+
+  it.each([
+    {
+      label: 'a non-finite collected amount',
+      input: {
+        revenue: [{ amount: 100, cashAmount: Infinity, hasCost: true }],
+        directCosts: [],
+        expenses: [],
+        payroll: [],
+      },
+    },
+    {
+      label: 'a paid amount with more than two decimals',
+      input: {
+        revenue: [],
+        directCosts: [{ amount: 100, paidAmount: 0.001 }],
+        expenses: [],
+        payroll: [],
+      },
+    },
+    {
+      label: 'a collection larger than its revenue',
+      input: {
+        revenue: [{ amount: 100, cashAmount: 100.01, hasCost: true }],
+        directCosts: [],
+        expenses: [],
+        payroll: [],
+      },
+    },
+  ])('rejects $label at the calculation boundary', ({ input }) => {
+    expect(() => calculateFinancialSummary(input)).toThrow(RangeError)
   })
 })
 

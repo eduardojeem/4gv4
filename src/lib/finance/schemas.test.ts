@@ -35,6 +35,24 @@ describe('expenseInputSchema', () => {
 
     expect(result.success).toBe(false)
   })
+
+  it('rejects amounts outside the numeric(14,2) precision contract', () => {
+    const fractionalScale = expenseInputSchema.safeParse({
+      branchId,
+      categoryId,
+      amount: 0.001,
+      accountingDate: '2026-08-11',
+    })
+    const exceedsMaximum = expenseInputSchema.safeParse({
+      branchId,
+      categoryId,
+      amount: 1_000_000_000_000,
+      accountingDate: '2026-08-11',
+    })
+
+    expect(fractionalScale.success).toBe(false)
+    expect(exceedsMaximum.success).toBe(false)
+  })
 })
 
 describe('paymentInputSchema', () => {
@@ -73,6 +91,24 @@ describe('paymentInputSchema', () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  it('rejects payment amounts outside the numeric(14,2) precision contract', () => {
+    const fractionalScale = paymentInputSchema.safeParse({
+      branchId,
+      amount: 0.001,
+      paymentMethod: 'other',
+      paymentDate: '2026-08-11',
+    })
+    const exceedsMaximum = paymentInputSchema.safeParse({
+      branchId,
+      amount: 1_000_000_000_000,
+      paymentMethod: 'other',
+      paymentDate: '2026-08-11',
+    })
+
+    expect(fractionalScale.success).toBe(false)
+    expect(exceedsMaximum.success).toBe(false)
   })
 
   it('rejects a cash session for a non-cash payment', () => {
