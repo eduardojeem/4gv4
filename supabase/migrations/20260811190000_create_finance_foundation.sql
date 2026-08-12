@@ -271,7 +271,7 @@ create table if not exists public.finance_audit_events (
   occurred_at timestamptz not null default now(),
   constraint finance_audit_events_branch_scope_fkey
     foreign key (organization_id, branch_id)
-    references public.branches (organization_id, id) on delete restrict,
+    references public.branches (organization_id, id) on delete cascade,
   check (entity_type in (
     'finance_categories',
     'finance_expense_templates',
@@ -906,10 +906,21 @@ begin
 
   if tg_op = 'DELETE'
      and tg_table_name = 'finance_audit_events'
-     and not exists (
-       select 1
-       from public.organizations organization
-       where organization.id = old.organization_id
+     and (
+       not exists (
+         select 1
+         from public.organizations organization
+         where organization.id = old.organization_id
+       )
+       or (
+         old.branch_id is not null
+         and not exists (
+           select 1
+           from public.branches branch
+           where branch.organization_id = old.organization_id
+             and branch.id = old.branch_id
+         )
+       )
      ) then
     return old;
   end if;

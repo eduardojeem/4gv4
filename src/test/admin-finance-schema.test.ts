@@ -256,4 +256,13 @@ describe('admin finance database foundation', () => {
     expect(sql).toContain("to_jsonb(new) - 'actor_id' = to_jsonb(old) - 'actor_id'")
     expect(sql).toContain('where actor.id = old.actor_id')
   })
+
+  it('cascades branch-scoped audit rows only after their parent branch is deleted', () => {
+    expect(tableDefinition('finance_audit_events')).toContain(
+      'references public.branches (organization_id, id) on delete cascade',
+    )
+    expect(sql).toContain('old.branch_id is not null')
+    expect(sql).toContain('branch.organization_id = old.organization_id')
+    expect(sql).toContain('branch.id = old.branch_id')
+  })
 })
