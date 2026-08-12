@@ -29,16 +29,84 @@ export class FinanceApiError extends Error {
   }
 }
 
+const PAYROLL_ERROR_MAPPINGS = [
+  {
+    tokens: [
+      'PAYROLL_GENERATION_IDEMPOTENCY_KEY_REUSED',
+      'PAYROLL_PAYMENT_IDEMPOTENCY_KEY_REUSED',
+      'PAYROLL_PERIOD_ALREADY_GENERATED',
+      'PAYROLL_COMMISSION_RULE_PERIOD_OVERLAP',
+      'PAYROLL_COMPENSATION_PERIOD_OVERLAP',
+      'PAYROLL_OVERPAYMENT',
+    ],
+    status: 409,
+    code: 'PAYROLL_CONFLICT',
+    publicMessage: 'La nómina entra en conflicto con su estado actual.',
+  },
+  {
+    tokens: [
+      'PAYROLL_INVALID_',
+      'PAYROLL_ADJUSTMENT_',
+      'PAYROLL_APPROVED_',
+      'PAYROLL_CASH_',
+      'PAYROLL_BRANCH_NOT_IN_ORGANIZATION',
+      'PAYROLL_COMMISSION_REVERSAL_',
+      'PAYROLL_COMMISSION_SNAPSHOT_MISMATCH',
+      'PAYROLL_ENTRY_COMMISSION_',
+      'PAYROLL_ENTRY_COMMISSIONS_',
+      'PAYROLL_ENTRY_NOT_PAYABLE',
+      'PAYROLL_ENTRY_REQUIRES_',
+      'PAYROLL_ENTRY_ROLE_',
+      'PAYROLL_ENTRY_SCOPE_',
+      'PAYROLL_ORGANIZATION_REQUIRED',
+      'PAYROLL_PAYMENT_BRANCH_MISMATCH',
+      'PAYROLL_PAYMENT_DATE_REQUIRED',
+      'PAYROLL_PAYMENT_STATE_MUST_MATCH_LEDGER',
+      'PAYROLL_PAYMENTS_ARE_APPEND_ONLY',
+      'PAYROLL_REFUND_',
+      'PAYROLL_REVERSAL_',
+      'PAYROLL_RUN_HAS_NO_ENTRIES',
+      'PAYROLL_RUN_NOT_APPROVABLE',
+      'PAYROLL_RUN_TOTALS_MISMATCH',
+      'PAYROLL_RUN_WITH_CLAIMS_CANNOT_BE_VOIDED',
+      'PAYROLL_UNSUPPORTED_',
+      'PAYROLL_USED_COMPENSATION_IS_IMMUTABLE',
+    ],
+    status: 422,
+    code: 'PAYROLL_INVALID_STATE',
+    publicMessage: 'La operación de nómina no es válida para el estado actual.',
+  },
+  {
+    tokens: [
+      'PAYROLL_APPROVAL_PERMISSION_DENIED',
+      'PAYROLL_BRANCH_PERMISSION_DENIED',
+      'PAYROLL_COMMISSION_PERMISSION_DENIED',
+      'PAYROLL_GENERATION_PERMISSION_DENIED',
+      'PAYROLL_PAYMENT_PERMISSION_DENIED',
+    ],
+    status: 403,
+    code: 'PAYROLL_FORBIDDEN',
+    publicMessage: 'No tienes permiso para completar esta operación de nómina.',
+  },
+  {
+    tokens: [
+      'PAYROLL_COMMISSION_TO_REVERSE_NOT_FOUND',
+      'PAYROLL_EARNED_COMMISSION_NOT_FOUND',
+      'PAYROLL_ENTRY_NOT_FOUND',
+      'PAYROLL_RUN_NOT_FOUND',
+    ],
+    status: 404,
+    code: 'PAYROLL_NOT_FOUND',
+    publicMessage: 'La nómina solicitada no existe.',
+  },
+] as const
+
 const FINANCE_ERROR_MAPPINGS = [
   {
     tokens: [
       'FINANCE_IDEMPOTENCY_KEY_REUSED',
       'FINANCE_RECURRING_IDEMPOTENCY_KEY_REUSED',
       'FINANCE_OVERPAYMENT',
-      'PAYROLL_GENERATION_IDEMPOTENCY_KEY_REUSED',
-      'PAYROLL_PERIOD_ALREADY_GENERATED',
-      'PAYROLL_PAYMENT_IDEMPOTENCY_KEY_REUSED',
-      'PAYROLL_OVERPAYMENT',
       '23505',
     ],
     status: 409,
@@ -52,13 +120,6 @@ const FINANCE_ERROR_MAPPINGS = [
       'NON_CASH_PAYMENT_CANNOT_USE_CASH_SESSION',
       'CASH_SESSION_ONLY_ALLOWED_FOR_CASH_COMPENSATION',
       'FINANCE_INVALID_',
-      'PAYROLL_INVALID_',
-      'PAYROLL_RUN_NOT_APPROVABLE',
-      'PAYROLL_RUN_HAS_NO_ENTRIES',
-      'PAYROLL_ENTRY_NOT_PAYABLE',
-      'PAYROLL_COMMISSION_SNAPSHOT_MISMATCH',
-      'PAYROLL_ADJUSTMENT_',
-      'PAYROLL_APPROVED_',
       '23514',
     ],
     status: 422,
@@ -73,11 +134,6 @@ const FINANCE_ERROR_MAPPINGS = [
       'FINANCE_VOID_PERMISSION_DENIED',
       'FINANCE_GENERATION_PERMISSION_DENIED',
       'FINANCE_RECURRING_PERMISSION_DENIED',
-      'PAYROLL_BRANCH_PERMISSION_DENIED',
-      'PAYROLL_BRANCH_NOT_IN_ORGANIZATION',
-      'PAYROLL_PAYMENT_PERMISSION_DENIED',
-      'PAYROLL_APPROVAL_PERMISSION_DENIED',
-      'PAYROLL_GENERATION_PERMISSION_DENIED',
       '42501',
     ],
     status: 403,
@@ -98,6 +154,16 @@ export function toFinanceApiError(error: unknown) {
   const candidate = error as SupabaseErrorLike | null
   const rawMessage = candidate?.message ?? 'No se pudo completar la operacion financiera.'
   const haystack = `${candidate?.code ?? ''} ${rawMessage}`
+  const payrollMapping = PAYROLL_ERROR_MAPPINGS.find(({ tokens }) =>
+    tokens.some((token) => haystack.includes(token)),
+  )
+  if (payrollMapping) {
+    return new FinanceApiError(
+      payrollMapping.publicMessage,
+      payrollMapping.status,
+      payrollMapping.code,
+    )
+  }
   const mapping = FINANCE_ERROR_MAPPINGS.find(({ tokens }) =>
     tokens.some((token) => haystack.includes(token)),
   )
@@ -828,24 +894,51 @@ export async function getPayrollPreview(
   input: PayrollPreviewInput,
 ) {
   const admin = createAdminSupabase()
+  const payrollClient = await createClient()
+  const { error: materializationError } = await payrollClient.rpc(
+    'calculate_earned_commissions',
+    {
+      p_organization_id: organizationId,
+      p_period_from: input.periodFrom,
+      p_period_to: input.periodTo,
+      p_branch_id: input.branchId ?? null,
+    },
+  )
+  if (materializationError) throw toFinanceApiError(materializationError)
+
   let commissionsQuery = admin
     .from('earned_commissions')
-    .select('id, employee_id, amount, occurred_on')
+    .select('id, employee_id, employee_role, amount, occurred_on, created_at')
     .eq('organization_id', organizationId)
-    .gte('occurred_on', input.periodFrom)
     .lte('occurred_on', input.periodTo)
   if (input.branchId) commissionsQuery = commissionsQuery.eq('branch_id', input.branchId)
 
-  const [membersResult, compensationResult, commissionsResult, claimedResult] = await Promise.all([
+  let assignmentsQuery = admin
+    .from('user_branch_assignments')
+    .select('user_id')
+    .eq('organization_id', organizationId)
+    .eq('is_active', true)
+    .eq('is_primary', true)
+  if (input.branchId) assignmentsQuery = assignmentsQuery.eq('branch_id', input.branchId)
+
+  const [
+    membersResult,
+    compensationResult,
+    commissionsResult,
+    claimedResult,
+    employmentResult,
+    assignmentsResult,
+    runsResult,
+    settingsResult,
+  ] = await Promise.all([
     admin
       .from('organization_members')
       .select('user_id, role, status')
       .eq('organization_id', organizationId)
-      .eq('status', 'active')
       .neq('role', 'customer'),
     admin
       .from('employee_compensation')
-      .select('employee_id, base_salary, effective_from, effective_to')
+      .select('id, employee_id, base_salary, effective_from, effective_to, legacy_cutover_on')
       .eq('organization_id', organizationId)
       .lte('effective_from', input.periodTo),
     commissionsQuery,
@@ -853,11 +946,43 @@ export async function getPayrollPreview(
       .from('payroll_entry_commissions')
       .select('earned_commission_id')
       .eq('organization_id', organizationId),
+    admin
+      .from('employee_employment_events')
+      .select('id, employee_id, employee_role, employment_status, occurred_at')
+      .eq('organization_id', organizationId),
+    assignmentsQuery,
+    admin
+      .from('payroll_runs')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('run_type', 'standard')
+      .in('status', ['draft', 'approved'])
+      .lte('period_from', input.periodTo)
+      .gte('period_to', input.periodFrom),
+    admin
+      .from('organization_settings')
+      .select('timezone')
+      .eq('organization_id', organizationId)
+      .maybeSingle(),
   ])
   if (membersResult.error) throw toFinanceApiError(membersResult.error)
   if (compensationResult.error) throw toFinanceApiError(compensationResult.error)
   if (commissionsResult.error) throw toFinanceApiError(commissionsResult.error)
   if (claimedResult.error) throw toFinanceApiError(claimedResult.error)
+  if (employmentResult.error) throw toFinanceApiError(employmentResult.error)
+  if (assignmentsResult.error) throw toFinanceApiError(assignmentsResult.error)
+  if (runsResult.error) throw toFinanceApiError(runsResult.error)
+  if (settingsResult.error) throw toFinanceApiError(settingsResult.error)
+
+  const conflictingRunIds = (runsResult.data ?? []).map((run) => run.id)
+  const entriesResult = conflictingRunIds.length
+    ? await admin
+        .from('payroll_entries')
+        .select('employee_id, base_amount')
+        .eq('organization_id', organizationId)
+        .in('payroll_run_id', conflictingRunIds)
+    : { data: [], error: null }
+  if (entriesResult.error) throw toFinanceApiError(entriesResult.error)
 
   const staff = membersResult.data ?? []
   const compensation = compensationResult.data ?? []
@@ -868,22 +993,96 @@ export async function getPayrollPreview(
     (record) => !claimedCommissionIds.has(record.id),
   )
   const payrollDays = eachDay(input.periodFrom, input.periodTo)
-  const entries = staff.map((member) => {
+  const timezone = settingsResult.data?.timezone ?? 'America/Asuncion'
+  const payrollDayForEvent = (occurredAt: string) => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date(occurredAt))
+    const value = (type: string) => parts.find((part) => part.type === type)?.value
+    return `${value('year')}-${value('month')}-${value('day')}`
+  }
+  const employmentByEmployee = new Map<string, typeof employmentResult.data>()
+  for (const event of employmentResult.data ?? []) {
+    const events = employmentByEmployee.get(event.employee_id) ?? []
+    events.push(event)
+    employmentByEmployee.set(event.employee_id, events)
+  }
+  for (const events of employmentByEmployee.values()) {
+    events.sort((left, right) =>
+      left.occurred_at === right.occurred_at
+        ? left.id.localeCompare(right.id)
+        : left.occurred_at.localeCompare(right.occurred_at),
+    )
+  }
+  const branchSalaryEmployees = new Set(
+    (assignmentsResult.data ?? []).map((assignment) => assignment.user_id),
+  )
+  const salaryConflictEmployees = new Set(
+    (entriesResult.data ?? [])
+      .filter((entry) => Number(entry.base_amount) > 0)
+      .map((entry) => entry.employee_id),
+  )
+  const commissionByEmployee = new Map<string, typeof commissions>()
+  for (const commission of commissions) {
+    const employeeCommissions = commissionByEmployee.get(commission.employee_id) ?? []
+    employeeCommissions.push(commission)
+    commissionByEmployee.set(commission.employee_id, employeeCommissions)
+  }
+  const entries = staff.flatMap((member) => {
+    const employeeEvents = employmentByEmployee.get(member.user_id) ?? []
+    const employmentForDay = (payDay: string) => {
+      const eligible = employeeEvents.filter(
+        (event) => payrollDayForEvent(event.occurred_at) <= payDay,
+      )
+      return eligible[eligible.length - 1]
+    }
+    const activeEvents = payrollDays
+      .map(employmentForDay)
+      .filter(
+        (event) =>
+          event?.employment_status === 'active' && event.employee_role !== 'customer',
+      )
+    const hasActiveEmployment = activeEvents.length > 0
+    const receivesSalaryAtBranch =
+      !input.branchId || branchSalaryEmployees.has(member.user_id)
+    const hasUnclaimedCommission = commissionByEmployee.has(member.user_id)
+    if (!hasUnclaimedCommission && (!hasActiveEmployment || !receivesSalaryAtBranch)) {
+      return []
+    }
+
     const employeeCompensation = compensation.filter(
       (record) => record.employee_id === member.user_id,
     )
+    const salaryEligible =
+      hasActiveEmployment &&
+      receivesSalaryAtBranch &&
+      !salaryConflictEmployees.has(member.user_id)
     const salary = payrollDays.reduce((total, payDay) => {
       const record = employeeCompensation
         .filter(
           (candidate) =>
             candidate.effective_from <= payDay &&
+            payDay >= (candidate.legacy_cutover_on ?? candidate.effective_from) &&
             (!candidate.effective_to || candidate.effective_to >= payDay),
         )
-        .sort((left, right) => right.effective_from.localeCompare(left.effective_from))[0]
-      return total + (record ? Number(record.base_salary) / daysInMonth(payDay) : 0)
+        .sort((left, right) =>
+          left.effective_from === right.effective_from
+            ? right.id.localeCompare(left.id)
+            : right.effective_from.localeCompare(left.effective_from),
+        )[0]
+      const employment = employmentForDay(payDay)
+      const isActive =
+        employment?.employment_status === 'active' &&
+        employment.employee_role !== 'customer'
+      return total +
+        (salaryEligible && isActive && record
+          ? Number(record.base_salary) / daysInMonth(payDay)
+          : 0)
     }, 0)
-    const commission = commissions
-      .filter((record) => record.employee_id === member.user_id)
+    const commission = (commissionByEmployee.get(member.user_id) ?? [])
       .reduce((total, record) => total + Number(record.amount), 0)
     const bonuses = 0
     const discounts = 0
@@ -893,7 +1092,14 @@ export async function getPayrollPreview(
 
     return {
       employeeId: member.user_id,
-      role: member.role,
+      role: activeEvents[activeEvents.length - 1]?.employee_role ??
+        (commissionByEmployee.get(member.user_id) ?? [])
+          .sort((left, right) =>
+            left.occurred_on === right.occurred_on
+              ? right.created_at.localeCompare(left.created_at)
+              : right.occurred_on.localeCompare(left.occurred_on),
+          )[0]?.employee_role ??
+        member.role,
       salary: roundMoney(salary),
       earnedCommissions: roundMoney(commission),
       bonuses,

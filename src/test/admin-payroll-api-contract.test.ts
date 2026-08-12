@@ -79,6 +79,34 @@ describe('admin payroll API contract', () => {
     })
 
     expect(error.status).toBe(422)
-    expect(error.code).toBe('FINANCE_INVALID_STATE')
+    expect(error.code).toBe('PAYROLL_INVALID_STATE')
+  })
+
+  it('derives a branch preview from the same payroll eligibility sources as generation', () => {
+    const server = read('src/lib/finance/server.ts')
+
+    expect(server).toContain("'calculate_earned_commissions'")
+    expect(server).toContain(".from('user_branch_assignments')")
+    expect(server).toContain(".eq('is_primary', true)")
+    expect(server).toContain(".from('employee_employment_events')")
+    expect(server).toContain('legacy_cutover_on')
+    expect(server).toContain(".from('payroll_runs')")
+    expect(server).toContain(".lte('occurred_on', input.periodTo)")
+    expect(server).not.toContain(".gte('occurred_on', input.periodFrom)")
+  })
+
+  it.each([
+    ['PAYROLL_PERIOD_ALREADY_GENERATED', 409, 'PAYROLL_CONFLICT'],
+    ['PAYROLL_COMMISSION_RULE_PERIOD_OVERLAP', 409, 'PAYROLL_CONFLICT'],
+    ['PAYROLL_ENTRY_NOT_PAYABLE', 422, 'PAYROLL_INVALID_STATE'],
+    ['PAYROLL_BRANCH_NOT_IN_ORGANIZATION', 422, 'PAYROLL_INVALID_STATE'],
+    ['PAYROLL_BRANCH_PERMISSION_DENIED', 403, 'PAYROLL_FORBIDDEN'],
+    ['PAYROLL_RUN_NOT_FOUND', 404, 'PAYROLL_NOT_FOUND'],
+  ])('maps %s to its public payroll error contract', (message, status, code) => {
+    const error = toFinanceApiError({ message })
+
+    expect(error.status).toBe(status)
+    expect(error.code).toBe(code)
+    expect(error.message).not.toContain('obligacion')
   })
 })
