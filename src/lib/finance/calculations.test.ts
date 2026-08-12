@@ -35,6 +35,21 @@ describe('calculateFinancialSummary', () => {
     })
   })
 
+  it.each([0.29, 999_999_999_999.99])(
+    'accepts the valid numeric(14,2) amount %d',
+    (amount) => {
+      const result = calculateFinancialSummary({
+        revenue: [{ amount, cashAmount: amount, hasCost: true }],
+        directCosts: [],
+        expenses: [],
+        payroll: [],
+      })
+
+      expect(result.accrued.revenue).toBe(amount)
+      expect(result.cash.collected).toBe(amount)
+    },
+  )
+
   it.each([
     {
       label: 'a non-finite collected amount',

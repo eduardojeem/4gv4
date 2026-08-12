@@ -1,14 +1,23 @@
 export type FinancePaymentMethod = 'cash' | 'bank_transfer' | 'other'
 
 export const MAX_FINANCE_AMOUNT = 999_999_999_999.99
-export const FINANCE_AMOUNT_SCALE = 100
+
+function decimalScale(value: number): number {
+  const [coefficient, exponentPart] = value.toString().toLowerCase().split('e')
+  const decimalPoint = coefficient.indexOf('.')
+  const coefficientScale =
+    decimalPoint === -1 ? 0 : coefficient.length - decimalPoint - 1
+  const exponent = exponentPart === undefined ? 0 : Number(exponentPart)
+
+  return coefficientScale - exponent
+}
 
 export function isFinanceAmount(value: number): boolean {
   return (
     Number.isFinite(value) &&
     value >= 0 &&
     value <= MAX_FINANCE_AMOUNT &&
-    Number.isSafeInteger(value * FINANCE_AMOUNT_SCALE)
+    decimalScale(value) <= 2
   )
 }
 

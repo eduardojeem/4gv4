@@ -60,6 +60,20 @@ describe('expenseInputSchema', () => {
     expect(exceedsMaximum.success).toBe(false)
     expect(nearIntegerWithExcessScale.success).toBe(false)
   })
+
+  it.each([0.29, 999_999_999_999.99])(
+    'accepts the valid numeric(14,2) amount %d',
+    (amount) => {
+      const result = expenseInputSchema.safeParse({
+        branchId,
+        categoryId,
+        amount,
+        accountingDate: '2026-08-11',
+      })
+
+      expect(result.success).toBe(true)
+    },
+  )
 })
 
 describe('paymentInputSchema', () => {
@@ -124,6 +138,20 @@ describe('paymentInputSchema', () => {
     expect(exceedsMaximum.success).toBe(false)
     expect(nearIntegerWithExcessScale.success).toBe(false)
   })
+
+  it.each([0.29, 999_999_999_999.99])(
+    'accepts the valid numeric(14,2) amount %d',
+    (amount) => {
+      const result = paymentInputSchema.safeParse({
+        branchId,
+        amount,
+        paymentMethod: 'other',
+        paymentDate: '2026-08-11',
+      })
+
+      expect(result.success).toBe(true)
+    },
+  )
 
   it('rejects a cash session for a non-cash payment', () => {
     const result = paymentInputSchema.safeParse({
