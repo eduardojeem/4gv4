@@ -3,6 +3,10 @@ import { normalizeRole } from '@/lib/auth/role-utils'
 import { resolveBranchScopeForUser } from '@/lib/branches/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { chunkQueryValues } from '@/lib/analytics/query-batches'
+import { calculateFinancialSummary } from '@/lib/finance/calculations'
+import { isCompletedSaleStatus } from '@/lib/sales-status'
+import { z } from 'zod'
 
 import type {
   CommissionRuleInput,
@@ -12,6 +16,7 @@ import type {
   PayrollGenerationInput,
   PayrollPaymentInput,
 } from './schemas'
+import type { FinanceFilters, FinanceSummary } from './types'
 
 type SupabaseErrorLike = {
   code?: string
@@ -1261,4 +1266,684 @@ export async function payPayrollEntry(params: {
   })
   if (error) throw toFinanceApiError(error)
   return data
+}
+
+const financeReportDateSchema = z.iso.date()
+const financeReportIdSchema = z.uuid()
+
+export const financeSummaryQuerySchema = z
+  .object({
+    organizationId: financeReportIdSchema.optional(),
+    organizationHeader: financeReportIdSchema.optional(),
+    startDate: financeReportDateSchema,
+    endDate: financeReportDateSchema,
+    branchId: financeReportIdSchema.optional(),
+  })
+  .refine(
+    (input) =>
+      !input.organizationId ||
+      !input.organizationHeader ||
+      input.organizationId === input.organizationHeader,
+    { message: 'Los selectores de organizacion no coinciden.' },
+  )
+  .refine((input) => input.startDate <= input.endDate, {
+    message: 'El rango financiero es invalido.',
+    path: ['endDate'],
+  })
+
+export type FinanceSummaryQuery = z.infer<typeof financeSummaryQuerySchema>
+
+type FinanceSaleRecord = {
+  id: string
+  branchId: string | null
+  createdAt: string
+  status: string | null
+  totalAmount: number
+  paidAmount: number
+  employeeId?: string | null
+}
+
+type FinanceSaleItemRecord = {
+  saleId: string
+  productId?: string | null
+  productName?: string | null
+  quantity: number
+  unitCost: number | null
+  revenueAmount?: number | null
+}
+
+type FinanceRepairRecord = {
+  id: string
+  branchId: string | null
+  createdAt: string
+  status: string | null
+  revenueAmount: number
+  paidAmount: number
+  employeeId?: string | null
+}
+
+type FinanceRepairPartRecord = {
+  repairId: string
+  quantity: number
+  unitCost: number | null
+}
+
+type FinanceObligationRecord = {
+  id: string
+  branchId: string | null
+  accountingDate: string
+  dueDate: string | null
+  status: string
+  amount: number
+}
+
+type FinancePayrollEntryRecord = {
+  id: string
+  branchId: string | null
+  approvedAt: string | null
+  status: string
+  netAmount: number
+  employeeId?: string | null
+}
+
+type FinancePaymentRecord = {
+  branchId: string | null
+  paymentDate: string
+  direction: 'payment' | 'reversal'
+  amount: number
+}
+
+export interface FinanceSummaryRecords {
+  sales: FinanceSaleRecord[]
+  saleItems: FinanceSaleItemRecord[]
+  repairs: FinanceRepairRecord[]
+  repairParts: FinanceRepairPartRecord[]
+  obligations: FinanceObligationRecord[]
+  payrollEntries: FinancePayrollEntryRecord[]
+  financePayments: FinancePaymentRecord[]
+  payrollPayments: FinancePaymentRecord[]
+}
+
+export interface FinanceSummaryReport extends FinanceSummary {
+  generatedAt: string
+  filters: FinanceFilters
+  comparison: FinanceSummary
+  upcomingDue: Array<{ id: string; dueDate: string; amount: number }>
+  overdue: Array<{ id: string; dueDate: string; amount: number }>
+}
+
+export type FinanceProfitabilityGroup =
+  | 'sale'
+  | 'repair'
+  | 'product'
+  | 'employee'
+  | 'branch'
+
+export interface FinanceProfitabilityRow {
+  id: string
+  label: string
+  group: FinanceProfitabilityGroup
+  revenue: number
+  directCosts: number | null
+  grossProfit: number | null
+  complete: boolean
+}
+
+const FINANCE_REPORT_QUERY_LIMIT = 10_000
+
+function money(value: number | string | null | undefined): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function roundMoneyValue(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
+function day(value: string | null | undefined): string | null {
+  if (!value) return null
+  const result = value.slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(result) ? result : null
+}
+
+function isInPeriod(value: string | null | undefined, filters: FinanceFilters): boolean {
+  const valueDay = day(value)
+  return Boolean(valueDay && valueDay >= filters.startDate && valueDay <= filters.endDate)
+}
+
+function isInBranch(branchId: string | null, filters: FinanceFilters): boolean {
+  return !filters.branchId || branchId === filters.branchId
+}
+
+function previousPeriod(filters: FinanceFilters): FinanceFilters {
+  const start = new Date(`${filters.startDate}T00:00:00Z`)
+  const end = new Date(`${filters.endDate}T00:00:00Z`)
+  const days = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
+  const previousEnd = new Date(start)
+  previousEnd.setUTCDate(previousEnd.getUTCDate() - 1)
+  const previousStart = new Date(previousEnd)
+  previousStart.setUTCDate(previousStart.getUTCDate() - days + 1)
+
+  return {
+    startDate: previousStart.toISOString().slice(0, 10),
+    endDate: previousEnd.toISOString().slice(0, 10),
+    branchId: filters.branchId,
+  }
+}
+
+function isCancelledRepair(status: string | null): boolean {
+  return String(status ?? '').trim().toLowerCase() === 'cancelado'
+}
+
+function signedPayments(
+  payments: FinancePaymentRecord[],
+  filters: FinanceFilters,
+): number {
+  return payments
+    .filter(
+      (payment) =>
+        isInBranch(payment.branchId, filters) &&
+        isInPeriod(payment.paymentDate, filters),
+    )
+    .reduce(
+      (total, payment) =>
+        total + (payment.direction === 'reversal' ? -money(payment.amount) : money(payment.amount)),
+      0,
+    )
+}
+
+function buildFinancialSummary(
+  records: FinanceSummaryRecords,
+  filters: FinanceFilters,
+): FinanceSummary {
+  const saleItemsBySaleId = new Map<string, FinanceSaleItemRecord[]>()
+  for (const item of records.saleItems) {
+    const items = saleItemsBySaleId.get(item.saleId) ?? []
+    items.push(item)
+    saleItemsBySaleId.set(item.saleId, items)
+  }
+  const partsByRepairId = new Map<string, FinanceRepairPartRecord[]>()
+  for (const part of records.repairParts) {
+    const parts = partsByRepairId.get(part.repairId) ?? []
+    parts.push(part)
+    partsByRepairId.set(part.repairId, parts)
+  }
+
+  const selectedSales = records.sales.filter(
+    (sale) =>
+      isInBranch(sale.branchId, filters) &&
+      isInPeriod(sale.createdAt, filters) &&
+      isCompletedSaleStatus(sale.status),
+  )
+  const selectedRepairs = records.repairs.filter(
+    (repair) =>
+      isInBranch(repair.branchId, filters) &&
+      isInPeriod(repair.createdAt, filters) &&
+      !isCancelledRepair(repair.status),
+  )
+  const revenue = [
+    ...selectedSales.map((sale) => {
+      const items = saleItemsBySaleId.get(sale.id) ?? []
+      const hasCost = items.length > 0 && items.every((item) => item.unitCost !== null)
+      return {
+        id: sale.id,
+        amount: money(sale.totalAmount),
+        cashAmount: Math.min(money(sale.totalAmount), money(sale.paidAmount)),
+        hasCost,
+      }
+    }),
+    ...selectedRepairs.map((repair) => {
+      const parts = partsByRepairId.get(repair.id) ?? []
+      return {
+        id: repair.id,
+        amount: money(repair.revenueAmount),
+        cashAmount: Math.min(money(repair.revenueAmount), money(repair.paidAmount)),
+        hasCost: parts.every((part) => part.unitCost !== null),
+      }
+    }),
+  ]
+  const directCosts = [
+    ...selectedSales.flatMap((sale) =>
+      (saleItemsBySaleId.get(sale.id) ?? []).flatMap((item) =>
+        item.unitCost === null
+          ? []
+          : [{ id: `${sale.id}:${item.productId ?? item.productName ?? 'item'}`, amount: money(item.quantity) * money(item.unitCost), paidAmount: 0 }],
+      ),
+    ),
+    ...selectedRepairs.flatMap((repair) =>
+      (partsByRepairId.get(repair.id) ?? []).flatMap((part) =>
+        part.unitCost === null
+          ? []
+          : [{ id: `${repair.id}:part`, amount: money(part.quantity) * money(part.unitCost), paidAmount: 0 }],
+      ),
+    ),
+  ]
+  const expenses = records.obligations
+    .filter(
+      (obligation) =>
+        isInBranch(obligation.branchId, filters) &&
+        isInPeriod(obligation.accountingDate, filters) &&
+        obligation.status !== 'voided',
+    )
+    .map((obligation) => ({ id: obligation.id, amount: money(obligation.amount), paidAmount: 0 }))
+  const payroll = records.payrollEntries
+    .filter(
+      (entry) =>
+        isInBranch(entry.branchId, filters) &&
+        entry.status === 'approved' &&
+        isInPeriod(entry.approvedAt, filters),
+    )
+    .map((entry) => ({ id: entry.id, amount: money(entry.netAmount), paidAmount: 0 }))
+  const summary = calculateFinancialSummary({ revenue, directCosts, expenses, payroll })
+  const paid = signedPayments(records.financePayments, filters) +
+    signedPayments(records.payrollPayments, filters)
+
+  return {
+    ...summary,
+    accrued: {
+      ...summary.accrued,
+      revenue: roundMoneyValue(summary.accrued.revenue),
+      directCosts: roundMoneyValue(summary.accrued.directCosts),
+      grossProfit: summary.accrued.grossProfit === null ? null : roundMoneyValue(summary.accrued.grossProfit),
+      operatingExpenses: roundMoneyValue(summary.accrued.operatingExpenses),
+      payrollCost: roundMoneyValue(summary.accrued.payrollCost),
+      netProfit: summary.accrued.netProfit === null ? null : roundMoneyValue(summary.accrued.netProfit),
+    },
+    cash: {
+      collected: roundMoneyValue(summary.cash.collected),
+      paid: roundMoneyValue(paid),
+      netCashFlow: roundMoneyValue(summary.cash.collected - paid),
+    },
+  }
+}
+
+export function buildFinanceSummaryFromRecords(
+  records: FinanceSummaryRecords,
+  filters: FinanceFilters,
+  today = new Date().toISOString().slice(0, 10),
+): FinanceSummaryReport {
+  const current = buildFinancialSummary(records, filters)
+  const dueObligations = records.obligations.filter(
+    (obligation) =>
+      isInBranch(obligation.branchId, filters) &&
+      isInPeriod(obligation.accountingDate, filters) &&
+      obligation.status !== 'voided' &&
+      obligation.status !== 'paid' &&
+      Boolean(obligation.dueDate),
+  )
+  const toDueRow = (obligation: FinanceObligationRecord) => ({
+    id: obligation.id,
+    dueDate: obligation.dueDate as string,
+    amount: roundMoneyValue(money(obligation.amount)),
+  })
+  const byDueDate = (left: { dueDate: string }, right: { dueDate: string }) =>
+    left.dueDate.localeCompare(right.dueDate)
+
+  return {
+    ...current,
+    generatedAt: new Date().toISOString(),
+    filters,
+    comparison: buildFinancialSummary(records, previousPeriod(filters)),
+    upcomingDue: dueObligations
+      .filter((obligation) => (obligation.dueDate as string) >= today)
+      .map(toDueRow)
+      .sort(byDueDate),
+    overdue: dueObligations
+      .filter((obligation) => (obligation.dueDate as string) < today)
+      .map(toDueRow)
+      .sort(byDueDate),
+  }
+}
+
+function assertBoundedFinanceRows(
+  rows: unknown[] | null,
+  source: string,
+): asserts rows is unknown[] {
+  if ((rows?.length ?? 0) >= FINANCE_REPORT_QUERY_LIMIT) {
+    throw new FinanceApiError(
+      `El rango solicitado excede el limite seguro de ${source}. Reduce el periodo.`,
+      422,
+      'FINANCE_REPORT_RANGE_TOO_LARGE',
+    )
+  }
+}
+
+async function loadFinanceSummaryRecords(
+  organizationId: string,
+  filters: FinanceFilters,
+): Promise<FinanceSummaryRecords> {
+  const admin = createAdminSupabase()
+  const comparison = previousPeriod(filters)
+  const startDate = comparison.startDate
+  const queryEndDate = filters.endDate
+  const branch = <T>(query: T): T => filters.branchId
+    ? (query as { eq: (column: string, value: string) => T }).eq('branch_id', filters.branchId)
+    : query
+
+  const salesQuery = branch(
+    admin
+      .from('sales')
+      .select('id, branch_id, created_at, status, total_amount, payment_status, created_by')
+      .eq('organization_id', organizationId)
+      .gte('created_at', startDate)
+      .lt('created_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
+      .limit(FINANCE_REPORT_QUERY_LIMIT),
+  )
+  const repairsQuery = branch(
+    admin
+      .from('repairs')
+      .select('id, branch_id, created_at, status, final_cost, estimated_cost, paid_amount, technician_id')
+      .eq('organization_id', organizationId)
+      .gte('created_at', startDate)
+      .lt('created_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
+      .limit(FINANCE_REPORT_QUERY_LIMIT),
+  )
+  const obligationsQuery = branch(
+    admin
+      .from('finance_obligations')
+      .select('id, branch_id, accounting_date, due_date, status, amount')
+      .eq('organization_id', organizationId)
+      .gte('accounting_date', startDate)
+      .lte('accounting_date', queryEndDate)
+      .limit(FINANCE_REPORT_QUERY_LIMIT),
+  )
+  const payrollQuery = branch(
+    admin
+      .from('payroll_entries')
+      .select('id, branch_id, employee_id, net_amount, payroll_runs!inner(status, approved_at)')
+      .eq('organization_id', organizationId)
+      .eq('payroll_runs.status', 'approved')
+      .gte('payroll_runs.approved_at', startDate)
+      .lte('payroll_runs.approved_at', queryEndDate)
+      .limit(FINANCE_REPORT_QUERY_LIMIT),
+  )
+  const financePaymentsQuery = branch(
+    admin
+      .from('finance_payments')
+      .select('branch_id, payment_date, direction, amount')
+      .eq('organization_id', organizationId)
+      .gte('payment_date', startDate)
+      .lte('payment_date', queryEndDate)
+      .limit(FINANCE_REPORT_QUERY_LIMIT),
+  )
+  const payrollPaymentsQuery = branch(
+    admin
+      .from('payroll_payments')
+      .select('branch_id, payment_date, direction, amount')
+      .eq('organization_id', organizationId)
+      .gte('payment_date', startDate)
+      .lte('payment_date', queryEndDate)
+      .limit(FINANCE_REPORT_QUERY_LIMIT),
+  )
+
+  const [salesResult, repairsResult, obligationsResult, payrollResult, financePaymentsResult, payrollPaymentsResult] =
+    await Promise.all([
+      salesQuery,
+      repairsQuery,
+      obligationsQuery,
+      payrollQuery,
+      financePaymentsQuery,
+      payrollPaymentsQuery,
+    ])
+  for (const result of [salesResult, repairsResult, obligationsResult, payrollResult, financePaymentsResult, payrollPaymentsResult]) {
+    if (result.error) throw toFinanceApiError(result.error)
+    assertBoundedFinanceRows(result.data as unknown[] | null, 'reporte financiero')
+  }
+
+  const sales = (salesResult.data ?? []).map((sale) => ({
+    id: String(sale.id),
+    branchId: sale.branch_id ?? null,
+    createdAt: String(sale.created_at),
+    status: sale.status ?? null,
+    totalAmount: money(sale.total_amount),
+    paidAmount: isPaidSale(sale.payment_status) ? money(sale.total_amount) : 0,
+    employeeId: sale.created_by ?? null,
+  }))
+  const repairs = (repairsResult.data ?? []).map((repair) => ({
+    id: String(repair.id),
+    branchId: repair.branch_id ?? null,
+    createdAt: String(repair.created_at),
+    status: repair.status ?? null,
+    revenueAmount: money(repair.final_cost ?? repair.estimated_cost),
+    paidAmount: money(repair.paid_amount),
+    employeeId: repair.technician_id ?? null,
+  }))
+  const saleItems = await loadSaleItems(admin, organizationId, sales.map((sale) => sale.id))
+  const repairParts = await loadRepairParts(admin, repairs.map((repair) => repair.id))
+
+  return {
+    sales,
+    saleItems,
+    repairs,
+    repairParts,
+    obligations: (obligationsResult.data ?? []).map((obligation) => ({
+      id: String(obligation.id),
+      branchId: obligation.branch_id ?? null,
+      accountingDate: String(obligation.accounting_date),
+      dueDate: obligation.due_date ?? null,
+      status: String(obligation.status),
+      amount: money(obligation.amount),
+    })),
+    payrollEntries: (payrollResult.data ?? []).map((entry) => {
+      const payrollRun = Array.isArray(entry.payroll_runs)
+        ? entry.payroll_runs[0]
+        : entry.payroll_runs
+      return {
+        id: String(entry.id),
+        branchId: entry.branch_id ?? null,
+        approvedAt: payrollRun?.approved_at ?? null,
+        status: payrollRun?.status ?? 'draft',
+        netAmount: money(entry.net_amount),
+        employeeId: entry.employee_id ?? null,
+      }
+    }),
+    financePayments: toFinancePaymentRecords(financePaymentsResult.data ?? []),
+    payrollPayments: toFinancePaymentRecords(payrollPaymentsResult.data ?? []),
+  }
+}
+
+function nextDay(value: string): string {
+  const date = new Date(`${value}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + 1)
+  return date.toISOString().slice(0, 10)
+}
+
+function isPaidSale(status: string | null): boolean {
+  return ['paid', 'pagado', 'completed', 'completado'].includes(
+    String(status ?? '').trim().toLowerCase(),
+  )
+}
+
+function toFinancePaymentRecords(rows: Array<Record<string, unknown>>): FinancePaymentRecord[] {
+  return rows.map((payment) => ({
+    branchId: typeof payment.branch_id === 'string' ? payment.branch_id : null,
+    paymentDate: String(payment.payment_date),
+    direction: payment.direction === 'reversal' ? 'reversal' : 'payment',
+    amount: money(payment.amount as number | string | null | undefined),
+  }))
+}
+
+async function loadSaleItems(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  saleIds: string[],
+): Promise<FinanceSaleItemRecord[]> {
+  if (saleIds.length === 0) return []
+  const results = await Promise.all(
+    chunkQueryValues(saleIds).map((ids) =>
+      admin
+        .from('sale_items')
+        .select('sale_id, product_id, quantity, subtotal, product:products(name, purchase_price)')
+        .eq('organization_id', organizationId)
+        .in('sale_id', ids)
+        .limit(FINANCE_REPORT_QUERY_LIMIT),
+    ),
+  )
+  const items: FinanceSaleItemRecord[] = []
+  for (const result of results) {
+    if (result.error) throw toFinanceApiError(result.error)
+    assertBoundedFinanceRows(result.data as unknown[] | null, 'items de venta')
+    for (const item of result.data ?? []) {
+      const product = Array.isArray(item.product) ? item.product[0] : item.product
+      items.push({
+        saleId: String(item.sale_id),
+        productId: item.product_id ?? null,
+        productName: product?.name ?? null,
+        quantity: money(item.quantity),
+        unitCost: product?.purchase_price === null || product?.purchase_price === undefined
+          ? null
+          : money(product.purchase_price),
+        revenueAmount: money(item.subtotal),
+      })
+    }
+  }
+  return items
+}
+
+async function loadRepairParts(
+  admin: ReturnType<typeof createAdminSupabase>,
+  repairIds: string[],
+): Promise<FinanceRepairPartRecord[]> {
+  if (repairIds.length === 0) return []
+  const results = await Promise.all(
+    chunkQueryValues(repairIds).map((ids) =>
+      admin
+        .from('repair_parts')
+        .select('repair_id, quantity, unit_cost')
+        .in('repair_id', ids)
+        .limit(FINANCE_REPORT_QUERY_LIMIT),
+    ),
+  )
+  const parts: FinanceRepairPartRecord[] = []
+  for (const result of results) {
+    if (result.error) throw toFinanceApiError(result.error)
+    assertBoundedFinanceRows(result.data as unknown[] | null, 'repuestos de reparación')
+    for (const part of result.data ?? []) {
+      parts.push({
+        repairId: String(part.repair_id),
+        quantity: money(part.quantity),
+        unitCost: part.unit_cost === null || part.unit_cost === undefined
+          ? null
+          : money(part.unit_cost),
+      })
+    }
+  }
+  return parts
+}
+
+export async function getFinanceSummary(
+  organizationId: string,
+  filters: FinanceFilters,
+): Promise<FinanceSummaryReport> {
+  const records = await loadFinanceSummaryRecords(organizationId, filters)
+  return buildFinanceSummaryFromRecords(records, filters)
+}
+
+export async function getFinanceProfitability(
+  organizationId: string,
+  filters: FinanceFilters,
+  group: FinanceProfitabilityGroup,
+): Promise<FinanceProfitabilityRow[]> {
+  const records = await loadFinanceSummaryRecords(organizationId, filters)
+  return buildProfitabilityRows(records, filters, group)
+}
+
+function buildProfitabilityRows(
+  records: FinanceSummaryRecords,
+  filters: FinanceFilters,
+  group: FinanceProfitabilityGroup,
+): FinanceProfitabilityRow[] {
+  const sales = records.sales.filter(
+    (sale) => isInBranch(sale.branchId, filters) && isInPeriod(sale.createdAt, filters) && isCompletedSaleStatus(sale.status),
+  )
+  const repairs = records.repairs.filter(
+    (repair) => isInBranch(repair.branchId, filters) && isInPeriod(repair.createdAt, filters) && !isCancelledRepair(repair.status),
+  )
+  const saleItemsBySaleId = new Map<string, FinanceSaleItemRecord[]>()
+  for (const item of records.saleItems) {
+    const items = saleItemsBySaleId.get(item.saleId) ?? []
+    items.push(item)
+    saleItemsBySaleId.set(item.saleId, items)
+  }
+  const repairPartsByRepairId = new Map<string, FinanceRepairPartRecord[]>()
+  for (const part of records.repairParts) {
+    const parts = repairPartsByRepairId.get(part.repairId) ?? []
+    parts.push(part)
+    repairPartsByRepairId.set(part.repairId, parts)
+  }
+  const rows = new Map<string, { label: string; revenue: number; directCosts: number; complete: boolean }>()
+  const add = (id: string, label: string, revenue: number, directCosts: number, complete: boolean) => {
+    const row = rows.get(id) ?? { label, revenue: 0, directCosts: 0, complete: true }
+    row.revenue += revenue
+    row.directCosts += directCosts
+    row.complete = row.complete && complete
+    rows.set(id, row)
+  }
+  const saleKey = (sale: FinanceSaleRecord) => {
+    if (group === 'employee') return [`employee:${sale.employeeId ?? 'unassigned'}`, sale.employeeId ?? 'Sin empleado'] as const
+    if (group === 'branch') return [`branch:${sale.branchId ?? 'organization'}`, sale.branchId ?? 'Organización'] as const
+    return [`sale:${sale.id}`, sale.id] as const
+  }
+  for (const sale of sales) {
+    if (group === 'product') {
+      for (const item of saleItemsBySaleId.get(sale.id) ?? []) {
+        const complete = item.unitCost !== null
+        add(
+          `product:${item.productId ?? 'missing'}`,
+          item.productName ?? item.productId ?? 'Producto sin identificar',
+          money(item.revenueAmount),
+          complete ? money(item.quantity) * money(item.unitCost) : 0,
+          complete,
+        )
+      }
+      continue
+    }
+    const [id, label] = saleKey(sale)
+    const items = saleItemsBySaleId.get(sale.id) ?? []
+    add(
+      id,
+      label,
+      money(sale.totalAmount),
+      items.reduce((total, item) => total + (item.unitCost === null ? 0 : money(item.quantity) * money(item.unitCost)), 0),
+      items.length > 0 && items.every((item) => item.unitCost !== null),
+    )
+  }
+  for (const repair of repairs) {
+    if (group === 'product') continue
+    const key = group === 'employee'
+      ? [`employee:${repair.employeeId ?? 'unassigned'}`, repair.employeeId ?? 'Sin empleado'] as const
+      : group === 'branch'
+        ? [`branch:${repair.branchId ?? 'organization'}`, repair.branchId ?? 'Organización'] as const
+        : [`repair:${repair.id}`, repair.id] as const
+    const parts = repairPartsByRepairId.get(repair.id) ?? []
+    add(
+      key[0],
+      key[1],
+      money(repair.revenueAmount),
+      parts.reduce(
+        (total, part) => total + (part.unitCost === null ? 0 : money(part.quantity) * money(part.unitCost)),
+        0,
+      ),
+      parts.every((part) => part.unitCost !== null),
+    )
+  }
+  return Array.from(rows.entries())
+    .map(([id, row]) => {
+      const summary = calculateFinancialSummary({
+        revenue: [{ id, amount: row.revenue, cashAmount: 0, hasCost: row.complete }],
+        directCosts: [{ id, amount: row.directCosts, paidAmount: 0 }],
+        expenses: [],
+        payroll: [],
+      })
+      return {
+        id,
+        label: row.label,
+        group,
+        revenue: roundMoneyValue(row.revenue),
+        directCosts: row.complete ? roundMoneyValue(row.directCosts) : null,
+        grossProfit: summary.accrued.grossProfit,
+        complete: row.complete,
+      }
+    })
+    .sort((left, right) => right.revenue - left.revenue || left.label.localeCompare(right.label))
 }
