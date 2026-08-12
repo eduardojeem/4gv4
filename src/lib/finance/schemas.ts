@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
-import { MAX_FINANCE_AMOUNT, type FinancePaymentMethod } from './types'
+import {
+  isFinanceAmount,
+  MAX_FINANCE_AMOUNT,
+  type FinancePaymentMethod,
+} from './types'
 
 const uuidSchema = z.uuid()
 const accountingDateSchema = z.iso.date()
@@ -9,10 +13,9 @@ const positiveAmountSchema = z
   .finite()
   .positive()
   .max(MAX_FINANCE_AMOUNT)
-  .refine(
-    (amount) => Math.abs(amount - Number(amount.toFixed(2))) < 0.000_000_001,
-    { message: 'El importe no puede tener más de dos decimales.' },
-  )
+  .refine(isFinanceAmount, {
+    message: 'El importe no puede tener más de dos decimales.',
+  })
 
 const recurrenceSchema = z
   .object({

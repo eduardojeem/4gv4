@@ -49,9 +49,16 @@ describe('expenseInputSchema', () => {
       amount: 1_000_000_000_000,
       accountingDate: '2026-08-11',
     })
+    const nearIntegerWithExcessScale = expenseInputSchema.safeParse({
+      branchId,
+      categoryId,
+      amount: 1.0000000001,
+      accountingDate: '2026-08-11',
+    })
 
     expect(fractionalScale.success).toBe(false)
     expect(exceedsMaximum.success).toBe(false)
+    expect(nearIntegerWithExcessScale.success).toBe(false)
   })
 })
 
@@ -106,9 +113,16 @@ describe('paymentInputSchema', () => {
       paymentMethod: 'other',
       paymentDate: '2026-08-11',
     })
+    const nearIntegerWithExcessScale = paymentInputSchema.safeParse({
+      branchId,
+      amount: 1.0000000001,
+      paymentMethod: 'other',
+      paymentDate: '2026-08-11',
+    })
 
     expect(fractionalScale.success).toBe(false)
     expect(exceedsMaximum.success).toBe(false)
+    expect(nearIntegerWithExcessScale.success).toBe(false)
   })
 
   it('rejects a cash session for a non-cash payment', () => {

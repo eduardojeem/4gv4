@@ -55,6 +55,15 @@ describe('calculateFinancialSummary', () => {
       },
     },
     {
+      label: 'an amount with excess precision below an epsilon',
+      input: {
+        revenue: [],
+        directCosts: [{ amount: 1.0000000001, paidAmount: 0 }],
+        expenses: [],
+        payroll: [],
+      },
+    },
+    {
       label: 'a collection larger than its revenue',
       input: {
         revenue: [{ amount: 100, cashAmount: 100.01, hasCost: true }],

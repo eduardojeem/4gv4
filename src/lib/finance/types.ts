@@ -1,6 +1,16 @@
 export type FinancePaymentMethod = 'cash' | 'bank_transfer' | 'other'
 
 export const MAX_FINANCE_AMOUNT = 999_999_999_999.99
+export const FINANCE_AMOUNT_SCALE = 100
+
+export function isFinanceAmount(value: number): boolean {
+  return (
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= MAX_FINANCE_AMOUNT &&
+    Number.isSafeInteger(value * FINANCE_AMOUNT_SCALE)
+  )
+}
 
 export interface FinanceFilters {
   startDate: string

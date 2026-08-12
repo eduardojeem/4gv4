@@ -7,16 +7,7 @@ import type {
   FinancialSummaryInput,
   FinancialRevenueLine,
 } from './types'
-import { MAX_FINANCE_AMOUNT } from './types'
-
-function isFinanceAmount(value: number): boolean {
-  return (
-    Number.isFinite(value) &&
-    value >= 0 &&
-    value <= MAX_FINANCE_AMOUNT &&
-    Math.abs(value - Number(value.toFixed(2))) < 0.000_000_001
-  )
-}
+import { isFinanceAmount } from './types'
 
 function assertFinanceAmount(value: number, field: string): void {
   if (!isFinanceAmount(value)) {
