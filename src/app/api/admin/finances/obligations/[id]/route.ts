@@ -27,7 +27,12 @@ const organizationSelectionSchema = z
 const expenseUpdateSchema = expenseInputSchema
   .omit({ recurrence: true })
   .partial()
-  .extend({ branchId: z.uuid() })
+  .extend({
+    branchId: z.uuid(),
+    dueDate: z.iso.date().nullable().optional(),
+    vendor: z.string().trim().min(1).max(200).nullable().optional(),
+    notes: z.string().trim().max(2_000).nullable().optional(),
+  })
   .refine((input) => Object.keys(input).some((key) => key !== 'branchId'), {
     message: 'Incluye al menos un campo para actualizar.',
   })

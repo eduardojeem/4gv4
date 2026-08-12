@@ -49,6 +49,7 @@ const FINANCE_ERROR_MAPPINGS = [
       'FINANCE_PAYMENT_PERMISSION_DENIED',
       'FINANCE_VOID_PERMISSION_DENIED',
       'FINANCE_GENERATION_PERMISSION_DENIED',
+      'FINANCE_RECURRING_PERMISSION_DENIED',
       '42501',
     ],
     status: 403,
@@ -276,38 +277,44 @@ export async function createObligation(params: {
   organizationId: string
   userId: string
   input: ExpenseInput
+  idempotencyKey?: string
 }) {
-  const { organizationId, userId, input } = params
+  const { organizationId, userId, input, idempotencyKey } = params
   const admin = createAdminSupabase()
   const dueDays = daysBetween(input.accountingDate, input.dueDate)
   const category = await loadFinanceCategory(organizationId, input.categoryId)
   const concept = input.concept ?? category.name
-  let templateId: string | null = null
 
   if (input.recurrence) {
-    const { data: template, error: templateError } = await admin
-      .from('finance_expense_templates')
-      .insert({
-        organization_id: organizationId,
-        branch_id: input.branchId,
-        category_id: input.categoryId,
-        concept,
-        amount: input.amount,
-        vendor: input.vendor ?? null,
-        notes: input.notes ?? null,
-        frequency: input.recurrence.frequency,
-        starts_on: input.recurrence.startsOn,
-        ends_on: input.recurrence.endsOn ?? null,
-        due_days_after_accounting: dueDays,
-        status: 'active',
-        created_by: userId,
-        updated_by: userId,
-      })
-      .select('id')
-      .single()
+    if (!idempotencyKey) {
+      throw new FinanceApiError(
+        'Las obligaciones recurrentes requieren una clave de idempotencia.',
+        422,
+        'FINANCE_IDEMPOTENCY_KEY_REQUIRED',
+      )
+    }
 
-    if (templateError || !template) throw toFinanceApiError(templateError)
-    templateId = template.id as string
+    const supabase = await createClient()
+    const { data, error } = await supabase.rpc(
+      'create_recurring_finance_obligation_atomic',
+      {
+        p_organization_id: organizationId,
+        p_branch_id: input.branchId,
+        p_category_id: input.categoryId,
+        p_concept: concept,
+        p_amount: input.amount,
+        p_vendor: input.vendor ?? null,
+        p_notes: input.notes ?? null,
+        p_frequency: input.recurrence.frequency,
+        p_starts_on: input.recurrence.startsOn,
+        p_ends_on: input.recurrence.endsOn ?? null,
+        p_due_days_after_accounting: dueDays,
+        p_idempotency_key: idempotencyKey,
+      },
+    )
+
+    if (error) throw toFinanceApiError(error)
+    return (data as { obligation?: unknown } | null)?.obligation ?? data
   }
 
   const status =
@@ -320,8 +327,8 @@ export async function createObligation(params: {
       organization_id: organizationId,
       branch_id: input.branchId,
       category_id: input.categoryId,
-      template_id: templateId,
-      recurrence_period: templateId ? input.recurrence!.startsOn : null,
+      template_id: null,
+      recurrence_period: null,
       concept,
       amount: input.amount,
       currency: null,
@@ -336,24 +343,51 @@ export async function createObligation(params: {
     .select('*')
     .single()
 
-  if (error || !data) {
-    if (templateId) {
-      await admin
-        .from('finance_expense_templates')
-        .delete()
-        .eq('organization_id', organizationId)
-        .eq('branch_id', input.branchId)
-        .eq('id', templateId)
-    }
-    throw toFinanceApiError(error)
-  }
+  if (error || !data) throw toFinanceApiError(error)
 
   return data
 }
 
 export type ExpenseUpdateInput = Partial<
-  Omit<ExpenseInput, 'branchId' | 'recurrence'>
-> & { branchId: string }
+  Omit<ExpenseInput, 'branchId' | 'recurrence' | 'dueDate' | 'vendor' | 'notes'>
+> & {
+  branchId: string
+  dueDate?: string | null
+  vendor?: string | null
+  notes?: string | null
+}
+
+type CurrentUnpaidObligation = {
+  category_id: string
+  concept: string
+  amount: number
+  vendor: string | null
+  accounting_date: string
+  due_date: string | null
+  notes: string | null
+}
+
+export function buildUnpaidObligationUpdate(
+  current: CurrentUnpaidObligation,
+  input: ExpenseUpdateInput,
+  today: string,
+) {
+  const effectiveDueDate =
+    input.dueDate === undefined ? current.due_date : input.dueDate
+
+  return {
+    ...(input.categoryId === undefined ? {} : { category_id: input.categoryId }),
+    ...(input.concept === undefined ? {} : { concept: input.concept }),
+    ...(input.amount === undefined ? {} : { amount: input.amount }),
+    ...(input.vendor === undefined ? {} : { vendor: input.vendor }),
+    ...(input.accountingDate === undefined
+      ? {}
+      : { accounting_date: input.accountingDate }),
+    ...(input.dueDate === undefined ? {} : { due_date: input.dueDate }),
+    ...(input.notes === undefined ? {} : { notes: input.notes }),
+    status: effectiveDueDate && effectiveDueDate < today ? 'overdue' : 'pending',
+  }
+}
 
 export async function updateUnpaidObligation(params: {
   organizationId: string
@@ -390,19 +424,18 @@ export async function updateUnpaidObligation(params: {
     await loadFinanceCategory(organizationId, input.categoryId)
   }
   const accountingDate = input.accountingDate ?? current.accounting_date
-  const dueDate = input.dueDate ?? current.due_date ?? undefined
+  const dueDate =
+    input.dueDate === undefined
+      ? current.due_date ?? undefined
+      : input.dueDate ?? undefined
   daysBetween(accountingDate, dueDate)
 
   const update = {
-    ...(input.categoryId === undefined ? {} : { category_id: input.categoryId }),
-    ...(input.concept === undefined ? {} : { concept: input.concept }),
-    ...(input.amount === undefined ? {} : { amount: input.amount }),
-    ...(input.vendor === undefined ? {} : { vendor: input.vendor }),
-    ...(input.accountingDate === undefined
-      ? {}
-      : { accounting_date: input.accountingDate }),
-    ...(input.dueDate === undefined ? {} : { due_date: input.dueDate }),
-    ...(input.notes === undefined ? {} : { notes: input.notes }),
+    ...buildUnpaidObligationUpdate(
+      current as CurrentUnpaidObligation,
+      input,
+      new Date().toISOString().slice(0, 10),
+    ),
     updated_by: userId,
   }
   const { data, error } = await admin

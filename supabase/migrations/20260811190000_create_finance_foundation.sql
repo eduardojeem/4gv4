@@ -99,6 +99,7 @@ create table if not exists public.finance_expense_templates (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete restrict,
   branch_id uuid not null,
+  creation_idempotency_key text not null,
   category_id uuid not null,
   concept text not null,
   amount numeric(14, 2) not null check (amount > 0),
@@ -118,6 +119,7 @@ create table if not exists public.finance_expense_templates (
   updated_at timestamptz not null default now(),
   unique (organization_id, id),
   unique (organization_id, branch_id, id),
+  unique (organization_id, branch_id, creation_idempotency_key),
   constraint finance_expense_templates_branch_scope_fkey
     foreign key (organization_id, branch_id)
     references public.branches (organization_id, id) on delete restrict,
@@ -125,6 +127,7 @@ create table if not exists public.finance_expense_templates (
     foreign key (organization_id, category_id)
     references public.finance_categories (organization_id, id) on delete restrict,
   check (char_length(trim(concept)) between 1 and 200),
+  check (char_length(trim(creation_idempotency_key)) between 1 and 128),
   check (vendor is null or char_length(trim(vendor)) between 1 and 200),
   check (notes is null or char_length(notes) <= 2000),
   check (ends_on is null or ends_on >= starts_on)
@@ -363,6 +366,19 @@ set search_path = pg_catalog, public
 as $$
 begin
   new.updated_at := now();
+  return new;
+end;
+$$;
+
+create or replace function public.protect_finance_template_idempotency_key()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+  if new.creation_idempotency_key is distinct from old.creation_idempotency_key then
+    raise exception 'FINANCE_TEMPLATE_IDEMPOTENCY_KEY_IMMUTABLE';
+  end if;
   return new;
 end;
 $$;
@@ -939,6 +955,11 @@ create trigger finance_expense_templates_updated_at
 before update on public.finance_expense_templates
 for each row execute function public.set_finance_updated_at();
 
+drop trigger if exists finance_expense_templates_protect_idempotency on public.finance_expense_templates;
+create trigger finance_expense_templates_protect_idempotency
+before update on public.finance_expense_templates
+for each row execute function public.protect_finance_template_idempotency_key();
+
 drop trigger if exists finance_obligations_validate_state on public.finance_obligations;
 create trigger finance_obligations_validate_state
 before insert or update on public.finance_obligations
@@ -1070,6 +1091,142 @@ for each row execute function public.seed_default_finance_categories_for_organiz
 
 select public.seed_default_finance_categories(organization.id)
 from public.organizations organization;
+
+create or replace function public.create_recurring_finance_obligation_atomic(
+  p_organization_id uuid,
+  p_branch_id uuid,
+  p_category_id uuid,
+  p_concept text,
+  p_amount numeric,
+  p_vendor text,
+  p_notes text,
+  p_frequency text,
+  p_starts_on date,
+  p_ends_on date,
+  p_due_days_after_accounting integer,
+  p_idempotency_key text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public, auth
+as $$
+declare
+  actor_id uuid := auth.uid();
+  existing_template public.finance_expense_templates%rowtype;
+  created_template public.finance_expense_templates%rowtype;
+  created_obligation public.finance_obligations%rowtype;
+begin
+  if actor_id is null then
+    raise exception 'AUTHENTICATION_REQUIRED';
+  end if;
+  if not (
+    public.has_org_permission(p_organization_id, 'finances.manage')
+    or public.get_user_role(actor_id) = 'super_admin'
+  ) then
+    raise exception 'FINANCE_RECURRING_PERMISSION_DENIED';
+  end if;
+  if not public.user_has_branch_access(p_branch_id, actor_id) then
+    raise exception 'FINANCE_BRANCH_PERMISSION_DENIED';
+  end if;
+  if not exists (
+    select 1 from public.branches branch
+    where branch.id = p_branch_id
+      and branch.organization_id = p_organization_id
+      and branch.is_active = true
+  ) then
+    raise exception 'FINANCE_BRANCH_NOT_IN_ORGANIZATION';
+  end if;
+  if not exists (
+    select 1 from public.finance_categories category
+    where category.id = p_category_id
+      and category.organization_id = p_organization_id
+      and category.is_active = true
+  ) then
+    raise exception 'FINANCE_CATEGORY_INVALID';
+  end if;
+  if nullif(trim(p_idempotency_key), '') is null
+     or char_length(trim(p_idempotency_key)) > 128
+     or lower(trim(p_idempotency_key)) like 'finance-system:%' then
+    raise exception 'FINANCE_INVALID_IDEMPOTENCY_KEY';
+  end if;
+  if nullif(trim(p_concept), '') is null or char_length(trim(p_concept)) > 200
+     or p_amount is null or p_amount <= 0 or p_amount > 999999999999.99
+     or p_amount <> trunc(p_amount, 2)
+     or p_frequency not in ('weekly', 'monthly', 'quarterly', 'yearly')
+     or p_starts_on is null
+     or (p_ends_on is not null and p_ends_on < p_starts_on)
+     or p_due_days_after_accounting not between 0 and 366 then
+    raise exception 'FINANCE_INVALID_RECURRING_OBLIGATION';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(
+    p_organization_id::text || ':' || p_branch_id::text || ':' || trim(p_idempotency_key),
+    0
+  ));
+
+  select template.* into existing_template
+  from public.finance_expense_templates template
+  where template.organization_id = p_organization_id
+    and template.branch_id = p_branch_id
+    and template.creation_idempotency_key = trim(p_idempotency_key);
+
+  if found then
+    if existing_template.category_id is distinct from p_category_id
+       or existing_template.concept is distinct from trim(p_concept)
+       or existing_template.amount is distinct from p_amount
+       or existing_template.vendor is distinct from nullif(trim(p_vendor), '')
+       or existing_template.notes is distinct from nullif(left(trim(p_notes), 2000), '')
+       or existing_template.frequency is distinct from p_frequency
+       or existing_template.starts_on is distinct from p_starts_on
+       or existing_template.ends_on is distinct from p_ends_on
+       or existing_template.due_days_after_accounting is distinct from p_due_days_after_accounting then
+      raise exception 'FINANCE_RECURRING_IDEMPOTENCY_KEY_REUSED';
+    end if;
+
+    select obligation.* into created_obligation
+    from public.finance_obligations obligation
+    where obligation.organization_id = p_organization_id
+      and obligation.branch_id = p_branch_id
+      and obligation.template_id = existing_template.id
+      and obligation.recurrence_period = p_starts_on;
+
+    return jsonb_build_object(
+      'template', to_jsonb(existing_template),
+      'obligation', to_jsonb(created_obligation)
+    );
+  end if;
+
+  insert into public.finance_expense_templates (
+    organization_id, branch_id, creation_idempotency_key, category_id,
+    concept, amount, vendor, notes, frequency, starts_on, ends_on,
+    due_days_after_accounting, status, created_by, updated_by
+  ) values (
+    p_organization_id, p_branch_id, trim(p_idempotency_key), p_category_id,
+    trim(p_concept), p_amount, nullif(trim(p_vendor), ''),
+    nullif(left(trim(p_notes), 2000), ''), p_frequency, p_starts_on, p_ends_on,
+    p_due_days_after_accounting, 'active', actor_id, actor_id
+  ) returning * into created_template;
+
+  insert into public.finance_obligations (
+    organization_id, branch_id, category_id, template_id, recurrence_period,
+    concept, amount, vendor, accounting_date, due_date, status, notes,
+    created_by, updated_by
+  ) values (
+    p_organization_id, p_branch_id, p_category_id, created_template.id, p_starts_on,
+    trim(p_concept), p_amount, nullif(trim(p_vendor), ''), p_starts_on,
+    p_starts_on + p_due_days_after_accounting,
+    case when p_starts_on + p_due_days_after_accounting < current_date
+      then 'overdue' else 'pending' end,
+    nullif(left(trim(p_notes), 2000), ''), actor_id, actor_id
+  ) returning * into created_obligation;
+
+  return jsonb_build_object(
+    'template', to_jsonb(created_template),
+    'obligation', to_jsonb(created_obligation)
+  );
+end;
+$$;
 
 create or replace function public.generate_recurring_finance_obligations(
   p_generation_date date,
@@ -1721,6 +1878,13 @@ grant select, insert, update, delete on table public.finance_obligations to serv
 grant select, insert on table public.finance_payments to service_role;
 grant select on table public.finance_audit_events to service_role;
 
+revoke all on function public.create_recurring_finance_obligation_atomic(
+  uuid, uuid, uuid, text, numeric, text, text, text, date, date, integer, text
+) from public, anon, authenticated;
+grant execute on function public.create_recurring_finance_obligation_atomic(
+  uuid, uuid, uuid, text, numeric, text, text, text, date, date, integer, text
+) to authenticated;
+
 revoke all on function public.generate_recurring_finance_obligations(date, uuid)
 from public, anon, authenticated;
 grant execute on function public.generate_recurring_finance_obligations(date, uuid)
@@ -1748,6 +1912,8 @@ from public, anon, authenticated;
 grant execute on function public.seed_default_finance_categories(uuid) to service_role;
 
 revoke all on function public.set_finance_updated_at()
+from public, anon, authenticated;
+revoke all on function public.protect_finance_template_idempotency_key()
 from public, anon, authenticated;
 revoke all on function public.validate_finance_obligation_state()
 from public, anon, authenticated;

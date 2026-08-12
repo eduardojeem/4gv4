@@ -133,3 +133,58 @@ Final results are recorded in the task handoff after fresh post-report runs.
   there is no Task 2 atomic creation RPC. A future migration can make that pair
   fully transactional if required.
 - No remote Supabase project was changed.
+
+## Fix round 1/5: recurring atomicity and unpaid PATCH semantics
+
+### Findings resolved
+
+- Recurring creation now defines its first obligation as the recurrence period
+  at `startsOn`. A request whose original `accountingDate` precedes `startsOn`
+  no longer consumes that first generated period; accounting and due dates are
+  derived deterministically from `startsOn` and the validated due-day offset.
+- Unpaid PATCH derives `pending` versus `overdue` from the effective due date
+  and the current date. The existing paid/voided precondition and concurrent
+  update predicates remain unchanged.
+- PATCH accepts explicit `null` for `dueDate`, `vendor`, and `notes`; omitted
+  fields remain untouched. Clearing a due date while changing accounting date
+  does not validate against or reuse the former due date.
+- Recurring template plus first obligation creation moved to the authenticated
+  `create_recurring_finance_obligation_atomic(...)` RPC. It validates finance
+  management permission, tenant branch/category scope, locks a tenant/branch/key
+  advisory identity, writes both rows in one transaction, and supports exact
+  replay. Reusing a key with a different normalized payload is a conflict.
+- `finance_expense_templates.creation_idempotency_key` is required, unique by
+  organization and branch, and immutable after creation.
+
+### Interface changes
+
+- `POST /api/admin/finances/obligations` requires `x-idempotency-key` when the
+  validated body contains `recurrence`. The same validated header value is
+  forwarded exactly as `p_idempotency_key`; non-recurring expense creation
+  remains compatible without the header.
+- New RPC:
+  `create_recurring_finance_obligation_atomic(uuid, uuid, uuid, text, numeric,
+  text, text, text, date, date, integer, text) -> jsonb`, executable only by
+  `authenticated` after default/public/anon access is revoked.
+- `finance_expense_templates` adds the required
+  `creation_idempotency_key text` field and unique
+  `(organization_id, branch_id, creation_idempotency_key)` contract.
+- `ExpenseUpdateInput` distinguishes omission from explicit null for `dueDate`,
+  `vendor`, and `notes`.
+
+### Strict RED/GREEN evidence
+
+- Initial review RED: the combined server/API/schema suite exited 1 with five
+  failures: missing recurring header/RPC contracts, missing atomic SQL, and two
+  missing PATCH behavior helpers.
+- First GREEN: 3 files and 35 tests passed after the atomic RPC, authenticated
+  adapter call, nullable PATCH contract, and overdue derivation were added.
+- Review hardening RED: the schema suite exited 1 with one failure before the
+  template idempotency key was made immutable.
+
+### Verification and concerns
+
+Fresh final verification is recorded in the handoff after the report update.
+The Task 2 migration remains unapplied: SQL behavior is statically contract
+tested but requires a real local/staging PostgreSQL apply before production.
+No remote Supabase project was changed.

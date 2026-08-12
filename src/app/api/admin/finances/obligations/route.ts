@@ -11,6 +11,12 @@ import {
   toFinanceApiError,
 } from '@/lib/finance/server'
 
+const idempotencyKeySchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+  .refine((key) => !key.toLowerCase().startsWith('finance-system:'))
 const obligationQuerySchema = z
   .object({
     organizationId: z.uuid().optional(),
@@ -99,9 +105,18 @@ async function postHandler(request: NextRequest, context: AdminAuthContext) {
 
   const body = await request.json().catch(() => null)
   const bodyResult = expenseInputSchema.safeParse(body)
+  const idempotencyKeyResult = idempotencyKeySchema.safeParse(
+    request.headers.get('x-idempotency-key'),
+  )
   if (!bodyResult.success) {
     return NextResponse.json(
       { error: 'Gasto invalido.', details: bodyResult.error.flatten() },
+      { status: 422 },
+    )
+  }
+  if (bodyResult.data.recurrence && !idempotencyKeyResult.success) {
+    return NextResponse.json(
+      { error: 'Los gastos recurrentes requieren una clave de idempotencia valida.' },
       { status: 422 },
     )
   }
@@ -120,6 +135,9 @@ async function postHandler(request: NextRequest, context: AdminAuthContext) {
       organizationId,
       userId: context.user.id,
       input: bodyResult.data,
+      idempotencyKey: idempotencyKeyResult.success
+        ? idempotencyKeyResult.data
+        : undefined,
     })
 
     return NextResponse.json({ obligation }, { status: 201 })

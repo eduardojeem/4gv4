@@ -14,6 +14,9 @@ describe('admin finance API contract', () => {
     expect(route).toContain('obligationQuerySchema.safeParse')
     expect(route).toContain('resolveFinanceOrganizationId')
     expect(route).toContain('assertFinanceBranchAccess')
+    expect(route).toContain("request.headers.get('x-idempotency-key')")
+    expect(route).toContain('idempotencyKeySchema.safeParse')
+    expect(route).toContain('idempotencyKeyResult.data')
   })
 
   it('keeps every service-backed finance query tenant scoped', () => {
@@ -24,6 +27,8 @@ describe('admin finance API contract', () => {
     expect(server).toContain('resolveBranchScopeForUser')
     expect(server).toContain('strict: true')
     expect(server).not.toContain(".from('cash_movements').insert")
+    expect(server).toContain("'create_recurring_finance_obligation_atomic'")
+    expect(server).not.toContain(".from('finance_expense_templates')\n+      .delete()")
   })
 
   it('validates update and void requests before scoped mutations', () => {

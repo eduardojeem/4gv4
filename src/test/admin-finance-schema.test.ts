@@ -71,6 +71,24 @@ describe('admin finance database foundation', () => {
     expect(sql).toContain('pg_advisory_xact_lock')
   })
 
+  it('creates a recurring template and its first period atomically and idempotently', () => {
+    expect(sql).toContain('creation_idempotency_key text not null')
+    expect(sql).toContain(
+      'unique (organization_id, branch_id, creation_idempotency_key)',
+    )
+    expect(sql).toContain('function public.create_recurring_finance_obligation_atomic')
+    expect(sql).toContain('p_idempotency_key text')
+    expect(sql).toContain("lower(trim(p_idempotency_key)) like 'finance-system:%'")
+    expect(sql).toContain('pg_advisory_xact_lock')
+    expect(sql).toContain('recurrence_period')
+    expect(sql).toContain('p_starts_on')
+    expect(sql).toContain('finance_recurring_idempotency_key_reused')
+    expect(sql).toContain('finance_template_idempotency_key_immutable')
+    expect(sql).toContain(
+      'grant execute on function public.create_recurring_finance_obligation_atomic',
+    )
+  })
+
   it('pays an obligation and posts cash atomically within one tenant branch', () => {
     expect(sql).toContain('function public.pay_finance_obligation_atomic')
     expect(sql).toContain("has_org_permission(p_organization_id, 'finances.pay')")
