@@ -50,6 +50,7 @@ export interface FinancialSummaryInput {
 
 export type CoverageWarningCode =
   | 'MISSING_DIRECT_COST'
+  | 'MISSING_CASH_TIMING'
   | 'MISSING_BRANCH'
   | 'MISSING_EMPLOYEE'
 
