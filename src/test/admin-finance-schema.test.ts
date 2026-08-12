@@ -121,7 +121,7 @@ describe('admin finance database foundation', () => {
   })
 
   it('allows only FK-driven audit lifecycle changes and preserves rows after actor deletion', () => {
-    expect(sql).toContain('pg_trigger_depth() > 1')
+    expect(sql).not.toContain('pg_trigger_depth() > 1')
     expect(tableDefinition('finance_expense_templates')).toContain(
       'created_by uuid references auth.users(id) on delete set null',
     )
@@ -142,7 +142,7 @@ describe('admin finance database foundation', () => {
       'grant select, insert on table public.finance_payments to service_role',
     )
     expect(sql).toContain(
-      'revoke truncate, references, trigger on table public.cash_movements',
+      'revoke all on table public.cash_movements from authenticated',
     )
   })
 
@@ -200,5 +200,60 @@ describe('admin finance database foundation', () => {
   it('refreshes cash-session activity for finance cash postings', () => {
     expect(sql).toContain('set last_activity_at = now(), updated_at = now()')
     expect(sql).toContain('where id = new.cash_session_id')
+  })
+
+  it('validates every finance-linked cash insert against its canonical cash payment', () => {
+    expect(sql).toContain('function public.validate_finance_cash_movement_insert()')
+    expect(sql).toContain('before insert on public.cash_movements')
+    expect(sql).toContain("payment.payment_method = 'cash'")
+    expect(sql).toContain('payment.cash_session_id = new.session_id')
+    expect(sql).toContain('finance_cash_movement_does_not_match_payment')
+  })
+
+  it('drops every historical permissive cash select policy', () => {
+    expect(sql).toContain(
+      'drop policy if exists "usuarios autenticados pueden ver movimientos de caja"',
+    )
+  })
+
+  it('freezes obligation actors except exact foreign-key nulling transitions', () => {
+    expect(sql).toContain('created_by_fk_nulling')
+    expect(sql).toContain('voided_by_fk_nulling')
+    expect(sql).toContain('finance_ever_paid_obligation_actor_immutable')
+    expect(sql).toContain('finance_voided_obligation_actor_immutable')
+    expect(sql).toContain('from auth.users actor')
+  })
+
+  it('skips invalid audit writes during organization and actor lifecycle actions', () => {
+    expect(sql).toContain("tg_op = 'delete' and not exists (")
+    expect(sql).toContain('actor_fk_nulling_only')
+    expect(sql).toContain(
+      "to_jsonb(new) - 'created_by' - 'updated_by' - 'voided_by'",
+    )
+  })
+
+  it('adds a full reversal lookup index matching ledger queries', () => {
+    expect(sql).toContain('finance_payments_reversal_lookup_idx')
+    expect(sql).toContain(
+      'on public.finance_payments (organization_id, branch_id, reverses_payment_id);',
+    )
+  })
+
+  it('resets authenticated cash privileges before explicit legacy dml grants', () => {
+    expect(sql).toContain(
+      'revoke all on table public.cash_movements from authenticated',
+    )
+    expect(sql).toContain(
+      'grant select, insert, update, delete on table public.cash_movements to authenticated',
+    )
+  })
+
+  it('allows only exact payment and audit foreign-key lifecycle mutations', () => {
+    expect(sql).not.toContain('pg_trigger_depth()')
+    expect(sql).toContain("tg_table_name = 'finance_payments'")
+    expect(sql).toContain("tg_table_name = 'finance_audit_events'")
+    expect(sql).toContain("to_jsonb(new) - 'created_by' = to_jsonb(old) - 'created_by'")
+    expect(sql).toContain("to_jsonb(new) - 'actor_id' = to_jsonb(old) - 'actor_id'")
+    expect(sql).toContain('where actor.id = old.actor_id')
   })
 })

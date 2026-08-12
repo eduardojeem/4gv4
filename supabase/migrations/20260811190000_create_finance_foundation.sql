@@ -255,6 +255,8 @@ create table if not exists public.finance_payments (
 create unique index if not exists finance_payments_one_reversal_per_payment
   on public.finance_payments (organization_id, branch_id, reverses_payment_id)
   where direction = 'reversal';
+create index if not exists finance_payments_reversal_lookup_idx
+  on public.finance_payments (organization_id, branch_id, reverses_payment_id);
 
 create table if not exists public.finance_audit_events (
   id uuid primary key default gen_random_uuid(),
@@ -374,8 +376,20 @@ as $$
 declare
   stored_paid_amount numeric(14, 2);
   financial_identity_changed boolean := false;
+  created_by_fk_nulling boolean := false;
+  voided_by_fk_nulling boolean := false;
 begin
   if tg_op = 'UPDATE' then
+    created_by_fk_nulling := old.created_by is not null
+      and new.created_by is null
+      and not exists (
+        select 1 from auth.users actor where actor.id = old.created_by
+      );
+    voided_by_fk_nulling := old.voided_by is not null
+      and new.voided_by is null
+      and not exists (
+        select 1 from auth.users actor where actor.id = old.voided_by
+      );
     financial_identity_changed :=
       new.id is distinct from old.id
       or new.organization_id is distinct from old.organization_id
@@ -401,6 +415,12 @@ begin
        ) then
       raise exception 'FINANCE_VOIDED_OBLIGATION_IS_TERMINAL';
     end if;
+
+    if old.status = 'voided'
+       and new.voided_by is distinct from old.voided_by
+       and not voided_by_fk_nulling then
+      raise exception 'FINANCE_VOIDED_OBLIGATION_ACTOR_IMMUTABLE';
+    end if;
   end if;
 
   if new.currency is null then
@@ -423,6 +443,28 @@ begin
       and payment.obligation_id = old.id
   ) then
     raise exception 'FINANCE_EVER_PAID_OBLIGATION_IMMUTABLE';
+  end if;
+
+  if tg_op = 'UPDATE' and exists (
+    select 1
+    from public.finance_payments payment
+    where payment.organization_id = old.organization_id
+      and payment.obligation_id = old.id
+  ) then
+    if new.created_by is distinct from old.created_by
+       and not created_by_fk_nulling then
+      raise exception 'FINANCE_EVER_PAID_OBLIGATION_ACTOR_IMMUTABLE';
+    end if;
+    if new.voided_by is distinct from old.voided_by
+       and not voided_by_fk_nulling
+       and not (
+         old.status <> 'voided'
+         and new.status = 'voided'
+         and old.voided_by is null
+         and new.voided_by is not null
+       ) then
+      raise exception 'FINANCE_EVER_PAID_OBLIGATION_ACTOR_IMMUTABLE';
+    end if;
   end if;
 
   if tg_op = 'UPDATE' and new.paid_amount is distinct from old.paid_amount then
@@ -462,6 +504,7 @@ begin
         select 1
         from public.finance_payments reversal
         where reversal.organization_id = original_payment.organization_id
+          and reversal.branch_id = original_payment.branch_id
           and reversal.reverses_payment_id = original_payment.id
           and reversal.direction = 'reversal'
       )
@@ -695,6 +738,40 @@ begin
 end;
 $$;
 
+create or replace function public.validate_finance_cash_movement_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  if new.finance_payment_id is null then
+    return new;
+  end if;
+
+  if not exists (
+    select 1
+    from public.finance_payments payment
+    where payment.id = new.finance_payment_id
+      and payment.organization_id = new.organization_id
+      and payment.branch_id = new.branch_id
+      and payment.payment_method = 'cash'
+      and payment.cash_session_id = new.session_id
+      and payment.amount = new.amount
+      and new.payment_method = 'cash'
+      and new.type = case
+        when payment.direction = 'payment' then 'cash_out'
+        else 'cash_in'
+      end
+      and new.created_by is not distinct from payment.created_by
+  ) then
+    raise exception 'FINANCE_CASH_MOVEMENT_DOES_NOT_MATCH_PAYMENT';
+  end if;
+
+  return new;
+end;
+$$;
+
 create or replace function public.record_finance_audit_event()
 returns trigger
 language plpgsql
@@ -707,7 +784,64 @@ declare
   target_branch_id uuid;
   target_entity_id uuid;
   target_actor_id uuid;
+  actor_fk_nulling_only boolean := false;
 begin
+  if tg_op = 'DELETE' and not exists (
+    select 1
+    from public.organizations organization
+    where organization.id = old.organization_id
+  ) then
+    return old;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    actor_fk_nulling_only :=
+      to_jsonb(new) - 'created_by' - 'updated_by' - 'voided_by' - 'updated_at'
+        = to_jsonb(old) - 'created_by' - 'updated_by' - 'voided_by' - 'updated_at'
+      and (
+        (
+          (to_jsonb(old) ->> 'created_by') is not null
+          and (to_jsonb(new) ->> 'created_by') is null
+          and not exists (
+            select 1 from auth.users actor
+            where actor.id = (to_jsonb(old) ->> 'created_by')::uuid
+          )
+        )
+        or (
+          (to_jsonb(old) ->> 'updated_by') is not null
+          and (to_jsonb(new) ->> 'updated_by') is null
+          and not exists (
+            select 1 from auth.users actor
+            where actor.id = (to_jsonb(old) ->> 'updated_by')::uuid
+          )
+        )
+        or (
+          (to_jsonb(old) ->> 'voided_by') is not null
+          and (to_jsonb(new) ->> 'voided_by') is null
+          and not exists (
+            select 1 from auth.users actor
+            where actor.id = (to_jsonb(old) ->> 'voided_by')::uuid
+          )
+        )
+      )
+      and not (
+        (to_jsonb(new) ->> 'created_by') is distinct from (to_jsonb(old) ->> 'created_by')
+        and not ((to_jsonb(old) ->> 'created_by') is not null and (to_jsonb(new) ->> 'created_by') is null)
+      )
+      and not (
+        (to_jsonb(new) ->> 'updated_by') is distinct from (to_jsonb(old) ->> 'updated_by')
+        and not ((to_jsonb(old) ->> 'updated_by') is not null and (to_jsonb(new) ->> 'updated_by') is null)
+      )
+      and not (
+        (to_jsonb(new) ->> 'voided_by') is distinct from (to_jsonb(old) ->> 'voided_by')
+        and not ((to_jsonb(old) ->> 'voided_by') is not null and (to_jsonb(new) ->> 'voided_by') is null)
+      );
+
+    if actor_fk_nulling_only then
+      return new;
+    end if;
+  end if;
+
   row_values := case when tg_op = 'DELETE' then to_jsonb(old) else to_jsonb(new) end;
   target_organization_id := (row_values ->> 'organization_id')::uuid;
   target_branch_id := nullif(row_values ->> 'branch_id', '')::uuid;
@@ -748,8 +882,36 @@ language plpgsql
 set search_path = pg_catalog, public
 as $$
 begin
-  if pg_trigger_depth() > 1 then
-    return case when tg_op = 'DELETE' then old else new end;
+  if tg_op = 'UPDATE'
+     and tg_table_name = 'finance_payments'
+     and old.created_by is not null
+     and new.created_by is null
+     and to_jsonb(new) - 'created_by' = to_jsonb(old) - 'created_by'
+     and not exists (
+       select 1 from auth.users actor where actor.id = old.created_by
+     ) then
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE'
+     and tg_table_name = 'finance_audit_events'
+     and old.actor_id is not null
+     and new.actor_id is null
+     and to_jsonb(new) - 'actor_id' = to_jsonb(old) - 'actor_id'
+     and not exists (
+       select 1 from auth.users actor where actor.id = old.actor_id
+     ) then
+    return new;
+  end if;
+
+  if tg_op = 'DELETE'
+     and tg_table_name = 'finance_audit_events'
+     and not exists (
+       select 1
+       from public.organizations organization
+       where organization.id = old.organization_id
+     ) then
+    return old;
   end if;
 
   raise exception 'FINANCE_AUDIT_EVENTS_ARE_APPEND_ONLY';
@@ -805,6 +967,11 @@ drop trigger if exists cash_movements_protect_finance_link on public.cash_moveme
 create trigger cash_movements_protect_finance_link
 before update or delete on public.cash_movements
 for each row execute function public.protect_finance_cash_movement();
+
+drop trigger if exists cash_movements_validate_finance_insert on public.cash_movements;
+create trigger cash_movements_validate_finance_insert
+before insert on public.cash_movements
+for each row execute function public.validate_finance_cash_movement_insert();
 
 drop trigger if exists finance_audit_events_append_only on public.finance_audit_events;
 create trigger finance_audit_events_append_only
@@ -1305,6 +1472,7 @@ begin
         select 1
         from public.finance_payments reversal
         where reversal.organization_id = payment.organization_id
+          and reversal.branch_id = payment.branch_id
           and reversal.reverses_payment_id = payment.id
       )
   ) into has_cash_compensation;
@@ -1341,6 +1509,7 @@ begin
         select 1
         from public.finance_payments existing_reversal
         where existing_reversal.organization_id = payment.organization_id
+          and existing_reversal.branch_id = payment.branch_id
           and existing_reversal.reverses_payment_id = payment.id
       )
     order by payment.created_at, payment.id
@@ -1401,6 +1570,7 @@ alter table public.finance_audit_events enable row level security;
 
 drop policy if exists "Enable select for authenticated users only" on public.cash_movements;
 drop policy if exists "Usuarios autenticados ven movimientos" on public.cash_movements;
+drop policy if exists "Usuarios autenticados pueden ver movimientos de caja" on public.cash_movements;
 drop policy if exists "solo usuarios autenticados pueden leer" on public.cash_movements;
 drop policy if exists "tenant members can read cash movements" on public.cash_movements;
 drop policy if exists "cash_movements_select_org" on public.cash_movements;
@@ -1580,6 +1750,8 @@ revoke all on function public.post_finance_cash_movement_from_payment()
 from public, anon, authenticated;
 revoke all on function public.protect_finance_cash_movement()
 from public, anon, authenticated;
+revoke all on function public.validate_finance_cash_movement_insert()
+from public, anon, authenticated;
 revoke all on function public.record_finance_audit_event()
 from public, anon, authenticated;
 revoke all on function public.prevent_finance_audit_event_mutation()
@@ -1587,8 +1759,8 @@ from public, anon, authenticated;
 revoke all on function public.seed_default_finance_categories_for_organization()
 from public, anon, authenticated;
 
-revoke truncate, references, trigger on table public.cash_movements
-from authenticated;
+revoke all on table public.cash_movements from authenticated;
+grant select, insert, update, delete on table public.cash_movements to authenticated;
 revoke all on table public.cash_movements from service_role;
 grant select, insert, update, delete on table public.cash_movements to service_role;
 
