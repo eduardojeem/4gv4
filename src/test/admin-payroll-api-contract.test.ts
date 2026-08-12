@@ -3,7 +3,9 @@ import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { toFinanceApiError } from '@/lib/finance/server'
+import * as financeServer from '@/lib/finance/server'
+
+const { toFinanceApiError } = financeServer
 
 const workspace = process.cwd()
 const read = (path: string) => readFileSync(resolve(workspace, path), 'utf8')
@@ -93,6 +95,17 @@ describe('admin payroll API contract', () => {
     expect(server).toContain(".from('payroll_runs')")
     expect(server).toContain(".lte('occurred_on', input.periodTo)")
     expect(server).not.toContain(".gte('occurred_on', input.periodFrom)")
+  })
+
+  it('keeps an employee whose current membership is customer when historical employment is eligible', () => {
+    expect(
+      financeServer.shouldIncludePayrollPreviewMember({
+        currentMembershipRole: 'customer',
+        hasActiveEmployment: true,
+        receivesSalaryAtBranch: true,
+        hasUnclaimedCommission: false,
+      }),
+    ).toBe(true)
   })
 
   it.each([

@@ -889,6 +889,23 @@ function eachDay(periodFrom: string, periodTo: string) {
   return days
 }
 
+/**
+ * Preview eligibility is deliberately derived from the payroll period, not the
+ * member's current role. A former/current customer membership can still have
+ * an eligible historical employment event in the requested period.
+ */
+export function shouldIncludePayrollPreviewMember(input: {
+  currentMembershipRole: string
+  hasActiveEmployment: boolean
+  receivesSalaryAtBranch: boolean
+  hasUnclaimedCommission: boolean
+}) {
+  return (
+    input.hasUnclaimedCommission ||
+    (input.hasActiveEmployment && input.receivesSalaryAtBranch)
+  )
+}
+
 export async function getPayrollPreview(
   organizationId: string,
   input: PayrollPreviewInput,
@@ -934,8 +951,7 @@ export async function getPayrollPreview(
     admin
       .from('organization_members')
       .select('user_id, role, status')
-      .eq('organization_id', organizationId)
-      .neq('role', 'customer'),
+      .eq('organization_id', organizationId),
     admin
       .from('employee_compensation')
       .select('id, employee_id, base_salary, effective_from, effective_to, legacy_cutover_on')
@@ -1049,7 +1065,12 @@ export async function getPayrollPreview(
     const receivesSalaryAtBranch =
       !input.branchId || branchSalaryEmployees.has(member.user_id)
     const hasUnclaimedCommission = commissionByEmployee.has(member.user_id)
-    if (!hasUnclaimedCommission && (!hasActiveEmployment || !receivesSalaryAtBranch)) {
+    if (!shouldIncludePayrollPreviewMember({
+      currentMembershipRole: member.role,
+      hasActiveEmployment,
+      receivesSalaryAtBranch,
+      hasUnclaimedCommission,
+    })) {
       return []
     }
 
