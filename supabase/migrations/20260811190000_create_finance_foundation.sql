@@ -112,11 +112,12 @@ create table if not exists public.finance_expense_templates (
     check (due_days_after_accounting between 0 and 366),
   status text not null default 'active'
     check (status in ('active', 'paused', 'ended')),
-  created_by uuid not null references auth.users(id) on delete restrict,
+  created_by uuid references auth.users(id) on delete set null,
   updated_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (organization_id, id),
+  unique (organization_id, branch_id, id),
   constraint finance_expense_templates_branch_scope_fkey
     foreign key (organization_id, branch_id)
     references public.branches (organization_id, id) on delete restrict,
@@ -149,8 +150,8 @@ create table if not exists public.finance_obligations (
   notes text,
   void_reason text,
   voided_at timestamptz,
-  voided_by uuid references auth.users(id) on delete restrict,
-  created_by uuid not null references auth.users(id) on delete restrict,
+  voided_by uuid references auth.users(id) on delete set null,
+  created_by uuid references auth.users(id) on delete set null,
   updated_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -164,8 +165,8 @@ create table if not exists public.finance_obligations (
     foreign key (organization_id, category_id)
     references public.finance_categories (organization_id, id) on delete restrict,
   constraint finance_obligations_template_scope_fkey
-    foreign key (organization_id, template_id)
-    references public.finance_expense_templates (organization_id, id) on delete restrict,
+    foreign key (organization_id, branch_id, template_id)
+    references public.finance_expense_templates (organization_id, branch_id, id) on delete restrict,
   check ((template_id is null and recurrence_period is null)
     or (template_id is not null and recurrence_period is not null)),
   check (char_length(trim(concept)) between 1 and 200),
@@ -178,7 +179,6 @@ create table if not exists public.finance_obligations (
     or (
       paid_amount = 0
       and voided_at is not null
-      and voided_by is not null
       and char_length(trim(void_reason)) between 1 and 1000
     )
   )
@@ -189,6 +189,7 @@ create table if not exists public.finance_payments (
   organization_id uuid not null references public.organizations(id) on delete restrict,
   branch_id uuid not null,
   obligation_id uuid not null,
+  idempotency_key text not null,
   direction text not null default 'payment'
     check (direction in ('payment', 'reversal')),
   reverses_payment_id uuid,
@@ -203,16 +204,17 @@ create table if not exists public.finance_payments (
   receipt_mime_type text,
   receipt_size_bytes bigint,
   notes text,
-  created_by uuid not null references auth.users(id) on delete restrict,
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   unique (organization_id, id),
   unique (organization_id, branch_id, id),
+  unique (organization_id, obligation_id, idempotency_key),
   constraint finance_payments_obligation_scope_fkey
     foreign key (organization_id, branch_id, obligation_id)
     references public.finance_obligations (organization_id, branch_id, id) on delete restrict,
   constraint finance_payments_reversal_scope_fkey
-    foreign key (organization_id, reverses_payment_id)
-    references public.finance_payments (organization_id, id) on delete restrict,
+    foreign key (organization_id, branch_id, reverses_payment_id)
+    references public.finance_payments (organization_id, branch_id, id) on delete restrict,
   constraint finance_payments_cash_session_scope_fkey
     foreign key (organization_id, branch_id, cash_session_id)
     references public.cash_closures (organization_id, branch_id, id) on delete restrict,
@@ -220,6 +222,7 @@ create table if not exists public.finance_payments (
     or (direction = 'reversal' and reverses_payment_id is not null)),
   check ((payment_method = 'cash' and cash_session_id is not null)
     or (payment_method <> 'cash' and cash_session_id is null)),
+  check (char_length(trim(idempotency_key)) between 1 and 128),
   check (reference is null or char_length(trim(reference)) between 1 and 200),
   check (notes is null or char_length(notes) <= 2000),
   check (
@@ -250,7 +253,7 @@ create table if not exists public.finance_payments (
 );
 
 create unique index if not exists finance_payments_one_reversal_per_payment
-  on public.finance_payments (organization_id, reverses_payment_id)
+  on public.finance_payments (organization_id, branch_id, reverses_payment_id)
   where direction = 'reversal';
 
 create table if not exists public.finance_audit_events (
@@ -302,10 +305,21 @@ create unique index if not exists cash_movements_finance_payment_unique
 
 create index if not exists finance_categories_organization_active_idx
   on public.finance_categories (organization_id, is_active, name);
+create index if not exists finance_categories_created_by_idx
+  on public.finance_categories (created_by) where created_by is not null;
+create index if not exists finance_categories_updated_by_idx
+  on public.finance_categories (updated_by) where updated_by is not null;
 create index if not exists finance_expense_templates_scope_status_idx
   on public.finance_expense_templates (organization_id, branch_id, status, starts_on);
 create index if not exists finance_expense_templates_category_idx
   on public.finance_expense_templates (organization_id, category_id);
+create index if not exists finance_templates_created_by_idx
+  on public.finance_expense_templates (created_by) where created_by is not null;
+create index if not exists finance_templates_updated_by_idx
+  on public.finance_expense_templates (updated_by) where updated_by is not null;
+create index if not exists finance_templates_generation_idx
+  on public.finance_expense_templates (starts_on, ends_on, organization_id, branch_id)
+  where status = 'active';
 create index if not exists finance_obligations_scope_due_status_idx
   on public.finance_obligations (organization_id, branch_id, due_date, status);
 create index if not exists finance_obligations_organization_status_due_idx
@@ -315,6 +329,12 @@ create index if not exists finance_obligations_category_accounting_idx
 create index if not exists finance_obligations_outstanding_due_idx
   on public.finance_obligations (organization_id, branch_id, due_date)
   where status in ('pending', 'partially_paid', 'overdue');
+create index if not exists finance_obligations_voided_by_idx
+  on public.finance_obligations (voided_by) where voided_by is not null;
+create index if not exists finance_obligations_created_by_idx
+  on public.finance_obligations (created_by) where created_by is not null;
+create index if not exists finance_obligations_updated_by_idx
+  on public.finance_obligations (updated_by) where updated_by is not null;
 create index if not exists finance_payments_obligation_created_idx
   on public.finance_payments (organization_id, obligation_id, created_at);
 create index if not exists finance_payments_scope_date_idx
@@ -322,10 +342,17 @@ create index if not exists finance_payments_scope_date_idx
 create index if not exists finance_payments_cash_session_idx
   on public.finance_payments (cash_session_id)
   where cash_session_id is not null;
+create index if not exists finance_payments_created_by_idx
+  on public.finance_payments (created_by) where created_by is not null;
 create index if not exists finance_audit_events_organization_occurred_idx
   on public.finance_audit_events (organization_id, occurred_at desc);
 create index if not exists finance_audit_events_entity_idx
   on public.finance_audit_events (organization_id, entity_type, entity_id, occurred_at desc);
+create index if not exists finance_audit_events_actor_idx
+  on public.finance_audit_events (actor_id) where actor_id is not null;
+create index if not exists finance_audit_events_branch_idx
+  on public.finance_audit_events (organization_id, branch_id)
+  where branch_id is not null;
 
 create or replace function public.set_finance_updated_at()
 returns trigger
@@ -346,7 +373,36 @@ set search_path = pg_catalog, public
 as $$
 declare
   stored_paid_amount numeric(14, 2);
+  financial_identity_changed boolean := false;
 begin
+  if tg_op = 'UPDATE' then
+    financial_identity_changed :=
+      new.id is distinct from old.id
+      or new.organization_id is distinct from old.organization_id
+      or new.branch_id is distinct from old.branch_id
+      or new.category_id is distinct from old.category_id
+      or new.template_id is distinct from old.template_id
+      or new.recurrence_period is distinct from old.recurrence_period
+      or new.concept is distinct from old.concept
+      or new.amount is distinct from old.amount
+      or new.currency is distinct from old.currency
+      or new.vendor is distinct from old.vendor
+      or new.accounting_date is distinct from old.accounting_date
+      or new.due_date is distinct from old.due_date
+      or new.notes is distinct from old.notes
+      or new.created_at is distinct from old.created_at;
+
+    if old.status = 'voided'
+       and (
+         new.status is distinct from old.status
+         or financial_identity_changed
+         or new.void_reason is distinct from old.void_reason
+         or new.voided_at is distinct from old.voided_at
+       ) then
+      raise exception 'FINANCE_VOIDED_OBLIGATION_IS_TERMINAL';
+    end if;
+  end if;
+
   if new.currency is null then
     select settings.currency
     into new.currency
@@ -360,13 +416,13 @@ begin
     if new.paid_amount <> 0 then
       raise exception 'FINANCE_INITIAL_PAID_AMOUNT_MUST_BE_ZERO';
     end if;
-  elsif new.amount is distinct from old.amount and exists (
+  elsif financial_identity_changed and exists (
     select 1
     from public.finance_payments payment
     where payment.organization_id = old.organization_id
       and payment.obligation_id = old.id
   ) then
-    raise exception 'FINANCE_PAID_OBLIGATION_AMOUNT_IMMUTABLE';
+    raise exception 'FINANCE_EVER_PAID_OBLIGATION_IMMUTABLE';
   end if;
 
   if tg_op = 'UPDATE' and new.paid_amount is distinct from old.paid_amount then
@@ -614,7 +670,28 @@ begin
     new.id
   );
 
+  update public.cash_closures
+  set last_activity_at = now(), updated_at = now()
+  where id = new.cash_session_id
+    and organization_id = new.organization_id
+    and branch_id = new.branch_id;
+
   return new;
+end;
+$$;
+
+create or replace function public.protect_finance_cash_movement()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+  if old.finance_payment_id is not null
+     or (tg_op = 'UPDATE' and new.finance_payment_id is not null) then
+    raise exception 'FINANCE_CASH_MOVEMENT_IS_IMMUTABLE';
+  end if;
+
+  return case when tg_op = 'DELETE' then old else new end;
 end;
 $$;
 
@@ -671,6 +748,10 @@ language plpgsql
 set search_path = pg_catalog, public
 as $$
 begin
+  if pg_trigger_depth() > 1 then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+
   raise exception 'FINANCE_AUDIT_EVENTS_ARE_APPEND_ONLY';
 end;
 $$;
@@ -719,6 +800,11 @@ drop trigger if exists finance_payments_append_only on public.finance_payments;
 create trigger finance_payments_append_only
 before update or delete on public.finance_payments
 for each row execute function public.prevent_finance_audit_event_mutation();
+
+drop trigger if exists cash_movements_protect_finance_link on public.cash_movements;
+create trigger cash_movements_protect_finance_link
+before update or delete on public.cash_movements
+for each row execute function public.protect_finance_cash_movement();
 
 drop trigger if exists finance_audit_events_append_only on public.finance_audit_events;
 create trigger finance_audit_events_append_only
@@ -809,7 +895,7 @@ from public.organizations organization;
 
 create or replace function public.generate_recurring_finance_obligations(
   p_generation_date date,
-  p_organization_id uuid default null
+  p_organization_id uuid
 )
 returns integer
 language plpgsql
@@ -821,13 +907,15 @@ declare
   template_record public.finance_expense_templates%rowtype;
   target_period date;
   target_accounting_date date;
+  elapsed_months integer;
+  cadence_months integer;
   inserted_count integer := 0;
   current_insert_count integer;
 begin
   if p_generation_date is null then
     raise exception 'FINANCE_GENERATION_DATE_REQUIRED';
   end if;
-  if actor_id is not null and p_organization_id is null then
+  if p_organization_id is null then
     raise exception 'FINANCE_ORGANIZATION_REQUIRED';
   end if;
   if actor_id is not null and not (
@@ -843,17 +931,41 @@ begin
     where template.status = 'active'
       and template.starts_on <= p_generation_date
       and (template.ends_on is null or template.ends_on >= p_generation_date)
-      and (p_organization_id is null or template.organization_id = p_organization_id)
+      and template.organization_id = p_organization_id
+      and (
+        actor_id is null
+        or public.user_has_branch_access(template.branch_id, actor_id)
+      )
     order by template.organization_id, template.id
   loop
-    target_period := case template_record.frequency
-      when 'weekly' then template_record.starts_on
-        + (((p_generation_date - template_record.starts_on) / 7) * 7)
-      when 'monthly' then date_trunc('month', p_generation_date)::date
-      when 'quarterly' then date_trunc('quarter', p_generation_date)::date
-      when 'yearly' then date_trunc('year', p_generation_date)::date
-    end;
-    target_accounting_date := greatest(target_period, template_record.starts_on);
+    if template_record.frequency = 'weekly' then
+      target_period := template_record.starts_on
+        + (((p_generation_date - template_record.starts_on) / 7) * 7);
+    else
+      cadence_months := case template_record.frequency
+        when 'monthly' then 1
+        when 'quarterly' then 3
+        when 'yearly' then 12
+      end;
+      elapsed_months := (
+        (extract(year from p_generation_date)::integer
+          - extract(year from template_record.starts_on)::integer) * 12
+        + extract(month from p_generation_date)::integer
+        - extract(month from template_record.starts_on)::integer
+      );
+      elapsed_months := (elapsed_months / cadence_months) * cadence_months;
+      target_period := (
+        template_record.starts_on + make_interval(months => elapsed_months)
+      )::date;
+
+      if target_period > p_generation_date then
+        elapsed_months := elapsed_months - cadence_months;
+        target_period := (
+          template_record.starts_on + make_interval(months => elapsed_months)
+        )::date;
+      end if;
+    end if;
+    target_accounting_date := target_period;
 
     perform pg_advisory_xact_lock(hashtextextended(
       template_record.organization_id::text
@@ -905,6 +1017,44 @@ begin
 end;
 $$;
 
+create or replace function public.generate_all_recurring_finance_obligations(
+  p_generation_date date
+)
+returns integer
+language plpgsql
+security definer
+set search_path = pg_catalog, public, auth
+as $$
+declare
+  organization_record record;
+  inserted_count integer := 0;
+begin
+  if auth.uid() is not null then
+    raise exception 'FINANCE_GLOBAL_GENERATION_SERVICE_ONLY';
+  end if;
+  if p_generation_date is null then
+    raise exception 'FINANCE_GENERATION_DATE_REQUIRED';
+  end if;
+
+  for organization_record in
+    select distinct template.organization_id
+    from public.finance_expense_templates template
+    where template.status = 'active'
+      and template.starts_on <= p_generation_date
+      and (template.ends_on is null or template.ends_on >= p_generation_date)
+    order by template.organization_id
+  loop
+    inserted_count := inserted_count
+      + public.generate_recurring_finance_obligations(
+        p_generation_date,
+        organization_record.organization_id
+      );
+  end loop;
+
+  return inserted_count;
+end;
+$$;
+
 create or replace function public.pay_finance_obligation_atomic(
   p_organization_id uuid,
   p_branch_id uuid,
@@ -912,6 +1062,7 @@ create or replace function public.pay_finance_obligation_atomic(
   p_amount numeric,
   p_payment_method text,
   p_payment_date date,
+  p_idempotency_key text,
   p_cash_session_id uuid default null,
   p_reference text default null,
   p_receipt_storage_path text default null,
@@ -963,6 +1114,11 @@ begin
   if p_payment_date is null then
     raise exception 'FINANCE_PAYMENT_DATE_REQUIRED';
   end if;
+  if nullif(trim(p_idempotency_key), '') is null
+     or char_length(trim(p_idempotency_key)) > 128
+     or lower(trim(p_idempotency_key)) like 'finance-system:%' then
+    raise exception 'FINANCE_INVALID_IDEMPOTENCY_KEY';
+  end if;
 
   select obligation.*
   into target_obligation
@@ -975,6 +1131,43 @@ begin
   if not found then
     raise exception 'FINANCE_OBLIGATION_NOT_FOUND';
   end if;
+
+  select payment.*
+  into created_payment
+  from public.finance_payments payment
+  where payment.organization_id = p_organization_id
+    and payment.obligation_id = p_obligation_id
+    and payment.idempotency_key = trim(p_idempotency_key)
+    and payment.branch_id = p_branch_id
+    and payment.direction = 'payment'
+    and payment.amount = p_amount
+    and payment.payment_method = p_payment_method
+    and payment.payment_date = p_payment_date
+    and payment.cash_session_id is not distinct from p_cash_session_id
+    and payment.reference is not distinct from nullif(left(trim(p_reference), 200), '')
+    and payment.receipt_storage_path is not distinct from nullif(trim(p_receipt_storage_path), '')
+    and payment.receipt_original_name is not distinct from nullif(left(trim(p_receipt_original_name), 255), '')
+    and payment.receipt_mime_type is not distinct from nullif(lower(trim(p_receipt_mime_type)), '')
+    and payment.receipt_size_bytes is not distinct from p_receipt_size_bytes
+    and payment.notes is not distinct from nullif(left(trim(p_notes), 2000), '');
+
+  if found then
+    return jsonb_build_object(
+      'payment', to_jsonb(created_payment),
+      'obligation', to_jsonb(target_obligation)
+    );
+  end if;
+
+  if exists (
+    select 1
+    from public.finance_payments payment
+    where payment.organization_id = p_organization_id
+      and payment.obligation_id = p_obligation_id
+      and payment.idempotency_key = trim(p_idempotency_key)
+  ) then
+    raise exception 'FINANCE_IDEMPOTENCY_KEY_REUSED';
+  end if;
+
   if target_obligation.status in ('draft', 'paid', 'voided') then
     raise exception 'FINANCE_OBLIGATION_NOT_PAYABLE';
   end if;
@@ -1007,6 +1200,7 @@ begin
     organization_id,
     branch_id,
     obligation_id,
+    idempotency_key,
     direction,
     amount,
     payment_method,
@@ -1023,6 +1217,7 @@ begin
     p_organization_id,
     p_branch_id,
     p_obligation_id,
+    trim(p_idempotency_key),
     'payment',
     p_amount,
     p_payment_method,
@@ -1154,6 +1349,7 @@ begin
       organization_id,
       branch_id,
       obligation_id,
+      idempotency_key,
       direction,
       reverses_payment_id,
       amount,
@@ -1167,6 +1363,7 @@ begin
       p_organization_id,
       p_branch_id,
       p_obligation_id,
+      'finance-system:reversal:' || original_payment.id::text,
       'reversal',
       original_payment.id,
       original_payment.amount,
@@ -1201,6 +1398,69 @@ alter table public.finance_expense_templates enable row level security;
 alter table public.finance_obligations enable row level security;
 alter table public.finance_payments enable row level security;
 alter table public.finance_audit_events enable row level security;
+
+drop policy if exists "Enable select for authenticated users only" on public.cash_movements;
+drop policy if exists "Usuarios autenticados ven movimientos" on public.cash_movements;
+drop policy if exists "solo usuarios autenticados pueden leer" on public.cash_movements;
+drop policy if exists "tenant members can read cash movements" on public.cash_movements;
+drop policy if exists "cash_movements_select_org" on public.cash_movements;
+drop policy if exists cash_movements_select_staff on public.cash_movements;
+drop policy if exists cash_movements_write_staff on public.cash_movements;
+drop policy if exists "cash_movements_update_staff" on public.cash_movements;
+drop policy if exists "cash_movements_delete_admin" on public.cash_movements;
+drop policy if exists "tenant members can update cash movements" on public.cash_movements;
+drop policy if exists "tenant members can delete cash movements" on public.cash_movements;
+drop policy if exists "Admin/Vendedores crean movimientos" on public.cash_movements;
+drop policy if exists "Enable insert for authenticated users only" on public.cash_movements;
+drop policy if exists "cash_movements_insert_staff" on public.cash_movements;
+
+create policy cash_movements_authenticated_source_guard
+on public.cash_movements
+as restrictive
+for insert
+to authenticated
+with check (finance_payment_id is null);
+
+create policy cash_movements_finance_aware_read
+on public.cash_movements
+for select
+to authenticated
+using (
+  (
+    finance_payment_id is null
+    and (
+      public.has_org_permission(organization_id, 'pos.cash.manage')
+      or public.has_org_permission(organization_id, 'pos.sales.read')
+      or public.has_org_permission(organization_id, 'pos.sales.create')
+    )
+  )
+  or (
+    finance_payment_id is not null
+    and public.has_org_permission(organization_id, 'finances.read')
+  )
+);
+
+create policy cash_movements_legacy_update
+on public.cash_movements
+for update
+to authenticated
+using (
+  finance_payment_id is null
+  and public.has_org_permission(organization_id, 'pos.cash.manage')
+)
+with check (
+  finance_payment_id is null
+  and public.has_org_permission(organization_id, 'pos.cash.manage')
+);
+
+create policy cash_movements_legacy_delete
+on public.cash_movements
+for delete
+to authenticated
+using (
+  finance_payment_id is null
+  and public.has_org_permission(organization_id, 'pos.cash.manage')
+);
 
 drop policy if exists finance_categories_read on public.finance_categories;
 create policy finance_categories_read
@@ -1268,22 +1528,33 @@ grant select on table public.finance_obligations to authenticated;
 grant select on table public.finance_payments to authenticated;
 grant select on table public.finance_audit_events to authenticated;
 
-grant all on table public.finance_categories to service_role;
-grant all on table public.finance_expense_templates to service_role;
-grant all on table public.finance_obligations to service_role;
-grant all on table public.finance_payments to service_role;
-grant all on table public.finance_audit_events to service_role;
+revoke all on table public.finance_categories from service_role;
+revoke all on table public.finance_expense_templates from service_role;
+revoke all on table public.finance_obligations from service_role;
+revoke all on table public.finance_payments from service_role;
+revoke all on table public.finance_audit_events from service_role;
+
+grant select, insert, update, delete on table public.finance_categories to service_role;
+grant select, insert, update, delete on table public.finance_expense_templates to service_role;
+grant select, insert, update, delete on table public.finance_obligations to service_role;
+grant select, insert on table public.finance_payments to service_role;
+grant select on table public.finance_audit_events to service_role;
 
 revoke all on function public.generate_recurring_finance_obligations(date, uuid)
 from public, anon, authenticated;
 grant execute on function public.generate_recurring_finance_obligations(date, uuid)
 to authenticated, service_role;
 
+revoke all on function public.generate_all_recurring_finance_obligations(date)
+from public, anon, authenticated;
+grant execute on function public.generate_all_recurring_finance_obligations(date)
+to service_role;
+
 revoke all on function public.pay_finance_obligation_atomic(
-  uuid, uuid, uuid, numeric, text, date, uuid, text, text, text, text, bigint, text
+  uuid, uuid, uuid, numeric, text, date, text, uuid, text, text, text, text, bigint, text
 ) from public, anon, authenticated;
 grant execute on function public.pay_finance_obligation_atomic(
-  uuid, uuid, uuid, numeric, text, date, uuid, text, text, text, text, bigint, text
+  uuid, uuid, uuid, numeric, text, date, text, uuid, text, text, text, text, bigint, text
 ) to authenticated;
 
 revoke all on function public.void_finance_obligation_atomic(uuid, uuid, uuid, text, uuid)
@@ -1307,6 +1578,8 @@ revoke all on function public.sync_finance_obligation_from_payment()
 from public, anon, authenticated;
 revoke all on function public.post_finance_cash_movement_from_payment()
 from public, anon, authenticated;
+revoke all on function public.protect_finance_cash_movement()
+from public, anon, authenticated;
 revoke all on function public.record_finance_audit_event()
 from public, anon, authenticated;
 revoke all on function public.prevent_finance_audit_event_mutation()
@@ -1314,6 +1587,9 @@ from public, anon, authenticated;
 revoke all on function public.seed_default_finance_categories_for_organization()
 from public, anon, authenticated;
 
-grant all on table public.cash_movements to service_role;
+revoke truncate, references, trigger on table public.cash_movements
+from authenticated;
+revoke all on table public.cash_movements from service_role;
+grant select, insert, update, delete on table public.cash_movements to service_role;
 
 commit;

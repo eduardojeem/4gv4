@@ -93,4 +93,112 @@ describe('admin finance database foundation', () => {
     expect(sql).toContain('revoke all on function public.pay_finance_obligation_atomic')
     expect(sql).not.toContain('or public.current_organization_id() is null')
   })
+
+  it('makes finance-linked cash movements immutable while preserving legacy rows', () => {
+    expect(sql).toContain('function public.protect_finance_cash_movement()')
+    expect(sql).toContain('old.finance_payment_id is not null')
+    expect(sql).toContain('before update or delete on public.cash_movements')
+    expect(sql).toContain('cash_movements_authenticated_source_guard')
+    expect(sql).toContain('finance_payment_id is null')
+  })
+
+  it('hides finance cash details from POS-only readers', () => {
+    expect(sql).toContain('cash_movements_finance_aware_read')
+    expect(sql).toMatch(
+      /finance_payment_id is not null\s+and public\.has_org_permission\(organization_id, 'finances\.read'\)/,
+    )
+    expect(sql).toContain('drop policy if exists "tenant members can read cash movements"')
+    expect(sql).toContain('drop policy if exists "cash_movements_select_org"')
+  })
+
+  it('freezes ever-paid obligation identity and makes void terminal', () => {
+    expect(sql).toContain('finance_ever_paid_obligation_immutable')
+    expect(sql).toContain('new.branch_id is distinct from old.branch_id')
+    expect(sql).toContain('new.accounting_date is distinct from old.accounting_date')
+    expect(sql).toContain("old.status = 'voided'")
+    expect(sql).toContain('new.void_reason is distinct from old.void_reason')
+    expect(sql).toContain('finance_voided_obligation_is_terminal')
+  })
+
+  it('allows only FK-driven audit lifecycle changes and preserves rows after actor deletion', () => {
+    expect(sql).toContain('pg_trigger_depth() > 1')
+    expect(tableDefinition('finance_expense_templates')).toContain(
+      'created_by uuid references auth.users(id) on delete set null',
+    )
+    expect(tableDefinition('finance_obligations')).toContain(
+      'created_by uuid references auth.users(id) on delete set null',
+    )
+    expect(tableDefinition('finance_payments')).toContain(
+      'created_by uuid references auth.users(id) on delete set null',
+    )
+  })
+
+  it('uses explicit service privileges without ledger truncation rights', () => {
+    expect(sql).not.toContain('grant all on table public.finance_')
+    expect(sql).toContain(
+      'grant select, insert, update, delete on table public.finance_obligations to service_role',
+    )
+    expect(sql).toContain(
+      'grant select, insert on table public.finance_payments to service_role',
+    )
+    expect(sql).toContain(
+      'revoke truncate, references, trigger on table public.cash_movements',
+    )
+  })
+
+  it('keeps template and reversal references branch-safe', () => {
+    expect(tableDefinition('finance_expense_templates')).toContain(
+      'unique (organization_id, branch_id, id)',
+    )
+    expect(tableDefinition('finance_obligations')).toContain(
+      'foreign key (organization_id, branch_id, template_id)',
+    )
+    expect(tableDefinition('finance_payments')).toContain(
+      'foreign key (organization_id, branch_id, reverses_payment_id)',
+    )
+  })
+
+  it('anchors every recurrence cadence to starts_on', () => {
+    expect(sql).toContain('elapsed_months integer')
+    expect(sql).toContain('make_interval(months => elapsed_months)')
+    expect(sql).not.toContain("when 'monthly' then date_trunc('month'")
+    expect(sql).not.toContain("when 'quarterly' then date_trunc('quarter'")
+    expect(sql).not.toContain("when 'yearly' then date_trunc('year'")
+  })
+
+  it('separates branch-authorized generation from global service generation', () => {
+    expect(sql).toContain('function public.generate_all_recurring_finance_obligations')
+    expect(sql).toContain('user_has_branch_access(template.branch_id, actor_id)')
+    expect(sql).not.toContain('p_organization_id uuid default null')
+    expect(sql).toContain(
+      'grant execute on function public.generate_all_recurring_finance_obligations(date)\nto service_role',
+    )
+  })
+
+  it('indexes actor foreign keys, audit branches, and recurrence generation', () => {
+    expect(sql).toContain('finance_categories_created_by_idx')
+    expect(sql).toContain('finance_templates_created_by_idx')
+    expect(sql).toContain('finance_obligations_voided_by_idx')
+    expect(sql).toContain('finance_payments_created_by_idx')
+    expect(sql).toContain('finance_audit_events_actor_idx')
+    expect(sql).toContain('finance_audit_events_branch_idx')
+    expect(sql).toContain('finance_templates_generation_idx')
+  })
+
+  it('requires payment idempotency and safely replays matching requests', () => {
+    expect(tableDefinition('finance_payments')).toContain(
+      'idempotency_key text not null',
+    )
+    expect(tableDefinition('finance_payments')).toContain(
+      'unique (organization_id, obligation_id, idempotency_key)',
+    )
+    expect(sql).toContain('p_idempotency_key text')
+    expect(sql).toContain('finance_idempotency_key_reused')
+    expect(sql).toContain('if found then\n    return jsonb_build_object(')
+  })
+
+  it('refreshes cash-session activity for finance cash postings', () => {
+    expect(sql).toContain('set last_activity_at = now(), updated_at = now()')
+    expect(sql).toContain('where id = new.cash_session_id')
+  })
 })
