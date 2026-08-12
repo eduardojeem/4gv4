@@ -188,3 +188,29 @@ Fresh final verification is recorded in the handoff after the report update.
 The Task 2 migration remains unapplied: SQL behavior is statically contract
 tested but requires a real local/staging PostgreSQL apply before production.
 No remote Supabase project was changed.
+
+## Fix round 2/5: recurring replay conflict mapping
+
+### Finding resolved
+
+- `toFinanceApiError` now recognizes the exact
+  `FINANCE_RECURRING_IDEMPOTENCY_KEY_REUSED` database code. Reusing a recurring
+  creation key with a changed payload returns the stable sanitized
+  `409 FINANCE_CONFLICT` response instead of leaking into the generic 500 path.
+- No HTTP, RPC, or schema signature changed in this round.
+
+### Strict RED/GREEN evidence
+
+- RED: the focused server behavior suite exited 1 because the recurring replay
+  code mapped to status 500.
+- GREEN: the same suite passed 4/4 after adding the exact code to the centralized
+  conflict mapping. The assertion also proves internal database details are not
+  present in the public message.
+
+### Verification and concerns
+
+- Focused API/schema/auth/workflow regressions: 6 files, 72 tests passed.
+- Focused ESLint passed with no warnings; `tsc --noEmit --skipLibCheck` passed;
+  `git diff --check` passed.
+- The migration remains unapplied locally/remotely, so the SQL contract
+  continues to require a real staging apply before release.

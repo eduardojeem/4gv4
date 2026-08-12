@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildUnpaidObligationUpdate } from './server'
+import { buildUnpaidObligationUpdate, toFinanceApiError } from './server'
 
 describe('buildUnpaidObligationUpdate', () => {
   const current = {
@@ -67,5 +67,21 @@ describe('buildUnpaidObligationUpdate', () => {
       due_date: null,
       status: 'pending',
     })
+  })
+})
+
+describe('toFinanceApiError', () => {
+  it('maps recurring idempotency payload reuse to a sanitized conflict', () => {
+    const error = toFinanceApiError({
+      message:
+        'FINANCE_RECURRING_IDEMPOTENCY_KEY_REUSED internal payload details',
+    })
+
+    expect(error.status).toBe(409)
+    expect(error.code).toBe('FINANCE_CONFLICT')
+    expect(error.message).toBe(
+      'El pago entra en conflicto con el estado actual de la obligacion.',
+    )
+    expect(error.message).not.toContain('internal payload details')
   })
 })

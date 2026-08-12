@@ -24,7 +24,12 @@ export class FinanceApiError extends Error {
 
 const FINANCE_ERROR_MAPPINGS = [
   {
-    tokens: ['FINANCE_IDEMPOTENCY_KEY_REUSED', 'FINANCE_OVERPAYMENT', '23505'],
+    tokens: [
+      'FINANCE_IDEMPOTENCY_KEY_REUSED',
+      'FINANCE_RECURRING_IDEMPOTENCY_KEY_REUSED',
+      'FINANCE_OVERPAYMENT',
+      '23505',
+    ],
     status: 409,
     code: 'FINANCE_CONFLICT',
     publicMessage: 'El pago entra en conflicto con el estado actual de la obligacion.',
