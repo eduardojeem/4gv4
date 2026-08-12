@@ -4,7 +4,14 @@ import { resolveBranchScopeForUser } from '@/lib/branches/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
-import type { ExpenseInput } from './schemas'
+import type {
+  CommissionRuleInput,
+  CompensationInput,
+  ExpenseInput,
+  PayrollAdjustmentInput,
+  PayrollGenerationInput,
+  PayrollPaymentInput,
+} from './schemas'
 
 type SupabaseErrorLike = {
   code?: string
@@ -28,6 +35,10 @@ const FINANCE_ERROR_MAPPINGS = [
       'FINANCE_IDEMPOTENCY_KEY_REUSED',
       'FINANCE_RECURRING_IDEMPOTENCY_KEY_REUSED',
       'FINANCE_OVERPAYMENT',
+      'PAYROLL_GENERATION_IDEMPOTENCY_KEY_REUSED',
+      'PAYROLL_PERIOD_ALREADY_GENERATED',
+      'PAYROLL_PAYMENT_IDEMPOTENCY_KEY_REUSED',
+      'PAYROLL_OVERPAYMENT',
       '23505',
     ],
     status: 409,
@@ -41,6 +52,13 @@ const FINANCE_ERROR_MAPPINGS = [
       'NON_CASH_PAYMENT_CANNOT_USE_CASH_SESSION',
       'CASH_SESSION_ONLY_ALLOWED_FOR_CASH_COMPENSATION',
       'FINANCE_INVALID_',
+      'PAYROLL_INVALID_',
+      'PAYROLL_RUN_NOT_APPROVABLE',
+      'PAYROLL_RUN_HAS_NO_ENTRIES',
+      'PAYROLL_ENTRY_NOT_PAYABLE',
+      'PAYROLL_COMMISSION_SNAPSHOT_MISMATCH',
+      'PAYROLL_ADJUSTMENT_',
+      'PAYROLL_APPROVED_',
       '23514',
     ],
     status: 422,
@@ -55,6 +73,11 @@ const FINANCE_ERROR_MAPPINGS = [
       'FINANCE_VOID_PERMISSION_DENIED',
       'FINANCE_GENERATION_PERMISSION_DENIED',
       'FINANCE_RECURRING_PERMISSION_DENIED',
+      'PAYROLL_BRANCH_PERMISSION_DENIED',
+      'PAYROLL_BRANCH_NOT_IN_ORGANIZATION',
+      'PAYROLL_PAYMENT_PERMISSION_DENIED',
+      'PAYROLL_APPROVAL_PERMISSION_DENIED',
+      'PAYROLL_GENERATION_PERMISSION_DENIED',
       '42501',
     ],
     status: 403,
@@ -503,6 +526,512 @@ export async function payObligation(params: {
   const supabase = await createClient()
   const { data, error } = await supabase.rpc(params.rpcName, params.rpcArgs)
 
+  if (error) throw toFinanceApiError(error)
+  return data
+}
+
+export async function assertFinanceEmployeeMembership(params: {
+  organizationId: string
+  employeeId: string
+}) {
+  const admin = createAdminSupabase()
+  const { data, error } = await admin
+    .from('organization_members')
+    .select('user_id, role, status')
+    .eq('organization_id', params.organizationId)
+    .eq('user_id', params.employeeId)
+    .neq('role', 'customer')
+    .maybeSingle()
+
+  if (error) throw toFinanceApiError(error)
+  if (!data) {
+    throw new FinanceApiError(
+      'El empleado no pertenece a la organización.',
+      422,
+      'PAYROLL_EMPLOYEE_INVALID',
+    )
+  }
+
+  return data as { user_id: string; role: string; status: string }
+}
+
+export async function listFinanceEmployees(organizationId: string) {
+  const admin = createAdminSupabase()
+  const { data, error } = await admin
+    .from('organization_members')
+    .select('user_id, role, status, created_at')
+    .eq('organization_id', organizationId)
+    .neq('role', 'customer')
+    .order('created_at', { ascending: true })
+
+  if (error) throw toFinanceApiError(error)
+  return data ?? []
+}
+
+export async function listEmployeeCompensation(
+  organizationId: string,
+  employeeId?: string,
+) {
+  const admin = createAdminSupabase()
+  let query = admin
+    .from('employee_compensation')
+    .select('id, organization_id, employee_id, base_salary, pay_frequency, effective_from, effective_to, created_at, updated_at')
+    .eq('organization_id', organizationId)
+    .order('effective_from', { ascending: false })
+
+  if (employeeId) query = query.eq('employee_id', employeeId)
+  const { data, error } = await query
+  if (error) throw toFinanceApiError(error)
+  return data ?? []
+}
+
+export async function createEmployeeCompensation(params: {
+  organizationId: string
+  userId: string
+  input: CompensationInput
+}) {
+  await assertFinanceEmployeeMembership({
+    organizationId: params.organizationId,
+    employeeId: params.input.employeeId,
+  })
+  const admin = createAdminSupabase()
+  const { data, error } = await admin
+    .from('employee_compensation')
+    .insert({
+      organization_id: params.organizationId,
+      employee_id: params.input.employeeId,
+      base_salary: params.input.baseSalary,
+      pay_frequency: 'monthly',
+      effective_from: params.input.effectiveFrom,
+      effective_to: params.input.effectiveTo ?? null,
+      created_by: params.userId,
+    })
+    .select('*')
+    .single()
+
+  if (error || !data) throw toFinanceApiError(error)
+  return data
+}
+
+export async function updateEmployeeCompensation(params: {
+  organizationId: string
+  userId: string
+  id: string
+  input: CompensationInput
+}) {
+  await assertFinanceEmployeeMembership({
+    organizationId: params.organizationId,
+    employeeId: params.input.employeeId,
+  })
+  const admin = createAdminSupabase()
+  const { data, error } = await admin
+    .from('employee_compensation')
+    .update({
+      employee_id: params.input.employeeId,
+      base_salary: params.input.baseSalary,
+      effective_from: params.input.effectiveFrom,
+      effective_to: params.input.effectiveTo ?? null,
+    })
+    .eq('organization_id', params.organizationId)
+    .eq('id', params.id)
+    .select('*')
+    .maybeSingle()
+
+  if (error) throw toFinanceApiError(error)
+  if (!data) {
+    throw new FinanceApiError('La compensación no existe.', 404, 'PAYROLL_COMPENSATION_NOT_FOUND')
+  }
+  return data
+}
+
+export async function deleteEmployeeCompensation(params: {
+  organizationId: string
+  id: string
+}) {
+  const admin = createAdminSupabase()
+  const { error, count } = await admin
+    .from('employee_compensation')
+    .delete({ count: 'exact' })
+    .eq('organization_id', params.organizationId)
+    .eq('id', params.id)
+
+  if (error) throw toFinanceApiError(error)
+  if (!count) {
+    throw new FinanceApiError('La compensación no existe.', 404, 'PAYROLL_COMPENSATION_NOT_FOUND')
+  }
+}
+
+export async function listCommissionRules(
+  organizationId: string,
+  filters: { employeeId?: string; branchId?: string },
+) {
+  const admin = createAdminSupabase()
+  let query = admin
+    .from('commission_rules')
+    .select('id, organization_id, branch_id, scope_type, role, employee_id, source_type, source_reference_id, accrual_status, calculation_type, value, status, effective_from, effective_to, approved_by, approved_at, created_at, updated_at')
+    .eq('organization_id', organizationId)
+    .order('effective_from', { ascending: false })
+
+  if (filters.employeeId) query = query.eq('employee_id', filters.employeeId)
+  if (filters.branchId) query = query.eq('branch_id', filters.branchId)
+  const { data, error } = await query
+  if (error) throw toFinanceApiError(error)
+  return data ?? []
+}
+
+function commissionRuleRecord(
+  organizationId: string,
+  userId: string,
+  input: CommissionRuleInput,
+) {
+  return {
+    organization_id: organizationId,
+    branch_id: input.branchId ?? null,
+    scope_type: input.scopeType,
+    role: input.scopeType === 'role' ? input.role ?? null : null,
+    employee_id: input.scopeType === 'employee' ? input.employeeId ?? null : null,
+    source_type: input.sourceType,
+    source_reference_id:
+      input.sourceType === 'product' || input.sourceType === 'category'
+        ? input.sourceReferenceId ?? null
+        : null,
+    accrual_status:
+      input.sourceType === 'repair' || input.sourceType === 'repair_labor'
+        ? input.accrualStatus ?? null
+        : null,
+    calculation_type: input.calculationType,
+    value: input.value,
+    status: input.status,
+    effective_from: input.effectiveFrom,
+    effective_to: input.effectiveTo ?? null,
+    approved_by: input.status === 'approved' ? userId : null,
+    approved_at: input.status === 'approved' ? new Date().toISOString() : null,
+    created_by: userId,
+  }
+}
+
+export async function createCommissionRule(params: {
+  organizationId: string
+  userId: string
+  input: CommissionRuleInput
+}) {
+  if (params.input.employeeId) {
+    await assertFinanceEmployeeMembership({
+      organizationId: params.organizationId,
+      employeeId: params.input.employeeId,
+    })
+  }
+  const admin = createAdminSupabase()
+  const { data, error } = await admin
+    .from('commission_rules')
+    .insert(commissionRuleRecord(params.organizationId, params.userId, params.input))
+    .select('*')
+    .single()
+
+  if (error || !data) throw toFinanceApiError(error)
+  return data
+}
+
+export async function updateCommissionRule(params: {
+  organizationId: string
+  userId: string
+  id: string
+  input: CommissionRuleInput
+}) {
+  if (params.input.employeeId) {
+    await assertFinanceEmployeeMembership({
+      organizationId: params.organizationId,
+      employeeId: params.input.employeeId,
+    })
+  }
+  const record = commissionRuleRecord(
+    params.organizationId,
+    params.userId,
+    params.input,
+  )
+  delete record.created_by
+  const admin = createAdminSupabase()
+  const { data, error } = await admin
+    .from('commission_rules')
+    .update(record)
+    .eq('organization_id', params.organizationId)
+    .eq('id', params.id)
+    .select('*')
+    .maybeSingle()
+
+  if (error) throw toFinanceApiError(error)
+  if (!data) {
+    throw new FinanceApiError('La regla de comisión no existe.', 404, 'PAYROLL_RULE_NOT_FOUND')
+  }
+  return data
+}
+
+export async function deleteCommissionRule(params: {
+  organizationId: string
+  id: string
+}) {
+  const admin = createAdminSupabase()
+  const { error, count } = await admin
+    .from('commission_rules')
+    .delete({ count: 'exact' })
+    .eq('organization_id', params.organizationId)
+    .eq('id', params.id)
+
+  if (error) throw toFinanceApiError(error)
+  if (!count) {
+    throw new FinanceApiError('La regla de comisión no existe.', 404, 'PAYROLL_RULE_NOT_FOUND')
+  }
+}
+
+export async function getCommissionRuleBranch(
+  organizationId: string,
+  commissionRuleId: string,
+) {
+  const admin = createAdminSupabase()
+  const { data, error } = await admin
+    .from('commission_rules')
+    .select('id, branch_id')
+    .eq('organization_id', organizationId)
+    .eq('id', commissionRuleId)
+    .maybeSingle()
+  if (error) throw toFinanceApiError(error)
+  if (!data) {
+    throw new FinanceApiError('La regla de comisión no existe.', 404, 'PAYROLL_RULE_NOT_FOUND')
+  }
+  return data as { id: string; branch_id: string | null }
+}
+
+type PayrollPreviewInput = PayrollGenerationInput
+
+function roundMoney(amount: number) {
+  return Math.round((amount + Number.EPSILON) * 100) / 100
+}
+
+function daysInMonth(date: string) {
+  const [year, month] = date.split('-').map(Number)
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+function eachDay(periodFrom: string, periodTo: string) {
+  const days: string[] = []
+  const cursor = new Date(`${periodFrom}T00:00:00Z`)
+  const end = new Date(`${periodTo}T00:00:00Z`)
+  while (cursor <= end) {
+    days.push(cursor.toISOString().slice(0, 10))
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+  return days
+}
+
+export async function getPayrollPreview(
+  organizationId: string,
+  input: PayrollPreviewInput,
+) {
+  const admin = createAdminSupabase()
+  let commissionsQuery = admin
+    .from('earned_commissions')
+    .select('id, employee_id, amount, occurred_on')
+    .eq('organization_id', organizationId)
+    .gte('occurred_on', input.periodFrom)
+    .lte('occurred_on', input.periodTo)
+  if (input.branchId) commissionsQuery = commissionsQuery.eq('branch_id', input.branchId)
+
+  const [membersResult, compensationResult, commissionsResult, claimedResult] = await Promise.all([
+    admin
+      .from('organization_members')
+      .select('user_id, role, status')
+      .eq('organization_id', organizationId)
+      .eq('status', 'active')
+      .neq('role', 'customer'),
+    admin
+      .from('employee_compensation')
+      .select('employee_id, base_salary, effective_from, effective_to')
+      .eq('organization_id', organizationId)
+      .lte('effective_from', input.periodTo),
+    commissionsQuery,
+    admin
+      .from('payroll_entry_commissions')
+      .select('earned_commission_id')
+      .eq('organization_id', organizationId),
+  ])
+  if (membersResult.error) throw toFinanceApiError(membersResult.error)
+  if (compensationResult.error) throw toFinanceApiError(compensationResult.error)
+  if (commissionsResult.error) throw toFinanceApiError(commissionsResult.error)
+  if (claimedResult.error) throw toFinanceApiError(claimedResult.error)
+
+  const staff = membersResult.data ?? []
+  const compensation = compensationResult.data ?? []
+  const claimedCommissionIds = new Set(
+    (claimedResult.data ?? []).map((record) => record.earned_commission_id),
+  )
+  const commissions = (commissionsResult.data ?? []).filter(
+    (record) => !claimedCommissionIds.has(record.id),
+  )
+  const payrollDays = eachDay(input.periodFrom, input.periodTo)
+  const entries = staff.map((member) => {
+    const employeeCompensation = compensation.filter(
+      (record) => record.employee_id === member.user_id,
+    )
+    const salary = payrollDays.reduce((total, payDay) => {
+      const record = employeeCompensation
+        .filter(
+          (candidate) =>
+            candidate.effective_from <= payDay &&
+            (!candidate.effective_to || candidate.effective_to >= payDay),
+        )
+        .sort((left, right) => right.effective_from.localeCompare(left.effective_from))[0]
+      return total + (record ? Number(record.base_salary) / daysInMonth(payDay) : 0)
+    }, 0)
+    const commission = commissions
+      .filter((record) => record.employee_id === member.user_id)
+      .reduce((total, record) => total + Number(record.amount), 0)
+    const bonuses = 0
+    const discounts = 0
+    const advances = 0
+    const grossPay = roundMoney(salary + commission + bonuses)
+    const netPay = roundMoney(grossPay + discounts + advances)
+
+    return {
+      employeeId: member.user_id,
+      role: member.role,
+      salary: roundMoney(salary),
+      earnedCommissions: roundMoney(commission),
+      bonuses,
+      discounts,
+      advances,
+      grossPay,
+      netPay,
+    }
+  })
+
+  return {
+    periodFrom: input.periodFrom,
+    periodTo: input.periodTo,
+    branchId: input.branchId ?? null,
+    entries,
+    totals: entries.reduce(
+      (totals, entry) => ({
+        salary: roundMoney(totals.salary + entry.salary),
+        earnedCommissions: roundMoney(totals.earnedCommissions + entry.earnedCommissions),
+        bonuses: roundMoney(totals.bonuses + entry.bonuses),
+        discounts: roundMoney(totals.discounts + entry.discounts),
+        advances: roundMoney(totals.advances + entry.advances),
+        grossPay: roundMoney(totals.grossPay + entry.grossPay),
+        netPay: roundMoney(totals.netPay + entry.netPay),
+      }),
+      { salary: 0, earnedCommissions: 0, bonuses: 0, discounts: 0, advances: 0, grossPay: 0, netPay: 0 },
+    ),
+  }
+}
+
+export async function generatePayrollRun(params: {
+  organizationId: string
+  input: PayrollGenerationInput
+  idempotencyKey: string
+}) {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('generate_payroll_run_atomic', {
+    p_organization_id: params.organizationId,
+    p_period_from: params.input.periodFrom,
+    p_period_to: params.input.periodTo,
+    p_idempotency_key: params.idempotencyKey,
+    p_branch_id: params.input.branchId ?? null,
+  })
+  if (error) throw toFinanceApiError(error)
+  return data
+}
+
+export async function approvePayrollRun(params: {
+  rpcName: 'approve_payroll_run_atomic'
+  organizationId: string
+  payrollRunId: string
+}) {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc(params.rpcName, {
+    p_organization_id: params.organizationId,
+    p_payroll_run_id: params.payrollRunId,
+  })
+  if (error) throw toFinanceApiError(error)
+  return data
+}
+
+export async function getPayrollRunBranch(
+  organizationId: string,
+  payrollRunId: string,
+) {
+  const admin = createAdminSupabase()
+  const { data, error } = await admin
+    .from('payroll_runs')
+    .select('id, branch_id, status')
+    .eq('organization_id', organizationId)
+    .eq('id', payrollRunId)
+    .maybeSingle()
+  if (error) throw toFinanceApiError(error)
+  if (!data) throw new FinanceApiError('La nómina no existe.', 404, 'PAYROLL_RUN_NOT_FOUND')
+  return data as { id: string; branch_id: string | null; status: string }
+}
+
+export async function getPayrollEntryBranch(
+  organizationId: string,
+  payrollEntryId: string,
+) {
+  const admin = createAdminSupabase()
+  const { data, error } = await admin
+    .from('payroll_entries')
+    .select('id, branch_id, payroll_run_id')
+    .eq('organization_id', organizationId)
+    .eq('id', payrollEntryId)
+    .maybeSingle()
+  if (error) throw toFinanceApiError(error)
+  if (!data) throw new FinanceApiError('La entrada de nómina no existe.', 404, 'PAYROLL_ENTRY_NOT_FOUND')
+  return data as { id: string; branch_id: string | null; payroll_run_id: string }
+}
+
+export async function createPayrollAdjustment(params: {
+  organizationId: string
+  userId: string
+  input: PayrollAdjustmentInput
+  idempotencyKey: string
+}) {
+  const admin = createAdminSupabase()
+  const { data, error } = await admin
+    .from('payroll_adjustments')
+    .insert({
+      organization_id: params.organizationId,
+      payroll_entry_id: params.input.payrollEntryId,
+      adjustment_type: params.input.adjustmentType,
+      amount: params.input.amount,
+      reason: params.input.reason,
+      idempotency_key: params.idempotencyKey,
+      reverses_adjustment_id: params.input.reversesAdjustmentId ?? null,
+      created_by: params.userId,
+    })
+    .select('*')
+    .single()
+  if (error || !data) throw toFinanceApiError(error)
+  return data
+}
+
+export async function payPayrollEntry(params: {
+  rpcName: 'pay_payroll_entry_atomic'
+  organizationId: string
+  payrollEntryId: string
+  input: PayrollPaymentInput
+  idempotencyKey: string
+}) {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc(params.rpcName, {
+    p_organization_id: params.organizationId,
+    p_branch_id: params.input.branchId,
+    p_payroll_entry_id: params.payrollEntryId,
+    p_amount: params.input.amount,
+    p_payment_method: params.input.paymentMethod,
+    p_payment_date: params.input.paymentDate,
+    p_idempotency_key: params.idempotencyKey,
+    p_cash_session_id: params.input.cashSessionId ?? null,
+    p_reference: params.input.reference ?? null,
+    p_notes: params.input.notes ?? null,
+  })
   if (error) throw toFinanceApiError(error)
   return data
 }
