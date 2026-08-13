@@ -3853,7 +3853,7 @@ select
   legacy.id,
   legacy.paid_by,
   coalesce(legacy.created_at, legacy.paid_at, now()),
-  coalesce(legacy.approved_by, legacy.paid_by),
+  legacy.paid_by,
   coalesce(legacy.approved_at, legacy.paid_at, legacy.created_at, now()),
   coalesce(legacy.created_at, now()),
   coalesce(legacy.updated_at, now())
@@ -4071,7 +4071,7 @@ select
   nullif(left(legacy.notes, 2000), ''),
   legacy.id,
   'reversal',
-  coalesce(legacy.approved_by, legacy.paid_by),
+  legacy.paid_by,
   coalesce(legacy.updated_at, legacy.paid_at, legacy.created_at, now())
 from public.technician_payments legacy
 join public.payroll_payments original

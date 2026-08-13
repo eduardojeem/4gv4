@@ -380,6 +380,7 @@ describe('organization payroll and commission database', () => {
     expect(sql).toContain('rule.legacy_cutover_on')
     expect(tableDefinition('commission_rules')).toContain('accrual_status text')
     expect(sql).toContain('legacy.accrual_status')
+    expect(sql).not.toContain('legacy.approved_by')
     expect(sql).toContain('rule.accrual_status')
     expect(sql).toContain("('listo'::text, repair.completed_at)")
     expect(sql).toContain("('entregado'::text, repair.delivered_at)")
