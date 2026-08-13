@@ -72,6 +72,8 @@ describe('FinancesSystem', () => {
     render(<FinancesSystem />)
 
     expect(screen.getByRole('heading', { name: 'Finanzas' })).toBeInTheDocument()
+    expect(screen.getByText(/Tomá decisiones con una vista clara del negocio/)).toBeInTheDocument()
+    expect(screen.getByText('Qué querés administrar')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Resumen' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Gastos' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Nómina' })).toBeInTheDocument()

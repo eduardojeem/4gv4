@@ -1,7 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { CircleDollarSign } from 'lucide-react'
+import {
+  ChartNoAxesCombined,
+  CircleDollarSign,
+  ReceiptText,
+  Settings2,
+  UsersRound,
+} from 'lucide-react'
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAdminFinances } from '@/hooks/use-admin-finances'
@@ -13,7 +19,15 @@ import { FinanceSummary } from './FinanceSummary'
 import { PayrollPanel } from './PayrollPanel'
 import { ProfitabilityPanel } from './ProfitabilityPanel'
 
-const tabs = ['Resumen', 'Gastos', 'Nómina', 'Rentabilidad', 'Configuración'] as const
+const sections = [
+  { value: 'Resumen', description: 'Estado general', icon: CircleDollarSign },
+  { value: 'Gastos', description: 'Pagos y vencimientos', icon: ReceiptText },
+  { value: 'Nómina', description: 'Sueldos y comisiones', icon: UsersRound },
+  { value: 'Rentabilidad', description: 'Resultado por actividad', icon: ChartNoAxesCombined },
+  { value: 'Configuración', description: 'Reglas y personal', icon: Settings2 },
+] as const
+
+type FinanceSection = (typeof sections)[number]['value']
 
 function isEmptySummary(summary: NonNullable<ReturnType<typeof useAdminFinances>['summary']>) {
   const accruedValues = [summary.accrued.revenue, summary.accrued.directCosts, summary.accrued.grossProfit, summary.accrued.operatingExpenses, summary.accrued.payrollCost, summary.accrued.netProfit]
@@ -22,9 +36,62 @@ function isEmptySummary(summary: NonNullable<ReturnType<typeof useAdminFinances>
 }
 
 export function FinancesSystem() {
-  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>('Resumen')
+  const [activeTab, setActiveTab] = useState<FinanceSection>('Resumen')
   const finances = useAdminFinances()
   const selectedBranchId = finances.filters.branchId
 
-  return <div className="space-y-6"><header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight"><CircleDollarSign className="h-6 w-6 text-primary" aria-hidden="true" />Finanzas</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Resultado, caja y compromisos financieros con el mismo período y sucursal para toda la administración.</p></div></header><FinanceFilters filters={finances.filters} isRefreshing={finances.isRefreshing ?? false} onDateRangeChange={finances.setDateRange} onRefresh={finances.refresh} /><Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as (typeof tabs)[number])} className="space-y-5"><TabsList className="h-auto w-full justify-start overflow-x-auto" aria-label="Secciones de Finanzas">{tabs.map((tab) => <TabsTrigger key={tab} value={tab} className="min-w-max">{tab}</TabsTrigger>)}</TabsList><TabsContent value="Resumen">{finances.isLoading ? <FinanceLoadingState /> : null}{!finances.isLoading && finances.error && !finances.summary ? <FinanceErrorState error={finances.error} onRetry={finances.refresh} /> : null}{!finances.isLoading && finances.error && finances.summary ? <FinanceStaleDataAlert error={finances.error} generatedAt={finances.summary.generatedAt} onRetry={finances.refresh} /> : null}{!finances.isLoading && finances.summary && isEmptySummary(finances.summary) ? <FinanceEmptyState /> : null}{!finances.isLoading && finances.summary && !isEmptySummary(finances.summary) ? <FinanceSummary summary={finances.summary} /> : null}</TabsContent><TabsContent value="Gastos">{finances.organizationId ? <ExpensesPanel organizationId={finances.organizationId} branchId={selectedBranchId} filters={finances.filters} onChanged={finances.refresh} /> : <FinanceLoadingState />}</TabsContent><TabsContent value="Nómina">{finances.organizationId ? <PayrollPanel organizationId={finances.organizationId} branchId={selectedBranchId} filters={finances.filters} onChanged={finances.refresh} /> : <FinanceLoadingState />}</TabsContent><TabsContent value="Rentabilidad">{finances.organizationId ? <ProfitabilityPanel organizationId={finances.organizationId} filters={finances.filters} /> : <FinanceLoadingState />}</TabsContent><TabsContent value="Configuración">{finances.organizationId ? <FinanceSettingsPanel organizationId={finances.organizationId} branchId={selectedBranchId} /> : <FinanceLoadingState />}</TabsContent></Tabs></div>
+  return (
+    <div className="space-y-6">
+      <header className="rounded-xl border border-border/70 bg-card p-5 shadow-sm sm:p-6">
+        <div className="flex items-start gap-4">
+          <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
+            <CircleDollarSign className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-primary">Administración financiera</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight">Finanzas</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              Tomá decisiones con una vista clara del negocio: cuánto ganás, qué dinero entró o salió y qué compromisos requieren atención.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <FinanceFilters
+        filters={finances.filters}
+        isRefreshing={finances.isRefreshing ?? false}
+        onDateRangeChange={finances.setDateRange}
+        onRefresh={finances.refresh}
+      />
+
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FinanceSection)} className="space-y-5">
+        <section aria-labelledby="finance-sections-heading" className="rounded-xl border border-border/70 bg-card p-3 shadow-sm sm:p-4">
+          <div className="mb-3 px-1">
+            <h2 id="finance-sections-heading" className="text-sm font-semibold">Qué querés administrar</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Elegí una sección. El período y la sucursal seleccionados se mantienen en toda la pantalla.</p>
+          </div>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-muted/60 p-1 md:grid-cols-5" aria-label="Secciones de Finanzas">
+            {sections.map(({ value, description, icon: Icon }) => (
+              <TabsTrigger key={value} value={value} className="h-auto min-h-16 flex-col items-start justify-center gap-1 whitespace-normal px-3 py-2 text-left data-[state=active]:shadow-sm">
+                <span className="flex items-center gap-2 text-sm font-medium"><Icon className="h-4 w-4" aria-hidden="true" />{value}</span>
+                <span aria-hidden="true" className="text-left text-xs font-normal text-muted-foreground">{description}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </section>
+
+        <TabsContent value="Resumen" className="mt-0">
+          {finances.isLoading ? <FinanceLoadingState /> : null}
+          {!finances.isLoading && finances.error && !finances.summary ? <FinanceErrorState error={finances.error} onRetry={finances.refresh} /> : null}
+          {!finances.isLoading && finances.error && finances.summary ? <FinanceStaleDataAlert error={finances.error} generatedAt={finances.summary.generatedAt} onRetry={finances.refresh} /> : null}
+          {!finances.isLoading && finances.summary && isEmptySummary(finances.summary) ? <FinanceEmptyState /> : null}
+          {!finances.isLoading && finances.summary && !isEmptySummary(finances.summary) ? <FinanceSummary summary={finances.summary} /> : null}
+        </TabsContent>
+        <TabsContent value="Gastos" className="mt-0">{finances.organizationId ? <ExpensesPanel organizationId={finances.organizationId} branchId={selectedBranchId} filters={finances.filters} onChanged={finances.refresh} /> : <FinanceLoadingState />}</TabsContent>
+        <TabsContent value="Nómina" className="mt-0">{finances.organizationId ? <PayrollPanel organizationId={finances.organizationId} branchId={selectedBranchId} filters={finances.filters} onChanged={finances.refresh} /> : <FinanceLoadingState />}</TabsContent>
+        <TabsContent value="Rentabilidad" className="mt-0">{finances.organizationId ? <ProfitabilityPanel organizationId={finances.organizationId} filters={finances.filters} /> : <FinanceLoadingState />}</TabsContent>
+        <TabsContent value="Configuración" className="mt-0">{finances.organizationId ? <FinanceSettingsPanel organizationId={finances.organizationId} branchId={selectedBranchId} /> : <FinanceLoadingState />}</TabsContent>
+      </Tabs>
+    </div>
+  )
 }
