@@ -1367,7 +1367,9 @@ export interface FinanceSummaryRecords {
   sales: FinanceSaleRecord[]
   saleItems: FinanceSaleItemRecord[]
   salePayments?: FinanceSalePaymentRecord[]
+  creditPayments?: FinanceSalePaymentRecord[]
   salePaymentTimingAvailable?: boolean
+  creditPaymentTimingAvailable?: boolean
   repairs: FinanceRepairRecord[]
   repairParts: FinanceRepairPartRecord[]
   obligations: FinanceObligationRecord[]
@@ -1456,7 +1458,7 @@ function isUsedRepairPart(status: string | null | undefined): boolean {
 function isCompletedNonCreditSalePayment(payment: FinanceSalePaymentRecord): boolean {
   return (
     payment.status === 'completed' &&
-    !['credit', 'credito', 'crédito'].includes(payment.paymentMethod)
+    ['cash', 'card', 'transfer'].includes(payment.paymentMethod)
   )
 }
 
@@ -1567,7 +1569,7 @@ function buildFinancialSummary(
     )
     .map((entry) => ({ id: entry.id, amount: money(entry.netAmount), paidAmount: 0 }))
   const summary = calculateFinancialSummary({ revenue, directCosts, expenses, payroll })
-  const saleCollected = (records.salePayments ?? [])
+  const saleCollected = [...(records.salePayments ?? []), ...(records.creditPayments ?? [])]
     .filter(
       (payment) =>
         isInBranch(payment.branchId, filters) &&
@@ -1584,6 +1586,19 @@ function buildFinancialSummary(
           message: 'La venta no tiene un registro de cobro fechado disponible.',
           sourceId: sale.id,
         }))
+      : []),
+    ...(records.creditPaymentTimingAvailable === false
+      ? selectedSales
+          .filter((sale) =>
+            (records.salePayments ?? []).some(
+              (payment) => payment.saleId === sale.id && payment.paymentMethod === 'credit',
+            ),
+          )
+          .map((sale) => ({
+            code: 'MISSING_CASH_TIMING' as const,
+            message: 'La venta financiada no tiene un registro de cuota fechado disponible.',
+            sourceId: sale.id,
+          }))
       : []),
     ...selectedRepairs
       .filter((repair) => money(repair.paidAmount) > 0)
@@ -1792,12 +1807,21 @@ async function loadFinanceSummaryRecords(
     startDate,
     queryEndDate,
   )
+  const creditPaymentResult = await loadCreditInstallmentPayments(
+    admin,
+    organizationId,
+    filters,
+    startDate,
+    queryEndDate,
+  )
 
   return {
     sales,
     saleItems,
     salePayments: salePaymentResult.payments,
     salePaymentTimingAvailable: salePaymentResult.available,
+    creditPayments: creditPaymentResult.payments,
+    creditPaymentTimingAvailable: creditPaymentResult.available,
     repairs,
     repairParts,
     obligations: (obligationsResult.data ?? []).map((obligation) => ({
@@ -1889,6 +1913,57 @@ async function loadSalePayments(
   }
 }
 
+async function loadCreditInstallmentPayments(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  filters: FinanceFilters,
+  startDate: string,
+  endDate: string,
+): Promise<{ payments: FinanceSalePaymentRecord[]; available: boolean }> {
+  let query = admin
+    .from('credit_payments')
+    .select(
+      'amount, payment_method, created_at, customer_credits!inner(sale_id, branch_id, organization_id)',
+      { count: 'exact' },
+    )
+    .eq('customer_credits.organization_id', organizationId)
+    .not('customer_credits.sale_id', 'is', null)
+    .in('payment_method', ['cash', 'card', 'transfer'])
+    .gt('amount', 0)
+    .gte('created_at', startDate)
+    .lt('created_at', `${nextDay(endDate)}T00:00:00.000Z`)
+    .limit(FINANCE_REPORT_QUERY_LIMIT)
+  if (filters.branchId) query = query.eq('customer_credits.branch_id', filters.branchId)
+
+  const result = await query
+  if (result.error) {
+    if (isMissingTableError(result.error, 'credit_payments')) {
+      return { payments: [], available: false }
+    }
+    throw toFinanceApiError(result.error)
+  }
+  assertBoundedFinanceRows(result.data as unknown[] | null, 'cobros de cuotas', result.count)
+  return {
+    payments: (result.data ?? []).flatMap((payment) => {
+      const credit = Array.isArray(payment.customer_credits)
+        ? payment.customer_credits[0]
+        : payment.customer_credits
+      if (!credit?.sale_id) return []
+      return [{
+        saleId: String(credit.sale_id),
+        branchId: credit.branch_id ?? null,
+        paymentDate: String(payment.created_at),
+        paymentMethod: String(payment.payment_method ?? '').trim().toLowerCase(),
+        // This table has no reversal/status state; the current persisted row is
+        // admitted only when it is a positive settlement in a schema-valid method.
+        status: 'completed',
+        amount: money(payment.amount),
+      }]
+    }),
+    available: true,
+  }
+}
+
 async function loadSaleCostSnapshots(
   admin: ReturnType<typeof createAdminSupabase>,
   organizationId: string,
@@ -1898,25 +1973,30 @@ async function loadSaleCostSnapshots(
   const results = await Promise.all(
     chunkQueryValues(saleIds).map((ids) =>
       admin
-        .from('product_movements')
-        .select('reference_id, product_id, unit_cost, total_cost', { count: 'exact' })
+        .from('sale_item_cost_snapshots')
+        .select('sale_item_id, unit_cost', { count: 'exact' })
         .eq('organization_id', organizationId)
-        .eq('reference_type', 'sale')
-        .in('reference_id', ids)
+        .in('sale_id', ids)
         .limit(FINANCE_REPORT_QUERY_LIMIT),
     ),
   )
   const snapshots = new Map<string, number>()
   for (const result of results) {
-    if (result.error) throw toFinanceApiError(result.error)
+    if (result.error) {
+      // A deployment that has not yet applied the immutable-snapshot migration
+      // remains explicitly incomplete; the summary emits MISSING_DIRECT_COST
+      // instead of replacing history with products.purchase_price.
+      if (isMissingTableError(result.error, 'sale_item_cost_snapshots')) return snapshots
+      throw toFinanceApiError(result.error)
+    }
     assertBoundedFinanceRows(result.data as unknown[] | null, 'costos históricos de venta', result.count)
-    for (const movement of result.data ?? []) {
-      if (!movement.reference_id || !movement.product_id || movement.unit_cost === null) {
+    for (const snapshot of result.data ?? []) {
+      if (!snapshot.sale_item_id || snapshot.unit_cost === null) {
         continue
       }
       snapshots.set(
-        `${String(movement.reference_id)}:${String(movement.product_id)}`,
-        money(movement.unit_cost),
+        String(snapshot.sale_item_id),
+        money(snapshot.unit_cost),
       )
     }
   }
@@ -1953,7 +2033,7 @@ async function loadSaleItems(
     chunkQueryValues(saleIds).map((ids) =>
       admin
         .from('sale_items')
-        .select('sale_id, product_id, quantity, subtotal', { count: 'exact' })
+        .select('id, sale_id, product_id, quantity, subtotal', { count: 'exact' })
         .eq('organization_id', organizationId)
         .in('sale_id', ids)
         .limit(FINANCE_REPORT_QUERY_LIMIT),
@@ -1964,9 +2044,7 @@ async function loadSaleItems(
     if (result.error) throw toFinanceApiError(result.error)
     assertBoundedFinanceRows(result.data as unknown[] | null, 'items de venta', result.count)
     for (const item of result.data ?? []) {
-      const snapshotCost = costSnapshots.get(
-        `${String(item.sale_id)}:${String(item.product_id)}`,
-      )
+      const snapshotCost = costSnapshots.get(String(item.id))
       items.push(toFinanceSaleItemFromSnapshot({
         saleId: String(item.sale_id),
         productId: item.product_id ?? null,

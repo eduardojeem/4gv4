@@ -243,6 +243,62 @@ describe('canonical finance summary aggregation', () => {
     expect(result.cash.collected).toBe(0)
   })
 
+  it('counts only a dated valid credit installment payment as cash collected', () => {
+    const result = buildFinanceSummaryFromRecords(
+      {
+        sales: [{
+          id: 'credit-sale-with-installment',
+          branchId: 'branch-a',
+          createdAt: '2026-08-08T10:00:00Z',
+          status: 'completed',
+          totalAmount: 400,
+          paidAmount: 400,
+        }],
+        saleItems: [{ saleId: 'credit-sale-with-installment', quantity: 1, unitCost: 150 }],
+        repairs: [],
+        repairParts: [],
+        obligations: [],
+        payrollEntries: [],
+        financePayments: [],
+        payrollPayments: [],
+        salePayments: [{
+          saleId: 'credit-sale-with-installment',
+          branchId: 'branch-a',
+          paymentDate: '2026-08-08',
+          paymentMethod: 'credit',
+          status: 'completed',
+          amount: 400,
+        }],
+        creditPayments: [{
+          saleId: 'credit-sale-with-installment',
+          branchId: 'branch-a',
+          paymentDate: '2026-08-20',
+          paymentMethod: 'transfer',
+          status: 'completed',
+          amount: 125,
+        }, {
+          saleId: 'credit-sale-with-installment',
+          branchId: 'branch-a',
+          paymentDate: '2026-08-21',
+          paymentMethod: 'credit',
+          status: 'completed',
+          amount: 400,
+        }, {
+          saleId: 'credit-sale-with-installment',
+          branchId: 'branch-a',
+          paymentDate: '2026-08-22',
+          paymentMethod: 'cash',
+          status: 'voided',
+          amount: 30,
+        }],
+      } as unknown as FinanceSummaryRecords,
+      period,
+    )
+
+    expect(result.accrued.revenue).toBe(400)
+    expect(result.cash.collected).toBe(125)
+  })
+
   it('includes only installed or used repair parts in direct costs', () => {
     const result = buildFinanceSummaryFromRecords(
       {
