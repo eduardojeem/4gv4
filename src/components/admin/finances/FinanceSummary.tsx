@@ -66,6 +66,14 @@ function DueList({
 
 export function FinanceSummary({ summary }: { summary: FinanceSummaryReport }) {
   const [view, setView] = useState<'accrued' | 'cash'>('accrued')
+  const coverageWarnings = Array.from(
+    new Map(
+      summary.coverageWarnings.map((warning) => [
+        `${warning.code}:${warning.message}`,
+        warning,
+      ]),
+    ).values(),
+  )
 
   return (
     <div className="space-y-5">
@@ -111,13 +119,13 @@ export function FinanceSummary({ summary }: { summary: FinanceSummaryReport }) {
         </TabsContent>
       </Tabs>
 
-      {summary.coverageWarnings.length > 0 && (
+      {coverageWarnings.length > 0 && (
         <Alert variant="destructive">
           <AlertTriangle aria-hidden="true" />
           <AlertTitle>Faltan costos o datos para completar el resultado</AlertTitle>
           <AlertDescription>
             <ul role="list">
-              {summary.coverageWarnings.map((warning, index) => <li key={`${warning.code}-${warning.sourceId ?? index}`}>{warning.message}</li>)}
+              {coverageWarnings.map((warning) => <li key={`${warning.code}-${warning.message}`}>{warning.message}</li>)}
             </ul>
           </AlertDescription>
         </Alert>

@@ -147,6 +147,27 @@ describe('FinancesSystem', () => {
     expect(screen.getByRole('button', { name: 'Reintentar datos' })).toBeInTheDocument()
   })
 
+  it('groups repeated coverage messages into one clear warning', () => {
+    mockUseAdminFinances.mockReturnValue({
+      summary: {
+        ...summary,
+        coverageWarnings: [
+          { code: 'MISSING_DIRECT_COST', message: 'El ingreso no tiene un costo directo registrado.', sourceId: 'sale-a' },
+          { code: 'MISSING_DIRECT_COST', message: 'El ingreso no tiene un costo directo registrado.', sourceId: 'sale-b' },
+        ],
+      },
+      filters: summary.filters,
+      setFilters: vi.fn(),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    render(<FinancesSystem />)
+
+    expect(screen.getAllByText('El ingreso no tiene un costo directo registrado.')).toHaveLength(1)
+  })
+
   it('switches between devengado and caja metrics with accessible tabs', async () => {
     const user = userEvent.setup()
     mockUseAdminFinances.mockReturnValue({
