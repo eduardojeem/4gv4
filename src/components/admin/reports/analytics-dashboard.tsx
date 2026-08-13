@@ -548,8 +548,8 @@ export default function AnalyticsDashboard() {
           <div className="grid gap-3 sm:grid-cols-2">
             <MiniStat label="Entró" value={formatCurrency(snapshot.finance.grossRevenue)} tone="info" />
             <MiniStat label="Salió" value={formatCurrency(snapshot.finance.visibleExpenses)} tone="warning" />
-            <MiniStat label="Quedó" value={formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
-            <MiniStat label="Margen" value={`${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
+            <MiniStat label="Quedó" value={snapshot.finance.estimatedProfit === null ? 'Pendiente' : formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit === null ? 'warning' : snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
+            <MiniStat label="Margen" value={snapshot.finance.margin === null ? 'Pendiente' : `${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin === null ? 'warning' : snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
           </div>
 
           {!snapshot.finance.complete ? (

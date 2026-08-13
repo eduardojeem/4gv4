@@ -1,10 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 
-type Employee = { user_id: string; role: string }
+type Employee = { user_id: string; role: string; display_name: string }
 type Rule = {
   id: string
   scope_type: string
@@ -29,7 +29,10 @@ const statusLabel = {
   retired: 'Retirada',
 } as const
 
-export function FinanceSettingsPanel({ organizationId, branchId }: {
+export function FinanceSettingsPanel({
+  organizationId,
+  branchId,
+}: {
   organizationId: string
   branchId: string | null | undefined
 }) {
@@ -41,6 +44,7 @@ export function FinanceSettingsPanel({ organizationId, branchId }: {
   const [scopeType, setScopeType] = useState<'employee' | 'role'>('employee')
   const [sourceType, setSourceType] = useState<SourceType>('sale')
   const [accrualStatus, setAccrualStatus] = useState<'listo' | 'entregado'>('listo')
+  const formRef = useRef<HTMLFormElement>(null)
 
   const load = useCallback(async () => {
     const params = new URLSearchParams({ organizationId })
@@ -92,6 +96,11 @@ export function FinanceSettingsPanel({ organizationId, branchId }: {
       setError(payload?.error ?? 'No se pudo guardar la regla.')
       return
     }
+    // Reset the form after a successful save
+    formRef.current?.reset()
+    setScopeType('employee')
+    setSourceType('sale')
+    setAccrualStatus('listo')
     await load()
   }
 
@@ -129,25 +138,148 @@ export function FinanceSettingsPanel({ organizationId, branchId }: {
 
   const needsAccrualStatus = sourceType === 'repair' || sourceType === 'repair_labor'
 
-  return <section className="space-y-4 rounded-lg border p-4">
-    <div>
-      <h2 className="font-semibold">Configuración de comisiones</h2>
-      <p className="text-sm text-muted-foreground">Las excepciones individuales del empleado prevalecen sobre las reglas de rol. Solo las reglas aprobadas se aplican a la nómina.</p>
-    </div>
-    <form action={submit} className="grid gap-3 sm:grid-cols-2">
-      <label className="grid gap-1 text-sm font-medium">Alcance<select name="scopeType" value={scopeType} onChange={(event) => setScopeType(event.target.value as 'employee' | 'role')} className="rounded-md border bg-background px-3 py-2"><option value="employee">Empleado</option><option value="role">Rol</option></select></label>
-      {scopeType === 'employee' ? <label className="grid gap-1 text-sm font-medium">Empleado<select name="employeeId" required className="rounded-md border bg-background px-3 py-2"><option value="">Selecciona</option>{employees.map((employee) => <option key={employee.user_id} value={employee.user_id}>{employee.user_id}</option>)}</select></label> : <label className="grid gap-1 text-sm font-medium">Rol<select name="role" required className="rounded-md border bg-background px-3 py-2"><option value="">Selecciona</option>{['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'].map((role) => <option key={role} value={role}>{role}</option>)}</select></label>}
-      <label className="grid gap-1 text-sm font-medium">Origen<select aria-label="Origen" value={sourceType} onChange={(event) => setSourceType(event.target.value as SourceType)} className="rounded-md border bg-background px-3 py-2"><option value="sale">Venta</option><option value="repair">Reparación</option><option value="repair_labor">Mano de obra</option></select></label>
-      {needsAccrualStatus ? <label className="grid gap-1 text-sm font-medium">Estado de devengo<select aria-label="Estado de devengo" value={accrualStatus} onChange={(event) => setAccrualStatus(event.target.value as 'listo' | 'entregado')} className="rounded-md border bg-background px-3 py-2"><option value="listo">Listo</option><option value="entregado">Entregado</option></select></label> : null}
-      <label className="grid gap-1 text-sm font-medium">Cálculo<select name="calculationType" className="rounded-md border bg-background px-3 py-2"><option value="percentage">Porcentaje</option><option value="fixed">Monto fijo</option></select></label>
-      <label className="grid gap-1 text-sm font-medium">Valor<input name="value" type="number" min="0" step="0.01" required className="rounded-md border bg-background px-3 py-2" /></label>
-      <label className="grid gap-1 text-sm font-medium">Vigente desde<input name="effectiveFrom" type="date" required className="rounded-md border bg-background px-3 py-2" /></label>
-      {error ? <p role="alert" className="text-sm text-destructive sm:col-span-2">{error}</p> : null}
-      <div className="flex flex-wrap gap-2 sm:col-span-2">
-        <Button type="submit" name="status" value="draft" variant="outline" disabled={isSaving}>Guardar borrador</Button>
-        <Button type="submit" name="status" value="approved" disabled={isSaving}>{isSaving ? 'Guardando…' : 'Crear y aprobar regla'}</Button>
+  return (
+    <section className="space-y-4 rounded-lg border p-4">
+      <div>
+        <h2 className="font-semibold">Configuración de comisiones</h2>
+        <p className="text-sm text-muted-foreground">
+          Las excepciones individuales del empleado prevalecen sobre las reglas de rol. Solo las reglas aprobadas se aplican a la nómina.
+        </p>
       </div>
-    </form>
-    <ul className="divide-y text-sm">{rules.map((rule) => <li key={rule.id} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between"><div>{rule.scope_type === 'employee' ? `Empleado ${rule.employee_id}` : `Rol ${rule.role}`} · {rule.source_type} · {rule.calculation_type === 'percentage' ? `${rule.value}%` : `₲ ${rule.value}`}<span className="ml-2 text-muted-foreground">{statusLabel[rule.status]}</span></div>{rule.status === 'draft' ? <Button size="sm" variant="outline" onClick={() => void approveRule(rule)} disabled={approvingId === rule.id}>{approvingId === rule.id ? 'Aprobando…' : 'Aprobar regla'}</Button> : null}</li>)}</ul>
-  </section>
+
+      <form ref={formRef} action={submit} className="grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-1 text-sm font-medium">
+          Alcance
+          <select
+            name="scopeType"
+            value={scopeType}
+            onChange={(event) => setScopeType(event.target.value as 'employee' | 'role')}
+            className="rounded-md border bg-background px-3 py-2"
+          >
+            <option value="employee">Empleado</option>
+            <option value="role">Rol</option>
+          </select>
+        </label>
+
+        {scopeType === 'employee' ? (
+          <label className="grid gap-1 text-sm font-medium">
+            Empleado
+            <select name="employeeId" required className="rounded-md border bg-background px-3 py-2">
+              <option value="">Selecciona</option>
+              {employees.map((employee) => (
+                <option key={employee.user_id} value={employee.user_id}>
+                  {employee.display_name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <label className="grid gap-1 text-sm font-medium">
+            Rol
+            <select name="role" required className="rounded-md border bg-background px-3 py-2">
+              <option value="">Selecciona</option>
+              {['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'].map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <label className="grid gap-1 text-sm font-medium">
+          Origen
+          <select
+            aria-label="Origen"
+            value={sourceType}
+            onChange={(event) => setSourceType(event.target.value as SourceType)}
+            className="rounded-md border bg-background px-3 py-2"
+          >
+            <option value="sale">Venta</option>
+            <option value="repair">Reparación</option>
+            <option value="repair_labor">Mano de obra</option>
+          </select>
+        </label>
+
+        {needsAccrualStatus ? (
+          <label className="grid gap-1 text-sm font-medium">
+            Estado de devengo
+            <select
+              aria-label="Estado de devengo"
+              value={accrualStatus}
+              onChange={(event) => setAccrualStatus(event.target.value as 'listo' | 'entregado')}
+              className="rounded-md border bg-background px-3 py-2"
+            >
+              <option value="listo">Listo</option>
+              <option value="entregado">Entregado</option>
+            </select>
+          </label>
+        ) : null}
+
+        <label className="grid gap-1 text-sm font-medium">
+          Cálculo
+          <select name="calculationType" className="rounded-md border bg-background px-3 py-2">
+            <option value="percentage">Porcentaje</option>
+            <option value="fixed">Monto fijo</option>
+          </select>
+        </label>
+
+        <label className="grid gap-1 text-sm font-medium">
+          Valor
+          <input
+            name="value"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+            className="rounded-md border bg-background px-3 py-2"
+          />
+        </label>
+
+        <label className="grid gap-1 text-sm font-medium">
+          Vigente desde
+          <input
+            name="effectiveFrom"
+            type="date"
+            required
+            className="rounded-md border bg-background px-3 py-2"
+          />
+        </label>
+
+        {error ? <p role="alert" className="text-sm text-destructive sm:col-span-2">{error}</p> : null}
+
+        <div className="flex flex-wrap gap-2 sm:col-span-2">
+          <Button type="submit" name="status" value="draft" variant="outline" disabled={isSaving}>
+            Guardar borrador
+          </Button>
+          <Button type="submit" name="status" value="approved" disabled={isSaving}>
+            {isSaving ? 'Guardando…' : 'Crear y aprobar regla'}
+          </Button>
+        </div>
+      </form>
+
+      <ul className="divide-y text-sm">
+        {rules.map((rule) => (
+          <li key={rule.id} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              {rule.scope_type === 'employee'
+                ? `${employees.find((e) => e.user_id === rule.employee_id)?.display_name ?? rule.employee_id}`
+                : `Rol ${rule.role}`}
+              {' · '}{rule.source_type}
+              {' · '}{rule.calculation_type === 'percentage' ? `${rule.value}%` : `₲ ${rule.value}`}
+              <span className="ml-2 text-muted-foreground">{statusLabel[rule.status]}</span>
+            </div>
+            {rule.status === 'draft' ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void approveRule(rule)}
+                disabled={approvingId === rule.id}
+              >
+                {approvingId === rule.id ? 'Aprobando…' : 'Aprobar regla'}
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
 }

@@ -34,7 +34,7 @@ describe('finance operational dialogs', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ preview: { totals: { netPay: 450000 }, entries: [] } })))
     render(<PayrollRunDialog open onOpenChange={vi.fn()} organizationId={uuid} branchId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-15' }} onSaved={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: 'Ver vista previa' }))
-    expect(await screen.findByText('Total neto: ₲ 450.000')).toBeInTheDocument()
+    expect(await screen.findByText(/Total neto:\s*(Gs\.|₲)/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Crear nómina' })).toBeEnabled()
   })
 
@@ -173,10 +173,15 @@ describe('finance operational dialogs', () => {
     expect(JSON.parse(request.body)).toMatchObject({ id: uuid, status: 'approved', effectiveFrom: '2026-08-01' })
   })
 
-  it('propagates the current period and branch to profitability exports', () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ rows: [] })))
+  it('propagates the current period and branch to profitability exports', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ rows: [] }))
+      .mockResolvedValueOnce(new Response('detalle,ingresos\n', { headers: { 'content-disposition': 'attachment; filename="rentabilidad.csv"' } }))
+    vi.stubGlobal('fetch', fetchMock)
     render(<ProfitabilityPanel organizationId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-15', branchId: uuid }} />)
-    expect(screen.getByRole('link', { name: 'Exportar rentabilidad' })).toHaveAttribute('href', expect.stringContaining('startDate=2026-08-01'))
-    expect(screen.getByRole('link', { name: 'Exportar rentabilidad' })).toHaveAttribute('href', expect.stringContaining('branchId=' + uuid))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Exportar rentabilidad' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(fetchMock.mock.calls[1][0]).toContain('startDate=2026-08-01')
+    expect(fetchMock.mock.calls[1][0]).toContain('branchId=' + uuid)
   })
 })

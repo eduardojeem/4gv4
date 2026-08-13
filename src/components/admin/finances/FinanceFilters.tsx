@@ -1,7 +1,7 @@
 'use client'
 
 import type { DateRange } from 'react-day-picker'
-import { format, parseISO } from 'date-fns'
+import { format, isValid, parseISO } from 'date-fns'
 import { CalendarRange, RefreshCw } from 'lucide-react'
 
 import { BranchSelector } from '@/components/branches/branch-selector'
@@ -24,10 +24,15 @@ export function FinanceFilters({
   onDateRangeChange,
   onRefresh,
 }: FinanceFiltersProps) {
+  const fromDate = parseISO(filters.startDate)
+  const toDate = parseISO(filters.endDate)
   const dateRange: DateRange = {
-    from: parseISO(filters.startDate),
-    to: parseISO(filters.endDate),
+    from: isValid(fromDate) ? fromDate : undefined,
+    to: isValid(toDate) ? toDate : undefined,
   }
+
+  const fromLabel = isValid(fromDate) ? format(fromDate, 'dd/MM/yyyy') : '—'
+  const toLabel = isValid(toDate) ? format(toDate, 'dd/MM/yyyy') : '—'
 
   return (
     <Card className="border-border/70 shadow-sm">
@@ -50,7 +55,7 @@ export function FinanceFilters({
         </div>
         <p className="flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
           <CalendarRange className="h-4 w-4" />
-          {format(dateRange.from!, 'dd/MM/yyyy')} al {format(dateRange.to!, 'dd/MM/yyyy')}
+          {fromLabel} al {toLabel}
         </p>
       </CardContent>
     </Card>

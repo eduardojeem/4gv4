@@ -26,11 +26,13 @@ describe('admin reports financial integration', () => {
   it('keeps incomplete coverage visible in reports', () => {
     expect(reportsDashboard).toContain('Resultado financiero incompleto')
     expect(reportsDashboard).toContain('coverageWarnings')
+    expect(reportsDashboard).toContain("snapshot.finance.margin === null ? 'Pendiente'")
+    expect(reportsDashboard).toContain("snapshot.finance.estimatedProfit === null ? 'Pendiente'")
   })
 
   it('schedules only the idempotent global recurrence generator once per day', () => {
     expect(financeMigration).toContain("cron.unschedule('finance-recurring-obligations-daily')")
-    expect(financeMigration).toContain("cron.schedule(\n      'finance-recurring-obligations-daily',\n      '0 2 * * *',\n      'select public.generate_all_recurring_finance_obligations(current_date)'\n    )")
+    expect(financeMigration).toMatch(/cron\.schedule\(\s*'finance-recurring-obligations-daily',\s*'0 2 \* \* \*',\s*'select public\.generate_all_recurring_finance_obligations\(current_date\)'\s*\)/)
     expect(financeMigration).not.toContain('cron.schedule(\n      \'finance-recurring-obligations-daily\',\n      \'0 2 * * *\',\n      \'select public.generate_recurring_finance_obligations')
   })
 })

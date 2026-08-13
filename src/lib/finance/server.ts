@@ -659,7 +659,7 @@ export async function assertFinanceEmployeeMembership(params: {
 
 export async function listFinanceEmployees(organizationId: string) {
   const admin = createAdminSupabase()
-  const { data, error } = await admin
+  const { data: members, error } = await admin
     .from('organization_members')
     .select('user_id, role, status, created_at')
     .eq('organization_id', organizationId)
@@ -667,7 +667,23 @@ export async function listFinanceEmployees(organizationId: string) {
     .order('created_at', { ascending: true })
 
   if (error) throw toFinanceApiError(error)
-  return data ?? []
+  if (!members?.length) return []
+
+  const userIds = members.map((m) => m.user_id)
+  const { data: profiles } = await admin
+    .from('profiles')
+    .select('id, full_name, email')
+    .in('id', userIds)
+
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]))
+
+  return members.map((m) => {
+    const profile = profileMap.get(m.user_id)
+    return {
+      ...m,
+      display_name: profile?.full_name || profile?.email || m.user_id,
+    }
+  })
 }
 
 export async function listEmployeeCompensation(
@@ -1261,14 +1277,24 @@ export async function listPayrollRuns(
     : { data: [], error: null }
   if (entriesError) throw toFinanceApiError(entriesError)
 
+  const employeeIds = [...new Set((entries ?? []).map((e) => e.employee_id))]
+  const { data: profiles } = employeeIds.length
+    ? await admin.from('profiles').select('id, full_name, email').in('id', employeeIds)
+    : { data: [] }
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]))
+
   return (runs ?? []).map((run) => ({
     ...run,
     entries: (entries ?? [])
       .filter((entry) => entry.payroll_run_id === run.id)
-      .map((entry) => ({
-        ...entry,
-        outstanding_amount: Math.max(0, Number(entry.net_amount) - Number(entry.paid_amount)),
-      })),
+      .map((entry) => {
+        const profile = profileMap.get(entry.employee_id)
+        return {
+          ...entry,
+          outstanding_amount: Math.max(0, Number(entry.net_amount) - Number(entry.paid_amount)),
+          employee_display_name: profile?.full_name || profile?.email || entry.employee_id,
+        }
+      }),
   }))
 }
 

@@ -22,7 +22,7 @@ export const adminFinanceSummarySWRConfig = {
   revalidateIfStale: false,
   refreshInterval: 0,
   dedupingInterval: 60_000,
-  keepPreviousData: false,
+  keepPreviousData: true,
 } as const
 
 export function getAdminFinancesKey(filters: AdminFinanceFilters, organizationId: string) {

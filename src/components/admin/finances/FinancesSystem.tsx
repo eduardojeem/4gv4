@@ -32,7 +32,11 @@ type FinanceSection = (typeof sections)[number]['value']
 function isEmptySummary(summary: NonNullable<ReturnType<typeof useAdminFinances>['summary']>) {
   const accruedValues = [summary.accrued.revenue, summary.accrued.directCosts, summary.accrued.grossProfit, summary.accrued.operatingExpenses, summary.accrued.payrollCost, summary.accrued.netProfit]
   const cashValues = [summary.cash.collected, summary.cash.paid, summary.cash.netCashFlow]
-  return accruedValues.every((value) => value === null || value === 0) && cashValues.every((value) => value === 0) && summary.upcomingDue.length === 0 && summary.overdue.length === 0 && summary.coverageWarnings.length === 0 && summary.complete
+  const hasNoValues = accruedValues.every((value) => value === null || value === 0) && cashValues.every((value) => value === 0)
+  const hasNoAlerts = summary.upcomingDue.length === 0 && summary.overdue.length === 0 && summary.coverageWarnings.length === 0
+  // Only consider empty if there are absolutely no values AND no alerts AND data is confirmed complete.
+  // If complete=false but no values, show the summary (it will show the coverage warnings).
+  return hasNoValues && hasNoAlerts && summary.complete
 }
 
 export function FinancesSystem() {
@@ -85,7 +89,7 @@ export function FinancesSystem() {
           {!finances.isLoading && finances.error && !finances.summary ? <FinanceErrorState error={finances.error} onRetry={finances.refresh} /> : null}
           {!finances.isLoading && finances.error && finances.summary ? <FinanceStaleDataAlert error={finances.error} generatedAt={finances.summary.generatedAt} onRetry={finances.refresh} /> : null}
           {!finances.isLoading && finances.summary && isEmptySummary(finances.summary) ? <FinanceEmptyState /> : null}
-          {!finances.isLoading && finances.summary && !isEmptySummary(finances.summary) ? <FinanceSummary summary={finances.summary} /> : null}
+          {!finances.isLoading && finances.summary && !isEmptySummary(finances.summary) ? <FinanceSummary summary={finances.summary} onViewExpenses={() => setActiveTab('Gastos')} /> : null}
         </TabsContent>
         <TabsContent value="Gastos" className="mt-0">{finances.organizationId ? <ExpensesPanel organizationId={finances.organizationId} branchId={selectedBranchId} filters={finances.filters} onChanged={finances.refresh} /> : <FinanceLoadingState />}</TabsContent>
         <TabsContent value="Nómina" className="mt-0">{finances.organizationId ? <PayrollPanel organizationId={finances.organizationId} branchId={selectedBranchId} filters={finances.filters} onChanged={finances.refresh} /> : <FinanceLoadingState />}</TabsContent>
