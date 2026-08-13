@@ -1285,7 +1285,16 @@ export async function getPayrollEntryBranch(
     .maybeSingle()
   if (error) throw toFinanceApiError(error)
   if (!data) throw new FinanceApiError('La entrada de nómina no existe.', 404, 'PAYROLL_ENTRY_NOT_FOUND')
-  return data as { id: string; branch_id: string | null; payroll_run_id: string }
+  const entry = data as { id: string; branch_id: string | null; payroll_run_id: string }
+  const run = await getPayrollRunBranch(organizationId, entry.payroll_run_id)
+  if (entry.branch_id !== run.branch_id) {
+    throw new FinanceApiError(
+      'La entrada de nómina no coincide con el alcance de su corrida.',
+      422,
+      'PAYROLL_ENTRY_SCOPE_MISMATCH',
+    )
+  }
+  return entry
 }
 
 export async function createPayrollAdjustment(params: {
@@ -1318,12 +1327,13 @@ export async function payPayrollEntry(params: {
   organizationId: string
   payrollEntryId: string
   input: PayrollPaymentInput
+  branchId: string | null
   idempotencyKey: string
 }) {
   const supabase = await createClient()
   const { data, error } = await supabase.rpc(params.rpcName, {
     p_organization_id: params.organizationId,
-    p_branch_id: params.input.branchId,
+    p_branch_id: params.branchId,
     p_payroll_entry_id: params.payrollEntryId,
     p_amount: params.input.amount,
     p_payment_method: params.input.paymentMethod,

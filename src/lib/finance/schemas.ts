@@ -50,20 +50,22 @@ export const expenseInputSchema = z.object({
   recurrence: recurrenceSchema.optional(),
 })
 
-export const paymentInputSchema = z
-  .object({
-    branchId: uuidSchema,
-    amount: positiveAmountSchema,
-    paymentMethod: z.enum(['cash', 'bank_transfer', 'other'] satisfies [
-      FinancePaymentMethod,
-      ...FinancePaymentMethod[],
-    ]),
-    paymentDate: accountingDateSchema,
-    cashSessionId: uuidSchema.optional(),
-    reference: z.string().trim().min(1).max(200).optional(),
-    notes: z.string().trim().max(2_000).optional(),
-  })
-  .superRefine((payment, context) => {
+const paymentDetailsSchema = z.object({
+  amount: positiveAmountSchema,
+  paymentMethod: z.enum(['cash', 'bank_transfer', 'other'] satisfies [
+    FinancePaymentMethod,
+    ...FinancePaymentMethod[],
+  ]),
+  paymentDate: accountingDateSchema,
+  cashSessionId: uuidSchema.optional(),
+  reference: z.string().trim().min(1).max(200).optional(),
+  notes: z.string().trim().max(2_000).optional(),
+})
+
+function validatePaymentDetails(
+  payment: z.infer<typeof paymentDetailsSchema>,
+  context: z.RefinementCtx,
+) {
     if (payment.paymentMethod === 'cash' && !payment.cashSessionId) {
       context.addIssue({
         code: 'custom',
@@ -79,7 +81,11 @@ export const paymentInputSchema = z
         path: ['cashSessionId'],
       })
     }
-  })
+}
+
+export const paymentInputSchema = paymentDetailsSchema
+  .extend({ branchId: uuidSchema })
+  .superRefine(validatePaymentDetails)
 
 export const payrollRunIdSchema = uuidSchema
 
@@ -199,7 +205,9 @@ export const payrollAdjustmentInputSchema = z
     }
   })
 
-export const payrollPaymentInputSchema = paymentInputSchema
+export const payrollPaymentInputSchema = paymentDetailsSchema
+  .extend({ branchId: z.null().optional() })
+  .superRefine(validatePaymentDetails)
 
 export type ExpenseInput = z.infer<typeof expenseInputSchema>
 export type PaymentInput = z.infer<typeof paymentInputSchema>

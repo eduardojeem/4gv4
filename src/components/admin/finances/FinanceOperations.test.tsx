@@ -94,7 +94,9 @@ describe('finance operational dialogs', () => {
     await user.type(screen.getByLabelText('Fecha de pago'), '2026-08-15')
     await user.click(screen.getByRole('button', { name: 'Registrar pago' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(7))
-    expect(JSON.parse(fetchMock.mock.calls[5][1].body)).toMatchObject({ branchId: null, amount: 450000 })
+    const payment = JSON.parse(fetchMock.mock.calls[5][1].body)
+    expect(payment).toMatchObject({ amount: 450000 })
+    expect(payment).not.toHaveProperty('branchId')
   })
 
   it('requires explicit confirmation before approving a draft run', async () => {

@@ -5,6 +5,7 @@ import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { payrollPaymentInputSchema } from '@/lib/finance/schemas'
 import {
   assertFinanceBranchAccess,
+  getPayrollEntryBranch,
   payPayrollEntry,
   resolveFinanceOrganizationId,
   toFinanceApiError,
@@ -35,12 +36,14 @@ async function postHandler(request: NextRequest, context: AdminAuthContext, para
 
   try {
     const organizationId = await resolveFinanceOrganizationId(context, selection.data.organizationHeader ?? selection.data.organizationId)
-    await assertFinanceBranchAccess({ context, organizationId, branchId: body.data.branchId })
+    const entry = await getPayrollEntryBranch(organizationId, payrollEntryId.data)
+    if (entry.branch_id) await assertFinanceBranchAccess({ context, organizationId, branchId: entry.branch_id })
     const payment = await payPayrollEntry({
       rpcName: 'pay_payroll_entry_atomic',
       organizationId,
       payrollEntryId: payrollEntryId.data,
       input: body.data,
+      branchId: entry.branch_id,
       idempotencyKey: idempotencyKey.data,
     })
     return NextResponse.json(payment)

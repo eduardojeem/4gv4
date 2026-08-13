@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { expenseInputSchema, paymentInputSchema } from './schemas'
+import { expenseInputSchema, paymentInputSchema, payrollPaymentInputSchema } from './schemas'
 
 const branchId = 'c6ba2f4d-5ed0-41ca-94a4-a0926ea5c42d'
 const categoryId = '08e261aa-8cad-4432-a1a6-3f4a9cdb885d'
@@ -163,5 +163,22 @@ describe('paymentInputSchema', () => {
     })
 
     expect(result.success).toBe(false)
+  })
+})
+
+describe('payrollPaymentInputSchema', () => {
+  const payment = {
+    amount: 50_000,
+    paymentMethod: 'bank_transfer' as const,
+    paymentDate: '2026-08-11',
+  }
+
+  it('accepts omitted or null branch scope because the payroll entry owns it', () => {
+    expect(payrollPaymentInputSchema.safeParse(payment).success).toBe(true)
+    expect(payrollPaymentInputSchema.safeParse({ ...payment, branchId: null }).success).toBe(true)
+  })
+
+  it('rejects a client-provided branch identifier', () => {
+    expect(payrollPaymentInputSchema.safeParse({ ...payment, branchId }).success).toBe(false)
   })
 })

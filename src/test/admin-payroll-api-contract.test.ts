@@ -58,7 +58,15 @@ describe('admin payroll API contract', () => {
     expect(paymentRoute).toContain('payrollPaymentInputSchema.safeParse')
     expect(paymentRoute).toContain("'pay_payroll_entry_atomic'")
     expect(paymentRoute).toContain("request.headers.get('x-idempotency-key')")
+    expect(paymentRoute).toContain('getPayrollEntryBranch')
+    expect(paymentRoute).toContain('if (entry.branch_id) await assertFinanceBranchAccess')
+    expect(paymentRoute).toContain('branchId: entry.branch_id')
+    expect(paymentRoute).not.toContain('branchId: body.data.branchId')
     expect(paymentRoute).not.toContain(".from('cash_movements').insert")
+
+    const server = read('src/lib/finance/server.ts')
+    expect(server).toContain('if (entry.branch_id !== run.branch_id)')
+    expect(server).toContain('p_branch_id: params.branchId')
   })
 
   it('keeps payroll data organization scoped and records adjustments append-only', () => {

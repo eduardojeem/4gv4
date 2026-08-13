@@ -16,7 +16,8 @@ export function PaymentDialog({ open, onOpenChange, organizationId, obligationId
     if (isSubmitting) return
     setIsSubmitting(true); setError(null)
     idempotencyKeyRef.current ??= `payment-${crypto.randomUUID()}`
-    const response = await fetch(`${target}?organizationId=${organizationId}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-idempotency-key': idempotencyKeyRef.current }, body: JSON.stringify({ branchId, amount: Number(formData.get('amount')), paymentMethod: method, paymentDate: formData.get('paymentDate'), cashSessionId: method === 'cash' ? formData.get('cashSessionId') : undefined, reference: String(formData.get('reference')) || undefined }) })
+    const payment = { amount: Number(formData.get('amount')), paymentMethod: method, paymentDate: formData.get('paymentDate'), cashSessionId: method === 'cash' ? formData.get('cashSessionId') : undefined, reference: String(formData.get('reference')) || undefined }
+    const response = await fetch(`${target}?organizationId=${organizationId}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-idempotency-key': idempotencyKeyRef.current }, body: JSON.stringify(payrollEntryId ? payment : { ...payment, branchId }) })
     const payload = await response.json().catch(() => null) as { error?: string } | null
     setIsSubmitting(false)
     if (!response.ok) { setError(payload?.error ?? 'No se pudo registrar el pago.'); return }
