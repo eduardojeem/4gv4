@@ -1424,7 +1424,9 @@ select
   'cutover-current'
 from public.organization_members membership
 where membership.role <> 'customer'
-on conflict (organization_id, source_membership_id, source_event) do nothing;
+on conflict (organization_id, source_membership_id, source_event)
+  where source_membership_id is not null
+  do nothing;
 
 insert into public.employee_employment_events (
   organization_id,
@@ -1451,7 +1453,9 @@ select
 from public.organization_members membership
 where membership.role <> 'customer'
   and membership.status = 'suspended'
-on conflict (organization_id, source_membership_id, source_event) do nothing;
+on conflict (organization_id, source_membership_id, source_event)
+  where source_membership_id is not null
+  do nothing;
 
 create or replace function public.capture_commission_operation_attribution()
 returns trigger

@@ -58,6 +58,7 @@ describe('organization payroll and commission database', () => {
 
     expect(cutoverSeed).toContain('membership.role')
     expect(cutoverSeed).not.toContain('employment.employee_role')
+    expect(cutoverSeed.match(/on conflict \(organization_id, source_membership_id, source_event\)\s+where source_membership_id is not null\s+do nothing;/g)).toHaveLength(2)
   })
 
   it('keeps salary and approved commission rules effective dated and deterministic', () => {
