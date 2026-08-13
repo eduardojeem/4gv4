@@ -135,5 +135,6 @@ export function useAdminFinances() {
     error: organizationError ?? (error instanceof Error ? error : error ? new Error('No se pudo cargar el resumen financiero.') : null),
     refresh: () => mutate(),
     mutateSummary: mutate,
+    organizationId,
   }
 }

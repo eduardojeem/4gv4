@@ -1,0 +1,83 @@
+'use client'
+
+import { useState } from 'react'
+
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+
+type FinanceCategory = { id: string; name: string }
+
+export function ExpenseDialog({
+  open,
+  onOpenChange,
+  organizationId,
+  branchId,
+  categories,
+  onSaved,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  organizationId: string
+  branchId: string | null | undefined
+  categories: FinanceCategory[]
+  onSaved: () => void | Promise<void>
+}) {
+  const [recurring, setRecurring] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(formData: FormData) {
+    if (!branchId || isSubmitting) return
+    setIsSubmitting(true)
+    setError(null)
+    const recurrence = recurring ? {
+      frequency: String(formData.get('frequency')),
+      startsOn: String(formData.get('recurrenceStartsOn')),
+      endsOn: String(formData.get('recurrenceEndsOn')) || undefined,
+    } : undefined
+    const response = await fetch(`/api/admin/finances/obligations?organizationId=${organizationId}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(recurring ? { 'x-idempotency-key': `expense-${Date.now()}-${Math.random().toString(36).slice(2)}` } : {}) },
+      body: JSON.stringify({
+        branchId,
+        categoryId: formData.get('categoryId'),
+        amount: Number(formData.get('amount')),
+        concept: String(formData.get('concept')) || undefined,
+        accountingDate: formData.get('accountingDate'),
+        dueDate: String(formData.get('dueDate')) || undefined,
+        vendor: String(formData.get('vendor')) || undefined,
+        notes: String(formData.get('notes')) || undefined,
+        recurrence,
+      }),
+    })
+    const payload = await response.json().catch(() => null) as { error?: string } | null
+    setIsSubmitting(false)
+    if (!response.ok) {
+      setError(payload?.error ?? 'No se pudo guardar el gasto.')
+      return
+    }
+    await onSaved()
+    onOpenChange(false)
+  }
+
+  return <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
+      <DialogHeader><DialogTitle>Registrar gasto</DialogTitle><DialogDescription>Registra el compromiso; el pago se registra por separado.</DialogDescription></DialogHeader>
+      <form className="grid gap-4" action={submit}>
+        <label className="grid gap-1 text-sm font-medium">Concepto<input name="concept" required maxLength={200} className="rounded-md border bg-background px-3 py-2" /></label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="grid gap-1 text-sm font-medium">Monto<input name="amount" type="number" min="0.01" step="0.01" required className="rounded-md border bg-background px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm font-medium">Categoría<select name="categoryId" required defaultValue="" className="rounded-md border bg-background px-3 py-2"><option value="" disabled>Selecciona una categoría</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="grid gap-1 text-sm font-medium">Fecha contable<input name="accountingDate" type="date" required className="rounded-md border bg-background px-3 py-2" /></label><label className="grid gap-1 text-sm font-medium">Vencimiento<input name="dueDate" type="date" className="rounded-md border bg-background px-3 py-2" /></label></div>
+        <label className="grid gap-1 text-sm font-medium">Proveedor<input name="vendor" maxLength={200} className="rounded-md border bg-background px-3 py-2" /></label>
+        <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={recurring} onChange={(event) => setRecurring(event.target.checked)} />Repetir este gasto</label>
+        {recurring ? <div className="grid gap-4 rounded-md border p-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-medium">Frecuencia<select name="frequency" aria-label="Frecuencia" className="rounded-md border bg-background px-3 py-2"><option value="monthly">Mensual</option><option value="weekly">Semanal</option><option value="quarterly">Trimestral</option><option value="yearly">Anual</option></select></label><label className="grid gap-1 text-sm font-medium">Inicio de recurrencia<input name="recurrenceStartsOn" aria-label="Inicio de recurrencia" type="date" required className="rounded-md border bg-background px-3 py-2" /></label><label className="grid gap-1 text-sm font-medium sm:col-span-2">Fin de recurrencia (opcional)<input name="recurrenceEndsOn" type="date" className="rounded-md border bg-background px-3 py-2" /></label></div> : null}
+        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button type="submit" disabled={!branchId || isSubmitting}>{isSubmitting ? 'Guardando…' : 'Guardar gasto'}</Button></DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>
+}
+
+export type { FinanceCategory }
