@@ -16,6 +16,15 @@ type ActiveOrganizationResponse = {
   error?: string
 }
 
+export const adminFinanceSummarySWRConfig = {
+  revalidateOnFocus: false,
+  revalidateOnReconnect: false,
+  revalidateIfStale: false,
+  refreshInterval: 0,
+  dedupingInterval: 60_000,
+  keepPreviousData: false,
+} as const
+
 export function getAdminFinancesKey(filters: AdminFinanceFilters, organizationId: string) {
   const params = new URLSearchParams({
     startDate: filters.startDate,
@@ -109,7 +118,7 @@ export function useAdminFinances() {
   const { data, error, isLoading, isValidating, mutate } = useSWR<FinanceSummaryReport>(
     cacheKey,
     fetchFinanceSummary,
-    { revalidateOnFocus: false, keepPreviousData: false },
+    adminFinanceSummarySWRConfig,
   )
 
   const setFilters = useCallback((next: Partial<Pick<AdminFinanceFilters, 'startDate' | 'endDate'>>) => {
