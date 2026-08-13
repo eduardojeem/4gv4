@@ -51,6 +51,15 @@ describe('organization payroll and commission database', () => {
     expect(sql).toContain("membership.role <> 'customer'")
   })
 
+  it('uses the membership alias while seeding cutover employment events', () => {
+    const cutoverStart = sql.indexOf('-- the trigger is installed before the cutover snapshot.')
+    const cutoverEnd = sql.indexOf('create or replace function public.capture_commission_operation_attribution', cutoverStart)
+    const cutoverSeed = sql.slice(cutoverStart, cutoverEnd)
+
+    expect(cutoverSeed).toContain('membership.role')
+    expect(cutoverSeed).not.toContain('employment.employee_role')
+  })
+
   it('keeps salary and approved commission rules effective dated and deterministic', () => {
     expect(tableDefinition('employee_compensation')).toContain('effective_from date not null')
     expect(tableDefinition('employee_compensation')).toContain('effective_to date')

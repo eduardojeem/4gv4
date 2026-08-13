@@ -1416,7 +1416,7 @@ insert into public.employee_employment_events (
 select
   membership.organization_id,
   membership.user_id,
-  employment.employee_role,
+  membership.role,
   case when membership.status = 'suspended' then 'active' else membership.status end,
   membership.created_at,
   'cutover_best_available',
