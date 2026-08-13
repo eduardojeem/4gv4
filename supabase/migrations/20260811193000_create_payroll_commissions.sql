@@ -1736,7 +1736,7 @@ select
   sale.id,
   null,
   sale.created_by,
-  membership.role,
+  employment.employee_role,
   sale.created_at,
   coalesce(sale.total_amount, 0),
   0,

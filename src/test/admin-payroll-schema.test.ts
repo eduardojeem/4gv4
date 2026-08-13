@@ -118,6 +118,21 @@ describe('organization payroll and commission database', () => {
     expect(captureAttribution).toContain(
       'from public.employee_employment_events employment',
     )
+
+    const historicalOperationBackfillStart = sql.indexOf(
+      'insert into public.commission_operation_attributions (',
+      sql.indexOf('-- install attribution capture before the backfill'),
+    )
+    const historicalOperationBackfillEnd = sql.indexOf(
+      'insert into public.commission_sale_item_attributions (',
+      historicalOperationBackfillStart,
+    )
+    const historicalOperationBackfill = sql.slice(
+      historicalOperationBackfillStart,
+      historicalOperationBackfillEnd,
+    )
+    expect(historicalOperationBackfill).toContain('employment.employee_role')
+    expect(historicalOperationBackfill).not.toContain('membership.role')
     expect(captureAttribution).not.toContain(
       'from public.organization_members membership',
     )
