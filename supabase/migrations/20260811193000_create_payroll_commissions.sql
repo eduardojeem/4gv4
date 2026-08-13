@@ -3854,7 +3854,7 @@ select
   legacy.paid_by,
   coalesce(legacy.created_at, legacy.paid_at, now()),
   legacy.paid_by,
-  coalesce(legacy.approved_at, legacy.paid_at, legacy.created_at, now()),
+  coalesce(legacy.paid_at, legacy.created_at, now()),
   coalesce(legacy.created_at, now()),
   coalesce(legacy.updated_at, now())
 from public.technician_payments legacy
