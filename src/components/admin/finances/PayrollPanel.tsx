@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import type { AdminFinanceFilters } from '@/hooks/use-admin-finances'
 import { PaymentDialog } from './PaymentDialog'
 import { PayrollRunDialog } from './PayrollRunDialog'
@@ -47,10 +48,13 @@ export function PayrollPanel({ organizationId, branchId, filters, onChanged }: {
   const [error, setError] = useState<string | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [confirmingRunId, setConfirmingRunId] = useState<string | null>(null)
+  const [scope, setScope] = useState({ branchId, isOrganizationWide: false })
+  const isOrganizationWide = scope.branchId === branchId && scope.isOrganizationWide
+  const activeBranchId = isOrganizationWide ? null : branchId
 
   const loadRuns = useCallback(async () => {
     const params = new URLSearchParams({ organizationId, periodFrom: filters.startDate, periodTo: filters.endDate })
-    if (branchId) params.set('branchId', branchId)
+    if (activeBranchId) params.set('branchId', activeBranchId)
     const response = await fetch(`/api/admin/finances/payroll/runs?${params.toString()}`)
     const payload = await response.json().catch(() => null) as { runs?: PayrollRun[]; error?: string } | null
     if (!response.ok) {
@@ -59,7 +63,7 @@ export function PayrollPanel({ organizationId, branchId, filters, onChanged }: {
     }
     setError(null)
     setRuns(payload?.runs ?? [])
-  }, [branchId, filters.endDate, filters.startDate, organizationId])
+  }, [activeBranchId, filters.endDate, filters.startDate, organizationId])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadRuns() }, [loadRuns])
@@ -93,6 +97,13 @@ export function PayrollPanel({ organizationId, branchId, filters, onChanged }: {
       <div><h2 className="font-semibold">Nómina</h2><p className="text-sm text-muted-foreground">La vista previa refleja salarios y comisiones devengadas por el servidor. Los pagos parciales usan el saldo autorizado de cada entrada.</p></div>
       <Button onClick={() => setOpen(true)}>Preparar nómina</Button>
     </div>
+    <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+      <div>
+        <label htmlFor="payroll-organization-wide" className="text-sm font-medium">Toda la organización</label>
+        <p className="text-xs text-muted-foreground">{isOrganizationWide ? 'Incluye todas las sucursales.' : 'Usa la sucursal seleccionada actualmente.'}</p>
+      </div>
+      <Switch id="payroll-organization-wide" checked={isOrganizationWide} onCheckedChange={(checked) => setScope({ branchId, isOrganizationWide: checked })} />
+    </div>
     {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
     <div className="space-y-3">
       {runs.map((run) => <article key={run.id} className="rounded-md border p-3">
@@ -101,8 +112,8 @@ export function PayrollPanel({ organizationId, branchId, filters, onChanged }: {
       </article>)}
       {!runs.length && !error ? <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No hay corridas de nómina para este período.</p> : null}
     </div>
-    <PayrollRunDialog open={open} onOpenChange={setOpen} organizationId={organizationId} branchId={branchId} filters={filters} onSaved={changed} />
-    <PaymentDialog open={Boolean(paying)} onOpenChange={(nextOpen) => !nextOpen && setPaying(null)} organizationId={organizationId} payrollEntryId={paying?.id} branchId={branchId} outstandingAmount={paying?.outstanding_amount} onSaved={changed} />
+    <PayrollRunDialog open={open} onOpenChange={setOpen} organizationId={organizationId} branchId={activeBranchId} filters={filters} onSaved={changed} />
+    <PaymentDialog open={Boolean(paying)} onOpenChange={(nextOpen) => !nextOpen && setPaying(null)} organizationId={organizationId} payrollEntryId={paying?.id} branchId={activeBranchId} outstandingAmount={paying?.outstanding_amount} onSaved={changed} />
     <AlertDialog open={Boolean(confirmingRunId)} onOpenChange={(nextOpen) => { if (!nextOpen && !approvingId) setConfirmingRunId(null) }}>
       <AlertDialogContent>
         <AlertDialogHeader>

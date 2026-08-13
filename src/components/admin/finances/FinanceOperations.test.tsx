@@ -54,6 +54,49 @@ describe('finance operational dialogs', () => {
     expect(JSON.parse(request.body)).toMatchObject({ periodFrom: '2026-08-01', periodTo: '2026-08-15', branchId: null })
   })
 
+  it('switches payroll from the current branch to the organization-wide creation and payment flows', async () => {
+    const user = userEvent.setup()
+    const runId = '22222222-2222-4222-8222-222222222222'
+    const entryId = '33333333-3333-4333-8333-333333333333'
+    const approvedRun = {
+      id: runId,
+      status: 'approved',
+      period_from: '2026-08-01',
+      period_to: '2026-08-15',
+      entries: [{ id: entryId, employee_id: uuid, employee_role: 'seller', net_amount: 450000, paid_amount: 0, outstanding_amount: 450000, payment_status: 'pending' }],
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ runs: [] }))
+      .mockResolvedValueOnce(json({ runs: [] }))
+      .mockResolvedValueOnce(json({ preview: { totals: { netPay: 450000 }, entries: [] } }))
+      .mockResolvedValueOnce(json({}, 201))
+      .mockResolvedValueOnce(json({ runs: [approvedRun] }))
+      .mockResolvedValueOnce(json({}, 201))
+      .mockResolvedValueOnce(json({ runs: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PayrollPanel organizationId={uuid} branchId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-15', branchId: uuid }} onChanged={vi.fn()} />)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(fetchMock.mock.calls[0][0]).toContain(`branchId=${uuid}`)
+
+    await user.click(screen.getByRole('switch', { name: 'Toda la organización' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(fetchMock.mock.calls[1][0]).not.toContain('branchId=')
+
+    await user.click(screen.getByRole('button', { name: 'Preparar nómina' }))
+    await user.click(screen.getByRole('button', { name: 'Ver vista previa' }))
+    await user.click(await screen.findByRole('button', { name: 'Crear nómina' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5))
+    expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toMatchObject({ branchId: null })
+
+    await user.click(await screen.findByRole('button', { name: 'Pago parcial' }))
+    await user.type(screen.getByLabelText('Monto'), '450000')
+    await user.type(screen.getByLabelText('Fecha de pago'), '2026-08-15')
+    await user.click(screen.getByRole('button', { name: 'Registrar pago' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(7))
+    expect(JSON.parse(fetchMock.mock.calls[5][1].body)).toMatchObject({ branchId: null, amount: 450000 })
+  })
+
   it('requires explicit confirmation before approving a draft run', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn()
