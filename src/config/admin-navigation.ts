@@ -11,6 +11,7 @@ import {
     Building2,
     CreditCard,
     Star,
+    WalletCards,
     type LucideIcon
 } from 'lucide-react'
 
@@ -113,6 +114,14 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/admin/branches',
                 description: 'Gestión multi sucursal y cobertura operativa',
                 permissions: ['settings.read']
+            },
+            {
+                key: 'finances',
+                label: 'Finanzas',
+                icon: WalletCards,
+                href: '/admin/finances',
+                description: 'GestiÃ³n de gastos, nÃ³mina y rentabilidad',
+                permissions: ['finances.read']
             },
             {
                 key: 'subscriptions',

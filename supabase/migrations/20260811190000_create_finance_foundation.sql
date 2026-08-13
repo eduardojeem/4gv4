@@ -1936,6 +1936,32 @@ from public, anon, authenticated;
 revoke all on function public.seed_default_finance_categories_for_organization()
 from public, anon, authenticated;
 
+-- The generator is idempotent by organization, template, and accounting period.
+-- Replace the named job on replays so the schedule itself is also idempotent.
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.unschedule('finance-recurring-obligations-daily')
+    where exists (
+      select 1
+      from cron.job
+      where jobname = 'finance-recurring-obligations-daily'
+    );
+
+    perform cron.schedule(
+      'finance-recurring-obligations-daily',
+      '0 2 * * *',
+      'select public.generate_all_recurring_finance_obligations(current_date)'
+    );
+  else
+    raise warning 'pg_cron is unavailable; recurring finance generation remains available on demand.';
+  end if;
+exception
+  when others then
+    raise warning 'could not schedule finance recurrence generation: %', sqlerrm;
+end;
+$$;
+
 revoke all on table public.cash_movements from authenticated;
 grant select, insert, update, delete on table public.cash_movements to authenticated;
 revoke all on table public.cash_movements from service_role;

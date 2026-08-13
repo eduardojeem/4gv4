@@ -8,6 +8,7 @@ import {
   type BranchInventoryClient,
 } from '@/lib/branches/inventory'
 import { chunkQueryValues } from '@/lib/analytics/query-batches'
+import type { FinanceSummaryReport } from '@/lib/finance/server'
 
 export type AnalyticsPreset = 'today' | '7d' | '30d' | '90d' | 'custom'
 const ANALYTICS_CACHE_TTL_MS = 5 * 60 * 1000
@@ -45,7 +46,6 @@ export interface TrendPoint {
   posRevenue: number
   repairRevenue: number
   grossRevenue: number
-  estimatedProfit: number
   orders: number
 }
 
@@ -125,13 +125,19 @@ export interface AdminAnalyticsSnapshot {
     revenue: number
   }
   finance: {
-    grossRevenue: number
+    operationalRevenue: number
     posRevenue: number
     repairsRevenue: number
+    accruedRevenue: number
+    accruedExpenses: number
+    netProfit: number | null
+    margin: number | null
+    grossRevenue: number
     visibleExpenses: number
-    estimatedProfit: number
-    margin: number
+    estimatedProfit: number | null
     growth: number | null
+    complete: boolean
+    coverageWarnings: FinanceSummaryReport['coverageWarnings']
   }
 }
 
@@ -195,13 +201,19 @@ const EMPTY_SNAPSHOT: AdminAnalyticsSnapshot = {
     revenue: 0,
   },
   finance: {
-    grossRevenue: 0,
+    operationalRevenue: 0,
     posRevenue: 0,
     repairsRevenue: 0,
+    accruedRevenue: 0,
+    accruedExpenses: 0,
+    netProfit: null,
+    margin: null,
+    grossRevenue: 0,
     visibleExpenses: 0,
-    estimatedProfit: 0,
-    margin: 0,
+    estimatedProfit: null,
     growth: null,
+    complete: true,
+    coverageWarnings: [],
   },
 }
 
@@ -362,6 +374,24 @@ function maxDate(a: Date, b: Date): Date {
   return a.getTime() >= b.getTime() ? a : b
 }
 
+async function fetchFinanceSummary(filters: AdminAnalyticsFilters): Promise<FinanceSummaryReport> {
+  const params = new URLSearchParams({
+    startDate: format(startOfDay(filters.from), 'yyyy-MM-dd'),
+    endDate: format(endOfDay(filters.to), 'yyyy-MM-dd'),
+  })
+  if (filters.branch !== 'all') {
+    params.set('branchId', filters.branch)
+  }
+
+  const response = await fetch(`/api/admin/finances/summary?${params.toString()}`)
+  const payload = await response.json().catch(() => null) as FinanceSummaryReport | { error?: string } | null
+  if (!response.ok || !payload || !('accrued' in payload)) {
+    throw new Error(payload && 'error' in payload ? payload.error : 'No se pudo cargar el resumen financiero.')
+  }
+
+  return payload
+}
+
 function sumSales(records: SaleRecord[]): number {
   return records.reduce((sum, record) => {
     return sum + toNumber(record.total_amount ?? record.total ?? record.subtotal)
@@ -388,7 +418,9 @@ function createFallbackInsight(snapshot: AdminAnalyticsSnapshot): AnalyticsInsig
     tone: 'info',
     title: 'Todo en orden',
     description: 'No hay alertas importantes en este periodo. Buen momento para revisar márgenes, inventario y si los clientes están volviendo.',
-    context: `Margen actual ${snapshot.finance.margin.toFixed(1)}%`,
+    context: snapshot.finance.margin === null
+      ? 'Resultado financiero pendiente de cobertura completa'
+      : `Margen actual ${snapshot.finance.margin.toFixed(1)}%`,
   }
 }
 
@@ -525,6 +557,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         productMovementsResponse,
         currentCustomersCountResponse,
         previousCustomersCountResponse,
+        financeSummary,
       ] = await Promise.all([
         // Sales: only select needed fields (not full row)
         supabase
@@ -584,6 +617,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           .select('*', { count: 'exact', head: true })
           .gte('created_at', previousFrom.toISOString())
           .lte('created_at', previousTo.toISOString()),
+        fetchFinanceSummary(filters),
       ])
 
       if (salesWindowResponse.error) throw salesWindowResponse.error
@@ -629,7 +663,6 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       // para conteos operativos y el gráfico de estados, que sí deben mostrar
       // las canceladas como una categoría más.
       const revenueRepairs = selectedRepairs.filter((repair) => !isCancelledRepairStatus(repair.status))
-      const previousRevenueRepairs = previousRepairs.filter((repair) => !isCancelledRepairStatus(repair.status))
       const allClosures = (cashClosuresResponse.data || []) as CashClosureRecord[]
       const allMovements = (cashMovementsResponse.data || []) as CashMovementRecord[]
       const allAlerts = (cashAlertsResponse.data || []) as CashAlertRecord[]
@@ -791,28 +824,25 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         return sum + toNumber(repair.final_cost ?? repair.estimated_cost)
       }, 0)
       const currentGrossRevenue = selectedPosRevenue + selectedRepairRevenue
-      const previousGrossRevenue = sumSales(previousSales) + previousRevenueRepairs.reduce((sum, repair) => {
-        return sum + toNumber(repair.final_cost ?? repair.estimated_cost)
-      }, 0)
-
-      const costOfGoods = selectedSaleItems.reduce((sum, item) => {
-        const quantity = toNumber(item.quantity)
-        const purchasePrice = toNumber(item.product?.purchase_price)
-        return sum + (quantity * purchasePrice)
-      }, 0)
       // Costo directo de repuestos: solo de las que facturan. Contar el costo
       // de una cancelada (sin contar su ingreso) hundiría la ganancia estimada.
-      const repairDirectCost = revenueRepairs.reduce((sum, repair) => sum + toNumber(repair.parts_cost), 0)
       const withdrawals = scopedMovements
         .filter((movement) => movement.type === 'cash_out')
         .reduce((sum, movement) => sum + toNumber(movement.amount), 0)
       const deposits = scopedMovements
         .filter((movement) => movement.type === 'cash_in')
         .reduce((sum, movement) => sum + toNumber(movement.amount), 0)
-      const visibleExpenses = costOfGoods + repairDirectCost + withdrawals
-      const estimatedProfit = currentGrossRevenue - visibleExpenses
-      const margin = currentGrossRevenue > 0 ? (estimatedProfit / currentGrossRevenue) * 100 : 0
-      const growth = percentChange(currentGrossRevenue, previousGrossRevenue)
+      const financeExpenses =
+        financeSummary.accrued.directCosts +
+        financeSummary.accrued.operatingExpenses +
+        financeSummary.accrued.payrollCost
+      const financeMargin = financeSummary.accrued.netProfit === null || financeSummary.accrued.revenue <= 0
+        ? null
+        : (financeSummary.accrued.netProfit / financeSummary.accrued.revenue) * 100
+      const financeGrowth = percentChange(
+        financeSummary.accrued.revenue,
+        financeSummary.comparison.accrued.revenue,
+      )
 
       const selectedOrderCount = selectedSales.length
       const averageTicket = selectedOrderCount > 0 ? selectedPosRevenue / selectedOrderCount : 0
@@ -1034,11 +1064,6 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       const trendMap = new Map<string, TrendPoint>()
 
       // Pre-build sale lookup map for O(1) access in trend builder (avoids O(n²))
-      const saleByIdMap = new Map<string, SaleRecord>()
-      selectedSales.forEach((sale) => {
-        saleByIdMap.set(String(sale.id), sale)
-      })
-
       selectedSales.forEach((sale) => {
         const saleDate = toDate(sale.created_at)
         if (!saleDate) return
@@ -1053,7 +1078,6 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           posRevenue: 0,
           repairRevenue: 0,
           grossRevenue: 0,
-          estimatedProfit: 0,
           orders: 0,
         }
         const total = toNumber(sale.total_amount ?? sale.total)
@@ -1078,39 +1102,17 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           posRevenue: 0,
           repairRevenue: 0,
           grossRevenue: 0,
-          estimatedProfit: 0,
           orders: 0,
         }
         const repairRevenue = toNumber(repair.final_cost ?? repair.estimated_cost)
-        const repairCost = toNumber(repair.parts_cost)
         current.repairRevenue += repairRevenue
         current.grossRevenue += repairRevenue
-        current.estimatedProfit += repairRevenue - repairCost
-        trendMap.set(key, current)
-      })
-
-      selectedSaleItems.forEach((item) => {
-        const parentSale = saleByIdMap.get(String(item.sale_id))
-        const parentDate = toDate(parentSale?.created_at)
-        if (!parentDate) return
-        const bucketDate = useWeeklyBuckets
-          ? startOfDay(subDays(parentDate, parentDate.getDay()))
-          : startOfDay(parentDate)
-        const key = bucketDate.toISOString()
-        const current = trendMap.get(key)
-        if (!current) return
-        const quantity = toNumber(item.quantity)
-        const purchasePrice = toNumber(item.product?.purchase_price)
-        current.estimatedProfit += toNumber(item.subtotal ?? item.total ?? quantity * toNumber(item.unit_price)) - (quantity * purchasePrice)
         trendMap.set(key, current)
       })
 
       const salesTrend = Array.from(trendMap.entries())
         .sort((left, right) => new Date(left[0]).getTime() - new Date(right[0]).getTime())
-        .map(([, value]) => ({
-          ...value,
-          estimatedProfit: Math.max(value.estimatedProfit, 0),
-        }))
+        .map(([, value]) => value)
 
       const hourlySalesMap = new Map<number, number>()
       selectedSales.forEach((sale) => {
@@ -1125,28 +1127,23 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         value: hourlySalesMap.get(hour) || 0,
       }))
 
-      const financeComparison: FinanceComparisonPoint[] = (() => {
-        // Calculate previous period expenses using current margin ratio as estimate
-        // This is more accurate than a hardcoded 32% because it uses the real current margin
-        const currentMarginRatio = currentGrossRevenue > 0 ? visibleExpenses / currentGrossRevenue : 0.68
-        const previousEstimatedExpenses = previousGrossRevenue * currentMarginRatio
-        const previousEstimatedProfit = previousGrossRevenue - previousEstimatedExpenses
-
-        return [
-          {
-            label: 'Actual',
-            ingresos: currentGrossRevenue,
-            egresos: visibleExpenses,
-            ganancia: estimatedProfit,
-          },
-          {
-            label: 'Anterior',
-            ingresos: previousGrossRevenue,
-            egresos: Math.max(previousEstimatedExpenses, 0),
-            ganancia: Math.max(previousEstimatedProfit, 0),
-          },
-        ]
-      })()
+      const financeComparison: FinanceComparisonPoint[] = [
+        {
+          label: 'Actual',
+          ingresos: financeSummary.accrued.revenue,
+          egresos: financeExpenses,
+          ganancia: financeSummary.accrued.netProfit ?? 0,
+        },
+        {
+          label: 'Anterior',
+          ingresos: financeSummary.comparison.accrued.revenue,
+          egresos:
+            financeSummary.comparison.accrued.directCosts +
+            financeSummary.comparison.accrued.operatingExpenses +
+            financeSummary.comparison.accrued.payrollCost,
+          ganancia: financeSummary.comparison.accrued.netProfit ?? 0,
+        },
+      ]
 
       const avgCycleDaysBase = Array.from(technicianStats.values()).reduce((sum, technician) => {
         return sum + technician.cycleDays
@@ -1164,7 +1161,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
             label: 'Total vendido',
             value: formatMoney(currentGrossRevenue),
             rawValue: currentGrossRevenue,
-            delta: growth,
+            delta: financeGrowth,
             tone: currentGrossRevenue > 0 ? 'info' : 'neutral',
             helper: 'Ventas + reparaciones del periodo',
           },
@@ -1189,10 +1186,10 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           {
             id: 'margin',
             label: 'Margen de ganancia',
-            value: `${margin.toFixed(1)}%`,
-            rawValue: margin,
+            value: financeMargin === null ? 'Pendiente' : `${financeMargin.toFixed(1)}%`,
+            rawValue: financeMargin ?? 0,
             delta: null,
-            tone: margin >= 20 ? 'success' : margin >= 10 ? 'warning' : 'danger',
+            tone: financeMargin === null ? 'warning' : financeMargin >= 20 ? 'success' : financeMargin >= 10 ? 'warning' : 'danger',
             helper: 'Lo que queda después de costos y retiros',
           },
           {
@@ -1263,13 +1260,19 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           revenue: selectedRepairRevenue,
         },
         finance: {
-          grossRevenue: currentGrossRevenue,
+          operationalRevenue: currentGrossRevenue,
           posRevenue: selectedPosRevenue,
           repairsRevenue: selectedRepairRevenue,
-          visibleExpenses,
-          estimatedProfit,
-          margin,
-          growth,
+          accruedRevenue: financeSummary.accrued.revenue,
+          accruedExpenses: financeExpenses,
+          netProfit: financeSummary.accrued.netProfit,
+          margin: financeMargin,
+          grossRevenue: financeSummary.accrued.revenue,
+          visibleExpenses: financeExpenses,
+          estimatedProfit: financeSummary.accrued.netProfit,
+          growth: financeGrowth,
+          complete: financeSummary.complete,
+          coverageWarnings: financeSummary.coverageWarnings,
         },
       }
 
@@ -1298,7 +1301,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         error: 'No se pudo construir el dashboard analytics con los datos actuales.',
       }))
     }
-  }, [filters.branch, filters.from, filters.to, supabase, isCacheFresh, filterKey])
+  }, [filters, supabase, isCacheFresh, filterKey])
 
   useEffect(() => {
     fetchAnalytics('initial')

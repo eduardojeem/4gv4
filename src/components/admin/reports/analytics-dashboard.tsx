@@ -484,8 +484,8 @@ export default function AnalyticsDashboard() {
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_280px]">
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-3">
-                  <MiniStat label="Total vendido" value={formatCurrency(snapshot.finance.grossRevenue)} tone="info" />
-                  <MiniStat label="Ganancia estimada" value={formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
+                  <MiniStat label="Total vendido" value={formatCurrency(snapshot.finance.operationalRevenue)} tone="info" />
+                  <MiniStat label="Ganancia neta devengada" value={snapshot.finance.netProfit === null ? 'Pendiente' : formatCurrency(snapshot.finance.netProfit)} tone={snapshot.finance.netProfit === null ? 'warning' : snapshot.finance.netProfit >= 0 ? 'success' : 'danger'} />
                   <MiniStat label="vs. periodo anterior" value={formatPercent(snapshot.finance.growth)} tone={snapshot.finance.growth !== null && snapshot.finance.growth >= 0 ? 'success' : 'warning'} />
                 </div>
 
@@ -551,6 +551,13 @@ export default function AnalyticsDashboard() {
             <MiniStat label="Quedó" value={formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
             <MiniStat label="Margen" value={`${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
           </div>
+
+          {!snapshot.finance.complete ? (
+            <div role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+              <p className="font-semibold">Resultado financiero incompleto</p>
+              <p className="mt-1">{snapshot.finance.coverageWarnings[0]?.message || 'Faltan costos o cobros fechados para completar el resultado.'}</p>
+            </div>
+          ) : null}
 
           <div ref={financeRef} className="mt-6 h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
