@@ -1,11 +1,84 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+
 import { Button } from '@/components/ui/button'
 import type { AdminFinanceFilters } from '@/hooks/use-admin-finances'
+import { PaymentDialog } from './PaymentDialog'
 import { PayrollRunDialog } from './PayrollRunDialog'
 
-export function PayrollPanel({ organizationId, branchId, filters, onChanged }: { organizationId: string; branchId: string | null | undefined; filters: AdminFinanceFilters; onChanged: () => unknown | Promise<unknown> }) {
+type PayrollEntry = {
+  id: string
+  employee_id: string
+  employee_role: string
+  net_amount: number
+  paid_amount: number
+  outstanding_amount: number
+  payment_status: string
+}
+type PayrollRun = {
+  id: string
+  status: 'draft' | 'approved' | 'voided'
+  period_from: string
+  period_to: string
+  entries: PayrollEntry[]
+}
+const money = (amount: number) => `₲ ${Math.round(amount).toLocaleString('es-PY')}`
+
+export function PayrollPanel({ organizationId, branchId, filters, onChanged }: {
+  organizationId: string
+  branchId: string | null | undefined
+  filters: AdminFinanceFilters
+  onChanged: () => unknown | Promise<unknown>
+}) {
   const [open, setOpen] = useState(false)
-  return <section className="space-y-4 rounded-lg border p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Nómina</h2><p className="text-sm text-muted-foreground">La vista previa refleja salarios y comisiones devengadas por el servidor. Los pagos se registran después de aprobar.</p></div><Button onClick={() => setOpen(true)} disabled={!branchId}>Preparar nómina</Button></div><PayrollRunDialog open={open} onOpenChange={setOpen} organizationId={organizationId} branchId={branchId} filters={filters} onSaved={onChanged} /></section>
+  const [runs, setRuns] = useState<PayrollRun[]>([])
+  const [paying, setPaying] = useState<PayrollEntry | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [approvingId, setApprovingId] = useState<string | null>(null)
+
+  const loadRuns = useCallback(async () => {
+    const params = new URLSearchParams({ organizationId, periodFrom: filters.startDate, periodTo: filters.endDate })
+    if (branchId) params.set('branchId', branchId)
+    const response = await fetch(`/api/admin/finances/payroll/runs?${params.toString()}`)
+    const payload = await response.json().catch(() => null) as { runs?: PayrollRun[]; error?: string } | null
+    if (!response.ok) { setError(payload?.error ?? 'No se pudieron cargar las nóminas.'); return }
+    setError(null)
+    setRuns(payload?.runs ?? [])
+  }, [branchId, filters.endDate, filters.startDate, organizationId])
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void loadRuns() }, [loadRuns])
+
+  async function changed() {
+    await loadRuns()
+    await onChanged()
+  }
+
+  async function approve(runId: string) {
+    if (approvingId) return
+    setApprovingId(runId)
+    const response = await fetch(`/api/admin/finances/payroll/${runId}/approve?organizationId=${organizationId}`, { method: 'POST' })
+    const payload = await response.json().catch(() => null) as { error?: string } | null
+    setApprovingId(null)
+    if (!response.ok) { setError(payload?.error ?? 'No se pudo aprobar la nómina.'); return }
+    await changed()
+  }
+
+  return <section className="space-y-4 rounded-lg border p-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div><h2 className="font-semibold">Nómina</h2><p className="text-sm text-muted-foreground">La vista previa refleja salarios y comisiones devengadas por el servidor. Los pagos parciales usan el saldo autorizado de cada entrada.</p></div>
+      <Button onClick={() => setOpen(true)} disabled={!branchId}>Preparar nómina</Button>
+    </div>
+    {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+    <div className="space-y-3">
+      {runs.map((run) => <article key={run.id} className="rounded-md border p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">{run.period_from} a {run.period_to}</p><p className="text-sm text-muted-foreground">Estado: {run.status}</p></div>{run.status === 'draft' ? <Button size="sm" onClick={() => void approve(run.id)} disabled={approvingId === run.id}>{approvingId === run.id ? 'Aprobando…' : 'Aprobar nómina'}</Button> : null}</div>
+        <ul className="mt-3 divide-y">{run.entries.map((entry) => <li key={entry.id} className="flex flex-col gap-2 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"><span>{entry.employee_id} · {entry.employee_role}</span><span>Autorizado: {money(Number(entry.net_amount))} · Pendiente: {money(Number(entry.outstanding_amount))}</span>{run.status === 'approved' && entry.outstanding_amount > 0 ? <Button size="sm" variant="outline" onClick={() => setPaying(entry)}>Pago parcial</Button> : null}</li>)}</ul>
+      </article>)}
+      {!runs.length && !error ? <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No hay corridas de nómina para este período.</p> : null}
+    </div>
+    <PayrollRunDialog open={open} onOpenChange={setOpen} organizationId={organizationId} branchId={branchId} filters={filters} onSaved={changed} />
+    <PaymentDialog open={Boolean(paying)} onOpenChange={(nextOpen) => !nextOpen && setPaying(null)} organizationId={organizationId} payrollEntryId={paying?.id} branchId={branchId} outstandingAmount={paying?.outstanding_amount} onSaved={changed} />
+  </section>
 }

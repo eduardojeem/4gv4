@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -25,6 +25,12 @@ export function ExpenseDialog({
   const [recurring, setRecurring] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const idempotencyKeyRef = useRef<string | null>(null)
+
+  function getIdempotencyKey() {
+    idempotencyKeyRef.current ??= `expense-${crypto.randomUUID()}`
+    return idempotencyKeyRef.current
+  }
 
   async function submit(formData: FormData) {
     if (!branchId || isSubmitting) return
@@ -37,7 +43,7 @@ export function ExpenseDialog({
     } : undefined
     const response = await fetch(`/api/admin/finances/obligations?organizationId=${organizationId}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...(recurring ? { 'x-idempotency-key': `expense-${Date.now()}-${Math.random().toString(36).slice(2)}` } : {}) },
+      headers: { 'content-type': 'application/json', 'x-idempotency-key': getIdempotencyKey() },
       body: JSON.stringify({
         branchId,
         categoryId: formData.get('categoryId'),
@@ -57,6 +63,7 @@ export function ExpenseDialog({
       return
     }
     await onSaved()
+    idempotencyKeyRef.current = null
     onOpenChange(false)
   }
 

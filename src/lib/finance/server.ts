@@ -303,8 +303,39 @@ export async function listObligations(
   const { data, error, count } = await query
   if (error) throw toFinanceApiError(error)
 
+  const obligations = data ?? []
+  const obligationIds = obligations.map((obligation) => obligation.id)
+  const { data: payments, error: paymentsError } = obligationIds.length
+    ? await admin
+        .from('finance_payments')
+        .select('id, obligation_id, payment_method, direction, reverses_payment_id')
+        .eq('organization_id', organizationId)
+        .in('obligation_id', obligationIds)
+    : { data: [], error: null }
+  if (paymentsError) throw toFinanceApiError(paymentsError)
+
+  const reversedPaymentIds = new Set(
+    (payments ?? [])
+      .filter((payment) => payment.direction === 'reversal' && payment.reverses_payment_id)
+      .map((payment) => payment.reverses_payment_id),
+  )
+  const cashPaidObligationIds = new Set(
+    (payments ?? [])
+      .filter((payment) =>
+        payment.direction === 'payment'
+        && payment.payment_method === 'cash'
+        && !reversedPaymentIds.has(payment.id),
+      )
+      .map((payment) => payment.obligation_id),
+  )
+
   return {
-    obligations: data ?? [],
+    obligations: obligations.map((obligation) => ({
+      ...obligation,
+      // The client receives server-owned state instead of deriving balances.
+      outstanding_amount: Math.max(0, Number(obligation.amount) - Number(obligation.paid_amount)),
+      requires_cash_session_on_void: cashPaidObligationIds.has(obligation.id),
+    })),
     pagination: {
       page: filters.page,
       pageSize: filters.pageSize,
@@ -1201,6 +1232,44 @@ export async function getPayrollRunBranch(
   if (error) throw toFinanceApiError(error)
   if (!data) throw new FinanceApiError('La nómina no existe.', 404, 'PAYROLL_RUN_NOT_FOUND')
   return data as { id: string; branch_id: string | null; status: string }
+}
+
+export async function listPayrollRuns(
+  organizationId: string,
+  filters: { branchId?: string; periodFrom?: string; periodTo?: string },
+) {
+  const admin = createAdminSupabase()
+  let runsQuery = admin
+    .from('payroll_runs')
+    .select('id, branch_id, period_from, period_to, status, net_amount, generated_at')
+    .eq('organization_id', organizationId)
+    .order('generated_at', { ascending: false })
+    .limit(25)
+  if (filters.branchId) runsQuery = runsQuery.eq('branch_id', filters.branchId)
+  if (filters.periodFrom) runsQuery = runsQuery.gte('period_to', filters.periodFrom)
+  if (filters.periodTo) runsQuery = runsQuery.lte('period_from', filters.periodTo)
+  const { data: runs, error: runsError } = await runsQuery
+  if (runsError) throw toFinanceApiError(runsError)
+
+  const runIds = (runs ?? []).map((run) => run.id)
+  const { data: entries, error: entriesError } = runIds.length
+    ? await admin
+        .from('payroll_entries')
+        .select('id, payroll_run_id, employee_id, employee_role, net_amount, paid_amount, payment_status')
+        .eq('organization_id', organizationId)
+        .in('payroll_run_id', runIds)
+    : { data: [], error: null }
+  if (entriesError) throw toFinanceApiError(entriesError)
+
+  return (runs ?? []).map((run) => ({
+    ...run,
+    entries: (entries ?? [])
+      .filter((entry) => entry.payroll_run_id === run.id)
+      .map((entry) => ({
+        ...entry,
+        outstanding_amount: Math.max(0, Number(entry.net_amount) - Number(entry.paid_amount)),
+      })),
+  }))
 }
 
 export async function getPayrollEntryBranch(
