@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { FinanceSummaryReport } from '@/lib/finance/server'
+import { getAdminFinancesKey } from '@/hooks/use-admin-finances'
 
 const summary: FinanceSummaryReport = {
   accrued: {
@@ -36,9 +38,13 @@ const summary: FinanceSummaryReport = {
 
 const mockUseAdminFinances = vi.fn()
 
-vi.mock('@/hooks/use-admin-finances', () => ({
-  useAdminFinances: () => mockUseAdminFinances(),
-}))
+vi.mock('@/hooks/use-admin-finances', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks/use-admin-finances')>()
+  return {
+    ...actual,
+    useAdminFinances: () => mockUseAdminFinances(),
+  }
+})
 
 vi.mock('@/contexts/branch-context', () => ({
   useBranch: () => ({
@@ -90,5 +96,78 @@ describe('FinancesSystem', () => {
 
     expect(screen.getByRole('heading', { name: 'No pudimos cargar Finanzas' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
+  })
+
+  it('keeps a cost-only period out of the empty state', () => {
+    mockUseAdminFinances.mockReturnValue({
+      summary: {
+        ...summary,
+        accrued: {
+          ...summary.accrued,
+          revenue: 0,
+          directCosts: 50_000,
+          grossProfit: -50_000,
+          operatingExpenses: 0,
+          payrollCost: 0,
+          netProfit: -50_000,
+        },
+        cash: { collected: 0, paid: 0, netCashFlow: 0 },
+        coverageWarnings: [],
+        upcomingDue: [],
+        overdue: [],
+      },
+      filters: summary.filters,
+      setFilters: vi.fn(),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    render(<FinancesSystem />)
+
+    expect(screen.queryByText('Todavía no hay movimientos financieros')).not.toBeInTheDocument()
+    expect(screen.getByText('Ganancia neta devengada')).toBeInTheDocument()
+  })
+
+  it('marks cached figures as stale and exposes a retry when the refresh fails', () => {
+    mockUseAdminFinances.mockReturnValue({
+      summary,
+      filters: summary.filters,
+      setFilters: vi.fn(),
+      isLoading: false,
+      error: new Error('No disponible'),
+      refresh: vi.fn(),
+    })
+
+    render(<FinancesSystem />)
+
+    expect(screen.getByText(/Mostrando datos del 12\/08\/2026/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reintentar datos' })).toBeInTheDocument()
+  })
+
+  it('switches between devengado and caja metrics with accessible tabs', async () => {
+    const user = userEvent.setup()
+    mockUseAdminFinances.mockReturnValue({
+      summary,
+      filters: summary.filters,
+      setFilters: vi.fn(),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    render(<FinancesSystem />)
+
+    expect(screen.getByRole('tab', { name: 'Devengado' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByText('Flujo de caja')).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Caja' }))
+    expect(screen.getByText('Flujo de caja neto')).toBeInTheDocument()
+  })
+
+  it('keys summary cache entries by active organization', () => {
+    expect(getAdminFinancesKey(summary.filters, 'organization-a')).toContain('organizationId=organization-a')
+    expect(getAdminFinancesKey(summary.filters, 'organization-b')).not.toBe(
+      getAdminFinancesKey(summary.filters, 'organization-a'),
+    )
   })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format, subDays } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
 import useSWR from 'swr'
@@ -11,13 +11,31 @@ import type { FinanceFilters } from '@/lib/finance/types'
 
 export type AdminFinanceFilters = FinanceFilters
 
-export function getAdminFinancesKey(filters: AdminFinanceFilters) {
+type ActiveOrganizationResponse = {
+  activeOrganization?: { id?: string } | null
+  error?: string
+}
+
+export function getAdminFinancesKey(filters: AdminFinanceFilters, organizationId: string) {
   const params = new URLSearchParams({
     startDate: filters.startDate,
     endDate: filters.endDate,
+    organizationId,
   })
   if (filters.branchId) params.set('branchId', filters.branchId)
   return `/api/admin/finances/summary?${params.toString()}`
+}
+
+async function fetchActiveOrganizationId(): Promise<string> {
+  const response = await fetch('/api/organizations', { cache: 'no-store' })
+  const payload = await response.json().catch(() => null) as ActiveOrganizationResponse | null
+  const organizationId = payload?.activeOrganization?.id
+
+  if (!response.ok || !organizationId) {
+    throw new Error(payload?.error || 'No se pudo resolver la organización activa.')
+  }
+
+  return organizationId
 }
 
 function buildInitialDateRange(): Pick<AdminFinanceFilters, 'startDate' | 'endDate'> {
@@ -40,17 +58,58 @@ async function fetchFinanceSummary(url: string): Promise<FinanceSummaryReport> {
 }
 
 export function useAdminFinances() {
-  const { selectedBranchId } = useBranch()
+  const { selectedBranchId, selectedBranch } = useBranch()
   const [dateFilters, setDateFilters] = useState(buildInitialDateRange)
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
+  const [organizationLoading, setOrganizationLoading] = useState(true)
+  const [organizationError, setOrganizationError] = useState<Error | null>(null)
+  const organizationRequestRef = useRef(0)
+
+  const loadActiveOrganization = useCallback(async () => {
+    const requestId = organizationRequestRef.current + 1
+    organizationRequestRef.current = requestId
+    setOrganizationId(null)
+    setOrganizationLoading(true)
+    setOrganizationError(null)
+
+    try {
+      const nextOrganizationId = await fetchActiveOrganizationId()
+      if (organizationRequestRef.current === requestId) {
+        setOrganizationId(nextOrganizationId)
+      }
+    } catch (error) {
+      if (organizationRequestRef.current === requestId) {
+        setOrganizationError(error instanceof Error ? error : new Error('No se pudo resolver la organización activa.'))
+      }
+    } finally {
+      if (organizationRequestRef.current === requestId) {
+        setOrganizationLoading(false)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadActiveOrganization()
+    const handleOrganizationChange = () => void loadActiveOrganization()
+    window.addEventListener('organization:changed', handleOrganizationChange)
+    return () => window.removeEventListener('organization:changed', handleOrganizationChange)
+  }, [loadActiveOrganization])
+
+  const branchId = selectedBranch?.organization_id && organizationId && selectedBranch.organization_id !== organizationId
+    ? null
+    : selectedBranchId
   const filters = useMemo<AdminFinanceFilters>(() => ({
     ...dateFilters,
-    branchId: selectedBranchId,
-  }), [dateFilters, selectedBranchId])
-  const cacheKey = useMemo(() => getAdminFinancesKey(filters), [filters])
+    branchId,
+  }), [branchId, dateFilters])
+  const cacheKey = useMemo(
+    () => organizationId ? getAdminFinancesKey(filters, organizationId) : null,
+    [filters, organizationId],
+  )
   const { data, error, isLoading, isValidating, mutate } = useSWR<FinanceSummaryReport>(
     cacheKey,
     fetchFinanceSummary,
-    { revalidateOnFocus: false },
+    { revalidateOnFocus: false, keepPreviousData: false },
   )
 
   const setFilters = useCallback((next: Partial<Pick<AdminFinanceFilters, 'startDate' | 'endDate'>>) => {
@@ -67,13 +126,13 @@ export function useAdminFinances() {
   }, [])
 
   return {
-    summary: data ?? null,
+    summary: organizationId ? data ?? null : null,
     filters,
     setFilters,
     setDateRange,
-    isLoading,
+    isLoading: organizationLoading || isLoading,
     isRefreshing: isValidating && !isLoading,
-    error: error instanceof Error ? error : error ? new Error('No se pudo cargar el resumen financiero.') : null,
+    error: organizationError ?? (error instanceof Error ? error : error ? new Error('No se pudo cargar el resumen financiero.') : null),
     refresh: () => mutate(),
     mutateSummary: mutate,
   }

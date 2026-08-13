@@ -1,5 +1,8 @@
 import { AlertCircle, CircleDollarSign, RefreshCw } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -23,6 +26,32 @@ export function FinanceErrorState({ error, onRetry }: { error: Error; onRetry: (
       action={{ label: 'Reintentar', onClick: onRetry, icon: RefreshCw }}
       className="rounded-xl border bg-card"
     />
+  )
+}
+
+export function FinanceStaleDataAlert({
+  error,
+  generatedAt,
+  onRetry,
+}: {
+  error: Error
+  generatedAt: string
+  onRetry: () => void
+}) {
+  const timestamp = format(parseISO(generatedAt), 'dd/MM/yyyy HH:mm')
+
+  return (
+    <Alert>
+      <AlertCircle aria-hidden="true" />
+      <AlertTitle>No pudimos actualizar los datos financieros</AlertTitle>
+      <AlertDescription>
+        <p>Mostrando datos del {timestamp}. {error.message}</p>
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={onRetry}>
+          <RefreshCw />
+          Reintentar datos
+        </Button>
+      </AlertDescription>
+    </Alert>
   )
 }
 

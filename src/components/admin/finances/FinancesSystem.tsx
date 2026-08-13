@@ -6,17 +6,28 @@ import { CircleDollarSign } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAdminFinances } from '@/hooks/use-admin-finances'
 import { FinanceFilters } from './FinanceFilters'
-import { FinanceEmptyState, FinanceErrorState, FinanceLoadingState } from './FinanceStates'
+import { FinanceEmptyState, FinanceErrorState, FinanceLoadingState, FinanceStaleDataAlert } from './FinanceStates'
 import { FinanceSummary } from './FinanceSummary'
 
 const tabs = ['Resumen', 'Gastos', 'Nómina', 'Rentabilidad', 'Configuración'] as const
 
 function isEmptySummary(summary: NonNullable<ReturnType<typeof useAdminFinances>['summary']>) {
-  return summary.accrued.revenue === 0
-    && summary.cash.collected === 0
-    && summary.cash.paid === 0
+  const accruedValues = [
+    summary.accrued.revenue,
+    summary.accrued.directCosts,
+    summary.accrued.grossProfit,
+    summary.accrued.operatingExpenses,
+    summary.accrued.payrollCost,
+    summary.accrued.netProfit,
+  ]
+  const cashValues = [summary.cash.collected, summary.cash.paid, summary.cash.netCashFlow]
+
+  return accruedValues.every((value) => value === null || value === 0)
+    && cashValues.every((value) => value === 0)
     && summary.upcomingDue.length === 0
     && summary.overdue.length === 0
+    && summary.coverageWarnings.length === 0
+    && summary.complete
 }
 
 export function FinancesSystem() {
@@ -52,7 +63,8 @@ export function FinancesSystem() {
         <TabsContent value="Resumen">
           {finances.isLoading ? <FinanceLoadingState /> : null}
           {!finances.isLoading && finances.error && !finances.summary ? <FinanceErrorState error={finances.error} onRetry={finances.refresh} /> : null}
-          {!finances.isLoading && !finances.error && finances.summary && isEmptySummary(finances.summary) ? <FinanceEmptyState /> : null}
+          {!finances.isLoading && finances.error && finances.summary ? <FinanceStaleDataAlert error={finances.error} generatedAt={finances.summary.generatedAt} onRetry={finances.refresh} /> : null}
+          {!finances.isLoading && finances.summary && isEmptySummary(finances.summary) ? <FinanceEmptyState /> : null}
           {!finances.isLoading && finances.summary && !isEmptySummary(finances.summary) ? <FinanceSummary summary={finances.summary} /> : null}
         </TabsContent>
 
