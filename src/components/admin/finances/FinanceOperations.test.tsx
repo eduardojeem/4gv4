@@ -1,14 +1,16 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ExpenseDialog } from './ExpenseDialog'
+import { FinanceSettingsPanel } from './FinanceSettingsPanel'
 import { PaymentDialog } from './PaymentDialog'
 import { PayrollPanel } from './PayrollPanel'
 import { PayrollRunDialog } from './PayrollRunDialog'
 import { ProfitabilityPanel } from './ProfitabilityPanel'
 
 const uuid = '11111111-1111-4111-8111-111111111111'
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 
 describe('finance operational dialogs', () => {
   it('exposes recurrence controls when creating an expense', async () => {
@@ -29,27 +31,105 @@ describe('finance operational dialogs', () => {
 
   it('shows server payroll preview totals before creating a run', async () => {
     const user = userEvent.setup()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ preview: { totals: { netPay: 450000 }, entries: [] } }), { status: 200 })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ preview: { totals: { netPay: 450000 }, entries: [] } })))
     render(<PayrollRunDialog open onOpenChange={vi.fn()} organizationId={uuid} branchId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-15' }} onSaved={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: 'Ver vista previa' }))
     expect(await screen.findByText('Total neto: ₲ 450.000')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Crear nómina' })).toBeEnabled()
   })
 
-  it('approves a draft run through the production payroll panel', async () => {
+  it('creates organization-wide payroll with a null branch after previewing it', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ runs: [{ id: uuid, status: 'draft', period_from: '2026-08-01', period_to: '2026-08-15', entries: [] }] }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ runs: [] }), { status: 200 }))
+      .mockResolvedValueOnce(json({ preview: { totals: { netPay: 450000 }, entries: [] } }))
+      .mockResolvedValueOnce(json({}, 201))
     vi.stubGlobal('fetch', fetchMock)
-    render(<PayrollPanel organizationId={uuid} branchId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-15', branchId: uuid }} onChanged={vi.fn()} />)
-    await user.click(await screen.findByRole('button', { name: 'Aprobar nómina' }))
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(`/payroll/${uuid}/approve`), expect.objectContaining({ method: 'POST' }))
+    render(<PayrollRunDialog open onOpenChange={vi.fn()} organizationId={uuid} branchId={null} filters={{ startDate: '2026-08-01', endDate: '2026-08-15' }} onSaved={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Ver vista previa' }))
+    await user.click(await screen.findByRole('button', { name: 'Crear nómina' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const [, request] = fetchMock.mock.calls[1]
+    expect(JSON.parse(request.body)).toMatchObject({ periodFrom: '2026-08-01', periodTo: '2026-08-15', branchId: null })
+  })
+
+  it('requires explicit confirmation before approving a draft run', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ runs: [{ id: uuid, status: 'draft', period_from: '2026-08-01', period_to: '2026-08-15', entries: [] }] }))
+      .mockResolvedValueOnce(json({}))
+      .mockResolvedValueOnce(json({ runs: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PayrollPanel organizationId={uuid} branchId={null} filters={{ startDate: '2026-08-01', endDate: '2026-08-15', branchId: null }} onChanged={vi.fn()} />)
+
+    expect(await screen.findByRole('button', { name: 'Preparar nómina' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Aprobar nómina' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('no se puede deshacer')
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining(`/payroll/${uuid}/approve`), expect.anything())
+
+    await user.click(screen.getByRole('button', { name: 'Sí, aprobar nómina' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(`/payroll/${uuid}/approve`), expect.objectContaining({ method: 'POST' })))
+  })
+
+  it('creates an approved commission rule so it is effective immediately', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ employees: [] }))
+      .mockResolvedValueOnce(json({ rules: [] }))
+      .mockResolvedValueOnce(json({ rule: { id: uuid } }, 201))
+      .mockResolvedValueOnce(json({ employees: [] }))
+      .mockResolvedValueOnce(json({ rules: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
+
+    await user.selectOptions(await screen.findByLabelText('Alcance'), 'role')
+    await user.selectOptions(screen.getByLabelText('Rol'), 'seller')
+    await user.type(screen.getByLabelText('Valor'), '15')
+    await user.type(screen.getByLabelText('Vigente desde'), '2026-08-01')
+    await user.click(screen.getByRole('button', { name: 'Crear y aprobar regla' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5))
+    const [, request] = fetchMock.mock.calls[2]
+    expect(JSON.parse(request.body)).toMatchObject({ scopeType: 'role', role: 'seller', status: 'approved' })
+  })
+
+  it('approves a saved draft commission rule through the audited update endpoint', async () => {
+    const user = userEvent.setup()
+    const draftRule = {
+      id: uuid,
+      branch_id: null,
+      scope_type: 'role',
+      role: 'seller',
+      employee_id: null,
+      source_type: 'sale',
+      source_reference_id: null,
+      accrual_status: null,
+      calculation_type: 'percentage',
+      value: 15,
+      status: 'draft',
+      effective_from: '2026-08-01',
+      effective_to: null,
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ employees: [] }))
+      .mockResolvedValueOnce(json({ rules: [draftRule] }))
+      .mockResolvedValueOnce(json({ rule: { ...draftRule, status: 'approved' } }))
+      .mockResolvedValueOnce(json({ employees: [] }))
+      .mockResolvedValueOnce(json({ rules: [{ ...draftRule, status: 'approved' }] }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Aprobar regla' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5))
+    const [, request] = fetchMock.mock.calls[2]
+    expect(request.method).toBe('PATCH')
+    expect(JSON.parse(request.body)).toMatchObject({ id: uuid, status: 'approved', effectiveFrom: '2026-08-01' })
   })
 
   it('propagates the current period and branch to profitability exports', () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ rows: [] }), { status: 200 })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ rows: [] })))
     render(<ProfitabilityPanel organizationId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-15', branchId: uuid }} />)
     expect(screen.getByRole('link', { name: 'Exportar rentabilidad' })).toHaveAttribute('href', expect.stringContaining('startDate=2026-08-01'))
     expect(screen.getByRole('link', { name: 'Exportar rentabilidad' })).toHaveAttribute('href', expect.stringContaining('branchId=' + uuid))
