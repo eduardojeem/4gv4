@@ -26,6 +26,7 @@ export type RepairPriority = 'low' | 'medium' | 'high'
 export type RepairUrgency = 'normal' | 'urgent'
 export type RepairDeliveryOutcome = 'repaired' | 'unrepairable' | 'withdrawn'
 export type RepairPricingMode = 'automatic' | 'budget' | 'manual'
+export type RepairPaymentStatus = 'pendiente' | 'parcial' | 'pagado'
 export type DeviceType = 'smartphone' | 'tablet' | 'laptop' | 'desktop' | 'accessory' | 'other'
 
 export interface Customer {
@@ -70,6 +71,17 @@ export interface RepairImage {
   description?: string
 }
 
+export interface RepairPayment {
+  id: string
+  amount: number
+  method: 'cash' | 'card' | 'transfer' | 'credit'
+  reference?: string | null
+  notes?: string | null
+  source: 'repairs' | 'delivery' | 'pos' | 'migration'
+  createdAt: string
+  createdBy?: string | null
+}
+
 export interface RepairNotifications {
   customer: boolean
   technician: boolean
@@ -112,8 +124,9 @@ export interface Repair {
   createdAt: string
   estimatedCompletion: string | null
   completedAt: string | null
-  paymentStatus?: 'pendiente' | 'parcial' | 'pagado'
+  paymentStatus?: RepairPaymentStatus
   paidAmount?: number
+  payments?: RepairPayment[]
   lastUpdate: string
   progress: number
   customerRating: number | null
