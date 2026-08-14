@@ -24,6 +24,19 @@ type Obligation = {
 
 const PAGE_SIZE = 50
 
+const expenseStatus: Record<string, { label: string; className: string }> = {
+  draft: { label: 'Borrador', className: 'border-muted-foreground/30 bg-muted text-muted-foreground' },
+  pending: { label: 'Pendiente', className: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200' },
+  partially_paid: { label: 'Pago parcial', className: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200' },
+  paid: { label: 'Pagado', className: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200' },
+  overdue: { label: 'Vencido', className: 'border-destructive/30 bg-destructive/10 text-destructive' },
+  voided: { label: 'Anulado', className: 'border-muted-foreground/30 bg-muted text-muted-foreground' },
+}
+
+function getExpenseStatus(status: string) {
+  return expenseStatus[status] ?? { label: status, className: 'border-muted-foreground/30 bg-muted text-muted-foreground' }
+}
+
 export function ExpensesPanel({
   organizationId,
   branchId,
@@ -120,6 +133,8 @@ export function ExpensesPanel({
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
   const hasMore = totalCount > PAGE_SIZE
+  const pageAmount = obligations.reduce((total, item) => total + Number(item.amount), 0)
+  const pageOutstanding = obligations.reduce((total, item) => total + Number(item.outstanding_amount), 0)
 
   return (
     <section className="space-y-4 rounded-lg border p-4">
@@ -137,28 +152,47 @@ export function ExpensesPanel({
 
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[42rem] text-sm">
+      {obligations.length > 0 ? (
+        <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Registros</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">{totalCount}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Importe de esta página</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(pageAmount)}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pendiente de pago</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums text-amber-700 dark:text-amber-300">{formatCurrency(pageOutstanding)}</p>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="hidden overflow-hidden rounded-lg border md:block">
+        <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-left">
-              <th className="p-2">Concepto</th>
-              <th className="p-2">Estado</th>
-              <th className="p-2">Importe</th>
-              <th className="p-2">Pendiente</th>
-              <th className="p-2"><span className="sr-only">Acciones</span></th>
+            <tr className="border-b bg-muted/60 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="px-4 py-3">Concepto y vencimiento</th>
+              <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3 text-right">Importe</th>
+              <th className="px-4 py-3 text-right">Pendiente de pago</th>
+              <th className="px-4 py-3"><span className="sr-only">Acciones</span></th>
             </tr>
           </thead>
           <tbody>
-            {obligations.map((item) => (
-              <tr key={item.id} className="border-b">
-                <td className="p-2">
-                  <p>{item.concept ?? item.finance_categories?.name ?? 'Gasto'}</p>
-                  <p className="text-xs text-muted-foreground">Vence: {item.due_date ?? 'Sin vencimiento'}</p>
+            {obligations.map((item) => {
+              const status = getExpenseStatus(item.status)
+              return (
+              <tr key={item.id} className="border-b last:border-0 transition-colors hover:bg-muted/40">
+                <td className="px-4 py-3">
+                  <p className="font-medium text-foreground">{item.concept ?? item.finance_categories?.name ?? 'Gasto'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Vence: {item.due_date ?? 'Sin vencimiento'}</p>
                 </td>
-                <td className="p-2">{item.status}</td>
-                <td className="p-2">{formatCurrency(Number(item.amount))}</td>
-                <td className="p-2">{formatCurrency(Number(item.outstanding_amount))}</td>
-                <td className="p-2 text-right">
+                <td className="px-4 py-3"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status.className}`}>{status.label}</span></td>
+                <td className="px-4 py-3 text-right font-medium tabular-nums">{formatCurrency(Number(item.amount))}</td>
+                <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatCurrency(Number(item.outstanding_amount))}</td>
+                <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-2">
                     <Button
                       size="sm"
@@ -179,7 +213,8 @@ export function ExpensesPanel({
                   </div>
                 </td>
               </tr>
-            ))}
+              )
+            })}
             {obligations.length === 0 && !error ? (
               <tr>
                 <td colSpan={5} className="p-4 text-center text-sm text-muted-foreground">
@@ -189,6 +224,34 @@ export function ExpensesPanel({
             ) : null}
           </tbody>
         </table>
+      </div>
+
+      <div className="grid gap-3 md:hidden">
+        {obligations.map((item) => {
+          const status = getExpenseStatus(item.status)
+          return (
+            <article key={item.id} className="rounded-lg border bg-card p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="font-medium text-foreground">{item.concept ?? item.finance_categories?.name ?? 'Gasto'}</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Vence: {item.due_date ?? 'Sin vencimiento'}</p>
+                </div>
+                <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${status.className}`}>{status.label}</span>
+              </div>
+              <dl className="mt-4 grid grid-cols-2 gap-3 border-y py-3 text-sm">
+                <div><dt className="text-xs text-muted-foreground">Importe</dt><dd className="mt-1 font-medium tabular-nums">{formatCurrency(Number(item.amount))}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Pendiente de pago</dt><dd className="mt-1 font-semibold tabular-nums">{formatCurrency(Number(item.outstanding_amount))}</dd></div>
+              </dl>
+              <div className="mt-3 flex justify-end gap-2">
+                <Button size="sm" variant="outline" onClick={() => setPaying(item)} disabled={['paid', 'voided'].includes(item.status)}>Pagar</Button>
+                <Button size="sm" variant="ghost" onClick={() => setVoiding(item)} disabled={['paid', 'voided'].includes(item.status)}>Anular</Button>
+              </div>
+            </article>
+          )
+        })}
+        {obligations.length === 0 && !error ? (
+          <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">No hay gastos para este período.</p>
+        ) : null}
       </div>
 
       {hasMore ? (

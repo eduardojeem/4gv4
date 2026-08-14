@@ -19,6 +19,12 @@ type Row = {
 const money = (value: number | null) =>
   value === null ? 'Sin cobertura' : formatCurrency(value)
 
+function coverage(row: Row) {
+  return row.complete
+    ? { label: 'Información completa', className: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200' }
+    : { label: 'Cobertura incompleta', className: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200' }
+}
+
 export function ProfitabilityPanel({
   organizationId,
   filters,
@@ -31,6 +37,11 @@ export function ProfitabilityPanel({
   const [error, setError] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const totals = useMemo(() => rows.reduce((total, row) => ({
+    revenue: total.revenue + row.revenue,
+    directCosts: total.directCosts + (row.directCosts ?? 0),
+    grossProfit: total.grossProfit + (row.grossProfit ?? 0),
+  }), { revenue: 0, directCosts: 0, grossProfit: 0 }), [rows])
 
   const params = useMemo(() => {
     const value = new URLSearchParams({
@@ -128,30 +139,39 @@ export function ProfitabilityPanel({
 
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[36rem] text-sm">
+      {rows.length > 0 ? (
+        <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
+          <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Ingresos visibles</p><p className="mt-1 text-lg font-semibold tabular-nums">{money(totals.revenue)}</p></div>
+          <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Costos directos visibles</p><p className="mt-1 text-lg font-semibold tabular-nums">{money(totals.directCosts)}</p></div>
+          <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Utilidad bruta visible</p><p className="mt-1 text-lg font-semibold tabular-nums text-primary">{money(totals.grossProfit)}</p></div>
+        </div>
+      ) : null}
+
+      <div className="hidden overflow-hidden rounded-lg border md:block">
+        <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-left">
-              <th className="p-2">Detalle</th>
-              <th className="p-2">Ingresos</th>
-              <th className="p-2">Costos</th>
-              <th className="p-2">Utilidad bruta</th>
+            <tr className="border-b bg-muted/60 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="px-4 py-3">Detalle</th>
+              <th className="px-4 py-3 text-right">Ingresos</th>
+              <th className="px-4 py-3 text-right">Costos directos</th>
+              <th className="px-4 py-3 text-right">Utilidad bruta</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-b">
-                <td className="p-2">
-                  {row.label}
-                  {!row.complete ? (
-                    <span className="ml-2 text-xs text-amber-700">Cobertura incompleta</span>
-                  ) : null}
+            {rows.map((row) => {
+              const status = coverage(row)
+              return (
+              <tr key={row.id} className="border-b last:border-0 transition-colors hover:bg-muted/40">
+                <td className="px-4 py-3">
+                  <p className="font-medium text-foreground">{row.label}</p>
+                  <span className={`mt-1 inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status.className}`}>{status.label}</span>
                 </td>
-                <td className="p-2">{money(row.revenue)}</td>
-                <td className="p-2">{money(row.directCosts)}</td>
-                <td className="p-2">{money(row.grossProfit)}</td>
+                <td className="px-4 py-3 text-right font-medium tabular-nums">{money(row.revenue)}</td>
+                <td className="px-4 py-3 text-right font-medium tabular-nums">{money(row.directCosts)}</td>
+                <td className="px-4 py-3 text-right font-semibold tabular-nums">{money(row.grossProfit)}</td>
               </tr>
-            ))}
+              )
+            })}
             {rows.length === 0 && !error ? (
               <tr>
                 <td colSpan={4} className="p-4 text-center text-sm text-muted-foreground">
@@ -161,6 +181,28 @@ export function ProfitabilityPanel({
             ) : null}
           </tbody>
         </table>
+      </div>
+
+      <div className="grid gap-3 md:hidden">
+        {rows.map((row) => {
+          const status = coverage(row)
+          return (
+            <article key={row.id} className="rounded-lg border bg-card p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="font-medium text-foreground">{row.label}</h3>
+                <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${status.className}`}>{status.label}</span>
+              </div>
+              <dl className="mt-4 grid grid-cols-3 gap-3 border-t pt-3 text-sm">
+                <div><dt className="text-xs text-muted-foreground">Ingresos</dt><dd className="mt-1 font-medium tabular-nums">{money(row.revenue)}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Costos directos</dt><dd className="mt-1 font-medium tabular-nums">{money(row.directCosts)}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Utilidad bruta</dt><dd className="mt-1 font-semibold tabular-nums">{money(row.grossProfit)}</dd></div>
+              </dl>
+            </article>
+          )
+        })}
+        {rows.length === 0 && !error ? (
+          <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">No hay datos de rentabilidad para este período.</p>
+        ) : null}
       </div>
     </section>
   )

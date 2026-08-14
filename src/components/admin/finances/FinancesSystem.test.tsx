@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { FinanceSummaryReport } from '@/lib/finance/server'
 import { getAdminFinancesKey } from '@/hooks/use-admin-finances'
+import { FinanceFilters } from './FinanceFilters'
 
 const summary: FinanceSummaryReport = {
   accrued: {
@@ -81,6 +82,7 @@ describe('FinancesSystem', () => {
     expect(screen.getByRole('tab', { name: 'Configuración' })).toBeInTheDocument()
     expect(screen.getByText('Ganancia neta devengada')).toBeInTheDocument()
     expect(screen.getByText('Flujo de caja')).toBeInTheDocument()
+    expect(screen.getByText('Qué requiere atención hoy')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('Faltan costos')
   })
 
@@ -192,5 +194,15 @@ describe('FinancesSystem', () => {
     expect(getAdminFinancesKey(summary.filters, 'organization-b')).not.toBe(
       getAdminFinancesKey(summary.filters, 'organization-a'),
     )
+  })
+
+  it('offers a quick range for the current month', async () => {
+    const user = userEvent.setup()
+    const onDateRangeChange = vi.fn()
+
+    render(<FinanceFilters filters={summary.filters} isRefreshing={false} onDateRangeChange={onDateRangeChange} onRefresh={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Este mes' }))
+    expect(onDateRangeChange).toHaveBeenCalledWith(expect.objectContaining({ from: expect.any(Date), to: expect.any(Date) }))
   })
 })

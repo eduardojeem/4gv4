@@ -39,6 +39,12 @@ type PayrollRun = {
   entries: PayrollEntry[]
 }
 
+const payrollStatus = {
+  draft: { label: 'Revisar y aprobar', className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300' },
+  approved: { label: 'Registrar pagos', className: 'bg-sky-100 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300' },
+  voided: { label: 'Anulada', className: 'bg-muted text-muted-foreground' },
+} as const
+
 export function PayrollPanel({
   organizationId,
   branchId,
@@ -69,6 +75,9 @@ export function PayrollPanel({
   }, [branchId])
 
   const activeBranchId = isOrganizationWide ? null : branchId
+  const hasDraft = runs.some((run) => run.status === 'draft')
+  const hasOutstandingApprovedEntry = runs.some((run) => run.status === 'approved' && run.entries.some((entry) => Number(entry.outstanding_amount) > 0))
+  const currentStep = hasOutstandingApprovedEntry ? 3 : hasDraft ? 2 : 1
 
   const loadRuns = useCallback(async () => {
     const params = new URLSearchParams({ organizationId, periodFrom: filters.startDate, periodTo: filters.endDate })
@@ -137,15 +146,39 @@ export function PayrollPanel({
         />
       </div>
 
+      <ol aria-label="Proceso de nómina" className="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-4">
+        {[
+          ['1', 'Preparar', 'Calculá salarios y comisiones.'],
+          ['2', 'Revisar y aprobar', 'Confirmá los importes finales.'],
+          ['3', 'Registrar pagos', 'Cargá pagos completos o parciales.'],
+          ['4', 'Cerrar período', 'Verificá que no queden saldos.'],
+        ].map(([step, title, description]) => {
+          const stepNumber = Number(step)
+          const isCurrent = currentStep === stepNumber
+          const isDone = currentStep > stepNumber
+          return (
+            <li key={step} className="flex gap-2 rounded-md p-2">
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isCurrent ? 'bg-primary text-primary-foreground' : isDone ? 'bg-emerald-600 text-white' : 'bg-muted text-muted-foreground'}`}>{step}</span>
+              <div>
+                <p className="text-xs font-semibold">{title}</p>
+                <p className="text-xs text-muted-foreground">{description}</p>
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 
       <div className="space-y-3">
         {runs.map((run) => (
-          <article key={run.id} className="rounded-md border p-3">
+          <article key={run.id} className="rounded-lg border bg-card p-4 shadow-sm">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium">{run.period_from} a {run.period_to}</p>
-                <p className="text-sm text-muted-foreground">Estado: {run.status}</p>
+                <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${payrollStatus[run.status].className}`}>
+                  {payrollStatus[run.status].label}
+                </span>
               </div>
               {run.status === 'draft' ? (
                 <Button

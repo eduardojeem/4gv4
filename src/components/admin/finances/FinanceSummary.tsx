@@ -130,12 +130,51 @@ function DueList({
   )
 }
 
+function PriorityAction({
+  title,
+  description,
+  count,
+  tone = 'default',
+  action,
+  onClick,
+}: {
+  title: string
+  description: string
+  count?: number
+  tone?: 'default' | 'urgent'
+  action: string
+  onClick?: () => void
+}) {
+  return (
+    <article className={cn('rounded-lg border p-3', tone === 'urgent' ? 'border-destructive/40 bg-destructive/5' : 'border-border/70 bg-card')}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={cn('text-sm font-semibold', tone === 'urgent' && 'text-destructive')}>{title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        </div>
+        {count !== undefined ? (
+          <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums', tone === 'urgent' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground')}>
+            {count}
+          </span>
+        ) : null}
+      </div>
+      <button type="button" onClick={onClick} className="mt-3 text-xs font-medium text-primary underline-offset-2 hover:underline">
+        {action} →
+      </button>
+    </article>
+  )
+}
+
 export function FinanceSummary({
   summary,
   onViewExpenses,
+  onViewProfitability,
+  onViewPayroll,
 }: {
   summary: FinanceSummaryReport
   onViewExpenses?: () => void
+  onViewProfitability?: () => void
+  onViewPayroll?: () => void
 }) {
   const [view, setView] = useState<'accrued' | 'cash'>('accrued')
   const coverageWarnings = Array.from(
@@ -149,6 +188,18 @@ export function FinanceSummary({
 
   return (
     <div className="space-y-5">
+      <section aria-labelledby="finance-priorities-heading" className="rounded-xl border border-border/70 bg-muted/20 p-4">
+        <div className="mb-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Siguiente acción</p>
+          <h2 id="finance-priorities-heading" className="text-base font-semibold">Qué requiere atención hoy</h2>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <PriorityAction title="Pagos vencidos" description="Regularizá obligaciones atrasadas." count={summary.overdue.length} tone="urgent" action="Ver gastos" onClick={onViewExpenses} />
+          <PriorityAction title="Próximos vencimientos" description="Planificá los pagos que están por vencer." count={summary.upcomingDue.length} action="Ver gastos" onClick={onViewExpenses} />
+          <PriorityAction title="Datos pendientes" description="Completá costos para medir la ganancia real." count={coverageWarnings.length} action="Revisar rentabilidad" onClick={onViewProfitability} />
+          <PriorityAction title="Nómina del equipo" description="Prepará, aprobá y registrá pagos al personal." action="Administrar nómina" onClick={onViewPayroll} />
+        </div>
+      </section>
       <Tabs value={view} onValueChange={(value) => setView(value as 'accrued' | 'cash')} className="space-y-4">
         <div className="rounded-lg border border-border/70 p-3">
           <TabsList aria-label="Tipo de indicadores financieros">

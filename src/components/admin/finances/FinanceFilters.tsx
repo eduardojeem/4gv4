@@ -1,7 +1,7 @@
 'use client'
 
 import type { DateRange } from 'react-day-picker'
-import { format, isValid, parseISO } from 'date-fns'
+import { endOfMonth, endOfWeek, format, isValid, parseISO, startOfDay, startOfMonth, startOfWeek, subMonths } from 'date-fns'
 import { CalendarRange, RefreshCw } from 'lucide-react'
 
 import { BranchSelector } from '@/components/branches/branch-selector'
@@ -34,6 +34,20 @@ export function FinanceFilters({
   const fromLabel = isValid(fromDate) ? format(fromDate, 'dd/MM/yyyy') : '—'
   const toLabel = isValid(toDate) ? format(toDate, 'dd/MM/yyyy') : '—'
 
+  const now = new Date()
+  const quickRanges: Array<{ label: string; range: DateRange }> = [
+    { label: 'Hoy', range: { from: startOfDay(now), to: startOfDay(now) } },
+    { label: 'Esta semana', range: { from: startOfWeek(now, { weekStartsOn: 1 }), to: endOfWeek(now, { weekStartsOn: 1 }) } },
+    { label: 'Este mes', range: { from: startOfMonth(now), to: endOfMonth(now) } },
+    {
+      label: 'Mes anterior',
+      range: {
+        from: startOfMonth(subMonths(now, 1)),
+        to: endOfMonth(subMonths(now, 1)),
+      },
+    },
+  ]
+
   return (
     <Card className="border-border/70 shadow-sm">
       <CardContent className="space-y-3 p-4">
@@ -53,7 +67,21 @@ export function FinanceFilters({
             </Button>
           </div>
         </div>
-        <p className="flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
+        <div className="flex flex-wrap gap-2 border-t pt-3" aria-label="Períodos rápidos">
+          {quickRanges.map((quickRange) => (
+            <Button
+              key={quickRange.label}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full px-3 text-xs"
+              onClick={() => onDateRangeChange(quickRange.range)}
+            >
+              {quickRange.label}
+            </Button>
+          ))}
+        </div>
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <CalendarRange className="h-4 w-4" />
           {fromLabel} al {toLabel}
         </p>

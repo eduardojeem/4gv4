@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ExpenseDialog } from './ExpenseDialog'
+import { ExpensesPanel } from './ExpensesPanel'
 import { FinanceSettingsPanel } from './FinanceSettingsPanel'
 import { PaymentDialog } from './PaymentDialog'
 import { PayrollPanel } from './PayrollPanel'
@@ -13,6 +14,28 @@ const uuid = '11111111-1111-4111-8111-111111111111'
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 
 describe('finance operational dialogs', () => {
+  it('presents expense status and outstanding balance with descriptive labels', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ categories: [] }))
+      .mockResolvedValueOnce(json({
+        obligations: [{
+          id: uuid,
+          concept: 'Internet del local',
+          amount: 240000,
+          outstanding_amount: 240000,
+          requires_cash_session_on_void: false,
+          due_date: '2026-08-18',
+          status: 'pending',
+        }],
+        total: 1,
+      })))
+
+    render(<ExpensesPanel organizationId={uuid} branchId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-31', branchId: uuid }} onChanged={vi.fn()} />)
+
+    expect(await screen.findAllByText('Pendiente')).toHaveLength(2)
+    expect(screen.getAllByText('Pendiente de pago')).toHaveLength(3)
+  })
+
   it('exposes recurrence controls when creating an expense', async () => {
     const user = userEvent.setup()
     render(<ExpenseDialog open onOpenChange={vi.fn()} organizationId={uuid} branchId={uuid} categories={[{ id: uuid, name: 'Alquiler' }]} onSaved={vi.fn()} />)
@@ -109,6 +132,7 @@ describe('finance operational dialogs', () => {
     render(<PayrollPanel organizationId={uuid} branchId={null} filters={{ startDate: '2026-08-01', endDate: '2026-08-15', branchId: null }} onChanged={vi.fn()} />)
 
     expect(await screen.findByRole('button', { name: 'Preparar nómina' })).toBeEnabled()
+    expect(screen.getAllByText('Revisar y aprobar')).toHaveLength(2)
     await user.click(screen.getByRole('button', { name: 'Aprobar nómina' }))
     expect(screen.getByRole('alertdialog')).toHaveTextContent('no se puede deshacer')
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining(`/payroll/${uuid}/approve`), expect.anything())
@@ -183,5 +207,16 @@ describe('finance operational dialogs', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     expect(fetchMock.mock.calls[1][0]).toContain('startDate=2026-08-01')
     expect(fetchMock.mock.calls[1][0]).toContain('branchId=' + uuid)
+  })
+
+  it('labels complete profitability rows instead of relying on color alone', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({
+      rows: [{ id: uuid, label: 'Venta DEMO', revenue: 1000000, directCosts: 500000, grossProfit: 500000, complete: true }],
+    })))
+
+    render(<ProfitabilityPanel organizationId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-15', branchId: uuid }} />)
+
+    expect(await screen.findAllByText('Información completa')).toHaveLength(2)
+    expect(screen.getAllByText('Costos directos')).toHaveLength(2)
   })
 })
