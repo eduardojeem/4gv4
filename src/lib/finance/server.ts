@@ -1400,6 +1400,7 @@ export type FinanceSummaryQuery = z.infer<typeof financeSummaryQuerySchema>
 
 type FinanceSaleRecord = {
   id: string
+  code?: string | null
   branchId: string | null
   createdAt: string
   status: string | null
@@ -1428,6 +1429,7 @@ type FinanceSalePaymentRecord = {
 
 type FinanceRepairRecord = {
   id: string
+  ticketNumber?: string | null
   branchId: string | null
   createdAt: string
   status: string | null
@@ -1818,7 +1820,7 @@ async function loadFinanceSummaryRecords(
   const salesQuery = branch(
     admin
       .from('sales')
-      .select('id, branch_id, created_at, status, total_amount, payment_status, created_by', { count: 'exact' })
+      .select('id, code, branch_id, created_at, status, total_amount, payment_status, created_by', { count: 'exact' })
       .eq('organization_id', organizationId)
       .gte('created_at', startDate)
       .lt('created_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
@@ -1827,7 +1829,7 @@ async function loadFinanceSummaryRecords(
   const repairsQuery = branch(
     admin
       .from('repairs')
-      .select('id, branch_id, created_at, status, final_cost, estimated_cost, paid_amount, technician_id', { count: 'exact' })
+      .select('id, ticket_number, branch_id, created_at, status, final_cost, estimated_cost, paid_amount, technician_id', { count: 'exact' })
       .eq('organization_id', organizationId)
       .gte('created_at', startDate)
       .lt('created_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
@@ -1887,6 +1889,7 @@ async function loadFinanceSummaryRecords(
 
   const sales = (salesResult.data ?? []).map((sale) => ({
     id: String(sale.id),
+    code: (sale as { code?: string | null }).code ?? null,
     branchId: sale.branch_id ?? null,
     createdAt: String(sale.created_at),
     status: sale.status ?? null,
@@ -1896,6 +1899,7 @@ async function loadFinanceSummaryRecords(
   }))
   const repairs = (repairsResult.data ?? []).map((repair) => ({
     id: String(repair.id),
+    ticketNumber: (repair as { ticket_number?: string | null }).ticket_number ?? null,
     branchId: repair.branch_id ?? null,
     createdAt: String(repair.created_at),
     status: repair.status ?? null,
@@ -2207,7 +2211,40 @@ export async function getFinanceProfitability(
   group: FinanceProfitabilityGroup,
 ): Promise<FinanceProfitabilityRow[]> {
   const records = await loadFinanceSummaryRecords(organizationId, filters)
-  return buildProfitabilityRows(records, filters, group)
+  const rows = buildProfitabilityRows(records, filters, group)
+
+  // Al agrupar por empleado o sucursal, buildProfitabilityRows deja el UUID
+  // como etiqueta (no tiene los nombres a mano). Acá se resuelven a nombres
+  // reales para que la columna "Detalle" sea legible en vez de un UUID.
+  if (group !== 'employee' && group !== 'branch') return rows
+
+  const idPrefix = group === 'employee' ? 'employee:' : 'branch:'
+  const sentinel = group === 'employee' ? 'unassigned' : 'organization'
+  const ids = rows
+    .map((row) => row.id.slice(idPrefix.length))
+    .filter((id) => id && id !== sentinel)
+  if (ids.length === 0) return rows
+
+  const admin = createAdminSupabase()
+  const nameById = new Map<string, string>()
+  if (group === 'employee') {
+    const { data } = await admin.from('profiles').select('id, full_name, email').in('id', ids)
+    for (const profile of data ?? []) {
+      const name = (profile.full_name as string | null)?.trim() || (profile.email as string | null) || null
+      if (name) nameById.set(String(profile.id), name)
+    }
+  } else {
+    const { data } = await admin.from('branches').select('id, name').in('id', ids).eq('organization_id', organizationId)
+    for (const branchRow of data ?? []) {
+      if (branchRow.name) nameById.set(String(branchRow.id), String(branchRow.name))
+    }
+  }
+
+  return rows.map((row) => {
+    const rawId = row.id.slice(idPrefix.length)
+    const resolved = nameById.get(rawId)
+    return resolved ? { ...row, label: resolved } : row
+  })
 }
 
 function buildProfitabilityRows(
@@ -2244,7 +2281,9 @@ function buildProfitabilityRows(
   const saleKey = (sale: FinanceSaleRecord) => {
     if (group === 'employee') return [`employee:${sale.employeeId ?? 'unassigned'}`, sale.employeeId ?? 'Sin empleado'] as const
     if (group === 'branch') return [`branch:${sale.branchId ?? 'organization'}`, sale.branchId ?? 'Organización'] as const
-    return [`sale:${sale.id}`, sale.id] as const
+    // Etiqueta legible para la fila de una venta: su código, o el id corto
+    // como respaldo — nunca el UUID completo.
+    return [`sale:${sale.id}`, sale.code ?? `Venta ${sale.id.slice(0, 8)}`] as const
   }
   for (const sale of sales) {
     if (group === 'product') {
@@ -2276,7 +2315,8 @@ function buildProfitabilityRows(
       ? [`employee:${repair.employeeId ?? 'unassigned'}`, repair.employeeId ?? 'Sin empleado'] as const
       : group === 'branch'
         ? [`branch:${repair.branchId ?? 'organization'}`, repair.branchId ?? 'Organización'] as const
-        : [`repair:${repair.id}`, repair.id] as const
+        // Ticket de la reparación como etiqueta legible, id corto de respaldo.
+        : [`repair:${repair.id}`, repair.ticketNumber ?? `Reparación ${repair.id.slice(0, 8)}`] as const
     const parts = repairPartsByRepairId.get(repair.id) ?? []
     add(
       key[0],
