@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { AdminFinanceFilters } from '@/hooks/use-admin-finances'
 import { formatCurrency } from '@/lib/currency'
+import { cn } from '@/lib/utils'
 
 type Group = 'sale' | 'repair' | 'product' | 'employee' | 'branch'
 type Row = {
@@ -18,6 +20,10 @@ type Row = {
 
 const money = (value: number | null) =>
   value === null ? 'Sin cobertura' : formatCurrency(value)
+
+// Una utilidad bruta negativa es una pérdida: se pinta en rojo para que
+// salte a la vista en vez de leerse como cualquier otro número.
+const lossClass = (value: number | null) => (value !== null && value < 0 ? 'text-destructive' : '')
 
 function coverage(row: Row) {
   return row.complete
@@ -34,6 +40,7 @@ export function ProfitabilityPanel({
 }) {
   const [group, setGroup] = useState<Group>('sale')
   const [rows, setRows] = useState<Row[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -56,19 +63,27 @@ export function ProfitabilityPanel({
 
   useEffect(() => {
     let active = true
+    setIsLoading(true)
     void (async () => {
       const response = await fetch(`/api/admin/finances/profitability?${params.toString()}`)
       const payload = await response.json().catch(() => null) as { rows?: Row[]; error?: string } | null
       if (!active) return
       if (!response.ok) {
         setError(payload?.error ?? 'No se pudo cargar la rentabilidad.')
+        setIsLoading(false)
         return
       }
       setError(null)
       setRows(payload?.rows ?? [])
+      setIsLoading(false)
     })()
     return () => { active = false }
   }, [params])
+
+  // Skeleton solo en la carga inicial (todavía sin datos): al cambiar de
+  // agrupación se conservan las filas anteriores visibles mientras llegan las
+  // nuevas, en vez de parpadear al esqueleto.
+  const showSkeleton = isLoading && rows.length === 0 && !error
 
   async function handleExport() {
     if (isExporting) return
@@ -139,15 +154,22 @@ export function ProfitabilityPanel({
 
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 
+      {showSkeleton ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Cargando rentabilidad">
+          <Skeleton className="h-20 w-full rounded-lg" />
+          <Skeleton className="h-56 w-full rounded-lg" />
+        </div>
+      ) : null}
+
       {rows.length > 0 ? (
         <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
           <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Ingresos visibles</p><p className="mt-1 text-lg font-semibold tabular-nums">{money(totals.revenue)}</p></div>
           <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Costos directos visibles</p><p className="mt-1 text-lg font-semibold tabular-nums">{money(totals.directCosts)}</p></div>
-          <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Utilidad bruta visible</p><p className="mt-1 text-lg font-semibold tabular-nums text-primary">{money(totals.grossProfit)}</p></div>
+          <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Utilidad bruta visible</p><p className={cn('mt-1 text-lg font-semibold tabular-nums', totals.grossProfit < 0 ? 'text-destructive' : 'text-primary')}>{money(totals.grossProfit)}</p></div>
         </div>
       ) : null}
 
-      <div className="hidden overflow-hidden rounded-lg border md:block">
+      <div className={cn('hidden overflow-hidden rounded-lg border md:block', showSkeleton && 'md:hidden')}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/60 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -168,7 +190,7 @@ export function ProfitabilityPanel({
                 </td>
                 <td className="px-4 py-3 text-right font-medium tabular-nums">{money(row.revenue)}</td>
                 <td className="px-4 py-3 text-right font-medium tabular-nums">{money(row.directCosts)}</td>
-                <td className="px-4 py-3 text-right font-semibold tabular-nums">{money(row.grossProfit)}</td>
+                <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', lossClass(row.grossProfit))}>{money(row.grossProfit)}</td>
               </tr>
               )
             })}
@@ -183,7 +205,7 @@ export function ProfitabilityPanel({
         </table>
       </div>
 
-      <div className="grid gap-3 md:hidden">
+      <div className={cn('grid gap-3 md:hidden', showSkeleton && 'hidden')}>
         {rows.map((row) => {
           const status = coverage(row)
           return (
@@ -195,7 +217,7 @@ export function ProfitabilityPanel({
               <dl className="mt-4 grid grid-cols-3 gap-3 border-t pt-3 text-sm">
                 <div><dt className="text-xs text-muted-foreground">Ingresos</dt><dd className="mt-1 font-medium tabular-nums">{money(row.revenue)}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">Costos directos</dt><dd className="mt-1 font-medium tabular-nums">{money(row.directCosts)}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">Utilidad bruta</dt><dd className="mt-1 font-semibold tabular-nums">{money(row.grossProfit)}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Utilidad bruta</dt><dd className={cn('mt-1 font-semibold tabular-nums', lossClass(row.grossProfit))}>{money(row.grossProfit)}</dd></div>
               </dl>
             </article>
           )
