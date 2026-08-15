@@ -1,6 +1,7 @@
 'use client'
 
 import { type FormEvent, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -92,6 +93,12 @@ export function ExpenseDialog({
     await onSaved()
     idempotencyKeyRef.current = null
     onOpenChange(false)
+    // Confirmación explícita: antes guardar solo cerraba el modal en silencio y
+    // parecía que "no se guardaba". La nota avisa del filtro por período, que es
+    // por qué un gasto recién creado a veces no aparece en la lista visible.
+    toast.success('Gasto guardado', {
+      description: 'Si no lo ves en la lista, revisá que su fecha contable esté dentro del período seleccionado arriba.',
+    })
   }
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
