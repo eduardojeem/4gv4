@@ -90,11 +90,16 @@ describe('RepairDeliveryDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
     fireEvent.click(screen.getByRole('button', { name: /Retirado sin reparar/i }))
-    fireEvent.click(screen.getByRole('checkbox'))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Entrega' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar y entregar' }))
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1))
-    expect(onConfirm).toHaveBeenCalledWith('repair-1', expect.not.objectContaining({ payment: expect.anything() }))
+    expect(onConfirm).toHaveBeenCalledWith('repair-1', expect.objectContaining({
+      outcome: 'withdrawn',
+      charge: { mode: 'none' },
+      parts: [],
+      settlement: { kind: 'none' },
+      idempotencyKey: expect.stringMatching(/^repair-delivery-/),
+    }))
   })
 
   it('registers a full transfer and repaired delivery without outstanding consent', async () => {

@@ -1005,7 +1005,10 @@ function RepairsPageContent() {
             throw new Error(result?.error || 'No se pudo registrar la entrega')
           }
           await refreshRepairs()
-          toast.success(payload.payment ? 'Pago y entrega registrados' : 'Entrega registrada')
+          const collected = payload.outcome === 'repaired'
+            ? Boolean(payload.payment)
+            : payload.settlement.kind === 'payment'
+          toast.success(collected ? 'Pago y entrega registrados' : 'Entrega registrada')
         }}
       />
 
