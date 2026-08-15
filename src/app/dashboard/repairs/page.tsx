@@ -1032,6 +1032,12 @@ function RepairsPageContent() {
         repair={payTarget}
         onOpenChange={(open) => !open && setPayTarget(null)}
         onConfirm={handleQuickPayConfirm}
+        onDefinePrice={(repair) => {
+          setPayTarget(null)
+          setSelectedRepair(repair)
+          setDialogMode('edit')
+          setIsDialogOpen(true)
+        }}
       />
     </div>
   )

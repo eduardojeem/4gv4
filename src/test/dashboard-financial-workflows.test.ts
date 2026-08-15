@@ -228,6 +228,16 @@ describe('dashboard financial workflow contracts', () => {
     expect(cashHook).toContain("name: 'Caja Principal'")
   })
 
+  it('routes a repair without price from payment to the existing edit flow', () => {
+    const repairsPage = readFileSync(resolve(workspace, 'src/app/dashboard/repairs/page.tsx'), 'utf8')
+
+    expect(repairsPage).toContain('onDefinePrice={(repair) => {')
+    expect(repairsPage).toContain('setPayTarget(null)')
+    expect(repairsPage).toContain('setSelectedRepair(repair)')
+    expect(repairsPage).toContain("setDialogMode('edit')")
+    expect(repairsPage).toContain('setIsDialogOpen(true)')
+  })
+
   it('commits payment metadata and paid-repair protection in the POS transaction', () => {
     const route = readFileSync(resolve(workspace, 'src/app/api/pos/process-sale/route.ts'), 'utf8')
     const atomicCheckoutMigration = readFileSync(

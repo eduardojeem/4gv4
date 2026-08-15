@@ -33,6 +33,7 @@ vi.mock('@/app/dashboard/pos/components/OpenCashRegisterDialog', () => ({
 
 vi.mock('@/lib/currency', () => ({
   formatCurrency: (amount: number) => `${amount}`,
+  getCurrencyFractionDigits: () => 0,
 }))
 
 const repair = {
@@ -98,6 +99,26 @@ describe('RepairPaymentDialog', () => {
     expect(screen.queryByText('Método de pago')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Confirmar Cobro' })).not.toBeInTheDocument()
     expect(cashRegisterMocks.checkOpenSession).not.toHaveBeenCalled()
+  })
+
+  it('uses automatic labor and parts pricing even when a stored final cost is stale', async () => {
+    cashRegisterMocks.checkOpenSession.mockResolvedValue({ id: 'session-1' })
+    const automaticallyPricedRepair = {
+      ...repair,
+      pricingMode: 'automatic' as const,
+      finalCost: 0,
+      estimatedCost: 0,
+      laborCost: 50000,
+      discountAmount: 10000,
+      paidAmount: 0,
+      parts: [{ id: 1, name: 'Pantalla', cost: 60000, quantity: 1, supplier: '', partNumber: '' }],
+    }
+
+    render(<RepairPaymentDialog open repair={automaticallyPricedRepair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
+
+    expect(await screen.findByText('Caja abierta')).toBeVisible()
+    expect(screen.getByText('Total a cobrar').parentElement).toHaveTextContent('100000')
+    expect(screen.queryByText('Primero definí el precio de la reparación')).not.toBeInTheDocument()
   })
 
   it('opens the register and preserves the payment draft', async () => {

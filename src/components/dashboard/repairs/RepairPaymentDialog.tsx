@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
+import { calculateRepairPricing } from '@/lib/repairs/pricing'
 import {
   Banknote,
   CreditCard,
@@ -81,7 +82,25 @@ export function RepairPaymentDialog({
   const checkOpenSessionRef = useRef(cashRegister.checkOpenSession)
   // Saldo real pendiente: si ya se cobró algo antes (a cuenta, o desde el
   // POS), no tiene sentido sugerir el costo total de nuevo.
-  const totalDue = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
+  const totalDue = useMemo(() => {
+    if (!repair) return 0
+
+    // Los registros anteriores a pricingMode ya tienen un total persistido.
+    // Solo recalculamos mano de obra + repuestos cuando el modo automatico es
+    // explicito, evitando convertir esos registros historicos en costo cero.
+    if (repair.pricingMode !== 'automatic') {
+      return Math.max(0, Number(repair.finalCost ?? repair.estimatedCost) || 0)
+    }
+
+    return calculateRepairPricing({
+      mode: repair.pricingMode,
+      laborCost: repair.laborCost,
+      finalCost: repair.finalCost ?? repair.estimatedCost,
+      discountAmount: repair.discountAmount,
+      paidAmount: repair.paidAmount,
+      parts: repair.parts,
+    }).customerTotal
+  }, [repair])
   const alreadyPaid = repair?.paidAmount ?? 0
   const persistedBalanceDue = Math.max(0, totalDue - alreadyPaid)
 
