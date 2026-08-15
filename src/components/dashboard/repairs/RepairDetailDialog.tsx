@@ -38,6 +38,7 @@ import { toast } from 'sonner'
 import { Repair, RepairDeliveryOutcome, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { getAvailableTransitions } from '@/lib/repairs/state-machine'
+import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { PatternDrawer } from './PatternDrawer'
@@ -149,6 +150,12 @@ export function RepairDetailDialog({
   const displayCost = repair.finalCost !== null && repair.finalCost !== undefined
     ? repair.finalCost
     : (repair.estimatedCost || 0)
+  const financial = getRepairFinancialPresentation({
+    status: repair.status,
+    finalCost: repair.finalCost,
+    estimatedCost: repair.estimatedCost,
+    paidAmount: repair.paidAmount,
+  })
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return 'Pendiente'
@@ -603,7 +610,7 @@ export function RepairDetailDialog({
                   <div>
                     <h4 className="font-semibold text-yellow-800 dark:text-yellow-400">Equipo Listo para Entrega</h4>
                     <p className="text-sm text-yellow-700 dark:text-yellow-500/90 mt-1">
-                      El equipo está listo. Para entregarlo, debe procesar el pago desde el módulo de <strong>Punto de Venta (POS)</strong>.
+                      Podés cobrar al entregar o continuar por POS si necesitás agregar productos.
                     </p>
                   </div>
                 </div>
@@ -680,69 +687,90 @@ export function RepairDetailDialog({
             <div className="flex flex-col lg:flex-row gap-6 items-start">
               {/* ─── Columna lateral: resumen siempre visible ─── */}
               <aside className="w-full lg:w-80 shrink-0 space-y-4">
-                {/* Costo */}
-                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 dark:from-emerald-600 dark:via-emerald-700 dark:to-teal-800 p-5 text-white shadow-md">
-                  <DollarSign className="pointer-events-none absolute -right-4 -top-4 h-28 w-28 text-white/10" />
-                  <div className="relative space-y-2">
+                {/* Estado financiero: independiente de si el equipo ya fue entregado. */}
+                <section aria-labelledby="repair-payment-summary-title" className="relative overflow-hidden rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/30">
+                  <DollarSign className="pointer-events-none absolute -right-4 -top-4 h-28 w-28 text-emerald-600/5" />
+                  <div className="relative space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-white/85 text-xs font-medium uppercase tracking-wide">
-                        Costo de la Reparación
-                      </span>
-                      {repair.status === 'entregado' && (
-                        <Badge variant="secondary" className="bg-white/90 text-emerald-700 hover:bg-white font-bold text-[10px]">
-                          PAGADO
-                        </Badge>
-                      )}
-                      {repair.status === 'listo' && (
-                        <Badge variant="secondary" className="bg-yellow-400 text-yellow-900 hover:bg-yellow-400 font-bold text-[10px] border-none">
-                          PENDIENTE DE PAGO
-                        </Badge>
-                      )}
-                      {repair.paymentStatus === 'parcial' && repair.status !== 'entregado' && repair.status !== 'listo' && (
-                        <Badge variant="secondary" className="bg-blue-400 text-blue-900 hover:bg-blue-400 font-bold text-[10px] border-none">
-                          PAGO PARCIAL
-                        </Badge>
-                      )}
+                      <h3 id="repair-payment-summary-title" className="text-xs font-semibold uppercase tracking-wide text-emerald-900 dark:text-emerald-100">
+                        Estado del pago
+                      </h3>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'font-bold text-[10px]',
+                          financial.status === 'pagado'
+                            ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                            : financial.status === 'parcial'
+                              ? 'border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200'
+                              : 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200',
+                        )}
+                      >
+                        {financial.status === 'pagado'
+                          ? 'Pago completado'
+                          : financial.status === 'parcial'
+                            ? 'Pago parcial'
+                            : 'Pago pendiente'}
+                      </Badge>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-bold text-3xl">{formatCurrency(displayCost)}</span>
-                      {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
-                        <Badge variant="secondary" className="bg-white/20 text-white border-white/30 text-[10px]">
-                          {repair.finalCost > repair.estimatedCost ? '↑' : '↓'} Ajustado
-                        </Badge>
-                      )}
-                    </div>
-                    {repair.paymentStatus === 'parcial' && repair.paidAmount !== undefined && repair.paidAmount > 0 && (
-                      <div className="text-white/90 text-xs space-y-1 pt-1">
-                        <div className="flex justify-between border-b border-white/20 pb-1">
-                          <span>Pagado:</span>
-                          <span className="font-semibold">{formatCurrency(repair.paidAmount)}</span>
-                        </div>
-                        <div className="flex justify-between font-bold text-white">
-                          <span>Restante:</span>
-                          <span>{formatCurrency(displayCost - repair.paidAmount)}</span>
-                        </div>
+                    <dl className="divide-y divide-emerald-200/80 rounded-lg border border-emerald-200 bg-background/80 text-sm dark:divide-emerald-900/60 dark:border-emerald-900/60">
+                      <div className="flex items-center justify-between px-3 py-2">
+                        <dt className="text-muted-foreground">Total</dt>
+                        <dd className="font-semibold tabular-nums">{formatCurrency(financial.total)}</dd>
                       </div>
-                    )}
+                      <div className="flex items-center justify-between px-3 py-2">
+                        <dt className="text-muted-foreground">Pagado</dt>
+                        <dd className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{formatCurrency(financial.paid)}</dd>
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-2">
+                        <dt className="font-medium">Pendiente</dt>
+                        <dd className={cn(
+                          'font-bold tabular-nums',
+                          financial.balance > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300',
+                        )}>
+                          {formatCurrency(financial.balance)}
+                        </dd>
+                      </div>
+                    </dl>
                     {repair.finalCost === null || repair.finalCost === undefined ? (
-                      <p className="text-white/75 text-[11px] leading-snug">
+                      <p className="text-muted-foreground text-[11px] leading-snug">
                         * Costo estimado — el final se determina al completar el diagnóstico
                       </p>
                     ) : (
-                      <div className="flex items-center gap-3 text-white/90 text-xs pt-1">
+                      <div className="flex items-center gap-3 text-muted-foreground text-xs pt-1">
                         <span>
-                          <span className="text-white/70">Mano de obra </span>
+                          <span>Mano de obra </span>
                           <span className="font-semibold">{formatCurrency(repair.laborCost || 0)}</span>
                         </span>
-                        <span className="text-white/40">•</span>
+                        <span aria-hidden="true">•</span>
                         <span>
-                          <span className="text-white/70">Piezas </span>
+                          <span>Piezas </span>
                           <span className="font-semibold">{formatCurrency(partsTotal)}</span>
                         </span>
                       </div>
                     )}
                   </div>
-                </div>
+                </section>
+
+                {repair.payments && repair.payments.length > 0 && (
+                  <div className="rounded-xl border bg-card p-4 shadow-sm">
+                    <h3 className="text-sm font-semibold">Historial de pagos</h3>
+                    <div className="mt-3 space-y-3">
+                      {repair.payments.map((payment) => (
+                        <div key={payment.id} className="rounded-lg border p-3 text-xs">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-semibold capitalize">{payment.method === 'mixed' ? 'Pago mixto' : payment.method}</span>
+                            <span className="font-bold tabular-nums">{formatCurrency(payment.amount)}</span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap justify-between gap-2 text-muted-foreground">
+                            <span>{format(new Date(payment.createdAt), 'dd/MM/yyyy HH:mm', { locale: es })}</span>
+                            {payment.reference && <span>Ref. {payment.reference}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Cliente */}
                 <div className="rounded-xl border bg-card p-4 space-y-3.5 shadow-sm">
@@ -1185,9 +1213,8 @@ export function RepairDetailDialog({
             Cerrar
           </Button>
 
-          {repair.status !== 'entregado' && (
-            <>
-              {onQuickPay && (
+          <>
+              {onQuickPay && financial.canCollect && (
                 <Button
                   variant="default"
                   className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -1197,9 +1224,10 @@ export function RepairDetailDialog({
                   }}
                 >
                   <DollarSign className="h-4 w-4" />
-                  Cobrar Aquí
+                  {repair.status === 'entregado' ? 'Cobrar saldo' : 'Cobrar Aquí'}
                 </Button>
               )}
+              {repair.status !== 'entregado' && repair.status !== 'cancelado' && (
               <Button
                 variant="outline"
                 className="gap-2"
@@ -1213,7 +1241,8 @@ export function RepairDetailDialog({
                 <ExternalLink className="h-4 w-4" />
                 + Productos en POS
               </Button>
-              {onDeliver && (
+              )}
+              {onDeliver && repair.status === 'listo' && (
                 <Button
                   variant="outline"
                   className="gap-2"
@@ -1227,7 +1256,6 @@ export function RepairDetailDialog({
                 </Button>
               )}
             </>
-          )}
 
         </DialogFooter>
 

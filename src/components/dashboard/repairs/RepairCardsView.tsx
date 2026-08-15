@@ -10,7 +10,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Eye, Pencil, Trash2, MoreVertical, PackageCheck } from 'lucide-react'
+import { Eye, Pencil, Trash2, MoreVertical, PackageCheck, DollarSign } from 'lucide-react'
+import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
 
 interface RepairCardsViewProps {
   repairs: Repair[]
@@ -18,14 +19,22 @@ interface RepairCardsViewProps {
   onEdit?: (repair: Repair) => void
   onDelete?: (repairId: string) => void
   onDeliver?: (repair: Repair) => void
+  onQuickPay?: (repair: Repair) => void
 }
 
-export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }: RepairCardsViewProps) {
+export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, onQuickPay }: RepairCardsViewProps) {
   if (repairs.length === 0) return null
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-      {repairs.map((repair) => (
+      {repairs.map((repair) => {
+        const financial = getRepairFinancialPresentation({
+          status: repair.status,
+          finalCost: repair.finalCost,
+          estimatedCost: repair.estimatedCost,
+          paidAmount: repair.paidAmount,
+        })
+        return (
         <div key={repair.id} className="relative group">
           <RepairCard
             repair={repair}
@@ -56,7 +65,16 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }
                     Editar
                   </DropdownMenuItem>
                 )}
-                {onDeliver && repair.status !== 'entregado' && repair.status !== 'cancelado' && (
+                {onQuickPay && financial.canCollect && (
+                  <DropdownMenuItem
+                    className="text-emerald-600 dark:text-emerald-400"
+                    onClick={() => onQuickPay(repair)}
+                  >
+                    <DollarSign className="mr-2 h-3.5 w-3.5" />
+                    {repair.status === 'entregado' ? 'Cobrar saldo' : 'Cobrar aquí'}
+                  </DropdownMenuItem>
+                )}
+                {onDeliver && repair.status === 'listo' && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -84,7 +102,8 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }
             </DropdownMenu>
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

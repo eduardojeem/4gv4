@@ -79,7 +79,6 @@ function RepairsPageContent() {
     repairs,
     isLoading,
     updateStatus,
-    deliverRepair,
     createRepair,
     updateRepair,
     deleteRepair,
@@ -311,7 +310,7 @@ function RepairsPageContent() {
 
       await refreshRepairs()
       const baseMsg = result.method === 'credit' ? 'Crédito registrado' : 'Pago registrado'
-      toast.success(result.markDelivered ? `${baseMsg} y equipo entregado` : `${baseMsg} exitosamente`)
+      toast.success(`${baseMsg} exitosamente`)
     } catch (err) {
       logger.error('Error registering payment', { error: err })
       // Mostrar el motivo real (ej. "No hay caja abierta...") en vez de un
@@ -380,6 +379,7 @@ function RepairsPageContent() {
           if (created && data.devices.length === 1 && (data.depositAmount ?? 0) > 0 && data.depositMethod) {
             try {
               await handleQuickPayConfirm(created.id, {
+                idempotencyKey: `repair-deposit-${crypto.randomUUID()}`,
                 method: data.depositMethod,
                 amount: data.depositAmount!,
                 reference: data.depositReference || undefined,
@@ -850,6 +850,7 @@ function RepairsPageContent() {
             onView={handleViewRepair}
             onDelete={handleDeleteClick}
             onDeliver={setDeliverTarget}
+            onQuickPay={setPayTarget}
             isLoading={false}
             companyInfo={repairListCompanyInfo}
           />
@@ -860,6 +861,7 @@ function RepairsPageContent() {
             onEdit={handleEditRepair}
             onDelete={handleDeleteClick}
             onDeliver={setDeliverTarget}
+            onQuickPay={setPayTarget}
           />
         ) : viewMode === 'kanban' ? (
           <div className="h-[calc(100vh-300px)] min-h-[500px]">
@@ -986,22 +988,20 @@ function RepairsPageContent() {
         repair={deliverTarget}
         onOpenChange={(open) => !open && setDeliverTarget(null)}
         onConfirm={async (id, payload: RepairDeliveryConfirmPayload) => {
-          if (payload.payment && payload.payment.amount > 0) {
-            // Cobra y entrega en un solo paso, reusando el mismo endpoint de
-            // pago que "Cobrar Aquí" (soporta markDelivered + outcome).
-            await handleQuickPayConfirm(id, {
-              method: payload.payment.method,
-              amount: payload.payment.amount,
-              reference: payload.payment.reference,
-              interestRate: payload.payment.interestRate,
-              installments: payload.payment.installments,
-              markDelivered: true,
-              outcome: payload.outcome,
-              note: payload.note,
-            })
-          } else {
-            await deliverRepair(id, payload.outcome, payload.note)
+          const response = await fetch(`/api/repairs/${id}/delivery`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...branchHeaders(selectedBranchId),
+            },
+            body: JSON.stringify(payload),
+          })
+          const result = await response.json().catch(() => null) as { error?: string } | null
+          if (!response.ok) {
+            throw new Error(result?.error || 'No se pudo registrar la entrega')
           }
+          await refreshRepairs()
+          toast.success(payload.payment ? 'Pago y entrega registrados' : 'Entrega registrada')
         }}
       />
 

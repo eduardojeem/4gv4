@@ -21,6 +21,7 @@ interface RepairListProps {
     onView?: (repair: Repair) => void
     onDelete?: (id: string) => void
     onDeliver?: (repair: Repair) => void
+    onQuickPay?: (repair: Repair) => void
     isLoading?: boolean
     companyInfo?: RepairListCompanyInfo
 }
@@ -32,6 +33,7 @@ export const RepairList = memo<RepairListProps>(function RepairList({
     onView,
     onDelete,
     onDeliver,
+    onQuickPay,
     isLoading,
     companyInfo,
 }) {
@@ -87,6 +89,7 @@ export const RepairList = memo<RepairListProps>(function RepairList({
                                 onView={onView}
                                 onDelete={onDelete}
                                 onDeliver={onDeliver}
+                                onQuickPay={onQuickPay}
                                 companyInfo={companyInfo}
                             />
                         ))}

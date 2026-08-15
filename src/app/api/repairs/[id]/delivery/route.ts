@@ -1,84 +1,95 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { resolveWarrantyExpiration } from '@/lib/warranty-utils'
 import {
   fetchRepairById,
   isNextResponse,
   resolveRepairRouteContext,
 } from '@/app/api/repairs/_lib'
+import { parseRepairDeliveryRequest } from '@/lib/repairs/financial-closure'
+import {
+  closeRepairAndRegisterPayment,
+  FinancialClosureRpcError,
+} from '@/lib/repairs/financial-closure-rpc'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
-const VALID_OUTCOMES = new Set(['repaired', 'withdrawn', 'unrepairable'])
+async function resolveCashSessionId(ctx: Awaited<ReturnType<typeof resolveRepairRouteContext>>) {
+  if (isNextResponse(ctx)) return null
+  const { data, error } = await ctx.supabase
+    .from('cash_closures')
+    .select('id, register_id')
+    .eq('organization_id', ctx.organizationId)
+    .eq('branch_id', ctx.branchId)
+    .is('date', null)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  const sessions = (data ?? []) as Array<{ id: string; register_id?: string | null }>
+  return sessions.find((session) => (session.register_id ?? '').toLowerCase() === 'principal')?.id
+    ?? sessions[0]?.id
+    ?? null
+}
 
 export async function POST(request: NextRequest, context: RouteParams) {
   try {
     const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
     if (isNextResponse(ctx)) return ctx
 
+    const parsed = parseRepairDeliveryRequest(await request.json().catch(() => ({})))
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Revisa el resultado, la confirmacion de saldo y los datos de cobro.', code: 'INVALID_DELIVERY_REQUEST' },
+        { status: 400 },
+      )
+    }
+
     const { id } = await context.params
-    const body = await request.json().catch(() => ({})) as {
-      outcome?: unknown
-      note?: unknown
+    const input = parsed.data
+    if (input.payment?.method === 'credit') {
+      return NextResponse.json(
+        { error: 'El credito debe registrarse desde Cobrar saldo antes de entregar.', code: 'DELIVERY_CREDIT_USE_PAYMENT' },
+        { status: 422 },
+      )
     }
 
-    const outcome = typeof body.outcome === 'string' && VALID_OUTCOMES.has(body.outcome)
-      ? body.outcome
-      : null
-
-    if (!outcome) {
-      return NextResponse.json({ error: 'Resultado de entrega invalido.' }, { status: 400 })
+    const cashSessionId = input.payment ? await resolveCashSessionId(ctx) : null
+    if (input.payment && !cashSessionId) {
+      return NextResponse.json(
+        { error: 'No hay una caja abierta en esta sucursal. Abri caja antes de cobrar la reparacion.', code: 'REPAIR_CASH_REGISTER_NOT_OPEN' },
+        { status: 409 },
+      )
     }
 
-    const now = new Date().toISOString()
-    const note = typeof body.note === 'string' ? body.note.trim() : ''
-    const updateData: Record<string, unknown> = {
-      status: 'entregado',
-      picked_up_at: now,
-      delivered_at: now,
-      completed_at: now,
-      delivery_outcome: outcome,
-      updated_at: now,
-    }
+    const operation = await closeRepairAndRegisterPayment(ctx.supabase, {
+      repairId: id,
+      organizationId: ctx.organizationId,
+      branchId: ctx.branchId,
+      actorId: ctx.userId,
+      deliver: true,
+      outcome: input.outcome,
+      note: input.note,
+      allowOutstandingBalance: input.allowOutstandingBalance,
+      payment: input.payment,
+      cashSessionId,
+      idempotencyKey: input.idempotencyKey,
+      source: 'delivery',
+    })
 
-    if (note) {
-      updateData.solution = note
-    }
-
-    // La entrega es el momento en que la garantia empieza a correr de verdad,
-    // asi que la fecha de vencimiento se fija aca a partir de los meses
-    // configurados. Sin esto el cliente perdia los dias entre que se cargaba la
-    // garantia y el retiro del equipo.
-    const { data: currentRepair } = await ctx.supabase
-      .from('repairs')
-      .select('warranty_months')
-      .eq('id', id)
-      .eq('organization_id', ctx.organizationId)
-      .eq('branch_id', ctx.branchId)
-      .maybeSingle()
-
-    const warrantyMonths = Number(currentRepair?.warranty_months || 0)
-    if (warrantyMonths > 0) {
-      updateData.warranty_expires_at = resolveWarrantyExpiration(warrantyMonths, { deliveredAt: now })
-    }
-
-    const { data, error } = await ctx.supabase
-      .from('repairs')
-      .update(updateData)
-      .eq('id', id)
-      .eq('organization_id', ctx.organizationId)
-      .eq('branch_id', ctx.branchId)
-      .select('id')
-      .maybeSingle()
-
+    const { data: repair, error } = await fetchRepairById(ctx, id)
     if (error) throw error
-    if (!data) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
+    if (!repair) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
 
-    const { data: repair, error: fetchError } = await fetchRepairById(ctx, id)
-    if (fetchError) throw fetchError
-
-    return NextResponse.json({ repair })
+    return NextResponse.json({
+      repair,
+      payment: operation.payment_id ? { id: operation.payment_id } : null,
+      idempotent: operation.idempotent,
+    })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Error interno del servidor'
-    return NextResponse.json({ error: message }, { status: 500 })
+    if (error instanceof FinancialClosureRpcError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
+    }
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Error interno del servidor' },
+      { status: 500 },
+    )
   }
 }

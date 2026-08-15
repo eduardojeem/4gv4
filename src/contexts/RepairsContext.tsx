@@ -420,7 +420,12 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     'Content-Type': 'application/json',
                     ...branchHeaders(selectedBranchId),
                 },
-                body: JSON.stringify({ outcome, note }),
+                body: JSON.stringify({
+                    outcome,
+                    note,
+                    allowOutstandingBalance: true,
+                    idempotencyKey: `repair-delivery-${crypto.randomUUID()}`,
+                }),
             })
             const payload = await response.json().catch(() => null) as { repair?: unknown; error?: string } | null
 
