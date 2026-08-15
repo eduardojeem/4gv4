@@ -1,6 +1,6 @@
 # Control global de pagos mediante caja abierta
 
-**Fecha:** 2026-08-15  
+**Fecha:** 2026-08-15
 **Estado:** aprobado para planificación
 
 ## Objetivo
@@ -100,4 +100,3 @@ Se ejecutarán las suites enfocadas, `typecheck`, ESLint de archivos tocados y `
 ## Estrategia de entrega
 
 El cambio se implementará incrementalmente: primero contrato y protección de servidor, luego POS y reparaciones, después créditos y egresos, y finalmente consolidación visual. Cada incremento mantendrá compatibilidad con datos históricos y quedará cubierto por pruebas antes de avanzar.
-
