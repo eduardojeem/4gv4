@@ -753,6 +753,22 @@ export function RepairDetailDialog({
                         </span>
                       </div>
                     )}
+
+                    {onQuickPay && financial.canCollect && (
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm mt-1"
+                        onClick={() => {
+                          onClose()
+                          onQuickPay(repair)
+                        }}
+                      >
+                        <DollarSign className="h-4 w-4" />
+                        Pagar monto pendiente ({formatCurrency(financial.balance)})
+                      </Button>
+                    )}
                   </div>
                 </section>
 
@@ -1091,6 +1107,44 @@ export function RepairDetailDialog({
                             )}
                           </div>
                         </div>
+                        <Separator />
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Monto Pagado:</span>
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                            {formatCurrency(financial.paid)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="font-semibold text-foreground">Saldo Pendiente:</span>
+                          <span
+                            className={cn(
+                              'font-bold text-base tabular-nums',
+                              financial.balance > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-emerald-600 dark:text-emerald-400',
+                            )}
+                          >
+                            {formatCurrency(financial.balance)}
+                          </span>
+                        </div>
+
+                        {onQuickPay && financial.canCollect && (
+                          <div className="pt-2">
+                            <Button
+                              type="button"
+                              variant="default"
+                              size="sm"
+                              className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                              onClick={() => {
+                                onClose()
+                                onQuickPay(repair)
+                              }}
+                            >
+                              <DollarSign className="h-4 w-4" />
+                              Pagar monto pendiente ({formatCurrency(financial.balance)})
+                            </Button>
+                          </div>
+                        )}
                         {repair.finalCost === null || repair.finalCost === undefined ? (
                           <div className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-2 flex items-start gap-2">
                             <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
@@ -1229,14 +1283,14 @@ export function RepairDetailDialog({
               {onQuickPay && financial.canCollect && (
                 <Button
                   variant="default"
-                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
                   onClick={() => {
                     onClose()
                     onQuickPay(repair)
                   }}
                 >
                   <DollarSign className="h-4 w-4" />
-                  {repair.status === 'entregado' ? 'Cobrar saldo' : 'Cobrar Aquí'}
+                  {repair.status === 'entregado' ? 'Cobrar saldo' : `Pagar monto pendiente (${formatCurrency(financial.balance)})`}
                 </Button>
               )}
               {repair.status !== 'entregado' && repair.status !== 'cancelado' && (

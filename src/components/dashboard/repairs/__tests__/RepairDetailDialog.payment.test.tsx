@@ -104,19 +104,24 @@ describe('RepairDetailDialog payment summary', () => {
     expect(screen.getByRole('heading', { name: 'Editar precio de reparación' })).toBeInTheDocument()
   })
 
-  it('does not offer quick price editing for a cancelled repair', async () => {
+  it('triggers onQuickPay when clicking pay pending balance button', async () => {
     const user = userEvent.setup()
+    const onQuickPay = vi.fn()
+    const onClose = vi.fn()
     render(
       <RepairDetailDialog
         open
-        repair={{ ...baseRepair, status: 'cancelado', paidAmount: 0 }}
-        onClose={vi.fn()}
-        onQuickPriceSave={vi.fn().mockResolvedValue(true)}
+        repair={{ ...baseRepair, status: 'reparacion', paidAmount: 30 }}
+        onClose={onClose}
+        onQuickPay={onQuickPay}
       />,
     )
 
-    await user.click(screen.getByRole('tab', { name: 'Costos y Piezas' }))
+    const payButton = screen.getAllByRole('button', { name: /Pagar monto pendiente/i })[0]
+    expect(payButton).toBeInTheDocument()
+    await user.click(payButton)
 
-    expect(screen.queryByRole('button', { name: 'Editar precio' })).not.toBeInTheDocument()
+    expect(onClose).toHaveBeenCalled()
+    expect(onQuickPay).toHaveBeenCalledWith(expect.objectContaining({ id: 'repair-1' }))
   })
 })
