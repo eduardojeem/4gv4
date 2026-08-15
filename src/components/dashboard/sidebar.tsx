@@ -82,6 +82,33 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   },
 ]
 
+export function SidebarToggleButton({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean
+  onToggle: () => void
+}) {
+  const label = collapsed ? 'Expandir menú' : 'Contraer menú'
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={onToggle}
+      className="h-10 w-10 shrink-0 border border-primary/30 bg-primary/10 text-primary shadow-sm hover:border-primary/50 hover:bg-primary/20 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
+      aria-label={label}
+      title={label}
+    >
+      {collapsed ? (
+        <ChevronRight className="h-5 w-5" />
+      ) : (
+        <ChevronLeft className="h-5 w-5" />
+      )}
+    </Button>
+  )
+}
+
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -186,7 +213,10 @@ export const Sidebar = memo(function Sidebar() {
         collapsed ? "w-16 -translate-x-full lg:translate-x-0" : "w-72 sm:w-80 translate-x-0"
       )}>
         {/* Logo */}
-        <div className="flex items-center justify-between p-4 border-b border-border bg-linear-to-r from-primary/5 to-primary/10 shrink-0">
+        <div className={cn(
+          "flex items-center border-b border-border bg-linear-to-r from-primary/5 to-primary/10 shrink-0",
+          collapsed ? "justify-center p-3" : "justify-between p-4"
+        )}>
           {!collapsed && (
             <div className="flex items-center space-x-3 min-w-0">
               {organizationLogoUrl ? (
@@ -209,19 +239,7 @@ export const Sidebar = memo(function Sidebar() {
               </div>
             </div>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleSidebar}
-            className="p-2 hover:bg-primary/10"
-            aria-label={collapsed ? 'Expandir sidebar' : 'Contraer sidebar'}
-          >
-            {collapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
-          </Button>
+          <SidebarToggleButton collapsed={collapsed} onToggle={toggleSidebar} />
         </div>
 
         {/* Navigation */}
