@@ -21,6 +21,27 @@ const repair = {
 } as Repair
 
 describe('RepairDeliveryDialog', () => {
+  it('does not keep the suggested payment after returning and choosing withdrawn', async () => {
+    const onConfirm = vi.fn().mockResolvedValue(undefined)
+    render(
+      <RepairDeliveryDialog
+        open
+        repair={repair}
+        onOpenChange={vi.fn()}
+        onConfirm={onConfirm}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+    fireEvent.click(screen.getByRole('button', { name: /Retirado sin reparar/i }))
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Entrega' }))
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1))
+    expect(onConfirm).toHaveBeenCalledWith('repair-1', expect.not.objectContaining({ payment: expect.anything() }))
+  })
+
   it('registers a full transfer and repaired delivery without outstanding consent', async () => {
     const onConfirm = vi.fn().mockResolvedValue(undefined)
     render(
@@ -33,7 +54,13 @@ describe('RepairDeliveryDialog', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
+    expect(screen.getByRole('heading', { name: 'Cobrar reparación' })).toBeInTheDocument()
     expect(screen.getByLabelText('Monto a cobrar')).toHaveValue(100)
+    expect(screen.queryByRole('button', { name: /Retirado sin reparar/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+    expect(screen.getByRole('button', { name: /Reparado y funcionando/i })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Transferencia' }))
     fireEvent.change(screen.getByLabelText('N° de Referencia'), { target: { value: 'TRX-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Cobrar y Entregar' }))

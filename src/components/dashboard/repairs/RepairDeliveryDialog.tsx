@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
-import { CheckCircle2, PackageX, Wrench, Loader2, AlertTriangle, DollarSign, ExternalLink } from 'lucide-react'
+import { CheckCircle2, PackageX, Wrench, Loader2, AlertTriangle, DollarSign, ExternalLink, ArrowLeft } from 'lucide-react'
 import { Repair, RepairDeliveryOutcome } from '@/types/repairs'
 import {
   PAYMENT_METHODS,
@@ -101,6 +101,7 @@ export function RepairDeliveryDialog({
   allowPayment = true,
 }: RepairDeliveryDialogProps) {
   const [selected, setSelected] = useState<RepairDeliveryOutcome | null>(null)
+  const [step, setStep] = useState<'outcome' | 'payment'>('outcome')
   const [note, setNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -138,6 +139,7 @@ export function RepairDeliveryDialog({
   const handleClose = () => {
     if (isSubmitting) return
     setSelected(null)
+    setStep('outcome')
     setNote('')
     setMethod('cash')
     setAmount('')
@@ -150,7 +152,7 @@ export function RepairDeliveryDialog({
   }
 
   const parsedAmount = parseFloat(amount) || 0
-  const wantsCharge = allowPayment && parsedAmount > 0
+  const wantsCharge = step === 'payment' && allowPayment && parsedAmount > 0
   // Guardrail: si queda saldo y no se va a cobrar nada, hay que confirmar a
   // propósito que se entrega igual (fiado). Antes esto pasaba en silencio.
   // No aplica donde no se ofrece cobro (allowPayment=false): ahí la entrega
@@ -210,7 +212,7 @@ export function RepairDeliveryDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-            Confirmar Entrega
+            {step === 'payment' ? 'Cobrar reparación' : 'Confirmar Entrega'}
           </DialogTitle>
           <DialogDescription asChild>
             <div className="space-y-1 mt-1">
@@ -229,8 +231,23 @@ export function RepairDeliveryDialog({
           </DialogDescription>
         </DialogHeader>
 
+        <div className="grid grid-cols-2 gap-2" aria-label="Progreso de entrega">
+          <div className={cn(
+            'rounded-md border px-3 py-2 text-xs font-semibold',
+            step === 'outcome' ? 'border-primary bg-primary/5 text-primary' : 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
+          )}>
+            1. Resultado
+          </div>
+          <div className={cn(
+            'rounded-md border px-3 py-2 text-xs font-semibold',
+            step === 'payment' ? 'border-primary bg-primary/5 text-primary' : 'text-muted-foreground',
+          )}>
+            2. Cobro y entrega
+          </div>
+        </div>
+
         <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto px-1">
-          <div className="space-y-3">
+          {step === 'outcome' && <div className="space-y-3">
             <p className="text-sm font-medium">¿Cuál fue el resultado?</p>
             <div className="flex flex-col gap-2">
               {outcomes.map((o) => {
@@ -240,7 +257,16 @@ export function RepairDeliveryDialog({
                   <button
                     key={o.value}
                     type="button"
-                    onClick={() => setSelected(o.value)}
+                    onClick={() => {
+                      setSelected(o.value)
+                      if (o.value === 'repaired' && allowPayment && balanceDue > 0) {
+                        setAmount((current) => current || balanceDue.toString())
+                        setStep('payment')
+                      } else if (o.value !== 'repaired') {
+                        setAmount('')
+                        setDeliverUnpaid(false)
+                      }
+                    }}
                     className={cn(
                       'flex items-start gap-3 rounded-lg border-2 p-3 text-left transition-all duration-150',
                       isSelected
@@ -261,10 +287,24 @@ export function RepairDeliveryDialog({
                 )
               })}
             </div>
-          </div>
+
+            {selected && selected !== 'repaired' && allowPayment && balanceDue > 0 && (
+              <label className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs dark:border-amber-800 dark:bg-amber-950/30">
+                <Checkbox
+                  checked={deliverUnpaid}
+                  onCheckedChange={(value) => setDeliverUnpaid(value === true)}
+                  className="mt-0.5"
+                />
+                <span className="flex items-start gap-1.5 text-amber-800 dark:text-amber-300">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  Confirmo la entrega con un saldo pendiente de {formatCurrency(balanceDue)}.
+                </span>
+              </label>
+            )}
+          </div>}
 
           {/* Cobro: solo aparece si hay algo pendiente y la pantalla lo permite. */}
-          {allowPayment && selected && balanceDue > 0 && (
+          {step === 'payment' && allowPayment && selected === 'repaired' && balanceDue > 0 && (
             <div className="space-y-3 rounded-lg border p-3 animate-in fade-in slide-in-from-top-1 duration-200">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium flex items-center gap-1.5">
@@ -274,6 +314,21 @@ export function RepairDeliveryDialog({
                 <span className="text-xs text-muted-foreground">
                   Saldo: {formatCurrency(balanceDue)}
                 </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 rounded-md bg-muted/40 p-2 text-xs">
+                <div>
+                  <span className="block text-muted-foreground">Total</span>
+                  <strong>{formatCurrency(totalDue)}</strong>
+                </div>
+                <div>
+                  <span className="block text-muted-foreground">Pagado</span>
+                  <strong>{formatCurrency(alreadyPaid)}</strong>
+                </div>
+                <div>
+                  <span className="block text-muted-foreground">Pendiente</span>
+                  <strong>{formatCurrency(balanceDue)}</strong>
+                </div>
               </div>
 
               {selected === 'repaired' && (
@@ -297,6 +352,19 @@ export function RepairDeliveryDialog({
                 {selected === 'repaired' ? 'o cobrar acá (queda en caja, no en ventas)' : 'cobrar acá'}
                 <span className="h-px flex-1 bg-border" />
               </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                onClick={() => {
+                  setAmount('')
+                  setDeliverUnpaid(false)
+                }}
+              >
+                <AlertTriangle className="h-4 w-4" />
+                Entregar y cobrar después
+              </Button>
 
               <div className="grid grid-cols-4 gap-1.5">
                 {PAYMENT_METHODS.filter(m => m.id !== 'credit').map(m => {
@@ -433,9 +501,16 @@ export function RepairDeliveryDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
-            Cancelar
-          </Button>
+          {step === 'payment' ? (
+            <Button variant="outline" onClick={() => setStep('outcome')} disabled={isSubmitting}>
+              <ArrowLeft className="h-4 w-4" />
+              Volver
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+              Cancelar
+            </Button>
+          )}
           <Button
             onClick={handleConfirm}
             disabled={!canConfirm}
