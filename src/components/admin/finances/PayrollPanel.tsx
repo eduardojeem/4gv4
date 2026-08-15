@@ -77,7 +77,21 @@ export function PayrollPanel({
   const activeBranchId = isOrganizationWide ? null : branchId
   const hasDraft = runs.some((run) => run.status === 'draft')
   const hasOutstandingApprovedEntry = runs.some((run) => run.status === 'approved' && run.entries.some((entry) => Number(entry.outstanding_amount) > 0))
-  const currentStep = hasOutstandingApprovedEntry ? 3 : hasDraft ? 2 : 1
+  const hasApprovedRuns = runs.some((run) => run.status === 'approved')
+  // #6 — El stepper nunca alcanzaba el paso 4. Ahora:
+  // - Paso 3: hay nóminas aprobadas con saldo pendiente (registrar pagos)
+  // - Paso 4 (done): hay runs y ninguno tiene draft ni saldo pendiente (período cerrado)
+  // - Paso 2: hay un draft esperando aprobación
+  // - Paso 1: sin runs todavía
+  const currentStep = hasOutstandingApprovedEntry
+    ? 3
+    : hasDraft
+    ? 2
+    : runs.length > 0 && !hasApprovedRuns
+    ? 4   // todos aprobados y pagados: período cerrado
+    : hasApprovedRuns
+    ? 4   // aprobados sin pendientes: período cerrado
+    : 1
 
   const loadRuns = useCallback(async () => {
     const params = new URLSearchParams({ organizationId, periodFrom: filters.startDate, periodTo: filters.endDate })

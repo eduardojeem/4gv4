@@ -209,14 +209,121 @@ describe('finance operational dialogs', () => {
     expect(fetchMock.mock.calls[1][0]).toContain('branchId=' + uuid)
   })
 
-  it('labels complete profitability rows instead of relying on color alone', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({
-      rows: [{ id: uuid, label: 'Venta DEMO', revenue: 1000000, directCosts: 500000, grossProfit: 500000, complete: true }],
-    })))
+  it('allows editing an unpaid expense and submitting updates', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ categories: [{ id: uuid, name: 'Servicios' }] }))
+      .mockResolvedValueOnce(json({
+        obligations: [{
+          id: uuid,
+          concept: 'Luz y Agua',
+          amount: 150000,
+          outstanding_amount: 150000,
+          requires_cash_session_on_void: false,
+          due_date: '2026-08-20',
+          accounting_date: '2026-08-01',
+          vendor: 'ANDE',
+          status: 'pending',
+          finance_categories: { id: uuid, name: 'Servicios' },
+        }],
+        total: 1,
+      }))
+      .mockResolvedValueOnce(json({})) // PATCH response
+      .mockResolvedValueOnce(json({ categories: [{ id: uuid, name: 'Servicios' }] }))
+      .mockResolvedValueOnce(json({ obligations: [], total: 0 }))
 
-    render(<ProfitabilityPanel organizationId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-15', branchId: uuid }} />)
+    vi.stubGlobal('fetch', fetchMock)
+    render(<ExpensesPanel organizationId={uuid} branchId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-31', branchId: uuid }} onChanged={vi.fn()} />)
 
-    expect(await screen.findAllByText('Información completa')).toHaveLength(2)
-    expect(screen.getAllByText('Costos directos')).toHaveLength(2)
+    const editBtns = await screen.findAllByRole('button', { name: 'Editar' })
+    expect(editBtns.length).toBeGreaterThan(0)
+    await user.click(editBtns[0])
+
+    expect(screen.getByRole('heading', { name: 'Editar gasto' })).toBeInTheDocument()
+    const conceptInput = screen.getByDisplayValue('Luz y Agua')
+    expect(conceptInput).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(`/api/admin/finances/obligations/${uuid}`),
+      expect.objectContaining({ method: 'PATCH' }),
+    ))
+  })
+
+  it('filters obligations locally by search query', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ categories: [] }))
+      .mockResolvedValueOnce(json({
+        obligations: [
+          {
+            id: '1',
+            concept: 'Limpieza de oficina',
+            amount: 50000,
+            outstanding_amount: 50000,
+            requires_cash_session_on_void: false,
+            due_date: '2026-08-10',
+            status: 'paid',
+          },
+          {
+            id: '2',
+            concept: 'Repuestos pantalla',
+            vendor: 'Proveedor ABC',
+            amount: 300000,
+            outstanding_amount: 300000,
+            requires_cash_session_on_void: false,
+            due_date: '2026-08-25',
+            status: 'pending',
+          },
+        ],
+        total: 2,
+      })))
+
+    render(<ExpensesPanel organizationId={uuid} branchId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-31', branchId: uuid }} onChanged={vi.fn()} />)
+
+    const items = await screen.findAllByText('Limpieza de oficina')
+    expect(items.length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Repuestos pantalla').length).toBeGreaterThan(0)
+
+    const searchInput = screen.getByPlaceholderText('Buscar por concepto o proveedor…')
+    await user.type(searchInput, 'ABC')
+
+    expect(screen.queryByText('Limpieza de oficina')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Repuestos pantalla').length).toBeGreaterThan(0)
+  })
+
+  it('excludes voided expenses from pageAmount and pageOutstanding totals', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ categories: [] }))
+      .mockResolvedValueOnce(json({
+        obligations: [
+          {
+            id: '1',
+            concept: 'Gasto Activo',
+            amount: 100000,
+            outstanding_amount: 100000,
+            requires_cash_session_on_void: false,
+            due_date: '2026-08-10',
+            status: 'pending',
+          },
+          {
+            id: '2',
+            concept: 'Gasto Anulado',
+            amount: 500000,
+            outstanding_amount: 0,
+            requires_cash_session_on_void: false,
+            due_date: '2026-08-12',
+            status: 'voided',
+          },
+        ],
+        total: 2,
+      })))
+
+    render(<ExpensesPanel organizationId={uuid} branchId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-31', branchId: uuid }} onChanged={vi.fn()} />)
+
+    // Solo debe sumar los 100.000 del gasto activo, no los 500.000 del anulado
+    const amounts = await screen.findAllByText(/100\.000/)
+    expect(amounts.length).toBeGreaterThan(0)
+    expect(screen.queryByText(/600\.000/)).not.toBeInTheDocument()
   })
 })

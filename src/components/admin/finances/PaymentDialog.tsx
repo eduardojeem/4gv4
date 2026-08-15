@@ -51,10 +51,14 @@ export function PaymentDialog({
     setIsSubmitting(true)
     setError(null)
     idempotencyKeyRef.current ??= `payment-${crypto.randomUUID()}`
+    const rawDate = String(formData.get('paymentDate') ?? '').trim()
+    const isoMatch = rawDate.match(/\d{4}-\d{2}-\d{2}$/)
+    const paymentDate = isoMatch ? isoMatch[0] : (rawDate || new Date().toISOString().slice(0, 10))
+
     const payment = {
       amount,
       paymentMethod: method,
-      paymentDate: formData.get('paymentDate'),
+      paymentDate,
       cashSessionId: method === 'cash' ? formData.get('cashSessionId') : undefined,
       reference: String(formData.get('reference')) || undefined,
     }
@@ -129,7 +133,12 @@ export function PaymentDialog({
               name="paymentDate"
               type="date"
               required
-              className="rounded-md border bg-background px-3 py-2"
+              defaultValue={new Date().toISOString().slice(0, 10)}
+              onFocus={(e) => {
+                // Si el valor es el default de hoy y el usuario va a tipear/cambiar, seleccionar todo
+                e.currentTarget.select()
+              }}
+              className="rounded-md border bg-background px-3 py-2 text-sm"
             />
           </label>
           <label className="grid gap-1 text-sm font-medium">

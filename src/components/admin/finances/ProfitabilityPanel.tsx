@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { AdminFinanceFilters } from '@/hooks/use-admin-finances'
 import { formatCurrency } from '@/lib/currency'
@@ -137,20 +138,23 @@ export function ProfitabilityPanel({
         </div>
       </div>
 
-      <label className="grid max-w-xs gap-1 text-sm font-medium">
-        Agrupar por
-        <select
-          value={group}
-          onChange={(event) => setGroup(event.target.value as Group)}
-          className="rounded-md border bg-background px-3 py-2"
-        >
-          <option value="sale">Venta</option>
-          <option value="repair">Reparación</option>
-          <option value="product">Producto</option>
-          <option value="employee">Empleado</option>
-          <option value="branch">Sucursal</option>
-        </select>
-      </label>
+      <div className="flex items-center gap-3">
+        <label htmlFor="profitability-group" className="text-sm font-medium shrink-0">
+          Agrupar por
+        </label>
+        <Select value={group} onValueChange={(value) => setGroup(value as Group)}>
+          <SelectTrigger id="profitability-group" className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="sale">Venta</SelectItem>
+            <SelectItem value="repair">Reparación</SelectItem>
+            <SelectItem value="product">Producto</SelectItem>
+            <SelectItem value="employee">Empleado</SelectItem>
+            <SelectItem value="branch">Sucursal</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 

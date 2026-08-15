@@ -286,7 +286,7 @@ export async function listObligations(
   let query = admin
     .from('finance_obligations')
     .select(
-      'id, organization_id, branch_id, category_id, template_id, recurrence_period, concept, amount, paid_amount, currency, vendor, accounting_date, due_date, status, notes, void_reason, voided_at, created_at, updated_at, finance_categories(name, code)',
+      'id, organization_id, branch_id, category_id, template_id, recurrence_period, concept, amount, paid_amount, currency, vendor, accounting_date, due_date, status, notes, void_reason, voided_at, created_at, updated_at, finance_categories(id, name, code)',
       { count: 'exact' },
     )
     .eq('organization_id', organizationId)
@@ -332,8 +332,11 @@ export async function listObligations(
   return {
     obligations: obligations.map((obligation) => ({
       ...obligation,
-      // The client receives server-owned state instead of deriving balances.
-      outstanding_amount: Math.max(0, Number(obligation.amount) - Number(obligation.paid_amount)),
+      // Las obligaciones anuladas tienen saldo pendiente 0.
+      outstanding_amount:
+        obligation.status === 'voided'
+          ? 0
+          : Math.max(0, Number(obligation.amount) - Number(obligation.paid_amount)),
       requires_cash_session_on_void: cashPaidObligationIds.has(obligation.id),
     })),
     pagination: {
@@ -461,7 +464,7 @@ export async function createObligation(params: {
       recurrence_period: null,
       concept,
       amount: input.amount,
-      currency: null,
+      currency: 'PYG',
       vendor: input.vendor ?? null,
       accounting_date: input.accountingDate,
       due_date: input.dueDate ?? null,
@@ -470,12 +473,16 @@ export async function createObligation(params: {
       created_by: userId,
       updated_by: userId,
     })
-    .select('*')
+    .select('*, finance_categories(id, name, code)')
     .single()
 
   if (error || !data) throw toFinanceApiError(error)
 
-  return data
+  return {
+    ...data,
+    outstanding_amount: Number(data.amount),
+    requires_cash_session_on_void: false,
+  }
 }
 
 export type ExpenseUpdateInput = Partial<

@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { format, isValid, parseISO } from 'date-fns'
 import { AlertTriangle, CalendarClock, CircleAlert, Landmark, TrendingUp, WalletCards } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatCurrency } from '@/lib/currency'
 import type { FinanceSummaryReport } from '@/lib/finance/server'
 import { cn } from '@/lib/utils'
@@ -108,12 +110,16 @@ function DueList({
           </div>
           <p className="text-sm text-muted-foreground">{description}</p>
           <ul className="mt-3 space-y-1 text-sm" role="list">
-            {visible.map((row) => (
-              <li key={row.id} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
-                <span>Vence {row.dueDate}</span>
-                <span className="font-medium">{formatCurrency(row.amount)}</span>
-              </li>
-            ))}
+            {visible.map((row) => {
+                const parsed = parseISO(row.dueDate)
+                const dateLabel = isValid(parsed) ? format(parsed, 'dd/MM/yyyy') : row.dueDate
+                return (
+                  <li key={row.id} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
+                    <span>Vence {dateLabel}</span>
+                    <span className="font-medium">{formatCurrency(row.amount)}</span>
+                  </li>
+                )
+              })}
           </ul>
           {remaining > 0 ? (
             <button
@@ -145,15 +151,20 @@ function PriorityAction({
   action: string
   onClick?: () => void
 }) {
+  // #3 — Forzar tono neutral cuando el contador existe pero es cero.
+  // Un badge "0" en rojo genera alarma innecesaria; la card se vuelve informativa.
+  const effectiveTone = tone === 'urgent' && count === 0 ? 'default' : tone
+
   return (
-    <article className={cn('rounded-lg border p-3', tone === 'urgent' ? 'border-destructive/40 bg-destructive/5' : 'border-border/70 bg-card')}>
+    <article className={cn('rounded-lg border p-3', effectiveTone === 'urgent' ? 'border-destructive/40 bg-destructive/5' : 'border-border/70 bg-card')}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className={cn('text-sm font-semibold', tone === 'urgent' && 'text-destructive')}>{title}</p>
+          <p className={cn('text-sm font-semibold', effectiveTone === 'urgent' && 'text-destructive')}>{title}</p>
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
-        {count !== undefined ? (
-          <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums', tone === 'urgent' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground')}>
+        {/* Solo mostrar el badge si count tiene valor y es mayor que cero */}
+        {count !== undefined && count > 0 ? (
+          <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums', effectiveTone === 'urgent' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground')}>
             {count}
           </span>
         ) : null}
@@ -201,16 +212,29 @@ export function FinanceSummary({
         </div>
       </section>
       <Tabs value={view} onValueChange={(value) => setView(value as 'accrued' | 'cash')} className="space-y-4">
-        <div className="rounded-lg border border-border/70 p-3">
+        {/* #5 — Las definiciones de cada tab se mueven a Tooltips en los triggers
+            para liberar el espacio vertical que ocupaban siempre visibles. */}
+        <TooltipProvider>
           <TabsList aria-label="Tipo de indicadores financieros">
-            <TabsTrigger value="accrued">Devengado</TabsTrigger>
-            <TabsTrigger value="cash">Caja</TabsTrigger>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <TabsTrigger value="accrued">Devengado</TabsTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[220px] text-center text-xs">
+                Ingresos y costos del período, aunque no se hayan cobrado o pagado.
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <TabsTrigger value="cash">Caja</TabsTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[220px] text-center text-xs">
+                Dinero efectivamente cobrado y pagado durante el período.
+              </TooltipContent>
+            </Tooltip>
           </TabsList>
-          <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-            <p><span className="font-medium text-foreground">Resultado devengado</span>: ingresos y costos del período, aunque no se hayan cobrado o pagado.</p>
-            <p><span className="font-medium text-foreground">Flujo de caja</span>: dinero efectivamente cobrado y pagado durante el período.</p>
-          </div>
-        </div>
+        </TooltipProvider>
+
 
         <TabsContent value="accrued">
           <section aria-labelledby="finance-accrued-heading">

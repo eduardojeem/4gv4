@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { expenseInputSchema } from '@/lib/finance/schemas'
 import {

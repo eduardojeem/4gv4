@@ -46,18 +46,20 @@ export function FinancesSystem() {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-border/70 bg-card p-5 shadow-sm sm:p-6">
-        <div className="flex items-start gap-4">
-          <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
-            <CircleDollarSign className="h-6 w-6" aria-hidden="true" />
+      {/* #7 — Header compactado: misma info pero en una sola línea horizontal
+          liberando ~80px que antes empujaban el contenido hacia abajo. */}
+      <header className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-5 py-3 shadow-sm">
+        <div className="rounded-md bg-primary/10 p-2 text-primary shrink-0">
+          <CircleDollarSign className="h-5 w-5" aria-hidden="true" />
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <h1 className="text-base font-bold tracking-tight">Finanzas</h1>
+            <p className="text-xs text-muted-foreground">Administración financiera</p>
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-primary">Administración financiera</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">Finanzas</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              Tomá decisiones con una vista clara del negocio: cuánto ganás, qué dinero entró o salió y qué compromisos requieren atención.
-            </p>
-          </div>
+          <p className="hidden text-xs text-muted-foreground sm:block">
+            Cuánto ganás, qué dinero entró o salió y qué compromisos requieren atención.
+          </p>
         </div>
       </header>
 

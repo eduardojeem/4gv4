@@ -2,7 +2,7 @@
 
 import type { DateRange } from 'react-day-picker'
 import { endOfMonth, endOfWeek, format, isValid, parseISO, startOfDay, startOfMonth, startOfWeek, subMonths } from 'date-fns'
-import { CalendarRange, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 
 import { BranchSelector } from '@/components/branches/branch-selector'
 import { Button } from '@/components/ui/button'
@@ -81,10 +81,6 @@ export function FinanceFilters({
             </Button>
           ))}
         </div>
-        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <CalendarRange className="h-4 w-4" />
-          {fromLabel} al {toLabel}
-        </p>
       </CardContent>
     </Card>
   )
