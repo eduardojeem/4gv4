@@ -43,6 +43,17 @@ interface SupabaseRepairNote {
     is_internal?: boolean
 }
 
+interface SupabaseRepairPayment {
+    id: string
+    amount: number | string
+    payment_method: 'cash' | 'card' | 'transfer' | 'credit' | 'mixed'
+    reference?: string | null
+    notes?: string | null
+    source: 'repairs' | 'delivery' | 'pos' | 'migration'
+    created_by?: string | null
+    created_at: string
+}
+
 interface SupabaseRepair {
     id: string
     ticket_number?: string
@@ -89,6 +100,7 @@ interface SupabaseRepair {
     notify_manager?: boolean
     parts?: SupabaseRepairPart[]
     notes?: SupabaseRepairNote[]
+    payments?: SupabaseRepairPayment[]
 }
 
 /**
@@ -134,6 +146,18 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         pricingUpdatedAt: r.pricing_updated_at || null,
         paymentStatus: (r.payment_status as Repair['paymentStatus']) || 'pendiente',
         paidAmount: Number(r.paid_amount) || 0,
+        payments: [...(r.payments || [])]
+            .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+            .map((payment) => ({
+                id: payment.id,
+                amount: Number(payment.amount) || 0,
+                method: payment.payment_method,
+                reference: payment.reference ?? null,
+                notes: payment.notes ?? null,
+                source: payment.source,
+                createdAt: payment.created_at,
+                createdBy: payment.created_by ?? null,
+            })),
         technician: tech ? {
             name: tech.full_name || tech.email,
             id: tech.id

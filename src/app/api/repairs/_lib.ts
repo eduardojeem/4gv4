@@ -11,7 +11,8 @@ export const FULL_REPAIR_SELECT = `
   technician:profiles!technician_id(id, full_name),
   images:repair_images(id, image_url, description),
   parts:repair_parts(*),
-  notes:repair_notes(*)
+  notes:repair_notes(*),
+  payments:repair_payments(*)
 `
 
 export type RepairRouteContext = {

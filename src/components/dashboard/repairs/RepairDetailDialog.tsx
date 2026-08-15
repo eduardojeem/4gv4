@@ -38,6 +38,7 @@ import { toast } from 'sonner'
 import { Repair, RepairDeliveryOutcome, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { getAvailableTransitions } from '@/lib/repairs/state-machine'
+import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { PatternDrawer } from './PatternDrawer'
@@ -149,6 +150,12 @@ export function RepairDetailDialog({
   const displayCost = repair.finalCost !== null && repair.finalCost !== undefined
     ? repair.finalCost
     : (repair.estimatedCost || 0)
+  const financial = getRepairFinancialPresentation({
+    status: repair.status,
+    finalCost: repair.finalCost,
+    estimatedCost: repair.estimatedCost,
+    paidAmount: repair.paidAmount,
+  })
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return 'Pendiente'
@@ -688,21 +695,19 @@ export function RepairDetailDialog({
                       <span className="text-white/85 text-xs font-medium uppercase tracking-wide">
                         Costo de la Reparación
                       </span>
-                      {repair.status === 'entregado' && (
-                        <Badge variant="secondary" className="bg-white/90 text-emerald-700 hover:bg-white font-bold text-[10px]">
-                          PAGADO
-                        </Badge>
-                      )}
-                      {repair.status === 'listo' && (
-                        <Badge variant="secondary" className="bg-yellow-400 text-yellow-900 hover:bg-yellow-400 font-bold text-[10px] border-none">
-                          PENDIENTE DE PAGO
-                        </Badge>
-                      )}
-                      {repair.paymentStatus === 'parcial' && repair.status !== 'entregado' && repair.status !== 'listo' && (
-                        <Badge variant="secondary" className="bg-blue-400 text-blue-900 hover:bg-blue-400 font-bold text-[10px] border-none">
-                          PAGO PARCIAL
-                        </Badge>
-                      )}
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          'font-bold text-[10px] border-none',
+                          financial.status === 'pagado'
+                            ? 'bg-white/90 text-emerald-700 hover:bg-white'
+                            : financial.status === 'parcial'
+                              ? 'bg-blue-300 text-blue-950 hover:bg-blue-300'
+                              : 'bg-yellow-300 text-yellow-950 hover:bg-yellow-300',
+                        )}
+                      >
+                        {financial.label.toUpperCase()}
+                      </Badge>
                     </div>
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-3xl">{formatCurrency(displayCost)}</span>
@@ -712,15 +717,15 @@ export function RepairDetailDialog({
                         </Badge>
                       )}
                     </div>
-                    {repair.paymentStatus === 'parcial' && repair.paidAmount !== undefined && repair.paidAmount > 0 && (
+                    {financial.total > 0 && (financial.paid > 0 || financial.balance > 0) && (
                       <div className="text-white/90 text-xs space-y-1 pt-1">
                         <div className="flex justify-between border-b border-white/20 pb-1">
                           <span>Pagado:</span>
-                          <span className="font-semibold">{formatCurrency(repair.paidAmount)}</span>
+                          <span className="font-semibold">{formatCurrency(financial.paid)}</span>
                         </div>
                         <div className="flex justify-between font-bold text-white">
                           <span>Restante:</span>
-                          <span>{formatCurrency(displayCost - repair.paidAmount)}</span>
+                          <span>{formatCurrency(financial.balance)}</span>
                         </div>
                       </div>
                     )}
@@ -743,6 +748,26 @@ export function RepairDetailDialog({
                     )}
                   </div>
                 </div>
+
+                {repair.payments && repair.payments.length > 0 && (
+                  <div className="rounded-xl border bg-card p-4 shadow-sm">
+                    <h3 className="text-sm font-semibold">Historial de pagos</h3>
+                    <div className="mt-3 space-y-3">
+                      {repair.payments.map((payment) => (
+                        <div key={payment.id} className="rounded-lg border p-3 text-xs">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-semibold capitalize">{payment.method === 'mixed' ? 'Pago mixto' : payment.method}</span>
+                            <span className="font-bold tabular-nums">{formatCurrency(payment.amount)}</span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap justify-between gap-2 text-muted-foreground">
+                            <span>{format(new Date(payment.createdAt), 'dd/MM/yyyy HH:mm', { locale: es })}</span>
+                            {payment.reference && <span>Ref. {payment.reference}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Cliente */}
                 <div className="rounded-xl border bg-card p-4 space-y-3.5 shadow-sm">
@@ -1185,9 +1210,8 @@ export function RepairDetailDialog({
             Cerrar
           </Button>
 
-          {repair.status !== 'entregado' && (
-            <>
-              {onQuickPay && (
+          <>
+              {onQuickPay && financial.canCollect && (
                 <Button
                   variant="default"
                   className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -1197,9 +1221,10 @@ export function RepairDetailDialog({
                   }}
                 >
                   <DollarSign className="h-4 w-4" />
-                  Cobrar Aquí
+                  {repair.status === 'entregado' ? 'Cobrar saldo' : 'Cobrar Aquí'}
                 </Button>
               )}
+              {repair.status !== 'entregado' && repair.status !== 'cancelado' && (
               <Button
                 variant="outline"
                 className="gap-2"
@@ -1213,7 +1238,8 @@ export function RepairDetailDialog({
                 <ExternalLink className="h-4 w-4" />
                 + Productos en POS
               </Button>
-              {onDeliver && (
+              )}
+              {onDeliver && repair.status === 'listo' && (
                 <Button
                   variant="outline"
                   className="gap-2"
@@ -1227,7 +1253,6 @@ export function RepairDetailDialog({
                 </Button>
               )}
             </>
-          )}
 
         </DialogFooter>
 

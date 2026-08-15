@@ -15,19 +15,22 @@ const REPAIR_SELECT_VARIANTS = [
     *,
     customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email),
     technician:profiles!technician_id(id, full_name),
-    images:repair_images(id, image_url, description)
+    images:repair_images(id, image_url, description),
+    payments:repair_payments(*)
   `,
   `
     *,
     customer:customers!customer_id(id, name, phone, email),
     technician:profiles!technician_id(id, full_name),
-    images:repair_images(id, image_url, description)
+    images:repair_images(id, image_url, description),
+    payments:repair_payments(*)
   `,
   `
     *,
     customer:customers!customer_id(id, first_name, last_name, phone, email),
     technician:profiles!technician_id(id, full_name),
-    images:repair_images(id, image_url, description)
+    images:repair_images(id, image_url, description),
+    payments:repair_payments(*)
   `,
 ]
 
@@ -37,7 +40,8 @@ const FULL_REPAIR_SELECT = `
   technician:profiles!technician_id(id, full_name),
   images:repair_images(id, image_url, description),
   parts:repair_parts(*),
-  notes:repair_notes(*)
+  notes:repair_notes(*),
+  payments:repair_payments(*)
 `
 
 type SupabaseError = { message?: string; code?: string; details?: string; hint?: string }

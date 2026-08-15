@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle, PackageCheck } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle, PackageCheck, DollarSign } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
@@ -52,6 +52,7 @@ interface RepairRowProps {
   onView?: (repair: Repair) => void
   onDelete?: (id: string) => void
   onDeliver?: (repair: Repair) => void
+  onQuickPay?: (repair: Repair) => void
   companyInfo?: RepairPrintCompanyInfo
 }
 
@@ -63,7 +64,7 @@ const DEFAULT_COMPANY_INFO: RepairPrintCompanyInfo = {
 }
 
 export const RepairRow = memo<RepairRowProps>(
-  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver, companyInfo }) {
+  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver, onQuickPay, companyInfo }) {
     const StatusIcon = statusConfig[repair.status].icon
     const priority = priorityConfig[repair.priority]
     const { notifyRepairStatus, notifyRepairReady, sendPaymentReminder } = useWhatsApp()
@@ -349,8 +350,17 @@ export const RepairRow = memo<RepairRowProps>(
                   Recordatorio de Pago
                 </DropdownMenuItem>
               )}
+              {pendingAmount > 0 && onQuickPay && repair.status !== 'cancelado' && (
+                <DropdownMenuItem
+                  onClick={() => onQuickPay(repair)}
+                  className="text-emerald-600 dark:text-emerald-400"
+                >
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  {repair.status === 'entregado' ? 'Cobrar saldo' : 'Cobrar aquí'}
+                </DropdownMenuItem>
+              )}
               {/* Quick delivery action */}
-              {repair.status !== 'entregado' && repair.status !== 'cancelado' && onDeliver && (
+              {repair.status === 'listo' && onDeliver && (
                 <>
                   <DropdownMenuSeparator className="dark:bg-muted/50" />
                   <DropdownMenuItem
@@ -368,7 +378,7 @@ export const RepairRow = memo<RepairRowProps>(
               </DropdownMenuLabel>
               {Object.entries(statusConfig).map(([key, config]) => {
                 const Icon = config.icon
-                if (key === repair.status) return null
+                if (key === repair.status || key === 'entregado') return null
                 return (
                   <DropdownMenuItem
                     key={key}

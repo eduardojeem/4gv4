@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getRepairFinancialPresentation,
   getRepairPaymentSummary,
   parseRepairDeliveryRequest,
   parseRepairPaymentRequest,
@@ -54,5 +55,15 @@ describe('repair financial closure contracts', () => {
       balance: 0,
       status: 'pagado',
     })
+  })
+
+  it('keeps delivered and payment state independent in presentation', () => {
+    expect(getRepairFinancialPresentation({
+      status: 'entregado', finalCost: 100_000, estimatedCost: 80_000, paidAmount: 40_000,
+    })).toMatchObject({ label: 'Entregado · pago parcial', canCollect: true, balance: 60_000 })
+
+    expect(getRepairFinancialPresentation({
+      status: 'entregado', finalCost: 100_000, estimatedCost: 80_000, paidAmount: 100_000,
+    })).toMatchObject({ label: 'Entregado · pagado', canCollect: false, balance: 0 })
   })
 })

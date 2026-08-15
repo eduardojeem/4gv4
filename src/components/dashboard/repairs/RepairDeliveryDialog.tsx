@@ -27,11 +27,14 @@ import {
 } from './RepairPaymentDialog'
 
 export interface RepairDeliveryConfirmPayload {
+  idempotencyKey: string
+  allowOutstandingBalance: boolean
   outcome: RepairDeliveryOutcome
   note?: string
   payment?: {
     method: QuickPayMethod
     amount: number
+    idempotencyKey: string
     reference?: string
     interestRate?: number
     installments?: { count: number; frequency: CreditFrequency }
@@ -112,6 +115,7 @@ export function RepairDeliveryDialog({
   const [installmentCount, setInstallmentCount] = useState('3')
   const [frequency, setFrequency] = useState<CreditFrequency>('monthly')
   const [interestRate, setInterestRate] = useState('0')
+  const [idempotencyKey, setIdempotencyKey] = useState('')
 
   const totalDue = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
   const alreadyPaid = repair?.paidAmount ?? 0
@@ -126,6 +130,10 @@ export function RepairDeliveryDialog({
       setAmount(prev => (prev ? prev : balanceDue.toString()))
     }
   }, [allowPayment, selected, balanceDue])
+
+  useEffect(() => {
+    if (open) setIdempotencyKey(`repair-delivery-${crypto.randomUUID()}`)
+  }, [open, repair?.id])
 
   const handleClose = () => {
     if (isSubmitting) return
@@ -147,7 +155,8 @@ export function RepairDeliveryDialog({
   // propósito que se entrega igual (fiado). Antes esto pasaba en silencio.
   // No aplica donde no se ofrece cobro (allowPayment=false): ahí la entrega
   // sigue funcionando exactamente como antes de este cambio.
-  const needsUnpaidConfirm = allowPayment && balanceDue > 0 && !wantsCharge
+  const remainingAfterPayment = Math.max(0, balanceDue - parsedAmount)
+  const needsUnpaidConfirm = allowPayment && remainingAfterPayment > 0
   const selectedMethod = PAYMENT_METHODS.find(m => m.id === method)
 
   const creditCount = Math.max(1, Math.floor(Number(installmentCount) || 0))
@@ -164,11 +173,14 @@ export function RepairDeliveryDialog({
     setIsSubmitting(true)
     try {
       const payload: RepairDeliveryConfirmPayload = {
+        idempotencyKey,
+        allowOutstandingBalance: !allowPayment || remainingAfterPayment > 0,
         outcome: selected,
         note: note.trim() || undefined,
       }
       if (wantsCharge) {
         payload.payment = {
+          idempotencyKey,
           method,
           amount: parsedAmount,
           reference: reference.trim() || undefined,
@@ -287,7 +299,7 @@ export function RepairDeliveryDialog({
               </div>
 
               <div className="grid grid-cols-4 gap-1.5">
-                {PAYMENT_METHODS.map(m => {
+                {PAYMENT_METHODS.filter(m => m.id !== 'credit').map(m => {
                   const Icon = m.icon
                   const isSelected = method === m.id
                   return (
@@ -398,7 +410,7 @@ export function RepairDeliveryDialog({
                   />
                   <span className="flex items-start gap-1.5 text-amber-800 dark:text-amber-300">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    Entregar de todas formas sin cobrar el saldo de {formatCurrency(balanceDue)} (fiado / se cobra después).
+                    Entregar dejando un saldo pendiente de {formatCurrency(remainingAfterPayment)} (se cobrará después).
                   </span>
                 </label>
               )}

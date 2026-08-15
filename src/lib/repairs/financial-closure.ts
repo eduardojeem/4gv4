@@ -35,6 +35,10 @@ export type RepairPaymentSummaryInput = {
   paidAmount?: number | null
 }
 
+export type RepairFinancialPresentationInput = RepairPaymentSummaryInput & {
+  status: string
+}
+
 export function parseRepairPaymentRequest(input: unknown) {
   return repairPaymentRequestSchema.safeParse(input)
 }
@@ -54,4 +58,21 @@ export function getRepairPaymentSummary(input: RepairPaymentSummaryInput) {
       : 'parcial'
 
   return { total, paid, balance, status }
+}
+
+export function getRepairFinancialPresentation(input: RepairFinancialPresentationInput) {
+  const summary = getRepairPaymentSummary(input)
+  const delivered = input.status === 'entregado'
+  const financialLabel = summary.status === 'pagado'
+    ? 'pagado'
+    : summary.status === 'parcial'
+      ? 'pago parcial'
+      : 'pago pendiente'
+
+  return {
+    ...summary,
+    delivered,
+    label: delivered ? `Entregado · ${financialLabel}` : financialLabel,
+    canCollect: input.status !== 'cancelado' && summary.balance > 0,
+  }
 }

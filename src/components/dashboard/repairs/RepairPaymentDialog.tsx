@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -24,18 +24,16 @@ import {
   DollarSign,
   CalendarClock,
 } from 'lucide-react'
-import { Repair, RepairDeliveryOutcome } from '@/types/repairs'
+import { Repair } from '@/types/repairs'
 
 export type QuickPayMethod = 'cash' | 'card' | 'transfer' | 'credit'
 export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
 
 export interface RepairPaymentResult {
+  idempotencyKey: string
   method: QuickPayMethod
   amount: number
   reference?: string
-  /** Solo lo usa el flujo de entrega (RepairDeliveryDialog), que cobra y entrega en un paso. */
-  markDelivered?: boolean
-  outcome?: RepairDeliveryOutcome
   note?: string
   /** Solo para method === 'credit'. */
   interestRate?: number
@@ -88,6 +86,11 @@ export function RepairPaymentDialog({
   const [installmentCount, setInstallmentCount] = useState('3')
   const [frequency, setFrequency] = useState<CreditFrequency>('monthly')
   const [interestRate, setInterestRate] = useState('0')
+  const [idempotencyKey, setIdempotencyKey] = useState('')
+
+  useEffect(() => {
+    if (open) setIdempotencyKey(`repair-payment-${crypto.randomUUID()}`)
+  }, [open, repair?.id])
 
   const isCredit = method === 'credit'
   const parsedAmount = parseFloat(amount) || 0
@@ -122,6 +125,7 @@ export function RepairPaymentDialog({
     setIsSubmitting(true)
     try {
       await onConfirm(repair.id, {
+        idempotencyKey,
         method,
         amount: parsed,
         reference: reference.trim() || undefined,
