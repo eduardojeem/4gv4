@@ -17,7 +17,7 @@ import {
   PaginationLinks,
 } from './components'
 import { Search } from 'lucide-react'
-import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
+import { PRODUCTS_MAX_PRICE, PRODUCTS_PER_PAGE } from '@/lib/constants/products'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 
 // La página es dinámica de facto: getPublicProducts llama headers() para
@@ -55,7 +55,9 @@ export default async function ProductsPage(props: {
   const brand = searchParams.brand as string || ''
   const branchId = searchParams.branch_id as string || ''
   const minPrice = Math.max(0, Number(searchParams.min_price) || 0)
-  const maxPrice = Math.max(0, Number(searchParams.max_price) || MAX_PRICE)
+  // #4 — max_price negativo o cero produce un rango vacío. Se trata como "sin límite".
+  const rawMaxPrice = Number(searchParams.max_price)
+  const maxPrice = Number.isFinite(rawMaxPrice) && rawMaxPrice > 0 ? rawMaxPrice : MAX_PRICE
   const inStock = searchParams.in_stock === 'true'
   const sort = searchParams.sort as string || 'name'
 
@@ -74,7 +76,7 @@ export default async function ProductsPage(props: {
       inStock,
       sort,
       page,
-      perPage: 16,
+      perPage: PRODUCTS_PER_PAGE,
       isWholesale,
     }),
     getPublicCategories(isWholesale),
@@ -188,7 +190,7 @@ export default async function ProductsPage(props: {
               </div>
               <div className="mt-3">
                 <Suspense>
-                  <FilterBadges categories={categories} />
+                  <FilterBadges categories={categories} branches={branches} />
                 </Suspense>
               </div>
             </div>

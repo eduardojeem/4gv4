@@ -11,7 +11,7 @@ import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-ten
 import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
 import { buildVisibleCategoryTree, resolveEffectiveProductStock } from '@/lib/public/catalog'
 
-import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
+import { PRODUCTS_MAX_PRICE, PRODUCTS_PER_PAGE } from '@/lib/constants/products'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -137,20 +137,36 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   const {
     query: rawQuery = '',
     categoryId,
-    brand,
+    brand: rawBrand,
     branchId,
     minPrice = 0,
     maxPrice = MAX_PRICE,
     inStock = false,
-    sort = 'name',
+    sort: rawSort = 'name',
     page: rawPage = 1,
-    perPage = 20,
+    perPage = PRODUCTS_PER_PAGE,
   } = filters
 
   // Defensa ante callers que pasen page inválido (p.ej. de la URL): un page
   // negativo genera un range PostgREST inválido y explota el render.
   const page = Math.max(1, Math.floor(rawPage) || 1)
   const query = sanitizeSearch(rawQuery)
+
+  // #2 — Sanitizar brand igual que query para prevenir inyección PostgREST.
+  const brand = sanitizeSearch(rawBrand ?? '')
+
+  // #4 — max_price negativo o cero produce un rango [0,0] vacío sin aviso.
+  // Se trata cualquier valor <= 0 o no-finito como "sin límite superior".
+  const rawMaxPrice = maxPrice
+  const effectiveMaxPrice =
+    Number.isFinite(rawMaxPrice) && rawMaxPrice > 0 ? rawMaxPrice : MAX_PRICE
+
+  // #8 — Validar sort contra lista permitida; valores desconocidos caen a 'name'.
+  const ALLOWED_SORTS = ['name', 'price_asc', 'price_desc', 'newest'] as const
+  type AllowedSort = typeof ALLOWED_SORTS[number]
+  const sort: AllowedSort = (ALLOWED_SORTS as readonly string[]).includes(rawSort)
+    ? (rawSort as AllowedSort)
+    : 'name'
 
   if (!organization) {
     return {
@@ -319,8 +335,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       }
     }
 
-    if (minPrice > 0 || maxPrice < MAX_PRICE) {
-      q = q.gte(priceCol, minPrice).lte(priceCol, maxPrice)
+    if (minPrice > 0 || effectiveMaxPrice < MAX_PRICE) {
+      q = q.gte(priceCol, minPrice).lte(priceCol, effectiveMaxPrice)
     }
 
     if (inStock) q = q.gt('stock_quantity', 0)

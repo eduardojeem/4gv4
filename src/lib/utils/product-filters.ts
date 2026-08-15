@@ -7,12 +7,13 @@ export function readActiveProductFilters(searchParams: URLSearchParams) {
   const query = searchParams.get('query')
   const categoryId = searchParams.get('category_id')
   const brand = searchParams.get('brand')
+  const branchId = searchParams.get('branch_id')
   const inStock = searchParams.get('in_stock') === 'true'
   const minPrice = Number(searchParams.get('min_price')) || 0
   const maxPrice = Number(searchParams.get('max_price')) || PRODUCTS_MAX_PRICE
   const hasActiveFilters =
-    !!query || !!categoryId || !!brand || inStock || minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE
-  return { query, categoryId, brand, inStock, minPrice, maxPrice, hasActiveFilters }
+    !!query || !!categoryId || !!brand || !!branchId || inStock || minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE
+  return { query, categoryId, brand, branchId, inStock, minPrice, maxPrice, hasActiveFilters }
 }
 
 /**

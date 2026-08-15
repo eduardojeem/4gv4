@@ -9,12 +9,24 @@ import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 import { readActiveProductFilters, clearAllProductFilters } from '@/lib/utils/product-filters'
 import type { Category } from '@/types/public'
 
-export function FilterBadges({ categories }: { categories: Category[] }) {
+interface Branch {
+  id: string
+  name: string
+  city: string | null
+}
+
+export function FilterBadges({
+  categories,
+  branches = [],
+}: {
+  categories: Category[]
+  branches?: Branch[]
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
 
-  const { query, categoryId, brand, inStock, minPrice, maxPrice } = readActiveProductFilters(
+  const { query, categoryId, brand, branchId, inStock, minPrice, maxPrice } = readActiveProductFilters(
     new URLSearchParams(searchParams.toString())
   )
 
@@ -35,7 +47,7 @@ export function FilterBadges({ categories }: { categories: Category[] }) {
   }
 
   const hasActiveFilters =
-    !!query || !!categoryId || !!brand || inStock || minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE
+    !!query || !!categoryId || !!brand || !!branchId || inStock || minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE
 
   if (!hasActiveFilters) return null
 
@@ -83,6 +95,20 @@ export function FilterBadges({ categories }: { categories: Category[] }) {
             className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => removeFilter('brand')}
             aria-label="Quitar filtro de marca"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </Badge>
+      )}
+      {/* #6 — Badge de sucursal activa */}
+      {branchId && (
+        <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
+          📍 {branches.find((b) => b.id === branchId)?.name ?? 'Sucursal'}
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => removeFilter('branch_id')}
+            aria-label="Quitar filtro de sucursal"
           >
             <X className="h-3 w-3" />
           </button>
