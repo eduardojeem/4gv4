@@ -23,6 +23,12 @@ describe('repair financial closure migration', () => {
     expect(migration).toContain("set search_path = ''")
   })
 
+  it('rejects idempotency replays whose financial payload changed', () => {
+    expect(migration).toContain('existing_payment.amount is distinct from p_payment_amount')
+    expect(migration).toContain('existing_payment.payment_method is distinct from p_payment_method')
+    expect(migration).toContain("raise exception 'REPAIR_IDEMPOTENCY_CONFLICT'")
+  })
+
   it('restricts execution to the backend service role', () => {
     expect(migration).toMatch(/revoke all on function public\.close_repair_and_register_payment[\s\S]+from public/)
     expect(migration).toMatch(/grant execute on function public\.close_repair_and_register_payment[\s\S]+to service_role/)

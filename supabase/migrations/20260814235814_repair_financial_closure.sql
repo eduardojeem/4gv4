@@ -128,7 +128,16 @@ begin
   end if;
 
   if existing_payment.id is not null then
-    if existing_payment.repair_id <> p_repair_id then
+    if existing_payment.repair_id <> p_repair_id
+       or existing_payment.amount is distinct from p_payment_amount
+       or existing_payment.payment_method is distinct from p_payment_method
+       or existing_payment.source is distinct from p_source
+       or existing_payment.reference is distinct from nullif(trim(coalesce(p_payment_reference, '')), '')
+       or (p_deliver and (
+         target_repair.status <> 'entregado'
+         or target_repair.delivery_idempotency_key is distinct from trim(p_idempotency_key)
+       ))
+       or (not p_deliver and existing_payment.source = 'delivery') then
       raise exception 'REPAIR_IDEMPOTENCY_CONFLICT';
     end if;
     resolved_total := greatest(0, coalesce(target_repair.final_cost, target_repair.estimated_cost, 0));
