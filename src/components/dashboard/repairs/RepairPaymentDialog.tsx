@@ -49,6 +49,7 @@ interface RepairPaymentDialogProps {
   repair: Repair | null
   onOpenChange: (open: boolean) => void
   onConfirm: (repairId: string, result: RepairPaymentResult) => Promise<void>
+  onDefinePrice?: (repair: Repair) => void
 }
 
 // Se exportan para que RepairDeliveryDialog reuse el mismo selector de método
@@ -74,6 +75,7 @@ export function RepairPaymentDialog({
   repair,
   onOpenChange,
   onConfirm,
+  onDefinePrice,
 }: RepairPaymentDialogProps) {
   const cashRegister = useCashRegister()
   const checkOpenSessionRef = useRef(cashRegister.checkOpenSession)
@@ -117,9 +119,11 @@ export function RepairPaymentDialog({
   useEffect(() => {
     if (open) {
       setIdempotencyKey(`repair-payment-${crypto.randomUUID()}`)
-      void refreshCashStatus()
+      if (totalDue > 0 && persistedBalanceDue > 0) {
+        void refreshCashStatus()
+      }
     }
-  }, [open, repair?.id, refreshCashStatus])
+  }, [open, repair?.id, persistedBalanceDue, refreshCashStatus, totalDue])
 
   const isCredit = method === 'credit'
   const parsedAmount = parseFloat(amount) || 0
@@ -217,6 +221,8 @@ export function RepairPaymentDialog({
   const creditCount = Math.max(1, Math.floor(Number(installmentCount) || 0))
   const creditFinanced = creditPrincipal * (1 + (Math.max(0, Number(interestRate) || 0) / 100))
   const creditPerInstallment = creditCount > 0 ? creditFinanced / creditCount : 0
+  const hasDefinedPrice = totalDue > 0
+  const isFullyPaid = hasDefinedPrice && balanceDue <= 0
 
   const canConfirm = parsedAmount > 0 && !amountExceedsBalance && !invalidCreditAmount && balanceDue > 0 &&
     (!METHODS.find(m => m.id === method)?.requiresRef || reference.trim().length > 0) &&
@@ -253,6 +259,47 @@ export function RepairPaymentDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {!hasDefinedPrice ? (
+          <>
+            <div className="space-y-4 py-2">
+              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30" role="status">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-amber-950 dark:text-amber-100">Primero definí el precio de la reparación</h3>
+                  <p className="text-sm leading-5 text-amber-900/80 dark:text-amber-200/80">
+                    Agregá mano de obra, repuestos o un total acordado mayor que cero antes de registrar un cobro.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={handleClose}>Cancelar</Button>
+              {onDefinePrice && (
+                <Button onClick={() => onDefinePrice(repair)}>Definir precio</Button>
+              )}
+            </DialogFooter>
+          </>
+        ) : isFullyPaid ? (
+          <>
+            <div className="space-y-4 py-2">
+              <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/30" role="status">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-emerald-950 dark:text-emerald-100">Reparación totalmente pagada</h3>
+                  <p className="text-sm text-emerald-900/80 dark:text-emerald-200/80">No queda ningún importe por cobrar.</p>
+                </div>
+              </div>
+              <dl className="grid grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-3 text-center">
+                <div><dt className="text-xs text-muted-foreground">Total</dt><dd className="mt-1 font-semibold tabular-nums">{formatCurrency(totalDue)}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Pagado</dt><dd className="mt-1 font-semibold tabular-nums">{formatCurrency(alreadyPaid)}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Saldo pendiente</dt><dd className="mt-1 font-semibold tabular-nums">{formatCurrency(0)}</dd></div>
+              </dl>
+              {balanceRefreshMessage && <p className="text-sm text-muted-foreground" role="status">{balanceRefreshMessage}</p>}
+            </div>
+            <DialogFooter><Button onClick={handleClose}>Cerrar</Button></DialogFooter>
+          </>
+        ) : (
+          <>
         <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto px-1">
           {/* Saldo pendiente destacado */}
           <div className="flex items-center justify-between rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 px-4 py-3">
@@ -534,6 +581,8 @@ export function RepairPaymentDialog({
             {isCredit ? 'Registrar Crédito' : 'Confirmar Cobro'}
           </Button>
         </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
     <OpenCashRegisterDialog

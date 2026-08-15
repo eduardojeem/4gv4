@@ -66,6 +66,40 @@ describe('RepairPaymentDialog', () => {
     expect(screen.getByRole('button', { name: 'Registrar Crédito' })).toBeEnabled()
   })
 
+  it('blocks payment without a defined price and routes the user to price editing', () => {
+    const onDefinePrice = vi.fn()
+    const repairWithoutPrice = { ...repair, finalCost: 0, estimatedCost: 0, paidAmount: 0 }
+
+    render(
+      <RepairPaymentDialog
+        open
+        repair={repairWithoutPrice}
+        onOpenChange={vi.fn()}
+        onConfirm={vi.fn()}
+        onDefinePrice={onDefinePrice}
+      />,
+    )
+
+    expect(screen.getByText('Primero definí el precio de la reparación')).toBeVisible()
+    expect(screen.queryByText('Método de pago')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmar Cobro' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Definir precio' }))
+    expect(onDefinePrice).toHaveBeenCalledWith(expect.objectContaining({ id: 'repair-1' }))
+    expect(cashRegisterMocks.checkOpenSession).not.toHaveBeenCalled()
+  })
+
+  it('shows a settled state instead of payment controls when the repair is fully paid', () => {
+    const paidRepair = { ...repair, finalCost: 200000, estimatedCost: 200000, paidAmount: 200000 }
+
+    render(<RepairPaymentDialog open repair={paidRepair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
+
+    expect(screen.getByText('Reparación totalmente pagada')).toBeVisible()
+    expect(screen.getByText('Saldo pendiente').parentElement).toHaveTextContent('0')
+    expect(screen.queryByText('Método de pago')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmar Cobro' })).not.toBeInTheDocument()
+    expect(cashRegisterMocks.checkOpenSession).not.toHaveBeenCalled()
+  })
+
   it('opens the register and preserves the payment draft', async () => {
     cashRegisterMocks.checkOpenSession
       .mockResolvedValueOnce(null)
@@ -155,7 +189,8 @@ describe('RepairPaymentDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Cobro' }))
 
     expect(await screen.findByText('La reparación ya no tiene saldo pendiente para cobrar.')).toBeVisible()
-    expect(screen.getByLabelText('Monto aplicado a la reparación')).toHaveValue(null)
-    expect(screen.getByRole('button', { name: 'Confirmar Cobro' })).toBeDisabled()
+    expect(screen.getByText('Reparación totalmente pagada')).toBeVisible()
+    expect(screen.queryByLabelText('Monto aplicado a la reparación')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmar Cobro' })).not.toBeInTheDocument()
   })
 })
