@@ -117,7 +117,7 @@ function RepairQuickPriceForm({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isSaving && onOpenChange(next)}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90dvh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar precio de reparación</DialogTitle>
           <DialogDescription>
@@ -131,6 +131,7 @@ function RepairQuickPriceForm({
               <Button
                 key={mode.id}
                 type="button"
+                aria-pressed={pricingMode === mode.id}
                 variant={pricingMode === mode.id ? 'default' : 'outline'}
                 className="h-auto min-h-10 whitespace-normal px-2 text-xs"
                 onClick={() => changeMode(mode.id)}
