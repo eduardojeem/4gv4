@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -23,8 +23,12 @@ import {
   Loader2,
   DollarSign,
   CalendarClock,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react'
 import { Repair } from '@/types/repairs'
+import { useCashRegister } from '@/hooks/useCashRegister'
+import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashRegisterDialog'
 
 export type QuickPayMethod = 'cash' | 'card' | 'transfer' | 'credit'
 export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
@@ -71,6 +75,8 @@ export function RepairPaymentDialog({
   onOpenChange,
   onConfirm,
 }: RepairPaymentDialogProps) {
+  const cashRegister = useCashRegister()
+  const checkOpenSessionRef = useRef(cashRegister.checkOpenSession)
   // Saldo real pendiente: si ya se cobró algo antes (a cuenta, o desde el
   // POS), no tiene sentido sugerir el costo total de nuevo.
   const totalDue = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
@@ -79,6 +85,7 @@ export function RepairPaymentDialog({
 
   const [method, setMethod] = useState<QuickPayMethod>('cash')
   const [amount, setAmount] = useState('')
+  const [cashReceived, setCashReceived] = useState('')
   const [reference, setReference] = useState('')
   const [note, setNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -87,26 +94,67 @@ export function RepairPaymentDialog({
   const [frequency, setFrequency] = useState<CreditFrequency>('monthly')
   const [interestRate, setInterestRate] = useState('0')
   const [idempotencyKey, setIdempotencyKey] = useState('')
+  const [cashStatus, setCashStatus] = useState<'checking' | 'open' | 'closed'>('checking')
+  const [isOpeningRegister, setIsOpeningRegister] = useState(false)
+  const [openingAmount, setOpeningAmount] = useState('0')
+  const [openingNote, setOpeningNote] = useState('')
+  const [isOpening, setIsOpening] = useState(false)
 
   useEffect(() => {
-    if (open) setIdempotencyKey(`repair-payment-${crypto.randomUUID()}`)
-  }, [open, repair?.id])
+    checkOpenSessionRef.current = cashRegister.checkOpenSession
+  }, [cashRegister.checkOpenSession])
+
+  const refreshCashStatus = useCallback(async () => {
+    setCashStatus('checking')
+    const session = await checkOpenSessionRef.current()
+    setCashStatus(session ? 'open' : 'closed')
+    return Boolean(session)
+  }, [])
+
+  useEffect(() => {
+    if (open) {
+      setIdempotencyKey(`repair-payment-${crypto.randomUUID()}`)
+      void refreshCashStatus()
+    }
+  }, [open, repair?.id, refreshCashStatus])
 
   const isCredit = method === 'credit'
   const parsedAmount = parseFloat(amount) || 0
+  const parsedCashReceived = parseFloat(cashReceived) || 0
   const amountExceedsBalance = parsedAmount > balanceDue
   const invalidCreditAmount = isCredit && parsedAmount !== balanceDue
+  const insufficientCash = method === 'cash' && parsedCashReceived < parsedAmount
+  const changeDue = method === 'cash' ? Math.max(0, parsedCashReceived - parsedAmount) : 0
+  const requiresOpenRegister = !isCredit
 
   const handleClose = () => {
     if (isSubmitting) return
     setMethod('cash')
     setAmount('')
+    setCashReceived('')
     setReference('')
     setNote('')
     setInstallmentCount('3')
     setFrequency('monthly')
     setInterestRate('0')
+    setIsOpeningRegister(false)
+    setOpeningAmount('0')
+    setOpeningNote('')
     onOpenChange(false)
+  }
+
+  const handleOpenRegister = async (initialAmount: number, openingReference: string) => {
+    setIsOpening(true)
+    try {
+      const opened = await cashRegister.openRegister('principal', initialAmount, undefined, openingReference)
+      if (!opened) return
+      setIsOpeningRegister(false)
+      setOpeningAmount('0')
+      setOpeningNote('')
+      await refreshCashStatus()
+    } finally {
+      setIsOpening(false)
+    }
   }
 
   const handleConfirm = async () => {
@@ -114,6 +162,7 @@ export function RepairPaymentDialog({
     const parsed = parseFloat(amount)
     if (!parsed || parsed <= 0) return
     if (parsed > balanceDue || (isCredit && parsed !== balanceDue)) return
+    if (method === 'cash' && parsedCashReceived < parsed) return
 
     const selectedMethod = METHODS.find(m => m.id === method)
     if (selectedMethod?.requiresRef && !reference.trim()) return
@@ -148,15 +197,18 @@ export function RepairPaymentDialog({
 
   const canConfirm = parsedAmount > 0 && !amountExceedsBalance && !invalidCreditAmount && balanceDue > 0 &&
     (!METHODS.find(m => m.id === method)?.requiresRef || reference.trim().length > 0) &&
-    (!isCredit || creditCount >= 1)
+    (!isCredit || creditCount >= 1) &&
+    (!insufficientCash) &&
+    (!requiresOpenRegister || cashStatus === 'open')
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-emerald-500" />
-            Registrar Pago a Cuenta
+            Procesar pago de reparación
           </DialogTitle>
           <DialogDescription asChild>
             <div className="space-y-1 mt-1">
@@ -208,6 +260,9 @@ export function RepairPaymentDialog({
                     onClick={() => {
                       setMethod(m.id)
                       if (m.id === 'credit') setAmount(balanceDue.toString())
+                      if (m.id === 'cash' && parsedAmount > 0 && parsedCashReceived < parsedAmount) {
+                        setCashReceived(parsedAmount.toString())
+                      }
                     }}
                     className={cn(
                       'flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 text-xs font-medium transition-all',
@@ -224,9 +279,39 @@ export function RepairPaymentDialog({
             </div>
           </div>
 
+          <div className={cn(
+            'flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5',
+            cashStatus === 'open'
+              ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+              : cashStatus === 'closed'
+                ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20'
+                : 'bg-muted/30',
+          )}>
+            <div className="flex items-center gap-2 text-sm font-medium">
+              {cashStatus === 'open' ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+              ) : cashStatus === 'closed' ? (
+                <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />
+              ) : (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+              )}
+              {cashStatus === 'open' ? 'Caja abierta' : cashStatus === 'closed' ? 'Caja cerrada' : 'Consultando caja'}
+            </div>
+            {cashStatus === 'closed' && (
+              <Button type="button" size="sm" variant="outline" onClick={() => setIsOpeningRegister(true)}>
+                Abrir caja
+              </Button>
+            )}
+          </div>
+          {requiresOpenRegister && cashStatus === 'closed' && (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Abrí la caja para cobrar en efectivo, tarjeta o transferencia. El crédito puede registrarse sin caja.
+            </p>
+          )}
+
           {/* Monto */}
           <div className="space-y-1.5">
-            <Label htmlFor="pay-amount">{isCredit ? 'Monto a financiar' : 'Monto recibido'}</Label>
+            <Label htmlFor="pay-amount">{isCredit ? 'Monto a financiar' : 'Monto aplicado a la reparación'}</Label>
             <Input
               id="pay-amount"
               type="number"
@@ -247,11 +332,64 @@ export function RepairPaymentDialog({
             <button
               type="button"
               className="text-xs text-primary underline-offset-2 hover:underline"
-              onClick={() => setAmount(balanceDue.toString())}
+              onClick={() => {
+                setAmount(balanceDue.toString())
+                if (method === 'cash') setCashReceived(balanceDue.toString())
+              }}
             >
               Usar saldo pendiente ({formatCurrency(balanceDue)})
             </button>
           </div>
+
+          {method === 'cash' && (
+            <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="cash-received">Efectivo recibido del cliente</Label>
+                <Input
+                  id="cash-received"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={cashReceived}
+                  onChange={event => setCashReceived(event.target.value)}
+                  placeholder="Monto entregado por el cliente"
+                  className="text-lg font-semibold tabular-nums"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Montos rápidos de efectivo">
+                {[50000, 100000, 200000, 500000].map(quickAmount => (
+                  <Button
+                    key={quickAmount}
+                    type="button"
+                    size="sm"
+                    variant={parsedCashReceived === quickAmount ? 'default' : 'outline'}
+                    aria-pressed={parsedCashReceived === quickAmount}
+                    onClick={() => setCashReceived(String(quickAmount))}
+                    className="px-2 text-xs tabular-nums"
+                  >
+                    {formatCurrency(quickAmount)}
+                  </Button>
+                ))}
+              </div>
+              {insufficientCash && cashReceived.trim() !== '' && (
+                <p className="text-xs font-medium text-red-600" role="alert">
+                  El efectivo recibido no alcanza para cubrir el monto aplicado.
+                </p>
+              )}
+              {parsedAmount > 0 && !insufficientCash && (
+                <div className="flex items-center justify-between rounded-md bg-emerald-50 px-3 py-2 text-sm dark:bg-emerald-950/30">
+                  <span className="font-medium text-emerald-800 dark:text-emerald-300">Vuelto</span>
+                  <span className="font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                    {formatCurrency(changeDue)}
+                  </span>
+                </div>
+              )}
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                Solo el monto aplicado se registra como pago; el efectivo recibido se usa para calcular el vuelto.
+              </p>
+            </div>
+          )}
 
           {/* Términos de crédito */}
           {isCredit && (
@@ -370,5 +508,17 @@ export function RepairPaymentDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <OpenCashRegisterDialog
+      open={isOpeningRegister}
+      onOpenChange={setIsOpeningRegister}
+      amount={openingAmount}
+      onAmountChange={setOpeningAmount}
+      note={openingNote}
+      onNoteChange={setOpeningNote}
+      registerName="Caja Principal"
+      isSubmitting={isOpening}
+      onSubmit={handleOpenRegister}
+    />
+    </>
   )
 }
