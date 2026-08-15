@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { CheckCircle2, PackageX, Wrench, Loader2, AlertTriangle, DollarSign, ExternalLink, ArrowLeft } from 'lucide-react'
 import { Repair, RepairDeliveryOutcome } from '@/types/repairs'
+import { useCashRegister } from '@/hooks/useCashRegister'
+import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashRegisterDialog'
 import {
   PAYMENT_METHODS,
   CREDIT_FREQUENCIES,
@@ -100,6 +102,8 @@ export function RepairDeliveryDialog({
   onConfirm,
   allowPayment = true,
 }: RepairDeliveryDialogProps) {
+  const cashRegister = useCashRegister()
+  const checkOpenSessionRef = useRef(cashRegister.checkOpenSession)
   const [selected, setSelected] = useState<RepairDeliveryOutcome | null>(null)
   const [step, setStep] = useState<'outcome' | 'payment'>('outcome')
   const [note, setNote] = useState('')
@@ -117,11 +121,28 @@ export function RepairDeliveryDialog({
   const [frequency, setFrequency] = useState<CreditFrequency>('monthly')
   const [interestRate, setInterestRate] = useState('0')
   const [idempotencyKey, setIdempotencyKey] = useState('')
+  const [cashStatus, setCashStatus] = useState<'checking' | 'open' | 'closed'>('checking')
+  const [isOpeningRegister, setIsOpeningRegister] = useState(false)
+  const [openingAmount, setOpeningAmount] = useState('0')
+  const [openingNote, setOpeningNote] = useState('')
+  const [isOpening, setIsOpening] = useState(false)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
 
   const totalDue = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
   const alreadyPaid = repair?.paidAmount ?? 0
   const balanceDue = Math.max(0, totalDue - alreadyPaid)
   const isCredit = method === 'credit'
+
+  useEffect(() => {
+    checkOpenSessionRef.current = cashRegister.checkOpenSession
+  }, [cashRegister.checkOpenSession])
+
+  const refreshCashStatus = useCallback(async () => {
+    setCashStatus('checking')
+    const session = await checkOpenSessionRef.current()
+    setCashStatus(session ? 'open' : 'closed')
+    return Boolean(session)
+  }, [])
 
   // Al elegir "reparado y funcionando" con saldo pendiente, se sugiere cobrar
   // el saldo completo. En los otros resultados el monto arranca vacío: el
@@ -133,8 +154,11 @@ export function RepairDeliveryDialog({
   }, [allowPayment, selected, balanceDue])
 
   useEffect(() => {
-    if (open) setIdempotencyKey(`repair-delivery-${crypto.randomUUID()}`)
-  }, [open, repair?.id])
+    if (open) {
+      setIdempotencyKey(`repair-delivery-${crypto.randomUUID()}`)
+      void refreshCashStatus()
+    }
+  }, [open, repair?.id, refreshCashStatus])
 
   const handleClose = () => {
     if (isSubmitting) return
@@ -148,7 +172,26 @@ export function RepairDeliveryDialog({
     setInstallmentCount('3')
     setFrequency('monthly')
     setInterestRate('0')
+    setIsOpeningRegister(false)
+    setOpeningAmount('0')
+    setOpeningNote('')
+    setSubmissionError(null)
     onOpenChange(false)
+  }
+
+  const handleOpenRegister = async (initialAmount: number, openingReference: string) => {
+    setSubmissionError(null)
+    setIsOpening(true)
+    try {
+      const opened = await cashRegister.openRegister('principal', initialAmount, undefined, openingReference)
+      if (!opened) return
+      setIsOpeningRegister(false)
+      setOpeningAmount('0')
+      setOpeningNote('')
+      await refreshCashStatus()
+    } finally {
+      setIsOpening(false)
+    }
   }
 
   const parsedAmount = parseFloat(amount) || 0
@@ -160,6 +203,7 @@ export function RepairDeliveryDialog({
   const remainingAfterPayment = Math.max(0, balanceDue - parsedAmount)
   const needsUnpaidConfirm = allowPayment && remainingAfterPayment > 0
   const selectedMethod = PAYMENT_METHODS.find(m => m.id === method)
+  const requiresOpenRegister = wantsCharge && !isCredit
 
   const creditCount = Math.max(1, Math.floor(Number(installmentCount) || 0))
 
@@ -168,10 +212,12 @@ export function RepairDeliveryDialog({
     (!wantsCharge || (
       (!selectedMethod?.requiresRef || reference.trim().length > 0) &&
       (!isCredit || creditCount >= 1)
-    ))
+    )) &&
+    (!requiresOpenRegister || cashStatus === 'open')
 
   const handleConfirm = async () => {
     if (!repair || !selected) return
+    setSubmissionError(null)
     setIsSubmitting(true)
     try {
       const payload: RepairDeliveryConfirmPayload = {
@@ -193,6 +239,8 @@ export function RepairDeliveryDialog({
       }
       await onConfirm(repair.id, payload)
       handleClose()
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : 'No se pudo registrar la entrega')
     } finally {
       setIsSubmitting(false)
     }
@@ -207,6 +255,7 @@ export function RepairDeliveryDialog({
   if (!repair) return null
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
@@ -353,6 +402,44 @@ export function RepairDeliveryDialog({
                 <span className="h-px flex-1 bg-border" />
               </div>
 
+              <div className={cn(
+                'flex items-center justify-between gap-3 rounded-md border px-3 py-2.5',
+                cashStatus === 'open'
+                  ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                  : cashStatus === 'closed'
+                    ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20'
+                    : 'bg-muted/30',
+              )}>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  {cashStatus === 'open' ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                  ) : cashStatus === 'closed' ? (
+                    <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />
+                  ) : (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                  )}
+                  {cashStatus === 'open' ? 'Caja abierta' : cashStatus === 'closed' ? 'Caja cerrada' : 'Consultando caja'}
+                </div>
+                {cashStatus === 'closed' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSubmissionError(null)
+                      setIsOpeningRegister(true)
+                    }}
+                  >
+                    Abrir caja
+                  </Button>
+                )}
+              </div>
+              {cashStatus === 'closed' && (
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Abrí la caja para cobrar aquí. También podés registrar crédito o entregar y cobrar después.
+                </p>
+              )}
+
               <Button
                 type="button"
                 variant="outline"
@@ -367,7 +454,7 @@ export function RepairDeliveryDialog({
               </Button>
 
               <div className="grid grid-cols-4 gap-1.5">
-                {PAYMENT_METHODS.filter(m => m.id !== 'credit').map(m => {
+                {PAYMENT_METHODS.map(m => {
                   const Icon = m.icon
                   const isSelected = method === m.id
                   return (
@@ -498,6 +585,13 @@ export function RepairDeliveryDialog({
               disabled={isSubmitting}
             />
           </div>
+
+          {submissionError && (
+            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300" role="alert">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{submissionError}</span>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -526,5 +620,17 @@ export function RepairDeliveryDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <OpenCashRegisterDialog
+      open={isOpeningRegister}
+      onOpenChange={setIsOpeningRegister}
+      amount={openingAmount}
+      onAmountChange={setOpeningAmount}
+      note={openingNote}
+      onNoteChange={setOpeningNote}
+      registerName="Caja Principal"
+      isSubmitting={isOpening}
+      onSubmit={handleOpenRegister}
+    />
+    </>
   )
 }
