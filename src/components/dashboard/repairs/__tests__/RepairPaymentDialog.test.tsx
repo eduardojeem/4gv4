@@ -139,4 +139,23 @@ describe('RepairPaymentDialog', () => {
     expect(screen.getByRole('dialog', { name: /Procesar pago de reparación/i })).toBeVisible()
     expect(screen.getByText('Saldo pendiente').parentElement).toHaveTextContent('100000')
   })
+
+  it('turns a server-reported zero balance into a controlled no-payment state', async () => {
+    cashRegisterMocks.checkOpenSession.mockResolvedValue({ id: 'session-1' })
+    const onConfirm = vi.fn().mockRejectedValue(Object.assign(
+      new Error('La reparación ya no tiene saldo pendiente para cobrar.'),
+      { code: 'REPAIR_HAS_NO_BALANCE', currentBalance: 0 },
+    ))
+
+    render(<RepairPaymentDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={onConfirm} />)
+
+    expect(await screen.findByText('Caja abierta')).toBeVisible()
+    fireEvent.change(screen.getByLabelText('Monto aplicado a la reparación'), { target: { value: '180000' } })
+    fireEvent.change(screen.getByLabelText('Efectivo recibido del cliente'), { target: { value: '180000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Cobro' }))
+
+    expect(await screen.findByText('La reparación ya no tiene saldo pendiente para cobrar.')).toBeVisible()
+    expect(screen.getByLabelText('Monto aplicado a la reparación')).toHaveValue(null)
+    expect(screen.getByRole('button', { name: 'Confirmar Cobro' })).toBeDisabled()
+  })
 })

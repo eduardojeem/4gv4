@@ -15,14 +15,12 @@ function queryResult(result: { data: unknown; error: null }) {
 }
 
 const cashQuery = queryResult({ data: [{ id: 'cash-1', register_id: 'principal' }], error: null })
-const repairQuery = queryResult({
-  data: {
-    id: 'repair-1', ticket_number: 'REP-1', customer_id: 'customer-1',
-    paid_amount: 0, payment_status: 'pendiente', final_cost: 100_000, estimated_cost: 100_000,
-    pricing_mode: 'automatic', labor_cost: 100_000, discount_amount: 0, parts: [],
-  },
-  error: null,
-})
+const repairRecord = {
+  id: 'repair-1', ticket_number: 'REP-1', customer_id: 'customer-1',
+  paid_amount: 0, payment_status: 'pendiente', final_cost: 100_000, estimated_cost: 100_000,
+  pricing_mode: 'automatic', labor_cost: 100_000, discount_amount: 0, parts: [],
+}
+const repairQuery = queryResult({ data: repairRecord, error: null })
 const ctx = {
   supabase: {
     rpc: vi.fn(),
@@ -45,6 +43,10 @@ vi.mock('@/lib/repairs/financial-closure-rpc', async (importOriginal) => {
 describe('POST /api/repairs/:id/payment', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    Object.assign(repairRecord, {
+      paid_amount: 0, final_cost: 100_000, estimated_cost: 100_000,
+      pricing_mode: 'automatic', labor_cost: 100_000, discount_amount: 0, parts: [],
+    })
     closeFinancial.mockResolvedValue({ payment_id: 'payment-1', idempotent: false })
     fetchRepair.mockResolvedValue({ data: { id: 'repair-1', payment_status: 'pagado' }, error: null })
   })
@@ -86,6 +88,22 @@ describe('POST /api/repairs/:id/payment', () => {
       currentPaid: 0,
       currentBalance: 100_000,
     })
+    expect(closeFinancial).not.toHaveBeenCalled()
+  })
+
+  it('reports a zero authoritative balance as an already settled repair', async () => {
+    repairRecord.labor_cost = 0
+    repairRecord.final_cost = 0
+    repairRecord.estimated_cost = 0
+    const { POST } = await import('./route')
+    const request = { json: async () => ({
+      method: 'cash', amount: 10_000, idempotencyKey: 'payment-no-balance',
+    }) } as never
+    const response = await POST(request, { params: Promise.resolve({ id: 'repair-1' }) })
+    const payload = await response.json()
+
+    expect(response.status).toBe(422)
+    expect(payload).toMatchObject({ code: 'REPAIR_HAS_NO_BALANCE', currentBalance: 0 })
     expect(closeFinancial).not.toHaveBeenCalled()
   })
 })

@@ -63,6 +63,16 @@ export async function POST(request: NextRequest, context: RouteParams) {
     const currentPaid = pricing.paidAmount
     const currentBalance = pricing.balance
 
+    if (currentBalance <= 0) {
+      return NextResponse.json({
+        error: 'La reparación ya no tiene saldo pendiente para cobrar.',
+        code: 'REPAIR_HAS_NO_BALANCE',
+        currentTotal,
+        currentPaid,
+        currentBalance: 0,
+      }, { status: 422 })
+    }
+
     if (input.amount > currentBalance) {
       return NextResponse.json({
         error: `El saldo pendiente cambió. El monto máximo actual es ${currentBalance}.`,

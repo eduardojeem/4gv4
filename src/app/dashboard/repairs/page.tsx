@@ -324,7 +324,7 @@ function RepairsPageContent() {
       toast.success(`${baseMsg} exitosamente`)
     } catch (err) {
       const code = (err as { code?: string } | null)?.code
-      const isBalanceRefresh = code === 'REPAIR_PAYMENT_EXCEEDS_BALANCE' || code === 'REPAIR_CREDIT_MUST_COVER_BALANCE'
+      const isBalanceRefresh = code === 'REPAIR_HAS_NO_BALANCE' || code === 'REPAIR_PAYMENT_EXCEEDS_BALANCE' || code === 'REPAIR_CREDIT_MUST_COVER_BALANCE'
       if (!isBalanceRefresh) logger.error('Error registering payment', { error: err })
       // Mostrar el motivo real (ej. "No hay caja abierta...") en vez de un
       // genérico: si no, el guardrail nuevo del backend queda invisible y

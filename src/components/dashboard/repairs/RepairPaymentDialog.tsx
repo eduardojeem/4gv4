@@ -100,6 +100,7 @@ export function RepairPaymentDialog({
   const [openingNote, setOpeningNote] = useState('')
   const [isOpening, setIsOpening] = useState(false)
   const [currentBalanceOverride, setCurrentBalanceOverride] = useState<number | null>(null)
+  const [balanceRefreshMessage, setBalanceRefreshMessage] = useState<string | null>(null)
   const balanceDue = currentBalanceOverride ?? persistedBalanceDue
 
   useEffect(() => {
@@ -143,6 +144,7 @@ export function RepairPaymentDialog({
     setOpeningAmount('0')
     setOpeningNote('')
     setCurrentBalanceOverride(null)
+    setBalanceRefreshMessage(null)
     onOpenChange(false)
   }
 
@@ -186,15 +188,17 @@ export function RepairPaymentDialog({
       })
       handleClose()
     } catch (error) {
-      const paymentError = error as { code?: string; currentBalance?: number }
+      const paymentError = error as { code?: string; currentBalance?: number; message?: string }
       if (
-        ['REPAIR_PAYMENT_EXCEEDS_BALANCE', 'REPAIR_CREDIT_MUST_COVER_BALANCE'].includes(paymentError.code || '') &&
+        ['REPAIR_HAS_NO_BALANCE', 'REPAIR_PAYMENT_EXCEEDS_BALANCE', 'REPAIR_CREDIT_MUST_COVER_BALANCE'].includes(paymentError.code || '') &&
         Number.isFinite(paymentError.currentBalance) &&
-        Number(paymentError.currentBalance) > 0
+        Number(paymentError.currentBalance) >= 0
       ) {
         const nextAmount = Number(paymentError.currentBalance)
         setCurrentBalanceOverride(nextAmount)
-        setAmount(String(nextAmount))
+        setBalanceRefreshMessage(paymentError.message || 'El saldo pendiente fue actualizado.')
+        setAmount(nextAmount > 0 ? String(nextAmount) : '')
+        if (nextAmount <= 0) setCashReceived('')
         if (method === 'cash' && parsedCashReceived < nextAmount) {
           setCashReceived(String(nextAmount))
         }
@@ -259,6 +263,11 @@ export function RepairPaymentDialog({
               {formatCurrency(balanceDue)}
             </span>
           </div>
+          {balanceRefreshMessage && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+              {balanceRefreshMessage}
+            </p>
+          )}
           {alreadyPaid > 0 && (
             <p className="text-xs text-muted-foreground -mt-2">
               Ya se registraron {formatCurrency(alreadyPaid)} de {formatCurrency(totalDue)}.
