@@ -120,4 +120,23 @@ describe('RepairPaymentDialog', () => {
     expect(screen.getByText('El efectivo recibido no alcanza para cubrir el monto aplicado.')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Confirmar Cobro' })).toBeDisabled()
   })
+
+  it('keeps the dialog open and adjusts the draft when the server reports a newer balance', async () => {
+    cashRegisterMocks.checkOpenSession.mockResolvedValue({ id: 'session-1' })
+    const onConfirm = vi.fn().mockRejectedValue(Object.assign(
+      new Error('El saldo pendiente cambió. El monto máximo actual es 100000.'),
+      { code: 'REPAIR_PAYMENT_EXCEEDS_BALANCE', currentBalance: 100000 },
+    ))
+
+    render(<RepairPaymentDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={onConfirm} />)
+
+    expect(await screen.findByText('Caja abierta')).toBeVisible()
+    fireEvent.change(screen.getByLabelText('Monto aplicado a la reparación'), { target: { value: '180000' } })
+    fireEvent.change(screen.getByLabelText('Efectivo recibido del cliente'), { target: { value: '180000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Cobro' }))
+
+    await waitFor(() => expect(screen.getByLabelText('Monto aplicado a la reparación')).toHaveValue(100000))
+    expect(screen.getByRole('dialog', { name: /Procesar pago de reparación/i })).toBeVisible()
+    expect(screen.getByText('Saldo pendiente').parentElement).toHaveTextContent('100000')
+  })
 })

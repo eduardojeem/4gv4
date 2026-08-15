@@ -19,6 +19,7 @@ const repairQuery = queryResult({
   data: {
     id: 'repair-1', ticket_number: 'REP-1', customer_id: 'customer-1',
     paid_amount: 0, payment_status: 'pendiente', final_cost: 100_000, estimated_cost: 100_000,
+    pricing_mode: 'automatic', labor_cost: 100_000, discount_amount: 0, parts: [],
   },
   error: null,
 })
@@ -68,5 +69,23 @@ describe('POST /api/repairs/:id/payment', () => {
       repairId: 'repair-1', deliver: false, cashSessionId: 'cash-1',
       payment: expect.objectContaining({ idempotencyKey: 'payment-123' }),
     }))
+  })
+
+  it('returns the authoritative balance before an oversized payment reaches the RPC', async () => {
+    const { POST } = await import('./route')
+    const request = { json: async () => ({
+      method: 'cash', amount: 120_000, idempotencyKey: 'payment-oversized',
+    }) } as never
+    const response = await POST(request, { params: Promise.resolve({ id: 'repair-1' }) })
+    const payload = await response.json()
+
+    expect(response.status).toBe(422)
+    expect(payload).toMatchObject({
+      code: 'REPAIR_PAYMENT_EXCEEDS_BALANCE',
+      currentTotal: 100_000,
+      currentPaid: 0,
+      currentBalance: 100_000,
+    })
+    expect(closeFinancial).not.toHaveBeenCalled()
   })
 })

@@ -7,6 +7,7 @@ import {
 import { createCreditAccount, CreditAccountError } from '@/lib/credits/create-credit-account'
 import { normalizeCreditFrequency, normalizeInstallmentCount } from '@/lib/credits/installments'
 import { parseRepairPaymentRequest } from '@/lib/repairs/financial-closure'
+import { calculateRepairPricing } from '@/lib/repairs/pricing'
 import {
   closeRepairAndRegisterPayment,
   FinancialClosureRpcError,
@@ -32,6 +33,55 @@ export async function POST(request: NextRequest, context: RouteParams) {
     const { id } = await context.params
     const input = parsed.data
     const isCredit = input.method === 'credit'
+
+    const { data: financialRepair, error: financialRepairError } = await ctx.supabase
+      .from('repairs')
+      .select('id, pricing_mode, labor_cost, final_cost, estimated_cost, discount_amount, paid_amount, parts:repair_parts(unit_price, unit_cost, quantity)')
+      .eq('id', id)
+      .eq('organization_id', ctx.organizationId)
+      .eq('branch_id', ctx.branchId)
+      .maybeSingle()
+
+    if (financialRepairError) throw financialRepairError
+    if (!financialRepair) {
+      return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
+    }
+
+    const pricing = calculateRepairPricing({
+      mode: financialRepair.pricing_mode,
+      laborCost: financialRepair.labor_cost,
+      finalCost: financialRepair.final_cost ?? financialRepair.estimated_cost,
+      discountAmount: financialRepair.discount_amount,
+      paidAmount: financialRepair.paid_amount,
+      parts: financialRepair.parts?.map((part: { unit_price?: number | null; unit_cost?: number | null; quantity?: number | null }) => ({
+        cost: part.unit_price ?? part.unit_cost,
+        internalCost: part.unit_cost,
+        quantity: part.quantity,
+      })) ?? [],
+    })
+    const currentTotal = pricing.customerTotal
+    const currentPaid = pricing.paidAmount
+    const currentBalance = pricing.balance
+
+    if (input.amount > currentBalance) {
+      return NextResponse.json({
+        error: `El saldo pendiente cambió. El monto máximo actual es ${currentBalance}.`,
+        code: 'REPAIR_PAYMENT_EXCEEDS_BALANCE',
+        currentTotal,
+        currentPaid,
+        currentBalance,
+      }, { status: 422 })
+    }
+
+    if (isCredit && input.amount !== currentBalance) {
+      return NextResponse.json({
+        error: `El crédito debe cubrir el saldo pendiente actual de ${currentBalance}.`,
+        code: 'REPAIR_CREDIT_MUST_COVER_BALANCE',
+        currentTotal,
+        currentPaid,
+        currentBalance,
+      }, { status: 422 })
+    }
 
     if (isCredit && (ctx.role === 'tecnico' || ctx.role === 'technician')) {
       return NextResponse.json(

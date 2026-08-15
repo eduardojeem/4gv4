@@ -303,16 +303,29 @@ function RepairsPageContent() {
         },
         body: JSON.stringify(result),
       })
-      const payload = await response.json().catch(() => null) as { error?: string } | null
+      const payload = await response.json().catch(() => null) as {
+        error?: string
+        code?: string
+        currentTotal?: number
+        currentPaid?: number
+        currentBalance?: number
+      } | null
       if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudo registrar el pago')
+        throw Object.assign(new Error(payload?.error || 'No se pudo registrar el pago'), {
+          code: payload?.code,
+          currentTotal: payload?.currentTotal,
+          currentPaid: payload?.currentPaid,
+          currentBalance: payload?.currentBalance,
+        })
       }
 
       await refreshRepairs()
       const baseMsg = result.method === 'credit' ? 'Crédito registrado' : 'Pago registrado'
       toast.success(`${baseMsg} exitosamente`)
     } catch (err) {
-      logger.error('Error registering payment', { error: err })
+      const code = (err as { code?: string } | null)?.code
+      const isBalanceRefresh = code === 'REPAIR_PAYMENT_EXCEEDS_BALANCE' || code === 'REPAIR_CREDIT_MUST_COVER_BALANCE'
+      if (!isBalanceRefresh) logger.error('Error registering payment', { error: err })
       // Mostrar el motivo real (ej. "No hay caja abierta...") en vez de un
       // genérico: si no, el guardrail nuevo del backend queda invisible y
       // el cajero no sabe por qué se rechazó el cobro.

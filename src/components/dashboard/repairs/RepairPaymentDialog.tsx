@@ -81,7 +81,7 @@ export function RepairPaymentDialog({
   // POS), no tiene sentido sugerir el costo total de nuevo.
   const totalDue = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
   const alreadyPaid = repair?.paidAmount ?? 0
-  const balanceDue = Math.max(0, totalDue - alreadyPaid)
+  const persistedBalanceDue = Math.max(0, totalDue - alreadyPaid)
 
   const [method, setMethod] = useState<QuickPayMethod>('cash')
   const [amount, setAmount] = useState('')
@@ -99,6 +99,8 @@ export function RepairPaymentDialog({
   const [openingAmount, setOpeningAmount] = useState('0')
   const [openingNote, setOpeningNote] = useState('')
   const [isOpening, setIsOpening] = useState(false)
+  const [currentBalanceOverride, setCurrentBalanceOverride] = useState<number | null>(null)
+  const balanceDue = currentBalanceOverride ?? persistedBalanceDue
 
   useEffect(() => {
     checkOpenSessionRef.current = cashRegister.checkOpenSession
@@ -140,6 +142,7 @@ export function RepairPaymentDialog({
     setIsOpeningRegister(false)
     setOpeningAmount('0')
     setOpeningNote('')
+    setCurrentBalanceOverride(null)
     onOpenChange(false)
   }
 
@@ -182,6 +185,22 @@ export function RepairPaymentDialog({
         ...(isCredit ? { interestRate: rate, installments: { count, frequency } } : {}),
       })
       handleClose()
+    } catch (error) {
+      const paymentError = error as { code?: string; currentBalance?: number }
+      if (
+        ['REPAIR_PAYMENT_EXCEEDS_BALANCE', 'REPAIR_CREDIT_MUST_COVER_BALANCE'].includes(paymentError.code || '') &&
+        Number.isFinite(paymentError.currentBalance) &&
+        Number(paymentError.currentBalance) > 0
+      ) {
+        const nextAmount = Number(paymentError.currentBalance)
+        setCurrentBalanceOverride(nextAmount)
+        setAmount(String(nextAmount))
+        if (method === 'cash' && parsedCashReceived < nextAmount) {
+          setCashReceived(String(nextAmount))
+        }
+        return
+      }
+      throw error
     } finally {
       setIsSubmitting(false)
     }
