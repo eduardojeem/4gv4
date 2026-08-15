@@ -219,6 +219,15 @@ describe('dashboard financial workflow contracts', () => {
     expect(cashHook).not.toContain("const fallback = [{ id: 'principal'")
   })
 
+  it('resolves the principal register alias inside the shared hook before opening cash', () => {
+    const cashHook = readFileSync(resolve(workspace, 'src/hooks/useCashRegister.ts'), 'utf8')
+
+    expect(cashHook).toContain("normalizedRegisterId === 'principal'")
+    expect(cashHook).toContain('await loadRegisters()')
+    expect(cashHook).toContain("fetch('/api/pos/cash-registers'")
+    expect(cashHook).toContain("name: 'Caja Principal'")
+  })
+
   it('commits payment metadata and paid-repair protection in the POS transaction', () => {
     const route = readFileSync(resolve(workspace, 'src/app/api/pos/process-sale/route.ts'), 'utf8')
     const atomicCheckoutMigration = readFileSync(

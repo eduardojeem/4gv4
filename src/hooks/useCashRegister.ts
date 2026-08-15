@@ -409,7 +409,43 @@ export function useCashRegister() {
                 return false
             }
 
-            const normalizedRegisterId = registerId.trim()
+            let normalizedRegisterId = registerId.trim()
+
+            // `principal` is a UI alias used by payment dialogs. The atomic RPC
+            // only accepts a real register id belonging to the active branch.
+            if (normalizedRegisterId === 'principal') {
+                if (!selectedBranchId || selectedBranchId === 'all') {
+                    throw new Error('Selecciona una sucursal antes de abrir la caja.')
+                }
+
+                const availableRegisters = await loadRegisters()
+                normalizedRegisterId = availableRegisters[0]?.id || ''
+
+                if (!normalizedRegisterId) {
+                    const createResponse = await fetch('/api/pos/cash-registers', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...branchHeaders(selectedBranchId),
+                        },
+                        body: JSON.stringify({
+                            name: 'Caja Principal',
+                            branch_id: selectedBranchId,
+                        }),
+                    })
+                    const createPayload = await createResponse.json().catch(() => null) as {
+                        success?: boolean
+                        error?: string
+                        data?: { id?: string }
+                    } | null
+
+                    if (!createResponse.ok || !createPayload?.success || !createPayload.data?.id) {
+                        throw new Error(createPayload?.error || 'No se pudo preparar la caja principal.')
+                    }
+
+                    normalizedRegisterId = createPayload.data.id
+                }
+            }
 
             // Check if already open
             const existingSession = await checkOpenSession(normalizedRegisterId)
@@ -484,7 +520,7 @@ export function useCashRegister() {
         } finally {
             setLoading(false)
         }
-    }, [checkOpenSession, resolveActorId, selectedBranchId, supabase])
+    }, [checkOpenSession, loadRegisters, resolveActorId, selectedBranchId, supabase])
 
     // Close cash register
     const closeRegister = useCallback(async (closingBalance: number, userId?: string) => {
