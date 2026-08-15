@@ -772,6 +772,24 @@ export function RepairDetailDialog({
                   </div>
                 </section>
 
+                {repair.closeout && (
+                  <section aria-labelledby="repair-closeout-title" className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/20">
+                    <h3 id="repair-closeout-title" className="text-sm font-semibold">Cierre sin reparación</h3>
+                    <p className="mt-1 text-xs font-medium text-amber-800 dark:text-amber-300">
+                      {repair.closeout.outcome === 'withdrawn' ? 'Retirado sin reparar' : 'No fue posible reparar'}
+                    </p>
+                    <dl className="mt-3 space-y-2 text-xs">
+                      <div className="flex justify-between gap-3"><dt>Cargo final</dt><dd className="font-semibold">{formatCurrency(repair.closeout.finalCharge)}</dd></div>
+                      <div className="flex justify-between gap-3"><dt>Pagado antes del cierre</dt><dd>{formatCurrency(repair.closeout.paidBefore)}</dd></div>
+                      <div className="flex justify-between gap-3"><dt>{repair.closeout.settlementKind === 'store_credit' ? 'Saldo a favor creado' : repair.closeout.settlementKind === 'refund' ? 'Devuelto al cliente' : repair.closeout.settlementKind === 'outstanding' ? 'Saldo pendiente' : 'Ajuste del cierre'}</dt><dd className="font-semibold">{formatCurrency(repair.closeout.settlementAmount)}</dd></div>
+                    </dl>
+                    {repair.closeout.parts.length > 0 && <div className="mt-3 space-y-1 border-t border-amber-200 pt-3 text-xs dark:border-amber-900/60">
+                      {repair.closeout.parts.map((part) => <p key={part.repairPartId}>{part.name} · {part.disposition === 'consumed' ? 'Consumido' : 'Reintegrado al inventario'}</p>)}
+                    </div>}
+                    {repair.closeout.reason && <p className="mt-3 text-xs text-muted-foreground">Motivo: {repair.closeout.reason}</p>}
+                  </section>
+                )}
+
                 {repair.payments && repair.payments.length > 0 && (
                   <div className="rounded-xl border bg-card p-4 shadow-sm">
                     <h3 className="text-sm font-semibold">Historial de pagos</h3>

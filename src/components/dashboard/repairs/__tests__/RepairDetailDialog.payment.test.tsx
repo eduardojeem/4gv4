@@ -104,6 +104,26 @@ describe('RepairDetailDialog payment summary', () => {
     expect(screen.getByRole('heading', { name: 'Editar precio de reparación' })).toBeInTheDocument()
   })
 
+  it('shows the financial and inventory result of an unrepaired closeout', () => {
+    render(<RepairDetailDialog open repair={{
+      ...baseRepair,
+      status: 'entregado',
+      paidAmount: 100,
+      closeout: {
+        id: 'closeout-1', outcome: 'unrepairable', chargeMode: 'labor_and_consumed_parts',
+        laborCharge: 20, consumedPartsCharge: 80, finalCharge: 100, paidBefore: 150,
+        settlementKind: 'store_credit', settlementAmount: 50, settlementMethod: null,
+        reason: 'Daño de placa', note: 'Cliente informado', createdAt: '2026-08-15T10:00:00Z',
+        parts: [{ repairPartId: 'part-1', name: 'Pantalla', quantity: 1, unitPrice: 80, disposition: 'consumed' }],
+      },
+    }} onClose={vi.fn()} />)
+
+    const closeout = screen.getByRole('region', { name: 'Cierre sin reparación' })
+    expect(within(closeout).getByText('No fue posible reparar')).toBeVisible()
+    expect(within(closeout).getByText('Saldo a favor creado')).toBeVisible()
+    expect(within(closeout).getByText('Pantalla · Consumido')).toBeVisible()
+  })
+
   it('triggers onQuickPay when clicking pay pending balance button', async () => {
     const user = userEvent.setup()
     const onQuickPay = vi.fn()

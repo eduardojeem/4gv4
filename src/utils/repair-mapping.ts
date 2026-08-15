@@ -1,4 +1,4 @@
-import { Repair, RepairPriority, RepairUrgency, RepairDeliveryOutcome, DeviceType, RepairStatus } from '@/types/repairs'
+import { Repair, RepairPriority, RepairUrgency, RepairDeliveryOutcome, DeviceType, RepairStatus, RepairCloseout } from '@/types/repairs'
 
 interface SupabaseCustomer {
     id?: string
@@ -54,6 +54,25 @@ interface SupabaseRepairPayment {
     created_at: string
 }
 
+interface SupabaseRepairCloseout {
+    id: string
+    outcome: 'withdrawn' | 'unrepairable'
+    charge_mode: RepairCloseout['chargeMode']
+    labor_charge: number | string
+    consumed_parts_charge: number | string
+    final_charge: number | string
+    paid_before: number | string
+    settlement_kind: RepairCloseout['settlementKind']
+    settlement_amount: number | string
+    settlement_method?: 'cash' | 'card' | 'transfer' | null
+    settlement_reference?: string | null
+    reason?: string | null
+    note?: string | null
+    created_by?: string | null
+    created_at: string
+    parts_resolution?: Array<{ repairPartId: string; productId?: string | null; name: string; quantity: number; unitPrice: number; disposition: 'consumed' | 'restocked' }>
+}
+
 interface SupabaseRepair {
     id: string
     ticket_number?: string
@@ -101,6 +120,7 @@ interface SupabaseRepair {
     parts?: SupabaseRepairPart[]
     notes?: SupabaseRepairNote[]
     payments?: SupabaseRepairPayment[]
+    closeout?: SupabaseRepairCloseout | SupabaseRepairCloseout[] | null
 }
 
 /**
@@ -116,6 +136,7 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
     const tech: SupabaseTechnician | undefined = Array.isArray(r.technician)
         ? (r.technician[0] ?? undefined)
         : r.technician
+    const closeout = Array.isArray(r.closeout) ? (r.closeout[0] ?? null) : (r.closeout ?? null)
     return {
         id: r.id,
         ticketNumber: r.ticket_number,
@@ -158,6 +179,28 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
                 createdAt: payment.created_at,
                 createdBy: payment.created_by ?? null,
             })),
+        closeout: closeout ? {
+            id: closeout.id,
+            outcome: closeout.outcome,
+            chargeMode: closeout.charge_mode,
+            laborCharge: Number(closeout.labor_charge) || 0,
+            consumedPartsCharge: Number(closeout.consumed_parts_charge) || 0,
+            finalCharge: Number(closeout.final_charge) || 0,
+            paidBefore: Number(closeout.paid_before) || 0,
+            settlementKind: closeout.settlement_kind,
+            settlementAmount: Number(closeout.settlement_amount) || 0,
+            settlementMethod: closeout.settlement_method ?? null,
+            settlementReference: closeout.settlement_reference ?? null,
+            reason: closeout.reason ?? null,
+            note: closeout.note ?? null,
+            createdBy: closeout.created_by ?? null,
+            createdAt: closeout.created_at,
+            parts: (closeout.parts_resolution ?? []).map((part) => ({
+                ...part,
+                quantity: Number(part.quantity) || 0,
+                unitPrice: Number(part.unitPrice) || 0,
+            })),
+        } : null,
         technician: tech ? {
             name: tech.full_name || tech.email,
             id: tech.id
@@ -184,7 +227,7 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
             isInternal: Boolean(n.is_internal)
         })),
         parts: (r.parts || []).map((p: SupabaseRepairPart) => ({
-            id: Number(p.id) || 0, // Fallback if UUID
+            id: String(p.id),
             name: p.part_name,
             cost: p.unit_price ?? p.unit_cost,
             internalCost: p.unit_cost,

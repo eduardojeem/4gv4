@@ -51,7 +51,7 @@ export interface RepairNote {
 }
 
 export interface RepairPart {
-  id: number
+  id: string | number
   name: string
   cost: number
   internalCost?: number
@@ -63,6 +63,34 @@ export interface RepairPart {
    *  forma de descontar stock ni de saber qué repuestos vinieron del
    *  inventario vs. de un proveedor externo. */
   productId?: string | null
+}
+
+export interface RepairPartResolution {
+  repairPartId: string
+  productId?: string | null
+  name: string
+  quantity: number
+  unitPrice: number
+  disposition: 'consumed' | 'restocked'
+}
+
+export interface RepairCloseout {
+  id: string
+  outcome: 'withdrawn' | 'unrepairable'
+  chargeMode: 'none' | 'labor' | 'labor_and_consumed_parts' | 'exceptional'
+  laborCharge: number
+  consumedPartsCharge: number
+  finalCharge: number
+  paidBefore: number
+  settlementKind: 'none' | 'payment' | 'outstanding' | 'refund' | 'store_credit'
+  settlementAmount: number
+  settlementMethod?: 'cash' | 'card' | 'transfer' | null
+  settlementReference?: string | null
+  reason?: string | null
+  note?: string | null
+  createdBy?: string | null
+  createdAt: string
+  parts: RepairPartResolution[]
 }
 
 export interface RepairImage {
@@ -127,6 +155,7 @@ export interface Repair {
   paymentStatus?: RepairPaymentStatus
   paidAmount?: number
   payments?: RepairPayment[]
+  closeout?: RepairCloseout | null
   lastUpdate: string
   progress: number
   customerRating: number | null
