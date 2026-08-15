@@ -44,7 +44,7 @@ function getPreview(repair: Repair, draft: UnrepairedCloseoutDraft) {
     exceptionalAmount: 'amount' in draft.charge ? draft.charge.amount : 0,
     paidAmount: repair.paidAmount ?? 0,
     parts: (repair.parts ?? []).map((part) => ({
-      disposition: draft.parts.find((item) => item.repairPartId === String(part.id))?.disposition ?? 'restocked',
+      disposition: draft.parts.find((item) => item.repairPartId === (part.databaseId ?? String(part.id)))?.disposition ?? 'restocked',
       quantity: part.quantity,
       unitPrice: part.cost,
     })),
@@ -113,12 +113,13 @@ export function UnrepairedCloseoutPanel({ repair, value, onChange, disabled }: P
       {repairParts.length > 0 && <div className="space-y-2">
         <h3 className="text-sm font-semibold">Resolvé los repuestos</h3>
         {repairParts.map((part) => {
-          const disposition = draft.parts.find((item) => item.repairPartId === String(part.id))?.disposition
-          return <div key={String(part.id)} className="rounded-md border p-3">
+          const repairPartId = part.databaseId ?? String(part.id)
+          const disposition = draft.parts.find((item) => item.repairPartId === repairPartId)?.disposition
+          return <div key={repairPartId} className="rounded-md border p-3">
             <div className="mb-2 flex justify-between gap-2 text-sm"><span className="font-medium">{part.name} × {part.quantity}</span><span>{formatCurrency(part.cost * part.quantity)}</span></div>
             <div className="flex flex-wrap gap-3 text-xs">
-              <label><input type="radio" name={`part-${part.id}`} checked={disposition === 'consumed'} onChange={() => updatePart(String(part.id), 'consumed')} disabled={disabled} /> Consumido o no recuperable</label>
-              <label><input type="radio" name={`part-${part.id}`} checked={disposition === 'restocked'} onChange={() => updatePart(String(part.id), 'restocked')} disabled={disabled} /> Volver a inventario</label>
+              <label><input type="radio" name={`part-${repairPartId}`} checked={disposition === 'consumed'} onChange={() => updatePart(repairPartId, 'consumed')} disabled={disabled} /> Consumido o no recuperable</label>
+              <label><input type="radio" name={`part-${repairPartId}`} checked={disposition === 'restocked'} onChange={() => updatePart(repairPartId, 'restocked')} disabled={disabled} /> Volver a inventario</label>
             </div>
             {!part.productId && disposition === 'restocked' && <p className="mt-2 text-xs text-amber-700">Quedará auditado, pero no suma stock porque no está vinculado a un producto.</p>}
           </div>

@@ -51,7 +51,8 @@ export interface RepairNote {
 }
 
 export interface RepairPart {
-  id: string | number
+  id: number
+  databaseId?: string
   name: string
   cost: number
   internalCost?: number

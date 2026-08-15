@@ -227,7 +227,8 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
             isInternal: Boolean(n.is_internal)
         })),
         parts: (r.parts || []).map((p: SupabaseRepairPart) => ({
-            id: String(p.id),
+            id: Number(p.id) || 0,
+            databaseId: String(p.id),
             name: p.part_name,
             cost: p.unit_price ?? p.unit_cost,
             internalCost: p.unit_cost,

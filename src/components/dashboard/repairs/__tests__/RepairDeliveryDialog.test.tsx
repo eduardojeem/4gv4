@@ -196,7 +196,8 @@ describe('RepairDeliveryDialog', () => {
   })
 
   it('keeps the modal open and shows an API rejection', async () => {
-    const onConfirm = vi.fn().mockRejectedValue(new Error('Caja cerrada durante el cobro'))
+    const apiError = Object.assign(new Error('Caja cerrada durante el cobro'), { code: 'REPAIR_CASH_REGISTER_NOT_OPEN' })
+    const onConfirm = vi.fn().mockRejectedValue(apiError)
 
     render(<RepairDeliveryDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={onConfirm} />)
     fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
@@ -205,6 +206,8 @@ describe('RepairDeliveryDialog', () => {
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1))
     expect(await screen.findByRole('alert')).toHaveTextContent('Caja cerrada durante el cobro')
+    expect(screen.getByText('Caja cerrada')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Abrir caja' })).toBeEnabled()
     expect(screen.getByRole('heading', { name: 'Cobrar reparación' })).toBeVisible()
     expect(screen.getByLabelText('Monto a cobrar')).toHaveValue(100)
   })

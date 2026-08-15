@@ -1000,9 +1000,11 @@ function RepairsPageContent() {
             },
             body: JSON.stringify(payload),
           })
-          const result = await response.json().catch(() => null) as { error?: string } | null
+          const result = await response.json().catch(() => null) as { error?: string; code?: string } | null
           if (!response.ok) {
-            throw new Error(result?.error || 'No se pudo registrar la entrega')
+            throw Object.assign(new Error(result?.error || 'No se pudo registrar la entrega'), {
+              code: result?.code,
+            })
           }
           await refreshRepairs()
           const collected = payload.outcome === 'repaired'

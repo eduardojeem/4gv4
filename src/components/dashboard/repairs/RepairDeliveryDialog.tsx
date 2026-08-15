@@ -261,6 +261,9 @@ export function RepairDeliveryDialog({
       await onConfirm(repair.id, payload)
       handleClose()
     } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'REPAIR_CASH_REGISTER_NOT_OPEN') {
+        setCashStatus('closed')
+      }
       setSubmissionError(error instanceof Error ? error.message : 'No se pudo registrar la entrega')
     } finally {
       setIsSubmitting(false)

@@ -33,7 +33,7 @@ describe('repair UI mapping', () => {
       }],
     })
 
-    expect(repair.parts[0].id).toBe('6d8238d2-fdc5-4939-85d7-130a823982b0')
+    expect(repair.parts[0].databaseId).toBe('6d8238d2-fdc5-4939-85d7-130a823982b0')
     expect(repair.closeout).toMatchObject({
       id: 'closeout-1', finalCharge: 100, paidBefore: 150, settlementKind: 'store_credit', settlementAmount: 50,
     })

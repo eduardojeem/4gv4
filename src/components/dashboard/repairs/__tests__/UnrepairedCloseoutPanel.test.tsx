@@ -9,7 +9,7 @@ const repair = {
   finalCost: 200,
   estimatedCost: 200,
   parts: [{
-    id: '6d8238d2-fdc5-4939-85d7-130a823982b0', name: 'Pantalla', cost: 80,
+    id: 0, databaseId: '6d8238d2-fdc5-4939-85d7-130a823982b0', name: 'Pantalla', cost: 80,
     internalCost: 50, quantity: 1, supplier: '', partNumber: '', productId: 'product-1',
   }],
 } as Repair
