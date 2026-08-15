@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import type { Repair } from '@/types/repairs'
@@ -47,6 +48,12 @@ const baseRepair = {
 
 describe('RepairDetailDialog payment summary', () => {
   beforeEach(() => {
+    class ResizeObserverMock {
+      observe = vi.fn()
+      unobserve = vi.fn()
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock)
     server.use(http.post('/api/repairs/sign', () => HttpResponse.json({ success: false })))
   })
 
@@ -78,5 +85,38 @@ describe('RepairDetailDialog payment summary', () => {
 
     expect(screen.getByText('Pago parcial')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cobrar saldo' })).toBeEnabled()
+  })
+
+  it('opens quick price editing from the costs section', async () => {
+    const user = userEvent.setup()
+    render(
+      <RepairDetailDialog
+        open
+        repair={{ ...baseRepair, status: 'listo', paidAmount: 40 }}
+        onClose={vi.fn()}
+        onQuickPriceSave={vi.fn().mockResolvedValue(true)}
+      />,
+    )
+
+    await user.click(screen.getByRole('tab', { name: 'Costos y Piezas' }))
+    await user.click(screen.getByRole('button', { name: 'Editar precio' }))
+
+    expect(screen.getByRole('heading', { name: 'Editar precio de reparación' })).toBeInTheDocument()
+  })
+
+  it('does not offer quick price editing for a cancelled repair', async () => {
+    const user = userEvent.setup()
+    render(
+      <RepairDetailDialog
+        open
+        repair={{ ...baseRepair, status: 'cancelado', paidAmount: 0 }}
+        onClose={vi.fn()}
+        onQuickPriceSave={vi.fn().mockResolvedValue(true)}
+      />,
+    )
+
+    await user.click(screen.getByRole('tab', { name: 'Costos y Piezas' }))
+
+    expect(screen.queryByRole('button', { name: 'Editar precio' })).not.toBeInTheDocument()
   })
 })

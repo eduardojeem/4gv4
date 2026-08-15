@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -48,27 +48,23 @@ function numberFromInput(value: string): number {
 }
 
 export function RepairQuickPriceDialog({
+  ...props
+}: RepairQuickPriceDialogProps) {
+  return <RepairQuickPriceForm key={`${props.repair.id}-${props.open ? 'open' : 'closed'}`} {...props} />
+}
+
+function RepairQuickPriceForm({
   open,
   repair,
   onOpenChange,
   onSave,
 }: RepairQuickPriceDialogProps) {
-  const [pricingMode, setPricingMode] = useState<RepairPricingMode>('automatic')
-  const [laborCost, setLaborCost] = useState('0')
-  const [finalCost, setFinalCost] = useState('')
-  const [discountAmount, setDiscountAmount] = useState('0')
-  const [reason, setReason] = useState('')
+  const [pricingMode, setPricingMode] = useState<RepairPricingMode>(repair.pricingMode || 'automatic')
+  const [laborCost, setLaborCost] = useState(String(repair.laborCost || 0))
+  const [finalCost, setFinalCost] = useState(repair.finalCost == null ? '' : String(repair.finalCost))
+  const [discountAmount, setDiscountAmount] = useState(String(repair.discountAmount || 0))
+  const [reason, setReason] = useState(repair.priceOverrideReason || '')
   const [isSaving, setIsSaving] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    setPricingMode(repair.pricingMode || 'automatic')
-    setLaborCost(String(repair.laborCost || 0))
-    setFinalCost(repair.finalCost == null ? '' : String(repair.finalCost))
-    setDiscountAmount(String(repair.discountAmount || 0))
-    setReason(repair.priceOverrideReason || '')
-    setIsSaving(false)
-  }, [open, repair])
 
   const paidAmount = Math.max(0, repair.paidAmount || 0)
   const pricingInput = useMemo(() => ({

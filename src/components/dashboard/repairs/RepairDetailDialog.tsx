@@ -56,6 +56,7 @@ import {
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { logger } from '@/lib/logger'
 import { formatWhatsAppPhone, getWhatsAppLink } from '@/lib/whatsapp'
+import { RepairQuickPriceDialog, type RepairQuickPriceUpdate } from './RepairQuickPriceDialog'
 
 interface RepairDetailDialogProps {
   open: boolean
@@ -64,6 +65,7 @@ interface RepairDetailDialogProps {
   onEdit?: (repair: Repair) => void
   onDeliver?: (repair: Repair) => void
   onQuickPay?: (repair: Repair) => void
+  onQuickPriceSave?: (repair: Repair, update: RepairQuickPriceUpdate) => Promise<boolean>
   onStatusChange?: (id: string, status: RepairStatus) => Promise<boolean>
 }
 
@@ -85,6 +87,7 @@ export function RepairDetailDialog({
   onEdit,
   onDeliver,
   onQuickPay,
+  onQuickPriceSave,
   onStatusChange
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
@@ -94,6 +97,7 @@ export function RepairDetailDialog({
   const [showSensitiveData, setShowSensitiveData] = useState(false)
   const [isSendingStatusWhatsApp, setIsSendingStatusWhatsApp] = useState(false)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [isQuickPriceOpen, setIsQuickPriceOpen] = useState(false)
   const { settings } = useSharedSettings()
   const [verificationHash, setVerificationHash] = useState<string | undefined>(undefined)
 
@@ -1047,10 +1051,18 @@ export function RepairDetailDialog({
                   {/* Costos y Piezas */}
                   <TabsContent value="finance" className="mt-4 space-y-5">
                     <div className="space-y-2">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-                        <DollarSign className="h-4 w-4" />
-                        Resumen de Costos
-                      </h3>
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          Resumen de Costos
+                        </h3>
+                        {repair.status !== 'cancelado' && onQuickPriceSave && (
+                          <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPriceOpen(true)}>
+                            <Edit className="h-4 w-4" />
+                            Editar precio
+                          </Button>
+                        )}
+                      </div>
                       <div className="rounded-xl border bg-card p-5 shadow-sm space-y-3">
                         <div className="flex justify-between items-center text-sm">
                           <span className="text-muted-foreground">Mano de Obra:</span>
@@ -1066,7 +1078,7 @@ export function RepairDetailDialog({
                         </div>
                         <Separator />
                         <div className="flex justify-between items-center">
-                          <span className="font-semibold">Costo Final:</span>
+                          <span className="font-semibold">Precio al cliente:</span>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-lg text-emerald-600 dark:text-emerald-400">
                               {formatCurrency(displayCost)}
@@ -1275,6 +1287,14 @@ export function RepairDetailDialog({
           }
           onCreated={() => setWarrantyCaseVersion((version) => version + 1)}
         />
+        {onQuickPriceSave && (
+          <RepairQuickPriceDialog
+            open={isQuickPriceOpen}
+            repair={repair}
+            onOpenChange={setIsQuickPriceOpen}
+            onSave={(update) => onQuickPriceSave(repair, update)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   )

@@ -970,6 +970,10 @@ function RepairsPageContent() {
         }}
         onDeliver={(repair) => setDeliverTarget(repair)}
         onQuickPay={(repair) => setPayTarget(repair)}
+        onQuickPriceSave={async (repair, update) => {
+          const updated = await updateRepair(repair.id, update)
+          return Boolean(updated)
+        }}
         onStatusChange={updateStatus}
       />
 
