@@ -27,4 +27,11 @@ describe('repair financial closure migration', () => {
     expect(migration).toMatch(/revoke all on function public\.close_repair_and_register_payment[\s\S]+from public/)
     expect(migration).toMatch(/grant execute on function public\.close_repair_and_register_payment[\s\S]+to service_role/)
   })
+
+  it('captures POS repair balance updates in the same sale transaction', () => {
+    expect(migration).toContain('create or replace function public.capture_pos_repair_payment')
+    expect(migration).toContain('before update of paid_amount, status on public.repairs')
+    expect(migration).toContain("'pos:' || resolved_sale_id::text || ':' || new.id::text")
+    expect(migration).toContain("'pos', resolved_sale_id")
+  })
 })

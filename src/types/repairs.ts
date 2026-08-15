@@ -74,7 +74,7 @@ export interface RepairImage {
 export interface RepairPayment {
   id: string
   amount: number
-  method: 'cash' | 'card' | 'transfer' | 'credit'
+  method: 'cash' | 'card' | 'transfer' | 'credit' | 'mixed'
   reference?: string | null
   notes?: string | null
   source: 'repairs' | 'delivery' | 'pos' | 'migration'

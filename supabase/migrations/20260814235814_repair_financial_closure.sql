@@ -13,7 +13,7 @@ create table if not exists public.repair_payments (
   organization_id uuid not null references public.organizations(id) on delete restrict,
   branch_id uuid not null references public.branches(id) on delete restrict,
   amount numeric(12, 2) not null check (amount > 0),
-  payment_method text not null check (payment_method in ('cash', 'card', 'transfer', 'credit')),
+  payment_method text not null check (payment_method in ('cash', 'card', 'transfer', 'credit', 'mixed')),
   idempotency_key text not null check (char_length(idempotency_key) between 8 and 120),
   source text not null check (source in ('repairs', 'delivery', 'pos', 'migration')),
   reference text,
@@ -332,5 +332,94 @@ grant execute on function public.close_repair_and_register_payment(
   uuid, uuid, uuid, uuid, boolean, text, text, boolean, text, numeric,
   text, text, text, uuid, uuid, uuid, text
 ) to service_role;
+
+create or replace function public.capture_pos_repair_payment()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  resolved_sale_id uuid;
+  resolved_sale public.sales%rowtype;
+  resolved_method text;
+  payment_delta numeric(12, 2);
+begin
+  if new.status = 'entregado' and old.status is distinct from 'entregado' then
+    if old.status <> 'listo' then
+      raise exception 'REPAIR_DELIVERY_INVALID_STATE';
+    end if;
+    if new.delivery_outcome not in ('repaired', 'withdrawn', 'unrepairable') then
+      raise exception 'REPAIR_DELIVERY_OUTCOME_INVALID';
+    end if;
+    new.warranty_expires_at := case
+      when coalesce(new.warranty_months, 0) > 0
+        then coalesce(new.delivered_at, now()) + make_interval(months => new.warranty_months)
+      else null
+    end;
+  end if;
+
+  payment_delta := greatest(0, coalesce(new.paid_amount, 0) - coalesce(old.paid_amount, 0));
+  if payment_delta <= 0 then
+    return new;
+  end if;
+
+  begin
+    resolved_sale_id := substring(
+      new.problem_description
+      from 'Venta relacionada #([0-9a-fA-F-]{36})'
+    )::uuid;
+  exception when others then
+    resolved_sale_id := null;
+  end;
+
+  if resolved_sale_id is null then
+    return new;
+  end if;
+
+  select sale.*
+  into resolved_sale
+  from public.sales sale
+  where sale.id = resolved_sale_id
+    and sale.organization_id = new.organization_id;
+
+  if not found then
+    raise exception 'REPAIR_POS_SALE_NOT_FOUND';
+  end if;
+
+  resolved_method := case lower(coalesce(resolved_sale.payment_method, ''))
+    when 'cash' then 'cash'
+    when 'efectivo' then 'cash'
+    when 'card' then 'card'
+    when 'tarjeta' then 'card'
+    when 'transfer' then 'transfer'
+    when 'transferencia' then 'transfer'
+    when 'credit' then 'credit'
+    when 'credito' then 'credit'
+    when 'crédito' then 'credit'
+    else 'mixed'
+  end;
+
+  insert into public.repair_payments (
+    repair_id, organization_id, branch_id, amount, payment_method,
+    idempotency_key, source, sale_id, created_by, created_at
+  ) values (
+    new.id, new.organization_id, new.branch_id, payment_delta, resolved_method,
+    'pos:' || resolved_sale_id::text || ':' || new.id::text,
+    'pos', resolved_sale_id, resolved_sale.created_by, now()
+  ) on conflict (organization_id, idempotency_key) do nothing;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.capture_pos_repair_payment() from public, anon, authenticated;
+grant execute on function public.capture_pos_repair_payment() to service_role;
+
+drop trigger if exists capture_pos_repair_payment_trigger on public.repairs;
+create trigger capture_pos_repair_payment_trigger
+before update of paid_amount, status on public.repairs
+for each row
+execute function public.capture_pos_repair_payment();
 
 commit;
