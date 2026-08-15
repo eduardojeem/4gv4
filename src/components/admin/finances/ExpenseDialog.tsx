@@ -27,6 +27,13 @@ export function ExpenseDialog({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const idempotencyKeyRef = useRef<string | null>(null)
+  // Fecha contable en HOY por defecto: el período que muestra la lista arranca
+  // en los últimos 30 días hasta hoy, así que un gasto de hoy aparece al
+  // instante en vez de quedar oculto por caer fuera del rango.
+  const today = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })()
 
   function getIdempotencyKey() {
     idempotencyKeyRef.current ??= `expense-${crypto.randomUUID()}`
@@ -110,7 +117,7 @@ export function ExpenseDialog({
           <label className="grid gap-1 text-sm font-medium">Monto<input name="amount" type="number" min="0.01" step="0.01" required className="rounded-md border bg-background px-3 py-2" /></label>
           <label className="grid gap-1 text-sm font-medium">Categoría<select name="categoryId" required defaultValue="" className="rounded-md border bg-background px-3 py-2"><option value="" disabled>Selecciona una categoría</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2"><label className="grid gap-1 text-sm font-medium">Fecha contable<input name="accountingDate" type="date" required className="rounded-md border bg-background px-3 py-2" /></label><label className="grid gap-1 text-sm font-medium">Vencimiento<input name="dueDate" type="date" className="rounded-md border bg-background px-3 py-2" /></label></div>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="grid gap-1 text-sm font-medium">Fecha contable<input name="accountingDate" type="date" required defaultValue={today} className="rounded-md border bg-background px-3 py-2" /></label><label className="grid gap-1 text-sm font-medium">Vencimiento<input name="dueDate" type="date" className="rounded-md border bg-background px-3 py-2" /></label></div>
         <label className="grid gap-1 text-sm font-medium">Proveedor<input name="vendor" maxLength={200} className="rounded-md border bg-background px-3 py-2" /></label>
         <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={recurring} onChange={(event) => setRecurring(event.target.checked)} />Repetir este gasto</label>
         {recurring ? <div className="grid gap-4 rounded-md border p-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-medium">Frecuencia<select name="frequency" aria-label="Frecuencia" className="rounded-md border bg-background px-3 py-2"><option value="monthly">Mensual</option><option value="weekly">Semanal</option><option value="quarterly">Trimestral</option><option value="yearly">Anual</option></select></label><label className="grid gap-1 text-sm font-medium">Inicio de recurrencia<input name="recurrenceStartsOn" aria-label="Inicio de recurrencia" type="date" required className="rounded-md border bg-background px-3 py-2" /></label><label className="grid gap-1 text-sm font-medium sm:col-span-2">Fin de recurrencia (opcional)<input name="recurrenceEndsOn" type="date" className="rounded-md border bg-background px-3 py-2" /></label></div> : null}
