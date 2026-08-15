@@ -18,11 +18,14 @@ El estado operativo seguirá indicando si el equipo está listo o entregado. Un 
 
 El botón `Entregar` y la transición rápida a `Entregado` abrirán el mismo `RepairDeliveryDialog`; no se permitirá marcar el estado directamente.
 
-El diálogo solicitará:
+El diálogo funcionará como un flujo de dos pasos:
 
-1. Resultado de la reparación: reparado, retirado sin reparar o no reparable.
-2. Cobro opcional mediante efectivo, tarjeta o transferencia.
-3. Confirmación explícita si, después del cobro, queda un saldo pendiente.
+1. `Resultado`: reparado, retirado sin reparar o no reparable.
+2. `Cobro y entrega`: al elegir `Reparado y funcionando`, el usuario avanzará dentro del mismo modal a una pantalla dedicada con total, monto ya pagado, saldo pendiente y método de cobro.
+
+No se abrirá un segundo diálogo sobre el primero. La segunda pantalla permitirá volver al resultado, cobrar mediante efectivo, tarjeta o transferencia, o seleccionar `Entregar y cobrar después`. Esta última opción exigirá confirmación explícita del saldo pendiente.
+
+Para `Retirado sin reparar` y `No fue posible reparar`, el diálogo no forzará el paso de cobro y permitirá confirmar directamente la entrega. El cobro seguirá disponible únicamente cuando el negocio necesite registrar una revisión o diagnóstico, sin presentarlo como la acción principal.
 
 Si se cobra, el pago y la entrega se registrarán en una única operación transaccional e idempotente. Si no se cobra o el cobro es parcial, la reparación quedará `entregado` y su estado financiero permanecerá `pendiente` o `parcial`.
 
@@ -36,6 +39,7 @@ Una reparación entregada con saldo mostrará `Cobrar saldo`. Esta acción abrir
 
 - El aviso amarillo actual que obliga a usar POS se reemplazará por un mensaje contextual coherente con el saldo.
 - Las cifras usarán etiquetas visibles (`Total`, `Pagado`, `Pendiente`) y no dependerán únicamente del color.
+- El flujo mostrará los indicadores `1. Resultado` y `2. Cobro y entrega`, con un botón `Volver` en el segundo paso.
 - Los botones conservarán controles nativos y nombres accesibles.
 - El resumen será legible en móvil y escritorio usando el sistema visual existente.
 
@@ -51,5 +55,8 @@ Una reparación entregada con saldo mostrará `Cobrar saldo`. Esta acción abrir
 - Detalle pagado: muestra total pagado y saldo cero.
 - Detalle pendiente o parcial: muestra el monto pendiente y `Cobrar saldo` cuando corresponda.
 - Reparación lista: `Entregar` abre el flujo de resultado y cobro.
+- Seleccionar `Reparado y funcionando` avanza a la pantalla `Cobrar reparación` sin abrir otro modal.
+- El segundo paso permite volver al resultado sin perder el contexto de la reparación.
+- El cobro completo permite `Cobrar y entregar`; omitirlo exige `Entregar y cobrar después` con confirmación.
 - Pago parcial al entregar: exige confirmar el saldo remanente.
 - La transición rápida a `Entregado` utiliza el diálogo y no la ruta genérica de estado.
