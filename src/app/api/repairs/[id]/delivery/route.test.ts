@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const closeFinancial = vi.fn()
+const closeUnrepaired = vi.fn()
 const fetchRepair = vi.fn()
 const ctx = {
   supabase: { rpc: vi.fn() },
@@ -20,11 +21,16 @@ vi.mock('@/lib/repairs/financial-closure-rpc', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/repairs/financial-closure-rpc')>()
   return { ...actual, closeRepairAndRegisterPayment: (...args: unknown[]) => closeFinancial(...args) }
 })
+vi.mock('@/lib/repairs/unrepaired-closeout-rpc', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/repairs/unrepaired-closeout-rpc')>()
+  return { ...actual, closeUnrepairedRepair: (...args: unknown[]) => closeUnrepaired(...args) }
+})
 
 describe('POST /api/repairs/:id/delivery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     closeFinancial.mockResolvedValue({ payment_id: null, idempotent: false })
+    closeUnrepaired.mockResolvedValue({ closeout_id: 'closeout-1', payment_id: null, idempotent: false })
     fetchRepair.mockResolvedValue({ data: { id: 'repair-1', status: 'entregado' }, error: null })
   })
 
@@ -51,5 +57,26 @@ describe('POST /api/repairs/:id/delivery', () => {
       actorId: 'user-1', deliver: true, allowOutstandingBalance: true,
       idempotencyKey: 'delivery-123',
     }))
+  })
+
+  it('uses the unrepaired closeout operation for a withdrawn delivery', async () => {
+    const { POST } = await import('./route')
+    const request = { json: async () => ({
+      outcome: 'withdrawn',
+      charge: { mode: 'none' },
+      parts: [],
+      settlement: { kind: 'store_credit' },
+      idempotencyKey: 'repair-closeout-123',
+    }) } as never
+
+    const response = await POST(request, { params: Promise.resolve({ id: 'repair-1' }) })
+
+    expect(response.status).toBe(200)
+    expect(closeUnrepaired).toHaveBeenCalledWith(ctx.supabase, expect.objectContaining({
+      repairId: 'repair-1', organizationId: 'org-1', branchId: 'branch-1', actorId: 'user-1',
+      cashSessionId: null,
+      request: expect.objectContaining({ outcome: 'withdrawn', settlement: { kind: 'store_credit' } }),
+    }))
+    expect(closeFinancial).not.toHaveBeenCalled()
   })
 })

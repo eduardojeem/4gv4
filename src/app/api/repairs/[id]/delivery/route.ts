@@ -9,6 +9,11 @@ import {
   closeRepairAndRegisterPayment,
   FinancialClosureRpcError,
 } from '@/lib/repairs/financial-closure-rpc'
+import { parseUnrepairedCloseoutRequest } from '@/lib/repairs/unrepaired-closeout'
+import {
+  closeUnrepairedRepair,
+  UnrepairedCloseoutRpcError,
+} from '@/lib/repairs/unrepaired-closeout-rpc'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -34,25 +39,66 @@ export async function POST(request: NextRequest, context: RouteParams) {
     const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
     if (isNextResponse(ctx)) return ctx
 
-    const parsed = parseRepairDeliveryRequest(await request.json().catch(() => ({})))
+    const body = await request.json().catch(() => ({}))
+    const outcome = typeof body === 'object' && body !== null && 'outcome' in body
+      ? (body as { outcome?: unknown }).outcome
+      : null
+    const unrepaired = outcome === 'withdrawn' || outcome === 'unrepairable'
+    const { id } = await context.params
+    if (unrepaired) {
+      const parsed = parseUnrepairedCloseoutRequest(body)
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: 'Revisá el cargo, los repuestos y la forma de resolver el saldo.', code: 'INVALID_DELIVERY_REQUEST' },
+          { status: 400 },
+        )
+      }
+      const closeoutRequest = parsed.data
+      const needsCashSession = closeoutRequest.settlement.kind === 'payment'
+        ? closeoutRequest.settlement.method !== 'transfer'
+        : closeoutRequest.settlement.kind === 'refund' && closeoutRequest.settlement.method === 'cash'
+      const cashSessionId = needsCashSession ? await resolveCashSessionId(ctx) : null
+      if (needsCashSession && !cashSessionId) {
+        return NextResponse.json(
+          { error: 'No hay una caja abierta en esta sucursal. Abrí caja para continuar.', code: 'REPAIR_CASH_REGISTER_NOT_OPEN' },
+          { status: 409 },
+        )
+      }
+      const operation = await closeUnrepairedRepair(ctx.supabase, {
+        repairId: id,
+        organizationId: ctx.organizationId,
+        branchId: ctx.branchId,
+        actorId: ctx.userId,
+        request: closeoutRequest,
+        cashSessionId,
+      })
+      const { data: repair, error } = await fetchRepairById(ctx, id)
+      if (error) throw error
+      if (!repair) return NextResponse.json({ error: 'Reparación no encontrada.' }, { status: 404 })
+      return NextResponse.json({
+        repair,
+        closeout: { id: operation.closeout_id },
+        payment: operation.payment_id ? { id: operation.payment_id } : null,
+        idempotent: operation.idempotent,
+      })
+    }
+    const parsed = parseRepairDeliveryRequest(body)
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Revisa el resultado, la confirmacion de saldo y los datos de cobro.', code: 'INVALID_DELIVERY_REQUEST' },
+        { error: 'Revisá el resultado, la confirmación de saldo y los datos de cobro.', code: 'INVALID_DELIVERY_REQUEST' },
         { status: 400 },
       )
     }
-
-    const { id } = await context.params
-    const input = parsed.data
-    if (input.payment?.method === 'credit') {
+    const resolvedInput = parsed.data
+    if (resolvedInput.payment?.method === 'credit') {
       return NextResponse.json(
         { error: 'El credito debe registrarse desde Cobrar saldo antes de entregar.', code: 'DELIVERY_CREDIT_USE_PAYMENT' },
         { status: 422 },
       )
     }
 
-    const cashSessionId = input.payment ? await resolveCashSessionId(ctx) : null
-    if (input.payment && !cashSessionId) {
+    const cashSessionId = resolvedInput.payment ? await resolveCashSessionId(ctx) : null
+    if (resolvedInput.payment && !cashSessionId) {
       return NextResponse.json(
         { error: 'No hay una caja abierta en esta sucursal. Abri caja antes de cobrar la reparacion.', code: 'REPAIR_CASH_REGISTER_NOT_OPEN' },
         { status: 409 },
@@ -65,12 +111,12 @@ export async function POST(request: NextRequest, context: RouteParams) {
       branchId: ctx.branchId,
       actorId: ctx.userId,
       deliver: true,
-      outcome: input.outcome,
-      note: input.note,
-      allowOutstandingBalance: input.allowOutstandingBalance,
-      payment: input.payment,
+      outcome: resolvedInput.outcome,
+      note: resolvedInput.note,
+      allowOutstandingBalance: resolvedInput.allowOutstandingBalance,
+      payment: resolvedInput.payment,
       cashSessionId,
-      idempotencyKey: input.idempotencyKey,
+      idempotencyKey: resolvedInput.idempotencyKey,
       source: 'delivery',
     })
 
@@ -84,6 +130,9 @@ export async function POST(request: NextRequest, context: RouteParams) {
       idempotent: operation.idempotent,
     })
   } catch (error) {
+    if (error instanceof UnrepairedCloseoutRpcError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
+    }
     if (error instanceof FinancialClosureRpcError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     }

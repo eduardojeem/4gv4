@@ -12,7 +12,8 @@ export const FULL_REPAIR_SELECT = `
   images:repair_images(id, image_url, description),
   parts:repair_parts(*),
   notes:repair_notes(*),
-  payments:repair_payments(*)
+  payments:repair_payments(*),
+  closeout:repair_closeouts(*)
 `
 
 export type RepairRouteContext = {
