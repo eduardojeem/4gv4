@@ -44,4 +44,16 @@ describe('usePaymentCashSession', () => {
     expect(result.current.state).toBe('idle')
     expect(cashRegister.checkOpenSession).not.toHaveBeenCalled()
   })
+
+  it('returns an open payment flow to the closed prerequisite without touching consumer data', async () => {
+    cashRegister.checkOpenSession.mockResolvedValue({ id: 'session-1' })
+    const draft = { amount: 150000, notes: 'Entrega' }
+    const { result } = renderHook(() => usePaymentCashSession({ active: true }))
+    await waitFor(() => expect(result.current.state).toBe('open'))
+
+    act(() => result.current.markClosed())
+
+    expect(result.current.state).toBe('closed')
+    expect(draft).toEqual({ amount: 150000, notes: 'Entrega' })
+  })
 })

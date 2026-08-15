@@ -19,9 +19,31 @@ describe('PaymentCashSessionGuard', () => {
     expect(onOpen).toHaveBeenCalledTimes(1)
   })
 
-  it('directs users without opening permission to cash management', () => {
-    render(<PaymentCashSessionGuard state="closed" canOpenRegister={false} onOpenCashRegister={vi.fn()} />)
+  it('presents caja as a prerequisite before a payment form', () => {
+    const onCancel = vi.fn()
+    render(
+      <PaymentCashSessionGuard
+        state="closed"
+        variant="gate"
+        branchName="Sucursal Centro"
+        registerName="Caja Principal"
+        onOpenCashRegister={vi.fn()}
+        onCancel={onCancel}
+      />
+    )
 
+    expect(screen.getByRole('heading', { name: 'Abrí la caja para continuar' })).toBeVisible()
+    expect(screen.getByText(/Todos los cobros y pagos deben quedar asociados/)).toBeVisible()
+    expect(screen.getByText('Sucursal Centro')).toBeVisible()
+    expect(screen.getByText('Caja Principal')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('directs users without opening permission to cash management', () => {
+    render(<PaymentCashSessionGuard state="closed" variant="gate" canOpenRegister={false} onOpenCashRegister={vi.fn()} />)
+
+    expect(screen.getByText('Solicitá a un responsable que abra la caja.')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Ir a Caja' })).toHaveAttribute('href', '/dashboard/pos/caja')
   })
 
