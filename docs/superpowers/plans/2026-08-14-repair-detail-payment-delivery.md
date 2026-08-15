@@ -74,7 +74,7 @@ git add src/components/dashboard/repairs/RepairDetailDialog.tsx src/components/d
 git commit -m "feat(repairs): clarify payment status in detail"
 ```
 
-### Task 2: Probar el recorrido Entregar → resultado → cobro
+### Task 2: Convertir la entrega reparada en un flujo guiado de dos pasos
 
 **Files:**
 - Modify: `src/components/dashboard/repairs/__tests__/RepairDeliveryDialog.test.tsx`
@@ -83,11 +83,21 @@ git commit -m "feat(repairs): clarify payment status in detail"
 
 **Interfaces:**
 - Consumes: `RepairDeliveryConfirmPayload` con `outcome`, `payment`, `allowOutstandingBalance` e `idempotencyKey`.
-- Produces: una entrega reparada con pago completo sin consentimiento de deuda, o una entrega parcial que exige dicho consentimiento.
+- Produces: `step: 'outcome' | 'payment'`; una entrega reparada con pago completo sin consentimiento de deuda, o una entrega parcial que exige dicho consentimiento.
 
-- [ ] **Step 1: Escribir la prueba fallida del pago completo al entregar**
+- [ ] **Step 1: Escribir pruebas fallidas de navegación y cobro**
 
-Abrir el diálogo, seleccionar `Reparado y funcionando`, verificar que el saldo completo se sugiere, seleccionar transferencia, ingresar referencia y confirmar.
+Abrir el diálogo y comprobar que inicia en `1. Resultado`. Al seleccionar `Reparado y funcionando`, debe ocultar las opciones de resultado, mostrar `2. Cobro y entrega`, el encabezado `Cobrar reparación`, el saldo completo sugerido y el botón `Volver`. Pulsar `Volver` debe regresar a las opciones sin cerrar el diálogo.
+
+```tsx
+fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
+expect(screen.getByRole('heading', { name: 'Cobrar reparación' })).toBeInTheDocument()
+expect(screen.getByLabelText('Monto a cobrar')).toHaveValue(100)
+fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+expect(screen.getByRole('button', { name: /Reparado y funcionando/i })).toBeVisible()
+```
+
+Volver a avanzar, seleccionar transferencia, ingresar referencia y confirmar:
 
 ```tsx
 expect(onConfirm).toHaveBeenCalledWith('repair-1', expect.objectContaining({
@@ -97,13 +107,21 @@ expect(onConfirm).toHaveBeenCalledWith('repair-1', expect.objectContaining({
 }))
 ```
 
-- [ ] **Step 2: Ejecutar la prueba y confirmar RED**
+- [ ] **Step 2: Ejecutar las pruebas y confirmar RED**
 
 Run: `npx vitest run src/components/dashboard/repairs/__tests__/RepairDeliveryDialog.test.tsx`
 
-Expected: FAIL si el flujo no sugiere el saldo, no conserva la referencia o exige consentimiento incorrectamente.
+Expected: FAIL porque el selector y el cobro se muestran actualmente en una sola pantalla.
 
-- [ ] **Step 3: Implementar únicamente el comportamiento faltante**
+- [ ] **Step 3: Implementar el flujo de dos pasos**
+
+Agregar estado local:
+
+```ts
+const [step, setStep] = useState<'outcome' | 'payment'>('outcome')
+```
+
+Al seleccionar `repaired`, ejecutar `setSelected('repaired')` y `setStep('payment')`. Renderizar indicadores accesibles para ambos pasos y, en `payment`, mostrar resumen financiero, método, monto, referencia, POS alternativo y `Volver`. Para `withdrawn` y `unrepairable`, conservar la confirmación directa en el primer paso.
 
 Mantener `remainingAfterPayment = Math.max(0, balanceDue - parsedAmount)` y derivar:
 
@@ -112,13 +130,13 @@ const needsUnpaidConfirm = allowPayment && remainingAfterPayment > 0
 allowOutstandingBalance: !allowPayment || remainingAfterPayment > 0
 ```
 
-La página debe enviar el payload completo a `POST /api/repairs/:id/delivery`; no debe llamar la transición genérica ni ejecutar pago y entrega en dos requests.
+El botón secundario del paso de pago será `Entregar y cobrar después`. Al activarlo, debe vaciar el monto, mostrar la confirmación explícita y conservar el mismo endpoint atómico. La página debe enviar el payload completo a `POST /api/repairs/:id/delivery`; no debe llamar la transición genérica ni ejecutar pago y entrega en dos requests.
 
 - [ ] **Step 4: Ejecutar ambas pruebas de entrega y confirmar GREEN**
 
 Run: `npx vitest run src/components/dashboard/repairs/__tests__/RepairDeliveryDialog.test.tsx src/app/api/repairs/[id]/delivery/route.test.ts src/app/api/repairs/[id]/status/route.test.ts`
 
-Expected: PASS.
+Expected: PASS para navegación, pago completo, saldo parcial, consentimiento y rutas.
 
 - [ ] **Step 5: Commit**
 
