@@ -19,6 +19,7 @@ import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { calculateRepairPricing, validateRepairPricing } from '@/lib/repairs/pricing'
+import { resolveServicePricingSelection } from '@/lib/repairs/service-pricing-selection'
 import { cn } from '@/lib/utils'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -1145,7 +1146,7 @@ export function RepairFormDialogV2({
                           <div className="flex items-center justify-between gap-2">
                             <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
                               <DollarSign className="h-3 w-3 text-primary" />
-                              Costo Estimado
+                              Precio de referencia del servicio
                               <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
                             </Label>
                             <Popover
@@ -1261,17 +1262,25 @@ export function RepairFormDialogV2({
                                             // - Es solo mano de obra: se fija como Mano de Obra en
                                             //   modo manual (como antes), y un repuesto que se agregue
                                             //   suma arriba, como corresponde si no estaba incluido.
-                                            const affectsCalculator = fields.length === 1
-                                            let calculatorNote: string | null = null
-                                            if (affectsCalculator && serviceIncludesParts) {
-                                              setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
-                                              setCalculationMode('budget')
-                                              setValue('pricingMode', 'budget', { shouldDirty: true })
-                                              calculatorNote = 'Se cargó como Costo Final. Si agregás un repuesto, el total no cambia.'
-                                            } else if (affectsCalculator && calculationMode === 'manual') {
-                                              setValue('laborCost', price, { shouldDirty: true, shouldValidate: true })
-                                              calculatorNote = 'Se cargó también como Mano de Obra.'
+                                            const selection = resolveServicePricingSelection({
+                                              price,
+                                              includesParts: serviceIncludesParts,
+                                              deviceCount: fields.length,
+                                            })
+
+                                            if (selection.affectsCalculator && selection.pricingMode) {
+                                              setCalculationMode(selection.pricingMode)
+                                              setValue('pricingMode', selection.pricingMode, { shouldDirty: true })
+
+                                              if (selection.laborCost !== undefined) {
+                                                setValue('laborCost', selection.laborCost, { shouldDirty: true, shouldValidate: true })
+                                              }
+                                              if (selection.finalCost !== undefined) {
+                                                setValue('finalCost', selection.finalCost, { shouldDirty: true, shouldValidate: true })
+                                              }
                                             }
+
+                                            const calculatorNote = selection.message || null
 
                                             toast.success(`"${svc.name}" — ${formatCurrency(price)}`, {
                                               description: [
@@ -1321,6 +1330,9 @@ export function RepairFormDialogV2({
                               {errors.devices[index]?.estimatedCost?.message}
                             </p>
                           )}
+                          <p className="text-[11px] text-muted-foreground">
+                            Al elegir un servicio, este valor también actualiza la calculadora cuando hay un solo equipo.
+                          </p>
                         </div>
                       </div>
 

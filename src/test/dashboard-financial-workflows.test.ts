@@ -238,6 +238,17 @@ describe('dashboard financial workflow contracts', () => {
     expect(repairsPage).toContain('setIsDialogOpen(true)')
   })
 
+  it('feeds a selected service price into the new-repair calculator', () => {
+    const repairForm = readFileSync(resolve(workspace, 'src/components/dashboard/repair-form-dialog-v2.tsx'), 'utf8')
+
+    expect(repairForm).toContain('resolveServicePricingSelection({')
+    expect(repairForm).toContain('deviceCount: fields.length')
+    expect(repairForm).toContain("setValue('laborCost', selection.laborCost")
+    expect(repairForm).toContain("setValue('finalCost', selection.finalCost")
+    expect(repairForm).toContain("setValue('pricingMode', selection.pricingMode")
+    expect(repairForm).toContain('setCalculationMode(selection.pricingMode)')
+  })
+
   it('commits payment metadata and paid-repair protection in the POS transaction', () => {
     const route = readFileSync(resolve(workspace, 'src/app/api/pos/process-sale/route.ts'), 'utf8')
     const atomicCheckoutMigration = readFileSync(
