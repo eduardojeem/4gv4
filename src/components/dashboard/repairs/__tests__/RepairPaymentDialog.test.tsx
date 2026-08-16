@@ -101,17 +101,17 @@ describe('RepairPaymentDialog', () => {
     expect(cashRegisterMocks.checkOpenSession).not.toHaveBeenCalled()
   })
 
-  it('uses automatic labor and parts pricing even when a stored final cost is stale', async () => {
+  it('uses the persisted final cost when an automatic repair has no pricing breakdown', async () => {
     cashRegisterMocks.checkOpenSession.mockResolvedValue({ id: 'session-1' })
     const automaticallyPricedRepair = {
       ...repair,
       pricingMode: 'automatic' as const,
-      finalCost: 0,
+      finalCost: 100000,
       estimatedCost: 0,
-      laborCost: 50000,
-      discountAmount: 10000,
+      laborCost: 0,
+      discountAmount: 0,
       paidAmount: 0,
-      parts: [{ id: 1, name: 'Pantalla', cost: 60000, quantity: 1, supplier: '', partNumber: '' }],
+      parts: [],
     }
 
     render(<RepairPaymentDialog open repair={automaticallyPricedRepair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
