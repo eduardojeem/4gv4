@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import type { RepairGuideTask } from './repairs-guide'
+import { useRepairHelpActions } from './repair-help-actions'
 
 type RepairHelpTourProps = {
   task: RepairGuideTask
@@ -18,8 +19,17 @@ type AnchorRect = { top: number; left: number; width: number; height: number }
 export function RepairHelpTour({ task, open, onOpenChange, onComplete }: RepairHelpTourProps) {
   const [stepIndex, setStepIndex] = useState(0)
   const [anchorRect, setAnchorRect] = useState<AnchorRect | null>(null)
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const executingRef = useRef(false)
+  const actionButtonRef = useRef<HTMLButtonElement>(null)
+  const executeAction = useRepairHelpActions()
   const step = task.steps[stepIndex]
   const isLastStep = stepIndex === task.steps.length - 1
+
+  useEffect(() => {
+    setActionError(null)
+  }, [stepIndex])
 
   useEffect(() => {
     if (!open || !step) return
@@ -54,6 +64,50 @@ export function RepairHelpTour({ task, open, onOpenChange, onComplete }: RepairH
   const finish = () => {
     onComplete?.(task.id)
     onOpenChange(false)
+  }
+
+  const waitForAnchor = (anchorId: string) => new Promise<boolean>((resolve) => {
+    const startedAt = performance.now()
+    const check = () => {
+      if (document.querySelector(`[data-help-id="${anchorId}"]`)) {
+        resolve(true)
+        return
+      }
+      if (performance.now() - startedAt >= 2000) {
+        resolve(false)
+        return
+      }
+      window.requestAnimationFrame(check)
+    }
+    check()
+  })
+
+  const handleAction = async () => {
+    const navigationAction = step.navigationAction
+    if (!navigationAction || !executeAction || executingRef.current) return
+    executingRef.current = true
+    setIsExecuting(true)
+    setActionError(null)
+    try {
+      const result = await executeAction(navigationAction.id)
+      if (result.status === 'unavailable') {
+        setActionError(result.message)
+        queueMicrotask(() => actionButtonRef.current?.focus())
+        return
+      }
+      if (navigationAction.successAnchorId) {
+        const found = await waitForAnchor(navigationAction.successAnchorId)
+        if (!found) {
+          setActionError('No pudimos abrir esta vista. Intentá nuevamente o continuá de forma manual.')
+          queueMicrotask(() => actionButtonRef.current?.focus())
+          return
+        }
+        setStepIndex(index => Math.min(task.steps.length - 1, index + 1))
+      }
+    } finally {
+      executingRef.current = false
+      setIsExecuting(false)
+    }
   }
 
   return (
@@ -92,6 +146,24 @@ export function RepairHelpTour({ task, open, onOpenChange, onComplete }: RepairH
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <div><strong>Elemento no disponible en esta vista.</strong><p className="mt-0.5">{step.fallback}</p></div>
           </div>
+        )}
+
+        {actionError && (
+          <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
+            {actionError}
+          </div>
+        )}
+
+        {step.navigationAction && executeAction && (
+          <Button
+            ref={actionButtonRef}
+            type="button"
+            className="mt-3 w-full"
+            onClick={handleAction}
+            disabled={isExecuting}
+          >
+            {isExecuting ? 'Abriendo…' : step.navigationAction.label}
+          </Button>
         )}
 
         <div className="mt-4 flex items-center justify-between gap-2">
