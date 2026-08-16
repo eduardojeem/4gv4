@@ -30,7 +30,7 @@
           "icon": "wrench",
           "steps": [
             { "title": "Localizá la orden", "body": "Filtrá por estado, técnico, prioridad o texto.", "action": "Usar filtros", "anchorId": "repair-filters", "fallback": "Usá la barra de búsqueda y los filtros sobre la lista." },
-            { "title": "Abrí el detalle", "body": "El detalle reúne estado, notas, costos e historial.", "action": "Abrir detalle", "anchorId": "repair-detail", "fallback": "Abrí la reparación desde su fila o tarjeta." }
+            { "title": "Abrí el detalle", "body": "El detalle reúne estado, notas, costos e historial.", "action": "Abrir detalle", "anchorId": "repair-detail", "fallback": "Abrí la reparación desde su fila o tarjeta.", "navigationAction": { "id": "open-repair-detail", "label": "Abrir detalle", "successAnchorId": "repair-detail" } }
           ]
         },
         {
@@ -53,7 +53,7 @@
           "audiences": ["operator", "admin"],
           "icon": "banknote",
           "steps": [
-            { "title": "Abrí el cobro", "body": "Desde el detalle podés cobrar a cuenta sin marcar el equipo como entregado.", "action": "Procesar pago", "anchorId": "repair-payment", "fallback": "Abrí el detalle y elegí Procesar pago." },
+            { "title": "Abrí el cobro", "body": "Desde el detalle podés cobrar a cuenta sin marcar el equipo como entregado.", "action": "Procesar pago", "anchorId": "repair-payment", "fallback": "Abrí el detalle y elegí Procesar pago.", "navigationAction": { "id": "open-repair-payment", "label": "Abrir pago y continuar", "successAnchorId": "repair-payment-amount" } },
             { "title": "Confirmá el importe", "body": "No superes el saldo. En efectivo también registrá cuánto entrega el cliente para calcular el vuelto.", "action": "Confirmar cobro", "anchorId": "repair-payment-amount", "fallback": "Revisá total, pagado y saldo antes de confirmar." }
           ]
         },
@@ -65,7 +65,7 @@
           "audiences": ["operator", "technician", "admin"],
           "icon": "package-check",
           "steps": [
-            { "title": "Elegí el resultado", "body": "Confirmá si funciona, se retira sin reparar o fue imposible reparar.", "action": "Procesar entrega", "anchorId": "repair-delivery", "fallback": "Abrí el detalle de una reparación lista y elegí Entregar." },
+            { "title": "Elegí el resultado", "body": "Confirmá si funciona, se retira sin reparar o fue imposible reparar.", "action": "Procesar entrega", "anchorId": "repair-delivery", "fallback": "Abrí el detalle de una reparación lista y elegí Entregar.", "navigationAction": { "id": "open-repair-delivery", "label": "Procesar entrega y continuar", "successAnchorId": "repair-delivery-resolution" } },
             { "title": "Revisá saldo y repuestos", "body": "El cierre explica qué pasa con adelantos, devoluciones, cargos excepcionales y repuestos.", "action": "Confirmar resolución", "anchorId": "repair-delivery-resolution", "fallback": "Leé el resumen financiero y de inventario antes de confirmar." }
           ]
         }
@@ -85,7 +85,7 @@
           "audiences": ["operator", "admin"],
           "icon": "landmark",
           "steps": [
-            { "title": "Comprobá la caja", "body": "Efectivo, tarjeta y transferencia requieren una caja abierta en la sucursal.", "action": "Ver estado de caja", "anchorId": "repair-cash-status", "fallback": "En el modal de pago revisá el bloque Estado de caja." },
+            { "title": "Comprobá la caja", "body": "Efectivo, tarjeta y transferencia requieren una caja abierta en la sucursal.", "action": "Ver estado de caja", "anchorId": "repair-cash-status", "fallback": "En el modal de pago revisá el bloque Estado de caja.", "navigationAction": { "id": "open-repair-payment", "label": "Abrir pago y revisar caja", "successAnchorId": "repair-open-cash" } },
             { "title": "Abrí sin perder el cobro", "body": "Si está cerrada, usá Abrir caja; al terminar volverás al pago.", "action": "Abrir caja", "anchorId": "repair-open-cash", "fallback": "El botón Abrir caja aparece dentro del modal cuando hace falta." }
           ]
         },
@@ -109,7 +109,7 @@
           "audiences": ["admin"],
           "icon": "shield-check",
           "steps": [
-            { "title": "Revisá el historial", "body": "El detalle muestra total, pagado, saldo y eventos de la reparación.", "action": "Ver historial", "anchorId": "repair-payment-history", "fallback": "Abrí el detalle y revisá Resumen de pago e Historial." },
+            { "title": "Revisá el historial", "body": "El detalle muestra total, pagado, saldo y eventos de la reparación.", "action": "Ver historial", "anchorId": "repair-payment-history", "fallback": "Abrí el detalle y revisá Resumen de pago e Historial.", "navigationAction": { "id": "open-repair-detail", "label": "Abrir detalle e historial", "successAnchorId": "repair-audit-summary" } },
             { "title": "Contrastá la operación", "body": "Los cobros crean un pago auditable y, según el método, un movimiento de caja o un crédito.", "action": "Revisar trazabilidad", "anchorId": "repair-audit-summary", "fallback": "Compará la nota interna con Caja o Créditos usando la misma referencia." }
           ]
         }

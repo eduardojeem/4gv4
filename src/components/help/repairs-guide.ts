@@ -58,7 +58,7 @@ function assertGuide(value: unknown): asserts value is RepairGuide {
 
 assertGuide(guideContent)
 
-export const repairsGuide = guideContent
+export const repairsGuide = guideContent as RepairGuide
 export const REPAIRS_GUIDE_VERSION = repairsGuide.version
 export const REPAIRS_GUIDE_PDF_PATH = '/guides/guia-reparaciones-v1.pdf'
 

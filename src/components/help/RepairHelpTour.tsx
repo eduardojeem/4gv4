@@ -19,6 +19,7 @@ type AnchorRect = { top: number; left: number; width: number; height: number }
 export function RepairHelpTour({ task, open, onOpenChange, onComplete }: RepairHelpTourProps) {
   const [stepIndex, setStepIndex] = useState(0)
   const [anchorRect, setAnchorRect] = useState<AnchorRect | null>(null)
+  const [anchorRefreshKey, setAnchorRefreshKey] = useState(0)
   const [isExecuting, setIsExecuting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const executingRef = useRef(false)
@@ -36,7 +37,14 @@ export function RepairHelpTour({ task, open, onOpenChange, onComplete }: RepairH
     const anchor = document.querySelector<HTMLElement>(`[data-help-id="${step.anchorId}"]`)
     if (!anchor) {
       queueMicrotask(() => setAnchorRect(null))
-      return
+      const observer = new MutationObserver(() => {
+        if (document.querySelector(`[data-help-id="${step.anchorId}"]`)) {
+          observer.disconnect()
+          setAnchorRefreshKey(key => key + 1)
+        }
+      })
+      observer.observe(document.body, { childList: true, subtree: true })
+      return () => observer.disconnect()
     }
 
     anchor.setAttribute('data-help-active', 'true')
@@ -56,7 +64,7 @@ export function RepairHelpTour({ task, open, onOpenChange, onComplete }: RepairH
       window.removeEventListener('resize', updatePosition)
       window.removeEventListener('scroll', updatePosition, true)
     }
-  }, [open, step])
+  }, [anchorRefreshKey, open, step])
 
   const progress = useMemo(() => ((stepIndex + 1) / Math.max(task.steps.length, 1)) * 100, [stepIndex, task.steps.length])
   if (!open || !step) return null
@@ -111,7 +119,7 @@ export function RepairHelpTour({ task, open, onOpenChange, onComplete }: RepairH
   }
 
   return (
-    <div className="fixed inset-0 z-[80]" role="presentation">
+    <div className="pointer-events-none fixed inset-0 z-[80]" role="presentation">
       <div className="absolute inset-0 bg-slate-950/55" aria-hidden="true" />
       {anchorRect && (
         <div
@@ -125,7 +133,7 @@ export function RepairHelpTour({ task, open, onOpenChange, onComplete }: RepairH
         role="dialog"
         aria-modal="true"
         aria-label={`Recorrido ${task.title}`}
-        className="fixed inset-x-3 bottom-3 z-[82] rounded-xl border bg-background p-4 shadow-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-[380px]"
+        className="pointer-events-auto fixed inset-x-3 bottom-3 z-[82] rounded-xl border bg-background p-4 shadow-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-[380px]"
       >
         <div className="flex items-start justify-between gap-3">
           <div>

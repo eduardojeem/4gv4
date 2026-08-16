@@ -49,6 +49,11 @@ import type { RepairFormData as PersistRepairFormData } from '@/contexts/Repairs
 import { RepairPrintPayload } from '@/lib/repair-receipt'
 import { deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
+import {
+  RepairHelpActionsProvider,
+  type RepairHelpActionExecutor,
+} from '@/components/help/repair-help-actions'
+import { resolveRepairHelpAction } from './repair-help-action-resolver'
 
 // Types
 import { Repair } from '@/types/repairs'
@@ -707,7 +712,52 @@ function RepairsPageContent() {
     ? repairs.find((r) => r.id === detailRepair.id) || detailRepair
     : null
 
+  const executeRepairHelpAction = useCallback<RepairHelpActionExecutor>((actionId) => {
+    const target = activeDetailRepair ?? payTarget ?? deliverTarget ?? selectedRepair ?? null
+    const total = target ? Math.max(0, target.finalCost ?? target.estimatedCost ?? 0) : 0
+    const balance = target ? Math.max(0, total - (target.paidAmount ?? 0)) : 0
+    const decision = resolveRepairHelpAction(actionId, {
+      hasSelectedRepair: Boolean(target),
+      balance,
+      hasPrice: total > 0,
+      canDeliver: target?.status === 'listo',
+    })
+
+    if (!decision.command) {
+      return {
+        status: 'unavailable',
+        message: decision.message ?? 'Esta acción no está disponible en este momento.',
+      }
+    }
+
+    if (decision.command === 'new') {
+      setIsDetailOpen(false)
+      setPayTarget(null)
+      setDeliverTarget(null)
+      handleNewRepair()
+      return { status: 'completed' }
+    }
+
+    if (!target) {
+      return { status: 'unavailable', message: 'Elegí una reparación primero.' }
+    }
+
+    if (decision.command === 'detail') {
+      setDetailRepair(target)
+      setIsDetailOpen(true)
+    } else if (decision.command === 'payment') {
+      setIsDetailOpen(false)
+      setPayTarget(target)
+    } else if (decision.command === 'delivery') {
+      setIsDetailOpen(false)
+      setDeliverTarget(target)
+    }
+
+    return { status: 'completed' }
+  }, [activeDetailRepair, deliverTarget, handleNewRepair, payTarget, selectedRepair])
+
   return (
+    <RepairHelpActionsProvider execute={executeRepairHelpAction}>
     <div className="flex flex-col gap-4 bg-slate-50 p-4 sm:p-5 lg:p-6 dark:bg-slate-950">
       <RepairHeader
         onRefresh={refreshRepairs}
@@ -1040,6 +1090,7 @@ function RepairsPageContent() {
         }}
       />
     </div>
+    </RepairHelpActionsProvider>
   )
 }
 
