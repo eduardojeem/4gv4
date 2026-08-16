@@ -1,0 +1,119 @@
+{
+  "version": "1.0",
+  "title": "Guía y ayuda de Reparaciones",
+  "subtitle": "Aprendé cada tarea con recorridos sobre la pantalla real",
+  "tracks": [
+    {
+      "id": "daily-work",
+      "title": "Trabajo diario",
+      "description": "Desde el ingreso del equipo hasta su entrega.",
+      "audiences": ["operator", "technician", "admin"],
+      "tasks": [
+        {
+          "id": "create-repair",
+          "title": "Crear una reparación",
+          "summary": "Registrá cliente, equipo, falla, prioridad y técnico.",
+          "keywords": ["nueva", "orden", "cliente", "equipo", "falla", "técnico"],
+          "audiences": ["operator", "technician", "admin"],
+          "icon": "plus",
+          "steps": [
+            { "title": "Iniciá la orden", "body": "Usá Nueva reparación para comenzar el ingreso.", "action": "Abrir el formulario", "anchorId": "repair-new", "fallback": "Encontrá Nueva reparación en el encabezado de la sección." },
+            { "title": "Completá el ingreso", "body": "Seleccioná o creá el cliente y documentá el equipo y la falla.", "action": "Completar datos", "anchorId": "repair-form-device", "fallback": "En el formulario completá cliente, tipo de equipo y problema informado." }
+          ]
+        },
+        {
+          "id": "diagnose-repair",
+          "title": "Diagnosticar y avanzar el trabajo",
+          "summary": "Asigná técnico, documentá diagnóstico y actualizá el estado.",
+          "keywords": ["diagnóstico", "estado", "técnico", "reparación", "listo"],
+          "audiences": ["technician", "admin"],
+          "icon": "wrench",
+          "steps": [
+            { "title": "Localizá la orden", "body": "Filtrá por estado, técnico, prioridad o texto.", "action": "Usar filtros", "anchorId": "repair-filters", "fallback": "Usá la barra de búsqueda y los filtros sobre la lista." },
+            { "title": "Abrí el detalle", "body": "El detalle reúne estado, notas, costos e historial.", "action": "Abrir detalle", "anchorId": "repair-detail", "fallback": "Abrí la reparación desde su fila o tarjeta." }
+          ]
+        },
+        {
+          "id": "price-parts",
+          "title": "Agregar servicio, precio y repuestos",
+          "summary": "Definí lo que se cobra y reservá los repuestos utilizados.",
+          "keywords": ["servicio", "precio", "mano de obra", "repuesto", "costo", "total"],
+          "audiences": ["technician", "admin"],
+          "icon": "calculator",
+          "steps": [
+            { "title": "Definí el precio", "body": "El total puede calcularse por mano de obra y repuestos o cargarse como presupuesto acordado.", "action": "Revisar costos", "anchorId": "repair-pricing", "fallback": "Abrí Editar reparación y buscá Costos de reparación." },
+            { "title": "Agregá repuestos", "body": "Indicá cantidad, costo interno y precio cobrado para mantener inventario y margen.", "action": "Agregar repuesto", "anchorId": "repair-parts", "fallback": "En Costos de reparación usá la sección Repuestos." }
+          ]
+        },
+        {
+          "id": "collect-balance",
+          "title": "Cobrar adelanto o saldo",
+          "summary": "Registrá pagos parciales o el saldo pendiente sin entregar el equipo.",
+          "keywords": ["cobrar", "pago", "adelanto", "saldo pendiente", "efectivo"],
+          "audiences": ["operator", "admin"],
+          "icon": "banknote",
+          "steps": [
+            { "title": "Abrí el cobro", "body": "Desde el detalle podés cobrar a cuenta sin marcar el equipo como entregado.", "action": "Procesar pago", "anchorId": "repair-payment", "fallback": "Abrí el detalle y elegí Procesar pago." },
+            { "title": "Confirmá el importe", "body": "No superes el saldo. En efectivo también registrá cuánto entrega el cliente para calcular el vuelto.", "action": "Confirmar cobro", "anchorId": "repair-payment-amount", "fallback": "Revisá total, pagado y saldo antes de confirmar." }
+          ]
+        },
+        {
+          "id": "deliver-device",
+          "title": "Entregar o retirar el equipo",
+          "summary": "Cerrá como reparado, retirado sin reparar o imposible de reparar.",
+          "keywords": ["entregar", "retirar", "sin reparar", "imposible", "devolución"],
+          "audiences": ["operator", "technician", "admin"],
+          "icon": "package-check",
+          "steps": [
+            { "title": "Elegí el resultado", "body": "Confirmá si funciona, se retira sin reparar o fue imposible reparar.", "action": "Procesar entrega", "anchorId": "repair-delivery", "fallback": "Abrí el detalle de una reparación lista y elegí Entregar." },
+            { "title": "Revisá saldo y repuestos", "body": "El cierre explica qué pasa con adelantos, devoluciones, cargos excepcionales y repuestos.", "action": "Confirmar resolución", "anchorId": "repair-delivery-resolution", "fallback": "Leé el resumen financiero y de inventario antes de confirmar." }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "admin-payments",
+      "title": "Administración y cobros",
+      "description": "Precios, caja, crédito, inventario y auditoría.",
+      "audiences": ["operator", "admin"],
+      "tasks": [
+        {
+          "id": "open-cash-register",
+          "title": "Abrir caja para cobrar",
+          "summary": "Abrí la caja de la sucursal antes de aceptar dinero.",
+          "keywords": ["abrir caja", "caja cerrada", "efectivo", "tarjeta", "transferencia"],
+          "audiences": ["operator", "admin"],
+          "icon": "landmark",
+          "steps": [
+            { "title": "Comprobá la caja", "body": "Efectivo, tarjeta y transferencia requieren una caja abierta en la sucursal.", "action": "Ver estado de caja", "anchorId": "repair-cash-status", "fallback": "En el modal de pago revisá el bloque Estado de caja." },
+            { "title": "Abrí sin perder el cobro", "body": "Si está cerrada, usá Abrir caja; al terminar volverás al pago.", "action": "Abrir caja", "anchorId": "repair-open-cash", "fallback": "El botón Abrir caja aparece dentro del modal cuando hace falta." }
+          ]
+        },
+        {
+          "id": "finance-balance",
+          "title": "Financiar el saldo con crédito",
+          "summary": "Convertí el saldo completo en cuotas del cliente.",
+          "keywords": ["crédito", "credito", "cuotas", "financiar", "saldo", "interés"],
+          "audiences": ["admin"],
+          "icon": "calendar-clock",
+          "steps": [
+            { "title": "Seleccioná Crédito", "body": "El crédito debe cubrir el saldo pendiente completo.", "action": "Elegir crédito", "anchorId": "repair-credit", "fallback": "En Método de pago seleccioná Crédito." },
+            { "title": "Definí las cuotas", "body": "Indicá cantidad, frecuencia e interés. La reparación queda saldada y la deuda pasa a Créditos.", "action": "Revisar financiación", "anchorId": "repair-credit-terms", "fallback": "Completá las condiciones y verificá la cuota estimada." }
+          ]
+        },
+        {
+          "id": "audit-payments",
+          "title": "Auditar pagos y movimientos",
+          "summary": "Relacioná reparación, caja, crédito, notas e inventario.",
+          "keywords": ["auditoría", "auditoria", "pagos", "movimientos", "caja", "inventario", "historial"],
+          "audiences": ["admin"],
+          "icon": "shield-check",
+          "steps": [
+            { "title": "Revisá el historial", "body": "El detalle muestra total, pagado, saldo y eventos de la reparación.", "action": "Ver historial", "anchorId": "repair-payment-history", "fallback": "Abrí el detalle y revisá Resumen de pago e Historial." },
+            { "title": "Contrastá la operación", "body": "Los cobros crean un pago auditable y, según el método, un movimiento de caja o un crédito.", "action": "Revisar trazabilidad", "anchorId": "repair-audit-summary", "fallback": "Compará la nota interna con Caja o Créditos usando la misma referencia." }
+          ]
+        }
+      ]
+    }
+  ]
+}
