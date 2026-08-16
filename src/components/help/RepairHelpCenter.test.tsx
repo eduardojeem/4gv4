@@ -44,4 +44,15 @@ describe('RepairHelpCenter', () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'consulta inexistente' } })
     expect(screen.getByText(/no encontramos una guía/i)).toBeVisible()
   })
+
+  it('links the downloadable manual generated for the current guide', () => {
+    render(
+      <RepairHelpCenter open onOpenChange={vi.fn()} audience="admin" onStartTour={vi.fn()} />,
+    )
+
+    expect(screen.getByRole('link', { name: /descargar manual pdf/i })).toHaveAttribute(
+      'href',
+      '/guides/guia-reparaciones-v1.pdf',
+    )
+  })
 })

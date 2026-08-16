@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import {
   REPAIRS_GUIDE_VERSION,
+  REPAIRS_GUIDE_PDF_PATH,
   getRepairGuideTracks,
   searchRepairGuide,
   type RepairGuideAudience,
@@ -165,9 +166,11 @@ export function RepairHelpCenter({
         </ScrollArea>
 
         <div className="border-t px-5 py-4 sm:px-6">
-          <Button variant="outline" className="w-full gap-2" disabled title="Disponible al finalizar la guía visual">
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Manual PDF en preparación
+          <Button asChild variant="outline" className="w-full gap-2">
+            <a href={REPAIRS_GUIDE_PDF_PATH} target="_blank" rel="noopener noreferrer">
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Descargar manual PDF
+            </a>
           </Button>
         </div>
       </SheetContent>

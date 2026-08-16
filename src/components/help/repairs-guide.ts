@@ -54,6 +54,7 @@ assertGuide(guideContent)
 
 export const repairsGuide = guideContent
 export const REPAIRS_GUIDE_VERSION = repairsGuide.version
+export const REPAIRS_GUIDE_PDF_PATH = '/guides/guia-reparaciones-v1.pdf'
 
 function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim()
