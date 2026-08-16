@@ -326,7 +326,7 @@ export function RepairDeliveryDialog({
         </div>
 
         <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto px-1">
-          {step === 'outcome' && <div className="space-y-3">
+          {step === 'outcome' && <div className="space-y-3" data-help-id="repair-delivery-resolution">
             <p className="text-sm font-medium">¿Cuál fue el resultado?</p>
             <div className="flex flex-col gap-2">
               {outcomes.map((o) => {

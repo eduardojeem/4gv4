@@ -28,7 +28,7 @@ const customerFormSchema = z.object({
   company: z.string().optional(),
   position: z.string().optional(),
   ruc: z.string().optional(),
-  customer_type: z.enum(['regular', 'premium', 'empresa']),
+  customer_type: z.enum(['regular', 'premium', 'empresa', 'wholesale']),
   segment: z.enum(['vip', 'premium', 'regular', 'new', 'high_value', 'low_value', 'business', 'wholesale']),
   status: z.enum(['active', 'inactive', 'suspended', 'pending']),
   credit_limit: z.number().min(0).optional(),

@@ -23,6 +23,8 @@ const createRepairInputSchema = z.object({
   customer_id: z.string().uuid(),
   device_brand: z.string().trim().min(2).max(100),
   device_model: z.string().trim().min(1).max(100),
+  serial_number: optionalText(100),
+  imei: optionalText(100),
   device_type: z.enum(['smartphone', 'laptop', 'tablet', 'desktop', 'accessory', 'other']),
   problem_description: z.string().trim().min(1).max(200),
   diagnosis: optionalText(1_000),

@@ -10,6 +10,14 @@ const atomicCreditMigration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/20260815213000_atomic_repair_credit_payment.sql'),
   'utf8',
 )
+const legacyBalanceMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260815230000_reconcile_legacy_repair_balances.sql'),
+  'utf8',
+)
+const unambiguousRpcMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260815233000_disambiguate_repair_financial_rpc.sql'),
+  'utf8',
+)
 const migration = `${baseMigration}\n${atomicCreditMigration}`
 
 describe('repair financial closure migration', () => {
@@ -61,5 +69,25 @@ describe('repair financial closure migration', () => {
     expect(migration).toContain('before update of paid_amount, status on public.repairs')
     expect(migration).toContain("'pos:' || resolved_sale_id::text || ':' || new.id::text")
     expect(migration).toContain("'pos', resolved_sale_id")
+  })
+
+  it('reconciles only safe historical prices and leaves an internal audit note', () => {
+    expect(legacyBalanceMigration).toContain("r.pricing_mode = 'automatic'")
+    expect(legacyBalanceMigration).toContain('coalesce(r.labor_cost, 0) = 0')
+    expect(legacyBalanceMigration).toContain('not exists')
+    expect(legacyBalanceMigration).toContain('public.repair_parts')
+    expect(legacyBalanceMigration).toContain("pricing_mode = 'budget'")
+    expect(legacyBalanceMigration).toContain('final_cost = r.estimated_cost')
+    expect(legacyBalanceMigration).toContain('insert into public.repair_notes')
+    expect(legacyBalanceMigration).toContain("'Sistema'")
+    expect(legacyBalanceMigration).toContain('is_internal')
+  })
+
+  it('gives the extended financial RPC an unambiguous public name', () => {
+    expect(unambiguousRpcMigration).toContain('alter function public.close_repair_and_register_payment')
+    expect(unambiguousRpcMigration).toContain('rename to close_repair_and_register_payment_v2')
+    expect(unambiguousRpcMigration).toContain('revoke all on function public.close_repair_and_register_payment_v2')
+    expect(unambiguousRpcMigration).toContain('grant execute on function public.close_repair_and_register_payment_v2')
+    expect(unambiguousRpcMigration).toContain('to service_role')
   })
 })

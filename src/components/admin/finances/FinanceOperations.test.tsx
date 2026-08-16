@@ -327,3 +327,72 @@ describe('finance operational dialogs', () => {
     expect(screen.queryByText(/600\.000/)).not.toBeInTheDocument()
   })
 })
+
+describe('profitability analysis', () => {
+  const profitabilityRows = [
+    { id: 'sale:a', label: 'Venta A', revenue: 1_000_000, directCosts: 600_000, grossProfit: 400_000, complete: true },
+    { id: 'sale:b', label: 'Venta B', revenue: 400_000, directCosts: 380_000, grossProfit: 20_000, complete: true },
+    { id: 'sale:c', label: 'Venta C sin costo', revenue: 600_000, directCosts: null, grossProfit: null, complete: false },
+  ]
+
+  const renderPanel = async (rows = profitabilityRows) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ rows })))
+    render(<ProfitabilityPanel organizationId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-15', branchId: null }} />)
+    // La tabla de escritorio y las tarjetas móviles conviven en el DOM: las
+    // consultas por texto usan la variante plural.
+    await screen.findAllByText('Venta A')
+  }
+
+  it('shows the gross margin per row and for the period', async () => {
+    await renderPanel()
+
+    // 400.000 / 1.000.000 y 20.000 / 400.000
+    expect(screen.getAllByText('40%')).not.toHaveLength(0)
+    expect(screen.getAllByText('5%')).not.toHaveLength(0)
+    // Margen del período sobre los ingresos con costo cargado:
+    // 420.000 / 1.400.000 = 30%
+    expect(screen.getAllByText('30%')).not.toHaveLength(0)
+  })
+
+  it('excludes rows without cost coverage from cost, profit and margin', async () => {
+    await renderPanel()
+
+    expect(screen.getByText('El costo, la utilidad y el margen excluyen 1 de 3 filas sin costo cargado.')).toBeInTheDocument()
+    expect(screen.getByText('Mostrando 3 de 3 filas por venta.')).toBeInTheDocument()
+  })
+
+  it('filters rows by label without touching the server', async () => {
+    const user = userEvent.setup()
+    await renderPanel()
+    const requestsBeforeSearch = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length
+
+    await user.type(screen.getByLabelText('Buscar'), 'Venta B')
+
+    await waitFor(() => expect(screen.getByText('Mostrando 1 de 3 filas por venta.')).toBeInTheDocument())
+    expect(screen.queryAllByText('Venta A')).toHaveLength(0)
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(requestsBeforeSearch)
+  })
+
+  it('reorders rows when a sortable column header is activated', async () => {
+    const user = userEvent.setup()
+    await renderPanel()
+
+    const labelsOf = () => screen.getAllByRole('row').slice(1).map((row) => row.querySelector('p')?.textContent)
+    // Orden por defecto: ingresos descendentes.
+    expect(labelsOf()).toEqual(['Venta A', 'Venta C sin costo', 'Venta B'])
+
+    await user.click(screen.getByRole('button', { name: /Utilidad bruta/ }))
+
+    // Utilidad descendente, y la fila sin cobertura al final.
+    await waitFor(() => expect(labelsOf()).toEqual(['Venta A', 'Venta B', 'Venta C sin costo']))
+  })
+
+  it('distinguishes an empty period from an empty filter result', async () => {
+    const user = userEvent.setup()
+    await renderPanel()
+
+    await user.type(screen.getByLabelText('Buscar'), 'no existe')
+
+    expect(await screen.findAllByText('Ninguna fila coincide con la búsqueda o el filtro de cobertura.')).not.toHaveLength(0)
+  })
+})

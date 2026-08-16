@@ -23,10 +23,12 @@ import { resolveServicePricingSelection } from '@/lib/repairs/service-pricing-se
 import { cn } from '@/lib/utils'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { format, addMonths, addDays } from 'date-fns'
+import { es } from 'date-fns/locale'
 import {
   Save, User, Phone, Mail, Smartphone, Laptop, Tablet,
   AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign, Calculator, FileText,
-  Search, Loader2, Maximize2, Minimize2
+  Search, Loader2, Maximize2, Minimize2, CheckSquare, Sparkles, Droplets, CheckCircle2, ChevronDown, ChevronUp, Clock, Check, X, Tag, Wrench, Shield, Star
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,11 +60,56 @@ import {
   type RepairFormData
 } from '@/schemas'
 import { CustomerSelectorV3 } from './repairs/CustomerSelectorV3'
-import { QuickCustomerModal } from './repairs/QuickCustomerModal'
+import { QuickCustomerModal, type QuickCustomerData } from './repairs/QuickCustomerModal'
 import { PatternDrawer } from './repairs/PatternDrawer'
 import { AppError } from '@/lib/errors'
 // import { uploadFile } from '@/lib/supabase-storage'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
+
+const DEFAULT_WARRANTY_KEY = '4g_default_repair_warranty'
+
+interface SavedWarrantyPreference {
+  months: number
+  type: 'labor' | 'parts' | 'full'
+  notes?: string
+}
+
+function getSavedWarrantyPreference(): SavedWarrantyPreference {
+  if (typeof window === 'undefined') return { months: 3, type: 'full' }
+  try {
+    const raw = localStorage.getItem(DEFAULT_WARRANTY_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (typeof parsed?.months === 'number') return parsed
+    }
+  } catch {}
+  return { months: 3, type: 'full' }
+}
+
+function saveWarrantyPreference(pref: SavedWarrantyPreference) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(DEFAULT_WARRANTY_KEY, JSON.stringify(pref))
+  } catch {}
+}
+
+const QUICK_MODE_PREF_KEY = '4g_repair_form_quick_mode'
+
+function getSavedQuickModePreference(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return localStorage.getItem(QUICK_MODE_PREF_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function saveQuickModePreference(val: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(QUICK_MODE_PREF_KEY, val ? 'true' : 'false')
+  } catch {}
+}
 import { useSubscriptionStatus, repairPhotoLimit } from '@/contexts/SubscriptionStatusContext'
 import { UpgradeHint } from '@/components/admin/PlanGate'
 import { RepairCostCalculator, type CostCalculationMode } from './repairs/RepairCostCalculator'
@@ -120,6 +167,16 @@ const SERVICE_NAME_DEVICE_HINTS: Array<{
 const KNOWN_DEVICE_BRANDS = [
   'Apple', 'Samsung', 'Xiaomi', 'Huawei', 'Motorola', 'LG', 'Sony',
   'Lenovo', 'HP', 'Dell', 'Asus', 'Acer', 'Nokia', 'OnePlus', 'Oppo', 'Vivo', 'ZTE', 'Realme'
+]
+
+const FREQUENT_ISSUES = [
+  { label: '📱 Pantalla / Módulo', issue: 'Cambio de Pantalla / Módulo Táctil' },
+  { label: '🔋 Batería', issue: 'Cambio de Batería (No retiene carga)' },
+  { label: '🔌 Pin de Carga', issue: 'Cambio de Pin de Carga (No carga)' },
+  { label: '🧹 Mantenimiento', issue: 'Mantenimiento preventivo y limpieza general' },
+  { label: '💻 Software / Flasheo', issue: 'Falla de Software / Reinstalación de sistema' },
+  { label: '📷 Cámara / Lente', issue: 'Falla de Cámara / Lente roto' },
+  { label: '⚡ No Enciende', issue: 'Equipo no enciende / Revisión de placa' },
 ]
 
 function guessDeviceFromServiceName(serviceName: string): {
@@ -209,11 +266,26 @@ export function RepairFormDialogV2({
   const { selectedBranchId } = useBranch()
   const { settings: sharedSettings } = useSharedSettings()
   const photoLimit = repairPhotoLimit(planCode)
-  const [quickMode, setQuickMode] = useState(false)
+  const [quickMode, setQuickModeState] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (open && mode === 'add') {
+      setQuickModeState(getSavedQuickModePreference())
+    }
+  }, [open, mode])
+
+  const setQuickMode = useCallback((val: boolean) => {
+    setQuickModeState(val)
+    saveQuickModePreference(val)
+  }, [])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false)
-  const [editingCustomer, setEditingCustomer] = useState<{ id: string; name: string; phone: string; email: string } | null>(null)
-  const [selectedQuickCustomer, setSelectedQuickCustomer] = useState<{ id: string; name: string; phone: string; email: string } | null>(null)
+  const [editingCustomer, setEditingCustomer] = useState<QuickCustomerData | null>(null)
+  const [selectedQuickCustomer, setSelectedQuickCustomer] = useState<QuickCustomerData | null>(null)
+  const [isWarrantyConfigOpen, setIsWarrantyConfigOpen] = useState(false)
+  const [configWarrantyMonths, setConfigWarrantyMonths] = useState<number>(3)
+  const [configWarrantyType, setConfigWarrantyType] = useState<'labor' | 'parts' | 'full'>('full')
+  const [configWarrantyNotes, setConfigWarrantyNotes] = useState<string>('')
 
   // Inventory part lookup states
   const [inventorySearchOpen, setInventorySearchOpen] = useState(false)
@@ -224,6 +296,7 @@ export function RepairFormDialogV2({
     sku?: string | null
     sale_price?: number | null
     offer_price?: number | null
+    wholesale_price?: number | null
     purchase_price?: number | null
     stock_quantity?: number | null
   }>>([])
@@ -243,7 +316,7 @@ export function RepairFormDialogV2({
     const t = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/products?per_page=15&strict_branch_stock=true&query=${encodeURIComponent(inventorySearchQuery)}`,
+          `/api/products?per_page=50&strict_branch_stock=true&query=${encodeURIComponent(inventorySearchQuery)}`,
           {
             signal: controller.signal,
             headers: branchHeaders(selectedBranchId),
@@ -251,7 +324,13 @@ export function RepairFormDialogV2({
         )
         const payload = await res.json().catch(() => ({}))
         const productsList = Array.isArray(payload?.data?.products) ? payload.data.products : []
-        setInventoryProducts(productsList)
+        // Filtrar exclusivamente repuestos y productos físicos (excluir servicios)
+        const partsOnly = productsList.filter((p: { unit_measure?: string | null; category?: { name?: string | null } | null }) => {
+          const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
+          const isServiceCategory = (p.category?.name || '').toLowerCase().includes('servicio')
+          return !isServiceUnit && !isServiceCategory
+        })
+        setInventoryProducts(partsOnly)
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
           setInventoryProducts([])
@@ -267,28 +346,27 @@ export function RepairFormDialogV2({
     }
   }, [inventorySearchOpen, inventorySearchQuery, selectedBranchId])
 
-  // Buscador de servicios (ej. "Cambio de pantalla") para autocompletar el
-  // Costo Estimado por dispositivo. Un servicio es un producto con
-  // unit_measure='servicio' o en la categoría "Servicios" — el mismo
-  // criterio que ya usa InventoryContext para separar servicios de repuestos
-  // físicos, así que se repite acá en vez de inventar uno nuevo.
+  // Buscador de servicios y repuestos (ej. "Cambio de pantalla A05" o "Modulo A05")
+  // para autocompletar el Costo Estimado y calcular la mano de obra teniendo en cuenta
+  // el precio mayorista y el costo base de compra.
   const [serviceSearchIndex, setServiceSearchIndex] = useState<number | null>(null)
   const [serviceSearchQuery, setServiceSearchQuery] = useState('')
   const [serviceResults, setServiceResults] = useState<Array<{
     id: string
     name: string
+    sku?: string | null
     sale_price?: number | null
     wholesale_price?: number | null
+    purchase_price?: number | null
+    offer_price?: number | null
+    stock_quantity?: number | null
     unit_measure?: string | null
     category?: { name?: string | null } | null
   }>>([])
   const [loadingServices, setLoadingServices] = useState(false)
-  // Decide qué pasa al elegir un servicio: si su precio ya incluye repuestos
-  // (el repuesto que se agregue después se descuenta de la mano de obra para
-  // que el total no se mueva) o si es solo mano de obra (el repuesto suma
-  // arriba). No hay forma de adivinar esto del catálogo — cada organización
-  // arma sus precios distinto — así que lo elige quien está cargando.
-  const [serviceIncludesParts, setServiceIncludesParts] = useState(false)
+  // Por defecto, cuando se busca un servicio de reparación (ej. Cambio de Pantalla A05),
+  // se activa el cálculo de presupuesto cerrado (el total incluye repuestos).
+  const [serviceIncludesParts, setServiceIncludesParts] = useState(true)
 
   useEffect(() => {
     if (serviceSearchIndex === null) {
@@ -303,7 +381,7 @@ export function RepairFormDialogV2({
     const t = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/products?per_page=30&query=${encodeURIComponent(serviceSearchQuery)}`,
+          `/api/products?per_page=50&query=${encodeURIComponent(serviceSearchQuery)}`,
           {
             signal: controller.signal,
             headers: branchHeaders(selectedBranchId),
@@ -311,12 +389,13 @@ export function RepairFormDialogV2({
         )
         const payload = await res.json().catch(() => ({}))
         const list = Array.isArray(payload?.data?.products) ? payload.data.products : []
-        const services = list.filter((p: { unit_measure?: string; category?: { name?: string } }) => {
+        // Filtrar exclusivamente servicios (unit_measure === 'servicio' o categoría 'Servicios')
+        const servicesOnly = list.filter((p: { unit_measure?: string | null; category?: { name?: string | null } | null }) => {
           const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
           const isServiceCategory = (p.category?.name || '').toLowerCase().includes('servicio')
           return isServiceUnit || isServiceCategory
         })
-        setServiceResults(services)
+        setServiceResults(servicesOnly)
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
           setServiceResults([])
@@ -331,6 +410,16 @@ export function RepairFormDialogV2({
       controller.abort()
     }
   }, [serviceSearchIndex, serviceSearchQuery, selectedBranchId])
+
+  // Checklist visual de estado físico de recepción
+  const [openChecklistIndex, setOpenChecklistIndex] = useState<number | null>(null)
+  const [checklists, setChecklists] = useState<Record<number, {
+    powersOn: 'yes' | 'no' | 'unknown'
+    screen: 'intact' | 'scratched' | 'broken'
+    body: 'good' | 'scratched' | 'dented_broken'
+    simCard: 'with_sim' | 'no_sim'
+    wet: 'no' | 'yes'
+  }>>({})
 
   // Select schema based on quick mode
   const resolver = zodResolver(quickMode ? RepairFormQuickSchema : RepairFormSchema) as unknown as import('react-hook-form').Resolver<RepairFormData>
@@ -367,6 +456,7 @@ export function RepairFormDialogV2({
         deviceType: 'smartphone',
         brand: '',
         model: '',
+        serialNumber: '',
         issue: '',
         description: '',
         accessType: 'none',
@@ -381,9 +471,9 @@ export function RepairFormDialogV2({
       pricingMode: initialData?.pricingMode || 'automatic',
       discountAmount: initialData?.discountAmount || 0,
       priceOverrideReason: initialData?.priceOverrideReason || '',
-      warrantyMonths: initialData?.warrantyMonths ?? 3,
-      warrantyType: initialData?.warrantyType || 'full',
-      warrantyNotes: initialData?.warrantyNotes || '',
+      warrantyMonths: initialData?.warrantyMonths ?? (mode === 'add' ? getSavedWarrantyPreference().months : 3),
+      warrantyType: initialData?.warrantyType || (mode === 'add' ? getSavedWarrantyPreference().type : 'full'),
+      warrantyNotes: initialData?.warrantyNotes || (mode === 'add' ? (getSavedWarrantyPreference().notes || '') : ''),
       depositAmount: null,
       depositMethod: null,
       depositReference: ''
@@ -530,6 +620,7 @@ export function RepairFormDialogV2({
           deviceType: 'smartphone',
           brand: '',
           model: '',
+          serialNumber: '',
           issue: '',
           description: '',
           accessType: 'none',
@@ -549,9 +640,9 @@ export function RepairFormDialogV2({
         pricingMode: initialData?.pricingMode || 'automatic',
         discountAmount: initialData?.discountAmount || 0,
         priceOverrideReason: initialData?.priceOverrideReason || '',
-        warrantyMonths: initialData?.warrantyMonths ?? 3,
-        warrantyType: initialData?.warrantyType || 'full',
-        warrantyNotes: initialData?.warrantyNotes || '',
+        warrantyMonths: initialData?.warrantyMonths ?? (mode === 'add' ? getSavedWarrantyPreference().months : 3),
+        warrantyType: initialData?.warrantyType || (mode === 'add' ? getSavedWarrantyPreference().type : 'full'),
+        warrantyNotes: initialData?.warrantyNotes || (mode === 'add' ? (getSavedWarrantyPreference().notes || '') : ''),
         depositAmount: initialData?.depositAmount ?? null,
         depositMethod: initialData?.depositMethod ?? null,
         depositReference: initialData?.depositReference || ''
@@ -678,20 +769,26 @@ export function RepairFormDialogV2({
   }
 
   // Handle quick customer creation
-  const handleQuickCustomerCreated = (customer: { id: string; name: string; phone: string; email: string }) => {
+  const handleQuickCustomerCreated = (customer: QuickCustomerData) => {
     // Auto-select the new customer
     setValue('existingCustomerId', customer.id, { shouldDirty: true, shouldValidate: true })
     setValue('customerName', customer.name, { shouldDirty: true, shouldValidate: true })
     setValue('customerPhone', customer.phone, { shouldDirty: true, shouldValidate: true })
     setValue('customerEmail', customer.email, { shouldDirty: true, shouldValidate: true })
     setSelectedQuickCustomer(customer)
+    if (customer.is_wholesale !== undefined) {
+      setCustomerIsWholesale(Boolean(customer.is_wholesale))
+    }
   }
 
-  const handleQuickCustomerUpdated = (customer: { id: string; name: string; phone: string; email: string }) => {
+  const handleQuickCustomerUpdated = (customer: QuickCustomerData) => {
     setValue('customerName', customer.name, { shouldDirty: true, shouldValidate: true })
     setValue('customerPhone', customer.phone, { shouldDirty: true, shouldValidate: true })
     setValue('customerEmail', customer.email, { shouldDirty: true, shouldValidate: true })
     setSelectedQuickCustomer(customer)
+    if (customer.is_wholesale !== undefined) {
+      setCustomerIsWholesale(Boolean(customer.is_wholesale))
+    }
     setEditingCustomer(null)
   }
 
@@ -702,7 +799,14 @@ export function RepairFormDialogV2({
     const email = watch('customerEmail')
 
     if (id) {
-      setEditingCustomer({ id, name, phone, email })
+      setEditingCustomer({
+        id,
+        name: name || '',
+        phone: phone || '',
+        email: email || '',
+        is_wholesale: customerIsWholesale,
+        customer_type: customerIsWholesale ? 'wholesale' : 'regular',
+      })
       setShowQuickCustomerModal(true)
     }
   }
@@ -789,18 +893,86 @@ export function RepairFormDialogV2({
 
         <div className="flex-1 overflow-y-auto bg-muted/20 px-3 py-4 sm:px-6 sm:py-5 dark:bg-slate-950">
           <form id={formId} onSubmit={handleSubmit(onSubmitForm)} className="mx-auto max-w-[1800px] space-y-5">
+            {/* Banner de Advertencia si la Reparación ya fue Entregada */}
+            {mode === 'edit' && repair?.status === 'entregado' && (
+              <div className="rounded-2xl border-2 border-amber-400 bg-amber-50/90 dark:bg-amber-950/40 p-4 sm:p-5 shadow-sm space-y-3">
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shrink-0 shadow-sm">
+                    <Shield className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <h4 className="text-sm font-extrabold text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                        <span>Orden ENTREGADA al Cliente</span>
+                        <Badge className="bg-emerald-600 text-white text-[10px] py-0 px-2 font-bold">
+                          Entregado
+                        </Badge>
+                      </h4>
+                      <span className="text-[11px] font-mono text-amber-800 dark:text-amber-300">
+                        Ticket #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-900/90 dark:text-amber-200 leading-relaxed">
+                      Esta orden ya fue cerrada, cobrada y entregada físicamente. Por seguridad contable y de stock, <strong>no se deben alterar los costos ni los repuestos originales</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Pasos para procesar como garantía */}
+                <div className="bg-white/90 dark:bg-slate-900/90 rounded-xl p-3.5 border border-amber-200 dark:border-amber-800/60 space-y-2.5">
+                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    ¿El cliente regresó por un reclamo técnico o garantía del trabajo?
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                    <div className="bg-amber-50/60 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-900/40">
+                      <span className="font-bold text-amber-900 dark:text-amber-300 block mb-0.5">
+                        1. No modificar orden previa
+                      </span>
+                      <span className="text-slate-600 dark:text-slate-400">
+                        Conserva intacto el historial técnico, la fecha original y la factura.
+                      </span>
+                    </div>
+                    <div className="bg-amber-50/60 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-900/40">
+                      <span className="font-bold text-amber-900 dark:text-amber-300 block mb-0.5">
+                        2. Crear Caso de Garantía
+                      </span>
+                      <span className="text-slate-600 dark:text-slate-400">
+                        Ve al Detalle de la Reparación y pulsa <strong>"Procesar Garantía"</strong>.
+                      </span>
+                    </div>
+                    <div className="bg-amber-50/60 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-900/40">
+                      <span className="font-bold text-amber-900 dark:text-amber-300 block mb-0.5">
+                        3. Cobertura y Reingreso
+                      </span>
+                      <span className="text-slate-600 dark:text-slate-400">
+                        El taller asume la reposición de repuesto o mano de obra sin recargo indebido.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Quick Mode Toggle */}
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200/70 bg-amber-50 px-3 py-3 sm:px-4 dark:border-amber-800/50 dark:bg-amber-950/30">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200/80 bg-gradient-to-r from-amber-50 to-orange-50/50 px-3.5 py-3 sm:px-4 dark:border-amber-800/60 dark:from-amber-950/40 dark:to-orange-950/20 shadow-xs">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-amber-400/90 dark:bg-amber-500 flex items-center justify-center shrink-0">
-                  <Zap className="h-4.5 w-4.5 text-white" />
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-amber-500/20">
+                  <Zap className="h-4.5 w-4.5" />
                 </div>
                 <div>
-                  <Label htmlFor="quick-mode" className="cursor-pointer font-semibold text-sm text-amber-900 dark:text-amber-100">
-                    Modo Rápido
-                  </Label>
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
-                    Solo cliente, equipo, problema y asignación
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="quick-mode" className="cursor-pointer font-bold text-sm text-amber-950 dark:text-amber-100">
+                      Modo Rápido / Mostrador
+                    </Label>
+                    <Badge variant="outline" className="text-[10px] font-bold border-amber-300 dark:border-amber-700 bg-amber-100/60 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 px-1.5 py-0">
+                      30 segundos
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-amber-800/80 dark:text-amber-300/90 mt-0.5">
+                    {quickMode
+                      ? 'Recepción ágil: solo cliente, equipo, falla y técnico (los repuestos y costos se cargan en taller)'
+                      : 'Activar para simplificar la pantalla y recibir al cliente al instante sin campos avanzados'}
                   </p>
                 </div>
               </div>
@@ -854,33 +1026,35 @@ export function RepairFormDialogV2({
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-1.5">
+                  <div className="flex items-center gap-2">
                     {watch('existingCustomerId') && (
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
                         onClick={handleEditCustomer}
                         disabled={isSubmitting}
-                        className="h-8 w-8 p-0 hover:bg-muted hover:text-foreground transition-colors"
-                        title="Editar cliente"
+                        className="h-8 px-2 text-xs font-semibold gap-1 border-slate-200 dark:border-slate-800"
+                        title="Editar cliente seleccionado"
                       >
                         <Pencil className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Editar</span>
                       </Button>
                     )}
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="default"
                       size="sm"
                       onClick={() => {
                         setEditingCustomer(null)
                         setShowQuickCustomerModal(true)
                       }}
                       disabled={isSubmitting}
-                      className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary transition-colors"
-                      title="Nuevo cliente"
+                      className="h-8 px-3 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 rounded-lg transition-all"
+                      title="Registrar un nuevo cliente en el sistema"
                     >
-                      <UserPlus className="h-3.5 w-3.5" />
+                      <UserPlus className="h-4 w-4" />
+                      <span>+ Nuevo Cliente</span>
                     </Button>
                   </div>
                 </div>
@@ -942,7 +1116,7 @@ export function RepairFormDialogV2({
             </Card>
 
             {/* Sección 2: Dispositivos a Reparar (Ancho Completo) */}
-            <Card id="repair-device-section" className={`${sectionCardClass} scroll-mt-16`}>
+            <Card id="repair-device-section" data-help-id="repair-form-device" className={`${sectionCardClass} scroll-mt-16`}>
               <CardHeader className={`pb-3 ${sectionHeaderClass}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -1079,7 +1253,7 @@ export function RepairFormDialogV2({
                           </Label>
                           <Input
                             {...register(`devices.${index}.model`)}
-                            placeholder="iPhone 15 Pro..."
+                            placeholder="iPhone 15 Pro, A05..."
                             className={`h-9 text-sm ${fieldClass} ${errors.devices?.[index]?.model ? 'border-red-500' : ''}`}
                           />
                           {errors.devices?.[index]?.model && (
@@ -1088,6 +1262,19 @@ export function RepairFormDialogV2({
                               {errors.devices[index]?.model?.message}
                             </p>
                           )}
+                        </div>
+
+                        {/* IMEI / Serial Number (Optional) */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-muted-foreground dark:text-slate-400 flex items-center justify-between">
+                            <span>IMEI / N° Serie</span>
+                            <span className="text-[10px] text-slate-400 font-normal">Opcional</span>
+                          </Label>
+                          <Input
+                            {...register(`devices.${index}.serialNumber`)}
+                            placeholder="356789012345678..."
+                            className={`h-9 text-sm font-mono ${fieldClass}`}
+                          />
                         </div>
                       </div>
 
@@ -1144,173 +1331,27 @@ export function RepairFormDialogV2({
                         {/* Estimated Cost */}
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
-                            <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
-                              <DollarSign className="h-3 w-3 text-primary" />
+                            <Label className="text-xs font-semibold flex items-center gap-1 text-slate-700 dark:text-slate-300">
+                              <DollarSign className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                               Precio de referencia del servicio
-                              <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
+                              <span className="text-[11px] text-muted-foreground ml-1">(opcional)</span>
                             </Label>
-                            <Popover
-                              open={serviceSearchIndex === index}
-                              onOpenChange={(isOpen) => setServiceSearchIndex(isOpen ? index : null)}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setServiceSearchIndex(index)
+                                setServiceSearchQuery('')
+                              }}
+                              className="h-7 px-3 text-[11px] font-bold rounded-xl border-emerald-300/80 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 shadow-xs transition-all flex items-center gap-1.5"
                             >
-                              <PopoverTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-                                >
-                                  <Search className="h-3 w-3" />
-                                  Buscar servicio
-                                </button>
-                              </PopoverTrigger>
-                              <PopoverContent align="end" className="w-80 p-0">
-                                <div className="p-2.5 border-b space-y-2">
-                                  <div className="relative">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                                    <Input
-                                      value={serviceSearchQuery}
-                                      onChange={(e) => setServiceSearchQuery(e.target.value)}
-                                      placeholder="Ej: Cambio de pantalla..."
-                                      className="pl-8 h-8 text-xs"
-                                      autoFocus
-                                    />
-                                  </div>
-                                  {fields.length === 1 && (
-                                    <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer">
-                                      <Switch
-                                        checked={serviceIncludesParts}
-                                        onCheckedChange={setServiceIncludesParts}
-                                        className="h-4 w-7 [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3"
-                                      />
-                                      <span>
-                                        El precio del servicio ya incluye repuestos
-                                        {serviceIncludesParts && (
-                                          <span className="block text-primary">
-                                            Si agregás un repuesto después, se descuenta de la mano de obra: el total no cambia.
-                                          </span>
-                                        )}
-                                      </span>
-                                    </label>
-                                  )}
-                                </div>
-                                <div className="max-h-64 overflow-y-auto p-1.5">
-                                  {loadingServices ? (
-                                    <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                      Buscando...
-                                    </div>
-                                  ) : serviceResults.length === 0 ? (
-                                    <p className="py-6 text-center text-xs text-muted-foreground">
-                                      {serviceSearchQuery
-                                        ? 'Sin servicios que coincidan.'
-                                        : 'Escribí para buscar un servicio.'}
-                                    </p>
-                                  ) : (
-                                    serviceResults.map((svc) => {
-                                      const price = customerIsWholesale && svc.wholesale_price
-                                        ? svc.wholesale_price
-                                        : (svc.sale_price ?? 0)
-                                      return (
-                                        <button
-                                          key={svc.id}
-                                          type="button"
-                                          onClick={() => {
-                                            setValue(`devices.${index}.estimatedCost`, price, {
-                                              shouldDirty: true,
-                                              shouldValidate: true,
-                                            })
-                                            // Si el problema todavía no se cargó, se completa con el
-                                            // nombre del servicio. No pisa lo que ya se haya escrito.
-                                            if (!watch(`devices.${index}.issue`)) {
-                                              setValue(`devices.${index}.issue`, svc.name, { shouldDirty: true })
-                                            }
-
-                                            // Tipo, marca y modelo: el catálogo de servicios no tiene
-                                            // estos como campos propios (solo nombre y precio), así
-                                            // que se infieren del NOMBRE del servicio. Es una
-                                            // heurística de texto, no un dato exacto — por eso solo
-                                            // completa lo que esté VACÍO, nunca pisa lo ya escrito.
-                                            const guess = guessDeviceFromServiceName(svc.name)
-                                            if (guess.deviceType && !watch(`devices.${index}.deviceType`)) {
-                                              setValue(`devices.${index}.deviceType`, guess.deviceType, {
-                                                shouldDirty: true,
-                                                shouldValidate: true,
-                                              })
-                                            }
-                                            if (guess.brand && !watch(`devices.${index}.brand`)) {
-                                              setValue(`devices.${index}.brand`, guess.brand, {
-                                                shouldDirty: true,
-                                                shouldValidate: true,
-                                              })
-                                            }
-                                            if (guess.model && !watch(`devices.${index}.model`)) {
-                                              setValue(`devices.${index}.model`, guess.model, {
-                                                shouldDirty: true,
-                                                shouldValidate: true,
-                                              })
-                                            }
-
-                                            // El servicio también carga la calculadora compartida,
-                                            // pero solo cuando no hay ambigüedad de a cuál equipo
-                                            // corresponde: un solo equipo en el formulario (la
-                                            // calculadora es compartida entre todos, no por equipo).
-                                            //
-                                            // Dos caminos según si el precio ya incluye repuestos:
-                                            // - Ya incluye: se fija como Costo Final y se pasa a modo
-                                            //   "labor = final - repuestos", así que un repuesto que
-                                            //   se agregue después se descuenta de la mano de obra y
-                                            //   el total sigue en el mismo precio pactado.
-                                            // - Es solo mano de obra: se fija como Mano de Obra en
-                                            //   modo manual (como antes), y un repuesto que se agregue
-                                            //   suma arriba, como corresponde si no estaba incluido.
-                                            const selection = resolveServicePricingSelection({
-                                              price,
-                                              includesParts: serviceIncludesParts,
-                                              deviceCount: fields.length,
-                                            })
-
-                                            if (selection.affectsCalculator && selection.pricingMode) {
-                                              setCalculationMode(selection.pricingMode)
-                                              setValue('pricingMode', selection.pricingMode, { shouldDirty: true })
-
-                                              if (selection.laborCost !== undefined) {
-                                                setValue('laborCost', selection.laborCost, { shouldDirty: true, shouldValidate: true })
-                                              }
-                                              if (selection.finalCost !== undefined) {
-                                                setValue('finalCost', selection.finalCost, { shouldDirty: true, shouldValidate: true })
-                                              }
-                                            }
-
-                                            const calculatorNote = selection.message || null
-
-                                            toast.success(`"${svc.name}" — ${formatCurrency(price)}`, {
-                                              description: [
-                                                customerIsWholesale && svc.wholesale_price ? 'Precio mayorista aplicado.' : null,
-                                                calculatorNote,
-                                                (guess.brand || guess.model || guess.deviceType)
-                                                  ? 'Tipo/marca/modelo sugeridos: revisalos antes de guardar.'
-                                                  : null,
-                                              ].filter(Boolean).join(' ') || undefined,
-                                            })
-                                            setServiceSearchIndex(null)
-                                          }}
-                                          className="flex w-full items-center justify-between gap-2 rounded-lg p-2 text-left text-xs hover:bg-muted/70"
-                                        >
-                                          <span className="min-w-0 truncate font-medium">{svc.name}</span>
-                                          <span className="shrink-0 font-semibold text-primary">
-                                            {formatCurrency(price)}
-                                          </span>
-                                        </button>
-                                      )
-                                    })
-                                  )}
-                                </div>
-                                {customerIsWholesale && (
-                                  <div className="border-t px-2.5 py-1.5 text-[10px] text-violet-600 dark:text-violet-400">
-                                    Cliente mayorista: se muestra el precio mayorista cuando está cargado.
-                                  </div>
-                                )}
-                              </PopoverContent>
-                            </Popover>
+                              <Wrench className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span>Buscar Servicio</span>
+                              <Badge className="bg-emerald-600 text-white text-[9px] px-1 py-0 h-3.5 rounded-sm">
+                                Catálogo
+                              </Badge>
+                            </Button>
                           </div>
                           <div className="relative">
                             <DollarSign className="absolute left-2.5 top-2 h-4 w-4 text-primary" />
@@ -1330,6 +1371,28 @@ export function RepairFormDialogV2({
                               {errors.devices[index]?.estimatedCost?.message}
                             </p>
                           )}
+                          <div className="flex flex-wrap items-center gap-1 pt-1">
+                            <span className="text-[10px] text-muted-foreground font-semibold">Atajos:</span>
+                            {[
+                              { label: '📱 Pantalla', query: 'pantalla' },
+                              { label: '🔋 Batería', query: 'bateria' },
+                              { label: '⚡ Pin Carga', query: 'pin' },
+                              { label: '💻 Software', query: 'software' },
+                              { label: '🧼 Limpieza', query: 'limpieza' },
+                            ].map((chip) => (
+                              <button
+                                key={chip.label}
+                                type="button"
+                                onClick={() => {
+                                  setServiceSearchIndex(index)
+                                  setServiceSearchQuery(chip.query)
+                                }}
+                                className="text-[10px] px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-medium transition-colors cursor-pointer"
+                              >
+                                {chip.label}
+                              </button>
+                            ))}
+                          </div>
                           <p className="text-[11px] text-muted-foreground">
                             Al elegir un servicio, este valor también actualiza la calculadora cuando hay un solo equipo.
                           </p>
@@ -1338,44 +1401,263 @@ export function RepairFormDialogV2({
 
                       {/* Problema y Descripción en ancho completo */}
                       <div className="space-y-3 pt-2 border-t border-slate-200/70 dark:border-slate-800/80">
-                      {/* Issue */}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
-                          <AlertCircle className="h-3 w-3 text-primary" />
-                          Problema Principal <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          {...register(`devices.${index}.issue`)}
-                          placeholder="Pantalla rota, no enciende..."
-                          className={`h-9 text-sm ${fieldClass} ${errors.devices?.[index]?.issue ? 'border-red-500' : ''}`}
-                        />
-                        {errors.devices?.[index]?.issue && (
-                          <p className="text-xs text-red-500 flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3" />
-                            {errors.devices[index]?.issue?.message}
-                          </p>
-                        )}
-                      </div>
+                        {/* Issue */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
+                              <AlertCircle className="h-3 w-3 text-primary" />
+                              Problema Principal <span className="text-red-500">*</span>
+                            </Label>
+                            <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                              Selección rápida o escribe la falla:
+                            </span>
+                          </div>
 
-                      {/* Description */}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
-                          <FileText className="h-3 w-3 text-primary" />
-                          Descripción Detallada
-                        </Label>
-                        <Textarea
-                          {...register(`devices.${index}.description`)}
-                          placeholder="Describe el problema en detalle..."
-                          rows={2}
-                          className={`resize-none text-sm ${fieldClass} ${errors.devices?.[index]?.description ? 'border-red-500' : ''}`}
-                        />
-                        {errors.devices?.[index]?.description && (
-                          <p className="text-xs text-red-500 flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3" />
-                            {errors.devices[index]?.description?.message}
-                          </p>
-                        )}
-                      </div>
+                          {/* Píldoras de fallas frecuentes */}
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            {FREQUENT_ISSUES.map((item) => (
+                              <button
+                                key={item.label}
+                                type="button"
+                                onClick={() => {
+                                  setValue(`devices.${index}.issue`, item.issue, {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  })
+                                }}
+                                className={cn(
+                                  "text-[11px] font-medium px-2 py-0.5 rounded-md border transition-colors",
+                                  watch(`devices.${index}.issue`) === item.issue
+                                    ? "bg-primary/10 border-primary text-primary font-semibold"
+                                    : "bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200"
+                                )}
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          <Input
+                            {...register(`devices.${index}.issue`)}
+                            placeholder="Pantalla rota, no enciende, pin dañado..."
+                            className={`h-9 text-sm ${fieldClass} ${errors.devices?.[index]?.issue ? 'border-red-500' : ''}`}
+                          />
+                          {errors.devices?.[index]?.issue && (
+                            <p className="text-xs text-red-500 flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              {errors.devices[index]?.issue?.message}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Checklist de Estado Físico de Recepción */}
+                        <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3 dark:border-slate-800/80 dark:bg-slate-900/30">
+                          <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={() => setOpenChecklistIndex(openChecklistIndex === index ? null : index)}
+                              className="flex items-center gap-2 text-xs font-semibold text-slate-700 hover:text-primary dark:text-slate-300 dark:hover:text-primary transition-colors"
+                            >
+                              <CheckSquare className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                              <span>Checklist de Estado Físico Inicial</span>
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal text-muted-foreground">
+                                {openChecklistIndex === index ? 'Ocultar' : 'Registrar'}
+                              </Badge>
+                            </button>
+                            {openChecklistIndex === index && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  const currentCheck = checklists[index] || {
+                                    powersOn: 'yes',
+                                    screen: 'intact',
+                                    body: 'good',
+                                    simCard: 'no_sim',
+                                    wet: 'no',
+                                  }
+                                  const lines = [
+                                    `[Recepción - Estado Físico Inicial]`,
+                                    `• Enciende: ${currentCheck.powersOn === 'yes' ? 'Sí' : currentCheck.powersOn === 'no' ? 'No' : 'No sabe / Apagado'}`,
+                                    `• Pantalla: ${currentCheck.screen === 'intact' ? 'Intacta' : currentCheck.screen === 'scratched' ? 'Rayada' : 'Rota / Astillada'}`,
+                                    `• Carcasa/Tapa: ${currentCheck.body === 'good' ? 'Buen estado' : currentCheck.body === 'scratched' ? 'Rayas de uso' : 'Golpeada / Rota'}`,
+                                    `• Bandeja SIM: ${currentCheck.simCard === 'with_sim' ? 'Con Chip SIM' : 'Sin Chip'}`,
+                                    `• Humedad: ${currentCheck.wet === 'yes' ? 'Presenta indicios de humedad/mojado' : 'No'}`
+                                  ].join('\n')
+
+                                  const curDesc = watch(`devices.${index}.description`) || ''
+                                  const clean = curDesc.replace(/\[Recepción - Estado Físico Inicial\][\s\S]*?(?=\n\n|$)/g, '').trim()
+                                  const finalDesc = clean ? `${clean}\n\n${lines}` : lines
+                                  setValue(`devices.${index}.description`, finalDesc, { shouldDirty: true })
+                                  toast.success('Estado físico copiado a la descripción')
+                                }}
+                                className="h-6 px-2 text-[11px] text-cyan-600 hover:text-cyan-700 hover:bg-cyan-50 dark:text-cyan-400 dark:hover:bg-cyan-950/40"
+                              >
+                                <Check className="h-3 w-3 mr-1" />
+                                Aplicar a descripción
+                              </Button>
+                            )}
+                          </div>
+
+                          {openChecklistIndex === index && (
+                            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/60 text-xs">
+                              {/* Enciende */}
+                              <div className="space-y-1">
+                                <span className="text-[11px] font-medium text-muted-foreground">Enciende:</span>
+                                <div className="flex gap-1">
+                                  {[
+                                    { value: 'yes', label: '✅ Sí' },
+                                    { value: 'no', label: '❌ No' },
+                                    { value: 'unknown', label: '⚠️ Apagado' }
+                                  ].map((opt) => {
+                                    const active = (checklists[index]?.powersOn || 'yes') === opt.value
+                                    return (
+                                      <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => setChecklists(prev => ({
+                                          ...prev,
+                                          [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), powersOn: opt.value as any }
+                                        }))}
+                                        className={cn(
+                                          "px-2 py-0.5 rounded text-[11px] border font-medium transition-colors",
+                                          active ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40 font-bold" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                                        )}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Pantalla */}
+                              <div className="space-y-1">
+                                <span className="text-[11px] font-medium text-muted-foreground">Pantalla:</span>
+                                <div className="flex gap-1">
+                                  {[
+                                    { value: 'intact', label: '✨ Intacta' },
+                                    { value: 'scratched', label: '⚠️ Rayada' },
+                                    { value: 'broken', label: '💥 Rota' }
+                                  ].map((opt) => {
+                                    const active = (checklists[index]?.screen || 'intact') === opt.value
+                                    return (
+                                      <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => setChecklists(prev => ({
+                                          ...prev,
+                                          [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), screen: opt.value as any }
+                                        }))}
+                                        className={cn(
+                                          "px-2 py-0.5 rounded text-[11px] border font-medium transition-colors",
+                                          active ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/40 font-bold" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                                        )}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Carcasa / Tapa */}
+                              <div className="space-y-1">
+                                <span className="text-[11px] font-medium text-muted-foreground">Carcasa / Tapa:</span>
+                                <div className="flex gap-1">
+                                  {[
+                                    { value: 'good', label: '✨ Impecable' },
+                                    { value: 'scratched', label: '🔄 Desgaste' },
+                                    { value: 'dented_broken', label: '💥 Golpeada' }
+                                  ].map((opt) => {
+                                    const active = (checklists[index]?.body || 'good') === opt.value
+                                    return (
+                                      <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => setChecklists(prev => ({
+                                          ...prev,
+                                          [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), body: opt.value as any }
+                                        }))}
+                                        className={cn(
+                                          "px-2 py-0.5 rounded text-[11px] border font-medium transition-colors",
+                                          active ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 font-bold" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                                        )}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Chip SIM & Humedad */}
+                              <div className="space-y-1">
+                                <span className="text-[11px] font-medium text-muted-foreground">Bandeja SIM / Humedad:</span>
+                                <div className="flex gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setChecklists(prev => {
+                                      const cur = prev[index]?.simCard || 'no_sim'
+                                      return {
+                                        ...prev,
+                                        [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), simCard: cur === 'with_sim' ? 'no_sim' : 'with_sim' }
+                                      }
+                                    })}
+                                    className={cn(
+                                      "px-2 py-0.5 rounded text-[11px] border font-medium transition-colors",
+                                      (checklists[index]?.simCard || 'no_sim') === 'with_sim'
+                                        ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/40 font-bold"
+                                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                                    )}
+                                  >
+                                    {(checklists[index]?.simCard || 'no_sim') === 'with_sim' ? '📲 Con Chip' : '🚫 Sin Chip'}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setChecklists(prev => {
+                                      const cur = prev[index]?.wet || 'no'
+                                      return {
+                                        ...prev,
+                                        [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), wet: cur === 'yes' ? 'no' : 'yes' }
+                                      }
+                                    })}
+                                    className={cn(
+                                      "px-2 py-0.5 rounded text-[11px] border font-medium transition-colors",
+                                      (checklists[index]?.wet || 'no') === 'yes'
+                                        ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40 font-bold"
+                                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                                    )}
+                                  >
+                                    {(checklists[index]?.wet || 'no') === 'yes' ? '💧 Mojado' : '🛡️ Seco'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Description */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
+                            <FileText className="h-3 w-3 text-primary" />
+                            Descripción Detallada / Observaciones
+                          </Label>
+                          <Textarea
+                            {...register(`devices.${index}.description`)}
+                            placeholder="Describe el problema en detalle o añade observaciones del cliente..."
+                            rows={3}
+                            className={`resize-none text-sm ${fieldClass} ${errors.devices?.[index]?.description ? 'border-red-500' : ''}`}
+                          />
+                          {errors.devices?.[index]?.description && (
+                            <p className="text-xs text-red-500 flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              {errors.devices[index]?.description?.message}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
                       {/* Acceso y Seguridad */}
@@ -1702,7 +1984,7 @@ export function RepairFormDialogV2({
               <>
             {/* Secciones de ancho completo: Repuestos, Notas y Calculadora */}
             {/* Parts */}
-            <Card className="shadow-lg border-2 hover:border-primary/30 transition-colors bg-gradient-to-br from-white to-orange-50/30 dark:from-slate-900 dark:to-orange-950/20 dark:border-slate-800 dark:hover:border-primary/50 mt-4">
+            <Card data-help-id="repair-parts" className="shadow-lg border-2 hover:border-primary/30 transition-colors bg-gradient-to-br from-white to-orange-50/30 dark:from-slate-900 dark:to-orange-950/20 dark:border-slate-800 dark:hover:border-primary/50 mt-4">
               <CardHeader className="pb-5 bg-gradient-to-r from-orange-50/50 to-transparent dark:from-orange-950/30 dark:to-transparent">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -2160,28 +2442,70 @@ export function RepairFormDialogV2({
             {/* Warranty Section */}
             <Card className="shadow-lg border-2 border-amber-200 dark:border-amber-900/50 hover:border-amber-400 dark:hover:border-amber-700 transition-all duration-200 bg-gradient-to-br from-white to-amber-50/20 dark:from-slate-900/50 dark:to-amber-950/10">
               <CardHeader className="pb-3 bg-gradient-to-r from-amber-50/50 to-transparent dark:from-amber-950/30 dark:to-transparent border-b border-amber-100 dark:border-amber-900/30">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700 flex items-center justify-center shadow-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                    </svg>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700 flex items-center justify-center shadow-lg">
+                      <Shield className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base font-bold text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                        <span>🛡️ Configuración de Garantía del Servicio</span>
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
+                        Establece el tiempo de cobertura y cláusulas que figurarán en el comprobante del cliente
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-base font-bold text-amber-800 dark:text-amber-300">
-                      🛡️ Configuración de Garantía del Servicio
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
-                      Establece el tiempo de cobertura y cláusulas que figurarán en el comprobante del cliente
-                    </p>
+
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0 self-start sm:self-auto">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setConfigWarrantyMonths(watch('warrantyMonths') ?? 3)
+                        setConfigWarrantyType(watch('warrantyType') || 'full')
+                        setConfigWarrantyNotes(watch('warrantyNotes') || '')
+                        setIsWarrantyConfigOpen(true)
+                      }}
+                      className="h-8 text-xs gap-1.5 border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950 font-semibold shadow-xs"
+                      title="Editar el tiempo de garantía y el texto que aparecerá en el comprobante impreso o PDF"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                      <span>Editar Términos / Comprobante</span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const months = watch('warrantyMonths') ?? 3
+                        const type = watch('warrantyType') || 'full'
+                        const notes = watch('warrantyNotes') || ''
+                        saveWarrantyPreference({ months, type, notes })
+                        toast.success(`⭐ Garantía predeterminada guardada: ${months} meses (${type === 'labor' ? 'Solo mano de obra' : type === 'parts' ? 'Solo repuestos' : 'Completa'})`)
+                      }}
+                      className="h-8 text-xs gap-1.5 border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900 font-bold shadow-xs"
+                      title="Guardar esta configuración como la predeterminada para nuevas reparaciones"
+                    >
+                      <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                      <span>Fijar como Predeterminada</span>
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-4 space-y-4">
                 {/* Atajos Rápidos de Selección */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-amber-900 dark:text-amber-300 uppercase tracking-wider">
-                    Atajos Rápidos de Duración
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-amber-900 dark:text-amber-300 uppercase tracking-wider">
+                      Atajos Rápidos de Duración
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground">
+                      ⭐ = Configuración predeterminada actual ({getSavedWarrantyPreference().months}m)
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
                     {[
                       { months: 0, label: 'Sin Garantía' },
@@ -2191,6 +2515,7 @@ export function RepairFormDialogV2({
                       { months: 12, label: '1 Año' },
                     ].map((preset) => {
                       const active = watch('warrantyMonths') === preset.months
+                      const isDefault = getSavedWarrantyPreference().months === preset.months
                       return (
                         <Button
                           key={preset.months}
@@ -2200,13 +2525,14 @@ export function RepairFormDialogV2({
                           disabled={isSubmitting}
                           onClick={() => setValue('warrantyMonths', preset.months, { shouldDirty: true, shouldValidate: true })}
                           className={cn(
-                            'h-7 text-xs rounded-lg transition-all',
+                            'h-7 text-xs rounded-lg transition-all gap-1',
                             active
                               ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm font-semibold'
                               : 'border-amber-200 dark:border-amber-900/60 hover:bg-amber-100/50 dark:hover:bg-amber-950/40 text-amber-900 dark:text-amber-300'
                           )}
                         >
-                          {preset.label}
+                          {isDefault && <Star className="h-3 w-3 text-amber-400 fill-amber-400" />}
+                          <span>{preset.label}</span>
                         </Button>
                       )
                     })}
@@ -2378,7 +2704,8 @@ export function RepairFormDialogV2({
                         </h4>
                         <div className="text-xs text-amber-800 dark:text-amber-200 space-y-1">
                           <p>• Duración: <strong>{watch('warrantyMonths')} {watch('warrantyMonths') === 1 ? 'mes' : 'meses'}</strong></p>
-                          <p>• Cubre: <strong>
+                          <p>• Cobertura estimada: Si se entrega hoy, cubre hasta el <strong>{format(addMonths(new Date(), watch('warrantyMonths') || 0), "d 'de' MMMM yyyy", { locale: es })}</strong> ({((watch('warrantyMonths') || 0) * 30)} días aprox.)</p>
+                          <p>• Cobertura: <strong>
                             {watch('warrantyType') === 'labor' && 'Solo mano de obra'}
                             {watch('warrantyType') === 'parts' && 'Solo repuestos'}
                             {watch('warrantyType') === 'full' && 'Completa (mano de obra + repuestos)'}
@@ -2422,10 +2749,25 @@ export function RepairFormDialogV2({
                 form={formId}
                 type="submit"
                 disabled={isSubmitting}
-                className="min-w-0 sm:min-w-[150px]"
+                className={cn(
+                  "min-w-0 sm:min-w-[160px] font-bold shadow-sm transition-all",
+                  quickMode && mode === 'add'
+                    ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+                    : ""
+                )}
               >
-                <Save className="h-4 w-4 mr-2" />
-                {isSubmitting ? 'Guardando...' : mode === 'add' ? 'Crear Reparación' : 'Guardar Cambios'}
+                {quickMode && mode === 'add' ? (
+                  <Zap className="h-4 w-4 mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                {isSubmitting
+                  ? 'Guardando...'
+                  : quickMode && mode === 'add'
+                  ? '⚡ Ingreso Rápido'
+                  : mode === 'add'
+                  ? 'Crear Reparación'
+                  : 'Guardar Cambios'}
               </Button>
             </div>
           </div>
@@ -2472,138 +2814,707 @@ export function RepairFormDialogV2({
 
     {/* Inventory Product Selector Modal */}
     <Dialog open={inventorySearchOpen} onOpenChange={setInventorySearchOpen}>
-      <DialogContent className="sm:max-w-[550px] max-h-[85vh] flex flex-col p-0 overflow-hidden">
-        <DialogHeader className="p-6 pb-4 border-b">
-          <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-            <Package className="h-5.5 w-5.5 text-cyan-600 dark:text-cyan-400" />
-            Buscar Repuesto en Inventario
-          </DialogTitle>
-          <DialogDescription>
-            Busca y selecciona repuestos del inventario local para agregarlos directamente a esta reparación.
-          </DialogDescription>
+      <DialogContent className="sm:max-w-[620px] max-h-[88vh] flex flex-col p-0 overflow-hidden rounded-2xl">
+        <DialogHeader className="p-5 pb-3 border-b bg-white dark:bg-slate-950">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+                <Package className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-bold">Buscar Repuesto en Inventario</DialogTitle>
+                <DialogDescription className="text-xs">
+                  Selecciona piezas físicas para vincularlas a la orden de trabajo.
+                </DialogDescription>
+              </div>
+            </div>
+            {customerIsWholesale && (
+              <Badge className="bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 border-violet-200 dark:border-violet-800 text-[10px] font-bold">
+                Tarifa Mayorista Activa
+              </Badge>
+            )}
+          </div>
         </DialogHeader>
 
-        <div className="p-6 pb-3 border-b bg-slate-50/50 dark:bg-slate-900/10">
+        <div className="p-4 pb-3 border-b bg-slate-50/70 dark:bg-slate-900/30 space-y-2.5">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={inventorySearchQuery}
               onChange={(e) => setInventorySearchQuery(e.target.value)}
-              placeholder="Buscar por nombre de producto o SKU..."
-              className="pl-9.5"
+              placeholder="Buscar por nombre, modelo o código SKU (ej. Pantalla A05, Batería iPhone)..."
+              className="pl-9 pr-8 h-9 text-xs"
               autoFocus
             />
+            {inventorySearchQuery && (
+              <button
+                type="button"
+                onClick={() => setInventorySearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Filtros rápidos por tipo de repuesto */}
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            {[
+              { label: 'Todos', query: '' },
+              { label: 'Pantallas / Módulos', query: 'pantalla' },
+              { label: 'Baterías', query: 'bateria' },
+              { label: 'Pines de carga', query: 'pin' },
+              { label: 'Tapas / Carcasas', query: 'tapa' },
+              { label: 'Cámaras / Flex', query: 'flex' },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => setInventorySearchQuery(chip.query)}
+                className={cn(
+                  "text-[10px] font-semibold px-2.5 py-1 rounded-full border transition-all",
+                  (chip.query === '' && inventorySearchQuery === '') || (chip.query !== '' && inventorySearchQuery.toLowerCase().includes(chip.query))
+                    ? "bg-cyan-600 text-white border-cyan-600 shadow-xs"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                )}
+              >
+                {chip.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 min-h-[300px]">
+        <div className="flex-1 overflow-y-auto p-4 min-h-[320px] max-h-[50vh]">
           {loadingInventory ? (
             <div className="flex flex-col items-center justify-center py-20 text-sm text-muted-foreground gap-2">
               <Loader2 className="h-6 w-6 animate-spin text-cyan-600 dark:text-cyan-400" />
-              <span>Buscando repuestos en el inventario...</span>
+              <span>Consultando stock de repuestos en sucursal...</span>
             </div>
           ) : inventoryProducts.length > 0 ? (
-            <div className="grid gap-2.5">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground px-1 mb-1">
+                <span>{inventoryProducts.length} repuestos encontrados</span>
+                <span>Precio unitario</span>
+              </div>
               {inventoryProducts.map((product) => {
-                // null/undefined = sin control de stock para ese producto
-                // (se permite igual); 0 explícito sí bloquea: agregar un
-                // repuesto sin unidades disponibles solo genera un costo que
-                // después no se puede cubrir físicamente.
                 const outOfStock = product.stock_quantity === 0
-                const alreadyAddedIndex = partsFields.findIndex((field, index) => watch(`parts.${index}.productId`) === product.id)
+                const alreadyAddedIndex = partsFields.findIndex((_, index) => watch(`parts.${index}.productId`) === product.id)
+                const currentQuantity = alreadyAddedIndex >= 0 ? (watch(`parts.${alreadyAddedIndex}.quantity`) || 0) : 0
+                const partPrice = customerIsWholesale && product.wholesale_price
+                  ? product.wholesale_price
+                  : (product.offer_price || product.sale_price || 0)
 
                 return (
-                <div
-                  key={product.id}
-                  className={cn(
-                    'flex items-center justify-between p-3.5 border rounded-2xl transition-all duration-200',
-                    outOfStock
-                      ? 'opacity-60 cursor-not-allowed bg-slate-50/50 dark:bg-slate-900/20'
-                      : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/40'
-                  )}
-                  onClick={() => {
-                    if (outOfStock) {
-                      toast.error(`"${product.name}" no tiene stock disponible`)
-                      return
-                    }
-                    if (alreadyAddedIndex >= 0) {
-                      const currentQuantity = watch(`parts.${alreadyAddedIndex}.quantity`) || 0
-                      const nextQuantity = currentQuantity + 1
-                      if (product.stock_quantity !== null && product.stock_quantity !== undefined && nextQuantity > product.stock_quantity) {
-                        toast.error(`Solo hay ${product.stock_quantity} unidades de "${product.name}" en esta sucursal`)
-                        return
-                      }
-                      setValue(`parts.${alreadyAddedIndex}.quantity`, nextQuantity, {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      })
-                      toast.success(`Cantidad de "${product.name}" actualizada a ${nextQuantity}`)
-                      setInventorySearchOpen(false)
-                      return
-                    }
-                    appendPart({
-                      name: product.name,
-                      cost: product.offer_price || product.sale_price || 0,
-                      internalCost: product.purchase_price ?? undefined,
-                      quantity: 1,
-                      stockAvailable: product.stock_quantity ?? null,
-                      supplier: 'Inventario Local',
-                      partNumber: product.sku || '',
-                      productId: product.id
-                    })
-                    toast.success(`Repuesto "${product.name}" agregado`)
-                    setInventorySearchOpen(false)
-                  }}
-                >
-                  <div className="min-w-0 flex-1 pr-3">
-                    <p className="font-bold text-sm text-slate-850 dark:text-slate-150 leading-snug truncate">
-                      {product.name}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2 mt-1.5 text-2xs font-semibold text-muted-foreground">
-                      {product.sku && (
-                        <Badge variant="outline" className="font-mono py-0.5 px-2 text-[9px] font-bold">
-                          SKU: {product.sku}
-                        </Badge>
-                      )}
-                      <span className={outOfStock ? 'text-red-600 dark:text-red-400 font-bold' : ''}>
-                        {product.stock_quantity !== null && product.stock_quantity !== undefined
-                          ? outOfStock ? 'Sin stock' : `Stock: ${product.stock_quantity} disp.`
-                          : 'Stock: ilimitado'}
-                      </span>
+                  <div
+                    key={product.id}
+                    className={cn(
+                      'flex items-center justify-between p-3 border rounded-xl transition-all duration-150',
+                      alreadyAddedIndex >= 0
+                        ? 'border-emerald-300 bg-emerald-50/40 dark:border-emerald-900/60 dark:bg-emerald-950/20'
+                        : outOfStock
+                          ? 'opacity-60 bg-slate-50/50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-800'
+                          : 'hover:border-cyan-400 dark:hover:border-cyan-600 hover:bg-slate-50/80 dark:hover:bg-slate-900/40 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950'
+                    )}
+                  >
+                    <div className="min-w-0 flex-1 pr-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
+                          {product.name}
+                        </p>
+                        {alreadyAddedIndex >= 0 && (
+                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[9px] py-0 px-1.5 font-bold">
+                            ✓ En la orden (x{currentQuantity})
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-muted-foreground">
+                        {product.sku && (
+                          <span className="font-mono text-[10px] bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">
+                            SKU: {product.sku}
+                          </span>
+                        )}
+                        <span className={cn("font-medium", outOfStock ? 'text-red-600 dark:text-red-400 font-bold' : 'text-slate-600 dark:text-slate-400')}>
+                          {product.stock_quantity !== null && product.stock_quantity !== undefined
+                            ? outOfStock ? 'Sin stock' : `Stock: ${product.stock_quantity} un.`
+                            : 'Stock ilimitado'}
+                        </span>
+                        {product.purchase_price && (
+                          <span className="text-[10px] text-muted-foreground opacity-80">
+                            Costo base: {formatCurrency(product.purchase_price)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <div className="text-right">
+                        <strong className="text-xs sm:text-sm font-bold text-cyan-600 dark:text-cyan-400 tabular-nums block">
+                          {formatCurrency(partPrice)}
+                        </strong>
+                        {customerIsWholesale && product.wholesale_price && (
+                          <span className="text-[9px] font-semibold text-violet-600 dark:text-violet-400 block">
+                            Mayorista
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={alreadyAddedIndex >= 0 ? "outline" : "default"}
+                        className={cn(
+                          "h-8 px-2.5 text-xs font-semibold rounded-lg",
+                          alreadyAddedIndex >= 0 && "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300"
+                        )}
+                        disabled={outOfStock}
+                        onClick={() => {
+                          if (outOfStock) {
+                            toast.error(`"${product.name}" no tiene stock disponible`)
+                            return
+                          }
+                          if (alreadyAddedIndex >= 0) {
+                            const nextQuantity = currentQuantity + 1
+                            if (product.stock_quantity !== null && product.stock_quantity !== undefined && nextQuantity > product.stock_quantity) {
+                              toast.error(`Solo hay ${product.stock_quantity} unidades de "${product.name}" en esta sucursal`)
+                              return
+                            }
+                            setValue(`parts.${alreadyAddedIndex}.quantity`, nextQuantity, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            })
+                            toast.success(`Cantidad de "${product.name}" actualizada a ${nextQuantity}`)
+                            setInventorySearchOpen(false)
+                            return
+                          }
+
+                          appendPart({
+                            name: product.name,
+                            cost: partPrice,
+                            internalCost: product.purchase_price ?? undefined,
+                            quantity: 1,
+                            stockAvailable: product.stock_quantity ?? null,
+                            supplier: 'Inventario Local',
+                            partNumber: product.sku || '',
+                            productId: product.id
+                          })
+                          toast.success(`Repuesto "${product.name}" agregado`, {
+                            description: customerIsWholesale && product.wholesale_price ? 'Precio mayorista aplicado.' : undefined
+                          })
+                          setInventorySearchOpen(false)
+                        }}
+                      >
+                        {alreadyAddedIndex >= 0 ? "+1 unidad" : "+ Agregar"}
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <strong className="text-sm font-black text-cyan-600 dark:text-cyan-400">
-                      {formatCurrency(product.offer_price || product.sale_price || 0)}
-                    </strong>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      className="h-7 px-3 text-xs font-bold rounded-lg"
-                      disabled={outOfStock}
-                    >
-                      Seleccionar
-                    </Button>
-                  </div>
-                </div>
                 )
               })}
             </div>
           ) : (
-            <div className="text-center py-20">
+            <div className="text-center py-16">
               <Package className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm font-bold text-slate-700 dark:text-slate-350">
-                {inventorySearchQuery ? 'No se encontraron repuestos' : 'Escribe para buscar repuestos'}
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                {inventorySearchQuery ? 'No se encontraron repuestos con ese criterio' : 'Escribe para buscar repuestos'}
               </p>
               <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
                 {inventorySearchQuery 
-                  ? 'Intenta con otros términos de búsqueda o agrega un repuesto personalizado manual.'
-                  : 'Busca por nombre, categoría o código SKU para filtrar la lista.'}
+                  ? 'Verifica el nombre o SKU, o agrega un repuesto manual personalizado.'
+                  : 'Filtra por nombre de pieza (ej. Pantalla, Batería) o código SKU.'}
               </p>
+              {inventorySearchQuery && (
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setInventorySearchQuery('')}
+                  >
+                    Limpiar búsqueda
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* Modal de Búsqueda de Servicios y Mano de Obra */}
+    <Dialog open={serviceSearchIndex !== null} onOpenChange={(open) => !open && setServiceSearchIndex(null)}>
+      <DialogContent className="sm:max-w-[650px] max-h-[88vh] flex flex-col p-0 overflow-hidden rounded-2xl bg-white/95 dark:bg-slate-950/95 backdrop-blur-2xl border-slate-200 dark:border-slate-800 shadow-2xl">
+        <DialogHeader className="p-5 pb-3.5 border-b bg-gradient-to-r from-emerald-600/10 via-teal-600/10 to-blue-600/10 dark:from-emerald-950/40 dark:via-teal-950/40 dark:to-blue-950/40">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20">
+                <Wrench className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
+                  Catálogo de Servicios y Mano de Obra
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Selecciona un servicio técnico para auto-completar el diagnóstico, mano de obra y repuestos.
+                </DialogDescription>
+              </div>
+            </div>
+            {customerIsWholesale && (
+              <Badge className="bg-violet-600 text-white text-[10px] font-extrabold px-2 py-0.5 shadow-sm">
+                Tarifa Mayorista
+              </Badge>
+            )}
+          </div>
+        </DialogHeader>
+
+        <div className="p-4 pb-3 border-b bg-slate-50/70 dark:bg-slate-900/40 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={serviceSearchQuery}
+              onChange={(e) => setServiceSearchQuery(e.target.value)}
+              placeholder="Buscar por servicio, dispositivo o modelo (ej. Cambio de pantalla A05, Batería iPhone, Pin de carga)..."
+              className="pl-9 pr-8 h-9 text-xs rounded-xl"
+              autoFocus
+            />
+            {serviceSearchQuery && (
+              <button
+                type="button"
+                onClick={() => setServiceSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Filtros rápidos por categoría de servicio */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { label: 'Todos', query: '' },
+              { label: '📱 Pantallas', query: 'pantalla' },
+              { label: '🔋 Baterías', query: 'bateria' },
+              { label: '⚡ Pines / Carga', query: 'pin' },
+              { label: '💻 Software', query: 'software' },
+              { label: '🧹 Limpieza', query: 'limpieza' },
+              { label: '🔬 Micro-soldadura', query: 'placa' },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => setServiceSearchQuery(chip.query)}
+                className={cn(
+                  "text-[10px] font-semibold px-2.5 py-1 rounded-full border transition-all",
+                  (chip.query === '' && serviceSearchQuery === '') || (chip.query !== '' && serviceSearchQuery.toLowerCase().includes(chip.query))
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                )}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Toggle para modo presupuesto cerrado */}
+          {fields.length === 1 && (
+            <label className="flex items-center gap-2.5 text-xs text-muted-foreground cursor-pointer bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
+              <Switch
+                checked={serviceIncludesParts}
+                onCheckedChange={setServiceIncludesParts}
+                className="h-4 w-7 [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3"
+              />
+              <span className="text-[11px] leading-tight">
+                <strong className="text-slate-800 dark:text-slate-200">Presupuesto cerrado:</strong> El precio total se mantiene fijo (si agregas repuestos después, se descuenta de la mano de obra).
+              </span>
+            </label>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 min-h-[320px] max-h-[50vh]">
+          {loadingServices ? (
+            <div className="flex flex-col items-center justify-center py-20 text-sm text-muted-foreground gap-2">
+              <Loader2 className="h-6 w-6 animate-spin text-emerald-600 dark:text-emerald-400" />
+              <span>Consultando servicios técnicos disponibles...</span>
+            </div>
+          ) : serviceResults.length > 0 ? (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground px-1 mb-1">
+                <span>{serviceResults.length} servicios encontrados</span>
+                <span>Tarifa y desglose</span>
+              </div>
+              {serviceResults.map((svc) => {
+                const price = customerIsWholesale && svc.wholesale_price
+                  ? svc.wholesale_price
+                  : ((svc.offer_price || svc.sale_price) ?? 0)
+                const baseCost = svc.purchase_price || 0
+                const laborPart = Math.max(0, price - baseCost)
+                const guess = guessDeviceFromServiceName(svc.name)
+
+                return (
+                  <div
+                    key={svc.id}
+                    onClick={() => {
+                      if (serviceSearchIndex === null) return
+                      const curIdx = serviceSearchIndex
+                      setValue(`devices.${curIdx}.estimatedCost`, price, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                      if (!watch(`devices.${curIdx}.issue`) || watch(`devices.${curIdx}.issue`) === 'Reparación general') {
+                        setValue(`devices.${curIdx}.issue`, svc.name, { shouldDirty: true })
+                      }
+
+                      if (guess.deviceType && !watch(`devices.${curIdx}.deviceType`)) {
+                        setValue(`devices.${curIdx}.deviceType`, guess.deviceType, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        })
+                      }
+                      if (guess.brand && !watch(`devices.${curIdx}.brand`)) {
+                        setValue(`devices.${curIdx}.brand`, guess.brand, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        })
+                      }
+                      if (guess.model && !watch(`devices.${curIdx}.model`)) {
+                        setValue(`devices.${curIdx}.model`, guess.model, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        })
+                      }
+
+                      const basePartCost = Number(svc.purchase_price ?? 0)
+
+                      if (basePartCost > 0) {
+                        // 1. Agregar el repuesto/insumo base para reflejar el costo del material
+                        appendPart({
+                          name: `${svc.name} (Repuesto / Insumo)`,
+                          cost: basePartCost,
+                          internalCost: basePartCost,
+                          quantity: 1,
+                          supplier: 'Insumo de servicio',
+                          partNumber: svc.sku || '',
+                        })
+
+                        // 2. Fijar modo presupuesto cerrado
+                        setCalculationMode('budget')
+                        setValue('pricingMode', 'budget', { shouldDirty: true })
+                        setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
+
+                        // 3. Mano de Obra Neta = Total - Costo de Repuesto
+                        const currentPartsPrice = partsFields.reduce((sum, _, pIdx) => {
+                          const c = watch(`parts.${pIdx}.cost`) || 0
+                          const q = watch(`parts.${pIdx}.quantity`) || 1
+                          return sum + (c * q)
+                        }, 0) + basePartCost
+
+                        const derivedLabor = Math.max(0, price - currentPartsPrice)
+                        setValue('laborCost', derivedLabor, { shouldDirty: true, shouldValidate: true })
+                      } else {
+                        // Servicio puro sin costo de repuesto inicial
+                        const selection = resolveServicePricingSelection({
+                          price,
+                          includesParts: serviceIncludesParts,
+                          deviceCount: fields.length,
+                        })
+
+                        if (selection.affectsCalculator && selection.pricingMode) {
+                          setCalculationMode(selection.pricingMode)
+                          setValue('pricingMode', selection.pricingMode, { shouldDirty: true })
+
+                          if (selection.pricingMode === 'budget') {
+                            setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
+                            const currentPartsPrice = partsFields.reduce((sum, _, pIdx) => {
+                              const c = watch(`parts.${pIdx}.cost`) || 0
+                              const q = watch(`parts.${pIdx}.quantity`) || 1
+                              return sum + (c * q)
+                            }, 0)
+                            const derivedLabor = Math.max(0, price - currentPartsPrice)
+                            setValue('laborCost', derivedLabor, { shouldDirty: true, shouldValidate: true })
+                          } else {
+                            setValue('laborCost', price, { shouldDirty: true, shouldValidate: true })
+                          }
+                        }
+                      }
+
+                      toast.success(`Servicio "${svc.name}" — ${formatCurrency(price)}`, {
+                        description: [
+                          customerIsWholesale && svc.wholesale_price ? 'Precio mayorista aplicado.' : null,
+                          basePartCost > 0
+                            ? `Repuesto (${formatCurrency(basePartCost)}) + Mano de Obra (${formatCurrency(Math.max(0, price - basePartCost))}).`
+                            : serviceIncludesParts
+                              ? 'Presupuesto cerrado: mano de obra se recalcula al agregar repuestos.'
+                              : 'Mano de obra fijada.',
+                          (guess.brand || guess.model || guess.deviceType)
+                            ? 'Tipo/marca/modelo sugeridos.'
+                            : null,
+                        ].filter(Boolean).join(' ') || undefined,
+                      })
+                      setServiceSearchIndex(null)
+                    }}
+                    className="group relative flex items-center justify-between p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all cursor-pointer shadow-xs hover:shadow-md"
+                  >
+                    <div className="min-w-0 flex-1 space-y-1.5 pr-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-sm text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                          {svc.name}
+                        </span>
+                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
+                          {svc.category?.name || 'Servicio'}
+                        </Badge>
+                        {customerIsWholesale && svc.wholesale_price && (
+                          <Badge className="bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300 text-[10px] py-0 px-1.5 font-bold">
+                            Mayorista
+                          </Badge>
+                        )}
+                        {guess.brand && (
+                          <Badge variant="secondary" className="text-[9px] py-0 px-1 font-mono">
+                            {guess.brand} {guess.model || ''}
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* Desglose Matemático */}
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+                        {baseCost > 0 ? (
+                          <>
+                            <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200/60 dark:border-amber-900/40 font-medium">
+                              Repuesto: {formatCurrency(baseCost)}
+                            </span>
+                            <span>+</span>
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-200/60 dark:border-emerald-900/40 font-bold">
+                              Mano de Obra: {formatCurrency(laborPart)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-200/60 dark:border-emerald-900/40 font-bold">
+                            Mano de Obra pura: {formatCurrency(price)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
+                      <span className="text-base font-black text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 tabular-nums">
+                        {formatCurrency(price)}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 px-3 text-[11px] font-bold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-xs"
+                      >
+                        Seleccionar
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <Wrench className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                {serviceSearchQuery ? 'No se encontraron servicios con ese criterio' : 'Escribe para buscar servicios'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+                {serviceSearchQuery
+                  ? 'Verifica el nombre o categoría, o ingresa el precio estimado de forma manual.'
+                  : 'Filtra por tipo de trabajo (Pantalla, Batería, Software, Limpieza).'}
+              </p>
+              {serviceSearchQuery && (
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setServiceSearchQuery('')}
+                  >
+                    Limpiar búsqueda
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* Modal de Configuración de Términos y Comprobante de Garantía */}
+    <Dialog open={isWarrantyConfigOpen} onOpenChange={setIsWarrantyConfigOpen}>
+      <DialogContent className="sm:max-w-[620px] max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl bg-white/95 dark:bg-slate-950/95 backdrop-blur-2xl border-slate-200 dark:border-slate-800 shadow-2xl">
+        <DialogHeader className="p-5 pb-3.5 border-b bg-gradient-to-r from-amber-500/10 via-amber-600/10 to-orange-500/10 dark:from-amber-950/40 dark:via-amber-900/30 dark:to-orange-950/40">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20">
+              <Shield className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
+                🛡️ Plantilla y Términos de Garantía en Comprobantes
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                Personaliza la duración predeterminada y el texto legal que figurará en el comprobante o PDF de entrega al cliente.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Duración */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Duración de Cobertura
+              </Label>
+              <Select
+                value={String(configWarrantyMonths)}
+                onValueChange={(v) => setConfigWarrantyMonths(Number(v))}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Seleccionar duración" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Sin garantía (0 meses)</SelectItem>
+                  <SelectItem value="1">1 mes (30 días)</SelectItem>
+                  <SelectItem value="3">3 meses (90 días - Estándar)</SelectItem>
+                  <SelectItem value="6">6 meses (180 días)</SelectItem>
+                  <SelectItem value="12">1 año (12 meses)</SelectItem>
+                  <SelectItem value="24">2 años (24 meses)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Tipo de Cobertura */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Tipo de Cobertura
+              </Label>
+              <Select
+                value={configWarrantyType}
+                onValueChange={(v) => setConfigWarrantyType(v as 'labor' | 'parts' | 'full')}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Seleccionar tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full">Completa (Mano de obra + Repuestos)</SelectItem>
+                  <SelectItem value="labor">Solo mano de obra</SelectItem>
+                  <SelectItem value="parts">Solo repuestos instalados</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Texto de Garantía / Cláusulas para el Comprobante */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Texto / Cláusulas Legales en el Comprobante
+              </Label>
+              <span className="text-[11px] text-muted-foreground">
+                (Aparece en la sección de garantía del ticket o PDF)
+              </span>
+            </div>
+
+            {/* Botones de cláusulas rápidas */}
+            <div className="space-y-1">
+              <span className="text-[11px] text-muted-foreground font-medium">Insertar cláusula recomendada:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Aplica únicamente sobre la pieza sustituida.',
+                  'No cubre daños causados por humedad, agua o líquidos.',
+                  'No cubre golpes, caídas o fracturas de pantalla posteriores.',
+                  'Garantía de batería sujeta a ciclos normales de carga.',
+                  'Precinto de seguridad intacto obligatorio para reclamos.',
+                  'Presentación indispensable del comprobante o ticket.',
+                ].map((clause) => (
+                  <button
+                    key={clause}
+                    type="button"
+                    onClick={() => {
+                      if (configWarrantyNotes.includes(clause)) return
+                      setConfigWarrantyNotes(prev => prev ? `${prev}\n• ${clause}` : `• ${clause}`)
+                    }}
+                    className="text-[11px] px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                  >
+                    + {clause}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Textarea
+              value={configWarrantyNotes}
+              onChange={(e) => setConfigWarrantyNotes(e.target.value)}
+              placeholder="Escribe los términos y condiciones de garantía que se imprimirán en el comprobante del cliente..."
+              className="min-h-[100px] text-xs resize-none"
+            />
+          </div>
+
+          {/* Vista Previa de cómo saldrá en el comprobante */}
+          <div className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 space-y-1.5">
+            <span className="text-[11px] font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider block">
+              📄 Vista Previa en Comprobante / Ticket
+            </span>
+            <div className="text-xs text-slate-700 dark:text-slate-300 space-y-1 bg-white/70 dark:bg-slate-900/70 p-3 rounded-lg border border-amber-100 dark:border-amber-900/30 font-mono">
+              <p className="font-bold text-amber-900 dark:text-amber-300">🛡️ TÉRMINOS Y CONDICIONES DE GARANTÍA:</p>
+              <p>• Duración: <strong>{configWarrantyMonths === 0 ? 'Sin garantía' : `${configWarrantyMonths} ${configWarrantyMonths === 1 ? 'mes' : 'meses'} (hasta el ${format(addMonths(new Date(), configWarrantyMonths), "dd/MM/yyyy")})`}</strong></p>
+              <p>• Cobertura: <strong>{configWarrantyType === 'labor' ? 'Solo mano de obra' : configWarrantyType === 'parts' ? 'Solo repuestos' : 'Completa (Mano de obra + Repuestos)'}</strong></p>
+              {configWarrantyNotes && (
+                <div className="pt-1 whitespace-pre-line text-[11px] text-slate-600 dark:text-slate-400">
+                  {configWarrantyNotes}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="p-4 border-t bg-slate-50/80 dark:bg-slate-900/60 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsWarrantyConfigOpen(false)}
+          >
+            Cancelar
+          </Button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setValue('warrantyMonths', configWarrantyMonths, { shouldDirty: true, shouldValidate: true })
+                setValue('warrantyType', configWarrantyType, { shouldDirty: true, shouldValidate: true })
+                setValue('warrantyNotes', configWarrantyNotes, { shouldDirty: true })
+                setIsWarrantyConfigOpen(false)
+                toast.info('Términos de garantía aplicados a esta orden.')
+              }}
+              className="flex-1 sm:flex-none text-xs"
+            >
+              Aplicar solo a esta Orden
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setValue('warrantyMonths', configWarrantyMonths, { shouldDirty: true, shouldValidate: true })
+                setValue('warrantyType', configWarrantyType, { shouldDirty: true, shouldValidate: true })
+                setValue('warrantyNotes', configWarrantyNotes, { shouldDirty: true })
+                saveWarrantyPreference({
+                  months: configWarrantyMonths,
+                  type: configWarrantyType,
+                  notes: configWarrantyNotes
+                })
+                setIsWarrantyConfigOpen(false)
+                toast.success(`⭐ ¡Plantilla predeterminada guardada! Se usará automáticamente en todos los nuevos comprobantes.`)
+              }}
+              className="flex-1 sm:flex-none text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold gap-1 shadow-sm"
+            >
+              <Star className="h-3.5 w-3.5 fill-white" />
+              <span>Guardar como Predeterminada</span>
+            </Button>
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
     </>

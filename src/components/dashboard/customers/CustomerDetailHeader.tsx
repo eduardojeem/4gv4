@@ -1,4 +1,5 @@
 import React from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -16,7 +17,9 @@ import {
   Copy,
   Link2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ShoppingBag,
+  Wrench
 } from "lucide-react"
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -154,21 +157,41 @@ export function CustomerDetailHeader({
 
   const initials = customer.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
 
+  const router = useRouter()
+
   return (
     <div className="space-y-4">
-      {/* Navigation Top Bar */}
+      {/* Top Bar: Navigation + Quick Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button
           variant="outline"
           size="sm"
           onClick={onBack}
-          className="gap-1.5 rounded-xl border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+          className="gap-2 rounded-xl border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
         >
           <ArrowLeft className="h-4 w-4" />
           Volver a Clientes
         </Button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => router.push(`/dashboard/pos?customerId=${customer.id}`)}
+            className="gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300 font-semibold"
+          >
+            <ShoppingBag className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Nueva Venta</span>
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => router.push(`/dashboard/repairs?new=true&customerId=${customer.id}&customerName=${encodeURIComponent(customer.name)}`)}
+            className="gap-1.5 rounded-xl border border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300 font-semibold"
+          >
+            <Wrench className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+            <span>Nueva Reparación</span>
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -192,7 +215,7 @@ export function CustomerDetailHeader({
           <Button
             size="sm"
             onClick={onEdit}
-            className="gap-1.5 rounded-xl bg-blue-600 font-semibold text-white hover:bg-blue-500"
+            className="gap-1.5 rounded-xl bg-blue-600 font-semibold text-white hover:bg-blue-500 shadow-xs"
           >
             <Edit className="h-4 w-4" />
             Editar

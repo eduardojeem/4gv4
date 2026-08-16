@@ -40,10 +40,14 @@ import { RepairEmptyState } from '@/components/dashboard/repairs/RepairEmptyStat
 import { RepairDeleteDialog } from '@/components/dashboard/repairs/RepairDeleteDialog'
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import { RepairSuccessDialog } from '@/components/dashboard/repairs/RepairSuccessDialog'
+import { RepairReceiptSettingsDialog } from '@/components/dashboard/repairs/RepairReceiptSettingsDialog'
 import { RepairCardsView } from '@/components/dashboard/repairs/RepairCardsView'
 import { RepairDeliveryDialog, type RepairDeliveryConfirmPayload } from '@/components/dashboard/repairs/RepairDeliveryDialog'
 import { RepairPaymentDialog, type RepairPaymentResult } from '@/components/dashboard/repairs/RepairPaymentDialog'
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
+import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
+import { getWarrantyStatus, formatWarrantyExpiration } from '@/lib/warranty-utils'
+import type { WarrantyFilterType } from '@/hooks/use-repair-filters'
 import type { RepairFormData } from '@/schemas'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
 import { RepairPrintPayload } from '@/lib/repair-receipt'
@@ -117,6 +121,8 @@ function RepairsPageContent() {
     setPriorityFilter,
     technicianFilter,
     setTechnicianFilter,
+    warrantyFilter,
+    setWarrantyFilter,
     dateRange,
     setDateRange,
     filteredRepairs
@@ -132,11 +138,13 @@ function RepairsPageContent() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
   const [payTarget, setPayTarget] = useState<Repair | null>(null)
+  const [warrantyClaimTarget, setWarrantyClaimTarget] = useState<Repair | null>(null)
   const [pageSize] = useState<number>(25)
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [searchOpen, setSearchOpen] = useState(false)
   const [successDialogData, setSuccessDialogData] = useState<RepairPrintPayload | null>(null)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+  const [showReceiptSettingsDialog, setShowReceiptSettingsDialog] = useState(false)
   const [quickAccessOpen, setQuickAccessOpen] = useState(false)
   const [statsOpen, setStatsOpen] = useState(false)
   const searchParams = useSearchParams()
@@ -255,10 +263,21 @@ function RepairsPageContent() {
     }
   }, [repairs])
 
+  const warrantyCounts = useMemo(() => {
+    let inWarranty = 0
+    let expiring = 0
+    for (const r of repairs) {
+      const ws = getWarrantyStatus(r.warrantyExpiresAt)
+      if (ws === 'active' || ws === 'expiring') inWarranty++
+      if (ws === 'expiring') expiring++
+    }
+    return { inWarranty, expiring }
+  }, [repairs])
+
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, priorityFilter, technicianFilter, dateRange])
+  }, [searchTerm, statusFilter, priorityFilter, technicianFilter, warrantyFilter, dateRange])
 
   // Optimized callbacks with proper dependencies
   const handleCalendarSelect = useCallback((d?: Date) => {
@@ -365,6 +384,8 @@ function RepairsPageContent() {
             deviceType: d.deviceType,
             brand: d.brand,
             model: d.model,
+            serial_number: d.serialNumber || undefined,
+            serialNumber: d.serialNumber || undefined,
             issue: d.issue,
             description: d.description || '',
             accessType: d.accessType || 'none',
@@ -497,10 +518,17 @@ function RepairsPageContent() {
                 typeLabel: deviceTypeConfig[deviceFormData.deviceType]?.label || deviceFormData.deviceType,
                 brand: deviceFormData.brand,
                 model: deviceFormData.model,
+                serialNumber: deviceFormData.serialNumber,
+                imei: (deviceFormData as any).imei || deviceFormData.serialNumber,
+                accessType: deviceFormData.accessType,
+                accessPassword: deviceFormData.accessPassword,
+                accessories: (deviceFormData as any).accessories,
                 issue: deviceFormData.issue,
                 description: deviceFormData.description,
                 technician: techName,
                 estimatedCost: deviceFormData.estimatedCost,
+                finalCost: createdRepair.finalCost,
+                paidAmount: createdRepair.paidAmount,
                 ticketNumber: createdRepair.ticketNumber || createdRepair.id
               }
             }).filter((device): device is NonNullable<typeof device> => device !== null)
@@ -519,9 +547,12 @@ function RepairsPageContent() {
           parts?: RepairFormData['parts']
           notes?: RepairFormData['notes']
           images?: string[]
+          serial_number?: string | null
         } = {
           brand: d.brand,
           model: d.model,
+          serialNumber: d.serialNumber || undefined,
+          serial_number: d.serialNumber || undefined,
           deviceType: d.deviceType,
           issue: d.issue,
           description: d.description,
@@ -623,6 +654,7 @@ function RepairsPageContent() {
           deviceType: selectedRepair.deviceType,
           brand: selectedRepair.brand,
           model: selectedRepair.model,
+          serialNumber: selectedRepair.serialNumber || selectedRepair.imei || '',
           issue: selectedRepair.issue,
           description: selectedRepair.description,
           accessType: selectedRepair.accessType || 'none',
@@ -660,32 +692,36 @@ function RepairsPageContent() {
   // Quick access navigation items
   const quickAccessSections = [
     {
-      title: 'Técnicos',
-      description: 'Asigna trabajos, revisa carga de tareas y entra al detalle de cada tecnico.',
+      title: 'Equipo Técnico',
+      description: 'Asigna trabajos, revisa la carga de tareas y entra al detalle de cada técnico.',
       icon: Users,
       path: '/dashboard/repairs/technicians',
-      color: 'sky' as const
+      color: 'sky' as const,
+      badge: 'Taller'
     },
     {
-      title: 'Analíticas',
-      description: 'Mide tiempos, volumen de reparaciones, estados y rendimiento del servicio.',
+      title: 'Analíticas y Tiempos',
+      description: 'Mide tiempos de entrega, volumen de reparaciones y rendimiento financiero.',
       icon: BarChart3,
       path: '/dashboard/repairs/analytics',
-      color: 'indigo' as const
+      color: 'indigo' as const,
+      badge: 'Reportes'
     },
     {
       title: 'Comunicaciones',
-      description: 'Gestiona avisos al cliente, mensajes de seguimiento y notificaciones.',
+      description: 'Gestiona avisos por WhatsApp, mensajes automáticos y notificaciones a clientes.',
       icon: MessageSquare,
       path: '/dashboard/repairs/communications',
-      color: 'teal' as const
+      color: 'teal' as const,
+      badge: 'WhatsApp'
     },
     {
-      title: 'Inventario',
-      description: 'Consulta repuestos, servicios y movimientos usados por el taller.',
+      title: 'Inventario de Repuestos',
+      description: 'Consulta stock en bodega, repuestos críticos y movimientos del taller.',
       icon: Package,
       path: '/dashboard/repairs/inventory',
-      color: 'amber' as const
+      color: 'amber' as const,
+      badge: 'Stock'
     }
   ]
 
@@ -762,6 +798,7 @@ function RepairsPageContent() {
       <RepairHeader
         onRefresh={refreshRepairs}
         onNewRepair={handleNewRepair}
+        onOpenReceiptSettings={() => setShowReceiptSettingsDialog(true)}
         isLoading={isLoading}
         totalRepairs={repairs.length}
         activeRepairs={repairPulse.activeRepairs}
@@ -808,6 +845,14 @@ function RepairsPageContent() {
 
 
       <div className="flex flex-col gap-4">
+        <RepairOperationsOverview
+          repairs={repairs}
+          filteredCount={uiFiltered.length}
+          selectedBranchName={selectedBranch?.name}
+          statusFilter={statusFilter}
+          onStatusFilterSelect={setStatusFilter}
+        />
+
         <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-4 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/70">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
@@ -818,6 +863,9 @@ function RepairsPageContent() {
                 setStatusFilter={setStatusFilter}
                 priorityFilter={priorityFilter}
                 setPriorityFilter={(p) => setPriorityFilter(p as 'low' | 'medium' | 'high' | 'all')}
+                warrantyFilter={warrantyFilter}
+                setWarrantyFilter={setWarrantyFilter}
+                warrantyCounts={warrantyCounts}
                 technicians={technicians}
                 technicianFilter={technicianFilter}
                 setTechnicianFilter={setTechnicianFilter}
@@ -845,7 +893,7 @@ function RepairsPageContent() {
           </div>
         </div>
 
-        {!isLoading && uiFiltered.length > 0 && (
+        {uiFiltered.length > 0 && (
           <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800/70 dark:bg-slate-950/60">
             <div className="space-y-1">
               <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -886,7 +934,7 @@ function RepairsPageContent() {
           </div>
         )}
 
-        {isLoading ? (
+        {isLoading && repairs.length === 0 ? (
           <div className="flex items-center justify-center rounded-[28px] border border-slate-200/80 bg-white/80 py-14 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/60">
             <div className="text-center">
               <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-2" />
@@ -902,6 +950,7 @@ function RepairsPageContent() {
               setStatusFilter('all')
               setPriorityFilter('all')
               setTechnicianFilter('all')
+              setWarrantyFilter('all')
               setDateRange(undefined)
             }}
           />
@@ -914,6 +963,7 @@ function RepairsPageContent() {
             onDelete={handleDeleteClick}
             onDeliver={setDeliverTarget}
             onQuickPay={setPayTarget}
+            onClaimWarranty={(r) => setWarrantyClaimTarget(r)}
             isLoading={false}
             companyInfo={repairListCompanyInfo}
           />
@@ -925,6 +975,7 @@ function RepairsPageContent() {
             onDelete={handleDeleteClick}
             onDeliver={setDeliverTarget}
             onQuickPay={setPayTarget}
+            onClaimWarranty={(r) => setWarrantyClaimTarget(r)}
           />
         ) : viewMode === 'kanban' ? (
           <div className="h-[calc(100vh-300px)] min-h-[500px]">
@@ -959,14 +1010,6 @@ function RepairsPageContent() {
             </div>
           </div>
         )}
-
-        <RepairOperationsOverview
-          repairs={repairs}
-          filteredCount={uiFiltered.length}
-          selectedBranchName={selectedBranch?.name}
-          statusFilter={statusFilter}
-          onStatusFilterSelect={setStatusFilter}
-        />
 
         <QuickAccessNav sections={quickAccessSections} />
       </div>
@@ -1088,6 +1131,33 @@ function RepairsPageContent() {
           setDialogMode('edit')
           setIsDialogOpen(true)
         }}
+      />
+
+      {warrantyClaimTarget && (
+        <CreateAfterSalesCaseDialog
+          open={!!warrantyClaimTarget}
+          onOpenChange={(open) => !open && setWarrantyClaimTarget(null)}
+          sourceType="repair"
+          repairId={warrantyClaimTarget.id}
+          customerId={warrantyClaimTarget.customer?.id}
+          reference={warrantyClaimTarget.ticketNumber || warrantyClaimTarget.id.slice(0, 8)}
+          subject={[warrantyClaimTarget.brand, warrantyClaimTarget.model].filter(Boolean).join(' ') || warrantyClaimTarget.device}
+          customerName={warrantyClaimTarget.customer?.name}
+          allowedRequestTypes={['repair_warranty']}
+          warrantyExpired={getWarrantyStatus(warrantyClaimTarget.warrantyExpiresAt) === 'expired'}
+          warrantyExpiresLabel={
+            warrantyClaimTarget.warrantyExpiresAt ? formatWarrantyExpiration(warrantyClaimTarget.warrantyExpiresAt) : null
+          }
+          onCreated={() => {
+            setWarrantyClaimTarget(null)
+            toast.success('Caso de garantía creado exitosamente')
+          }}
+        />
+      )}
+
+      <RepairReceiptSettingsDialog
+        open={showReceiptSettingsDialog}
+        onOpenChange={setShowReceiptSettingsDialog}
       />
     </div>
     </RepairHelpActionsProvider>

@@ -79,6 +79,7 @@ interface SupabaseRepair {
     customer?: SupabaseCustomer | SupabaseCustomer[]
     device_brand: string
     device_model: string
+    serial_number?: string | null
     device_type?: string
     problem_description: string
     diagnosis?: string
@@ -151,6 +152,8 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         deviceType: (r.device_type as DeviceType) || 'smartphone',
         brand: r.device_brand,
         model: r.device_model,
+        serialNumber: r.serial_number || undefined,
+        imei: r.serial_number || undefined,
         issue: r.problem_description,
         description: r.diagnosis || r.solution || '',
         accessType: (r.access_type?.toLowerCase() as 'none' | 'pin' | 'password' | 'pattern' | 'biometric' | 'other') || 'none',

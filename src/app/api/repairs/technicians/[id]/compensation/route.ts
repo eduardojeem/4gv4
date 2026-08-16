@@ -140,6 +140,93 @@ export async function PUT(req: NextRequest, context: RouteParams) {
 
     if (error) throw error
 
+    // Sincronización automática con Finanzas y Nómina central
+    try {
+      const effectiveDate = parsed.data.salary_effective_from || new Date().toISOString().slice(0, 10)
+
+      // 1. Sincronizar sueldo base en employee_compensation
+      if (parsed.data.base_salary > 0) {
+        const { data: existingComp } = await supabase
+          .from('employee_compensation')
+          .select('id')
+          .eq('organization_id', organization.id)
+          .eq('employee_id', technicianId)
+          .order('effective_from', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (existingComp) {
+          await supabase
+            .from('employee_compensation')
+            .update({
+              base_salary: parsed.data.base_salary,
+              effective_from: effectiveDate,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingComp.id)
+        } else {
+          await supabase
+            .from('employee_compensation')
+            .insert({
+              organization_id: organization.id,
+              employee_id: technicianId,
+              base_salary: parsed.data.base_salary,
+              pay_frequency: 'monthly',
+              effective_from: effectiveDate,
+              created_by: staffAuth.user.id,
+            })
+        }
+      }
+
+      // 2. Sincronizar regla de comisión en commission_rules
+      const sourceType = parsed.data.commission_base === 'labor' ? 'repair_labor' : 'repair'
+      const calcType = parsed.data.commission_rate > 0 ? 'percentage' : 'fixed'
+      const ruleVal = parsed.data.commission_rate > 0 ? parsed.data.commission_rate : parsed.data.fixed_per_repair
+
+      if (ruleVal > 0) {
+        const { data: existingRule } = await supabase
+          .from('commission_rules')
+          .select('id')
+          .eq('organization_id', organization.id)
+          .eq('employee_id', technicianId)
+          .in('source_type', ['repair', 'repair_labor'])
+          .eq('status', 'approved')
+          .limit(1)
+          .maybeSingle()
+
+        if (existingRule) {
+          await supabase
+            .from('commission_rules')
+            .update({
+              source_type: sourceType,
+              calculation_type: calcType,
+              value: ruleVal,
+              accrual_status: parsed.data.accrual_status,
+              effective_from: effectiveDate,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingRule.id)
+        } else {
+          await supabase
+            .from('commission_rules')
+            .insert({
+              organization_id: organization.id,
+              scope_type: 'employee',
+              employee_id: technicianId,
+              source_type: sourceType,
+              calculation_type: calcType,
+              value: ruleVal,
+              accrual_status: parsed.data.accrual_status,
+              status: 'approved',
+              effective_from: effectiveDate,
+              created_by: staffAuth.user.id,
+            })
+        }
+      }
+    } catch (syncErr) {
+      console.error('[technician-compensation syncToFinance error]', syncErr)
+    }
+
     return NextResponse.json({ compensation: data })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error al guardar la compensación'

@@ -12,6 +12,8 @@ const repairCustomerSchema = z.object({
   address: z.string().trim().max(500).optional().nullable(),
   city: z.string().trim().max(120).optional().nullable(),
   ruc: z.string().trim().max(50).optional().nullable(),
+  customer_type: z.string().trim().max(50).optional().nullable(),
+  is_wholesale: z.boolean().optional(),
 })
 
 const repairCustomerUpdateSchema = repairCustomerSchema.partial().extend({
@@ -19,14 +21,18 @@ const repairCustomerUpdateSchema = repairCustomerSchema.partial().extend({
 })
 
 function normalizeCustomerPayload(payload: z.infer<typeof repairCustomerSchema>) {
+  const isWholesale = Boolean(payload.is_wholesale || payload.customer_type === 'wholesale' || payload.customer_type === 'mayorista')
+  const customerType = isWholesale ? 'wholesale' : (payload.customer_type || 'regular')
+  const { is_wholesale, ...rest } = payload
   return {
-    ...payload,
+    ...rest,
     email: payload.email || null,
     phone: payload.phone || '',
     address: payload.address || null,
     city: payload.city || null,
     ruc: payload.ruc || null,
-    customer_type: 'regular',
+    customer_type: customerType,
+    segment: isWholesale ? 'wholesale' : 'regular',
     status: 'active' as const,
     updated_at: new Date().toISOString(),
   }

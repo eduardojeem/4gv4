@@ -120,15 +120,15 @@ export const adminNavCategories: NavCategory[] = [
                 label: 'Finanzas',
                 icon: WalletCards,
                 href: '/admin/finances',
-                description: 'GestiÃ³n de gastos, nÃ³mina y rentabilidad',
+                description: 'Gestión de gastos, nómina y rentabilidad',
                 permissions: ['finances.read']
             },
             {
                 key: 'subscriptions',
-                label: 'Suscripcion',
+                label: 'Suscripción',
                 icon: CreditCard,
                 href: '/admin/subscriptions',
-                description: 'Plan, pagos, limites y facturacion',
+                description: 'Plan, pagos, límites y facturación',
                 permissions: ['billing.manage']
             },
             {

@@ -145,19 +145,27 @@ beforeAll(() => {
     createMockWebVitalEntry: typeof createMockWebVitalEntry
   }).createMockWebVitalEntry = createMockWebVitalEntry
 
-  // Mock de IntersectionObserver
-  global.IntersectionObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn()
-  }))
+  // Mocks de observers. Van como clases y no como vi.fn(() => ({...})): una
+  // implementación de flecha no se puede invocar con `new`, y las librerías
+  // que instancian el observer de verdad (Radix usa ResizeObserver al medir
+  // tooltips y popovers) rompen con "is not a constructor".
+  class IntersectionObserverMock {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+    takeRecords = vi.fn(() => [])
+    root = null
+    rootMargin = ''
+    thresholds: number[] = []
+  }
+  global.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver
 
-  // Mock de ResizeObserver
-  global.ResizeObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn()
-  }))
+  class ResizeObserverMock {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+  }
+  global.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
 
   // Mock de matchMedia
   Object.defineProperty(window, 'matchMedia', {

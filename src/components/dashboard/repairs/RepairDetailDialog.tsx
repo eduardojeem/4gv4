@@ -22,14 +22,15 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Input } from '@/components/ui/input'
 import {
   User, Phone, Mail, MapPin, Calendar, Wrench,
   Smartphone, Tablet, Laptop, Monitor, AlertCircle,
   DollarSign, Clock, FileText, Image as ImageIcon,
-  Edit, Trash, Printer, Package as PackageIcon, CheckCircle,
+  Edit, Trash, Trash2, Printer, Package as PackageIcon, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
   PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown,
-  Loader2
+  Loader2, Plus, Search, Sparkles, History, FileCheck2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -44,6 +45,7 @@ import { formatCurrency } from '@/lib/currency'
 import { PatternDrawer } from './PatternDrawer'
 import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
 import { RepairWarrantyCase } from './RepairWarrantyCase'
+import { DeviceHistoryTimeline } from './DeviceHistoryTimeline'
 import { printRepairReceipt, generateRepairShareText, RepairPrintPayload } from '@/lib/repair-receipt'
 import {
   getWarrantyStatus,
@@ -100,15 +102,192 @@ export function RepairDetailDialog({
   const [isQuickPriceOpen, setIsQuickPriceOpen] = useState(false)
   const { settings } = useSharedSettings()
   const [verificationHash, setVerificationHash] = useState<string | undefined>(undefined)
+  const [deliveredEditWarningOpen, setDeliveredEditWarningOpen] = useState(false)
+
+  // Estado local sincronizado para actualización reactiva instantánea
+  const [localRepair, setLocalRepair] = useState<Repair | null>(repair)
+
+  React.useEffect(() => {
+    setLocalRepair(repair)
+  }, [repair])
+
+  const activeRepair = localRepair || repair
+
+  // Modal de búsqueda de repuestos en inventario dentro del detalle
+  const [inventorySearchOpen, setInventorySearchOpen] = useState(false)
+  const [inventorySearchQuery, setInventorySearchQuery] = useState('')
+  const [inventoryProducts, setInventoryProducts] = useState<Array<{
+    id: string
+    name: string
+    sku?: string | null
+    sale_price?: number | null
+    offer_price?: number | null
+    wholesale_price?: number | null
+    purchase_price?: number | null
+    stock_quantity?: number | null
+    category?: { name?: string | null } | null
+  }>>([])
+  const [loadingInventory, setLoadingInventory] = useState(false)
+  const [isSavingParts, setIsSavingParts] = useState(false)
+
+  const customerIsWholesale = Boolean(
+    activeRepair?.customer && (
+      (activeRepair.customer as { customer_type?: string; segment?: string; is_wholesale?: boolean }).customer_type === 'wholesale' ||
+      (activeRepair.customer as { customer_type?: string; segment?: string; is_wholesale?: boolean }).segment === 'wholesale' ||
+      (activeRepair.customer as { customer_type?: string; segment?: string; is_wholesale?: boolean }).is_wholesale
+    )
+  )
+
+  // Fetch de productos físicos de inventario con debounce
+  React.useEffect(() => {
+    if (!inventorySearchOpen) {
+      setInventoryProducts([])
+      setInventorySearchQuery('')
+      return
+    }
+
+    const controller = new AbortController()
+    setLoadingInventory(true)
+
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/products?per_page=50&strict_branch_stock=true&query=${encodeURIComponent(inventorySearchQuery)}`,
+          {
+            signal: controller.signal,
+          }
+        )
+        const payload = await res.json().catch(() => ({}))
+        const productsList = Array.isArray(payload?.data?.products) ? payload.data.products : []
+        const partsOnly = productsList.filter((p: { unit_measure?: string | null; category?: { name?: string | null } | null }) => {
+          const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
+          const isServiceCategory = (p.category?.name || '').toLowerCase().includes('servicio')
+          return !isServiceUnit && !isServiceCategory
+        })
+        setInventoryProducts(partsOnly)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setInventoryProducts([])
+        }
+      } finally {
+        setLoadingInventory(false)
+      }
+    }, 250)
+
+    return () => {
+      clearTimeout(t)
+      controller.abort()
+    }
+  }, [inventorySearchOpen, inventorySearchQuery])
+
+  const handleSaveParts = async (nextParts: Repair['parts']) => {
+    if (!activeRepair) return
+    setIsSavingParts(true)
+    try {
+      const payloadParts = nextParts.map(p => ({
+        name: p.name,
+        cost: Number(p.cost) || 0,
+        internalCost: p.internalCost,
+        quantity: Math.max(1, Number(p.quantity) || 1),
+        stockAvailable: p.stockAvailable,
+        supplier: p.supplier || 'Inventario Local',
+        partNumber: p.partNumber || '',
+        productId: p.productId || (p as { product_id?: string }).product_id,
+      }))
+
+      const res = await fetch(`/api/repairs/${activeRepair.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ parts: payloadParts }),
+      })
+
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(data?.error || 'No se pudieron actualizar los repuestos')
+      }
+
+      setLocalRepair(prev => prev ? {
+        ...prev,
+        parts: nextParts,
+      } : null)
+
+      toast.success('Repuestos actualizados exitosamente')
+    } catch (err) {
+      const error = err as Error
+      toast.error(error.message || 'Error al guardar repuestos')
+    } finally {
+      setIsSavingParts(false)
+    }
+  }
+
+  const handleAddInventoryProduct = async (product: typeof inventoryProducts[number]) => {
+    if (!activeRepair) return
+    const existingIndex = (activeRepair.parts || []).findIndex(
+      p => (p.productId || (p as { product_id?: string }).product_id) === product.id
+    )
+
+    const partPrice = customerIsWholesale && product.wholesale_price
+      ? product.wholesale_price
+      : (product.offer_price || product.sale_price || 0)
+
+    let nextParts = [...(activeRepair.parts || [])]
+
+    if (existingIndex >= 0) {
+      const cur = nextParts[existingIndex]
+      const nextQuantity = (cur.quantity || 1) + 1
+      nextParts[existingIndex] = {
+        ...cur,
+        quantity: nextQuantity,
+      }
+      toast.success(`Cantidad de "${product.name}" actualizada a ${nextQuantity}`)
+    } else {
+      nextParts.push({
+        id: nextParts.length + 1,
+        name: product.name,
+        cost: partPrice,
+        internalCost: product.purchase_price ?? undefined,
+        quantity: 1,
+        stockAvailable: product.stock_quantity ?? null,
+        supplier: 'Inventario Local',
+        partNumber: product.sku || '',
+        productId: product.id,
+      })
+      toast.success(`Repuesto "${product.name}" agregado a la orden`)
+    }
+
+    await handleSaveParts(nextParts)
+  }
+
+  const handleUpdateQuantity = async (index: number, newQty: number) => {
+    if (!activeRepair) return
+    let nextParts = [...(activeRepair.parts || [])]
+    if (newQty <= 0) {
+      nextParts.splice(index, 1)
+    } else {
+      nextParts[index] = {
+        ...nextParts[index],
+        quantity: newQty,
+      }
+    }
+    await handleSaveParts(nextParts)
+  }
+
+  const handleRemovePart = async (index: number) => {
+    if (!activeRepair) return
+    const nextParts = (activeRepair.parts || []).filter((_, i) => i !== index)
+    await handleSaveParts(nextParts)
+  }
 
   // Fetch verification hash when repair is loaded
   React.useEffect(() => {
     const controller = new AbortController()
 
-    if (repair && open) {
-      const ticketNum = repair.ticketNumber || repair.id
-      const customerName = repair.customer.name
-      const dateObj = new Date(repair.createdAt)
+    if (activeRepair && open) {
+      const ticketNum = activeRepair.ticketNumber || activeRepair.id
+      const customerName = activeRepair.customer.name
+      const dateObj = new Date(activeRepair.createdAt)
 
       fetch('/api/repairs/sign', {
         method: 'POST',
@@ -135,7 +314,7 @@ export function RepairDetailDialog({
       setVerificationHash(undefined)
     }
     return () => controller.abort()
-  }, [repair, open])
+  }, [activeRepair, open])
 
   React.useEffect(() => {
     if (!open) {
@@ -143,22 +322,22 @@ export function RepairDetailDialog({
     }
   }, [open])
 
-  if (!repair) return null
+  if (!activeRepair) return null
 
-  const StatusIcon = statusConfig[repair.status]?.icon || AlertCircle
-  const DeviceIcon = deviceTypeConfig[repair.deviceType]?.icon || Smartphone
-  const isPaused = repair.status === 'pausado'
-  const isCancelled = repair.status === 'cancelado'
-  const currentStepIndex = isPaused ? 2 : STATUS_FLOW.indexOf(repair.status)
-  const partsTotal = (repair.parts || []).reduce((acc, part) => acc + (part.cost * part.quantity), 0)
-  const displayCost = repair.finalCost !== null && repair.finalCost !== undefined
-    ? repair.finalCost
-    : (repair.estimatedCost || 0)
+  const StatusIcon = statusConfig[activeRepair.status]?.icon || AlertCircle
+  const DeviceIcon = deviceTypeConfig[activeRepair.deviceType]?.icon || Smartphone
+  const isPaused = activeRepair.status === 'pausado'
+  const isCancelled = activeRepair.status === 'cancelado'
+  const currentStepIndex = isPaused ? 2 : STATUS_FLOW.indexOf(activeRepair.status)
+  const partsTotal = (activeRepair.parts || []).reduce((acc, part) => acc + (part.cost * part.quantity), 0)
+  const displayCost = activeRepair.finalCost !== null && activeRepair.finalCost !== undefined
+    ? activeRepair.finalCost
+    : (activeRepair.estimatedCost || 0)
   const financial = getRepairFinancialPresentation({
-    status: repair.status,
-    finalCost: repair.finalCost,
-    estimatedCost: repair.estimatedCost,
-    paidAmount: repair.paidAmount,
+    status: activeRepair.status,
+    finalCost: activeRepair.finalCost,
+    estimatedCost: activeRepair.estimatedCost,
+    paidAmount: activeRepair.paidAmount,
   })
 
   const formatDate = (dateString?: string | null) => {
@@ -199,12 +378,24 @@ export function RepairDetailDialog({
         typeLabel: deviceTypeConfig[repair.deviceType]?.label || repair.deviceType,
         brand: repair.brand,
         model: repair.model,
+        serialNumber: repair.serialNumber,
+        imei: repair.imei || repair.serialNumber,
+        accessType: repair.accessType,
+        accessPassword: repair.accessPassword,
         issue: repair.issue,
         description: repair.description,
         technician: repair.technician?.name || 'Sin asignar',
         estimatedCost: repair.estimatedCost,
+        finalCost: repair.finalCost,
+        paidAmount: repair.paidAmount,
         ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()
       }],
+      finalCost: repair.finalCost || undefined,
+      estimatedCost: repair.estimatedCost,
+      paidAmount: repair.paidAmount,
+      warrantyMonths: repair.warrantyMonths,
+      warrantyType: repair.warrantyType,
+      warrantyNotes: repair.warrantyNotes,
       company: {
         name: settings.companyName,
         phone: settings.companyPhone,
@@ -216,7 +407,7 @@ export function RepairDetailDialog({
     }
   }
 
-  const handlePrint = (type: 'customer' | 'technician') => {
+  const handlePrint = (type: 'customer' | 'technician' | 'technician_detailed') => {
     if (!repair) return
     const payload = getPrintPayload()
     printRepairReceipt(type, payload)
@@ -335,8 +526,10 @@ export function RepairDetailDialog({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
+        data-help-id="repair-detail"
         showCloseButton={false}
         className={cn(
           "flex flex-col p-0 gap-0 overflow-hidden transition-all duration-300",
@@ -381,6 +574,14 @@ export function RepairDetailDialog({
                   <span>{deviceTypeConfig[repair.deviceType]?.label || repair.deviceType}</span>
                   <span className="text-muted-foreground/50">•</span>
                   <span>{repair.brand} {repair.model}</span>
+                  {(repair.serialNumber || repair.imei) && (
+                    <>
+                      <span className="text-muted-foreground/50">•</span>
+                      <span className="font-mono text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">
+                        IMEI/SN: {repair.serialNumber || repair.imei}
+                      </span>
+                    </>
+                  )}
                 </DialogDescription>
               </div>
             </div>
@@ -445,16 +646,46 @@ export function RepairDetailDialog({
                   <DropdownMenuItem onClick={() => handlePrint('technician')} className="items-start gap-3 py-2.5">
                     <Wrench className="h-4 w-4 mt-0.5 shrink-0" />
                     <div>
-                      <p className="font-medium">Ficha técnica (taller)</p>
+                      <p className="font-medium">Ficha técnica simple (taller)</p>
                       <p className="text-xs text-muted-foreground">
-                        Orden interna con diagnóstico y detalle del trabajo
+                        Resumen para pegar en el equipo
+                      </p>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handlePrint('technician_detailed')} className="items-start gap-3 py-2.5">
+                    <FileCheck2 className="h-4 w-4 mt-0.5 shrink-0 text-indigo-600" />
+                    <div>
+                      <p className="font-medium">Ficha de laboratorio (completa)</p>
+                      <p className="text-xs text-muted-foreground">
+                        Incluye PIN/Patrón, checklist de banco y notas técnicas
                       </p>
                     </div>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {activeRepair.status === 'entregado' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setWarrantyClaimOpen(true)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs gap-1.5 shadow-xs"
+                >
+                  <Shield className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Procesar Garantía</span>
+                </Button>
+              )}
               {onEdit && (
-                <Button variant="outline" size="sm" onClick={() => onEdit(repair)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (activeRepair.status === 'entregado') {
+                      setDeliveredEditWarningOpen(true)
+                    } else {
+                      onEdit(activeRepair)
+                    }
+                  }}
+                >
                   <Edit className="h-4 w-4 sm:mr-2" />
                   <span className="hidden sm:inline">Editar</span>
                 </Button>
@@ -791,8 +1022,8 @@ export function RepairDetailDialog({
                 )}
 
                 {repair.payments && repair.payments.length > 0 && (
-                  <div className="rounded-xl border bg-card p-4 shadow-sm">
-                    <h3 className="text-sm font-semibold">Historial de pagos</h3>
+                  <div className="rounded-xl border bg-card p-4 shadow-sm" data-help-id="repair-payment-history">
+                    <h3 className="text-sm font-semibold" data-help-id="repair-audit-summary">Historial de pagos</h3>
                     <div className="mt-3 space-y-3">
                       {repair.payments.map((payment) => (
                         <div key={payment.id} className="rounded-lg border p-3 text-xs">
@@ -990,8 +1221,9 @@ export function RepairDetailDialog({
                     <TabsTrigger value="finance" className="text-xs sm:text-sm">
                       Costos y Piezas
                     </TabsTrigger>
-                    <TabsTrigger value="history" className="text-xs sm:text-sm">
-                      Historial ({repair.notes?.length || 0})
+                    <TabsTrigger value="history" className="text-xs sm:text-sm gap-1.5">
+                      <History className="h-3.5 w-3.5" />
+                      <span>Historial y Bitácora</span>
                     </TabsTrigger>
                     <TabsTrigger value="images" className="text-xs sm:text-sm">
                       Imágenes ({repair.images?.length || 0})
@@ -1088,7 +1320,7 @@ export function RepairDetailDialog({
                       <div className="flex items-center justify-between gap-3">
                         <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
                           <DollarSign className="h-4 w-4" />
-                          Resumen de Costos
+                          Resumen Económico
                         </h3>
                         {repair.status !== 'cancelado' && onQuickPriceSave && (
                           <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPriceOpen(true)}>
@@ -1099,20 +1331,26 @@ export function RepairDetailDialog({
                       </div>
                       <div className="rounded-xl border bg-card p-5 shadow-sm space-y-3">
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Mano de Obra:</span>
+                          <span className="text-muted-foreground">Mano de Obra Técnica:</span>
                           <span className="font-medium">{formatCurrency(repair.laborCost || 0)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Costo de Piezas:</span>
+                          <span className="text-muted-foreground">Repuestos e Insumos ({repair.parts?.length || 0}):</span>
                           <span className="font-medium">{formatCurrency(partsTotal)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Costo Estimado:</span>
+                          <span className="text-muted-foreground">Presupuesto Inicial:</span>
                           <span className="font-medium">{formatCurrency(repair.estimatedCost || 0)}</span>
                         </div>
+                        {repair.discountAmount && repair.discountAmount > 0 ? (
+                          <div className="flex justify-between items-center text-sm text-rose-600 dark:text-rose-400">
+                            <span>Descuento Comercial:</span>
+                            <span className="font-semibold">- {formatCurrency(repair.discountAmount)}</span>
+                          </div>
+                        ) : null}
                         <Separator />
                         <div className="flex justify-between items-center">
-                          <span className="font-semibold">Precio al cliente:</span>
+                          <span className="font-bold text-slate-900 dark:text-white">Total de la Reparación:</span>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-lg text-emerald-600 dark:text-emerald-400">
                               {formatCurrency(displayCost)}
@@ -1127,13 +1365,13 @@ export function RepairDetailDialog({
                         </div>
                         <Separator />
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Monto Pagado:</span>
+                          <span className="text-muted-foreground">Seña / Anticipo Pagado:</span>
                           <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
                             {formatCurrency(financial.paid)}
                           </span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                          <span className="font-semibold text-foreground">Saldo Pendiente:</span>
+                          <span className="font-bold text-foreground">Saldo a Cobrar al Retirar:</span>
                           <span
                             className={cn(
                               'font-bold text-base tabular-nums',
@@ -1159,7 +1397,7 @@ export function RepairDetailDialog({
                               }}
                             >
                               <DollarSign className="h-4 w-4" />
-                              Pagar monto pendiente ({formatCurrency(financial.balance)})
+                              Cobrar saldo pendiente ({formatCurrency(financial.balance)})
                             </Button>
                           </div>
                         )}
@@ -1167,45 +1405,161 @@ export function RepairDetailDialog({
                           <div className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-2 flex items-start gap-2">
                             <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
                             <span className="text-amber-700 dark:text-amber-400">
-                              El costo final aún no ha sido establecido. Se muestra el costo estimado.
+                              El total final se calcula según el presupuesto inicial acordado.
                             </span>
                           </div>
                         ) : null}
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-                        <PackageIcon className="h-4 w-4" />
-                        Piezas y Refacciones
-                      </h3>
-                      {(!repair.parts || repair.parts.length === 0) ? (
-                        <div className="bg-muted/20 border border-dashed rounded-xl p-8 text-center text-muted-foreground text-sm">
-                          No hay piezas registradas para esta reparación.
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+                            <PackageIcon className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                              Repuestos y Materiales Utilizados
+                            </h3>
+                            <p className="text-[11px] text-muted-foreground">
+                              Piezas físicas asociadas a la orden de reparación
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => setInventorySearchOpen(true)}
+                              className="gap-1.5 text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white shadow-xs"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Buscar Repuesto en Inventario
+                            </Button>
+                          )}
+                          {onEdit && activeRepair.status !== 'cancelado' && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                onClose()
+                                onEdit(activeRepair)
+                              }}
+                              className="gap-1.5 text-xs font-medium text-muted-foreground"
+                            >
+                              <Edit className="h-3 w-3" />
+                              Editar en Formulario
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {(!activeRepair.parts || activeRepair.parts.length === 0) ? (
+                        <div className="bg-slate-50/60 dark:bg-slate-900/30 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center space-y-2">
+                          <PackageIcon className="h-8 w-8 text-muted-foreground/50 mx-auto" />
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                            No hay repuestos registrados para esta reparación
+                          </p>
+                          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                            Puedes buscar repuestos en el inventario de la sucursal para añadirlos y deducir stock automáticamente.
+                          </p>
+                          {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setInventorySearchOpen(true)}
+                              className="mt-2 text-xs font-bold text-cyan-600 dark:text-cyan-400 border-cyan-300 dark:border-cyan-800 hover:bg-cyan-50 dark:hover:bg-cyan-950/30"
+                            >
+                              <Plus className="h-3.5 w-3.5 mr-1" />
+                              + Buscar Repuesto en Inventario
+                            </Button>
+                          )}
                         </div>
                       ) : (
-                        <div className="border rounded-xl overflow-x-auto shadow-sm">
-                          <table className="w-full text-sm min-w-[480px]">
-                            <thead className="bg-muted/50 text-muted-foreground font-medium">
+                        <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
+                          <table className="w-full text-xs min-w-[500px]">
+                            <thead className="bg-slate-50 dark:bg-slate-900/80 text-muted-foreground font-semibold border-b border-slate-200 dark:border-slate-800">
                               <tr>
-                                <th className="px-4 py-3 text-left">Pieza</th>
-                                <th className="px-4 py-3 text-center">Cant.</th>
-                                <th className="px-4 py-3 text-right">Costo Unit.</th>
-                                <th className="px-4 py-3 text-right">Total</th>
+                                <th className="px-4 py-3 text-left">Pieza / Repuesto</th>
+                                <th className="px-3 py-3 text-center">Cantidad</th>
+                                <th className="px-4 py-3 text-right">Precio Unit.</th>
+                                <th className="px-4 py-3 text-right">Subtotal</th>
+                                {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' && (
+                                  <th className="px-3 py-3 text-center w-14">Acción</th>
+                                )}
                               </tr>
                             </thead>
-                            <tbody className="divide-y">
-                              {repair.parts.map((part, index) => (
-                                <tr key={index} className="bg-background">
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                              {activeRepair.parts.map((part, index) => (
+                                <tr key={index} className="bg-white dark:bg-slate-950/40 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
                                   <td className="px-4 py-3">
-                                    <div className="font-medium">{part.name}</div>
-                                    <div className="text-xs text-muted-foreground">{part.partNumber}</div>
+                                    <div className="font-bold text-slate-900 dark:text-slate-100">{part.name}</div>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      {part.partNumber && (
+                                        <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-muted-foreground">
+                                          SKU: {part.partNumber}
+                                        </span>
+                                      )}
+                                      {part.supplier && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          • {part.supplier}
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
-                                  <td className="px-4 py-3 text-center">{part.quantity}</td>
-                                  <td className="px-4 py-3 text-right">{formatCurrency(part.cost)}</td>
-                                  <td className="px-4 py-3 text-right font-medium">
+                                  <td className="px-3 py-3 text-center">
+                                    {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' ? (
+                                      <div className="inline-flex items-center border border-slate-200 dark:border-slate-800 rounded-lg p-0.5 bg-slate-50 dark:bg-slate-900">
+                                        <button
+                                          type="button"
+                                          disabled={isSavingParts}
+                                          onClick={() => handleUpdateQuantity(index, (part.quantity || 1) - 1)}
+                                          className="h-6 w-6 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold"
+                                        >
+                                          -
+                                        </button>
+                                        <span className="px-2 font-bold text-xs tabular-nums">
+                                          {part.quantity}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          disabled={isSavingParts}
+                                          onClick={() => handleUpdateQuantity(index, (part.quantity || 1) + 1)}
+                                          className="h-6 w-6 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span className="font-bold text-xs tabular-nums">{part.quantity}</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-medium text-slate-700 dark:text-slate-300">
+                                    {formatCurrency(part.cost)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                                     {formatCurrency(part.cost * part.quantity)}
                                   </td>
+                                  {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' && (
+                                    <td className="px-3 py-3 text-center">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        disabled={isSavingParts}
+                                        onClick={() => handleRemovePart(index)}
+                                        className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
+                                        title="Eliminar repuesto"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
@@ -1215,37 +1569,18 @@ export function RepairDetailDialog({
                     </div>
                   </TabsContent>
 
-                  {/* Historial y Notas */}
-                  <TabsContent value="history" className="mt-4 space-y-2">
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      Notas de la Reparación
-                    </h3>
-
-                    {(!repair.notes || repair.notes.length === 0) ? (
-                      <div className="bg-muted/20 border border-dashed rounded-xl p-8 text-center text-muted-foreground text-sm">
-                        No hay notas registradas.
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {repair.notes.map((note, index) => (
-                          <div key={index} className="flex gap-4 rounded-xl border bg-card p-4 shadow-sm">
-                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                              <User className="h-4 w-4 text-primary" />
-                            </div>
-                            <div className="space-y-1 flex-1 min-w-0">
-                              <div className="flex justify-between items-start gap-2">
-                                <span className="font-medium text-sm">{note.author}</span>
-                                <span className="text-xs text-muted-foreground shrink-0">
-                                  {formatDate(note.timestamp)}
-                                </span>
-                              </div>
-                              <p className="text-sm text-foreground/90">{note.text}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  {/* Historial del Celular, Eventos y Bitácora */}
+                  <TabsContent value="history" className="mt-4 space-y-4">
+                    <DeviceHistoryTimeline
+                      repair={activeRepair}
+                      onOpenWarrantyModal={() => setWarrantyClaimOpen(true)}
+                      onNoteAdded={(notes) => {
+                        setLocalRepair((prev) => (prev ? { ...prev, notes } : null))
+                      }}
+                      onSelectPreviousRepair={(prevRepair) => {
+                        setLocalRepair(prevRepair)
+                      }}
+                    />
                   </TabsContent>
 
                   {/* Imágenes */}
@@ -1336,7 +1671,7 @@ export function RepairDetailDialog({
                   }}
                 >
                   <PackageCheck className="h-4 w-4" />
-                  Entregar
+                  <span data-help-id="repair-delivery">Entregar</span>
                 </Button>
               )}
             </>
@@ -1362,12 +1697,330 @@ export function RepairDetailDialog({
         {onQuickPriceSave && (
           <RepairQuickPriceDialog
             open={isQuickPriceOpen}
-            repair={repair}
+            repair={activeRepair}
             onOpenChange={setIsQuickPriceOpen}
-            onSave={(update) => onQuickPriceSave(repair, update)}
+            onSave={(update) => onQuickPriceSave(activeRepair, update)}
           />
         )}
       </DialogContent>
     </Dialog>
+
+    {/* Modal de Búsqueda de Repuestos en Inventario (Dentro de Detalle) */}
+    <Dialog open={inventorySearchOpen} onOpenChange={setInventorySearchOpen}>
+      <DialogContent className="sm:max-w-[640px] max-h-[88vh] flex flex-col p-0 overflow-hidden rounded-2xl bg-white dark:bg-slate-950 shadow-2xl border-slate-200 dark:border-slate-800">
+        <DialogHeader className="p-5 pb-3 border-b bg-gradient-to-r from-cyan-600/10 via-teal-600/10 to-blue-600/10 dark:from-cyan-950/40 dark:via-teal-950/40 dark:to-blue-950/40">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+                <PackageIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                  Buscar Repuesto en Inventario
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Selecciona repuestos físicos para agregar a la orden #{activeRepair.ticketNumber || activeRepair.id.slice(0, 8).toUpperCase()}.
+                </DialogDescription>
+              </div>
+            </div>
+            {customerIsWholesale && (
+              <Badge className="bg-violet-600 text-white text-[10px] font-bold px-2 py-0.5 shadow-xs">
+                Tarifa Mayorista
+              </Badge>
+            )}
+          </div>
+        </DialogHeader>
+
+        <div className="p-4 pb-3 border-b bg-slate-50/70 dark:bg-slate-900/30 space-y-2.5">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={inventorySearchQuery}
+              onChange={(e) => setInventorySearchQuery(e.target.value)}
+              placeholder="Buscar por nombre, modelo o código SKU (ej. Pantalla A05, Batería iPhone)..."
+              className="pl-9 pr-8 h-9 text-xs rounded-xl"
+              autoFocus
+            />
+            {inventorySearchQuery && (
+              <button
+                type="button"
+                onClick={() => setInventorySearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Filtros rápidos por tipo de repuesto */}
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            {[
+              { label: 'Todos', query: '' },
+              { label: '📱 Pantallas / Módulos', query: 'pantalla' },
+              { label: '🔋 Baterías', query: 'bateria' },
+              { label: '⚡ Pines de carga', query: 'pin' },
+              { label: '🛡️ Tapas / Carcasas', query: 'tapa' },
+              { label: '🔬 Cámaras / Flex', query: 'flex' },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => setInventorySearchQuery(chip.query)}
+                className={cn(
+                  "text-[10px] font-semibold px-2.5 py-1 rounded-full border transition-all cursor-pointer",
+                  (chip.query === '' && inventorySearchQuery === '') || (chip.query !== '' && inventorySearchQuery.toLowerCase().includes(chip.query))
+                    ? "bg-cyan-600 text-white border-cyan-600 shadow-xs"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                )}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 min-h-[320px] max-h-[50vh]">
+          {loadingInventory ? (
+            <div className="flex flex-col items-center justify-center py-20 text-sm text-muted-foreground gap-2">
+              <Loader2 className="h-6 w-6 animate-spin text-cyan-600 dark:text-cyan-400" />
+              <span>Consultando stock de repuestos en sucursal...</span>
+            </div>
+          ) : inventoryProducts.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground px-1 mb-1">
+                <span>{inventoryProducts.length} repuestos encontrados</span>
+                <span>Precio unitario</span>
+              </div>
+              {inventoryProducts.map((product) => {
+                const outOfStock = product.stock_quantity === 0
+                const alreadyAddedIndex = (activeRepair.parts || []).findIndex(
+                  p => (p.productId || (p as { product_id?: string }).product_id) === product.id
+                )
+                const currentQuantity = alreadyAddedIndex >= 0 ? (activeRepair.parts[alreadyAddedIndex].quantity || 0) : 0
+                const partPrice = customerIsWholesale && product.wholesale_price
+                  ? product.wholesale_price
+                  : (product.offer_price || product.sale_price || 0)
+
+                return (
+                  <div
+                    key={product.id}
+                    className={cn(
+                      "group relative flex items-center justify-between p-3 rounded-2xl border transition-all",
+                      alreadyAddedIndex >= 0
+                        ? "bg-cyan-50/40 dark:bg-cyan-950/20 border-cyan-300 dark:border-cyan-800 shadow-xs"
+                        : outOfStock
+                          ? "bg-slate-50/50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-800 opacity-60"
+                          : "bg-white dark:bg-slate-900/60 border-slate-200/80 dark:border-slate-800 hover:border-cyan-300 dark:hover:border-cyan-800 hover:shadow-xs"
+                    )}
+                  >
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-xs text-slate-900 dark:text-slate-100">
+                          {product.name}
+                        </span>
+                        {product.sku && (
+                          <span className="text-[10px] font-mono text-muted-foreground bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                            SKU: {product.sku}
+                          </span>
+                        )}
+                        {alreadyAddedIndex >= 0 && (
+                          <Badge className="bg-cyan-600 text-white text-[9px] px-1 py-0 h-4">
+                            En la orden ({currentQuantity})
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <span className={cn(
+                          "font-semibold flex items-center gap-1",
+                          outOfStock
+                            ? "text-red-600 dark:text-red-400"
+                            : (product.stock_quantity ?? 0) <= 2
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-emerald-600 dark:text-emerald-400"
+                        )}>
+                          • Stock: {product.stock_quantity ?? 0} un.
+                        </span>
+                        {product.category?.name && (
+                          <span className="text-muted-foreground">
+                            {product.category.name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0 flex items-center gap-3 pl-3">
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100 tabular-nums block">
+                          {formatCurrency(partPrice)}
+                        </span>
+                        {customerIsWholesale && product.wholesale_price && (
+                          <span className="text-[9px] text-violet-600 dark:text-violet-400 font-bold block">
+                            Mayorista
+                          </span>
+                        )}
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isSavingParts || (outOfStock && alreadyAddedIndex < 0)}
+                        onClick={() => handleAddInventoryProduct(product)}
+                        className={cn(
+                          "h-7 px-2.5 text-[11px] font-bold rounded-xl shadow-xs transition-all cursor-pointer",
+                          alreadyAddedIndex >= 0
+                            ? "bg-cyan-600 hover:bg-cyan-700 text-white"
+                            : "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-cyan-600 dark:hover:bg-cyan-600 dark:hover:text-white"
+                        )}
+                      >
+                        {isSavingParts ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : alreadyAddedIndex >= 0 ? (
+                          "+1 un."
+                        ) : (
+                          "+ Agregar"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <PackageIcon className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                {inventorySearchQuery ? 'No se encontraron repuestos con ese criterio' : 'Escribe para buscar repuestos'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+                {inventorySearchQuery
+                  ? 'Verifica el nombre o SKU de la pieza en inventario.'
+                  : 'Filtra por nombre de pieza (ej. Pantalla, Batería) o código SKU.'}
+              </p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* Modal de Advertencia al Intentar Editar Reparación Entregada */}
+    <Dialog open={deliveredEditWarningOpen} onOpenChange={setDeliveredEditWarningOpen}>
+      <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden rounded-2xl bg-white dark:bg-slate-950 border-amber-300 dark:border-amber-800/80 shadow-2xl">
+        <div className="p-5 pb-4 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/5 dark:from-amber-950/50 dark:via-orange-950/30 dark:to-transparent border-b border-amber-200 dark:border-amber-800/60">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-md shadow-amber-500/20 shrink-0">
+              <Shield className="h-6 w-6" />
+            </div>
+            <div>
+              <DialogTitle className="text-base sm:text-lg font-extrabold text-amber-950 dark:text-amber-100">
+                Reparación Entregada y Cerrada
+              </DialogTitle>
+              <DialogDescription className="text-xs text-amber-800 dark:text-amber-300 font-medium">
+                Orden #{activeRepair.ticketNumber || activeRepair.id.slice(0, 8).toUpperCase()} · Cliente: {activeRepair.customer.name}
+              </DialogDescription>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4 text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+          <div className="bg-amber-50/80 dark:bg-amber-950/30 p-3.5 rounded-xl border border-amber-200 dark:border-amber-800/50 space-y-1.5">
+            <p className="font-bold text-amber-900 dark:text-amber-200">
+              ⚠️ ¿Por qué no se debe editar directamente una orden entregada?
+            </p>
+            <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90">
+              Esta orden ya fue finalizada, cobrada y retirada. Los repuestos utilizados salieron del inventario y los costos fueron asentados en caja. Alterar la orden original alteraría el balance histórico del taller.
+            </p>
+          </div>
+
+          <div className="space-y-2.5">
+            <p className="font-bold text-slate-900 dark:text-slate-100 text-xs flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              ¿Cómo proceder si el cliente tiene un reclamo o reingreso?
+            </p>
+            
+            <div className="space-y-2 text-[11px]">
+              <div className="flex gap-2.5 items-start p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <span className="flex h-5 w-5 rounded-full bg-amber-600 text-white font-bold items-center justify-center shrink-0 text-[10px]">
+                  1
+                </span>
+                <div>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                    Abrir Reclamo de Garantía (Recomendado)
+                  </span>
+                  Crea un caso post-venta vinculado al equipo sin alterar la orden original ni duplicar cargos.
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 items-start p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <span className="flex h-5 w-5 rounded-full bg-amber-600 text-white font-bold items-center justify-center shrink-0 text-[10px]">
+                  2
+                </span>
+                <div>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                    Evaluación Técnica de Cobertura
+                  </span>
+                  El taller determina si la falla corresponde a repuesto defectuoso o mano de obra con garantía.
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 items-start p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <span className="flex h-5 w-5 rounded-full bg-amber-600 text-white font-bold items-center justify-center shrink-0 text-[10px]">
+                  3
+                </span>
+                <div>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                    Resolución y Trazabilidad
+                  </span>
+                  Se genera el reingreso o cambio de pieza con cobertura del 100% o porcentaje aplicable.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setDeliveredEditWarningOpen(false)
+              if (onEdit) {
+                onClose()
+                onEdit(activeRepair)
+              }
+            }}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Continuar a edición de datos menores
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setDeliveredEditWarningOpen(false)}
+              className="text-xs"
+            >
+              Cerrar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setDeliveredEditWarningOpen(false)
+                setWarrantyClaimOpen(true)
+              }}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs gap-1.5 shadow-sm"
+            >
+              <Shield className="h-3.5 w-3.5" />
+              Procesar como Garantía
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }

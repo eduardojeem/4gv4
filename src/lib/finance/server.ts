@@ -1278,7 +1278,7 @@ export async function listPayrollRuns(
   const { data: entries, error: entriesError } = runIds.length
     ? await admin
         .from('payroll_entries')
-        .select('id, payroll_run_id, employee_id, employee_role, net_amount, paid_amount, payment_status')
+        .select('id, payroll_run_id, employee_id, employee_role, base_amount, commission_amount, adjustment_amount, gross_amount, net_amount, paid_amount, payment_status')
         .eq('organization_id', organizationId)
         .in('payroll_run_id', runIds)
     : { data: [], error: null }
@@ -1298,11 +1298,168 @@ export async function listPayrollRuns(
         const profile = profileMap.get(entry.employee_id)
         return {
           ...entry,
+          base_amount: Number(entry.base_amount) || 0,
+          commission_amount: Number(entry.commission_amount) || 0,
+          adjustment_amount: Number(entry.adjustment_amount) || 0,
+          gross_amount: Number(entry.gross_amount) || 0,
           outstanding_amount: Math.max(0, Number(entry.net_amount) - Number(entry.paid_amount)),
           employee_display_name: profile?.full_name || profile?.email || entry.employee_id,
         }
       }),
   }))
+}
+
+export async function getPayrollEntryCommissions(
+  organizationId: string,
+  payrollEntryId: string,
+) {
+  const admin = createAdminSupabase()
+  const { data: entry, error: entryError } = await admin
+    .from('payroll_entries')
+    .select('id, payroll_run_id, employee_id, employee_role, base_amount, commission_amount, adjustment_amount, gross_amount, net_amount, paid_amount, payment_status, payroll_runs(period_from, period_to, status)')
+    .eq('organization_id', organizationId)
+    .eq('id', payrollEntryId)
+    .maybeSingle()
+
+  if (entryError) throw toFinanceApiError(entryError)
+  if (!entry) throw new FinanceApiError('Entrada de nómina no encontrada.', 404, 'NOT_FOUND')
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('id, full_name, email')
+    .eq('id', entry.employee_id)
+    .maybeSingle()
+
+  // Buscar comisiones bloqueadas a esta entrada o asociadas al período
+  const { data: linkedCommissions } = await admin
+    .from('payroll_entry_commissions')
+    .select('earned_commission_id')
+    .eq('organization_id', organizationId)
+    .eq('payroll_entry_id', payrollEntryId)
+
+  const linkedIds = (linkedCommissions ?? []).map((lc) => lc.earned_commission_id)
+
+  let commissionsQuery = admin
+    .from('earned_commissions')
+    .select('id, employee_id, employee_role, source_type, origin_type, origin_id, origin_key, occurred_on, basis_amount, amount, rule_snapshot, created_at')
+    .eq('organization_id', organizationId)
+    .eq('employee_id', entry.employee_id)
+
+  if (linkedIds.length > 0) {
+    commissionsQuery = commissionsQuery.in('id', linkedIds)
+  } else {
+    const run = Array.isArray(entry.payroll_runs) ? entry.payroll_runs[0] : entry.payroll_runs
+    if (run?.period_from && run?.period_to) {
+      commissionsQuery = commissionsQuery
+        .gte('occurred_on', run.period_from)
+        .lte('occurred_on', run.period_to)
+    }
+  }
+
+  const { data: earnedList, error: earnedError } = await commissionsQuery.order('occurred_on', { ascending: false })
+  if (earnedError) throw toFinanceApiError(earnedError)
+
+  const commissions = earnedList ?? []
+  const saleIds = commissions
+    .filter((c) => c.source_type === 'sale' || c.source_type === 'product' || c.source_type === 'category' || c.origin_type === 'sale' || c.origin_type === 'sale_item')
+    .map((c) => c.origin_id)
+
+  const repairIds = commissions
+    .filter((c) => c.source_type === 'repair' || c.source_type === 'repair_labor' || c.origin_type === 'repair')
+    .map((c) => c.origin_id)
+
+  // Contexto de ventas
+  const { data: salesData } = saleIds.length
+    ? await admin.from('sales').select('id, code, total_amount, created_at').in('id', saleIds)
+    : { data: [] }
+  const salesMap = new Map((salesData ?? []).map((s) => [s.id, s]))
+
+  // Contexto de productos en ventas
+  const { data: saleItemsAttribution } = saleIds.length
+    ? await admin.from('commission_sale_item_attributions').select('sale_item_id, sale_id, product_id, quantity, subtotal').in('sale_id', saleIds)
+    : { data: [] }
+  const productIds = (saleItemsAttribution ?? []).map((sia) => sia.product_id).filter(Boolean) as string[]
+
+  const { data: productsData } = productIds.length
+    ? await admin.from('products').select('id, name, sku').in('id', productIds)
+    : { data: [] }
+  const productsMap = new Map((productsData ?? []).map((p) => [p.id, p]))
+
+  // Contexto de reparaciones
+  const { data: repairsData } = repairIds.length
+    ? await admin.from('repairs').select('id, ticket_number, device_brand, device_model, final_cost, estimated_cost, created_at').in('id', repairIds)
+    : { data: [] }
+  const repairsMap = new Map((repairsData ?? []).map((r) => [r.id, r]))
+
+  const items = commissions.map((c) => {
+    let referenceCode = ''
+    let title = ''
+    let details = ''
+
+    const rule = (c.rule_snapshot as Record<string, unknown>) ?? {}
+    const ruleCalcType = rule.calculation_type === 'fixed' ? 'fixed' : 'percentage'
+    const ruleValue = Number(rule.value) || 0
+    const ruleExplanation =
+      ruleCalcType === 'percentage'
+        ? `${ruleValue}% sobre importe base`
+        : `Gs. ${Math.round(ruleValue).toLocaleString('es-PY')} fijo por operación`
+
+    if (c.source_type === 'repair' || c.source_type === 'repair_labor' || c.origin_type === 'repair') {
+      const rep = repairsMap.get(c.origin_id)
+      referenceCode = rep?.ticket_number ? `#REP-${rep.ticket_number}` : 'Reparación'
+      const device = [rep?.device_brand, rep?.device_model].filter(Boolean).join(' ')
+      title = device ? `Reparación: ${device}` : 'Servicio Técnico / Reparación'
+      details = c.source_type === 'repair_labor' ? 'Mano de obra técnica completada' : 'Reparación completada'
+    } else {
+      const sale = salesMap.get(c.origin_id)
+      referenceCode = sale?.code ? `Venta ${sale.code}` : 'Venta'
+      const sia = (saleItemsAttribution ?? []).find((a) => a.sale_id === c.origin_id)
+      const prod = sia?.product_id ? productsMap.get(sia.product_id) : null
+
+      if (prod) {
+        title = prod.name
+        details = `Venta de producto (${Number(sia?.quantity) || 1} un.)`
+      } else {
+        title = referenceCode
+        details = 'Comisión por venta comercial'
+      }
+    }
+
+    return {
+      id: c.id,
+      sourceType: c.source_type,
+      originType: c.origin_type,
+      occurredOn: c.occurred_on,
+      referenceCode,
+      title,
+      details,
+      basisAmount: Number(c.basis_amount) || 0,
+      commissionAmount: Number(c.amount) || 0,
+      ruleSnapshot: {
+        calculationType: ruleCalcType,
+        value: ruleValue,
+        explanation: ruleExplanation,
+      },
+    }
+  })
+
+  return {
+    entry: {
+      id: entry.id,
+      employeeId: entry.employee_id,
+      employeeDisplayName: profile?.full_name || profile?.email || entry.employee_id,
+      employeeRole: entry.employee_role,
+      baseAmount: Number(entry.base_amount) || 0,
+      commissionAmount: Number(entry.commission_amount) || 0,
+      adjustmentAmount: Number(entry.adjustment_amount) || 0,
+      grossAmount: Number(entry.gross_amount) || 0,
+      netAmount: Number(entry.net_amount) || 0,
+      paidAmount: Number(entry.paid_amount) || 0,
+      outstandingAmount: Math.max(0, Number(entry.net_amount) - Number(entry.paid_amount)),
+      paymentStatus: entry.payment_status,
+    },
+    commissions: items,
+  }
 }
 
 export async function getPayrollEntryBranch(

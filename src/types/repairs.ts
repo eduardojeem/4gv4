@@ -125,6 +125,8 @@ export interface Repair {
   deviceType: DeviceType
   brand: string
   model: string
+  serialNumber?: string
+  imei?: string
   issue: string
   description: string
   accessType?: 'none' | 'pin' | 'password' | 'pattern' | 'biometric' | 'other'

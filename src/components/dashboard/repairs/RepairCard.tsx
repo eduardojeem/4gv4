@@ -18,6 +18,7 @@ import { formatCurrency } from '@/lib/currency'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
+import { WarrantyBadge } from './WarrantyBadge'
 
 interface RepairCardProps {
   repair: Repair
@@ -121,15 +122,20 @@ export const RepairCard = memo<RepairCardProps>(
             </div>
           </div>
 
-          {/* Footer: Status + Date + Cost */}
-          <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-slate-800">
-            <Badge
-              variant="outline"
-              className={cn('text-[10px] px-1.5 py-0 h-5 font-medium', status.color)}
-            >
-              {status.label}
-            </Badge>
-            <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500">
+          {/* Footer: Status + Date + Cost + Warranty */}
+          <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-slate-800 gap-1 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge
+                variant="outline"
+                className={cn('text-[10px] px-1.5 py-0 h-5 font-medium', status.color)}
+              >
+                {status.label}
+              </Badge>
+              {(repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0)) && (
+                <WarrantyBadge repair={repair} size="sm" showDaysRemaining />
+              )}
+            </div>
+            <div className="flex items-center gap-2.5 text-[11px] text-gray-400 dark:text-gray-500 shrink-0">
               {imageCount > 0 && (
                 <span className="flex items-center gap-0.5">
                   <ImageIcon className="h-3 w-3" />{imageCount}

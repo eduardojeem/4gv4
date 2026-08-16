@@ -81,7 +81,9 @@ describe('FinancesSystem', () => {
     expect(screen.getByRole('tab', { name: 'Rentabilidad' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Configuración' })).toBeInTheDocument()
     expect(screen.getByText('Ganancia neta devengada')).toBeInTheDocument()
-    expect(screen.getByText('Flujo de caja')).toBeInTheDocument()
+    // Las métricas de caja viven detrás de su propia solapa: acá alcanza con
+    // que la vía de acceso esté presente.
+    expect(screen.getByRole('tab', { name: 'Caja' })).toBeInTheDocument()
     expect(screen.getByText('Qué requiere atención hoy')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('Faltan costos')
   })
@@ -184,9 +186,15 @@ describe('FinancesSystem', () => {
     render(<FinancesSystem />)
 
     expect(screen.getByRole('tab', { name: 'Devengado' })).toHaveAttribute('data-state', 'active')
-    expect(screen.getByText('Flujo de caja')).toBeInTheDocument()
+    expect(screen.getByText('Resultado devengado')).toBeInTheDocument()
+    expect(screen.queryByText('Flujo de caja')).not.toBeInTheDocument()
+
     await user.click(screen.getByRole('tab', { name: 'Caja' }))
+
+    expect(screen.getByRole('tab', { name: 'Caja' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByText('Flujo de caja')).toBeInTheDocument()
     expect(screen.getByText('Flujo de caja neto')).toBeInTheDocument()
+    expect(screen.queryByText('Resultado devengado')).not.toBeInTheDocument()
   })
 
   it('keys summary cache entries by active organization', () => {

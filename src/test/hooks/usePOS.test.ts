@@ -8,6 +8,19 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import { usePOS } from '@/hooks/usePOS'
 import { createMockProduct } from '@/test/setup'
 
+// usePOS lee la sucursal activa del contexto. Sin provider el hook lanza, así
+// que se mockea el contexto igual que en FinancesSystem.test.tsx.
+vi.mock('@/contexts/branch-context', () => ({
+  useBranch: () => ({
+    branches: [],
+    selectedBranchId: null,
+    selectedBranch: null,
+    loading: false,
+    setSelectedBranchId: vi.fn(),
+    refreshBranches: vi.fn(),
+  }),
+}))
+
 // Mock de servicios externos
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({

@@ -140,12 +140,12 @@ export function ExpensesPanel({
         setIsLoading(false)
       }
     },
-    [organizationId, branchId, filters.startDate, filters.endDate, page, statusFilter, categoryFilter],
+    [organizationId, branchId, filters.startDate, filters.endDate, statusFilter, categoryFilter],
   )
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load(page)
+  }, [load, page])
 
   // Reset to page 1 when global filters or local criteria change.
   useEffect(() => {

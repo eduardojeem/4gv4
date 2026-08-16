@@ -1,8 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Loader2 } from 'lucide-react'
+import { AlertTriangle, Loader2, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -42,6 +43,16 @@ const MODES: Array<{ id: RepairPricingMode; label: string }> = [
   { id: 'budget', label: 'Presupuesto acordado' },
   { id: 'manual', label: 'Precio manual' },
 ]
+
+const QUICK_REASONS = [
+  'Descuento cliente frecuente',
+  'Ajuste acordado con cliente',
+  'Garantía previa / Reingreso',
+  'Promoción especial vigente',
+  'Descuento por demora técnica'
+]
+
+const QUICK_DISCOUNT_PERCENTAGES = [5, 10, 15, 20]
 
 function numberFromInput(value: string): number {
   return value === '' ? 0 : Math.max(0, Number(value) || 0)
@@ -101,6 +112,15 @@ function RepairQuickPriceForm({
     }
   }
 
+  const applyDiscountPercent = (percent: number) => {
+    const rawSubtotal = (pricing.laborCost || 0) + (pricing.partsPrice || 0)
+    const calculated = Math.round((rawSubtotal * percent) / 100)
+    setDiscountAmount(String(calculated))
+    if (!reason) {
+      setReason(`Descuento comercial del ${percent}%`)
+    }
+  }
+
   const handleSave = async () => {
     if (!canSave) return
     setIsSaving(true)
@@ -117,7 +137,7 @@ function RepairQuickPriceForm({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isSaving && onOpenChange(next)}>
-      <DialogContent className="max-h-[90dvh] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[92dvh] max-w-lg overflow-y-auto p-6">
         <DialogHeader>
           <DialogTitle>Editar precio de reparación</DialogTitle>
           <DialogDescription>
@@ -125,7 +145,8 @@ function RepairQuickPriceForm({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5">
+        <div className="space-y-4 pt-1">
+          {/* Selector de modo */}
           <div className="grid grid-cols-3 gap-2" aria-label="Modo de cálculo">
             {MODES.map((mode) => (
               <Button
@@ -148,9 +169,18 @@ function RepairQuickPriceForm({
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="quick-labor-cost">Mano de obra</Label>
+          {/* Entradas de valores */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {/* Mano de obra */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="quick-labor-cost">Mano de obra</Label>
+                {pricingMode === 'budget' && (
+                  <Badge variant="outline" className="text-[9px] py-0 px-1 text-muted-foreground">
+                    Derivado
+                  </Badge>
+                )}
+              </div>
               <Input
                 id="quick-labor-cost"
                 type="number"
@@ -158,10 +188,23 @@ function RepairQuickPriceForm({
                 value={pricingMode === 'budget' ? pricing.laborCost : laborCost}
                 disabled={pricingMode === 'budget' || isSaving}
                 onChange={(event) => setLaborCost(event.target.value)}
+                className="h-9 font-semibold tabular-nums"
               />
+              <span className="text-[11px] font-mono text-muted-foreground block truncate">
+                {formatCurrency(pricingMode === 'budget' ? pricing.laborCost : numberFromInput(laborCost))}
+              </span>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="quick-final-cost">Precio al cliente</Label>
+
+            {/* Precio al cliente */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="quick-final-cost">Precio al cliente</Label>
+                {pricingMode === 'automatic' && (
+                  <Badge variant="outline" className="text-[9px] py-0 px-1 text-muted-foreground">
+                    Automático
+                  </Badge>
+                )}
+              </div>
               <Input
                 id="quick-final-cost"
                 type="number"
@@ -169,10 +212,39 @@ function RepairQuickPriceForm({
                 value={pricingMode === 'automatic' ? pricing.customerTotal : finalCost}
                 disabled={pricingMode === 'automatic' || isSaving}
                 onChange={(event) => setFinalCost(event.target.value)}
+                className="h-9 font-bold text-emerald-600 dark:text-emerald-400 tabular-nums"
               />
+              <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold block truncate">
+                {formatCurrency(pricingMode === 'automatic' ? pricing.customerTotal : numberFromInput(finalCost))}
+              </span>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="quick-discount">Descuento</Label>
+
+            {/* Descuento */}
+            <div className="space-y-1 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="quick-discount">Descuento</Label>
+                <div className="flex items-center gap-1">
+                  {QUICK_DISCOUNT_PERCENTAGES.map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => applyDiscountPercent(pct)}
+                      className="px-1.5 py-0.5 rounded text-[10px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-primary/10 hover:text-primary transition-colors font-semibold"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                  {numberFromInput(discountAmount) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDiscountAmount('0')}
+                      className="px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-red-500 transition-colors"
+                    >
+                      Quitar
+                    </button>
+                  )}
+                </div>
+              </div>
               <Input
                 id="quick-discount"
                 type="number"
@@ -180,9 +252,12 @@ function RepairQuickPriceForm({
                 value={discountAmount}
                 disabled={isSaving}
                 onChange={(event) => setDiscountAmount(event.target.value)}
+                className="h-9 font-semibold tabular-nums text-rose-600 dark:text-rose-400"
               />
             </div>
-            <div className="space-y-2">
+
+            {/* Motivo del ajuste */}
+            <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="quick-reason">Motivo del ajuste</Label>
               <Input
                 id="quick-reason"
@@ -190,7 +265,20 @@ function RepairQuickPriceForm({
                 disabled={isSaving}
                 placeholder={reasonRequired ? 'Obligatorio, mínimo 5 caracteres' : 'Opcional'}
                 onChange={(event) => setReason(event.target.value)}
+                className="h-9 text-xs"
               />
+              <div className="flex flex-wrap gap-1 pt-0.5">
+                {QUICK_REASONS.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setReason(r)}
+                    className="text-[10px] px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 transition-colors"
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -200,6 +288,7 @@ function RepairQuickPriceForm({
             </p>
           )}
 
+          {/* Desglose Financiero */}
           <dl className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-4 text-sm">
             <div>
               <dt className="text-muted-foreground">Ya pagado</dt>
@@ -214,11 +303,11 @@ function RepairQuickPriceForm({
           </dl>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="mt-2">
           <Button type="button" variant="outline" disabled={isSaving} onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button type="button" disabled={!canSave} onClick={handleSave}>
+          <Button type="button" disabled={!canSave} onClick={handleSave} className="font-semibold">
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Guardar precio
           </Button>
@@ -227,3 +316,4 @@ function RepairQuickPriceForm({
     </Dialog>
   )
 }
+

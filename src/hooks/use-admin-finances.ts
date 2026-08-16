@@ -77,8 +77,7 @@ export function useAdminFinances() {
   const loadActiveOrganization = useCallback(async () => {
     const requestId = organizationRequestRef.current + 1
     organizationRequestRef.current = requestId
-    setOrganizationId(null)
-    setOrganizationLoading(true)
+    setOrganizationLoading((current) => current || organizationId === null)
     setOrganizationError(null)
 
     try {
@@ -95,7 +94,7 @@ export function useAdminFinances() {
         setOrganizationLoading(false)
       }
     }
-  }, [])
+  }, [organizationId])
 
   useEffect(() => {
     void loadActiveOrganization()

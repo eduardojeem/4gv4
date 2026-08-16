@@ -23,6 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useRouter } from 'next/navigation'
 import {
   Grid3X3,
   List,
@@ -41,7 +42,9 @@ import {
   MessageCircle,
   Clock,
   Power,
-  PowerOff
+  PowerOff,
+  ShoppingBag,
+  Wrench
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerSalesMetricsMap, CustomerMetrics } from '@/hooks/use-customer-metrics'
@@ -805,6 +808,7 @@ function CustomerActions({
   onDelete: () => void
   onToggleStatus?: () => void
 }) {
+  const router = useRouter()
   const { isAdmin, isManager } = useAuth()
   const canDelete = isAdmin || isManager
 
@@ -822,29 +826,35 @@ function CustomerActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent 
         align="end"
-        className="w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg"
+        className="w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg"
       >
         <DropdownMenuItem 
           onClick={onView}
-          className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+          className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer font-medium"
         >
-          <Eye className="h-4 w-4" />
-          Ver Detalle
+          <Eye className="h-4 w-4 text-primary" />
+          Ver Detalle 360°
+        </DropdownMenuItem>
+        <DropdownMenuItem 
+          onClick={() => router.push(`/dashboard/pos?customerId=${customer.id}`)}
+          className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 font-medium cursor-pointer"
+        >
+          <ShoppingBag className="h-4 w-4" />
+          Nueva Venta (POS)
+        </DropdownMenuItem>
+        <DropdownMenuItem 
+          onClick={() => router.push(`/dashboard/repairs?new=true&customerId=${customer.id}&customerName=${encodeURIComponent(customer.name)}`)}
+          className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-sky-50 dark:hover:bg-sky-950/30 text-sky-600 dark:text-sky-400 font-medium cursor-pointer"
+        >
+          <Wrench className="h-4 w-4" />
+          Nueva Reparación
         </DropdownMenuItem>
         <DropdownMenuItem 
           onClick={onEdit}
           className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
         >
           <Edit className="h-4 w-4" />
-          Editar
-        </DropdownMenuItem>
-        <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
-          <History className="h-4 w-4" />
-          Historial
-        </DropdownMenuItem>
-        <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
-          <MessageCircle className="h-4 w-4" />
-          Contactar
+          Editar Cliente
         </DropdownMenuItem>
         
         {/* Separador */}

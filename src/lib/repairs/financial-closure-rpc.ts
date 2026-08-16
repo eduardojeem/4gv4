@@ -117,7 +117,7 @@ export async function closeRepairAndRegisterPayment(
     )
   }
 
-  const { data, error } = await client.rpc('close_repair_and_register_payment', {
+  const { data, error } = await client.rpc('close_repair_and_register_payment_v2', {
     p_repair_id: input.repairId,
     p_organization_id: input.organizationId,
     p_branch_id: input.branchId,

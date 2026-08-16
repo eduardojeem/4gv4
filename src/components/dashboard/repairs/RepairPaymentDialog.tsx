@@ -238,7 +238,7 @@ export function RepairPaymentDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" data-help-id="repair-payment">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-emerald-500" />
@@ -329,7 +329,7 @@ export function RepairPaymentDialog({
           {/* Método de pago */}
           <div className="space-y-2">
             <Label>Método de pago</Label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2" data-help-id="repair-credit">
               {METHODS.map(m => {
                 const Icon = m.icon
                 const selected = method === m.id
@@ -359,7 +359,7 @@ export function RepairPaymentDialog({
             </div>
           </div>
 
-          <div className={cn(
+          <div data-help-id="repair-cash-status" className={cn(
             'flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5',
             cashStatus === 'open'
               ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
@@ -378,7 +378,7 @@ export function RepairPaymentDialog({
               {cashStatus === 'open' ? 'Caja abierta' : cashStatus === 'closed' ? 'Caja cerrada' : 'Consultando caja'}
             </div>
             {cashStatus === 'closed' && (
-              <Button type="button" size="sm" variant="outline" onClick={() => setIsOpeningRegister(true)}>
+              <Button data-help-id="repair-open-cash" type="button" size="sm" variant="outline" onClick={() => setIsOpeningRegister(true)}>
                 Abrir caja
               </Button>
             )}
@@ -390,7 +390,7 @@ export function RepairPaymentDialog({
           )}
 
           {/* Monto */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5" data-help-id="repair-payment-amount">
             <Label htmlFor="pay-amount">{isCredit ? 'Monto a financiar' : 'Monto aplicado a la reparación'}</Label>
             <Input
               id="pay-amount"
@@ -473,7 +473,7 @@ export function RepairPaymentDialog({
 
           {/* Términos de crédito */}
           {isCredit && (
-            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div data-help-id="repair-credit-terms" className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3 animate-in fade-in slide-in-from-top-1 duration-200">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="cred-count" className="text-xs">N° de cuotas</Label>

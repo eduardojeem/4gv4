@@ -119,6 +119,12 @@ const DeviceBaseSchema = z.object({
     .min(1, 'El modelo es obligatorio')
     .max(100, 'El modelo es demasiado largo (maximo 100 caracteres)'),
 
+  serialNumber: z
+    .string()
+    .max(100, 'El IMEI / Serie es demasiado largo (maximo 100 caracteres)')
+    .optional()
+    .or(z.literal('')),
+
   issue: z
     .string()
     .min(4, 'Describe el problema (minimo 4 caracteres)')

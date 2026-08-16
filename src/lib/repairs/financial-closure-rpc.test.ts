@@ -27,7 +27,7 @@ describe('repair financial closure RPC adapter', () => {
       },
     })
 
-    expect(rpc).toHaveBeenCalledWith('close_repair_and_register_payment', {
+    expect(rpc).toHaveBeenCalledWith('close_repair_and_register_payment_v2', {
       p_repair_id: 'repair-1',
       p_organization_id: 'org-1',
       p_branch_id: 'branch-1',
@@ -71,7 +71,7 @@ describe('repair financial closure RPC adapter', () => {
       },
     })
 
-    expect(rpc).toHaveBeenCalledWith('close_repair_and_register_payment', expect.objectContaining({
+    expect(rpc).toHaveBeenCalledWith('close_repair_and_register_payment_v2', expect.objectContaining({
       p_credit_id: null,
       p_credit_interest_rate: 12,
       p_credit_installment_count: 6,

@@ -130,7 +130,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     if (idParam) query = query.eq('id', idParam)
 
     if (search) {
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,customer_code.ilike.%${search}%`)
+      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,customer_code.ilike.%${search}%,ruc.ilike.%${search}%`)
     }
 
     if (status && status !== 'all') query = query.eq('status', status)

@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Eye, Pencil, Trash2, MoreVertical, PackageCheck, DollarSign } from 'lucide-react'
+import { Eye, Pencil, Trash2, MoreVertical, PackageCheck, DollarSign, Shield } from 'lucide-react'
 import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
 
 interface RepairCardsViewProps {
@@ -20,9 +20,10 @@ interface RepairCardsViewProps {
   onDelete?: (repairId: string) => void
   onDeliver?: (repair: Repair) => void
   onQuickPay?: (repair: Repair) => void
+  onClaimWarranty?: (repair: Repair) => void
 }
 
-export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, onQuickPay }: RepairCardsViewProps) {
+export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, onQuickPay, onClaimWarranty }: RepairCardsViewProps) {
   if (repairs.length === 0) return null
 
   return (
@@ -83,6 +84,18 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, 
                     >
                       <PackageCheck className="mr-2 h-3.5 w-3.5" />
                       Marcar Entregado
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {(repair.status === 'entregado' || repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0)) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-amber-700 dark:text-amber-400 font-semibold cursor-pointer"
+                      onClick={() => onClaimWarranty ? onClaimWarranty(repair) : onView?.(repair)}
+                    >
+                      <Shield className="mr-2 h-3.5 w-3.5 text-amber-600" />
+                      Procesar Garantía
                     </DropdownMenuItem>
                   </>
                 )}

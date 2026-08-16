@@ -58,7 +58,7 @@ export function FinancesSystem() {
             <p className="text-xs text-muted-foreground">Administración financiera</p>
           </div>
           <p className="hidden text-xs text-muted-foreground sm:block">
-            Cuánto ganás, qué dinero entró o salió y qué compromisos requieren atención.
+            Tomá decisiones con una vista clara del negocio: cuánto ganás, qué dinero entró o salió y qué compromisos requieren atención.
           </p>
         </div>
       </header>
@@ -87,11 +87,28 @@ export function FinancesSystem() {
         </section>
 
         <TabsContent value="Resumen" className="mt-0">
-          {finances.isLoading ? <FinanceLoadingState /> : null}
-          {!finances.isLoading && finances.error && !finances.summary ? <FinanceErrorState error={finances.error} onRetry={finances.refresh} /> : null}
-          {!finances.isLoading && finances.error && finances.summary ? <FinanceStaleDataAlert error={finances.error} generatedAt={finances.summary.generatedAt} onRetry={finances.refresh} /> : null}
-          {!finances.isLoading && finances.summary && isEmptySummary(finances.summary) ? <FinanceEmptyState /> : null}
-          {!finances.isLoading && finances.summary && !isEmptySummary(finances.summary) ? <FinanceSummary summary={finances.summary} onViewExpenses={() => setActiveTab('Gastos')} onViewProfitability={() => setActiveTab('Rentabilidad')} onViewPayroll={() => setActiveTab('Nómina')} /> : null}
+          {finances.isLoading && !finances.summary ? <FinanceLoadingState /> : null}
+          {!finances.isLoading && finances.error && !finances.summary ? (
+            <FinanceErrorState error={finances.error} onRetry={finances.refresh} />
+          ) : null}
+          {finances.error && finances.summary ? (
+            <FinanceStaleDataAlert
+              error={finances.error}
+              generatedAt={finances.summary.generatedAt}
+              onRetry={finances.refresh}
+            />
+          ) : null}
+          {finances.summary && isEmptySummary(finances.summary) && !finances.isLoading ? (
+            <FinanceEmptyState />
+          ) : null}
+          {finances.summary && !isEmptySummary(finances.summary) ? (
+            <FinanceSummary
+              summary={finances.summary}
+              onViewExpenses={() => setActiveTab('Gastos')}
+              onViewProfitability={() => setActiveTab('Rentabilidad')}
+              onViewPayroll={() => setActiveTab('Nómina')}
+            />
+          ) : null}
         </TabsContent>
         <TabsContent value="Gastos" className="mt-0">{finances.organizationId ? <ExpensesPanel organizationId={finances.organizationId} branchId={selectedBranchId} filters={finances.filters} onChanged={finances.refresh} /> : <FinanceLoadingState />}</TabsContent>
         <TabsContent value="Nómina" className="mt-0">{finances.organizationId ? <PayrollPanel organizationId={finances.organizationId} branchId={selectedBranchId} filters={finances.filters} onChanged={finances.refresh} /> : <FinanceLoadingState />}</TabsContent>

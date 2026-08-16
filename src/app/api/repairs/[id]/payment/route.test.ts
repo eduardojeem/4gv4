@@ -15,7 +15,19 @@ function queryResult(result: { data: unknown; error: null }) {
 }
 
 const cashQuery = queryResult({ data: [{ id: 'cash-1', register_id: 'principal' }], error: null })
-const repairRecord = {
+const repairRecord: {
+  id: string
+  ticket_number: string
+  customer_id: string
+  paid_amount: number
+  payment_status: string
+  final_cost: number | null
+  estimated_cost: number
+  pricing_mode: 'automatic' | 'budget' | 'manual'
+  labor_cost: number
+  discount_amount: number
+  parts: Array<{ unit_price?: number | null; unit_cost?: number | null; quantity?: number | null }>
+} = {
   id: 'repair-1', ticket_number: 'REP-1', customer_id: 'customer-1',
   paid_amount: 0, payment_status: 'pendiente', final_cost: 100_000, estimated_cost: 100_000,
   pricing_mode: 'automatic', labor_cost: 100_000, discount_amount: 0, parts: [],
@@ -104,6 +116,24 @@ describe('POST /api/repairs/:id/payment', () => {
     expect(response.status).toBe(422)
     expect(payload).toMatchObject({ code: 'REPAIR_HAS_NO_BALANCE', currentBalance: 0 })
     expect(closeFinancial).not.toHaveBeenCalled()
+  })
+
+  it('collects a historical estimated price when automatic details were never persisted', async () => {
+    repairRecord.labor_cost = 0
+    repairRecord.final_cost = null
+    repairRecord.estimated_cost = 600_000
+    repairRecord.parts = []
+    const { POST } = await import('./route')
+    const request = { json: async () => ({
+      method: 'cash', amount: 600_000, idempotencyKey: 'payment-legacy-price',
+    }) } as never
+    const response = await POST(request, { params: Promise.resolve({ id: 'repair-1' }) })
+
+    expect(response.status).toBe(200)
+    expect(closeFinancial).toHaveBeenCalledWith(ctx.supabase, expect.objectContaining({
+      repairId: 'repair-1',
+      payment: expect.objectContaining({ amount: 600_000 }),
+    }))
   })
 
   it('delegates repair credit creation to the atomic financial operation', async () => {

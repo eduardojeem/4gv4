@@ -34,8 +34,8 @@ export function WarrantyBadge({
   const warrantyMonths = repair.warrantyMonths || 0
   const expiresAt = repair.warrantyExpiresAt
   
-  // No warranty
-  if (warrantyMonths === 0) {
+  // No warranty at all
+  if (warrantyMonths === 0 && !expiresAt) {
     return null
   }
   
@@ -78,7 +78,13 @@ export function WarrantyBadge({
     >
       {showIcon && <StatusIcon className={cn(iconSizes[size], colors.icon)} />}
       <span>
-        {formatWarrantyDuration(warrantyMonths)}
+        {warrantyMonths > 0
+          ? formatWarrantyDuration(warrantyMonths)
+          : status === 'active'
+            ? 'Garantía activa'
+            : status === 'expiring'
+              ? 'Por vencer'
+              : 'Garantía vencida'}
       </span>
       {showDaysRemaining && status !== 'expired' && daysRemaining > 0 && (
         <span className={cn(

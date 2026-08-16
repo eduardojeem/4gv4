@@ -5,7 +5,7 @@ import {
   resolveRepairRouteContext,
 } from '@/app/api/repairs/_lib'
 import { parseRepairPaymentRequest } from '@/lib/repairs/financial-closure'
-import { calculateRepairPricing } from '@/lib/repairs/pricing'
+import { resolveRepairCollectionPricing } from '@/lib/repairs/collection-pricing'
 import {
   closeRepairAndRegisterPayment,
   FinancialClosureRpcError,
@@ -43,10 +43,11 @@ export async function POST(request: NextRequest, context: RouteParams) {
       return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
     }
 
-    const pricing = calculateRepairPricing({
+    const { pricing } = resolveRepairCollectionPricing({
       mode: financialRepair.pricing_mode,
       laborCost: financialRepair.labor_cost,
-      finalCost: financialRepair.final_cost ?? financialRepair.estimated_cost,
+      finalCost: financialRepair.final_cost,
+      estimatedCost: financialRepair.estimated_cost,
       discountAmount: financialRepair.discount_amount,
       paidAmount: financialRepair.paid_amount,
       parts: financialRepair.parts?.map((part: { unit_price?: number | null; unit_cost?: number | null; quantity?: number | null }) => ({

@@ -39,6 +39,9 @@ export interface RepairFormData {
     deviceType: string
     brand: string
     model: string
+    serial_number?: string | null
+    serialNumber?: string | null
+    imei?: string | null
     issue: string
     description?: string
     accessType?: 'none' | 'pin' | 'password' | 'pattern' | 'biometric' | 'other'
@@ -178,7 +181,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     // Fetch all repairs
     const fetchRepairs = useCallback(async () => {
         try {
-            setIsLoading(true)
+            setIsLoading((prev) => (repairs.length === 0 ? true : prev))
             setError(null)
 
             const { data, error: fetchError } = await fetchRepairsWithCustomerFallback()
@@ -199,7 +202,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         } finally {
             setIsLoading(false)
         }
-    }, [fetchRepairsWithCustomerFallback])
+    }, [fetchRepairsWithCustomerFallback, repairs.length])
 
     // Create repair
     const createRepair = useCallback(async (data: RepairFormData): Promise<Repair | null> => {
@@ -225,6 +228,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     customer_id: repairData.customer_id,
                     device_brand: repairData.brand,
                     device_model: repairData.model,
+                    serial_number: repairData.serial_number || repairData.serialNumber || repairData.imei || null,
                     device_type: repairData.deviceType,
                     problem_description: repairData.issue,
                     diagnosis: repairData.description,
