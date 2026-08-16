@@ -1,4 +1,5 @@
 import guideContent from './repairs-guide-content.json'
+import type { RepairHelpActionId } from './repair-help-actions'
 
 export type RepairGuideAudience = 'operator' | 'technician' | 'admin'
 
@@ -9,6 +10,11 @@ export type RepairGuideStep = {
   anchorId: string
   fallback: string
   route?: string
+  navigationAction?: {
+    id: RepairHelpActionId
+    label: string
+    successAnchorId?: string
+  }
 }
 
 export type RepairGuideTask = {

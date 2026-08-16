@@ -17,7 +17,7 @@
           "audiences": ["operator", "technician", "admin"],
           "icon": "plus",
           "steps": [
-            { "title": "Iniciá la orden", "body": "Usá Nueva reparación para comenzar el ingreso.", "action": "Abrir el formulario", "anchorId": "repair-new", "fallback": "Encontrá Nueva reparación en el encabezado de la sección." },
+            { "title": "Iniciá la orden", "body": "Usá Nueva reparación para comenzar el ingreso.", "action": "Abrir el formulario", "anchorId": "repair-new", "fallback": "Encontrá Nueva reparación en el encabezado de la sección.", "navigationAction": { "id": "open-new-repair", "label": "Abrir nueva reparación", "successAnchorId": "repair-form-device" } },
             { "title": "Completá el ingreso", "body": "Seleccioná o creá el cliente y documentá el equipo y la falla.", "action": "Completar datos", "anchorId": "repair-form-device", "fallback": "En el formulario completá cliente, tipo de equipo y problema informado." }
           ]
         },
