@@ -102,8 +102,9 @@ export function RepairHeader({
                 </Button>
                 <HelpButton
                   guideKey="repairs"
+                  showLabel
                   variant="outline"
-                  className="h-10 w-10 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                  className="h-10 w-10 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white sm:w-auto [&>span]:hidden sm:[&>span]:inline"
                 />
               </div>
             </div>
