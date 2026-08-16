@@ -409,11 +409,12 @@ const generateRepairReceiptHTML = (
     }
     
     .company-name {
-      font-size: 18px;
-      font-weight: 800;
+      font-size: ${settings.showLogo ? '18px' : '21px'};
+      font-weight: 900;
       color: #0f172a;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: ${settings.showLogo ? '0.5px' : '1px'};
+      margin: 2px 0;
     }
     
     .company-info {

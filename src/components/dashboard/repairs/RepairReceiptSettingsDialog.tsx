@@ -153,9 +153,23 @@ export function RepairReceiptSettingsDialog({
             {/* TAB 1: Secciones Activas / Visibles */}
             <TabsContent value="sections" className="space-y-3 pt-1">
               <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/60 dark:bg-slate-950/40 p-4 space-y-4">
-                <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                  Elementos que aparecerán en el Comprobante
-                </h4>
+                {/* 0. Logo vs Solo Nombre del Local */}
+                <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                  <div className="space-y-0.5 pr-2">
+                    <Label className="text-xs font-bold text-slate-900 dark:text-slate-200 flex items-center gap-1.5">
+                      <span>🖼️ Logo de la Empresa en el Encabezado</span>
+                    </Label>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {settings.showLogo 
+                        ? 'Activado: Imprime la imagen del logo y el nombre de la empresa.' 
+                        : 'Desactivado: Imprime SOLO el nombre del local en texto grande y nítido (ideal para térmicas sin logo).'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.showLogo}
+                    onCheckedChange={(val) => setSettings(prev => ({ ...prev, showLogo: val }))}
+                  />
+                </div>
 
                 {/* 1. Control de Entrega y Activación de Garantía */}
                 <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-indigo-100 dark:border-indigo-950 bg-indigo-50/50 dark:bg-indigo-950/20">
