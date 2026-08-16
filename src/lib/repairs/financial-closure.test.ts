@@ -31,6 +31,35 @@ describe('repair financial closure contracts', () => {
     }).success).toBe(false)
   })
 
+  it.each(['card', 'transfer'] as const)(
+    'requires an auditable reference for %s payments',
+    (method) => {
+      expect(parseRepairPaymentRequest({
+        method,
+        amount: 50_000,
+        idempotencyKey: `payment-${method}`,
+      }).success).toBe(false)
+
+      expect(parseRepairPaymentRequest({
+        method,
+        amount: 50_000,
+        reference: 'COMPROBANTE-123',
+        idempotencyKey: `payment-${method}`,
+      }).success).toBe(true)
+    },
+  )
+
+  it.each(['cash', 'credit'] as const)(
+    'does not require an external reference for %s payments',
+    (method) => {
+      expect(parseRepairPaymentRequest({
+        method,
+        amount: 50_000,
+        idempotencyKey: `payment-${method}`,
+      }).success).toBe(true)
+    },
+  )
+
   it('derives a partial financial state independently from delivery', () => {
     expect(getRepairPaymentSummary({
       finalCost: 100_000,

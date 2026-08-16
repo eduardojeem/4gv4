@@ -4,7 +4,7 @@ const idempotencyKeySchema = z.string().trim().min(8).max(120)
 const optionalReferenceSchema = z.string().trim().max(120).optional()
 const optionalNoteSchema = z.string().trim().max(2_000).optional()
 
-export const repairPaymentRequestSchema = z.object({
+const repairPaymentBaseSchema = z.object({
   method: z.enum(['cash', 'card', 'transfer', 'credit']),
   amount: z.number().finite().positive(),
   reference: optionalReferenceSchema,
@@ -17,12 +17,31 @@ export const repairPaymentRequestSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
 }).strict()
 
+function requireAuditablePaymentReference(
+  payment: Pick<z.infer<typeof repairPaymentBaseSchema>, 'method' | 'reference'>,
+  ctx: z.RefinementCtx,
+) {
+  if ((payment.method === 'card' || payment.method === 'transfer') && !payment.reference) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['reference'],
+      message: 'La referencia del comprobante es obligatoria para este método.',
+    })
+  }
+}
+
+export const repairPaymentRequestSchema = repairPaymentBaseSchema
+  .superRefine(requireAuditablePaymentReference)
+
 export const repairDeliveryRequestSchema = z.object({
   outcome: z.enum(['repaired', 'withdrawn', 'unrepairable']),
   note: optionalNoteSchema,
   allowOutstandingBalance: z.boolean(),
   idempotencyKey: idempotencyKeySchema,
-  payment: repairPaymentRequestSchema.omit({ note: true }).optional(),
+  payment: repairPaymentBaseSchema
+    .omit({ note: true })
+    .superRefine(requireAuditablePaymentReference)
+    .optional(),
 }).strict()
 
 export type RepairPaymentRequest = z.infer<typeof repairPaymentRequestSchema>

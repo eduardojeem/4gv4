@@ -2,10 +2,15 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const migration = readFileSync(
+const baseMigration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/20260814235814_repair_financial_closure.sql'),
   'utf8',
 )
+const atomicCreditMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260815213000_atomic_repair_credit_payment.sql'),
+  'utf8',
+)
+const migration = `${baseMigration}\n${atomicCreditMigration}`
 
 describe('repair financial closure migration', () => {
   it('creates an immutable tenant-scoped payment ledger', () => {
@@ -32,6 +37,23 @@ describe('repair financial closure migration', () => {
   it('restricts execution to the backend service role', () => {
     expect(migration).toMatch(/revoke all on function public\.close_repair_and_register_payment[\s\S]+from public/)
     expect(migration).toMatch(/grant execute on function public\.close_repair_and_register_payment[\s\S]+to service_role/)
+  })
+
+  it('creates repair credit and installments in the locked payment transaction', () => {
+    expect(atomicCreditMigration).toContain('alter table public.customer_credits')
+    expect(atomicCreditMigration).toContain('idx_customer_credits_org_branch')
+    expect(atomicCreditMigration).toMatch(/from public\.customers[\s\S]+for update/)
+    expect(atomicCreditMigration).toContain('insert into public.customer_credits')
+    expect(atomicCreditMigration).toContain('insert into public.credit_installments')
+    expect(atomicCreditMigration).toContain("'credit_id', resolved_credit_id")
+    expect(atomicCreditMigration).toContain("'credit_total', financed_total")
+    expect(atomicCreditMigration).toContain("raise exception 'REPAIR_PAYMENT_REFERENCE_REQUIRED'")
+  })
+
+  it('rejects credit retries whose financing terms changed', () => {
+    expect(atomicCreditMigration).toContain('existing_credit_rate is distinct from credit_rate')
+    expect(atomicCreditMigration).toContain('existing_credit_count is distinct from credit_count')
+    expect(atomicCreditMigration).toContain('existing_credit_frequency is distinct from credit_frequency')
   })
 
   it('captures POS repair balance updates in the same sale transaction', () => {

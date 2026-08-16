@@ -4,6 +4,11 @@ export type FinancialClosurePaymentInput = {
   reference?: string | null
   note?: string | null
   idempotencyKey: string
+  interestRate?: number
+  installments?: {
+    count: number
+    frequency: 'weekly' | 'biweekly' | 'monthly'
+  }
 }
 
 export type FinancialClosureRpcInput = {
@@ -26,6 +31,8 @@ export type FinancialClosureRpcInput = {
 export type FinancialClosureRpcResult = {
   repair_id: string
   payment_id: string | null
+  credit_id: string | null
+  credit_total: number | null
   idempotent: boolean
   total: number
   paid_amount: number
@@ -53,6 +60,11 @@ const ERROR_STATUS: Record<string, number> = {
   REPAIR_FINAL_COST_REQUIRED: 422,
   REPAIR_PAYMENT_EXCEEDS_BALANCE: 422,
   REPAIR_CREDIT_MUST_COVER_BALANCE: 422,
+  REPAIR_CREDIT_CUSTOMER_REQUIRED: 422,
+  REPAIR_CREDIT_LIMIT_DISABLED: 422,
+  REPAIR_CREDIT_LIMIT_EXCEEDED: 422,
+  REPAIR_CREDIT_TERMS_INVALID: 422,
+  REPAIR_PAYMENT_REFERENCE_REQUIRED: 422,
   REPAIR_OUTSTANDING_CONFIRMATION_REQUIRED: 422,
   REPAIR_CASH_REGISTER_NOT_OPEN: 409,
 }
@@ -72,6 +84,23 @@ function extractStableCode(error: RpcError) {
   const message = error.message || 'REPAIR_FINANCIAL_OPERATION_FAILED'
   return Object.keys(ERROR_STATUS).find((code) => message.includes(code))
     || 'REPAIR_FINANCIAL_OPERATION_FAILED'
+}
+
+function getFinancialErrorMessage(code: string, rawMessage: string) {
+  if (code === 'REPAIR_CREDIT_LIMIT_EXCEEDED') {
+    const available = rawMessage.split('|')[1]
+    return available
+      ? `El cliente no tiene crédito disponible suficiente. Disponible: ${available}.`
+      : 'El cliente no tiene crédito disponible suficiente.'
+  }
+
+  const messages: Record<string, string> = {
+    REPAIR_CREDIT_CUSTOMER_REQUIRED: 'La reparación no tiene un cliente asociado para cobrar a crédito.',
+    REPAIR_CREDIT_LIMIT_DISABLED: 'El cliente no tiene un límite de crédito habilitado.',
+    REPAIR_CREDIT_TERMS_INVALID: 'Revisá el interés, la cantidad y la frecuencia de las cuotas.',
+    REPAIR_PAYMENT_REFERENCE_REQUIRED: 'Ingresá la referencia del comprobante para este método de pago.',
+  }
+  return messages[code] ?? rawMessage
 }
 
 export async function closeRepairAndRegisterPayment(
@@ -104,13 +133,21 @@ export async function closeRepairAndRegisterPayment(
     p_idempotency_key: idempotencyKey,
     p_cash_session_id: input.cashSessionId ?? null,
     p_credit_id: input.creditId ?? null,
+    p_credit_interest_rate: payment?.method === 'credit' ? payment.interestRate ?? 0 : null,
+    p_credit_installment_count: payment?.method === 'credit' ? payment.installments?.count ?? 1 : null,
+    p_credit_frequency: payment?.method === 'credit' ? payment.installments?.frequency ?? 'monthly' : null,
     p_sale_id: input.saleId ?? null,
     p_source: input.source ?? (input.deliver ? 'delivery' : 'repairs'),
   })
 
   if (error) {
     const code = extractStableCode(error)
-    throw new FinancialClosureRpcError(error.message || code, code, ERROR_STATUS[code] ?? 500)
+    const rawMessage = error.message || code
+    throw new FinancialClosureRpcError(
+      getFinancialErrorMessage(code, rawMessage),
+      code,
+      ERROR_STATUS[code] ?? 500,
+    )
   }
 
   return data as FinancialClosureRpcResult

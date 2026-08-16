@@ -39,7 +39,6 @@ vi.mock('@/lib/repairs/financial-closure-rpc', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/repairs/financial-closure-rpc')>()
   return { ...actual, closeRepairAndRegisterPayment: (...args: unknown[]) => closeFinancial(...args) }
 })
-
 describe('POST /api/repairs/:id/payment', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -104,6 +103,42 @@ describe('POST /api/repairs/:id/payment', () => {
 
     expect(response.status).toBe(422)
     expect(payload).toMatchObject({ code: 'REPAIR_HAS_NO_BALANCE', currentBalance: 0 })
+    expect(closeFinancial).not.toHaveBeenCalled()
+  })
+
+  it('delegates repair credit creation to the atomic financial operation', async () => {
+    closeFinancial.mockResolvedValue({
+      payment_id: 'payment-1', credit_id: 'atomic-credit', credit_total: 112_000,
+      idempotent: false,
+    })
+    const { POST } = await import('./route')
+    const request = { json: async () => ({
+      method: 'credit', amount: 100_000, interestRate: 12,
+      installments: { count: 6, frequency: 'monthly' },
+      idempotencyKey: 'credit-payment-123',
+    }) } as never
+    const response = await POST(request, { params: Promise.resolve({ id: 'repair-1' }) })
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(closeFinancial).toHaveBeenCalledWith(ctx.supabase, expect.objectContaining({
+      creditId: null,
+      payment: expect.objectContaining({
+        method: 'credit', interestRate: 12,
+        installments: { count: 6, frequency: 'monthly' },
+      }),
+    }))
+    expect(payload.credit).toEqual({ creditId: 'atomic-credit', financedTotal: 112_000 })
+  })
+
+  it.each(['card', 'transfer'] as const)('rejects %s without a reference', async (method) => {
+    const { POST } = await import('./route')
+    const request = { json: async () => ({
+      method, amount: 100_000, idempotencyKey: `payment-${method}`,
+    }) } as never
+    const response = await POST(request, { params: Promise.resolve({ id: 'repair-1' }) })
+
+    expect(response.status).toBe(400)
     expect(closeFinancial).not.toHaveBeenCalled()
   })
 })

@@ -4,8 +4,6 @@ import {
   isNextResponse,
   resolveRepairRouteContext,
 } from '@/app/api/repairs/_lib'
-import { createCreditAccount, CreditAccountError } from '@/lib/credits/create-credit-account'
-import { normalizeCreditFrequency, normalizeInstallmentCount } from '@/lib/credits/installments'
 import { parseRepairPaymentRequest } from '@/lib/repairs/financial-closure'
 import { calculateRepairPricing } from '@/lib/repairs/pricing'
 import {
@@ -16,8 +14,6 @@ import {
 type RouteParams = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, context: RouteParams) {
-  let rollbackCredit: (() => Promise<void>) | null = null
-
   try {
     const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
     if (isNextResponse(ctx)) return ctx
@@ -124,63 +120,6 @@ export async function POST(request: NextRequest, context: RouteParams) {
       }
     }
 
-    let creditInfo: { creditId: string; financedTotal: number } | null = null
-    if (isCredit) {
-      const { data: repair, error: repairError } = await ctx.supabase
-        .from('repairs')
-        .select('id, ticket_number, customer_id')
-        .eq('id', id)
-        .eq('organization_id', ctx.organizationId)
-        .eq('branch_id', ctx.branchId)
-        .maybeSingle()
-
-      if (repairError) throw repairError
-      if (!repair?.customer_id) {
-        return NextResponse.json(
-          { error: 'La reparacion no tiene un cliente asociado para cobrar a credito.' },
-          { status: 400 },
-        )
-      }
-
-      const { data: customer, error: customerError } = await ctx.supabase
-        .from('customers')
-        .select('id, credit_limit')
-        .eq('id', repair.customer_id)
-        .eq('organization_id', ctx.organizationId)
-        .maybeSingle()
-
-      if (customerError) throw customerError
-      const creditLimit = Math.max(0, Number(customer?.credit_limit) || 0)
-      if (!customer || creditLimit <= 0) {
-        return NextResponse.json(
-          { error: 'El cliente no tiene limite de credito habilitado.' },
-          { status: 400 },
-        )
-      }
-
-      const created = await createCreditAccount({
-        supabase: ctx.supabase,
-        organizationId: ctx.organizationId,
-        customerId: repair.customer_id,
-        creditLimit,
-        amount: input.amount,
-        interestRate: input.interestRate ?? 0,
-        installmentCount: normalizeInstallmentCount(input.installments?.count),
-        frequency: normalizeCreditFrequency(input.installments?.frequency),
-        saleId: null,
-        label: `Reparacion ${repair.ticket_number || id.slice(0, 8).toUpperCase()}`,
-        creditType: 'repair_financing',
-        originType: 'repair',
-      })
-      creditInfo = { creditId: created.creditId, financedTotal: created.financedTotal }
-      rollbackCredit = async () => {
-        await ctx.supabase.from('credit_installments').delete().eq('credit_id', created.creditId)
-        await ctx.supabase.from('customer_credits').delete()
-          .eq('id', created.creditId)
-          .eq('organization_id', ctx.organizationId)
-      }
-    }
-
     const operation = await closeRepairAndRegisterPayment(ctx.supabase, {
       repairId: id,
       organizationId: ctx.organizationId,
@@ -190,11 +129,10 @@ export async function POST(request: NextRequest, context: RouteParams) {
       allowOutstandingBalance: false,
       payment: input,
       cashSessionId,
-      creditId: creditInfo?.creditId ?? null,
+      creditId: null,
       source: 'repairs',
     })
 
-    rollbackCredit = null
     const { data: repair, error } = await fetchRepairById(ctx, id)
     if (error) throw error
     if (!repair) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
@@ -202,19 +140,19 @@ export async function POST(request: NextRequest, context: RouteParams) {
     return NextResponse.json({
       repair,
       payment: operation.payment_id ? { id: operation.payment_id } : null,
-      credit: creditInfo,
+      credit: operation.credit_id ? {
+        creditId: operation.credit_id,
+        financedTotal: Number(operation.credit_total ?? input.amount),
+      } : null,
       idempotent: operation.idempotent,
     })
   } catch (error) {
-    if (rollbackCredit) await rollbackCredit()
     if (error instanceof FinancialClosureRpcError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     }
-    if (error instanceof CreditAccountError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
-    }
+    console.error('[repair-payment] Unexpected payment failure', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error interno del servidor' },
+      { error: 'No se pudo registrar el pago de la reparación.' },
       { status: 500 },
     )
   }
