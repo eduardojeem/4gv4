@@ -90,17 +90,19 @@ export async function POST(request: NextRequest, context: RouteParams) {
       )
     }
     const resolvedInput = parsed.data
-    if (resolvedInput.payment?.method === 'credit') {
+    const isCredit = resolvedInput.payment?.method === 'credit'
+    if (isCredit && (ctx.role === 'tecnico' || ctx.role === 'technician')) {
       return NextResponse.json(
-        { error: 'El credito debe registrarse desde Cobrar saldo antes de entregar.', code: 'DELIVERY_CREDIT_USE_PAYMENT' },
-        { status: 422 },
+        { error: 'Permisos insuficientes para registrar una entrega a crédito.', code: 'REPAIR_CREDIT_UNAUTHORIZED' },
+        { status: 403 },
       )
     }
 
-    const cashSessionId = resolvedInput.payment ? await resolveCashSessionId(ctx) : null
-    if (resolvedInput.payment && !cashSessionId) {
+    const needsCashSession = Boolean(resolvedInput.payment && !isCredit)
+    const cashSessionId = needsCashSession ? await resolveCashSessionId(ctx) : null
+    if (needsCashSession && !cashSessionId) {
       return NextResponse.json(
-        { error: 'No hay una caja abierta en esta sucursal. Abri caja antes de cobrar la reparacion.', code: 'REPAIR_CASH_REGISTER_NOT_OPEN' },
+        { error: 'No hay una caja abierta en esta sucursal. Abrí caja antes de cobrar la reparación.', code: 'REPAIR_CASH_REGISTER_NOT_OPEN' },
         { status: 409 },
       )
     }

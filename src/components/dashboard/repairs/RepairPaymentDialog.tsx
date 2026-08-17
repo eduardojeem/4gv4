@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import {
   Banknote,
   CreditCard,
@@ -29,6 +29,7 @@ import {
 import { Repair } from '@/types/repairs'
 import { useCashRegister } from '@/hooks/useCashRegister'
 import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashRegisterDialog'
+import { toast } from 'sonner'
 
 export type QuickPayMethod = 'cash' | 'card' | 'transfer' | 'credit'
 export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
@@ -110,6 +111,12 @@ export function RepairPaymentDialog({
   const [balanceRefreshMessage, setBalanceRefreshMessage] = useState<string | null>(null)
   const balanceDue = currentBalanceOverride ?? persistedBalanceDue
 
+  const [customerCreditLimit, setCustomerCreditLimit] = useState<number | null>(null)
+  const [isEnablingCredit, setIsEnablingCredit] = useState(false)
+  const [creditStatusLoaded, setCreditStatusLoaded] = useState(false)
+
+  const isCredit = method === 'credit'
+
   useEffect(() => {
     checkOpenSessionRef.current = cashRegister.checkOpenSession
   }, [cashRegister.checkOpenSession])
@@ -130,7 +137,59 @@ export function RepairPaymentDialog({
     }
   }, [open, repair?.id, persistedBalanceDue, refreshCashStatus, totalDue])
 
-  const isCredit = method === 'credit'
+  useEffect(() => {
+    if (!open || !isCredit || !repair?.customer?.id) {
+      setCustomerCreditLimit(null)
+      setCreditStatusLoaded(false)
+      return
+    }
+    let active = true
+    setCreditStatusLoaded(false)
+    fetch(`/api/customers?search=${encodeURIComponent(repair.customer.phone || repair.customer.name || '')}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!active) return
+        const list = data?.data?.customers || data?.data || []
+        const matched = Array.isArray(list) ? list.find((c: { id?: string }) => c.id === repair.customer?.id) : null
+        if (matched) {
+          setCustomerCreditLimit(Number(matched.credit_limit) || 0)
+        } else {
+          setCustomerCreditLimit(0)
+        }
+        setCreditStatusLoaded(true)
+      })
+      .catch(() => {
+        if (active) setCreditStatusLoaded(true)
+      })
+    return () => { active = false }
+  }, [open, isCredit, repair?.customer?.id, repair?.customer?.name, repair?.customer?.phone])
+
+  const handleEnableCustomerCredit = async (limitAmount?: number) => {
+    if (!repair?.customer?.id) return
+    setIsEnablingCredit(true)
+    try {
+      const newLimit = limitAmount || Math.max(1000000, balanceDue)
+      const res = await fetch('/api/customers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: repair.customer.id,
+          credit_limit: newLimit,
+        }),
+      })
+      const data = await res.json()
+      if (data?.success) {
+        setCustomerCreditLimit(newLimit)
+        toast.success(`Línea de crédito habilitada: ${formatCurrency(newLimit)}`)
+      } else {
+        toast.error(data?.error || 'No se pudo habilitar el crédito')
+      }
+    } catch {
+      toast.error('Error de conexión al habilitar el crédito')
+    } finally {
+      setIsEnablingCredit(false)
+    }
+  }
   const parsedAmount = parseFloat(amount) || 0
   const parsedCashReceived = parseFloat(cashReceived) || 0
   const amountExceedsBalance = parsedAmount > balanceDue
@@ -392,17 +451,19 @@ export function RepairPaymentDialog({
           {/* Monto */}
           <div className="space-y-1.5" data-help-id="repair-payment-amount">
             <Label htmlFor="pay-amount">{isCredit ? 'Monto a financiar' : 'Monto aplicado a la reparación'}</Label>
-            <Input
-              id="pay-amount"
-              type="number"
-              min={0}
-              max={balanceDue}
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              placeholder={balanceDue.toString()}
-              className="text-lg font-semibold"
-              disabled={isSubmitting}
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-2.5 text-sm font-bold text-slate-400">₲</span>
+              <Input
+                id="pay-amount"
+                type="text"
+                inputMode="numeric"
+                value={formatThousands(amount)}
+                onChange={e => setAmount(parseThousands(e.target.value).toString())}
+                placeholder={formatThousands(balanceDue)}
+                className="pl-7 text-lg font-bold font-mono"
+                disabled={isSubmitting}
+              />
+            </div>
             {amountExceedsBalance && (
               <p className="text-xs text-red-600">El monto supera el saldo pendiente.</p>
             )}
@@ -425,17 +486,19 @@ export function RepairPaymentDialog({
             <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
               <div className="space-y-1.5">
                 <Label htmlFor="cash-received">Efectivo recibido del cliente</Label>
-                <Input
-                  id="cash-received"
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  value={cashReceived}
-                  onChange={event => setCashReceived(event.target.value)}
-                  placeholder="Monto entregado por el cliente"
-                  className="text-lg font-semibold tabular-nums"
-                  disabled={isSubmitting}
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-sm font-bold text-slate-400">₲</span>
+                  <Input
+                    id="cash-received"
+                    type="text"
+                    inputMode="numeric"
+                    value={formatThousands(cashReceived)}
+                    onChange={event => setCashReceived(parseThousands(event.target.value).toString())}
+                    placeholder="Monto entregado por el cliente"
+                    className="pl-7 text-lg font-bold font-mono tabular-nums"
+                    disabled={isSubmitting}
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Montos rápidos de efectivo">
                 {[50000, 100000, 200000, 500000].map(quickAmount => (
@@ -529,6 +592,65 @@ export function RepairPaymentDialog({
                   </span>
                 </div>
               )}
+              {creditStatusLoaded && customerCreditLimit !== null && customerCreditLimit <= 0 && (
+                <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 space-y-2">
+                  <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                    <div>
+                      <p className="font-bold">Cliente sin crédito activo</p>
+                      <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                        {repair?.customer?.name || 'Este cliente'} no tiene una línea de crédito asignada (0 ₲).
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isEnablingCredit}
+                      onClick={() => handleEnableCustomerCredit(Math.max(1000000, balanceDue))}
+                      className="h-7 px-2.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg gap-1.5 shadow-xs"
+                    >
+                      {isEnablingCredit ? <Loader2 className="h-3 w-3 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+                      Habilitar Crédito ({formatCurrency(Math.max(1000000, balanceDue))})
+                    </Button>
+                    <button
+                      type="button"
+                      disabled={isEnablingCredit}
+                      onClick={() => handleEnableCustomerCredit(500000)}
+                      className="text-[10px] px-2 py-1 rounded-lg border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 font-semibold text-amber-800 dark:text-amber-300"
+                    >
+                      ₲ 500.000
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isEnablingCredit}
+                      onClick={() => handleEnableCustomerCredit(2000000)}
+                      className="text-[10px] px-2 py-1 rounded-lg border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 font-semibold text-amber-800 dark:text-amber-300"
+                    >
+                      ₲ 2.000.000
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {creditStatusLoaded && customerCreditLimit !== null && customerCreditLimit > 0 && (
+                <div className="flex items-center justify-between rounded-md bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-700 dark:text-emerald-300">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                    Línea habilitada: {formatCurrency(customerCreditLimit)}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isEnablingCredit}
+                    onClick={() => handleEnableCustomerCredit(customerCreditLimit + Math.max(500000, balanceDue))}
+                    className="text-[10px] text-emerald-800 dark:text-emerald-200 underline font-semibold hover:opacity-80"
+                  >
+                    Aumentar límite
+                  </button>
+                </div>
+              )}
+
               <p className="text-[11px] leading-snug text-muted-foreground">
                 Se registrará una deuda a crédito del cliente. La reparación queda saldada; el saldo se cobra por el módulo de créditos.
               </p>

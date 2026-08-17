@@ -9,6 +9,8 @@ import { DateRange } from 'react-day-picker'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
+import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
+import { POS_DASHBOARD_GUIDE } from '@/components/dashboard/common/section-guides-data'
 
 export type PosDashboardViewTab = 'all' | 'sales' | 'repairs' | 'profit'
 
@@ -151,7 +153,12 @@ export function PosDashboardHeader({ dateRange, setDateRange, onExport, activeVi
           </PopoverContent>
         </Popover>
 
-        <Button variant="outline" size="sm" className="gap-2" onClick={onExport}>
+        <SectionGuideButton 
+          guide={POS_DASHBOARD_GUIDE} 
+          className="h-9 font-semibold text-xs border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 transition-all shadow-2xs"
+        />
+
+        <Button variant="outline" size="sm" className="h-9 gap-2 text-xs" onClick={onExport}>
           <Download className="h-3.5 w-3.5" />
           Exportar CSV
         </Button>

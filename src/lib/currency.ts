@@ -165,3 +165,22 @@ export const isValidCurrency = (value: string | number): boolean => {
   const parsed = parseCurrency(value)
   return Number.isFinite(parsed) && parsed >= 0
 }
+
+/** Formatea un valor numérico o texto a miles con puntos para visualización en Paraguay (ej: 1000000 -> "1.000.000") */
+export const formatThousands = (value: number | string | null | undefined): string => {
+  if (value === null || value === undefined || value === '') return ''
+  const clean = String(value).replace(/\D/g, '')
+  if (!clean) return ''
+  const num = parseInt(clean, 10)
+  return isNaN(num) ? '' : num.toLocaleString('es-PY')
+}
+
+/** Parsea un texto con puntos/comas/letras a un número entero limpio (ej: "1.000.000" -> 1000000) */
+export const parseThousands = (value: number | string | null | undefined): number => {
+  if (value === null || value === undefined || value === '') return 0
+  if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value) : 0
+  const clean = String(value).replace(/\D/g, '')
+  if (!clean) return 0
+  const parsed = parseInt(clean, 10)
+  return isNaN(parsed) ? 0 : parsed
+}

@@ -25,6 +25,8 @@ import {
 import type { CustomerOrder, OrderStatus, PaymentStatus } from '@/lib/orders/types'
 import { CreateOrderDialog } from './CreateOrderDialog'
 import { formatDate, formatMoney } from './format'
+import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
+import { ORDERS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DatePreset = 'all' | 'today' | 'week' | 'month'
@@ -442,7 +444,7 @@ function OrderRow({
         <Button size="sm" variant="ghost"
           onClick={onDetailRequest}
           className="w-full h-7 gap-1 rounded-lg text-[11px] text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/8 dark:hover:text-slate-200 justify-center">
-          <PackageSearch className="h-3 w-3" /> Detalle producto
+          <PackageSearch className="h-3 w-3" /> Ver detalle
         </Button>
 
         {/* Copy order summary */}
@@ -558,6 +560,114 @@ function CancelConfirmBanner({ onConfirm, onDismiss }: { onConfirm: () => void; 
 }
 
 // ─── Main dashboard ───────────────────────────────────────────────────────────
+// ─── Historial del pedido ─────────────────────────────────────────────────────
+type OrderHistoryEvent = {
+  id: string
+  kind: 'STATUS' | 'PAYMENT'
+  from: string | null
+  to: string
+  note: string | null
+  amount: number | null
+  actor: string | null
+  createdAt: string
+}
+
+export function OrderHistory({ orderId }: { orderId: string }) {
+  const [events, setEvents] = useState<OrderHistoryEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    setError(null)
+    void (async () => {
+      try {
+        const response = await fetch(`/api/orders/${orderId}/history`, { cache: 'no-store' })
+        const payload = await response.json().catch(() => ({}))
+        if (!active) return
+        if (!response.ok || payload?.success === false) {
+          throw new Error(payload?.error ?? 'No se pudo cargar el historial.')
+        }
+        setEvents((payload.data?.events ?? []) as OrderHistoryEvent[])
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : 'No se pudo cargar el historial.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => { active = false }
+  }, [orderId])
+
+  const labelFor = (event: OrderHistoryEvent) => event.kind === 'STATUS'
+    ? ORDER_STATUS_META[event.to as OrderStatus]?.label ?? event.to
+    : PAYMENT_STATUS_META[event.to as PaymentStatus]?.label ?? event.to
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+        Historial
+      </p>
+
+      {loading ? (
+        <div className="mt-3 space-y-2" aria-busy="true" aria-label="Cargando historial">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-3/4" />
+        </div>
+      ) : error ? (
+        <p role="alert" className="mt-2 text-xs text-rose-600 dark:text-rose-300">{error}</p>
+      ) : events.length === 0 ? (
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          Todavía no hay cambios registrados para este pedido.
+        </p>
+      ) : (
+        <ol className="mt-3 space-y-0">
+          {events.map((event, index) => {
+            const isLast = index === events.length - 1
+            const isPayment = event.kind === 'PAYMENT'
+            return (
+              <li key={event.id} className="grid grid-cols-[16px_1fr] gap-3">
+                {/* Riel vertical: el punto marca el evento y la línea lo une
+                    con el siguiente, salvo en el último. */}
+                <div className="flex flex-col items-center">
+                  <span
+                    className={cn(
+                      'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                      isPayment ? 'bg-emerald-500' : 'bg-blue-500',
+                    )}
+                    aria-hidden="true"
+                  />
+                  {!isLast && <span className="w-px flex-1 bg-slate-200 dark:bg-white/10" aria-hidden="true" />}
+                </div>
+                <div className={cn('min-w-0', isLast ? 'pb-0' : 'pb-4')}>
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                      {isPayment ? 'Pago: ' : ''}{labelFor(event)}
+                    </span>
+                    {event.amount !== null && (
+                      <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                        {formatMoney(event.amount)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {formatDate(event.createdAt)}
+                    {' · '}
+                    {event.actor ?? 'Sistema'}
+                  </p>
+                  {event.note && (
+                    <p className="mt-1 text-xs italic text-slate-500 dark:text-slate-400">{event.note}</p>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </div>
+  )
+}
+
 function OrderDetailDialog({ order, open, onOpenChange }: {
   order: CustomerOrder | null
   open: boolean
@@ -620,8 +730,15 @@ function OrderDetailDialog({ order, open, onOpenChange }: {
           <div className="flex justify-between text-slate-500 dark:text-slate-400"><span>Subtotal</span><span>{formatMoney(order.subtotal)}</span></div>
           <div className="flex justify-between text-slate-500 dark:text-slate-400"><span>Envio</span><span>{formatMoney(order.shipping_cost)}</span></div>
           {order.discount_amount > 0 && <div className="flex justify-between text-emerald-600 dark:text-emerald-300"><span>Descuento</span><span>-{formatMoney(order.discount_amount)}</span></div>}
+          {order.store_credit_reserved > 0 && <div className="flex justify-between text-amber-600 dark:text-amber-300"><span>Saldo reservado</span><span>-{formatMoney(order.store_credit_reserved)}</span></div>}
+          {order.store_credit_applied > 0 && <div className="flex justify-between text-emerald-600 dark:text-emerald-300"><span>Saldo aplicado</span><span>-{formatMoney(order.store_credit_applied)}</span></div>}
           <div className="flex justify-between border-t border-slate-200 dark:border-white/10 pt-2 text-base font-bold text-slate-900 dark:text-white"><span>Total</span><span>{formatMoney(order.total)}</span></div>
+          <div className="flex justify-between font-bold text-rose-600 dark:text-rose-300"><span>Pendiente por cobrar</span><span>{formatMoney(order.amount_due)}</span></div>
         </div>
+
+        {/* El historial ya se venía registrando en cada cambio de estado y de
+            pago, pero nunca se mostraba en ningún lado. */}
+        <OrderHistory orderId={order.id} />
       </DialogContent>
     </Dialog>
   )
@@ -712,8 +829,11 @@ export function OrdersDashboard() {
         const mapped = cur.map((r) => r.id === order.id ? updated : r)
         return statusTab !== 'ALL' && updated.status !== statusTab ? mapped.filter((r) => r.id !== order.id) : mapped
       })
-      setStats((cur) => ({ ...cur, [order.status]: Math.max(0, (cur[order.status] ?? 0) - 1), [nextStatus]: (cur[nextStatus] ?? 0) + 1 }))
       toast.success('Estado actualizado', { description: `${order.order_number} → ${ORDER_STATUS_META[nextStatus].label}` })
+      // Los contadores se recargan del servidor en vez de ajustarse a mano: si
+      // otro operador movió pedidos mientras tanto, la aritmética optimista
+      // dejaba los números mal hasta la próxima recarga completa.
+      void loadOrders({ forceStats: true })
     } catch (error) {
       toast.error('No se pudo actualizar', { description: error instanceof Error ? error.message : 'Intenta nuevamente.' })
     } finally { setUpdatingId(null) }
@@ -736,7 +856,7 @@ export function OrdersDashboard() {
       // Keep "Cobrado hoy" live: the server attributes revenue to the day the
       // payment was confirmed, so a fresh PAID transition always lands on today.
       if (updated.payment_status === 'PAID' && order.payment_status !== 'PAID') {
-        setTodayRevenue((cur) => cur + Number(updated.total || 0))
+        setTodayRevenue((cur) => cur + Math.max(0, Number(order.total || 0) - Number(order.store_credit_applied || 0) - Number(order.store_credit_reserved || 0)))
       }
       toast.success('Pago actualizado', { description: `${order.order_number} → ${PAYMENT_STATUS_META[paymentStatus].label}` })
     } catch (error) {
@@ -832,6 +952,7 @@ export function OrdersDashboard() {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <SectionGuideButton guide={ORDERS_GUIDE} />
             <Button variant="outline" size="sm" onClick={() => void loadOrders({ forceStats: true })} disabled={loading}
               className="gap-1.5 rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:border-white/15 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white">
               <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Actualizar
@@ -846,62 +967,6 @@ export function OrdersDashboard() {
             </Button>
           </div>
         </div>
-
-        {/* Guía de funcionamiento de pedidos */}
-        {showGuide && (
-          <Card className="relative border border-slate-200 bg-white/80 dark:border-white/10 dark:bg-white/5 backdrop-blur-md">
-            <button
-              type="button"
-              onClick={() => setShowGuide(false)}
-              className="absolute right-3 top-3 z-10 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/10 transition-colors"
-              title="Ocultar guía permanentemente durante esta sesión"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <details className="group">
-              <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3 pr-10">
-                <div className="text-md font-bold flex items-center gap-2 text-blue-600 dark:text-blue-400">
-                  <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Pedidos Digitales?
-                </div>
-                <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-                  <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-                  <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-                </div>
-              </summary>
-              <CardContent className="pt-0 pb-5 text-xs text-slate-600 dark:text-slate-300">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-white/5 dark:border-white/5 backdrop-blur-sm">
-                    <h4 className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">1</Badge>
-                      Flujo de Estados
-                    </h4>
-                    <p className="leading-relaxed">
-                      Gestiona el ciclo de vida de los pedidos que provienen de tus canales digitales. Puedes transicionar estados desde Pendiente a Listo, Entregado o Cancelado conforme avance el empaque.
-                    </p>
-                  </div>
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-white/5 dark:border-white/5 backdrop-blur-sm">
-                    <h4 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">2</Badge>
-                      Método y Estado de Pago
-                    </h4>
-                    <p className="leading-relaxed">
-                      Monitorea si las órdenes fueron pre-pagadas mediante pasarela de cobros o si están pendientes de cobro contra entrega. Puedes actualizar el estado del pago a Pagado tras confirmarlo.
-                    </p>
-                  </div>
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-white/5 dark:border-white/5 backdrop-blur-sm">
-                    <h4 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">3</Badge>
-                      Despacho e Integración
-                    </h4>
-                    <p className="leading-relaxed">
-                      Identifica si el pedido requiere Delivery/Envío o Retiro en Sucursal (Store Pickup). Al preparar los ítems, el inventario de la sucursal seleccionada se descontará automáticamente.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </details>
-          </Card>
-        )}
 
         {/* ── Metric cards ── */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -27,6 +27,7 @@ import { CashRegisterHistory } from './components/CashRegisterHistory'
 import { CashRegisterAudit } from './components/CashRegisterAudit'
 import { ElectronicPaymentsPanel } from './components/ElectronicPaymentsPanel'
 import { OpenCashRegisterDialog } from '../components/OpenCashRegisterDialog'
+import { POSCashMovementDialog } from '../components/POSCashMovementDialog'
 
 export default function CashRegisterPage() {
   const router = useRouter()
@@ -378,85 +379,13 @@ export default function CashRegisterPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isMovementDialogOpen} onOpenChange={setIsMovementDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}</DialogTitle>
-            <DialogDescription>
-              {movementType === 'in'
-                ? 'Ingrese el monto a agregar a la caja.'
-                : 'Ingrese el monto a retirar de la caja.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="mov-amount">Monto</Label>
-              <Input
-                id="mov-amount"
-                type="number"
-                inputMode="decimal"
-                value={movementAmount}
-                onChange={(e) => setMovementAmount(e.target.value)}
-                autoFocus
-                placeholder="0"
-              />
-              <div className="flex flex-wrap gap-2 mt-1">
-                {[5000, 10000, 20000, 50000, 100000].map((amount) => (
-                  <Button
-                    key={amount}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setMovementAmount(amount.toString())}
-                  >
-                    {new Intl.NumberFormat('es-PY').format(amount)}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="mov-note">Motivo / Nota</Label>
-              <Input
-                id="mov-note"
-                value={movementNote}
-                onChange={(e) => setMovementNote(e.target.value)}
-                placeholder={movementType === 'in' ? 'Ej. Cambio inicial' : 'Ej. Pago a proveedor'}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsMovementDialogOpen(false)}>Cancelar</Button>
-            <Button
-              variant={movementType === 'out' ? 'destructive' : 'default'}
-              disabled={parsedMovementAmount <= 0 || isSubmitting}
-              onClick={async () => {
-                if (parsedMovementAmount <= 0) return
-                setIsSubmitting(true)
-                try {
-                  const saved = await addMovement(
-                    movementType === 'in' ? 'cash_in' : 'cash_out',
-                    parsedMovementAmount,
-                    movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso')
-                  )
-                  if (saved) {
-                    setIsMovementDialogOpen(false)
-                    setMovementAmount('')
-                    setMovementNote('')
-                  }
-                } finally {
-                  setIsSubmitting(false)
-                }
-              }}
-            >
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isSubmitting
-                ? 'Guardando...'
-                : movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <POSCashMovementDialog
+        open={isMovementDialogOpen}
+        onOpenChange={setIsMovementDialogOpen}
+        onAddMovement={addMovement}
+        initialType={movementType}
+        currentBalance={getCurrentRegister?.balance || 0}
+      />
 
       <CashCountModal
         isOpen={isCashCountModalOpen}

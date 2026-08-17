@@ -13,7 +13,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import { useAuth } from '@/contexts/auth-context'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
@@ -1354,15 +1354,17 @@ export function RepairFormDialogV2({
                             </Button>
                           </div>
                           <div className="relative">
-                            <DollarSign className="absolute left-2.5 top-2 h-4 w-4 text-primary" />
+                            <span className="absolute left-2.5 top-2 font-bold text-xs text-primary">₲</span>
                             <Input
-                              type="number"
-                              step="0.01"
-                              {...register(`devices.${index}.estimatedCost`, {
-                                valueAsNumber: true
-                              })}
-                              placeholder="0.00"
-                              className={`h-9 text-sm pl-8 font-semibold ${fieldClass} ${errors.devices?.[index]?.estimatedCost ? 'border-red-500' : ''}`}
+                              type="text"
+                              inputMode="numeric"
+                              value={formatThousands(watch(`devices.${index}.estimatedCost`))}
+                              onChange={(e) => {
+                                const raw = parseThousands(e.target.value)
+                                setValue(`devices.${index}.estimatedCost`, raw, { shouldDirty: true, shouldValidate: true })
+                              }}
+                              placeholder="0"
+                              className={`h-9 text-sm pl-7 font-mono font-bold ${fieldClass} ${errors.devices?.[index]?.estimatedCost ? 'border-red-500' : ''}`}
                             />
                           </div>
                           {errors.devices?.[index]?.estimatedCost && (
@@ -2136,14 +2138,17 @@ export function RepairFormDialogV2({
                               Precio al cliente
                             </Label>
                             <div className="relative">
-                              <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-orange-600 dark:text-orange-400" />
+                              <span className="absolute left-3 top-2.5 font-bold text-xs text-orange-600 dark:text-orange-400">₲</span>
                               <Input 
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                className="pl-9 border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600 font-semibold" 
-                                {...register(`parts.${index}.cost`, { valueAsNumber: true })} 
-                                placeholder="0.00"
+                                type="text"
+                                inputMode="numeric"
+                                className="pl-7 font-mono font-bold border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600" 
+                                value={formatThousands(watch(`parts.${index}.cost`))}
+                                onChange={(e) => {
+                                  const raw = parseThousands(e.target.value)
+                                  setValue(`parts.${index}.cost`, raw, { shouldDirty: true, shouldValidate: true })
+                                }}
+                                placeholder="0"
                               />
                             </div>
                             {errors.parts?.[index]?.cost && (
@@ -2157,15 +2162,21 @@ export function RepairFormDialogV2({
                           {/* Costo real para margen y reportes */}
                           <div className="md:col-span-2 space-y-2">
                             <Label className="text-sm font-medium">Costo interno</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              disabled={Boolean(productId)}
-                              className="font-medium"
-                              {...register(`parts.${index}.internalCost`, { valueAsNumber: true })}
-                              placeholder={productId ? 'Desde inventario' : '0.00'}
-                            />
+                            <div className="relative">
+                              <span className="absolute left-3 top-2.5 font-bold text-xs text-slate-400">₲</span>
+                              <Input
+                                type="text"
+                                inputMode="numeric"
+                                disabled={Boolean(productId)}
+                                className="pl-7 font-mono font-medium"
+                                value={formatThousands(watch(`parts.${index}.internalCost`))}
+                                onChange={(e) => {
+                                  const raw = parseThousands(e.target.value)
+                                  setValue(`parts.${index}.internalCost`, raw, { shouldDirty: true, shouldValidate: true })
+                                }}
+                                placeholder={productId ? 'Desde inventario' : '0'}
+                              />
+                            </div>
                             <p className="text-[11px] leading-4 text-muted-foreground">
                               {productId ? 'Se toma del costo de compra del producto.' : 'Se usa para calcular el margen; no se muestra al cliente.'}
                             </p>
@@ -2371,16 +2382,23 @@ export function RepairFormDialogV2({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="depositAmount" className="text-sm font-medium">Monto del adelanto</Label>
-                      <Input
-                        id="depositAmount"
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        {...register('depositAmount', { valueAsNumber: true })}
-                        placeholder="0"
-                        disabled={isSubmitting || !cajaAbierta}
-                      />
+                      <Label htmlFor="depositAmount" className="text-sm font-medium">Monto del adelanto / seña</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 font-bold text-xs text-slate-400">₲</span>
+                        <Input
+                          id="depositAmount"
+                          type="text"
+                          inputMode="numeric"
+                          value={formatThousands(watch('depositAmount'))}
+                          onChange={(e) => {
+                            const raw = parseThousands(e.target.value)
+                            setValue('depositAmount', raw, { shouldDirty: true, shouldValidate: true })
+                          }}
+                          placeholder="0"
+                          className="pl-7 font-mono font-bold"
+                          disabled={isSubmitting || !cajaAbierta}
+                        />
+                      </div>
                       {errors.depositAmount && (
                         <p className="text-xs text-red-500">{errors.depositAmount.message}</p>
                       )}

@@ -73,7 +73,7 @@ describe('dashboard financial workflow contracts', () => {
       'utf8'
     )
 
-    expect(posRoute).toContain("'process_pos_sale_atomic_v3'")
+    expect(posRoute).toContain("'process_pos_sale_atomic_v4'")
     expect(ordersRoute).toContain("'create_dashboard_order_atomic'")
   })
 
@@ -96,7 +96,7 @@ describe('dashboard financial workflow contracts', () => {
     )
 
     expect(posRoute).toContain("permission: 'pos.sales.create'")
-    expect(posRoute).toContain("'process_pos_sale_atomic_v3'")
+    expect(posRoute).toContain("'process_pos_sale_atomic_v4'")
     expect(posPage).not.toContain('await persistSaleToSupabase(')
     expect(posPage).not.toContain('syncSaleWithCashRegister(')
     expect(posPage).not.toContain(".from('sales').insert")
@@ -255,13 +255,18 @@ describe('dashboard financial workflow contracts', () => {
       resolve(workspace, 'supabase/migrations/20260802133000_finalize_pos_checkout_atomic.sql'),
       'utf8'
     )
+    const atomicStoreCreditMigration = readFileSync(
+      resolve(workspace, 'supabase/migrations/20260816153000_atomic_pos_store_credit.sql'),
+      'utf8'
+    )
 
-    expect(route).toContain("'process_pos_sale_atomic_v3'")
+    expect(route).toContain("'process_pos_sale_atomic_v4'")
     expect(route).not.toContain("supabase.rpc('apply_pos_payment_metadata_atomic'")
     expect(atomicCheckoutMigration).toContain('function public.process_pos_sale_atomic_v3')
     expect(atomicCheckoutMigration).toContain('REPAIR_ALREADY_PAID')
     expect(atomicCheckoutMigration).toContain('for update')
     expect(atomicCheckoutMigration).toContain('apply_pos_payment_metadata_atomic')
+    expect(atomicStoreCreditMigration).toContain('process_pos_sale_atomic_v3(')
   })
 
   it('connects checkout discount and paid-repair filtering to persisted fields', () => {

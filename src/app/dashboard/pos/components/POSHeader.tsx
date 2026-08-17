@@ -10,9 +10,11 @@ import {
   BarChart3,
   CreditCard,
   FileText,
-  ShoppingCart
+  ShoppingCart,
+  DollarSign
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   DropdownMenu,
@@ -22,6 +24,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { cn } from '@/lib/utils'
+import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
+import { POS_GUIDE } from '@/components/dashboard/common/section-guides-data'
+import { useAuth } from '@/contexts/auth-context'
 
 interface Register {
   id: string
@@ -63,14 +68,16 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
   cartItemCount,
   mobileCompact = false
 }) => {
+  const { user, isAdmin } = useAuth()
+  const canViewExecutiveReports = Boolean(isAdmin || user?.role === 'admin' || user?.role === 'super_admin')
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => {
     setMounted(true)
   }, [])
   return (
-    <div className={cn("flex items-center justify-between gap-4 p-2", className)}>
+    <div className={cn("flex items-center justify-between gap-3 px-4 py-1.5", className)}>
       {/* Left Side: Branding & Register Selection */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4">
         {children}
         
         {children && <div className="h-8 w-px bg-border/60" />}
@@ -136,21 +143,25 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
       </div>
 
       {/* Right Side: Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {onOpenCart && (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             className={cn(
-              "h-7 text-xs font-medium hover:bg-background shadow-none",
-              mobileCompact ? "w-8 px-0" : "px-3"
+              "h-7 text-xs font-semibold bg-primary/10 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground gap-1.5 transition-all shadow-xs rounded-lg",
+              mobileCompact ? "w-8 px-0" : "px-2.5"
             )}
             onClick={onOpenCart}
-            title="Ver productos agregados"
+            title="Ver productos agregados al carrito"
           >
-            <ShoppingCart className={cn("h-3.5 w-3.5 text-muted-foreground", !mobileCompact && "mr-2")} />
+            <ShoppingCart className="h-3.5 w-3.5" />
             {!mobileCompact && <span className="hidden sm:inline">Carrito</span>}
-            {!mobileCompact && (typeof cartItemCount === 'number' ? ` (${cartItemCount})` : '')}
+            {typeof cartItemCount === 'number' && cartItemCount > 0 && (
+              <Badge className="h-4 min-w-[16px] px-1 text-[9px] font-bold rounded-full bg-primary text-primary-foreground">
+                {cartItemCount}
+              </Badge>
+            )}
           </Button>
         )}
         {mobileCompact ? (
@@ -160,75 +171,115 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={isRegisterOpen ? onOpenMovements : onOpenRegister}>
-                <GSIcon className="h-4 w-4 mr-2" />
-                {isRegisterOpen ? 'Movimientos' : 'Abrir caja'}
+            <DropdownMenuContent align="end" className="w-60 max-h-[75vh] sm:max-h-[80vh] overflow-y-auto p-1.5">
+              <DropdownMenuItem 
+                onClick={isRegisterOpen ? onOpenMovements : onOpenRegister}
+                className="gap-2.5 py-2 cursor-pointer text-xs"
+              >
+                <DollarSign className="h-4 w-4 text-emerald-500" />
+                <div className="flex flex-col">
+                  <span className="font-medium">{isRegisterOpen ? 'Movimientos de Caja' : 'Abrir Turno de Caja'}</span>
+                  <span className="text-[10px] text-muted-foreground">{isRegisterOpen ? 'Ingresos y egresos' : 'Iniciar sesión'}</span>
+                </div>
               </DropdownMenuItem>
-              {canManageRegisters && (
-                <DropdownMenuItem onClick={onOpenRegisterManager}>
-                  <Settings className="h-4 w-4 mr-2" />
-                  Gestionar cajas
-                </DropdownMenuItem>
-              )}
+
               {isRegisterOpen && (
-                <DropdownMenuItem asChild>
+                <DropdownMenuItem asChild className="gap-2.5 py-2 cursor-pointer text-xs">
                   <Link href="/dashboard/pos/caja">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Detalles de caja
+                    <FileText className="h-4 w-4 text-blue-500" />
+                    <div className="flex flex-col">
+                      <span className="font-medium">Detalles de Caja</span>
+                      <span className="text-[10px] text-muted-foreground">Arqueo y transacciones</span>
+                    </div>
                   </Link>
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem asChild>
-                <Link href="/dashboard/pos/dashboard">
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Reportes
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onToggleFullscreen}>
-                {isFullscreen ? <Minimize className="h-4 w-4 mr-2" /> : <Maximize className="h-4 w-4 mr-2" />}
-                {isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+
+              {canViewExecutiveReports && (
+                <DropdownMenuItem asChild className="gap-2.5 py-2 cursor-pointer text-xs">
+                  <Link href="/dashboard/pos/dashboard">
+                    <BarChart3 className="h-4 w-4 text-indigo-500" />
+                    <div className="flex flex-col">
+                      <span className="font-medium">Reportes de POS</span>
+                      <span className="text-[10px] text-muted-foreground">Métricas y estadísticas</span>
+                    </div>
+                  </Link>
+                </DropdownMenuItem>
+              )}
+
+              {canManageRegisters && (
+                <DropdownMenuItem 
+                  onClick={onOpenRegisterManager}
+                  className="gap-2.5 py-2 cursor-pointer text-xs"
+                >
+                  <Settings className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Gestionar cajas</span>
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuItem 
+                onClick={onToggleFullscreen}
+                className="gap-2.5 py-2 cursor-pointer text-xs"
+              >
+                {isFullscreen ? <Minimize className="h-4 w-4 text-muted-foreground" /> : <Maximize className="h-4 w-4 text-muted-foreground" />}
+                <span>{isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
           <>
-            <div className="flex items-center bg-muted/30 rounded-lg p-1 border border-border/40 mr-2">
+            <div className="flex items-center bg-muted/30 rounded-lg p-0.5 border border-border/50">
+              {/* Botón Movimientos / Abrir Caja */}
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none"
+                className="h-7 px-2.5 text-xs font-medium hover:bg-background text-foreground/80 hover:text-foreground gap-1.5 transition-all rounded-md"
                 onClick={isRegisterOpen ? onOpenMovements : onOpenRegister}
-                title={isRegisterOpen ? "Ver movimientos" : "Abrir caja"}
+                title={isRegisterOpen ? "Registrar ingresos o egresos de caja" : "Abrir turno de caja"}
               >
-                <GSIcon className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
                 <span className="hidden sm:inline">{isRegisterOpen ? 'Movimientos' : 'Abrir caja'}</span>
               </Button>
+
               {isRegisterOpen && (
                 <>
-                  <div className="hidden lg:block w-px h-4 bg-border/40 mx-1" />
-                  <Link href="/dashboard/pos/caja" className="hidden lg:block">
+                  <div className="hidden sm:block w-px h-3.5 bg-border/50 mx-0.5" />
+                  {/* Botón Detalles de Caja Resaltado */}
+                  <Link href="/dashboard/pos/caja" className="hidden sm:block">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none"
+                      className="h-7 px-2.5 text-xs font-semibold bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300 hover:bg-blue-500/20 hover:text-blue-800 dark:hover:text-blue-200 gap-1.5 transition-all rounded-md shadow-2xs"
+                      title="Ver resumen, arqueo y transacciones detalladas de caja"
                     >
-                      <FileText className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                      Detalles de Caja
+                      <FileText className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      <span>Detalles de Caja</span>
                     </Button>
                   </Link>
-                  <div className="hidden lg:block w-px h-4 bg-border/40 mx-1" />
-                  <Link href="/dashboard/pos/dashboard" className="hidden lg:block">
-                    <Button variant="ghost" size="sm" className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none">
-                      <BarChart3 className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                      Reportes
-                    </Button>
-                  </Link>
+
+                  {canViewExecutiveReports && (
+                    <>
+                      <div className="hidden lg:block w-px h-3.5 bg-border/50 mx-0.5" />
+                      {/* Botón Reportes */}
+                      <Link href="/dashboard/pos/dashboard" className="hidden lg:block">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 px-2.5 text-xs font-medium hover:bg-background text-foreground/80 hover:text-foreground gap-1.5 transition-all rounded-md"
+                          title="Ver métricas y reportes de ventas POS"
+                        >
+                          <BarChart3 className="h-3.5 w-3.5 text-indigo-500" />
+                          <span>Reportes</span>
+                        </Button>
+                      </Link>
+                    </>
+                  )}
                 </>
               )}
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
+              <SectionGuideButton guide={POS_GUIDE} />
               <Button
                 variant="ghost"
                 size="icon"

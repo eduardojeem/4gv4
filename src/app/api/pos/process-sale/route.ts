@@ -17,6 +17,7 @@ type RouteBody = {
   p_repair_ids?: unknown
   p_mark_repairs_delivered?: unknown
   p_delivery_outcome?: unknown
+  p_store_credit_amount?: unknown
 }
 
 type NormalizedItem = {
@@ -65,8 +66,8 @@ function normalizeItems(value: unknown): NormalizedItem[] | null {
   return items
 }
 
-export function normalizePayments(value: unknown): NormalizedPayment[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 10) return null
+export function normalizePayments(value: unknown, allowEmpty = false): NormalizedPayment[] | null {
+  if (!Array.isArray(value) || (!allowEmpty && value.length === 0) || value.length > 10) return null
 
   const payments: NormalizedPayment[] = []
   for (const entry of value) {
@@ -160,6 +161,10 @@ function errorResponse(error: { message?: string } | null) {
     ['TRANSFER_REFERENCE_REQUIRED', 'La transferencia necesita una referencia.', 400],
     ['CREDIT_CUSTOMER_REQUIRED', 'Selecciona un cliente para usar credito.', 400],
     ['CREDIT_LIMIT_EXCEEDED', 'El cliente no tiene credito disponible suficiente.', 409],
+    ['STORE_CREDIT_CUSTOMER_REQUIRED', 'Selecciona un cliente para usar saldo a favor.', 400],
+    ['STORE_CREDIT_EXCEEDS_BALANCE', 'El saldo a favor disponible cambio. Actualiza el cobro.', 409],
+    ['STORE_CREDIT_EXCEEDS_SALE_TOTAL', 'El saldo a favor no puede superar el total de la venta.', 400],
+    ['STORE_CREDIT_SALE_CUSTOMER_MISMATCH', 'El saldo a favor no pertenece al cliente de la venta.', 409],
     ['REPAIR_NOT_IN_POS_SCOPE', 'Una reparacion no pertenece a la sucursal activa.', 400],
     ['REPAIR_ALREADY_PAID', 'Una de las reparaciones seleccionadas ya fue pagada.', 409],
   ]
@@ -182,7 +187,8 @@ export const POST = withTenantAuth(
 
     const saleData = body.p_sale_data ?? {}
     const items = normalizeItems(body.p_items)
-    const payments = normalizePayments(body.p_payments)
+    const requestedStoreCreditAmount = finiteNumber(body.p_store_credit_amount ?? 0)
+    const payments = normalizePayments(body.p_payments, requestedStoreCreditAmount !== null && requestedStoreCreditAmount > 0)
     const repairIds = normalizeUuidArray(body.p_repair_ids)
     const sessionId = typeof body.p_session_id === 'string' ? body.p_session_id.trim() : ''
     const customerId = typeof saleData.customer_id === 'string' && saleData.customer_id.trim()
@@ -192,6 +198,7 @@ export const POST = withTenantAuth(
     const priceMode = body.p_price_mode === 'wholesale' ? 'wholesale' : 'retail'
     const orderDiscountRate = finiteNumber(body.p_order_discount_rate ?? 0)
     const credit = normalizeCredit(body.p_credit)
+    const storeCreditAmount = requestedStoreCreditAmount
 
     if (!items || !payments || !repairIds) {
       return NextResponse.json({ success: false, error: 'Los items, pagos o reparaciones no son validos.' }, { status: 400 })
@@ -210,6 +217,12 @@ export const POST = withTenantAuth(
     }
     if (orderDiscountRate === null || orderDiscountRate < 0 || orderDiscountRate > 100) {
       return NextResponse.json({ success: false, error: 'El descuento general no es valido.' }, { status: 400 })
+    }
+    if (storeCreditAmount === null || storeCreditAmount < 0) {
+      return NextResponse.json({ success: false, error: 'El saldo a favor aplicado no es valido.' }, { status: 400 })
+    }
+    if (storeCreditAmount > 0 && !customerId) {
+      return NextResponse.json({ success: false, error: 'Selecciona un cliente para usar saldo a favor.' }, { status: 400 })
     }
 
     let branchScope
@@ -232,7 +245,7 @@ export const POST = withTenantAuth(
     const supabase = createAdminSupabase()
     const taxRate = await getTaxRate(supabase, organization.id)
     const code = `POS-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
-    const { data, error } = await supabase.rpc('process_pos_sale_atomic_v3', {
+    const { data, error } = await supabase.rpc('process_pos_sale_atomic_v4', {
       p_organization_id: organization.id,
       p_branch_id: branchScope.branchId,
       p_actor_id: user.id,
@@ -251,6 +264,7 @@ export const POST = withTenantAuth(
       p_repair_ids: repairIds,
       p_mark_repairs_delivered: body.p_mark_repairs_delivered === true,
       p_delivery_outcome: typeof body.p_delivery_outcome === 'string' ? body.p_delivery_outcome.slice(0, 120) : null,
+      p_store_credit_amount: storeCreditAmount,
     })
 
     if (error || !data) return errorResponse(error)

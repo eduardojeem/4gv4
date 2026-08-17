@@ -1634,6 +1634,19 @@ type FinancePaymentRecord = {
   amount: number
 }
 
+/** Devolucion de posventa ya cerrada, con su costo historico resuelto. */
+export interface FinanceRefundRecord {
+  id: string
+  branchId: string | null
+  /** Fecha en que se cerro el caso: el reintegro pertenece a ese periodo. */
+  resolvedAt: string | null
+  amount: number
+  /** Costo que vuelve a inventario; 0 si la mercaderia no volvio vendible. */
+  recoveredCost: number
+  /** Reintegrado en efectivo por caja. El saldo a favor no mueve caja. */
+  cashAmount: number
+}
+
 export interface FinanceSummaryRecords {
   sales: FinanceSaleRecord[]
   saleItems: FinanceSaleItemRecord[]
@@ -1647,6 +1660,8 @@ export interface FinanceSummaryRecords {
   payrollEntries: FinancePayrollEntryRecord[]
   financePayments: FinancePaymentRecord[]
   payrollPayments: FinancePaymentRecord[]
+  /** Opcional: un despliegue sin la tabla de posventa sigue funcionando. */
+  refunds?: FinanceRefundRecord[]
 }
 
 export interface FinanceSummaryReport extends FinanceSummary {
@@ -1839,7 +1854,19 @@ function buildFinancialSummary(
         isInPeriod(entry.approvedAt, filters),
     )
     .map((entry) => ({ id: entry.id, amount: money(entry.netAmount), paidAmount: 0 }))
-  const summary = calculateFinancialSummary({ revenue, directCosts, expenses, payroll })
+  // Las devoluciones cerradas en el periodo revierten la venta que ya se conto.
+  const selectedRefunds = (records.refunds ?? []).filter(
+    (refund) =>
+      isInBranch(refund.branchId, filters) && isInPeriod(refund.resolvedAt, filters),
+  )
+  const refunds = selectedRefunds.map((refund) => ({
+    id: refund.id,
+    amount: money(refund.amount),
+    recoveredCost: Math.min(money(refund.recoveredCost), money(refund.amount)),
+    cashAmount: Math.min(money(refund.cashAmount), money(refund.amount)),
+  }))
+  const summary = calculateFinancialSummary({ revenue, directCosts, expenses, payroll, refunds })
+  const refundedCash = refunds.reduce((total, refund) => total + refund.cashAmount, 0)
   const saleCollected = [...(records.salePayments ?? []), ...(records.creditPayments ?? [])]
     .filter(
       (payment) =>
@@ -1849,7 +1876,8 @@ function buildFinancialSummary(
     )
     .reduce((total, payment) => total + money(payment.amount), 0)
   const paid = signedPayments(records.financePayments, filters) +
-    signedPayments(records.payrollPayments, filters)
+    signedPayments(records.payrollPayments, filters) +
+    refundedCash
   const cashTimingWarnings = [
     ...(records.salePaymentTimingAvailable === false
       ? selectedSales.map((sale) => ({
@@ -1967,6 +1995,115 @@ function assertBoundedFinanceRows(
     totalRows: count,
     source,
   })
+}
+
+
+/**
+ * Devoluciones de posventa ya cerradas dentro del periodo.
+ *
+ * El costo recuperado sale del snapshot historico del item vendido, el mismo
+ * que usa el costo directo de la venta: asi la reversion usa exactamente el
+ * costo con el que se conto el ingreso, y no el precio de compra de hoy.
+ */
+async function loadAfterSalesRefunds(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  startDate: string,
+  queryEndDate: string,
+): Promise<FinanceRefundRecord[]> {
+  const result = await admin
+    .from('after_sales_cases')
+    .select('id, status, resolved_at, refund_amount, refund_method, restock_action, sale_id, sale_item_id, repair_id', { count: 'exact' })
+    .eq('organization_id', organizationId)
+    // El estado se guarda en ingles o en espanol segun la antiguedad del caso.
+    .in('status', ['completed', 'completado'])
+    .gt('refund_amount', 0)
+    .gte('resolved_at', startDate)
+    .lt('resolved_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
+    .limit(FINANCE_REPORT_QUERY_LIMIT)
+
+  if (result.error) {
+    // Un despliegue sin la migracion de posventa simplemente no tiene
+    // devoluciones que revertir; no es motivo para romper el resumen.
+    if (isMissingTableError(result.error, 'after_sales_cases')) return []
+    throw toFinanceApiError(result.error)
+  }
+  assertBoundedFinanceRows(result.data as unknown[] | null, 'devoluciones de posventa', result.count)
+
+  const rows = (result.data ?? []) as Array<Record<string, unknown>>
+  if (rows.length === 0) return []
+
+  // Solo se recupera costo si la mercaderia volvio vendible.
+  const sellableItemIds = rows
+    .filter((row) => String(row.restock_action ?? '') === 'sellable' && row.sale_item_id)
+    .map((row) => String(row.sale_item_id))
+
+  const costByItemId = new Map<string, number>()
+  if (sellableItemIds.length > 0) {
+    for (const ids of chunkQueryValues(sellableItemIds)) {
+      const snapshots = await admin
+        .from('sale_item_cost_snapshots')
+        .select('sale_item_id, unit_cost')
+        .eq('organization_id', organizationId)
+        .in('sale_item_id', ids)
+      if (snapshots.error) {
+        if (isMissingTableError(snapshots.error, 'sale_item_cost_snapshots')) break
+        throw toFinanceApiError(snapshots.error)
+      }
+      for (const snapshot of snapshots.data ?? []) {
+        if (snapshot.sale_item_id && snapshot.unit_cost !== null) {
+          costByItemId.set(String(snapshot.sale_item_id), money(snapshot.unit_cost))
+        }
+      }
+    }
+  }
+
+  // El caso no guarda sucursal: se toma la del origen, igual que al reintegrar.
+  const branchBySaleId = await loadBranchIds(admin, organizationId, 'sales', rows.map((row) => row.sale_id))
+  const branchByRepairId = await loadBranchIds(admin, organizationId, 'repairs', rows.map((row) => row.repair_id))
+
+  return rows.map((row) => {
+    const amount = money(row.refund_amount as number | string | null)
+    const quantity = Math.max(1, Math.trunc(Number(row.quantity ?? 1) || 1))
+    const unitCost = row.sale_item_id ? costByItemId.get(String(row.sale_item_id)) ?? 0 : 0
+    const saleId = row.sale_id ? String(row.sale_id) : null
+    const repairId = row.repair_id ? String(row.repair_id) : null
+
+    return {
+      id: String(row.id),
+      branchId: (saleId ? branchBySaleId.get(saleId) : null) ?? (repairId ? branchByRepairId.get(repairId) : null) ?? null,
+      resolvedAt: row.resolved_at ? String(row.resolved_at) : null,
+      amount,
+      // Nunca se recupera mas costo que lo reintegrado.
+      recoveredCost: Math.min(roundMoneyValue(unitCost * quantity), amount),
+      cashAmount: String(row.refund_method ?? '') === 'cash' ? amount : 0,
+    }
+  })
+}
+
+/** Sucursal de un conjunto de ventas o reparaciones, por id. */
+async function loadBranchIds(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  table: 'sales' | 'repairs',
+  rawIds: unknown[],
+): Promise<Map<string, string | null>> {
+  const ids = Array.from(new Set(rawIds.filter(Boolean).map((id) => String(id))))
+  const branches = new Map<string, string | null>()
+  if (ids.length === 0) return branches
+
+  for (const chunk of chunkQueryValues(ids)) {
+    const { data, error } = await admin
+      .from(table)
+      .select('id, branch_id')
+      .eq('organization_id', organizationId)
+      .in('id', chunk)
+    if (error) throw toFinanceApiError(error)
+    for (const row of data ?? []) {
+      branches.set(String(row.id), (row as { branch_id?: string | null }).branch_id ?? null)
+    }
+  }
+  return branches
 }
 
 async function loadFinanceSummaryRecords(
@@ -2088,7 +2225,10 @@ async function loadFinanceSummaryRecords(
     queryEndDate,
   )
 
+  const refunds = await loadAfterSalesRefunds(admin, organizationId, startDate, queryEndDate)
+
   return {
+    refunds,
     sales,
     saleItems,
     salePayments: salePaymentResult.payments,

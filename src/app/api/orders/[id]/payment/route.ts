@@ -9,7 +9,6 @@ import {
   getInvalidPaymentTransitionMessage,
   normalizePaymentStatus,
 } from '@/lib/orders/payment-flow'
-import type { PaymentStatus } from '@/lib/orders/types'
 import { createClient } from '@/lib/supabase/server'
 
 const paymentSchema = z.object({
@@ -38,7 +37,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, a
     const supabase = await createClient()
     const { data: current, error: currentError } = await supabase
       .from('customer_orders')
-      .select('status, payment_status, payment_method, total')
+      .select('status, payment_status, payment_method, total, store_credit_reserved, store_credit_applied')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -77,7 +76,9 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, a
       from_status: fromPaymentStatus,
       to_status: toPaymentStatus,
       payment_method: current.payment_method ? String(current.payment_method).toUpperCase() : null,
-      amount: toPaymentStatus === 'PAID' ? Number(current.total || 0) : null,
+      amount: toPaymentStatus === 'PAID'
+        ? Math.max(0, Number(current.total || 0) - Number(current.store_credit_reserved || 0) - Number(current.store_credit_applied || 0))
+        : null,
       note: validation.data.note || null,
       changed_by: user.id,
       created_at: now,

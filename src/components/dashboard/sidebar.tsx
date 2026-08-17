@@ -53,7 +53,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { name: 'Onboarding', href: '/dashboard/onboarding', icon: Rocket, roles: ['admin', 'vendedor', 'tecnico'], description: 'Configuracion inicial' },
       { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, permission: 'pos.read' },
       { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, permission: 'pos.read' },
-      { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, permission: 'pos.read' },
+      { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin'], description: 'Analíticas y ganancias' },
     ],
   },
   {
@@ -66,7 +66,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { name: 'Marcas', href: '/dashboard/brands', icon: Building2, permission: 'products.manage' },
       { name: 'Categorías', href: '/dashboard/categories', icon: Tag, permission: 'products.read' },
       { name: 'Promociones', href: '/dashboard/promotions', icon: Percent, permission: 'promotions.read' },
-      { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['admin'] },
+      { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['super_admin', 'admin'] },
       { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, permission: 'repairs.read' },
       { name: 'Posventa', href: '/dashboard/after-sales', icon: RotateCcw, permission: 'customers.read', description: 'Garantias, cambios y devoluciones' },
       { name: 'Inv. Taller', href: '/dashboard/repairs/inventory', icon: Archive, permission: 'repairs.read' },
@@ -76,7 +76,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: 'Análisis',
     items: [
-      { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, permission: 'reports.read' },
+      { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, roles: ['super_admin', 'admin'] },
       { name: 'Administración', href: '/admin', icon: Settings, roles: ['super_admin', 'admin'] },
     ],
   },

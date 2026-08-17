@@ -10,6 +10,7 @@ import { InstallmentSelector } from '@/components/public/InstallmentSelector'
 import { usePathname } from 'next/navigation'
 import { formatPrice, cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
+import { resolvePublicUnitPrice } from '@/lib/orders/public-pricing'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -86,11 +87,15 @@ export function ProductCard(props: ProductCardProps) {
     product.wholesale_price != null &&
     product.wholesale_price < product.sale_price
 
-  const displayPrice = hasOffer
-    ? product.offer_price!
-    : isWholesale && product.wholesale_price
-    ? product.wholesale_price
-    : product.sale_price
+  // La misma función que usa el checkout: si la vitrina y el cobro calcularan
+  // por separado, vuelven a divergir como pasaba con el precio mayorista.
+  const displayPrice = resolvePublicUnitPrice({
+    isWholesale,
+    wholesalePrice: product.wholesale_price ?? null,
+    salePrice: product.sale_price,
+    hasOffer: product.has_offer === true,
+    offerPrice: product.offer_price ?? null,
+  })
 
   const originalPrice = hasOffer || isWholesaleDiscount ? product.sale_price : null
   const discountPct = originalPrice

@@ -606,11 +606,14 @@ export function TrackOrderClient({ organizationSlug }: { organizationSlug?: stri
                     <span className="font-semibold">Costo Envío</span>
                     <strong className="font-extrabold text-slate-800 dark:text-slate-200">{formatMoney(order.shipping_cost)}</strong>
                   </div>
+                  {order.store_credit_reserved > 0 && <div className="flex justify-between items-center text-amber-600 dark:text-amber-300"><span className="font-semibold">Saldo reservado</span><strong>-{formatMoney(order.store_credit_reserved)}</strong></div>}
+                  {order.store_credit_applied > 0 && <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-300"><span className="font-semibold">Saldo aplicado</span><strong>-{formatMoney(order.store_credit_applied)}</strong></div>}
                   
                   <div className="flex justify-between border-t border-slate-200/60 dark:border-slate-800/60 pt-3.5 text-slate-900 dark:text-white items-center">
                     <span className="text-sm font-bold">Total Facturado</span>
                     <strong className="text-xl font-black text-cyan-600 dark:text-cyan-400 tabular-nums">{formatMoney(order.total)}</strong>
                   </div>
+                  <div className="flex justify-between items-center text-rose-600 dark:text-rose-300"><span className="text-sm font-bold">Pendiente por pagar</span><strong className="text-lg font-black tabular-nums">{formatMoney(order.amount_due)}</strong></div>
                 </div>
               ) : (
                 <div className="flex items-start gap-3 p-2">

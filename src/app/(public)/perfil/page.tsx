@@ -71,6 +71,11 @@ export default async function CustomerProfilePage() {
     customer_address: order.customer_address,
     estimated_delivery_date: order.estimated_delivery_date,
     total: Number(order.total || 0),
+    store_credit_reserved: Number(order.store_credit_reserved || 0),
+    store_credit_applied: Number(order.store_credit_applied || 0),
+    amount_due: String(order.payment_status).toUpperCase() === 'PAID'
+      ? 0
+      : Math.max(0, Number(order.total || 0) - Number(order.store_credit_reserved || 0) - Number(order.store_credit_applied || 0)),
     created_at: order.created_at,
   }))
 

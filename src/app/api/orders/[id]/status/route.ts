@@ -76,6 +76,31 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, a
       return NextResponse.json({ success: true, data: normalizeOrder(cancelledOrder) })
     }
 
+    if (status === 'CONFIRMED' && currentStatus !== 'CONFIRMED') {
+      const adminSupabase = createAdminSupabase()
+      const { error: confirmationError } = await adminSupabase.rpc(
+        'confirm_customer_order_store_credit_atomic',
+        {
+          p_organization_id: organization.id,
+          p_order_id: id,
+          p_actor_id: user.id,
+          p_note: validation.data.note || null,
+        }
+      )
+
+      if (confirmationError) throw confirmationError
+
+      const { data: confirmedOrder, error: confirmedOrderError } = await supabase
+        .from('customer_orders')
+        .select('*, order_items:customer_order_items(*)')
+        .eq('id', id)
+        .eq('organization_id', organization.id)
+        .single()
+
+      if (confirmedOrderError) throw confirmedOrderError
+      return NextResponse.json({ success: true, data: normalizeOrder(confirmedOrder) })
+    }
+
     const now = new Date().toISOString()
     const terminalDates: Record<string, string | null> = {}
     if (status === 'DELIVERED' && currentStatus !== 'DELIVERED') {

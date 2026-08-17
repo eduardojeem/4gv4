@@ -11,7 +11,7 @@
 import React, { memo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Clock, User, Wrench, Zap, ImageIcon } from 'lucide-react'
+import { Clock, ShieldCheck, User, Wrench, Zap, ImageIcon } from 'lucide-react'
 import { Repair } from '@/types/repairs'
 import { statusConfig, priorityConfig } from '@/config/repair-constants'
 import { formatCurrency } from '@/lib/currency'
@@ -89,6 +89,19 @@ export const RepairCard = memo<RepairCardProps>(
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 #{ticketLabel}
               </p>
+              {/* Un retrabajo por garantia nacia de un caso de posventa y se
+                  veia igual que cualquier otra reparacion: sin esto lo unico
+                  que lo delataba era el prefijo en la descripcion. */}
+              {repair.parentRepairId && (
+                <Badge
+                  variant="outline"
+                  className="mt-1 h-5 gap-0.5 border-blue-200 bg-blue-50 px-1.5 py-0 text-[10px] font-medium text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"
+                  title="Retrabajo generado por un reclamo de garantía"
+                >
+                  <ShieldCheck className="h-3 w-3" />
+                  Garantía
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               {repair.urgency === 'urgent' && (

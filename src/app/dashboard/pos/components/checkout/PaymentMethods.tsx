@@ -12,6 +12,7 @@ import { GSIcon } from '@/components/ui/standardized-components'
 import { useCheckout } from '../../contexts/CheckoutContext'
 import { CreditStatusPanel } from './CreditStatusPanel'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 
 /**
  * Genera sugerencias inteligentes de billetes basadas en el monto total
@@ -381,26 +382,44 @@ export function PaymentMethods({
       {paymentMethod === 'cash' && !isMixedPayment && (
         <div className="mt-4">
           <label className="text-sm font-medium mb-2 block">Efectivo recibido</label>
-          <Input
-            type="number"
-            value={localCashInput}
-            onChange={(e) => {
-              const val = e.target.value
-              setLocalCashInput(val)
-              setCashReceived(val === '' ? 0 : Number(val))
-            }}
-            onFocus={(e) => e.target.select()}
-            placeholder="0"
-          />
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">₲</span>
+            <Input
+              type="text"
+              inputMode="numeric"
+              value={formatThousands(localCashInput)}
+              onChange={(e) => {
+                const raw = parseThousands(e.target.value)
+                setLocalCashInput(raw > 0 ? String(raw) : (e.target.value === '' ? '' : '0'))
+                setCashReceived(raw)
+              }}
+              onFocus={(e) => e.target.select()}
+              placeholder="0"
+              className="pl-7 font-bold font-mono text-base"
+            />
+          </div>
           
-          {/* Sugerencias inteligentes */}
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          {/* Sugerencias rápidas de billetes y montos exactos */}
+          <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+              onClick={() => {
+                setLocalCashInput(cartTotal.toString())
+                setCashReceived(cartTotal)
+              }}
+            >
+              Monto Exacto ({formatCurrency(cartTotal)})
+            </Button>
             {getSmartSuggestions(cartTotal, currency).map((suggestion) => (
               <Button
                 key={suggestion}
+                type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 px-2 text-[10px] bg-background/50 hover:bg-primary hover:text-primary-foreground transition-all duration-200 border-dashed"
+                className="h-7 px-2 text-xs bg-card hover:bg-primary hover:text-primary-foreground transition-all duration-150 border-border/70 font-medium"
                 onClick={() => {
                   setLocalCashInput(suggestion.toString())
                   setCashReceived(suggestion)
@@ -409,17 +428,46 @@ export function PaymentMethods({
                 {formatCurrency(suggestion)}
               </Button>
             ))}
+            {localCashInput !== '' && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                onClick={() => {
+                  setLocalCashInput('')
+                  setCashReceived(0)
+                }}
+              >
+                Limpiar
+              </Button>
+            )}
           </div>
 
+          {/* Indicador de Restante / Falta Cobrar */}
           {cashRemaining > 0 && (
-            <p className="text-sm text-destructive mt-2">
-              Restante: {formatCurrency(cashRemaining)}
-            </p>
+            <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 flex items-center justify-between text-xs">
+              <span className="font-semibold">Falta cobrar:</span>
+              <span className="font-bold text-sm tabular-nums">{formatCurrency(cashRemaining)}</span>
+            </div>
           )}
+
+          {/* Indicador GIGANTE de Vuelto / Cambio a Entregar */}
           {cashChange > 0 && (
-            <p className="text-sm text-primary mt-1">
-              Cambio: {formatCurrency(cashChange)}
-            </p>
+            <div className="mt-3 p-3.5 rounded-xl bg-emerald-500/15 border-2 border-emerald-500/40 text-emerald-900 dark:text-emerald-200 flex items-center justify-between shadow-sm animate-in fade-in-50 duration-200">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                  💵 Vuelto a Entregar
+                </p>
+                <p className="text-2xl font-black tabular-nums text-emerald-600 dark:text-emerald-300">
+                  {formatCurrency(cashChange)}
+                </p>
+              </div>
+              <div className="text-right text-xs text-muted-foreground">
+                <p>Cobrado: <strong className="text-foreground">{formatCurrency(cashReceived)}</strong></p>
+                <p>Total ticket: <strong className="text-foreground">{formatCurrency(cartTotal)}</strong></p>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -450,19 +498,22 @@ export function PaymentMethods({
         <div className="mt-4 space-y-3">
           <div>
             <label className="text-sm font-medium mb-2 block">Monto a pagar con {paymentMethod}</label>
-            <Input
-              type="number"
-              placeholder={`Máximo: ${formatCurrency(getRemainingAmount())}`}
-              min={0}
-              max={getRemainingAmount()}
-              value={localSplitInput}
-              onChange={(e) => {
-                const val = e.target.value
-                setLocalSplitInput(val)
-                setSplitAmount(val === '' ? 0 : Number(val))
-              }}
-              onFocus={(e) => e.target.select()}
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">₲</span>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder={`Máximo: ${formatCurrency(getRemainingAmount())}`}
+                value={formatThousands(localSplitInput)}
+                onChange={(e) => {
+                  const raw = parseThousands(e.target.value)
+                  setLocalSplitInput(raw > 0 ? String(raw) : (e.target.value === '' ? '' : '0'))
+                  setSplitAmount(raw)
+                }}
+                onFocus={(e) => e.target.select()}
+                className="pl-7 font-bold font-mono"
+              />
+            </div>
           </div>
 
           {getRemainingAmount() > 0.01 && (

@@ -3,31 +3,49 @@
 /**
  * CustomerFormSimple
  *
- * Formulario simplificado de cliente basado en el patrón del sistema de reparaciones:
- * - Solo campos esenciales
- * - Validación básica
- * - Interfaz limpia y compacta
- * - Fácil de usar y entender
+ * Formulario optimizado de creación y edición rápida de cliente:
+ * - Soporte para RUC / Cédula paraguaya
+ * - Ciudades con presets rápidos
+ * - Límite de crédito en Guaraníes (₲) y plazos de pago
+ * - Validación inteligente (no bloqueante para ventas rápidas)
+ * - Diseño moderno, responsivo y adaptado al tema oscuro/claro
  */
 
 import React, { useState, useEffect } from 'react'
-import { User, Phone, Mail, MapPin, FileText, AlertCircle, Check, CreditCard } from 'lucide-react'
+import {
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  FileText,
+  AlertCircle,
+  CreditCard,
+  Building2,
+  Package,
+  Star,
+  Check,
+  ShieldCheck,
+  Coins
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { isValidEmail } from '@/lib/auth/password-validation'
+import { formatThousands, parseThousands } from '@/lib/currency'
 
 export interface SimpleCustomerFormData {
   firstName: string
-  lastName: string
+  lastName?: string
+  ruc?: string
   phone: string
   email: string
+  city?: string
   address: string
-  customerType: 'individual' | 'mayorista' | 'empresa'
+  customerType: 'individual' | 'mayorista' | 'empresa' | 'vip'
   creditLimit?: string
   paymentTerms?: string
   notes: string
@@ -46,37 +64,53 @@ interface CustomerFormSimpleProps {
   className?: string
 }
 
-const customerTypeOptions = [
-  { value: 'individual', label: 'Individual', icon: User },
-  { value: 'mayorista', label: 'Mayorista', icon: User },
-  { value: 'empresa', label: 'Empresa', icon: User },
+const customerTypeCards = [
+  {
+    value: 'individual' as const,
+    label: 'Particular',
+    sublabel: 'Consumidor final',
+    icon: User,
+  },
+  {
+    value: 'empresa' as const,
+    label: 'Empresa',
+    sublabel: 'Con RUC / Factura',
+    icon: Building2,
+  },
+  {
+    value: 'mayorista' as const,
+    label: 'Mayorista',
+    sublabel: 'Precios de reventa',
+    icon: Package,
+  },
+  {
+    value: 'vip' as const,
+    label: 'VIP / Taller',
+    sublabel: 'Cliente preferencial',
+    icon: Star,
+  },
+]
+
+const popularCities = [
+  'Asunción',
+  'San Lorenzo',
+  'Luque',
+  'Capiatá',
+  'Lambaré',
+  'Fernando de la Mora',
+  'Ciudad del Este',
+  'Encarnación'
 ]
 
 function validateForm(data: SimpleCustomerFormData): ValidationErrors {
   const errors: ValidationErrors = {}
 
   if (!data.firstName || data.firstName.trim().length < 2) {
-    errors.firstName = 'El nombre es obligatorio (mín. 2 caracteres)'
+    errors.firstName = 'El nombre o razón social es obligatorio (mín. 2 caracteres)'
   }
 
-  if (!data.lastName || data.lastName.trim().length < 2) {
-    errors.lastName = 'El apellido es obligatorio (mín. 2 caracteres)'
-  }
-
-  if (!data.phone || !/^\+?[0-9\s-]{7,}$/.test(data.phone)) {
-    errors.phone = 'Teléfono inválido'
-  }
-
-  if (data.email && !isValidEmail(data.email)) {
-    errors.email = 'Correo inválido'
-  }
-
-  if (!data.address || data.address.trim().length < 5) {
-    errors.address = 'La dirección es obligatoria (mín. 5 caracteres)'
-  }
-
-  if (!data.customerType) {
-    errors.customerType = 'Selecciona un tipo de cliente'
+  if (data.email && data.email.trim().length > 0 && !isValidEmail(data.email.trim())) {
+    errors.email = 'Correo electrónico inválido'
   }
 
   return errors
@@ -93,30 +127,32 @@ export function CustomerFormSimple({
   const [formData, setFormData] = useState<SimpleCustomerFormData>({
     firstName: '',
     lastName: '',
+    ruc: '',
     phone: '',
     email: '',
+    city: 'Asunción',
     address: '',
     customerType: 'individual',
+    creditLimit: '',
+    paymentTerms: 'contado',
     notes: '',
     ...initialData
   })
 
   const [errors, setErrors] = useState<ValidationErrors>({})
-  const [formProgress, setFormProgress] = useState(0)
 
-  // Calcular progreso del formulario
+  // Actualizar estado si initialData cambia
   useEffect(() => {
-    const requiredFields = ['firstName', 'lastName', 'phone', 'address', 'customerType']
-    const filledFields = requiredFields.filter(field => {
-      const value = formData[field as keyof SimpleCustomerFormData]
-      return value && value.toString().trim().length > 0
-    })
-    setFormProgress((filledFields.length / requiredFields.length) * 100)
-  }, [formData])
+    if (initialData) {
+      setFormData(prev => ({
+        ...prev,
+        ...initialData
+      }))
+    }
+  }, [initialData])
 
   const handleInputChange = (field: keyof SimpleCustomerFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
-    // Limpiar error del campo cuando el usuario empiece a escribir
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }))
     }
@@ -133,294 +169,381 @@ export function CustomerFormSimple({
     }
   }
 
-  const getFieldIcon = (field: keyof SimpleCustomerFormData) => {
-    if (errors[field]) {
-      return <AlertCircle className="h-4 w-4 text-red-500" />
-    }
-
-    const value = formData[field]
-    if (value && value.toString().trim().length > 0) {
-      return <Check className="h-4 w-4 text-green-500" />
-    }
-
-    return null
-  }
-
   return (
-    <Card className={cn("w-full max-w-2xl mx-auto", className)}>
-      <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2">
-          <User className="h-5 w-5 text-blue-600" />
-          Información del Cliente
-        </CardTitle>
-        {formProgress > 0 && (
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${formProgress}%` }}
+    <form onSubmit={handleSubmit} className={cn("space-y-4 text-slate-800 dark:text-slate-200", className)}>
+      {/* ─── Tipo de Cliente / Segmento (Pill Cards) ─── */}
+      <div className="space-y-1.5">
+        <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Tipo de Cliente
+        </Label>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {customerTypeCards.map((type) => {
+            const isSelected = formData.customerType === type.value
+            const Icon = type.icon
+            return (
+              <button
+                key={type.value}
+                type="button"
+                onClick={() => handleInputChange('customerType', type.value)}
+                className={cn(
+                  "flex flex-col items-start p-2.5 rounded-xl border text-left transition-all relative cursor-pointer",
+                  isSelected
+                    ? "border-blue-500 bg-blue-50/80 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 shadow-xs ring-1 ring-blue-500"
+                    : "border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-white/20"
+                )}
+              >
+                {isSelected && (
+                  <div className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-white">
+                    <Check className="h-2.5 w-2.5" />
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 font-bold text-xs mb-0.5">
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{type.label}</span>
+                </div>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal leading-tight">
+                  {type.sublabel}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ─── Bloque 1: Identificación y Contacto ─── */}
+      <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] space-y-3">
+        <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+          <User className="h-3.5 w-3.5 text-blue-500" />
+          <span>Datos Principales</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Nombre / Razón Social */}
+          <div className="space-y-1">
+            <Label htmlFor="firstName" className="text-xs font-medium flex items-center justify-between">
+              <span>Nombre o Razón Social <span className="text-red-500">*</span></span>
+            </Label>
+            <Input
+              id="firstName"
+              value={formData.firstName}
+              onChange={(e) => handleInputChange('firstName', e.target.value)}
+              placeholder="Ej: Juan Carlos / Inversiones SRL"
+              className={cn(
+                "h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900",
+                errors.firstName && "border-red-500 focus-visible:ring-red-500"
+              )}
+              autoFocus
+            />
+            {errors.firstName && (
+              <p className="text-[11px] text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {errors.firstName}
+              </p>
+            )}
+          </div>
+
+          {/* Apellido / Nombre Fantasía */}
+          <div className="space-y-1">
+            <Label htmlFor="lastName" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+              Apellido / Fantasía (opcional)
+            </Label>
+            <Input
+              id="lastName"
+              value={formData.lastName || ''}
+              onChange={(e) => handleInputChange('lastName', e.target.value)}
+              placeholder="Ej: Pérez / Comercial"
+              className="h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
             />
           </div>
-        )}
-      </CardHeader>
 
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Información Personal */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName" className="text-sm font-medium flex items-center gap-1">
-                Nombre <span className="text-red-500">*</span>
-              </Label>
-              <div className="relative">
-                <Input
-                  id="firstName"
-                  value={formData.firstName}
-                  onChange={(e) => handleInputChange('firstName', e.target.value)}
-                  placeholder="Ej: Juan"
-                  className={cn(
-                    'pr-10',
-                    errors.firstName ? 'border-red-500 focus:border-red-500' : 'focus:border-blue-500'
-                  )}
-                />
-                <div className="absolute right-3 top-3">
-                  {getFieldIcon('firstName')}
-                </div>
-              </div>
-              {errors.firstName && (
-                <p className="text-sm text-red-500 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  {errors.firstName}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="lastName" className="text-sm font-medium flex items-center gap-1">
-                Apellido <span className="text-red-500">*</span>
-              </Label>
-              <div className="relative">
-                <Input
-                  id="lastName"
-                  value={formData.lastName}
-                  onChange={(e) => handleInputChange('lastName', e.target.value)}
-                  placeholder="Ej: Pérez"
-                  className={cn(
-                    'pr-10',
-                    errors.lastName ? 'border-red-500 focus:border-red-500' : 'focus:border-blue-500'
-                  )}
-                />
-                <div className="absolute right-3 top-3">
-                  {getFieldIcon('lastName')}
-                </div>
-              </div>
-              {errors.lastName && (
-                <p className="text-sm text-red-500 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  {errors.lastName}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Información de Contacto */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="phone" className="text-sm font-medium flex items-center gap-1">
-                <Phone className="h-4 w-4" />
-                Teléfono <span className="text-red-500">*</span>
-              </Label>
-              <div className="relative">
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  placeholder="+598 99 123 456"
-                  className={cn(
-                    'pr-10',
-                    errors.phone ? 'border-red-500 focus:border-red-500' : 'focus:border-blue-500'
-                  )}
-                />
-                <div className="absolute right-3 top-3">
-                  {getFieldIcon('phone')}
-                </div>
-              </div>
-              {errors.phone && (
-                <p className="text-sm text-red-500 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  {errors.phone}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium flex items-center gap-1">
-                <Mail className="h-4 w-4" />
-                Email (opcional)
-              </Label>
-              <div className="relative">
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  placeholder="cliente@email.com"
-                  className={cn(
-                    'pr-10',
-                    errors.email ? 'border-red-500 focus:border-red-500' : 'focus:border-blue-500'
-                  )}
-                />
-                <div className="absolute right-3 top-3">
-                  {getFieldIcon('email')}
-                </div>
-              </div>
-              {errors.email && (
-                <p className="text-sm text-red-500 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  {errors.email}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Dirección */}
-          <div className="space-y-2">
-            <Label htmlFor="address" className="text-sm font-medium flex items-center gap-1">
-              <MapPin className="h-4 w-4" />
-              Dirección <span className="text-red-500">*</span>
+          {/* RUC / Cédula de Identidad */}
+          <div className="space-y-1">
+            <Label htmlFor="ruc" className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+              <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
+              <span>RUC / Cédula (C.I.)</span>
             </Label>
-            <div className="relative">
+            <Input
+              id="ruc"
+              value={formData.ruc || ''}
+              onChange={(e) => handleInputChange('ruc', e.target.value)}
+              placeholder="Ej: 4567890-1 ó 3456789"
+              className="h-9 text-xs font-mono rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
+            />
+          </div>
+
+          {/* Teléfono / WhatsApp */}
+          <div className="space-y-1">
+            <Label htmlFor="phone" className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+              <Phone className="h-3.5 w-3.5 text-slate-400" />
+              <span>Teléfono / WhatsApp</span>
+            </Label>
+            <Input
+              id="phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => handleInputChange('phone', e.target.value)}
+              placeholder="Ej: 0981 123456 ó +595 981..."
+              className="h-9 text-xs font-mono rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
+            />
+          </div>
+
+          {/* Correo Electrónico */}
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="email" className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+              <Mail className="h-3.5 w-3.5 text-slate-400" />
+              <span>Correo Electrónico (opcional)</span>
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              placeholder="cliente@ejemplo.com"
+              className={cn(
+                "h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900",
+                errors.email && "border-red-500 focus-visible:ring-red-500"
+              )}
+            />
+            {errors.email && (
+              <p className="text-[11px] text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {errors.email}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Bloque 2: Ubicación ─── */}
+      <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] space-y-2.5">
+        <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+          <MapPin className="h-3.5 w-3.5 text-emerald-500" />
+          <span>Ubicación y Dirección</span>
+        </div>
+
+        <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1 sm:col-span-1">
+              <Label htmlFor="city" className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                Ciudad
+              </Label>
+              <Input
+                id="city"
+                value={formData.city || ''}
+                onChange={(e) => handleInputChange('city', e.target.value)}
+                placeholder="Ej: Asunción"
+                className="h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="address" className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                Dirección / Referencia (opcional)
+              </Label>
               <Input
                 id="address"
                 value={formData.address}
                 onChange={(e) => handleInputChange('address', e.target.value)}
-                placeholder="Ej: Av. 18 de Julio 1234"
-                className={cn(
-                  'pr-10',
-                  errors.address ? 'border-red-500 focus:border-red-500' : 'focus:border-blue-500'
-                )}
+                placeholder="Ej: Av. Eusebio Ayala c/ Choferes del Chaco"
+                className="h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
               />
-              <div className="absolute right-3 top-3">
-                {getFieldIcon('address')}
-              </div>
             </div>
-            {errors.address && (
-              <p className="text-sm text-red-500 flex items-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                {errors.address}
-              </p>
-            )}
           </div>
 
-          {/* Tipo de Cliente */}
-          <div className="space-y-2">
-            <Label htmlFor="customerType" className="text-sm font-medium flex items-center gap-1">
-              Tipo de Cliente <span className="text-red-500">*</span>
-            </Label>
-            <Select
-              value={formData.customerType}
-              onValueChange={(value: 'individual' | 'mayorista' | 'empresa') => handleInputChange('customerType', value)}
-            >
-              <SelectTrigger className={cn(
-                errors.customerType ? 'border-red-500 focus:border-red-500' : 'focus:border-blue-500'
-              )}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {customerTypeOptions.map(option => (
-                  <SelectItem key={option.value} value={option.value}>
-                    <div className="flex items-center gap-2">
-                      <option.icon className="h-4 w-4" />
-                      {option.label}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.customerType && (
-              <p className="text-sm text-red-500 flex items-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                {errors.customerType}
-              </p>
-            )}
-          </div>
-
-          {/* Información Financiera */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="creditLimit" className="text-sm font-medium flex items-center gap-1">
-                <CreditCard className="h-4 w-4" />
-                Límite de Crédito
-              </Label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-gray-500">$</span>
-                <Input
-                  id="creditLimit"
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={formData.creditLimit || ''}
-                  onChange={(e) => handleInputChange('creditLimit', e.target.value)}
-                  placeholder="0.00"
-                  className="pl-7 focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="paymentTerms" className="text-sm font-medium flex items-center gap-1">
-                <FileText className="h-4 w-4" />
-                Términos de Pago
-              </Label>
-              <Select
-                value={formData.paymentTerms}
-                onValueChange={(value) => handleInputChange('paymentTerms', value)}
+          {/* Quick city suggestions */}
+          <div className="flex flex-wrap items-center gap-1 pt-0.5">
+            <span className="text-[10px] text-slate-400 mr-1">Sugerencias:</span>
+            {popularCities.map((city) => (
+              <button
+                key={city}
+                type="button"
+                onClick={() => handleInputChange('city', city)}
+                className={cn(
+                  "text-[10px] px-2 py-0.5 rounded-md border transition-colors cursor-pointer",
+                  formData.city === city
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-semibold"
+                    : "border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                )}
               >
-                <SelectTrigger className="focus:border-blue-500">
-                  <SelectValue placeholder="Seleccionar..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="contado">Contado</SelectItem>
-                  <SelectItem value="15_dias">15 Días</SelectItem>
-                  <SelectItem value="30_dias">30 Días</SelectItem>
-                  <SelectItem value="60_dias">60 Días</SelectItem>
-                </SelectContent>
-              </Select>
+                {city}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Bloque 3: Condiciones Comerciales y Crédito ─── */}
+      <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            <Coins className="h-3.5 w-3.5 text-amber-500" />
+            <span>Comercial y Crédito</span>
+          </div>
+          {Number(formData.creditLimit) > 0 ? (
+            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-semibold">
+              Crédito Habilitado
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] text-slate-500 border-slate-200 dark:border-white/10">
+              Sin Crédito
+            </Badge>
+          )}
+        </div>
+
+        {/* Botón de Habilitar Límite de Crédito si está deshabilitado */}
+        {(!formData.creditLimit || Number(formData.creditLimit) <= 0) ? (
+          <div className="p-3 rounded-xl border border-dashed border-slate-200 dark:border-white/10 bg-white/60 dark:bg-slate-900/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+            <div className="space-y-0.5">
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5 text-blue-500" />
+                <span>¿Habilitar compras y reparaciones a crédito?</span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Permite al cliente financiar en cuotas o retirar equipos con saldo pendiente.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleInputChange('creditLimit', '1000000')}
+                className="h-7 px-2.5 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg gap-1 shadow-xs"
+              >
+                <CreditCard className="h-3 w-3" />
+                Habilitar Crédito
+              </Button>
+              <button
+                type="button"
+                onClick={() => handleInputChange('creditLimit', '500000')}
+                className="text-[10px] px-2 py-1 rounded-lg border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-slate-600 dark:text-slate-400"
+              >
+                ₲ 500.000
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInputChange('creditLimit', '2000000')}
+                className="text-[10px] px-2 py-1 rounded-lg border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-slate-600 dark:text-slate-400"
+              >
+                ₲ 2.000.000
+              </button>
             </div>
           </div>
-
-          {/* Notas */}
+        ) : (
           <div className="space-y-2">
-            <Label htmlFor="notes" className="text-sm font-medium flex items-center gap-1">
-              <FileText className="h-4 w-4" />
-              Notas (opcional)
-            </Label>
-            <Textarea
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => handleInputChange('notes', e.target.value)}
-              placeholder="Información adicional sobre el cliente..."
-              className="min-h-[80px] focus:border-blue-500"
-            />
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Límite de Crédito en Guaraníes */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="creditLimit" className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <CreditCard className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>Límite de Crédito (₲ Guaraníes)</span>
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() => handleInputChange('creditLimit', '0')}
+                    className="text-[10px] text-red-500 hover:underline font-medium"
+                  >
+                    Deshabilitar
+                  </button>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₲</span>
+                  <Input
+                    id="creditLimit"
+                    type="text"
+                    inputMode="numeric"
+                    value={formatThousands(formData.creditLimit)}
+                    onChange={(e) => handleInputChange('creditLimit', parseThousands(e.target.value).toString())}
+                    placeholder="Ej: 1.000.000"
+                    className="pl-7 h-9 text-xs font-mono font-bold rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
+                  />
+                </div>
+              </div>
 
-          {/* Botones */}
-          <div className="flex justify-end gap-3 pt-4">
-            {onCancel && (
-              <Button type="button" variant="outline" onClick={onCancel}>
-                Cancelar
-              </Button>
-            )}
-            <Button
-              type="submit"
-              disabled={isSubmitting || formProgress < 80}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {isSubmitting ? 'Guardando...' : submitLabel}
-            </Button>
+              {/* Términos de Pago */}
+              <div className="space-y-1">
+                <Label htmlFor="paymentTerms" className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <FileText className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Condición de Pago Habitual</span>
+                </Label>
+                <Select
+                  value={formData.paymentTerms || 'contado'}
+                  onValueChange={(value) => handleInputChange('paymentTerms', value)}
+                >
+                  <SelectTrigger className="h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900">
+                    <SelectValue placeholder="Seleccionar condición..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contado">Al Contado</SelectItem>
+                    <SelectItem value="15_dias">Crédito 15 Días</SelectItem>
+                    <SelectItem value="30_dias">Crédito 30 Días</SelectItem>
+                    <SelectItem value="60_dias">Crédito 60 Días</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Presets rápidos de crédito */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[10px] text-slate-400 mr-1">Montos rápidos:</span>
+              {['500000', '1000000', '2000000', '3000000', '5000000', '10000000'].map((amt) => {
+                const formatted = Number(amt).toLocaleString('es-PY')
+                const isCurrent = formData.creditLimit === amt
+                return (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => handleInputChange('creditLimit', amt)}
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-md border transition-colors cursor-pointer",
+                      isCurrent
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-bold"
+                        : "border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                    )}
+                  >
+                    ₲ {formatted}
+                  </button>
+                )
+              })}
+            </div>
           </div>
-        </form>
-      </CardContent>
-    </Card>
+        )}
+
+        {/* Observaciones / Notas */}
+        <div className="space-y-1">
+          <Label htmlFor="notes" className="text-xs font-medium text-slate-700 dark:text-slate-300">
+            Notas u Observaciones (opcional)
+          </Label>
+          <Textarea
+            id="notes"
+            value={formData.notes}
+            onChange={(e) => handleInputChange('notes', e.target.value)}
+            placeholder="Preferencias del cliente, recomendaciones, contactos alternativos..."
+            className="min-h-[55px] text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 resize-none"
+          />
+        </div>
+      </div>
+
+      {/* ─── Botones de Acción ─── */}
+      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-white/5">
+        {onCancel && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={isSubmitting}
+            className="h-9 px-4 text-xs font-semibold rounded-xl border-slate-200 dark:border-white/10"
+          >
+            Cancelar
+          </Button>
+        )}
+        <Button
+          type="submit"
+          disabled={isSubmitting}
+          className="h-9 px-5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/20"
+        >
+          {isSubmitting ? 'Guardando...' : submitLabel}
+        </Button>
+      </div>
+    </form>
   )
 }

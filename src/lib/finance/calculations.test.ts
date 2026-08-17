@@ -90,6 +90,99 @@ describe('calculateFinancialSummary', () => {
   ])('rejects $label at the calculation boundary', ({ input }) => {
     expect(() => calculateFinancialSummary(input)).toThrow(RangeError)
   })
+
+  // Una devolucion cerrada revierte la venta que ya se conto como ingreso. Sin
+  // esto el resumen mostraba la utilidad inflada por cada devolucion del periodo.
+  it('reverses revenue and recovers cost when the returned goods are sellable again', () => {
+    const result = calculateFinancialSummary({
+      revenue: [{ amount: 1_000_000, cashAmount: 1_000_000, hasCost: true }],
+      directCosts: [{ amount: 600_000, paidAmount: 600_000 }],
+      expenses: [],
+      payroll: [],
+      refunds: [{ amount: 100_000, recoveredCost: 60_000, cashAmount: 100_000 }],
+    })
+
+    expect(result.accrued.revenue).toBe(900_000)
+    expect(result.accrued.directCosts).toBe(540_000)
+    // Se pierde el margen de esa venta, no la venta entera.
+    expect(result.accrued.grossProfit).toBe(360_000)
+  })
+
+  it('sinks the whole cost when the returned goods do not come back sellable', () => {
+    const result = calculateFinancialSummary({
+      revenue: [{ amount: 1_000_000, cashAmount: 1_000_000, hasCost: true }],
+      directCosts: [{ amount: 600_000, paidAmount: 600_000 }],
+      expenses: [],
+      payroll: [],
+      refunds: [{ amount: 100_000, recoveredCost: 0, cashAmount: 100_000 }],
+    })
+
+    expect(result.accrued.revenue).toBe(900_000)
+    expect(result.accrued.directCosts).toBe(600_000)
+    // Cuarentena: se pierde el ingreso completo, no solo el margen.
+    expect(result.accrued.grossProfit).toBe(300_000)
+  })
+
+  it('counts a cash refund as money out of the period', () => {
+    const result = calculateFinancialSummary({
+      revenue: [{ amount: 500_000, cashAmount: 500_000, hasCost: true }],
+      directCosts: [],
+      expenses: [],
+      payroll: [],
+      refunds: [{ amount: 80_000, recoveredCost: 0, cashAmount: 80_000 }],
+    })
+
+    expect(result.cash.paid).toBe(80_000)
+    expect(result.cash.netCashFlow).toBe(420_000)
+  })
+
+  // Un saldo a favor afecta el resultado pero no mueve la caja del periodo.
+  it('keeps store-credit refunds out of the cash flow', () => {
+    const result = calculateFinancialSummary({
+      revenue: [{ amount: 500_000, cashAmount: 500_000, hasCost: true }],
+      directCosts: [],
+      expenses: [],
+      payroll: [],
+      refunds: [{ amount: 80_000, recoveredCost: 0, cashAmount: 0 }],
+    })
+
+    expect(result.accrued.revenue).toBe(420_000)
+    expect(result.cash.paid).toBe(0)
+    expect(result.cash.netCashFlow).toBe(500_000)
+  })
+
+  it('behaves exactly as before when no refunds are declared', () => {
+    const base = {
+      revenue: [{ amount: 1_000_000, cashAmount: 800_000, hasCost: true }],
+      directCosts: [{ amount: 400_000, paidAmount: 400_000 }],
+      expenses: [],
+      payroll: [],
+    }
+
+    expect(calculateFinancialSummary(base)).toEqual(
+      calculateFinancialSummary({ ...base, refunds: [] }),
+    )
+  })
+
+  it('rejects recovering more cost than the amount refunded', () => {
+    expect(() => calculateFinancialSummary({
+      revenue: [],
+      directCosts: [],
+      expenses: [],
+      payroll: [],
+      refunds: [{ amount: 50_000, recoveredCost: 90_000, cashAmount: 0 }],
+    })).toThrow(RangeError)
+  })
+
+  it('rejects paying out more cash than the amount refunded', () => {
+    expect(() => calculateFinancialSummary({
+      revenue: [],
+      directCosts: [],
+      expenses: [],
+      payroll: [],
+      refunds: [{ amount: 50_000, recoveredCost: 0, cashAmount: 90_000 }],
+    })).toThrow(RangeError)
+  })
 })
 
 describe('resolveCommissionRule', () => {

@@ -72,7 +72,7 @@ export async function fetchCustomerActivity(organizationId: string | null) {
 
     let recentOrdersQuery = adminSupabase
       .from('customer_orders')
-      .select('id, order_number, status, payment_status, fulfillment_type, customer_address, estimated_delivery_date, total, created_at')
+      .select('id, order_number, status, payment_status, fulfillment_type, customer_address, estimated_delivery_date, total, store_credit_reserved, store_credit_applied, created_at')
       .in('customer_id', validIds)
       .order('created_at', { ascending: false })
       .limit(5)

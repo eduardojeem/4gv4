@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Download, LayoutGrid, List, Trash2, CheckCircle, XCircle, Clock, RefreshCw, FileDown, X, Scale, Truck, Info } from 'lucide-react'
+import { Plus, Download, LayoutGrid, List, Trash2, CheckCircle, XCircle, Clock, RefreshCw, FileDown, X, Scale, Truck, Info, Shield, ArrowLeft, Loader2 } from 'lucide-react'
+import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { SupplierModal } from '@/components/dashboard/supplier-modal'
@@ -19,6 +21,8 @@ import { useSupplierSystem } from '@/lib/integrations/inventory-suppliers'
 import { exportSuppliers } from '@/lib/utils/export-suppliers'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
+import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
+import { SUPPLIERS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -88,6 +92,9 @@ function MetricCard({
 
 export default function SuppliersPage() {
   const router = useRouter()
+  const { user, isAdmin, loading: authLoading } = useAuth()
+  const canAccess = Boolean(isAdmin || user?.role === 'admin' || user?.role === 'super_admin')
+
   const { suppliers, loading, stats, statsLoading, createSupplier, updateSupplier, deleteSupplier, bulkDeleteSuppliers, bulkUpdateStatus, refresh, pagination, setPage, setPageSize } = useSuppliers()
   const { loading: sysLoading, suppliers: availableIntegrations, syncAllSuppliers } = useSupplierSystem()
 
@@ -106,6 +113,39 @@ export default function SuppliersPage() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+
+  if (authLoading) {
+    return (
+      <div className="mx-auto flex max-w-[1480px] flex-col items-center justify-center gap-3 py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+        <p className="text-sm text-slate-500">Verificando permisos de acceso...</p>
+      </div>
+    )
+  }
+
+  if (!canAccess) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] p-6">
+        <div className="max-w-md w-full text-center space-y-4 bg-card p-8 rounded-2xl border border-border shadow-lg">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+            <Shield className="h-8 w-8 text-rose-600 dark:text-rose-400" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold text-foreground">Acceso Restringido</h1>
+            <p className="text-xs text-muted-foreground">
+              La gestión de proveedores y costos de compra está reservada para usuarios administradores.
+            </p>
+          </div>
+          <Button asChild className="gap-2 text-xs font-semibold rounded-xl mt-2" size="sm">
+            <Link href="/dashboard">
+              <ArrowLeft className="h-4 w-4" />
+              Volver al Inicio
+            </Link>
+          </Button>
+        </div>
+      </div>
+    )
+  }
   const [businessTypeFilter, setBusinessTypeFilter] = useState('all')
   const [sortBy, setSortBy] = useState('name-asc')
 
@@ -370,6 +410,7 @@ export default function SuppliersPage() {
               Sincronizar
             </Button>
           )}
+          <SectionGuideButton guide={SUPPLIERS_GUIDE} />
           <Button
             onClick={() => router.push('/dashboard/suppliers/compare')}
             variant="outline"
@@ -389,52 +430,6 @@ export default function SuppliersPage() {
           </Button>
         </div>
       </header>
-
-      {/* Guía de funcionamiento de proveedores */}
-      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-        <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Proveedores?
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-            </div>
-          </summary>
-          <CardContent className="pt-0 pb-5 text-xs">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                  Directorio de Proveedores
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Registra información comercial de tus contactos y distribuidores de repuestos o insumos, incluyendo datos de contacto de ejecutivos, plazos de crédito y tipos de entrega.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                  Comparador de Precios
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Utiliza la herramienta "Comparar precios" para analizar y ponderar las cotizaciones de un mismo repuesto de diferentes proveedores. El sistema te recomendará la opción más económica.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                  Sincronización e Historial
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Al recibir una compra, puedes vincular el proveedor correspondiente para guardar la trazabilidad del costo real de tus piezas y analizar las tendencias de facturación.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </details>
-      </Card>
 
       {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

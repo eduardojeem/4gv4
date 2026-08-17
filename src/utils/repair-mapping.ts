@@ -76,6 +76,8 @@ interface SupabaseRepairCloseout {
 interface SupabaseRepair {
     id: string
     ticket_number?: string
+    /** Reparacion original cuando esta es un retrabajo por garantia. */
+    parent_repair_id?: string | null
     customer?: SupabaseCustomer | SupabaseCustomer[]
     device_brand: string
     device_model: string
@@ -141,6 +143,7 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
     return {
         id: r.id,
         ticketNumber: r.ticket_number,
+        parentRepairId: r.parent_repair_id ?? null,
         customer: {
             id: cust?.id,
             customerCode: cust?.customer_code,

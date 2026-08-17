@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { CustomerCreditInfo } from './CustomerCreditInfo'
+import { StoreCreditCard } from './StoreCreditCard'
 import {
   FileText,
   User,
@@ -42,7 +43,10 @@ import {
   Building,
   Star,
   Edit,
-  Wrench
+  Wrench,
+  Wallet,
+  Hash,
+  Info
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerData, useCustomerPurchases, prefetchCustomerPurchases } from '@/hooks/useCustomerData'
@@ -319,6 +323,147 @@ function SalesHistoryList({
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Saldo a Favor Panel (always visible in Overview right column)
+// ─────────────────────────────────────────────────────────────────────────────
+interface StoreCreditMovement {
+  id: string
+  amount: number
+  reason: string
+  source_type: 'after_sales' | 'sale' | 'repair' | 'manual'
+  source_id: string | null
+  created_at: string
+}
+
+function CustomerStoreCreditPanel({ customerId }: { customerId?: string | null }) {
+  const [balance, setBalance] = React.useState(0)
+  const [movements, setMovements] = React.useState<StoreCreditMovement[]>([])
+  const [loading, setLoading] = React.useState(Boolean(customerId))
+  const [error, setError] = React.useState<string | null>(null)
+  const [expanded, setExpanded] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!customerId) return
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const resp = await fetch(`/api/customers/${customerId}/store-credit?page=1&pageSize=20`)
+        if (!resp.ok) throw new Error('Error al cargar saldo a favor')
+        const payload = await resp.json().catch(() => null)
+        if (!payload?.success) throw new Error(payload?.error || 'Error al cargar saldo a favor')
+        if (cancelled) return
+        setBalance(Number(payload.data?.balance || 0))
+        setMovements(payload.data?.movements ?? [])
+      } catch {
+        if (!cancelled) setError('No se pudo cargar el saldo a favor.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [customerId])
+
+  if (!customerId) return null
+
+  const sourceLabel = (s: StoreCreditMovement['source_type']) =>
+    ({ after_sales: 'Posventa', sale: 'Venta', repair: 'Reparación', manual: 'Ajuste manual' }[s] || 'Movimiento')
+
+  return (
+    <Card className={`border-0 shadow-lg overflow-hidden ${balance > 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200/60 dark:border-emerald-500/20' : 'bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-800/30 dark:to-gray-800/30'}`}>
+      {/* Decorative glow */}
+      {balance > 0 && (
+        <div className="pointer-events-none absolute -top-8 -right-8 h-24 w-24 rounded-full bg-emerald-400/20 blur-2xl" />
+      )}
+      <CardHeader className="pb-2">
+        <CardTitle className={`flex items-center justify-between text-base ${balance > 0 ? 'text-emerald-800 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-400'}`}>
+          <div className="flex items-center gap-2">
+            <Wallet className={`h-5 w-5 ${balance > 0 ? 'text-emerald-600' : 'text-gray-400'}`} />
+            Saldo a Favor
+          </div>
+          {balance > 0 && (
+            <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-800/40 dark:text-emerald-300 border-0 font-semibold">
+              ✓ Disponible
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="flex items-center gap-3 py-2">
+            <div className="animate-spin h-4 w-4 rounded-full border-b-2 border-emerald-600" />
+            <span className="text-sm text-gray-500">Cargando saldo…</span>
+          </div>
+        ) : error ? (
+          <div className="flex items-center gap-2 text-sm text-rose-600">
+            <AlertCircle className="h-4 w-4" />
+            <span>{error}</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-end justify-between">
+              <div>
+                <p className={`text-3xl font-bold tabular-nums tracking-tight ${balance > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-400 dark:text-gray-600'}`}>
+                  {formatCurrency(balance)}
+                </p>
+                <p className={`text-xs mt-1 ${balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                  {balance > 0 ? '💡 Disponible para aplicar en próxima compra o reparación' : 'Sin saldo acumulado aún'}
+                </p>
+              </div>
+              <div className={`h-12 w-12 rounded-2xl flex items-center justify-center ${balance > 0 ? 'bg-emerald-100 dark:bg-emerald-800/40' : 'bg-gray-100 dark:bg-gray-700/40'}`}>
+                <Wallet className={`h-6 w-6 ${balance > 0 ? 'text-emerald-600' : 'text-gray-400'}`} />
+              </div>
+            </div>
+
+            {movements.length > 0 && (
+              <>
+                <Separator className={balance > 0 ? 'border-emerald-200/70 dark:border-emerald-800/50' : ''} />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={`h-8 px-0 text-xs font-semibold ${balance > 0 ? 'text-emerald-700 hover:bg-transparent dark:text-emerald-400' : 'text-gray-500 hover:bg-transparent'}`}
+                  onClick={() => setExpanded(v => !v)}
+                >
+                  {expanded ? '▲ Ocultar movimientos' : `▼ Ver ${movements.length} movimiento${movements.length !== 1 ? 's' : ''}`}
+                </Button>
+                {expanded && (
+                  <ul className="divide-y divide-gray-200/70 dark:divide-white/5 rounded-xl border border-gray-200/70 dark:border-white/5 bg-white/70 dark:bg-black/20 overflow-hidden">
+                    {movements.map(m => (
+                      <li key={m.id} className="flex items-start justify-between gap-3 p-3 text-sm">
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900 dark:text-white truncate">{m.reason}</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            {sourceLabel(m.source_type)} · {new Date(m.created_at).toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                        </div>
+                        <span className={`shrink-0 font-bold tabular-nums text-sm ${m.amount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {m.amount >= 0 ? '+' : '-'}{formatCurrency(Math.abs(Number(m.amount)))}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+
+            {movements.length === 0 && balance === 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-gray-100/70 dark:bg-white/5">
+                <Info className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  El saldo a favor se genera automáticamente por devoluciones, créditos o ajustes manuales. Cuando el cliente acumule saldo, aparecerá aquí y podrá aplicarlo en futuras compras.
+                </p>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compact }: CustomerDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
   const { data: freshData } = useCustomerData(customer.id)
@@ -447,7 +592,6 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
             </TabsTrigger>
           </TabsList>
         </div>
-
         {/* Tab Content: Overview */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -461,88 +605,128 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6 p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Nombre Completo</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.name}</p>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.name)}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Nombre */}
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Nombre Completo</span>
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                        <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        <p className="font-semibold flex-1 text-gray-900 dark:text-white">{currentCustomer.name}</p>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.name)}>
                           <Copy className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Email</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.email || "No registrado"}</p>
+
+                    {/* Email */}
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Email</span>
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                        <ExternalLink className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        <p className="font-medium flex-1 text-sm truncate">{currentCustomer.email || "No registrado"}</p>
                         {currentCustomer.email && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.email)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.email)}>
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`mailto:${encodeURIComponent(currentCustomer.email)}`)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => window.open(`mailto:${encodeURIComponent(currentCustomer.email)}`)}>
                               <ExternalLink className="h-3 w-3" />
                             </Button>
                           </>
                         )}
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Teléfono</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.phone || "No registrado"}</p>
+
+                    {/* Teléfono */}
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Teléfono</span>
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                        <PhoneCall className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        <p className="font-medium flex-1 font-mono text-sm">{currentCustomer.phone || "No registrado"}</p>
                         {currentCustomer.phone && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.phone)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.phone)}>
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`tel:${encodeURIComponent(currentCustomer.phone)}`)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => window.open(`tel:${encodeURIComponent(currentCustomer.phone)}`)}>
                               <PhoneCall className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`https://wa.me/${currentCustomer.phone?.replace(/[^\d]/g, '')}`)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => window.open(`https://wa.me/${currentCustomer.phone?.replace(/[^\d]/g, '')}`)}>
                               <MessageSquare className="h-3 w-3" />
                             </Button>
                           </>
                         )}
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Dirección</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.address || currentCustomer.city || "No registrada"}</p>
+
+                    {/* Dirección */}
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Dirección</span>
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                        <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        <p className="font-medium flex-1 text-sm">{currentCustomer.address || currentCustomer.city || "No registrada"}</p>
                         {(currentCustomer.address || currentCustomer.city) && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.address || currentCustomer.city)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.address || currentCustomer.city)}>
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(currentCustomer.address || currentCustomer.city)}`, '_blank')}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(currentCustomer.address || currentCustomer.city)}`, '_blank')}>
                               <MapPin className="h-3 w-3" />
                             </Button>
                           </>
                         )}
                       </div>
                     </div>
+
+                    {/* RUC / CI */}
+                    {(currentCustomer as any).ruc && (
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">RUC / CI</span>
+                        <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                          <Hash className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <p className="font-semibold flex-1 font-mono text-sm">{(currentCustomer as any).ruc}</p>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard((currentCustomer as any).ruc)}>
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Código de cliente */}
+                    {(currentCustomer as any).customer_code && (
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Código</span>
+                        <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                          <Hash className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <p className="font-semibold flex-1 font-mono text-sm">{(currentCustomer as any).customer_code}</p>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard((currentCustomer as any).customer_code)}>
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <Separator />
 
+                  {/* Dates & Status row */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <label className="text-sm font-medium text-blue-700 dark:text-blue-300">Fecha de Registro</label>
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Registro</label>
                       <div className="flex items-center gap-2 mt-2">
                         <Calendar className="h-4 w-4 text-blue-500" />
-                        <p className="font-semibold text-blue-900 dark:text-blue-100">{formatDate(currentCustomer.registration_date)}</p>
+                        <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm">{formatDate(currentCustomer.registration_date)}</p>
                       </div>
                     </div>
-                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <label className="text-sm font-medium text-green-700 dark:text-green-300">Última Actividad</label>
+                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-green-600 dark:text-green-400">Última Visita</label>
                       <div className="flex items-center gap-2 mt-2">
                         <Clock className="h-4 w-4 text-green-500" />
-                        <p className="font-semibold text-green-900 dark:text-green-100">{formatDate(currentCustomer.last_visit || currentCustomer.last_activity)}</p>
+                        <p className="font-semibold text-green-900 dark:text-green-100 text-sm">{formatDate(currentCustomer.last_visit || currentCustomer.last_activity)}</p>
                       </div>
                     </div>
-                    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                      <label className="text-sm font-medium text-purple-700 dark:text-purple-300">Estado</label>
+                    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-purple-600 dark:text-purple-400">Estado</label>
                       <div className="flex items-center gap-2 mt-2">
                         <CheckCircle className="h-4 w-4 text-purple-500" />
                         <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200">
@@ -551,6 +735,42 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                       </div>
                     </div>
                   </div>
+
+                  {/* Línea de crédito barra */}
+                  {(currentCustomer.credit_limit || 0) > 0 && (
+                    <>
+                      <Separator />
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                          <CreditCard className="h-4 w-4 text-purple-500" />
+                          Línea de Crédito
+                        </label>
+                        <div className="flex items-center justify-between text-sm mb-1.5">
+                          <span className="text-gray-500 text-xs">Utilizado</span>
+                          <span className="font-semibold text-sm">
+                            {formatCurrency(currentCustomer.current_balance || 0)}
+                            <span className="text-gray-400 font-normal"> / {formatCurrency(currentCustomer.credit_limit || 0)}</span>
+                          </span>
+                        </div>
+                        <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              ((currentCustomer.current_balance || 0) / (currentCustomer.credit_limit || 1)) > 0.8
+                                ? 'bg-gradient-to-r from-red-500 to-rose-600'
+                                : ((currentCustomer.current_balance || 0) / (currentCustomer.credit_limit || 1)) > 0.5
+                                ? 'bg-gradient-to-r from-amber-500 to-orange-500'
+                                : 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                            }`}
+                            style={{ width: `${Math.min(100, ((currentCustomer.current_balance || 0) / (currentCustomer.credit_limit || 1)) * 100)}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
+                          <span>Disponible: <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency((currentCustomer.credit_limit || 0) - (currentCustomer.current_balance || 0))}</span></span>
+                          <span className="font-medium">{Math.round(((currentCustomer.current_balance || 0) / (currentCustomer.credit_limit || 1)) * 100)}% utilizado</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
@@ -572,8 +792,12 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
               </Card>
             </div>
 
-            {/* Right Column: Quick Stats & Notes Preview */}
+            {/* Right Column: Saldo a Favor + Quick Stats + Notes */}
             <div className="space-y-6">
+
+              {/* ─── SALDO A FAVOR (siempre visible) ─── */}
+              <CustomerStoreCreditPanel customerId={currentCustomer.id} />
+
               <Card className="border-0 shadow-lg">
                 <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-t-lg">
                   <CardTitle className="flex items-center gap-2">

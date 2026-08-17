@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, Suspense } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronLeft, BarChart3, Activity, Users, ArrowLeft, Home, ChevronRight, Download } from 'lucide-react'
+import { ChevronLeft, BarChart3, Activity, Users, ArrowLeft, Home, ChevronRight, Download, Shield, Loader2 } from 'lucide-react'
 import { AnalyticsOverview } from '@/components/dashboard/repairs/analytics/AnalyticsOverview'
 import { AnalyticsTechnicians } from '@/components/dashboard/repairs/analytics/AnalyticsTechnicians'
 import { RepairPerformanceMetrics } from '@/components/dashboard/repairs/analytics/RepairPerformanceMetrics'
@@ -12,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useRepairAnalytics } from '@/hooks/use-repair-analytics'
 import { generateAnalyticsPDF } from '@/lib/repairs/analytics-pdf'
 import { useBranch } from '@/contexts/branch-context'
+import { useAuth } from '@/contexts/auth-context'
 
 function AnalyticsLoading() {
   return (
@@ -32,12 +34,47 @@ function AnalyticsLoading() {
 
 export default function RepairsAnalyticsPage() {
   const router = useRouter()
+  const { user, isAdmin, loading: authLoading } = useAuth()
+  const canAccess = Boolean(isAdmin || user?.role === 'admin' || user?.role === 'super_admin')
   const [activeTab, setActiveTab] = useState('overview')
   const analyticsData = useRepairAnalytics('6m')
   const { selectedBranch } = useBranch()
 
   const handleExportPDF = () => {
     generateAnalyticsPDF(analyticsData, selectedBranch?.name || 'Taller')
+  }
+
+  if (authLoading) {
+    return (
+      <div className="mx-auto flex max-w-[1480px] flex-col items-center justify-center gap-3 py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+        <p className="text-sm text-slate-500">Verificando permisos de acceso...</p>
+      </div>
+    )
+  }
+
+  if (!canAccess) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] p-6">
+        <div className="max-w-md w-full text-center space-y-4 bg-card p-8 rounded-2xl border border-border shadow-lg">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+            <Shield className="h-8 w-8 text-rose-600 dark:text-rose-400" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold text-foreground">Acceso Restringido</h1>
+            <p className="text-xs text-muted-foreground">
+              Las analíticas financieras y de productividad del taller están reservadas para administradores y gerencia.
+            </p>
+          </div>
+          <Button asChild className="gap-2 text-xs font-semibold rounded-xl mt-2" size="sm">
+            <Link href="/dashboard/repairs">
+              <ArrowLeft className="h-4 w-4" />
+              Volver a Reparaciones
+            </Link>
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (

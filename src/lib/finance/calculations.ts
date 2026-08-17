@@ -4,6 +4,7 @@ import type {
   CoverageWarning,
   FinanceSummary,
   FinancialPayableLine,
+  FinancialRefundLine,
   FinancialSummaryInput,
   FinancialRevenueLine,
 } from './types'
@@ -37,6 +38,25 @@ function assertPayableLine(line: FinancialPayableLine, group: string, index: num
   }
 }
 
+function assertRefundLine(line: FinancialRefundLine, index: number): void {
+  assertFinanceAmount(line.amount, `refunds[${index}].amount`)
+  assertFinanceAmount(line.recoveredCost, `refunds[${index}].recoveredCost`)
+  assertFinanceAmount(line.cashAmount, `refunds[${index}].cashAmount`)
+
+  if (line.cashAmount > line.amount) {
+    throw new RangeError(
+      `refunds[${index}].cashAmount cannot exceed refunds[${index}].amount.`,
+    )
+  }
+
+  // Recuperar mas costo del que se reintegro daria margen positivo por devolver.
+  if (line.recoveredCost > line.amount) {
+    throw new RangeError(
+      `refunds[${index}].recoveredCost cannot exceed refunds[${index}].amount.`,
+    )
+  }
+}
+
 function assertFinancialSummaryInput(input: FinancialSummaryInput): void {
   input.revenue.forEach(assertRevenueLine)
   input.directCosts.forEach((line, index) =>
@@ -44,6 +64,7 @@ function assertFinancialSummaryInput(input: FinancialSummaryInput): void {
   )
   input.expenses.forEach((line, index) => assertPayableLine(line, 'expenses', index))
   input.payroll.forEach((line, index) => assertPayableLine(line, 'payroll', index))
+  ;(input.refunds ?? []).forEach(assertRefundLine)
 }
 
 const sumAmounts = (lines: FinancialPayableLine[]): number =>
@@ -57,18 +78,28 @@ export function calculateFinancialSummary(
 ): FinanceSummary {
   assertFinancialSummaryInput(input)
 
-  const revenue = input.revenue.reduce((total, line) => total + line.amount, 0)
+  const refunds = input.refunds ?? []
+  const refundedAmount = refunds.reduce((total, line) => total + line.amount, 0)
+  const recoveredCost = refunds.reduce((total, line) => total + line.recoveredCost, 0)
+  const refundedCash = refunds.reduce((total, line) => total + line.cashAmount, 0)
+
+  // Una devolucion revierte el ingreso de su venta, y devuelve al inventario el
+  // costo solo si la mercaderia volvio vendible.
+  const revenue =
+    input.revenue.reduce((total, line) => total + line.amount, 0) - refundedAmount
   const collected = input.revenue.reduce(
     (total, line) => total + line.cashAmount,
     0,
   )
-  const directCosts = sumAmounts(input.directCosts)
+  const directCosts = sumAmounts(input.directCosts) - recoveredCost
   const operatingExpenses = sumAmounts(input.expenses)
   const payrollCost = sumAmounts(input.payroll)
+  // El reintegro por caja es plata que salio; el saldo a favor no mueve caja.
   const paid =
     sumPaidAmounts(input.directCosts) +
     sumPaidAmounts(input.expenses) +
-    sumPaidAmounts(input.payroll)
+    sumPaidAmounts(input.payroll) +
+    refundedCash
   const coverageWarnings: CoverageWarning[] = input.revenue.flatMap(
     (line, index) =>
       line.hasCost

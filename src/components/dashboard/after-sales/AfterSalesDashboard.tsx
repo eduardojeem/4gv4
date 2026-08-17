@@ -27,12 +27,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { ChevronDown, Eye, HelpCircle, Inbox, Plus, RefreshCw, Search, ShoppingBag, Wrench, X } from 'lucide-react'
+import { Eye, Inbox, Plus, RefreshCw, Search, ShoppingBag, Wrench, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { normalizeAfterSalesCase } from '@/lib/after-sales/compat'
 import { ProductThumb } from '@/components/suppliers/order-ui'
 import { CreateAfterSalesCaseDialog } from './CreateAfterSalesCaseDialog'
+import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
+import { AFTER_SALES_GUIDE } from '@/components/dashboard/common/section-guides-data'
+import { SourcesBrowser } from './SourcesBrowser'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
     NEXT_ACTIONS,
     REQUEST_META,
@@ -79,6 +83,7 @@ interface AfterSalesCase {
     customers?: { name: string | null; phone: string | null } | null
     generated_repair?: {
         ticket_number: string | null
+        status?: string | null
     } | null
 }
 
@@ -113,6 +118,9 @@ export function AfterSalesDashboard() {
     const searchParams = useSearchParams()
     const [cases, setCases] = useState<AfterSalesCase[]>([])
     const [loading, setLoading] = useState(true)
+    // Los casos siguen siendo la vista principal: el listado de comprobantes es
+    // el punto de entrada cuando el cliente llega con un ticket en la mano.
+    const [view, setView] = useState<'cases' | 'sources'>('cases')
     const [search, setSearch] = useState('')
     const [statusFilter, setStatusFilter] = useState<'all' | CaseStatus>('all')
     const [typeFilter, setTypeFilter] = useState<'all' | RequestType>('all')
@@ -278,6 +286,7 @@ export function AfterSalesDashboard() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <SectionGuideButton guide={AFTER_SALES_GUIDE} />
                     <Button variant="default" size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setIsCreateDialogOpen(true)}>
                         <Plus className="h-4 w-4" />
                         Nuevo Reclamo
@@ -289,64 +298,6 @@ export function AfterSalesDashboard() {
                 </div>
             </div>
 
-            {/* Interactive Explanatory Guide Banner */}
-            <Card className="border border-blue-200/60 bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-purple-50/40 shadow-sm dark:border-white/10 dark:from-blue-950/20 dark:via-indigo-950/10 dark:to-purple-950/10 rounded-2xl">
-                <details className="group [&_summary::-webkit-details-marker]:hidden">
-                    <summary className="flex cursor-pointer items-center justify-between p-4 focus:outline-none">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm dark:bg-blue-500">
-                                <HelpCircle className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                    ¿Cómo funciona el flujo de Devoluciones y Garantías?
-                                    <Badge variant="outline" className="border-blue-300 bg-blue-100 text-blue-800 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-200 text-[10px]">
-                                        Guía Rápida
-                                    </Badge>
-                                </h3>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    Aprende dónde iniciar reclamos y cómo se procesan las devoluciones de dinero o reparaciones.
-                                </p>
-                            </div>
-                        </div>
-                        <ChevronDown className="h-4 w-4 text-slate-400 transition-transform duration-200 group-open:rotate-180" />
-                    </summary>
-
-                    <CardContent className="border-t border-blue-100/80 dark:border-white/5 p-4 pt-3 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div className="p-3 rounded-xl bg-white/80 dark:bg-[#0d1117] border border-slate-200 dark:border-white/10 space-y-1.5">
-                                <div className="flex items-center gap-2 font-bold text-xs text-slate-900 dark:text-white">
-                                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 text-[11px]">1</span>
-                                    <span>¿Dónde se inicia?</span>
-                                </div>
-                                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                                    En <strong>POS Dashboard / Historial de Ventas</strong> (`/dashboard/pos/dashboard`), en <strong>Reparaciones</strong> (`/dashboard/repairs`), o con el botón <strong>+ Nuevo Reclamo</strong>.
-                                </p>
-                            </div>
-
-                            <div className="p-3 rounded-xl bg-white/80 dark:bg-[#0d1117] border border-slate-200 dark:border-white/10 space-y-1.5">
-                                <div className="flex items-center gap-2 font-bold text-xs text-slate-900 dark:text-white">
-                                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 text-[11px]">2</span>
-                                    <span>Garantía de Taller</span>
-                                </div>
-                                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                                    Al aprobar una garantía de reparación, se genera automáticamente una <strong>Orden de Retrabajo en Taller (₲ 0)</strong> para el equipo del cliente.
-                                </p>
-                            </div>
-
-                            <div className="p-3 rounded-xl bg-white/80 dark:bg-[#0d1117] border border-slate-200 dark:border-white/10 space-y-1.5">
-                                <div className="flex items-center gap-2 font-bold text-xs text-slate-900 dark:text-white">
-                                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 text-[11px]">3</span>
-                                    <span>Devolución de Dinero</span>
-                                </div>
-                                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                                    Al completar una devolución, puedes elegir emitir el dinero <strong>Por Caja Chica</strong> (salida auditada) o como <strong>Saldo a Favor</strong> del cliente.
-                                </p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </details>
-            </Card>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {([
@@ -426,6 +377,17 @@ export function AfterSalesDashboard() {
                 })}
             </div>
 
+            <Tabs value={view} onValueChange={(value) => setView(value as 'cases' | 'sources')} className="space-y-5">
+                <TabsList>
+                    <TabsTrigger value="cases">Casos de posventa</TabsTrigger>
+                    <TabsTrigger value="sources">Ventas y reparaciones</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="sources" className="mt-0">
+                    <SourcesBrowser />
+                </TabsContent>
+
+                <TabsContent value="cases" className="mt-0 space-y-5">
             <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/20 p-3">
                 <div className="relative min-w-[200px] flex-1 max-w-sm">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -653,6 +615,8 @@ export function AfterSalesDashboard() {
                     Mostrando {cases.length} de {totalCases} casos. Usá los filtros o el buscador para acotar.
                 </p>
             )}
+                </TabsContent>
+            </Tabs>
 
             {/* Case Detail Dialog */}
             <Dialog open={Boolean(selectedCase)} onOpenChange={(open) => !open && setSelectedCase(null)}>
@@ -1022,6 +986,21 @@ export function AfterSalesDashboard() {
 
                     {confirming?.status === 'completed' && (
                         <div className="space-y-3">
+                            {/* Cerrar el caso no cierra el retrabajo: son dos cosas
+                                distintas y nada las sincroniza. Se avisa, pero no se
+                                bloquea, porque puede haber razones legitimas para
+                                cerrar el caso administrativo antes de entregar. */}
+                            {confirming.item.generated_repair
+                                && confirming.item.generated_repair.status !== 'entregado' && (
+                                <div role="status" className="rounded-lg border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                                    <p className="font-semibold">El retrabajo todavía no fue entregado</p>
+                                    <p className="mt-0.5">
+                                        La reparación {confirming.item.generated_repair.ticket_number ?? 'de garantía'} sigue
+                                        abierta en el taller. Podés cerrar el caso igual, pero el equipo continúa sin entregarse.
+                                    </p>
+                                </div>
+                            )}
+
                             {confirming.item.source_type === 'sale' && (
                                 <div className="space-y-1.5">
                                     <span className="text-sm font-medium">Que pasa con la mercaderia</span>

@@ -30,8 +30,12 @@ import {
   CreditCard,
   Plus,
   RefreshCw,
-  ArrowUpCircle, ArrowDownCircle, MoreHorizontal, Info, X
+  ArrowUpCircle, ArrowDownCircle, MoreHorizontal, Info, X,
+  Download
 } from 'lucide-react'
+import { exportCustomersToCSV } from '@/lib/export/customers-export'
+import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
+import { CUSTOMERS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { ImprovedMetricCard } from './ImprovedMetricCard'
 // Componentes cargados dinámicamente para reducir el peso inicial
 // Componente mejorado de lista de clientes
@@ -42,9 +46,11 @@ const CustomerHistory = dynamic(() => import("./CustomerHistory").then(m => m.Cu
 const CustomerFilters = dynamic(() => import("./CustomerFilters").then(m => m.CustomerFilters), { ssr: false })
 import { CustomerModal } from './CustomerModal'
 import { CustomerQuickView } from './CustomerQuickView'
+import { CustomerDeleteDialog } from './CustomerDeleteDialog'
 // Componente consolidado de analíticas
 const AnalyticsDashboard = lazy(() => import("./AnalyticsDashboard").then(m => ({ default: m.AnalyticsDashboard })))
 const CustomerAlerts = dynamic(() => import("./CustomerAlerts").then(m => m.CustomerAlerts), { ssr: false })
+const CustomerActiveCreditsTab = dynamic(() => import("./CustomerActiveCreditsTab").then(m => m.CustomerActiveCreditsTab), { ssr: false })
 import { Customer } from '@/hooks/use-customer-state'
 import { Pagination } from '@/components/ui/pagination'
 import { prefetchCustomerPurchases, prefetchSimilarCustomers } from '@/hooks/useCustomerData'
@@ -71,6 +77,7 @@ type ViewState = 'list' | 'detail' | 'history' | 'edit'
 const dashboardTabs = [
   { value: "customers", icon: <Users className="h-4 w-4" />, label: "Clientes" },
   { value: "analytics", icon: <BarChart3 className="h-4 w-4" />, label: "Analíticas" },
+  { value: "credits", icon: <CreditCard className="h-4 w-4" />, label: "Créditos Activos" },
   { value: "notifications", icon: <Bell className="h-4 w-4" />, label: "Alertas" },
 ]
 
@@ -143,6 +150,7 @@ export function CustomerDashboard() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [selectedCreditCustomerId, setSelectedCreditCustomerId] = useState<string>("")
   const [creditSearchTerm, setCreditSearchTerm] = useState("")
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null)
   const [isDeletingCustomer, setIsDeletingCustomer] = useState(false)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   
@@ -174,16 +182,6 @@ export function CustomerDashboard() {
   }, [creditSummaries])
 
   const stats = useMemo(() => {
-    // Función para formatear moneda
-    const formatCurrency = (amount: number) => {
-      return new Intl.NumberFormat('es-ES', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      }).format(amount)
-    }
-
     return [
       {
         title: "Total Clientes",
@@ -431,11 +429,12 @@ export function CustomerDashboard() {
     setCurrentView('edit')
   }
 
-  const handleDeleteCustomer = async (customer: Customer) => {
-    if (isDeletingCustomer) return
-    const confirmed = window.confirm(`¿Eliminar cliente "${customer.name}"? Esta acción no se puede deshacer.`)
-    if (!confirmed) return
+  const handleDeleteCustomer = (customer: Customer) => {
+    setCustomerToDelete(customer)
+  }
 
+  const handleConfirmDeleteCustomer = async (customer: Customer) => {
+    if (isDeletingCustomer) return
     try {
       setIsDeletingCustomer(true)
       const result = await deleteCustomer(customer.id)
@@ -451,6 +450,24 @@ export function CustomerDashboard() {
       toast.error('No se pudo eliminar el cliente')
     } finally {
       setIsDeletingCustomer(false)
+      setCustomerToDelete(null)
+    }
+  }
+
+  const handleDeactivateCustomer = async (customer: Customer) => {
+    try {
+      const result = await updateCustomer(customer.id, { status: 'inactive' })
+      if (result.success) {
+        toast.success(`Cliente "${customer.name}" desactivado`, {
+          description: 'El cliente no aparecerá en ventas activas, conservando su historial.'
+        })
+        await refreshCustomers()
+      }
+    } catch (error) {
+      console.error('Error deactivating customer:', error)
+      toast.error('No se pudo desactivar el cliente')
+    } finally {
+      setCustomerToDelete(null)
     }
   }
 
@@ -647,15 +664,33 @@ export function CustomerDashboard() {
                       Ctrl + N
                     </kbd>
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleRefresh}
-                    disabled={loading}
-                    className="h-10 flex-1 gap-2 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
-                  >
-                    <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-                    Actualizar
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleRefresh}
+                      disabled={loading}
+                      className="h-10 flex-1 gap-1.5 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white text-xs font-semibold"
+                    >
+                      <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+                      Actualizar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const res = exportCustomersToCSV(filteredCustomers)
+                        if (res.success) toast.success('Clientes exportados en CSV')
+                      }}
+                      className="h-10 gap-1.5 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white text-xs font-semibold"
+                      title="Exportar clientes filtrados en CSV"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Exportar
+                    </Button>
+                    <SectionGuideButton 
+                      guide={CUSTOMERS_GUIDE} 
+                      className="h-10 border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                    />
+                  </div>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white/70">
                   {creditMetrics.overduePayments > 0 ? (
@@ -676,62 +711,6 @@ export function CustomerDashboard() {
             </div>
           </div>
         </motion.div>
-
-        {/* Guía de funcionamiento de CRM/Clientes */}
-        {showGuide && (
-          <Card className="relative bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-            <button
-              type="button"
-              onClick={() => setShowGuide(false)}
-              className="absolute right-3 top-3 z-10 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/10 transition-colors"
-              title="Ocultar guía permanentemente durante esta sesión"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <details className="group">
-              <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3 pr-10">
-                <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                  <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la sección de Clientes (CRM)?
-                </div>
-                <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-                  <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-                  <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-                </div>
-              </summary>
-              <CardContent className="pt-0 pb-5 text-xs">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                    <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                      Registro de Clientes
-                    </h4>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Mantén una lista organizada de clientes con sus teléfonos, e-mails e identificación fiscal (RUC/CI). Registra clientes rápidos o detallados según la necesidad de facturación o reparación.
-                    </p>
-                  </div>
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                    <h4 className="font-semibold text-foreground flex items-center gap-2">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                      Historial y Trazabilidad
-                    </h4>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Visualiza el historial completo de compras, órdenes de servicio técnico asociadas y comportamiento de pagos. Esto te permite evaluar el valor de vida del cliente.
-                    </p>
-                  </div>
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                    <h4 className="font-semibold text-foreground flex items-center gap-2">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                      Cartera y Cuenta Corriente
-                    </h4>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Lleva el control de créditos, deudas acumuladas y saldos a favor. Podrás enviar recordatorios directos por WhatsApp con un solo clic.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </details>
-          </Card>
-        )}
 
         {/* Stats Cards */}
         <motion.div
@@ -968,6 +947,7 @@ export function CustomerDashboard() {
                       onBulkStatusChange={handleBulkStatusChange}
                       bulkDeleting={isBulkDeleting}
                       loading={loading || isDeletingCustomer || isBulkDeleting}
+                      compact={compactMode}
                     />
                     
                     {/* Paginación */}
@@ -1071,6 +1051,23 @@ export function CustomerDashboard() {
               </Suspense>
             </TabsContent>
 
+            <TabsContent value="credits" className="mt-0">
+              <Suspense fallback={<div className="p-4"><Skeleton className="h-32 w-full" /></div>}>
+                <CustomerActiveCreditsTab
+                  customers={customers}
+                  creditSummaries={creditSummaries}
+                  credits={credits}
+                  installments={installments}
+                  onViewCustomer={(customer) => {
+                    setActiveTab('customers')
+                    handleViewDetail(customer)
+                  }}
+                  onMarkPaid={markInstallmentPaid}
+                  compact={compactMode}
+                />
+              </Suspense>
+            </TabsContent>
+
             <TabsContent value="notifications" className="mt-0">
               <CustomerAlerts
                 customers={customers}
@@ -1102,6 +1099,17 @@ export function CustomerDashboard() {
         onClose={() => setQuickViewCustomer(null)}
         onViewDetail={handleGoToFullDetail}
         onEdit={(c) => { setQuickViewCustomer(null); handleEditCustomer(c) }}
+      />
+
+      {/* Delete / Deactivate Customer Confirmation Dialog */}
+      <CustomerDeleteDialog
+        customer={customerToDelete}
+        isOpen={!!customerToDelete}
+        onClose={() => setCustomerToDelete(null)}
+        onConfirmDelete={handleConfirmDeleteCustomer}
+        onDeactivate={handleDeactivateCustomer}
+        isDeleting={isDeletingCustomer}
+        creditSummary={customerToDelete ? creditSummaries[customerToDelete.id] : null}
       />
 
       {/* Keyboard Shortcuts Indicator */}

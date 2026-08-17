@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CartItem, Product } from '../types'
@@ -99,12 +99,32 @@ export const useOptimizedCart = (
   }, [cart, isLoaded])
 
   /**
+   * Helper para identificar ítems de servicio o reparaciones sin control de stock físico
+   */
+  const isServiceItem = useCallback((itemOrId: any) => {
+    if (!itemOrId) return false
+    if (typeof itemOrId === 'string') {
+      return itemOrId.startsWith('repair_') || itemOrId.startsWith('service_') || itemOrId.startsWith('quick_')
+    }
+    return Boolean(
+      itemOrId.isService ||
+      itemOrId.is_service ||
+      itemOrId.type === 'service' ||
+      (typeof itemOrId.id === 'string' && (itemOrId.id.startsWith('repair_') || itemOrId.id.startsWith('service_'))) ||
+      itemOrId.isServiceItem
+    )
+  }, [])
+
+  /**
    * Verificar disponibilidad de stock
    */
   const checkAvailability = useCallback((productId: string, quantity: number) => {
+    if (isServiceItem(productId)) return true
     const product = inventoryProducts.find(p => p.id === productId)
-    return product ? product.stock_quantity >= quantity : false
-  }, [inventoryProducts])
+    if (!product) return true
+    if (isServiceItem(product)) return true
+    return (product.stock_quantity ?? 0) >= quantity
+  }, [inventoryProducts, isServiceItem])
 
   /**
    * Helper para redondear a 2 decimales
@@ -115,7 +135,7 @@ export const useOptimizedCart = (
    * Agregar producto al carrito
    */
   const addToCart = useCallback((product: Product, quantity: number = 1) => {
-    // Verificar disponibilidad
+    const isService = isServiceItem(product)
     const currentProduct = inventoryProducts.find(p => p.id === product.id) || (product as any)
     if (!currentProduct) {
       toast.error('Producto no encontrado')
@@ -127,16 +147,20 @@ export const useOptimizedCart = (
       const currentQty = existingItem ? existingItem.quantity : 0
       const requestedQuantity = currentQty + quantity
 
-      const hasInventoryEntry = inventoryProducts.some(p => p.id === product.id)
-      const availableStock = Number(currentProduct.stock_quantity || 0)
-      const canAdd = hasInventoryEntry
-        ? checkAvailability(product.id, requestedQuantity)
-        : requestedQuantity <= availableStock
+      if (!isService) {
+        const hasInventoryEntry = inventoryProducts.some(p => p.id === product.id)
+        const availableStock = Number(currentProduct.stock_quantity || 0)
+        const canAdd = hasInventoryEntry
+          ? checkAvailability(product.id, requestedQuantity)
+          : requestedQuantity <= availableStock
 
-      if (!canAdd) {
-        toast.error(`Stock insuficiente. Disponible: ${availableStock}`)
-        return prev
+        if (!canAdd) {
+          toast.error(`Stock insuficiente. Disponible: ${availableStock}`)
+          return prev
+        }
       }
+
+      const itemPrice = Number((product as any).price ?? product.sale_price ?? 0)
 
       if (existingItem) {
         // Actualizar item existente
@@ -154,24 +178,21 @@ export const useOptimizedCart = (
           id: product.id,
           name: product.name,
           sku: product.sku,
-          price: product.sale_price, // Precio base de venta
+          price: itemPrice,
           quantity: quantity,
-          stock: currentProduct.stock_quantity,
-          subtotal: product.sale_price * quantity,
+          stock: isService ? 999 : currentProduct.stock_quantity,
+          subtotal: itemPrice * quantity,
           image: (product as any).image || (product as any).image_url || '',
           wholesalePrice: inferredWholesale,
-          originalPrice: product.sale_price,
-          category: typeof product.category === 'object' ? product.category?.id : product.category
+          originalPrice: itemPrice,
+          category: typeof product.category === 'object' ? product.category?.id : product.category,
+          isService: isService || Boolean((product as any).isService)
         }
         
-        // NotificaciÃ³n rica (copiada de page.tsx)
-        // Nota: JSX en toast requiere que este archivo sea .tsx o manejarlo en el componente
-        // Por ahora usamos texto simple o confiamos en que toast soporte JSX si cambiamos extensiÃ³n
-        // Para seguridad en .ts, usamos mensaje simple
         return [...prev, newItem]
       }
     })
-  }, [inventoryProducts, checkAvailability])
+  }, [inventoryProducts, checkAvailability, isServiceItem])
 
   /**
    * Agregar variante al carrito
@@ -229,7 +250,7 @@ export const useOptimizedCart = (
   }, [])
 
   /**
-   * Actualizar cantidad con descuentos automÃ¡ticos
+   * Actualizar cantidad con descuentos automáticos
    */
   const updateQuantity = useCallback((id: string, quantity: number) => {
     if (quantity <= 0) {
@@ -238,7 +259,8 @@ export const useOptimizedCart = (
       return
     }
 
-    if (!checkAvailability(id, quantity)) {
+    const isService = isServiceItem(id)
+    if (!isService && !checkAvailability(id, quantity)) {
       const currentProduct = inventoryProducts.find(p => p.id === id)
       toast.error(`Stock insuficiente. Disponible: ${currentProduct?.stock_quantity || 0}`)
       return

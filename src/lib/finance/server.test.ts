@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildUnpaidObligationUpdate, toFinanceApiError } from './server'
+import {
+  buildFinanceSummaryFromRecords,
+  buildUnpaidObligationUpdate,
+  toFinanceApiError,
+  type FinanceSummaryRecords,
+} from './server'
 
 describe('buildUnpaidObligationUpdate', () => {
   const current = {
@@ -83,5 +88,99 @@ describe('toFinanceApiError', () => {
       'El pago entra en conflicto con el estado actual de la obligacion.',
     )
     expect(error.message).not.toContain('internal payload details')
+  })
+})
+
+describe('devoluciones de posventa en el resumen', () => {
+  const filters = { startDate: '2026-08-01', endDate: '2026-08-31', branchId: null }
+
+  const baseRecords: FinanceSummaryRecords = {
+    sales: [{
+      id: 'sale-1', code: 'VTA-1', branchId: 'branch-1', createdAt: '2026-08-05T10:00:00.000Z',
+      status: 'completed', totalAmount: 1_000_000, paidAmount: 0, employeeId: null,
+    }],
+    saleItems: [{
+      id: 'item-1', saleId: 'sale-1', productId: 'product-1', productName: 'Cargador',
+      quantity: 1, unitCost: 600_000, revenueAmount: 1_000_000,
+    }],
+    salePayments: [{
+      saleId: 'sale-1', branchId: 'branch-1', paymentDate: '2026-08-05',
+      amount: 1_000_000, paymentMethod: 'cash', status: 'completed',
+    }],
+    salePaymentTimingAvailable: true,
+    creditPayments: [],
+    creditPaymentTimingAvailable: true,
+    repairs: [],
+    repairParts: [],
+    obligations: [],
+    payrollEntries: [],
+    financePayments: [],
+    payrollPayments: [],
+  } as unknown as FinanceSummaryRecords
+
+  const withRefund = (refund: Partial<{ amount: number; recoveredCost: number; cashAmount: number }>) =>
+    buildFinanceSummaryFromRecords({
+      ...baseRecords,
+      refunds: [{
+        id: 'case-1',
+        branchId: 'branch-1',
+        resolvedAt: '2026-08-20T12:00:00.000Z',
+        amount: 200_000,
+        recoveredCost: 0,
+        cashAmount: 0,
+        ...refund,
+      }],
+    }, filters)
+
+  it('sin devoluciones el resumen no cambia', () => {
+    const summary = buildFinanceSummaryFromRecords(baseRecords, filters)
+    expect(summary.accrued.revenue).toBe(1_000_000)
+    expect(summary.accrued.directCosts).toBe(600_000)
+  })
+
+  // El bug: la venta seguia contando entera y el reintegro no aparecia, asi que
+  // la utilidad quedaba inflada por cada devolucion del periodo.
+  it('descuenta del ingreso la devolucion cerrada en el periodo', () => {
+    const summary = withRefund({ amount: 200_000, cashAmount: 200_000 })
+    expect(summary.accrued.revenue).toBe(800_000)
+  })
+
+  it('recupera el costo solo si la mercaderia volvio vendible', () => {
+    expect(withRefund({ amount: 200_000, recoveredCost: 120_000 }).accrued.directCosts).toBe(480_000)
+    expect(withRefund({ amount: 200_000, recoveredCost: 0 }).accrued.directCosts).toBe(600_000)
+  })
+
+  it('cuenta el reintegro por caja como salida de efectivo', () => {
+    const summary = withRefund({ amount: 200_000, cashAmount: 200_000 })
+    expect(summary.cash.paid).toBe(200_000)
+    expect(summary.cash.netCashFlow).toBe(800_000)
+  })
+
+  it('deja el saldo a favor fuera del flujo de caja', () => {
+    const summary = withRefund({ amount: 200_000, cashAmount: 0 })
+    expect(summary.accrued.revenue).toBe(800_000)
+    expect(summary.cash.paid).toBe(0)
+  })
+
+  it('ignora una devolucion cerrada fuera del periodo', () => {
+    const summary = buildFinanceSummaryFromRecords({
+      ...baseRecords,
+      refunds: [{
+        id: 'case-old', branchId: 'branch-1', resolvedAt: '2026-07-10T12:00:00.000Z',
+        amount: 200_000, recoveredCost: 0, cashAmount: 200_000,
+      }],
+    }, filters)
+    expect(summary.accrued.revenue).toBe(1_000_000)
+  })
+
+  it('respeta el filtro por sucursal', () => {
+    const summary = buildFinanceSummaryFromRecords({
+      ...baseRecords,
+      refunds: [{
+        id: 'case-other', branchId: 'branch-2', resolvedAt: '2026-08-20T12:00:00.000Z',
+        amount: 200_000, recoveredCost: 0, cashAmount: 200_000,
+      }],
+    }, { ...filters, branchId: 'branch-1' })
+    expect(summary.accrued.revenue).toBe(1_000_000)
   })
 })

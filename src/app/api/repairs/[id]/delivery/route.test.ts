@@ -59,24 +59,36 @@ describe('POST /api/repairs/:id/delivery', () => {
     }))
   })
 
-  it('uses the unrepaired closeout operation for a withdrawn delivery', async () => {
+  it('supports credit payment upon delivery without requiring cash session', async () => {
     const { POST } = await import('./route')
     const request = { json: async () => ({
-      outcome: 'withdrawn',
-      charge: { mode: 'none' },
-      parts: [],
-      settlement: { kind: 'store_credit' },
-      idempotencyKey: 'repair-closeout-123',
+      outcome: 'repaired',
+      allowOutstandingBalance: false,
+      idempotencyKey: 'delivery-credit-123',
+      payment: {
+        method: 'credit',
+        amount: 250_000,
+        interestRate: 10,
+        installments: { count: 3, frequency: 'monthly' },
+        idempotencyKey: 'credit-pay-123',
+      },
     }) } as never
 
     const response = await POST(request, { params: Promise.resolve({ id: 'repair-1' }) })
 
     expect(response.status).toBe(200)
-    expect(closeUnrepaired).toHaveBeenCalledWith(ctx.supabase, expect.objectContaining({
-      repairId: 'repair-1', organizationId: 'org-1', branchId: 'branch-1', actorId: 'user-1',
+    expect(closeFinancial).toHaveBeenCalledWith(ctx.supabase, expect.objectContaining({
+      repairId: 'repair-1',
+      organizationId: 'org-1',
+      branchId: 'branch-1',
+      actorId: 'user-1',
+      deliver: true,
       cashSessionId: null,
-      request: expect.objectContaining({ outcome: 'withdrawn', settlement: { kind: 'store_credit' } }),
+      payment: expect.objectContaining({
+        method: 'credit',
+        amount: 250_000,
+        interestRate: 10,
+      }),
     }))
-    expect(closeFinancial).not.toHaveBeenCalled()
   })
 })

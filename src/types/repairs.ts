@@ -120,6 +120,12 @@ export interface RepairNotifications {
 export interface Repair {
   id: string
   ticketNumber?: string
+  /**
+   * Reparacion original si esta nacio como retrabajo por garantia desde un
+   * caso de posventa. Sin esto un retrabajo se veia igual que cualquier otra
+   * reparacion en la lista.
+   */
+  parentRepairId?: string | null
   customer: Customer
   device: string
   deviceType: DeviceType

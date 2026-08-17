@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
 import { FilterPanel } from '@/components/shared'
 import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt, RefreshCw, Download, Users, Info } from 'lucide-react'
+import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
+import { CREDITS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { formatCurrency } from '@/lib/currency'
 import { useCredits, InstallmentRow, isInstallmentLate } from '@/hooks/use-credits'
 import { CreditOverview } from '@/components/dashboard/credits/CreditOverview'
@@ -417,6 +419,7 @@ function CreditsDashboardContent() {
             <p className="text-xl font-bold tabular-nums text-red-700 dark:text-red-300">{formatCurrency(portfolioTotals.overdue)}</p>
           </button>
           <div className="flex items-center gap-2">
+            <SectionGuideButton guide={CREDITS_GUIDE} />
             <Button variant="outline" size="sm" className="h-9" onClick={refreshData} disabled={loading || isPending}>
               <RefreshCw className={`h-4 w-4 mr-1.5 ${loading || isPending ? 'animate-spin' : ''}`} />
               Actualizar
@@ -441,52 +444,6 @@ function CreditsDashboardContent() {
           </button>
         </div>
       )}
-
-      {/* Guía de funcionamiento de créditos */}
-      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-        <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Módulo de Créditos?
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-            </div>
-          </summary>
-          <CardContent className="pt-0 pb-5 text-xs">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                  Financiación en Cuotas
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Permite a tus clientes comprar productos o pagar servicios de reparación en múltiples cuotas. El sistema creará un plan de amortización con sus respectivos montos y fechas de vencimiento.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                  Gestión de Cobranzas
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Monitorea las cuotas que vencen hoy o que ya están atrasadas. Puedes registrar los pagos manualmente indicando el método (efectivo, tarjeta, transferencia) para amortizar la deuda.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                  Cartera Activa e Historial
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Obtén el total de tu cartera pendiente por cobrar y el historial consolidado de transacciones de amortización por cliente, facilitando el control y análisis financiero general.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </details>
-      </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:w-auto lg:inline-grid gap-1.5 h-auto">

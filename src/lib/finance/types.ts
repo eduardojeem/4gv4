@@ -41,11 +41,35 @@ export interface FinancialPayableLine extends FinancialSourceLine {
   paidAmount: number
 }
 
+/**
+ * Devolucion cerrada de posventa.
+ *
+ * Una devolucion revierte una venta que ya se conto como ingreso. Sin esto el
+ * resumen mostraba la utilidad inflada: la venta seguia sumando completa y el
+ * reintegro no aparecia por ningun lado, porque sale por `cash_movements` o
+ * como saldo a favor, tablas que el resumen no lee.
+ */
+export interface FinancialRefundLine extends FinancialSourceLine {
+  /**
+   * Costo directo que vuelve a ser inventario. Solo se recupera si la
+   * mercaderia volvio vendible: en cuarentena o si el cliente se queda con el
+   * producto, el costo queda hundido y la perdida es el total reintegrado.
+   */
+  recoveredCost: number
+  /**
+   * Parte del reintegro que salio de la caja. Un saldo a favor no mueve
+   * efectivo, asi que afecta la utilidad pero no el flujo del periodo.
+   */
+  cashAmount: number
+}
+
 export interface FinancialSummaryInput {
   revenue: FinancialRevenueLine[]
   directCosts: FinancialPayableLine[]
   expenses: FinancialPayableLine[]
   payroll: FinancialPayableLine[]
+  /** Opcional: un periodo sin devoluciones cerradas no necesita declararlo. */
+  refunds?: FinancialRefundLine[]
 }
 
 export type CoverageWarningCode =

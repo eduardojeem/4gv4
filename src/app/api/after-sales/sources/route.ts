@@ -44,6 +44,16 @@ interface RepairRow {
   customers?: { name: string | null } | { name: string | null }[] | null
 }
 
+function buildPagination(count: number | null, page: number, limit: number) {
+  const total = count ?? 0
+  return {
+    page,
+    limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  }
+}
+
 /** PostgREST devuelve el embed como objeto o array segun la cardinalidad. */
 function firstOf<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null
@@ -57,9 +67,34 @@ export const GET = withTenantAuth(
       const { searchParams } = new URL(request.url)
       const type = searchParams.get('type') === 'repair' ? 'repair' : 'sale'
       const term = sanitizeSearchTerm(searchParams.get('q'))
-      const limit = Math.min(25, Math.max(1, Number(searchParams.get('limit') || 10)))
+      const limit = Math.min(50, Math.max(1, Number(searchParams.get('limit') || 10)))
+      const page = Math.max(1, Number(searchParams.get('page') || 1))
+      const from = (page - 1) * limit
+      const to = from + limit - 1
+      // El selector de "Nuevo reclamo" solo busca reparaciones reclamables. El
+      // listado necesita ver todas, incluso las que ya no tienen garantia, asi
+      // que el filtro pasa a ser opcional en vez de desaparecer.
+      const warrantyOnly = searchParams.get('warrantyOnly') !== 'false'
 
       const supabase = await createClient()
+
+      // El termino puede ser un codigo, un nombre o un telefono. El nombre y el
+      // telefono viven en `customers`, asi que se resuelven aparte: filtrar el
+      // embed con !inner dejaria fuera las ventas de mostrador sin cliente.
+      let matchedCustomerIds: string[] = []
+      if (term) {
+        const { data: matchedCustomers } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('organization_id', organization.id)
+          .or(`name.ilike.%${term}%,phone.ilike.%${term}%`)
+          .limit(100)
+        matchedCustomerIds = (matchedCustomers ?? []).map((row) => String(row.id))
+      }
+
+      const customerClause = matchedCustomerIds.length > 0
+        ? `,customer_id.in.(${matchedCustomerIds.join(',')})`
+        : ''
 
       if (type === 'sale') {
         let query = supabase
@@ -67,15 +102,16 @@ export const GET = withTenantAuth(
           .select(
             `id, code, total_amount, created_at,
              customers:customers!customer_id(name),
-             sale_items(id, product_id, quantity, unit_price, products(name, image_url))`
+             sale_items(id, product_id, quantity, unit_price, products(name, image_url))`,
+            { count: 'exact' }
           )
           .eq('organization_id', organization.id)
 
-        if (term) query = query.ilike('code', `%${term}%`)
+        if (term) query = query.or(`code.ilike.%${term}%${customerClause}`)
 
-        const { data, error } = await query
+        const { data, error, count } = await query
           .order('created_at', { ascending: false })
-          .limit(limit)
+          .range(from, to)
 
         if (error) throw error
 
@@ -95,27 +131,35 @@ export const GET = withTenantAuth(
           })),
         }))
 
-        return NextResponse.json({ success: true, data: results })
+        return NextResponse.json({
+          success: true,
+          data: results,
+          pagination: buildPagination(count, page, limit),
+        })
       }
 
-      // Solo reparaciones entregadas: la garantia empieza a correr con la
-      // entrega, asi que antes de eso no hay nada que reclamar.
+      // Las reparaciones reclamables son las entregadas con garantia vigente:
+      // la garantia empieza a correr con la entrega. El listado puede pedir el
+      // resto con warrantyOnly=false.
       let query = supabase
         .from('repairs')
         .select(
           `id, ticket_number, device_brand, device_model, status,
            warranty_months, warranty_type, warranty_expires_at, delivered_at,
-           customers:customers!customer_id(name)`
+           customers:customers!customer_id(name)`,
+          { count: 'exact' }
         )
         .eq('organization_id', organization.id)
-        .eq('status', 'entregado')
-        .gt('warranty_months', 0)
 
-      if (term) query = query.ilike('ticket_number', `%${term}%`)
+      if (warrantyOnly) {
+        query = query.eq('status', 'entregado').gt('warranty_months', 0)
+      }
 
-      const { data, error } = await query
+      if (term) query = query.or(`ticket_number.ilike.%${term}%${customerClause}`)
+
+      const { data, error, count } = await query
         .order('delivered_at', { ascending: false, nullsFirst: false })
-        .limit(limit)
+        .range(from, to)
 
       if (error) throw error
 
@@ -131,11 +175,16 @@ export const GET = withTenantAuth(
           warrantyType: repair.warranty_type,
           warrantyExpiresAt: repair.warranty_expires_at,
           warrantyExpired: expiresAt != null ? expiresAt < now : false,
+          status: repair.status,
           date: repair.delivered_at,
         }
       })
 
-      return NextResponse.json({ success: true, data: results })
+      return NextResponse.json({
+        success: true,
+        data: results,
+        pagination: buildPagination(count, page, limit),
+      })
     } catch (error) {
       logger.error('After-sales sources API error', { error })
       return NextResponse.json(

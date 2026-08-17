@@ -16,6 +16,7 @@ import { ProfileOrders, type ProfileOrder } from '@/components/profile/profile-o
 import { ProfileAccountSummary } from '@/components/profile/profile-account-summary'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import type { CustomerAccountSummary } from '@/lib/profile/customer-account-summary'
+import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreCredit'
 
 const profileSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -161,6 +162,13 @@ export function ProfileClient({
 
         <div className="mb-8">
           <ProfileAccountSummary summary={accountSummary} tenantPrefix={tenantPrefix} />
+        </div>
+
+        <div className="mb-8">
+          <PublicStoreCredit
+            authenticated
+            organizationSlug={tenantPrefix.replace(/^\//, '') || null}
+          />
         </div>
 
         <div className="grid gap-8 lg:grid-cols-[1fr_340px]">

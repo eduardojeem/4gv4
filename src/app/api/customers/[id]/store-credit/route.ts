@@ -38,7 +38,7 @@ async function readBalance(
 
 export const GET = withTenantAuth(
   { permission: 'crm.customers.read', module: 'crm' },
-  async (_request, { organization }, routeContext) => {
+  async (request, { organization }, routeContext) => {
     try {
       const id = await getRouteId(routeContext)
       if (!id || !UUID_PATTERN.test(id)) {
@@ -46,20 +46,38 @@ export const GET = withTenantAuth(
       }
 
       const supabase = await createClient()
-      const { data, error } = await supabase
+      const url = new URL(request.url)
+      const requestedPage = Number(url.searchParams.get('page') || 1)
+      const requestedPageSize = Number(url.searchParams.get('pageSize') || 20)
+      const page = Number.isInteger(requestedPage) ? Math.max(1, requestedPage) : 1
+      const pageSize = Number.isInteger(requestedPageSize) ? Math.min(100, Math.max(1, requestedPageSize)) : 20
+      const from = (page - 1) * pageSize
+      const to = from + pageSize - 1
+
+      const [{ data, error, count }, balance] = await Promise.all([
+        supabase
         .from('customer_store_credits')
-        .select('id, amount, reason, source_type, source_id, created_at')
+        .select('id, amount, reason, source_type, source_id, created_at', { count: 'exact' })
         .eq('organization_id', organization.id)
         .eq('customer_id', id)
         .order('created_at', { ascending: false })
-        .limit(200)
+        .range(from, to),
+        readBalance(supabase, organization.id, id),
+      ])
 
       if (error) throw error
 
       const movements = data ?? []
-      const balance = movements.reduce((total, movement) => total + Number(movement.amount || 0), 0)
+      const total = count ?? movements.length
 
-      return NextResponse.json({ success: true, data: { balance, movements } })
+      return NextResponse.json({
+        success: true,
+        data: {
+          balance,
+          movements,
+          pagination: { page, pageSize, total, totalPages: total === 0 ? 0 : Math.ceil(total / pageSize) },
+        },
+      })
     } catch (error) {
       logger.error('Store credit API error', { error })
       return NextResponse.json({ success: false, error: 'No se pudo cargar el saldo a favor.' }, { status: 500 })

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import {
   calculateRepairPricing,
   validateRepairPricing,
@@ -183,12 +183,12 @@ function RepairQuickPriceForm({
               </div>
               <Input
                 id="quick-labor-cost"
-                type="number"
-                min="0"
-                value={pricingMode === 'budget' ? pricing.laborCost : laborCost}
+                type="text"
+                inputMode="numeric"
+                value={pricingMode === 'budget' ? formatThousands(pricing.laborCost) : formatThousands(laborCost)}
                 disabled={pricingMode === 'budget' || isSaving}
-                onChange={(event) => setLaborCost(event.target.value)}
-                className="h-9 font-semibold tabular-nums"
+                onChange={(event) => setLaborCost(parseThousands(event.target.value).toString())}
+                className="h-9 font-semibold font-mono tabular-nums"
               />
               <span className="text-[11px] font-mono text-muted-foreground block truncate">
                 {formatCurrency(pricingMode === 'budget' ? pricing.laborCost : numberFromInput(laborCost))}
@@ -207,12 +207,12 @@ function RepairQuickPriceForm({
               </div>
               <Input
                 id="quick-final-cost"
-                type="number"
-                min="0"
-                value={pricingMode === 'automatic' ? pricing.customerTotal : finalCost}
+                type="text"
+                inputMode="numeric"
+                value={pricingMode === 'automatic' ? formatThousands(pricing.customerTotal) : formatThousands(finalCost)}
                 disabled={pricingMode === 'automatic' || isSaving}
-                onChange={(event) => setFinalCost(event.target.value)}
-                className="h-9 font-bold text-emerald-600 dark:text-emerald-400 tabular-nums"
+                onChange={(event) => setFinalCost(parseThousands(event.target.value).toString())}
+                className="h-9 font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums"
               />
               <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold block truncate">
                 {formatCurrency(pricingMode === 'automatic' ? pricing.customerTotal : numberFromInput(finalCost))}
@@ -247,12 +247,12 @@ function RepairQuickPriceForm({
               </div>
               <Input
                 id="quick-discount"
-                type="number"
-                min="0"
-                value={discountAmount}
+                type="text"
+                inputMode="numeric"
+                value={formatThousands(discountAmount)}
                 disabled={isSaving}
-                onChange={(event) => setDiscountAmount(event.target.value)}
-                className="h-9 font-semibold tabular-nums text-rose-600 dark:text-rose-400"
+                onChange={(event) => setDiscountAmount(parseThousands(event.target.value).toString())}
+                className="h-9 font-semibold font-mono tabular-nums text-rose-600 dark:text-rose-400"
               />
             </div>
 

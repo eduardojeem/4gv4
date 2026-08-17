@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { calculateRepairTotal, type RepairCalculationInput } from '@/lib/pos-calculator'
 import { calculateRepairPricing, type RepairPricingMode } from '@/lib/repairs/pricing'
@@ -331,17 +331,19 @@ export function RepairCostCalculator({
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Input
-                  id="repair-discount"
-                  type="number"
-                  min="0"
-                  step={getCurrencyFractionDigits(currency) === 0 ? '1' : '0.01'}
-                  value={discountAmount || ''}
-                  onChange={(event) => onDiscountAmountChange(Number(event.target.value) || 0)}
-                  disabled={disabled}
-                  placeholder="0"
-                  className="font-bold"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₲</span>
+                  <Input
+                    id="repair-discount"
+                    type="text"
+                    inputMode="numeric"
+                    value={formatThousands(discountAmount)}
+                    onChange={(event) => onDiscountAmountChange(parseThousands(event.target.value))}
+                    disabled={disabled}
+                    placeholder="0"
+                    className="pl-7 font-bold font-mono"
+                  />
+                </div>
                 {discountAmount > 0 && (
                   <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                     Descuento: {formatCurrency(discountAmount)}
@@ -380,15 +382,14 @@ export function RepairCostCalculator({
               </Badge>
             </div>
             <div className="relative">
-              <DollarSign className="absolute left-3 top-3.5 h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+              <span className="absolute left-3.5 top-3 text-base font-bold text-cyan-600 dark:text-cyan-400">₲</span>
               <Input
-                type="number"
-                step={getCurrencyFractionDigits(currency) === 0 ? '1' : '0.01'}
-                min="0"
-                value={laborCost || ''}
-                onChange={(e) => handleLaborInputChange(e.target.value)}
-                placeholder="0.00"
-                className="h-12 pl-11 text-lg font-bold disabled:opacity-80 rounded-xl"
+                type="text"
+                inputMode="numeric"
+                value={formatThousands(laborCost)}
+                onChange={(e) => handleLaborInputChange(parseThousands(e.target.value).toString())}
+                placeholder="0"
+                className="h-12 pl-9 text-lg font-bold font-mono disabled:opacity-80 rounded-xl"
                 disabled={disabled || isLaborDerived}
               />
             </div>
@@ -502,15 +503,14 @@ export function RepairCostCalculator({
           </div>
 
           <div className="relative">
-            <DollarSign className="absolute left-4 top-4 h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            <span className="absolute left-4 top-4 text-xl font-bold text-emerald-600 dark:text-emerald-400">₲</span>
             <Input
-              type="number"
-              step={getCurrencyFractionDigits(currency) === 0 ? '1' : '0.01'}
-              min="0"
-              value={finalCost ?? ''}
-              onChange={(e) => handleFinalCostInputChange(e.target.value)}
+              type="text"
+              inputMode="numeric"
+              value={formatThousands(finalCost)}
+              onChange={(e) => handleFinalCostInputChange(parseThousands(e.target.value).toString())}
               placeholder={`${formatCurrency(estimatedCost)} (estimado)`}
-              className={`pl-14 h-16 text-xl font-bold border-2 disabled:opacity-80 rounded-2xl ${
+              className={`pl-12 h-16 text-xl font-bold font-mono border-2 disabled:opacity-80 rounded-2xl ${
                 hasCostDifference
                   ? costDifference > 0
                     ? 'border-orange-400 dark:border-orange-700 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950/40 dark:to-orange-900/30 text-orange-900 dark:text-orange-200'

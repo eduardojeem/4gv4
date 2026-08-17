@@ -129,15 +129,17 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       replacementById = new Map((replacements ?? []).map((row) => [row.id, { name: row.name, image_url: row.image_url }]))
     }
 
-    let generatedById = new Map<string, { ticket_number: string | null }>()
+    let generatedById = new Map<string, { ticket_number: string | null; status: string | null }>()
     if (generatedIds.length > 0) {
       const { data: generated } = await supabase
         .from('repairs')
-        .select('id, ticket_number')
+        // El estado del retrabajo permite avisar si el caso se cierra con el
+        // equipo todavia en el taller.
+        .select('id, ticket_number, status')
         .eq('organization_id', organization.id)
         .in('id', generatedIds)
 
-      generatedById = new Map((generated ?? []).map((row) => [row.id, { ticket_number: row.ticket_number }]))
+      generatedById = new Map((generated ?? []).map((row) => [row.id, { ticket_number: row.ticket_number, status: row.status ?? null }]))
     }
 
     const enriched = rows.map((row) => normalizeAfterSalesCase({

@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useState, useEffect } from 'react'
 import { CreditCard, User, DollarSign, FileText, Calendar, AlertCircle, CheckCircle2, Printer } from 'lucide-react'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
 
@@ -87,12 +87,14 @@ export function CreditPaymentDialog({
     }, [open, initialAmount])
 
     const handleAmountChange = (value: string) => {
-        setAmount(value)
-        const numericAmount = parseFloat(value)
+        const rawNumber = parseThousands(value)
+        const strVal = rawNumber > 0 ? String(rawNumber) : (value === '' ? '' : '0')
+        setAmount(strVal)
+        const numericAmount = rawNumber
         const maxAllowed = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
         const balanceLabel = allowFullDebtPayment ? 'la deuda total' : 'esta cuota'
 
-        if (isNaN(numericAmount) || numericAmount <= 0) {
+        if (numericAmount <= 0 && value !== '') {
             setError('El monto debe ser mayor a 0')
         } else if (typeof maxAllowed === 'number' && numericAmount > maxAllowed) {
             setError(`El monto excede el saldo disponible para ${balanceLabel} (${formatCurrency(maxAllowed)})`)
@@ -414,15 +416,15 @@ export function CreditPaymentDialog({
                                             Monto a Pagar *
                                         </Label>
                                         <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">₲</span>
                                             <Input
                                                 id="amount"
-                                                type="number"
-                                                className={`pl-7 ${error ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                                                value={amount}
-                                                placeholder="0.00"
+                                                type="text"
+                                                inputMode="numeric"
+                                                className={`pl-7 font-mono font-bold ${error ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                                                value={formatThousands(amount)}
+                                                placeholder="0"
                                                 onChange={(e) => handleAmountChange(e.target.value)}
-                                                step="0.01"
                                             />
                                         </div>
                                         {error && (
