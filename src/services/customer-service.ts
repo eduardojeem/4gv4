@@ -253,6 +253,29 @@ class CustomerService {
     try {
       const queryId = String(id)
 
+      // 1. Intentar actualizar a través de la API del servidor (Tenant Auth y bypass RLS seguro)
+      if (typeof window !== 'undefined') {
+        try {
+          const apiRes = await fetch('/api/customers', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: queryId, ...customerData })
+          })
+
+          if (apiRes.ok) {
+            const apiJson = await apiRes.json()
+            if (apiJson.success && apiJson.data) {
+              return {
+                success: true,
+                data: this.mapSupabaseToCustomer(apiJson.data)
+              }
+            }
+          }
+        } catch (apiErr) {
+          console.warn('API update failed, fallbacking to client supabase:', apiErr)
+        }
+      }
+
       // Debug: Check session
       const { data: { session }, error: sessionError } = await this.supabase.auth.getSession()
       if (sessionError) {
@@ -613,11 +636,15 @@ class CustomerService {
    // Obtener el crédito (id) del cliente si existe
    private async getCustomerCreditId(customerId: string): Promise<{ success: boolean; creditId?: string; error?: string }> {
      try {
+       // Un cliente puede tener mas de un credito: con .single() PostgREST
+       // fallaba y el detalle se quedaba sin resumen. Se toma el mas reciente.
        const { data, error } = await this.supabase
          .from('customer_credits')
          .select('id')
          .eq('customer_id', customerId)
-         .single()
+         .order('created_at', { ascending: false })
+         .limit(1)
+         .maybeSingle()
  
        if (error) {
          // Si no existe registro de crédito, devolver success con creditId undefined
@@ -635,6 +662,92 @@ class CustomerService {
      }
    }
  
+   /**
+    * Saldo pendiente de varios clientes de una sola vez.
+    *
+    * La alerta de "clientes con saldo pendiente" filtraba por
+    * `customers.current_balance`, que nadie actualiza: nunca aparecia nadie.
+    */
+   async getCustomersCreditOutstanding(customerIds: string[]): Promise<Map<string, number>> {
+     const outstanding = new Map<string, number>()
+     const ids = Array.from(new Set(customerIds.filter(Boolean)))
+     if (ids.length === 0) return outstanding
+
+     try {
+       const { data: credits, error: creditsError } = await this.supabase
+         .from('customer_credits')
+         .select('id, customer_id')
+         .in('customer_id', ids)
+
+       if (creditsError) throw creditsError
+
+       const customerByCredit = new Map<string, string>()
+       for (const row of (credits ?? []) as Array<{ id: string; customer_id: string }>) {
+         customerByCredit.set(row.id, row.customer_id)
+       }
+       if (customerByCredit.size === 0) return outstanding
+
+       const { data, error } = await this.supabase
+         .from('credit_summary')
+         .select('credit_id, saldo_pendiente')
+         .in('credit_id', Array.from(customerByCredit.keys()))
+
+       if (error) throw error
+
+       for (const row of (data ?? []) as Array<{ credit_id: string; saldo_pendiente?: number | string | null }>) {
+         const customerId = customerByCredit.get(row.credit_id)
+         if (!customerId) continue
+         outstanding.set(customerId, (outstanding.get(customerId) ?? 0) + (Number(row.saldo_pendiente) || 0))
+       }
+     } catch (error: unknown) {
+       const message = error instanceof Error ? error.message : 'Unknown error occurred'
+       console.warn('Error obteniendo saldos pendientes:', message)
+     }
+
+     return outstanding
+   }
+
+   /**
+    * Saldo pendiente total del cliente, sumando todos sus creditos.
+    *
+    * Es el mismo numero que decide si se le puede vender a credito
+    * (`canSellOnCredit` y `createCreditAccount` usan las cuotas pendientes).
+    * El detalle del cliente mostraba `credit_limit - customers.current_balance`,
+    * y esa columna no la actualiza nadie: quedaba en 0 y el credito disponible
+    * se veia siempre igual al limite, aunque el cliente debiera todo.
+    */
+   async getCustomerCreditOutstanding(customerId: string): Promise<{ success: boolean; outstanding: number; error?: string }> {
+     try {
+       const { data: credits, error: creditsError } = await this.supabase
+         .from('customer_credits')
+         .select('id')
+         .eq('customer_id', customerId)
+
+       if (creditsError) throw creditsError
+
+       const creditIds = (credits ?? []).map((row: { id: string }) => row.id)
+       if (creditIds.length === 0) return { success: true, outstanding: 0 }
+
+       const { data, error } = await this.supabase
+         .from('credit_summary')
+         .select('saldo_pendiente')
+         .in('credit_id', creditIds)
+
+       if (error) throw error
+
+       const outstanding = (data ?? []).reduce(
+         (total: number, row: { saldo_pendiente?: number | string | null }) =>
+           total + (Number(row.saldo_pendiente) || 0),
+         0,
+       )
+       return { success: true, outstanding }
+     } catch (error: unknown) {
+       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+       console.warn('Error obteniendo saldo pendiente del cliente:', errorMessage)
+       return { success: false, outstanding: 0, error: errorMessage }
+     }
+   }
+
    // Resumen de crédito del cliente desde la vista credit_summary
    async getCustomerCreditSummary(customerId: string): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
      try {

@@ -47,14 +47,22 @@ export async function GET(
       .eq('customer_id', customerId)
       .eq('organization_id', organization.id)
 
+    // Se toma el costo final y, si todavia no se cerro, el estimado: es la
+    // convencion del resto de la app. Filtrar por `final_cost not null` dejaba
+    // fuera toda reparacion sin cerrar y el "Total Gastado" del cliente no
+    // sumaba las reparaciones.
     const { data: costData } = await supabase
       .from('repairs')
-      .select('final_cost')
+      .select('final_cost, estimated_cost, status')
       .eq('customer_id', customerId)
       .eq('organization_id', organization.id)
-      .not('final_cost', 'is', null)
 
-    const totalSpent = (costData ?? []).reduce((sum, r) => sum + Number(r.final_cost || 0), 0)
+    const totalSpent = (costData ?? []).reduce((sum, r) => {
+      // Una reparacion cancelada no es plata gastada por el cliente.
+      if (String(r.status ?? '').trim().toLowerCase() === 'cancelado') return sum
+      const cost = Number(r.final_cost ?? r.estimated_cost ?? 0)
+      return sum + (Number.isFinite(cost) && cost > 0 ? cost : 0)
+    }, 0)
 
     return NextResponse.json({
       repairs: repairs ?? [],

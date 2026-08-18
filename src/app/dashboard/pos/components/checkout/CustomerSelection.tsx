@@ -16,9 +16,12 @@ import {
   Mail, 
   Phone, 
   MapPin, 
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  Loader2
 } from 'lucide-react'
 import { usePOSCustomer } from '../../contexts/POSCustomerContext'
+import { useCreditSystem } from '@/hooks/use-credit-system'
 
 interface CreditSummary {
   totalCredit: number
@@ -84,6 +87,38 @@ export function CustomerSelection({
     newCustomerSaving,
     createNewCustomer
   } = usePOSCustomer()
+
+  const { loadCreditData } = useCreditSystem()
+  const [isEnablingCredit, setIsEnablingCredit] = React.useState(false)
+
+  const handleEnableCustomerCredit = async (limitAmount: number = 1000000) => {
+    if (!activeCustomer?.id) return
+    setIsEnablingCredit(true)
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: activeCustomer.id,
+          credit_limit: limitAmount,
+        }),
+      })
+      const data = await res.json()
+      if (data?.success) {
+        toast.success(`Línea de crédito activada: ${formatCurrency(limitAmount)}`)
+        await Promise.all([
+          refreshCustomers(),
+          loadCreditData(activeCustomer.id)
+        ])
+      } else {
+        toast.error(data?.error || 'No se pudo habilitar el crédito')
+      }
+    } catch {
+      toast.error('Error de conexión al habilitar el crédito')
+    } finally {
+      setIsEnablingCredit(false)
+    }
+  }
 
   return (
       <div className="space-y-4">
@@ -275,7 +310,7 @@ export function CustomerSelection({
               </div>
               
               {/* Información de crédito */}
-              {creditSummary && creditSummary.totalCredit > 0 && (
+              {creditSummary && creditSummary.totalCredit > 0 ? (
                 <div className="mt-3 pt-3 border-t border-border/50">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Crédito</span>
@@ -308,6 +343,27 @@ export function CustomerSelection({
                       Vencido: {formatCurrency(creditSummary.overdueAmount)}
                     </div>
                   )}
+                </div>
+              ) : (
+                <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block">Crédito</span>
+                    <span className="text-xs text-muted-foreground">Sin línea activa (₲ 0)</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isEnablingCredit}
+                    onClick={() => handleEnableCustomerCredit(1000000)}
+                    className="h-7 px-2.5 text-xs text-emerald-700 bg-emerald-50 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                  >
+                    {isEnablingCredit ? (
+                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    ) : (
+                      <Sparkles className="h-3 w-3 mr-1" />
+                    )}
+                    Habilitar ₲ 1.000.000
+                  </Button>
                 </div>
               )}
               

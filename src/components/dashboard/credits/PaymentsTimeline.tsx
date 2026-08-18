@@ -81,7 +81,12 @@ export function PaymentsTimeline({
   const printPaymentReceipt = async (payment: PaymentRow) => {
     const credit = creditById[payment.credit_id]
     const installment = installments.find((row) => row.id === payment.installment_id)
+    const creditInstallments = installments.filter((row) => row.credit_id === payment.credit_id)
+    const paidCount = creditInstallments.filter((row) => row.status === 'paid').length
+    const pendingCount = creditInstallments.filter((row) => row.status !== 'paid').length
+    const nextPending = creditInstallments.find((row) => row.status !== 'paid')
     const display = getCreditDisplayInfo(credit, installments, sales, saleItems)
+
     const result = await createCreditPaymentReceiptPdf({
       paymentId: payment.id,
       paymentDate: payment.created_at,
@@ -98,10 +103,16 @@ export function PaymentsTimeline({
       creditLabel: display.creditLabel,
       saleCode: display.saleCode,
       productSummary: display.productSummary,
+      totalCreditAmount: credit?.principal,
+      totalInstallments: credit?.term_months || creditInstallments.length,
+      paidInstallmentsCount: paidCount,
+      pendingInstallmentsCount: pendingCount,
       installmentNumber: installment?.installment_number,
       installmentDueDate: installment?.due_date,
       installmentAmount: installment?.amount,
       currentCreditBalance: getCreditCurrentBalance(installments, payment.credit_id),
+      nextDueDate: nextPending?.due_date,
+      nextDueAmount: nextPending?.amount,
     })
 
     result.doc.autoPrint()

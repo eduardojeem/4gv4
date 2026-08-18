@@ -5,31 +5,76 @@ import {
   ShoppingBag,
   CreditCard,
   Clock,
-  Sparkles
+  Sparkles,
+  Coins
 } from "lucide-react"
 import { Customer } from "@/hooks/use-customer-state"
 import { formatCurrency } from "@/lib/currency"
 import { StoreCreditCard } from "./StoreCreditCard"
 
 type CreditSummary = {
-  credit_id: string
-  total_principal: number
-  total_installments: number
-  total_pagado: number
-  saldo_pendiente: number
-  progreso: number
+  credit_id?: string
+  total_principal?: number
+  total_installments?: number
+  total_pagado?: number
+  total_paid?: number
+  saldo_pendiente?: number
+  total_pending?: number
+  progreso?: number
+  available_credit?: number
+  credit_limit?: number
+  store_balance?: number
 } | null
 
-interface CustomerDetailMetricsProps {
-  customer: Customer & { credit_summary?: CreditSummary }
+export interface CustomerStatsOverview {
+  totalSpent?: number
+  salesTotal?: number
+  repairsTotal?: number
+  totalPurchases?: number
+  salesCount?: number
+  repairsCount?: number
+  lastVisit?: string | null
+  averageTicket?: number
+  pendingDebt?: number
+  availableCredit?: number
+  creditLimit?: number
+  storeBalance?: number
 }
 
-export function CustomerDetailMetrics({ customer }: CustomerDetailMetricsProps) {
+interface CustomerDetailMetricsProps {
+  customer: Customer & { credit_summary?: CreditSummary; credit_outstanding?: number }
+  stats?: CustomerStatsOverview
+}
+
+export function CustomerDetailMetrics({ customer, stats }: CustomerDetailMetricsProps) {
   const creditSummary = customer.credit_summary
+  /**
+   * El saldo sale de las cuotas pendientes, no de `customers.current_balance`:
+   * esa columna no la actualiza nadie, quedaba en 0 y el credito disponible se
+   * mostraba siempre igual al limite aunque el cliente debiera todo. Es ademas
+   * el mismo numero con el que el POS decide si puede vender a credito.
+   */
+  const creditLimit = stats?.creditLimit ?? creditSummary?.credit_limit ?? customer.credit_limit ?? 0
+  const outstanding = stats?.pendingDebt ?? creditSummary?.total_pending ?? creditSummary?.saldo_pendiente ?? customer.credit_outstanding ?? 0
+  const availableCredit = stats?.availableCredit ?? creditSummary?.available_credit ?? Math.max(0, creditLimit - outstanding)
+
+  const effectiveSpent = stats?.totalSpent ?? (customer as any).total_spent_this_year ?? customer.lifetime_value ?? 0
+  const effectivePurchases = stats?.totalPurchases ?? customer.total_purchases ?? 0
+  const effectiveLastVisit = stats?.lastVisit ?? customer.last_visit ?? customer.last_activity ?? null
+
+  const spentSubtext = stats?.salesCount !== undefined && stats?.repairsCount !== undefined
+    ? `${stats.salesCount} ${stats.salesCount === 1 ? 'venta' : 'ventas'} · ${stats.repairsCount} ${stats.repairsCount === 1 ? 'reparación' : 'reparaciones'}`
+    : "Histórico de compras y servicios"
+
+  const purchasesSubtext = stats?.averageTicket && stats.averageTicket > 0
+    ? `Promedio: ${formatCurrency(stats.averageTicket)}`
+    : "Operaciones registradas"
+
   const metrics = [
     {
       label: "Total Gastado",
-      value: formatCurrency(customer.lifetime_value || 0),
+      value: formatCurrency(effectiveSpent),
+      subtext: spentSubtext,
       icon: ShoppingBag,
       color: "text-blue-600 dark:text-blue-400",
       bg: "bg-blue-100 dark:bg-blue-500/20",
@@ -37,8 +82,10 @@ export function CustomerDetailMetrics({ customer }: CustomerDetailMetricsProps) 
     },
     {
       label: "Crédito Disponible",
-      value: formatCurrency((customer.credit_limit || 0) - (customer.current_balance || 0)),
-      subtext: `Límite: ${formatCurrency(customer.credit_limit || 0)}`,
+      value: formatCurrency(availableCredit),
+      subtext: outstanding > 0
+        ? `Límite ${formatCurrency(creditLimit)} · debe ${formatCurrency(outstanding)}`
+        : `Límite: ${formatCurrency(creditLimit)}`,
       icon: CreditCard,
       color: "text-purple-600 dark:text-purple-400",
       bg: "bg-purple-100 dark:bg-purple-500/20",
@@ -46,7 +93,8 @@ export function CustomerDetailMetrics({ customer }: CustomerDetailMetricsProps) 
     },
     {
       label: "Pedidos Totales",
-      value: `${customer.total_purchases || 0}`,
+      value: `${effectivePurchases}`,
+      subtext: purchasesSubtext,
       icon: TrendingUp,
       color: "text-emerald-600 dark:text-emerald-400",
       bg: "bg-emerald-100 dark:bg-emerald-500/20",
@@ -54,7 +102,7 @@ export function CustomerDetailMetrics({ customer }: CustomerDetailMetricsProps) 
     },
     {
       label: "Última Visita",
-      value: customer.last_visit ? new Date(customer.last_visit).toLocaleDateString('es-PY') : "N/A",
+      value: effectiveLastVisit ? new Date(effectiveLastVisit).toLocaleDateString('es-PY') : "Sin registro",
       subtext: "Actividad registrada",
       icon: Clock,
       color: "text-amber-600 dark:text-amber-400",
@@ -63,18 +111,30 @@ export function CustomerDetailMetrics({ customer }: CustomerDetailMetricsProps) 
     }
   ]
 
-  const prediction = (() => {
-    if (!customer.total_purchases || customer.total_purchases < 2 || !customer.registration_date || !customer.last_visit) return null;
-    const regDate = new Date(customer.registration_date);
-    const lastDate = new Date(customer.last_visit);
-    const now = new Date();
-    const daysSinceReg = Math.max(1, (now.getTime() - regDate.getTime()) / (1000 * 3600 * 24));
-    const avgDays = daysSinceReg / customer.total_purchases;
-    const nextDate = new Date(lastDate.getTime() + (avgDays * 1000 * 3600 * 24));
-    const diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
+  if (outstanding > 0) {
+    metrics.push({
+      label: "Deuda Pendiente",
+      value: formatCurrency(outstanding),
+      subtext: creditLimit > 0 ? `${Math.min(100, Math.round((outstanding / creditLimit) * 100))}% de línea utilizada` : "Saldo por cobrar",
+      icon: Coins,
+      color: "text-rose-600 dark:text-rose-400",
+      bg: "bg-rose-100 dark:bg-rose-500/20",
+      border: "border-rose-200 dark:border-rose-500/30"
+    })
+  }
 
-    return { diffDays, avgDays: Math.round(avgDays) };
-  })();
+  const prediction = (() => {
+    if (!effectivePurchases || effectivePurchases < 2 || !customer.registration_date || !effectiveLastVisit) return null
+    const regDate = new Date(customer.registration_date)
+    const lastDate = new Date(effectiveLastVisit)
+    const now = new Date()
+    const daysSinceReg = Math.max(1, (now.getTime() - regDate.getTime()) / (1000 * 3600 * 24))
+    const avgDays = daysSinceReg / effectivePurchases
+    const nextDate = new Date(lastDate.getTime() + (avgDays * 1000 * 3600 * 24))
+    const diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 3600 * 24))
+
+    return { diffDays, avgDays: Math.round(avgDays) }
+  })()
 
   if (prediction) {
     metrics.push({
@@ -85,30 +145,7 @@ export function CustomerDetailMetrics({ customer }: CustomerDetailMetricsProps) 
       color: "text-amber-600 dark:text-amber-400",
       bg: "bg-amber-100 dark:bg-amber-500/20",
       border: "border-slate-200 dark:border-white/10"
-    });
-  }
-
-  if (creditSummary) {
-    metrics.push(
-      {
-        label: "Saldo Pendiente",
-        value: formatCurrency(creditSummary.saldo_pendiente || 0),
-        subtext: `Principal ${formatCurrency(creditSummary.total_principal || 0)}`,
-        icon: CreditCard,
-        color: "text-rose-600 dark:text-rose-400",
-        bg: "bg-rose-100 dark:bg-rose-500/20",
-        border: "border-rose-200 dark:border-rose-500/30"
-      },
-      {
-        label: "Progreso Crédito",
-        value: `${creditSummary.progreso ?? 0}%`,
-        subtext: `Pagado ${formatCurrency(creditSummary.total_pagado || 0)}`,
-        icon: TrendingUp,
-        color: "text-indigo-600 dark:text-indigo-400",
-        bg: "bg-indigo-100 dark:bg-indigo-500/20",
-        border: "border-slate-200 dark:border-white/10"
-      }
-    )
+    })
   }
 
   return (

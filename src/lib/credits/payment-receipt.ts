@@ -13,6 +13,8 @@ export type CreditPaymentReceiptInput = {
   customerName: string
   customerId?: string | null
   customerCode?: string | null
+  customerRuc?: string | null
+  customerPhone?: string | null
   creditId: string
   creditCode?: string | null
   creditTypeLabel?: string | null
@@ -20,24 +22,31 @@ export type CreditPaymentReceiptInput = {
   creditLabel?: string | null
   saleCode?: string | null
   productSummary?: string | null
+  totalCreditAmount?: number | null
+  totalInstallments?: number | null
+  paidInstallmentsCount?: number | null
+  pendingInstallmentsCount?: number | null
   installmentNumber?: number | null
   installmentDueDate?: string | null
   installmentAmount?: number | null
   currentCreditBalance?: number | null
+  nextDueDate?: string | null
+  nextDueAmount?: number | null
+  businessName?: string | null
 }
 
 export const CREDIT_PAYMENT_RECEIPT_WIDTH_MM = 80
 export const CREDIT_PAYMENT_RECEIPT_HEIGHT_MM = 220
-export const CREDIT_PAYMENT_RECEIPT_MAX_HEIGHT_MM = 900
+export const CREDIT_PAYMENT_RECEIPT_MAX_HEIGHT_MM = 950
 
 export type CreditPaymentReceiptPdfOptions = {
   printerWidthMm?: number
 }
 
 export function getCreditPaymentReceiptLayout(pageWidthMm: number) {
-  const margin = Math.max(3, Math.min(5, pageWidthMm * 0.055))
+  const margin = Math.max(3, Math.min(5, pageWidthMm * 0.05))
   const usableWidth = Math.max(1, pageWidthMm - margin * 2)
-  const labelColumnWidth = Math.max(18, Math.min(28, usableWidth * 0.35))
+  const labelColumnWidth = Math.max(20, Math.min(32, usableWidth * 0.40))
   const isNarrow = pageWidthMm < 70
 
   return {
@@ -45,14 +54,14 @@ export function getCreditPaymentReceiptLayout(pageWidthMm: number) {
     usableWidth,
     labelColumnWidth,
     valueColumnWidth: Math.max(1, usableWidth - labelColumnWidth),
-    headerHeight: isNarrow ? 22 : 24,
-    titleFontSize: isNarrow ? 8.5 : 10,
-    receiptFontSize: isNarrow ? 7 : 8,
-    metaFontSize: isNarrow ? 6.3 : 7,
+    headerHeight: isNarrow ? 24 : 26,
+    titleFontSize: isNarrow ? 9 : 10.5,
+    receiptFontSize: isNarrow ? 7.5 : 8.5,
+    metaFontSize: isNarrow ? 6.5 : 7.2,
     tableHeaderFontSize: isNarrow ? 7 : 8,
-    tableBodyFontSize: isNarrow ? 6.2 : 7,
-    footerFontSize: isNarrow ? 5.6 : 6.5,
-    cellPadding: isNarrow ? 1.1 : 1.5,
+    tableBodyFontSize: isNarrow ? 6.5 : 7.2,
+    footerFontSize: isNarrow ? 5.8 : 6.5,
+    cellPadding: isNarrow ? 1.2 : 1.6,
     sectionGap: isNarrow ? 3 : 4,
     footerBottom: isNarrow ? 6 : 8,
   }
@@ -82,33 +91,100 @@ function estimateTableHeight(rows: ReceiptRow[], layout: ReturnType<typeof getCr
   return headerHeight + bodyHeight
 }
 
-function buildCreditInfoRows(input: CreditPaymentReceiptInput): ReceiptRow[] {
+export function buildCreditInfoRows(input: CreditPaymentReceiptInput): ReceiptRow[] {
   const creditCode = input.creditCode || formatCreditId(input.creditId)
-  const customerCode = input.customerCode || formatCustomerId(input.customerId)
+  const customerCode = input.customerRuc || input.customerCode || formatCustomerId(input.customerId)
 
-  return [
+  const rows: ReceiptRow[] = [
     ['Cliente', input.customerName],
-    ...(customerCode ? [['ID cliente', customerCode] as ReceiptRow] : []),
-    ['Credito', creditCode],
-    ...(input.creditTypeLabel ? [['Tipo', input.creditTypeLabel] as ReceiptRow] : []),
-    ...(input.originLabel ? [['Origen', input.originLabel] as ReceiptRow] : []),
-    ...(input.saleCode ? [['Ticket', input.saleCode] as ReceiptRow] : []),
-    ...(input.creditLabel ? [['Concepto', input.creditLabel] as ReceiptRow] : []),
-    ...(input.productSummary ? [['Detalle', input.productSummary] as ReceiptRow] : []),
   ]
+
+  if (customerCode) {
+    rows.push(['RUC / CI / ID', customerCode])
+  }
+  if (input.customerPhone) {
+    rows.push(['Teléfono', input.customerPhone])
+  }
+
+  rows.push(['Crédito Nº', creditCode])
+
+  if (input.saleCode) {
+    rows.push(['Ticket Venta', input.saleCode])
+  } else if (input.originLabel) {
+    rows.push(['Origen', input.originLabel])
+  }
+
+  if (input.productSummary) {
+    rows.push(['Detalle Venta', input.productSummary])
+  } else if (input.creditLabel) {
+    rows.push(['Concepto', input.creditLabel])
+  }
+
+  if (typeof input.totalCreditAmount === 'number' && input.totalCreditAmount > 0) {
+    const planText = input.totalInstallments ? ` (${input.totalInstallments} cuotas)` : ''
+    rows.push(['Total Financiado', `${formatCurrency(input.totalCreditAmount)}${planText}`])
+  }
+
+  return rows
 }
 
-function buildPaymentDetailRows(input: CreditPaymentReceiptInput): ReceiptRow[] {
-  return [
-    ['Monto pagado', formatCurrency(input.paymentAmount)],
-    ['Metodo', getCreditPaymentMethodLabel(input.paymentMethod)],
-    ...(input.installmentNumber ? [['Cuota', `#${input.installmentNumber}`] as ReceiptRow] : []),
-    ...(input.installmentDueDate ? [['Vencimiento cuota', new Date(input.installmentDueDate).toLocaleDateString('es-AR')] as ReceiptRow] : []),
-    ...(typeof input.installmentAmount === 'number' ? [['Monto cuota', formatCurrency(input.installmentAmount)] as ReceiptRow] : []),
-    ...(input.reference ? [['Referencia', input.reference] as ReceiptRow] : []),
-    ...(input.notes ? [['Notas', input.notes] as ReceiptRow] : []),
-    ...(typeof input.currentCreditBalance === 'number' ? [['Saldo actual credito', formatCurrency(Math.max(0, input.currentCreditBalance))] as ReceiptRow] : []),
-  ]
+export function buildPaymentDetailRows(input: CreditPaymentReceiptInput): ReceiptRow[] {
+  const rows: ReceiptRow[] = []
+
+  if (input.installmentNumber) {
+    const totalInstText = input.totalInstallments ? ` de ${input.totalInstallments}` : ''
+    rows.push(['Cuota Pagada', `Cuota #${input.installmentNumber}${totalInstText}`])
+  }
+
+  if (input.installmentDueDate) {
+    rows.push(['Vencimiento Cuota', new Date(input.installmentDueDate).toLocaleDateString('es-AR')])
+  }
+
+  if (typeof input.installmentAmount === 'number' && input.installmentAmount > 0) {
+    rows.push(['Valor Cuota', formatCurrency(input.installmentAmount)])
+  }
+
+  // Monto pagado
+  rows.push(['MONTO ABONADO', formatCurrency(input.paymentAmount)])
+  rows.push(['Método de Pago', getCreditPaymentMethodLabel(input.paymentMethod)])
+
+  if (input.reference) {
+    rows.push(['Referencia / N° Trans.', input.reference])
+  }
+
+  if (input.notes) {
+    rows.push(['Observaciones', input.notes])
+  }
+
+  return rows
+}
+
+export function buildAccountStatusRows(input: CreditPaymentReceiptInput): ReceiptRow[] {
+  const rows: ReceiptRow[] = []
+
+  if (typeof input.currentCreditBalance === 'number') {
+    const balance = Math.max(0, input.currentCreditBalance)
+    if (balance === 0) {
+      rows.push(['SALDO PENDIENTE', 'Gs. 0 (TOTALMENTE SALDADO)'])
+    } else {
+      rows.push(['SALDO PENDIENTE (FALTA)', formatCurrency(balance)])
+    }
+  }
+
+  if (typeof input.pendingInstallmentsCount === 'number') {
+    if (input.pendingInstallmentsCount === 0) {
+      rows.push(['Cuotas Restantes', '0 cuotas (Completado)'])
+    } else {
+      rows.push(['Cuotas por Pagar', `${input.pendingInstallmentsCount} cuota${input.pendingInstallmentsCount !== 1 ? 's' : ''} pendiente${input.pendingInstallmentsCount !== 1 ? 's' : ''}`])
+    }
+  }
+
+  if (input.nextDueDate) {
+    const nextAmountText = typeof input.nextDueAmount === 'number' && input.nextDueAmount > 0 ? ` (${formatCurrency(input.nextDueAmount)})` : ''
+    rows.push(['Próximo Vencimiento', `${new Date(input.nextDueDate).toLocaleDateString('es-AR')}${nextAmountText}`])
+  }
+
+  return rows
 }
 
 export function getCreditPaymentReceiptHeight(input: CreditPaymentReceiptInput, printerWidthMm = CREDIT_PAYMENT_RECEIPT_WIDTH_MM) {
@@ -116,14 +192,17 @@ export function getCreditPaymentReceiptHeight(input: CreditPaymentReceiptInput, 
   const layout = getCreditPaymentReceiptLayout(pageWidthMm)
   const creditRows = buildCreditInfoRows(input)
   const paymentRows = buildPaymentDetailRows(input)
+  const statusRows = buildAccountStatusRows(input)
+
   const estimatedHeight =
     layout.headerHeight +
-    11 +
+    14 +
     estimateTableHeight(creditRows, layout) +
     layout.sectionGap +
     estimateTableHeight(paymentRows, layout) +
     layout.sectionGap +
-    16
+    (statusRows.length > 0 ? estimateTableHeight(statusRows, layout) + layout.sectionGap : 0) +
+    32
 
   return Math.max(
     CREDIT_PAYMENT_RECEIPT_HEIGHT_MM,
@@ -180,69 +259,115 @@ export async function createCreditPaymentReceiptPdf(
   const paidAt = input.paymentDate ? new Date(input.paymentDate) : new Date()
   const creditRows = buildCreditInfoRows(input)
   const paymentRows = buildPaymentDetailRows(input)
+  const statusRows = buildAccountStatusRows(input)
 
-  doc.setFillColor(37, 99, 235)
+  // 1. Cabecera Elegante
+  doc.setFillColor(15, 23, 42) // Slate 900
   doc.rect(0, 0, pageW, layout.headerHeight, 'F')
   doc.setTextColor(255)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(layout.titleFontSize)
-  doc.text('COMPROBANTE DE PAGO', pageW / 2, layout.headerHeight * 0.42, {
+  doc.text('COMPROBANTE DE PAGO', pageW / 2, layout.headerHeight * 0.38, {
     align: 'center',
     maxWidth: layout.usableWidth,
   })
-  doc.setFont('helvetica', 'normal')
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(layout.receiptFontSize)
-  doc.text(receiptNumber, pageW / 2, layout.headerHeight - 6, {
+  doc.setTextColor(147, 197, 253) // Light Blue 300
+  doc.text(receiptNumber, pageW / 2, layout.headerHeight * 0.72, {
     align: 'center',
     maxWidth: layout.usableWidth,
   })
   doc.setTextColor(0)
 
+  // 2. Fecha de Emisión
+  doc.setFont('helvetica', 'normal')
   doc.setFontSize(layout.metaFontSize)
   doc.setTextColor(100)
-  doc.text(`Emitido: ${paidAt.toLocaleString('es-AR')}`, pageW / 2, layout.headerHeight + 6, {
+  doc.text(`Fecha y Hora: ${paidAt.toLocaleString('es-AR')}`, pageW / 2, layout.headerHeight + 5, {
     align: 'center',
     maxWidth: layout.usableWidth,
   })
   doc.setTextColor(0)
 
+  // 3. Tabla 1: Cliente y Crédito
   autoTable(doc, {
-    startY: layout.headerHeight + 11,
-    head: [['Cliente y credito', '']],
+    startY: layout.headerHeight + 9,
+    head: [['DATOS DEL CLIENTE Y VENTA', '']],
     body: creditRows,
     theme: 'grid',
-    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: layout.tableHeaderFontSize },
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: layout.tableHeaderFontSize },
     bodyStyles: { fontSize: layout.tableBodyFontSize },
     styles: { cellPadding: layout.cellPadding, overflow: 'linebreak' },
     columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: layout.labelColumnWidth },
-      1: { cellWidth: layout.valueColumnWidth },
+      0: { fontStyle: 'bold', cellWidth: layout.labelColumnWidth, textColor: [71, 85, 105] },
+      1: { cellWidth: layout.valueColumnWidth, fontStyle: 'normal' },
     },
     margin: { left: layout.margin, right: layout.margin },
   })
 
+  // 4. Tabla 2: Detalle del Pago (Cuota Pagada)
   const afterCredit = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
   autoTable(doc, {
     startY: afterCredit + layout.sectionGap,
-    head: [['Detalle del pago', '']],
+    head: [['DETALLE DEL PAGO EFECTUADO', '']],
     body: paymentRows,
     theme: 'grid',
-    headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: layout.tableHeaderFontSize },
+    headStyles: { fillColor: [16, 115, 74], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: layout.tableHeaderFontSize },
     bodyStyles: { fontSize: layout.tableBodyFontSize },
     styles: { cellPadding: layout.cellPadding, overflow: 'linebreak' },
     columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: layout.labelColumnWidth },
-      1: { cellWidth: layout.valueColumnWidth },
+      0: { fontStyle: 'bold', cellWidth: layout.labelColumnWidth, textColor: [22, 101, 52] },
+      1: { cellWidth: layout.valueColumnWidth, fontStyle: 'bold' },
     },
     margin: { left: layout.margin, right: layout.margin },
   })
 
+  // 5. Tabla 3: Estado de Cuenta (¿Cuánto Falta?)
+  let afterStatus = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
+  if (statusRows.length > 0) {
+    autoTable(doc, {
+      startY: afterStatus + layout.sectionGap,
+      head: [['ESTADO DE CUENTA (CUANTO FALTA)', '']],
+      body: statusRows,
+      theme: 'grid',
+      headStyles: { fillColor: [71, 85, 105], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: layout.tableHeaderFontSize },
+      bodyStyles: { fontSize: layout.tableBodyFontSize },
+      styles: { cellPadding: layout.cellPadding, overflow: 'linebreak' },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: layout.labelColumnWidth, textColor: [51, 65, 85] },
+        1: { cellWidth: layout.valueColumnWidth, fontStyle: 'bold' },
+      },
+      margin: { left: layout.margin, right: layout.margin },
+    })
+    afterStatus = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
+  }
+
+  // 6. Firma y Pie de Recibo
+  const signatureY = afterStatus + layout.sectionGap + 10
+  if (signatureY + 12 < pageH) {
+    doc.setDrawColor(180, 180, 180)
+    doc.setLineDashPattern([1, 1], 0)
+    doc.line(layout.margin + 8, signatureY, pageW - layout.margin - 8, signatureY)
+    doc.setLineDashPattern([], 0)
+
+    doc.setFontSize(layout.footerFontSize)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(100)
+    doc.text('Firma / Sello de Cobranza', pageW / 2, signatureY + 4, {
+      align: 'center',
+    })
+  }
+
   doc.setFontSize(layout.footerFontSize)
   doc.setFont('helvetica', 'italic')
-  doc.setTextColor(130)
-  const afterPayment = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
-  const footerY = Math.min(pageH - layout.footerBottom, afterPayment + layout.sectionGap + 5)
-  doc.text('Este comprobante es valido como constancia del pago registrado.', pageW / 2, footerY, {
+  doc.setTextColor(120)
+  const footerY = Math.min(pageH - layout.footerBottom, afterStatus + layout.sectionGap + 18)
+  doc.text('¡Gracias por su pago puntual!', pageW / 2, footerY, {
+    align: 'center',
+    maxWidth: layout.usableWidth,
+  })
+  doc.text('Comprobante oficial de pago interno de cuota.', pageW / 2, footerY + 3.5, {
     align: 'center',
     maxWidth: layout.usableWidth,
   })

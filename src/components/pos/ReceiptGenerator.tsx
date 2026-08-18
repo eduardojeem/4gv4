@@ -7,7 +7,6 @@ import { Printer, Download, Share2, CheckCircle2 } from 'lucide-react'
 import { getTaxConfig, config } from '@/lib/config'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import QRCode from 'qrcode'
 
 interface CartItem {
   id: string
@@ -78,7 +77,6 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
   const { settings } = useSharedSettings()
   const { settings: websiteSettings } = useAdminWebsiteSettings()
   const logoUrl = websiteSettings?.company_info?.logoUrl
-  const [qrCodeUrl, setQrCodeUrl] = useState<string>('')
   
   const companyInfo = {
     name: settings.companyName && settings.companyName !== 'Mi Empresa' 
@@ -93,27 +91,6 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
     website: settings.companyName ? `www.${settings.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'www.miempresa.com',
     logoUrl: logoUrl
   }
-
-  // Generar código QR
-  useEffect(() => {
-    const generateQR = async () => {
-      try {
-        const verifyUrl = `${companyInfo.website}/verify/${receiptData.receiptNumber}`
-        const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
-          width: 120,
-          margin: 1,
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF'
-          }
-        })
-        setQrCodeUrl(qrDataUrl)
-      } catch (error) {
-        console.error('Error generating QR code:', error)
-      }
-    }
-    generateQR()
-  }, [receiptData.receiptNumber, companyInfo.website])
 
   const getPaymentMethodLabel = (method: string) => {
     const labels = {
@@ -367,24 +344,6 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
           </p>
         </div>
       </div>
-
-      {/* Código QR de verificación */}
-      {qrCodeUrl && (
-        <>
-          <Separator className="my-4 print:hidden" />
-          <div className="mb-4 text-center px-4 print:hidden">
-            <p className="text-xs font-medium text-muted-foreground mb-2">
-              Verificar ticket en línea:
-            </p>
-            <div className="flex justify-center mb-2">
-              <img src={qrCodeUrl} alt="QR Code" className="w-28 h-28 border-2 border-border rounded" />
-            </div>
-            <p className="text-xs text-primary font-medium">
-              {companyInfo.website}/verify
-            </p>
-          </div>
-        </>
-      )}
 
       <Separator className="my-4" />
 

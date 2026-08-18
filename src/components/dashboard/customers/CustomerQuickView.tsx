@@ -62,6 +62,10 @@ interface CreditsStats {
   totalCredits: number
   activeCredits: number
   totalPrincipal: number
+  /** Suma de las cuotas: con interes es mayor al capital prestado. */
+  financedTotal: number
+  /** Lo efectivamente cobrado de esas cuotas. */
+  paidTotal: number
   pendingBalance: number
   totalInstallments: number
   pendingInstallments: number
@@ -199,6 +203,8 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
     totalCredits: 0,
     activeCredits: 0,
     totalPrincipal: 0,
+    financedTotal: 0,
+    paidTotal: 0,
     pendingBalance: 0,
     totalInstallments: 0,
     pendingInstallments: 0
@@ -223,6 +229,8 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
         totalCredits: 0,
         activeCredits: 0,
         totalPrincipal: 0,
+        financedTotal: 0,
+        paidTotal: 0,
         pendingBalance: 0,
         totalInstallments: 0,
         pendingInstallments: 0
@@ -287,6 +295,8 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
             totalCredits: 0,
             activeCredits: 0,
             totalPrincipal: 0,
+            financedTotal: 0,
+            paidTotal: 0,
             pendingBalance: 0,
             totalInstallments: 0,
             pendingInstallments: 0,
@@ -512,7 +522,10 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
           </div>
 
           {/* ── Banner de Créditos Activos y Deuda Pendiente ── */}
-          {(creditStats.activeCredits > 0 || creditStats.pendingBalance > 0 || (customer.current_balance && customer.current_balance > 0)) && (
+          {/* `customer.current_balance` no se consulta mas: es una columna que
+              nadie actualiza, siempre en 0, y solo servia para disfrazar de dato
+              un valor que no existe. */}
+          {(creditStats.activeCredits > 0 || creditStats.pendingBalance > 0 || creditStats.financedTotal > 0) && (
             <div className="mx-4 mt-3 rounded-xl border p-3.5 bg-purple-50/80 border-purple-200/80 dark:bg-purple-950/20 dark:border-purple-500/20">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -531,7 +544,7 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
                       )}
                     </div>
                     <p className="text-sm font-bold text-purple-950 dark:text-purple-100 tabular-nums">
-                      Saldo Deudor: {globalFormatCurrency(creditStats.pendingBalance || customer.current_balance || 0)}
+                      Saldo Deudor: {globalFormatCurrency(creditStats.pendingBalance)}
                     </p>
                   </div>
                 </div>
@@ -554,6 +567,58 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
                   </button>
                 </div>
               </div>
+
+              {/* Total / Pagado / Faltante. Las tres salen de las cuotas, asi que
+                  cierran entre si: financiado = pagado + faltante. Usar el capital
+                  como total no cerraria cuando el credito tiene interes. */}
+              {creditStats.financedTotal > 0 && (
+                <div className="mt-3 border-t border-purple-200/70 pt-3 dark:border-purple-500/20">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-purple-200/60 dark:bg-purple-900/40" aria-hidden="true">
+                    <div
+                      className="h-full rounded-full bg-emerald-500"
+                      style={{ width: `${Math.min(100, Math.round((creditStats.paidTotal / creditStats.financedTotal) * 100))}%` }}
+                    />
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-purple-700/80 dark:text-purple-300/80">
+                        Total en créditos
+                      </p>
+                      <p className="text-sm font-bold tabular-nums text-purple-950 dark:text-purple-100">
+                        {globalFormatCurrency(creditStats.financedTotal)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-purple-700/80 dark:text-purple-300/80">
+                        Pagado
+                      </p>
+                      <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {globalFormatCurrency(creditStats.paidTotal)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-purple-700/80 dark:text-purple-300/80">
+                        Faltante
+                      </p>
+                      <p className={cn(
+                        'text-sm font-bold tabular-nums',
+                        creditStats.pendingBalance > 0
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-emerald-600 dark:text-emerald-400',
+                      )}>
+                        {globalFormatCurrency(creditStats.pendingBalance)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="mt-1.5 text-[10px] text-purple-700/70 dark:text-purple-300/70">
+                    {creditStats.pendingBalance > 0
+                      ? `${Math.min(100, Math.round((creditStats.paidTotal / creditStats.financedTotal) * 100))}% cancelado · ${creditStats.totalCredits} crédito${creditStats.totalCredits !== 1 ? 's' : ''} en total`
+                      : `Todo cancelado · ${creditStats.totalCredits} crédito${creditStats.totalCredits !== 1 ? 's' : ''} en total`}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -911,7 +976,7 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         {(customer.credit_limit || 0) > 0
-                          ? `Saldo pendiente actual: ${globalFormatCurrency(customer.current_balance || creditStats.pendingBalance || 0)}`
+                          ? `Saldo pendiente actual: ${globalFormatCurrency(creditStats.pendingBalance)}`
                           : 'El cliente no tiene asignado un límite de crédito para compras o retiro de reparaciones.'}
                       </p>
                     </div>

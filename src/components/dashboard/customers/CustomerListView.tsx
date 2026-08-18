@@ -46,7 +46,8 @@ import {
   ShoppingBag,
   Wrench,
   Copy,
-  Check
+  Check,
+  CreditCard
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Customer } from '@/hooks/use-customer-state'
@@ -304,6 +305,47 @@ export function CustomerListView({
       </AnimatePresence>
     </div>
   )
+}
+
+function getEffectiveCreditSummary(customer: Customer, summary?: CustomerCreditSummary | null): CustomerCreditSummary | null {
+  if (summary) return summary
+  if (!customer.credit_limit && !customer.pending_amount && !customer.current_balance) return null
+
+  const limit = customer.credit_limit || 0
+  const pending = customer.pending_amount || customer.current_balance || 0
+  const available = Math.max(0, limit - pending)
+  const utilization = limit > 0 ? Math.min(100, Math.round((pending / limit) * 100)) : 0
+
+  return {
+    customer_id: customer.id,
+    total_credits: 0,
+    active_credits: pending > 0 ? 1 : 0,
+    completed_credits: 0,
+    defaulted_credits: 0,
+    total_principal: limit,
+    total_paid: 0,
+    total_pending: pending,
+    current_balance: pending,
+    credit_limit: limit,
+    available_credit: available,
+    credit_utilization: utilization,
+    store_balance: 0,
+    store_reserved: 0,
+    overdue_debt: 0,
+    debts: [],
+    payment_history: {
+      on_time_payments: 0,
+      late_payments: 0,
+      missed_payments: 0,
+      payment_score: 100
+    },
+    next_payment: null,
+    risk_assessment: {
+      risk_level: 'low',
+      risk_score: 100,
+      factors: []
+    }
+  }
 }
 
 function getFormattedWhatsAppUrl(customer: Customer): string | null {
@@ -597,13 +639,21 @@ function TableView({
                         </div>
                       </div>
                     </TableCell>
-                    {/* Columna deuda */}
+                    {/* Columna deuda y crédito */}
                     <TableCell className={cn(compact ? "py-1.5" : "py-3")} onClick={(e) => e.stopPropagation()}>
-                      <CustomerCreditBadge
-                        creditSummary={creditSummaries[customer.id] ?? null}
-                        variant="compact"
-                        showTooltip
-                      />
+                      <div className="flex flex-col gap-1 items-start">
+                        {customer.credit_limit > 0 && (
+                          <div className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 dark:bg-emerald-500/20 px-2 py-0.5 rounded-lg border border-emerald-500/20">
+                            <CreditCard className="h-3 w-3 text-emerald-600" />
+                            <span>Límite: {formatters.currency(customer.credit_limit)}</span>
+                          </div>
+                        )}
+                        <CustomerCreditBadge
+                          creditSummary={getEffectiveCreditSummary(customer, creditSummaries[customer.id])}
+                          variant="compact"
+                          showTooltip
+                        />
+                      </div>
                     </TableCell>
                     <TableCell className={cn("pr-4 text-right", compact ? "py-1.5" : "py-3")} onClick={(e) => e.stopPropagation()}>
                       <CustomerActions
@@ -711,10 +761,10 @@ function CustomerCard({
     <Card className={cn(
       "group relative flex flex-col justify-between transition-all duration-300 overflow-hidden cursor-pointer",
       "border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]",
-      "hover:border-slate-300 hover:shadow-md dark:hover:border-white/20 dark:hover:shadow-black/40",
+      "hover:border-blue-400 hover:shadow-md dark:hover:border-blue-500/40 dark:hover:shadow-black/40",
       selected && "ring-2 ring-blue-500 border-blue-300 dark:border-blue-500/50 shadow-md"
     )}>
-      <CardContent className={cn("flex flex-col justify-between h-full", compact ? "p-3" : "p-4")}>
+      <CardContent className={cn("flex flex-col justify-between h-full", compact ? "p-3" : "p-4.5")}>
         <div>
           {/* Header con checkbox, badges superiores y acciones */}
           <div className={cn("flex items-center justify-between gap-1.5", compact ? "mb-2" : "mb-3")}>
@@ -725,7 +775,7 @@ function CustomerCard({
                 onClick={(e) => e.stopPropagation()}
                 className="border-slate-300 dark:border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
               />
-              <span className="text-[10.5px] font-mono text-slate-400 dark:text-slate-500">
+              <span className="text-[10.5px] font-mono font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded">
                 {customer.customerCode || customer.ruc || 'S/C'}
               </span>
             </div>
@@ -747,19 +797,19 @@ function CustomerCard({
           </div>
 
           {/* Avatar, Nombre y Segmento */}
-          <div className={cn("flex items-start gap-2.5", compact ? "mb-2.5" : "mb-4")} onClick={onView}>
-            <Avatar className={cn("border border-slate-200 dark:border-white/10 shrink-0 mt-0.5", compact ? "h-8 w-8" : "h-11 w-11")}>
+          <div className={cn("flex items-start gap-2.5", compact ? "mb-2.5" : "mb-3.5")} onClick={onView}>
+            <Avatar className={cn("border border-slate-200 dark:border-white/10 shrink-0 mt-0.5 shadow-sm", compact ? "h-8 w-8" : "h-11 w-11")}>
               <AvatarImage src={customer.avatar} />
-              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-xs">
+              <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold text-xs">
                 {(customer.name || 'C').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <h3 className={cn("font-bold text-slate-900 dark:text-white truncate flex items-center gap-1", compact ? "text-xs" : "text-base")}>
+              <h3 className={cn("font-bold text-slate-900 dark:text-white truncate flex items-center gap-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors", compact ? "text-xs" : "text-base")}>
                 {customer.name}
-                {customer.segment === 'vip' && <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 shrink-0" />}
+                {customer.segment === 'vip' && <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 shrink-0" />}
               </h3>
-              <div className="mt-0.5 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <div className="mt-1 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
                 {onToggleStatus ? (
                   <StatusToggle
                     status={customer.status}
@@ -789,8 +839,8 @@ function CustomerCard({
             </div>
           </div>
 
-          {/* Contacto directo */}
-          <div className={cn("rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5", compact ? "p-1.5 space-y-1 mb-2.5 text-[11px]" : "p-2.5 space-y-1.5 mb-4 text-xs")}>
+          {/* Contacto directo y WhatsApp */}
+          <div className={cn("rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5", compact ? "p-1.5 space-y-1 mb-2.5 text-[11px]" : "p-2.5 space-y-1.5 mb-3.5 text-xs")}>
             {customer.email && (
               <div 
                 onClick={(e) => handleCopy(e, customer.email!, 'Email')}
@@ -821,7 +871,7 @@ function CustomerCard({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 text-[10px] font-semibold transition-colors"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/25 text-[10.5px] font-bold transition-all"
                     title="Escribir por WhatsApp"
                   >
                     <MessageCircle className="h-3 w-3" />
@@ -832,17 +882,28 @@ function CustomerCard({
             )}
           </div>
 
-          {/* Indicador de Deuda */}
-          <div className={compact ? "mb-2.5" : "mb-4"} onClick={(e) => e.stopPropagation()}>
+          {/* Indicador de Deuda & Línea de Crédito */}
+          <div className={compact ? "mb-2.5 space-y-1.5" : "mb-3.5 space-y-1.5"} onClick={(e) => e.stopPropagation()}>
+            {customer.credit_limit > 0 && (
+              <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 text-xs">
+                <div className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-200">
+                  <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Línea Autorizada</span>
+                </div>
+                <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                  {formatters.currency(customer.credit_limit)}
+                </span>
+              </div>
+            )}
             <CustomerCreditBadge
-              creditSummary={creditSummary ?? null}
+              creditSummary={getEffectiveCreditSummary(customer, creditSummary)}
               variant="compact"
               showTooltip
             />
           </div>
 
           {/* Métricas destacadas */}
-          <div className={cn("grid grid-cols-2 border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] rounded-xl", compact ? "p-2 gap-1.5 mb-2.5" : "p-3 gap-2 mb-4")}>
+          <div className={cn("grid grid-cols-2 border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] rounded-xl", compact ? "p-2 gap-1.5 mb-2.5" : "p-3 gap-2 mb-3.5")}>
             <div>
               <div className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Total Gastado</div>
               <div className={cn("font-bold tabular-nums text-slate-900 dark:text-white", compact ? "text-xs" : "text-sm")}>
@@ -850,9 +911,11 @@ function CustomerCard({
               </div>
             </div>
             <div>
-              <div className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Compras</div>
-              <div className={cn("font-bold tabular-nums text-slate-900 dark:text-white", compact ? "text-xs" : "text-sm")}>
-                {(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)}
+              <div className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Compras / Taller</div>
+              <div className={cn("font-bold tabular-nums text-slate-900 dark:text-white flex items-center gap-1", compact ? "text-xs" : "text-sm")}>
+                <span>{(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)} c.</span>
+                <span className="text-slate-300 dark:text-slate-600">•</span>
+                <span className="text-sky-600 dark:text-sky-400">{customer.total_repairs || 0} t.</span>
               </div>
             </div>
             <div>
@@ -862,23 +925,39 @@ function CustomerCard({
               </div>
             </div>
             <div>
-              <div className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Puntos</div>
+              <div className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Puntos Club</div>
               <div className={cn("font-semibold tabular-nums text-slate-700 dark:text-slate-300", compact ? "text-[11px]" : "text-xs")}>
-                {(customer as unknown as { loyalty_points?: number }).loyalty_points ?? 0}
+                {(customer as unknown as { loyalty_points?: number }).loyalty_points ?? 0} pts
               </div>
             </div>
           </div>
         </div>
 
-        {/* Footer: Última actividad y Ciudad */}
-        <div className={cn("border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-slate-400 dark:text-slate-500", compact ? "pt-2 text-[10px]" : "pt-3 text-[11px]")}>
-          <div className="flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            <span>{getRelativeTime(customer.last_activity)}</span>
+        {/* Footer: Acción principal + metadata */}
+        <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-white/5">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation()
+              onView()
+            }}
+            className="w-full h-8 gap-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-600 dark:bg-white/5 dark:hover:bg-blue-600/20 dark:hover:text-blue-300 transition-all"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            <span>Ver Ficha Completa</span>
+          </Button>
+
+          <div className={cn("flex items-center justify-between text-slate-400 dark:text-slate-500", compact ? "text-[9.5px]" : "text-[10.5px]")}>
+            <div className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              <span>{getRelativeTime(customer.last_activity)}</span>
+            </div>
+            {customer.city && (
+              <span className="font-semibold uppercase tracking-wider truncate max-w-[100px]">{customer.city}</span>
+            )}
           </div>
-          {customer.city && (
-            <span className="font-semibold uppercase tracking-wider truncate max-w-[100px]">{customer.city}</span>
-          )}
         </div>
       </CardContent>
     </Card>

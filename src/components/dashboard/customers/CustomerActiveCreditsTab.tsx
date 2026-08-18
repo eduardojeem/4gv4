@@ -93,14 +93,22 @@ export function CustomerActiveCreditsTab({
   }, [customersWithCredits, creditSummaries, searchTerm, statusFilter])
 
   // Métricas agregadas
+  // Las metricas son de cartera, no de lo filtrado —los contadores de los
+  // botones dependen de eso—, pero se calculan sobre la misma poblacion que
+  // "Clientes Financiados": antes el saldo sumaba resumenes de clientes que esa
+  // tarjeta no contaba, y las cifras de la misma fila no cerraban entre si.
   const metrics = useMemo(() => {
-    const summaries = Object.values(creditSummaries)
+    const summaries = customersWithCredits
+      .map((customer) => creditSummaries[customer.id])
+      .filter(Boolean)
     const totalPending = summaries.reduce((acc, s) => acc + (s.total_pending || 0), 0)
     const totalPrincipal = summaries.reduce((acc, s) => acc + (s.total_principal || 0), 0)
     const totalActiveCredits = summaries.reduce((acc, s) => acc + (s.active_credits || 0), 0)
     const overdueCustomers = summaries.filter(s => s.next_payment?.is_overdue).length
     const totalLimit = summaries.reduce((acc, s) => acc + (s.credit_limit || 0), 0)
-    const utilizationRate = totalLimit > 0 ? Math.round((totalPending / totalLimit) * 100) : 0
+    // Se topea en 100 como en el resto de la app: un cupo reducido despues de
+    // otorgar el credito daba porcentajes de tres digitos.
+    const utilizationRate = totalLimit > 0 ? Math.min(100, Math.round((totalPending / totalLimit) * 100)) : 0
 
     return {
       totalPending,
@@ -110,7 +118,7 @@ export function CustomerActiveCreditsTab({
       utilizationRate,
       totalCustomers: customersWithCredits.length
     }
-  }, [creditSummaries, customersWithCredits.length])
+  }, [creditSummaries, customersWithCredits])
 
   const creditById = useMemo(() => {
     const map: Record<string, CreditRow> = {}
@@ -288,8 +296,25 @@ export function CustomerActiveCreditsTab({
         </CardContent>
       </Card>
 
-      {/* Vista de Próximos Vencimientos si está seleccionada */}
-      {statusFilter === 'upcoming' && installments.length > 0 ? (
+      {/* Vista de Próximos Vencimientos si está seleccionada.
+          Sin cuotas cargadas caia a la tabla normal sin decir nada, y el boton
+          parecia no hacer efecto: se dice explicitamente que no hay nada. */}
+      {statusFilter === 'upcoming' && installments.length === 0 ? (
+        <Card className="border border-border/80 bg-card rounded-2xl shadow-sm">
+          <CardContent role="status" className="flex flex-col items-center gap-2 py-12 text-center">
+            <div className="rounded-2xl bg-muted p-4">
+              <CalendarClock className="h-7 w-7 text-muted-foreground" />
+            </div>
+            <p className="text-base font-semibold">No hay cuotas próximas a vencer</p>
+            <p className="max-w-md text-sm text-muted-foreground">
+              Ningún crédito activo tiene cuotas pendientes de vencimiento registradas.
+            </p>
+            <Button variant="outline" size="sm" className="mt-2" onClick={() => setStatusFilter('all')}>
+              Ver todos los créditos
+            </Button>
+          </CardContent>
+        </Card>
+      ) : statusFilter === 'upcoming' && installments.length > 0 ? (
         <Card className="border border-border/80 bg-card rounded-2xl overflow-hidden shadow-sm">
           <CardHeader className="p-4 border-b border-border/50">
             <CardTitle className="text-base font-bold flex items-center justify-between">
@@ -405,7 +430,7 @@ export function CustomerActiveCreditsTab({
                             </div>
                             {summary?.credit_limit && summary.credit_limit > 0 && (
                               <div className="text-[10px] text-muted-foreground">
-                                {Math.round(((summary.total_pending || 0) / summary.credit_limit) * 100)}% ocupado
+                                {Math.min(100, Math.round(((summary.total_pending || 0) / summary.credit_limit) * 100))}% ocupado
                               </div>
                             )}
                           </TableCell>

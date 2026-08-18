@@ -7,9 +7,12 @@ import React, { useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CreditCard, Users, Clock, AlertCircle, Trash2 } from 'lucide-react'
+import { CreditCard, Users, Clock, AlertCircle, Trash2, Sparkles, Loader2, PlusCircle } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useCheckout } from '../../contexts/CheckoutContext'
+import { usePOSCustomer } from '../../contexts/POSCustomerContext'
+import { useCreditSystem } from '@/hooks/use-credit-system'
+import { toast } from 'sonner'
 import { CreditStatusPanel } from './CreditStatusPanel'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
@@ -98,6 +101,46 @@ export function PaymentMethods({
     creditTerms,
     setCreditTerms
   } = useCheckout()
+
+  const { activeCustomer, refreshCustomers } = usePOSCustomer()
+  const { loadCreditData } = useCreditSystem()
+  const [isEnablingCredit, setIsEnablingCredit] = React.useState(false)
+  const [customCreditLimit, setCustomCreditLimit] = React.useState('')
+  const [showCustomLimitInput, setShowCustomLimitInput] = React.useState(false)
+
+  const handleEnableCredit = async (amount: number) => {
+    if (!activeCustomer?.id) {
+      toast.error('Selecciona un cliente primero para habilitar crédito')
+      return
+    }
+    setIsEnablingCredit(true)
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: activeCustomer.id,
+          credit_limit: amount,
+        }),
+      })
+      const data = await res.json()
+      if (data?.success) {
+        toast.success(`Línea de crédito activada: ${formatCurrency(amount)}`)
+        await Promise.all([
+          refreshCustomers(),
+          loadCreditData(activeCustomer.id)
+        ])
+        setShowCustomLimitInput(false)
+        setCustomCreditLimit('')
+      } else {
+        toast.error(data?.error || 'No se pudo actualizar el límite de crédito')
+      }
+    } catch {
+      toast.error('Error de conexión al habilitar el crédito')
+    } finally {
+      setIsEnablingCredit(false)
+    }
+  }
 
   // Estado local para el input de efectivo para permitir borrarlo fácilmente (evita que el 0 se quede "pegado")
   const [localCashInput, setLocalCashInput] = React.useState(cashReceived === 0 ? '' : cashReceived.toString())
@@ -252,49 +295,127 @@ export function PaymentMethods({
             />
           )}
           
-          {/* Advertencia si no tiene crédito suficiente */}
+          {/* Advertencia y opciones para habilitar crédito si no tiene crédito suficiente */}
           {paymentMethod === 'credit' && !canUseCredit && (
-            <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  {!creditSummary || (creditSummary.availableCredit + creditSummary.usedCredit) === 0 ? (
-                    // Cliente sin límite de crédito configurado
-                    <>
-                      <p className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
-                        Crédito no habilitado
+            <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-3">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div className="flex-1 space-y-1">
+                  {!activeCustomer ? (
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                        Cliente no seleccionado
                       </p>
-                      <p className="text-xs text-red-700 dark:text-red-300">
-                        Este cliente no tiene un límite de crédito asignado. Configure el límite de crédito en la ficha del cliente para habilitar ventas a crédito.
+                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                        Debes seleccionar un cliente en el panel para procesar ventas a crédito.
                       </p>
-                    </>
+                    </div>
+                  ) : (!creditSummary || (creditSummary.availableCredit + creditSummary.usedCredit) === 0) ? (
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                        Crédito no habilitado para {activeCustomer.name}
+                      </p>
+                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                        El cliente no tiene un límite de crédito activo (₲ 0). Puedes asignarle una línea de crédito con 1 clic para continuar:
+                      </p>
+                    </div>
                   ) : (
-                    // Cliente con crédito insuficiente
-                    <>
-                      <p className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
-                        Cliente con crédito insuficiente
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                        Crédito insuficiente para esta venta
                       </p>
-                      <p className="text-xs text-red-700 dark:text-red-300 mb-2">
-                        El cliente no tiene suficiente crédito disponible para esta venta.
+                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                        Disponible: <strong className="text-emerald-700 dark:text-emerald-400 font-mono">{formatCurrency(creditSummary.availableCredit)}</strong> · Requerido: <strong className="font-mono">{formatCurrency(cartTotal)}</strong>
                       </p>
-                      <div className="space-y-1 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-red-600 dark:text-red-400">Total financiado:</span>
-                          <span className="font-semibold text-red-800 dark:text-red-200">{formatCurrency(creditPlan.financedTotal)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-red-600 dark:text-red-400">Crédito disponible:</span>
-                          <span className="font-semibold text-red-800 dark:text-red-200">{formatCurrency(creditSummary.availableCredit)}</span>
-                        </div>
-                        <div className="flex justify-between border-t border-red-300 dark:border-red-700 pt-1 mt-1">
-                          <span className="text-red-700 dark:text-red-300 font-medium">Faltante:</span>
-                          <span className="font-bold text-red-900 dark:text-red-100">{formatCurrency(creditPlan.financedTotal - creditSummary.availableCredit)}</span>
-                        </div>
-                      </div>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
+
+              {activeCustomer && (
+                <div className="pt-2 border-t border-amber-500/20 space-y-2">
+                  <span className="text-xs font-semibold text-amber-900 dark:text-amber-200 block">
+                    Opciones rápidas para habilitar crédito:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isEnablingCredit}
+                      onClick={() => handleEnableCredit(Math.max(1000000, cartTotal))}
+                      className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    >
+                      {isEnablingCredit ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Habilitar {formatCurrency(Math.max(1000000, cartTotal))}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isEnablingCredit}
+                      onClick={() => handleEnableCredit(2000000)}
+                      className="h-8 text-xs bg-card border-amber-300 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950/40"
+                    >
+                      Límite ₲ 2.000.000
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isEnablingCredit}
+                      onClick={() => handleEnableCredit(5000000)}
+                      className="h-8 text-xs bg-card border-amber-300 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950/40"
+                    >
+                      Límite ₲ 5.000.000
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowCustomLimitInput(!showCustomLimitInput)}
+                      className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      {showCustomLimitInput ? 'Cancelar' : 'Otro monto...'}
+                    </Button>
+                  </div>
+
+                  {showCustomLimitInput && (
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-amber-500/20">
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₲</span>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Ingresar nuevo límite"
+                          value={formatThousands(customCreditLimit)}
+                          onChange={(e) => {
+                            const raw = parseThousands(e.target.value)
+                            setCustomCreditLimit(raw > 0 ? String(raw) : (e.target.value === '' ? '' : '0'))
+                          }}
+                          className="h-8 pl-6 text-xs font-mono font-bold"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isEnablingCredit || !customCreditLimit || Number(customCreditLimit) <= 0}
+                        onClick={() => handleEnableCredit(Number(customCreditLimit))}
+                        className="h-8 px-3 text-xs bg-primary"
+                      >
+                        {isEnablingCredit ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        Guardar Límite
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

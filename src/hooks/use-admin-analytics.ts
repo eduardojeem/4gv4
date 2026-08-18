@@ -762,7 +762,12 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
             (response) => (response.data ?? []) as unknown as SaleItemRecord[]
           )
         } catch (e) {
+          // Sin los items vendidos el reporte se contradice a si mismo: mostraria
+          // facturacion real junto a "0 unidades vendidas", categorias vacias y
+          // utilidad por producto en cero. Es preferible avisar que no se pudo
+          // construir el reporte antes que publicar esos ceros como dato.
           console.warn('[analytics] sale_items query failed:', e)
+          throw e
         }
       }
 

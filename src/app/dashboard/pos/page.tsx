@@ -97,7 +97,14 @@ import { POSProductDetailDialog } from './components/POSProductDetailDialog'
 import { POSCashMovementDialog } from './components/POSCashMovementDialog'
 import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
 import { getMixedPaymentValidation } from './lib/payment-validation'
-import { getRepairBalanceDue } from './lib/repair-charge'
+import { getRepairBalanceDue, type ChargeableRepair } from './lib/repair-charge'
+
+/** Lo minimo que necesita el carrito para armar la linea de una reparacion. */
+type PosCartRepair = ChargeableRepair & {
+  id: string
+  device_brand?: string | null
+  device_model?: string | null
+}
 
 const getErrorMessage = (e: unknown) => {
   if (!e) return 'Unknown error'
@@ -224,6 +231,11 @@ function POSPageContent() {
 
 
   const [customerRepairs, setCustomerRepairs] = useState<any[]>([])
+  // Reparaciones sumadas desde el buscador del POS. Ese modal lista todas las
+  // del taller, no solo las del cliente activo, asi que hay que conservar sus
+  // datos: `customerRepairs` no las tiene y la linea del carrito no se podia
+  // construir.
+  const [manualRepairs, setManualRepairs] = useState<PosCartRepair[]>([])
   const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([])
 
   const { heldSales, heldSalesCount, parkSale, deleteSale, clearAllSales } = useHeldSales()
@@ -274,10 +286,16 @@ function POSPageContent() {
   // Opciones de vinculación de reparación
   const [markRepairDelivered, setMarkRepairDelivered] = useState(false)
   const [deliveryOutcome, setDeliveryOutcome] = useState<'repaired' | 'withdrawn' | 'unrepairable'>('repaired')
-  const selectedRepairs = useMemo(
-    () => customerRepairs.filter(repair => selectedRepairIds.includes(repair.id)),
-    [customerRepairs, selectedRepairIds]
-  )
+  const selectedRepairs = useMemo(() => {
+    // `customerRepairs` manda cuando existe —viene de Supabase y se mantiene al
+    // dia—; el resto sale de lo que se sumo a mano desde el buscador.
+    const byId = new Map<string, any>()
+    for (const repair of manualRepairs) byId.set(repair.id, repair)
+    for (const repair of customerRepairs) byId.set(repair.id, repair)
+    return selectedRepairIds
+      .map(id => byId.get(id))
+      .filter(Boolean)
+  }, [customerRepairs, manualRepairs, selectedRepairIds])
   const supabaseStatusToLabel: Record<string, string> = {
     recibido: 'Recibido',
     'diagnostico': 'En diagnóstico',
@@ -1141,6 +1159,8 @@ function POSPageContent() {
     const rawRepairId = id.startsWith('repair_') ? id.replace('repair_', '') : id
     if (selectedRepairIds.includes(rawRepairId) || selectedRepairIds.includes(id)) {
       setSelectedRepairIds(prev => prev.filter(repairId => repairId !== rawRepairId && repairId !== id))
+      // Se suelta tambien la copia manual para no acumularlas entre ventas.
+      setManualRepairs(prev => prev.filter(repair => repair.id !== rawRepairId && repair.id !== id))
       toast.info('Reparación removida del cobro')
     }
     removeFromCart(id)
@@ -1165,6 +1185,7 @@ function POSPageContent() {
     if (success) {
       clearCart(true)
       setSelectedRepairIds([])
+      setManualRepairs([])
     }
   }, [combinedCartItems, isWholesale, generalDiscount, unifiedCalculations.total, customers, selectedCustomer, selectedRepairIds, parkSale, clearCart])
 
@@ -1189,13 +1210,24 @@ function POSPageContent() {
     })
   }, [clearCart, addToCartHook, setIsWholesale, setGeneralDiscount, setSelectedCustomer])
 
-  const handleAddRepairToCart = useCallback((item: CartItem) => {
-    addToCartHook(item as any, 1)
+  const handleAddRepairToCart = useCallback((item: CartItem, repair?: PosCartRepair) => {
+    // Solo se registra el id de la reparacion. La linea del carrito la produce
+    // `combinedCartItems` a partir de `selectedRepairIds`; agregarla tambien con
+    // `addToCartHook` la duplicaba —una linea con id `repair_<uuid>` y otra con
+    // el uuid pelado— y con dos reparaciones se veian cuatro renglones.
+    //
+    // Ademas la linea derivada es la que vale: usa el saldo con el que el
+    // servidor cobra, mientras que la del modal traia su propio precio.
     const rawRepairId = item.id.startsWith('repair_') ? item.id.replace('repair_', '') : item.id
-    if (rawRepairId) {
-      setSelectedRepairIds(prev => prev.includes(rawRepairId) ? prev : [...prev, rawRepairId])
+    if (!rawRepairId) return
+
+    if (repair) {
+      setManualRepairs(prev => prev.some(r => r.id === rawRepairId)
+        ? prev
+        : [...prev, { ...repair, id: rawRepairId }])
     }
-  }, [addToCartHook])
+    setSelectedRepairIds(prev => prev.includes(rawRepairId) ? prev : [...prev, rawRepairId])
+  }, [])
 
   // Global Keyboard Shortcuts (F2, F3, F4, F8, F9)
   useEffect(() => {
@@ -1500,7 +1532,10 @@ function POSPageContent() {
         setLastSaleData(persistedReceipt)
         setCurrentReceipt(persistedReceipt)
         setPaymentStatus('success')
-        toast.success('Venta procesada exitosamente')
+        const receiptCode = persistedReceipt.receiptNumber || 'POS'
+        toast.success(`¡Venta completada! Comprobante #${receiptCode} generado (${formatCurrency(receiptCalculations.total)})`, {
+          duration: 4500,
+        })
         addPaymentAttempt({ status: 'success', method: 'single', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
         if (markRepairDelivered && selectedRepairIds.length > 0) {
           setCustomerRepairs(prev => prev.map(r => (
@@ -1513,7 +1548,7 @@ function POSPageContent() {
         const msg = normalizePaymentError(error)
         setPaymentStatus('failed')
         setPaymentError(msg)
-        toast.error('Error al procesar la venta: ' + msg)
+        toast.error(msg, { duration: 6000 })
         addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
         return
       }
@@ -1524,6 +1559,7 @@ function POSPageContent() {
       clearCart(true)
       setSelectedCustomer('')
       setSelectedRepairIds([])
+      setManualRepairs([])
       resetCheckoutState()
       
       // Cerrar luego de una breve confirmación visual
@@ -1659,7 +1695,10 @@ function POSPageContent() {
       setLastSaleData(persistedReceipt)
       setCurrentReceipt(persistedReceipt)
       setPaymentStatus('success')
-      toast.success('Venta procesada con múltiples métodos de pago')
+      const receiptCode = persistedReceipt.receiptNumber || 'POS'
+      toast.success(`¡Venta completada! Comprobante #${receiptCode} generado (${formatCurrency(cartCalculations.total)})`, {
+        duration: 4500,
+      })
       addPaymentAttempt({ status: 'success', method: 'mixed', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
       if (markRepairDelivered && selectedRepairIds.length > 0) {
         setCustomerRepairs(prev => prev.map(r => (
@@ -1672,7 +1711,7 @@ function POSPageContent() {
       const msg = normalizePaymentError(error)
       setPaymentStatus('failed')
       setPaymentError(msg)
-      toast.error('Error al procesar la venta: ' + msg)
+      toast.error(msg, { duration: 6000 })
       addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
       return
     }

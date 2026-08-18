@@ -83,13 +83,37 @@ export const priorityConfig: Record<string, PriorityConfigItem> = {
         bgColor: 'bg-slate-400',
         icon: '●'
     },
+    baja: {
+        label: 'Baja',
+        color: 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-700',
+        bgColor: 'bg-slate-400',
+        icon: '●'
+    },
+    normal: {
+        label: 'Normal',
+        color: 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-700',
+        bgColor: 'bg-slate-400',
+        icon: '●'
+    },
     medium: {
         label: 'Media',
         color: 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700',
         bgColor: 'bg-orange-500',
         icon: '●●'
     },
+    media: {
+        label: 'Media',
+        color: 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700',
+        bgColor: 'bg-orange-500',
+        icon: '●●'
+    },
     high: {
+        label: 'Alta',
+        color: 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700',
+        bgColor: 'bg-red-500',
+        icon: '●●●'
+    },
+    alta: {
         label: 'Alta',
         color: 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700',
         bgColor: 'bg-red-500',
@@ -104,6 +128,11 @@ export const urgencyConfig: Record<string, UrgencyConfigItem> = {
         icon: Activity
     },
     urgent: {
+        label: 'Urgente',
+        color: 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700',
+        icon: Zap
+    },
+    urgente: {
         label: 'Urgente',
         color: 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700',
         icon: Zap

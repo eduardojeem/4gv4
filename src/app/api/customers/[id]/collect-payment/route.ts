@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { readStoreCreditBalance } from '@/lib/credits/store-credit-balance'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 
@@ -14,6 +15,9 @@ export interface DebtItem {
   dueDate?: string
   isOverdue: boolean
   status: string
+  operationalStatus?: string
+  repairCategory?: 'in_progress' | 'ready_for_pickup' | 'delivered_unpaid'
+  debtReason?: string
   creditId?: string
 }
 
@@ -41,6 +45,34 @@ export async function GET(
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
+    // 0. Obtener datos del cliente (límite de crédito configurado y saldo)
+    const { data: customerRow, error: customerRowError } = await supabase
+      .from('customers')
+      .select('id, name, credit_limit, store_credit')
+      .eq('id', customerId)
+      .eq('organization_id', organization.id)
+      .maybeSingle()
+
+    if (customerRowError) {
+      console.error('[GET /api/customers/[id]/collect-payment] error leyendo el cliente:', customerRowError)
+      return NextResponse.json(
+        { success: false, error: 'No se pudo leer la ficha del cliente.' },
+        { status: 500 }
+      )
+    }
+
+    // No encontrar al cliente no es "limite 0": devolver 0 hacia la ficha hacia
+    // que el panel mostrara "Limite Autorizado: 0" pisando el valor real que ya
+    // tenia cargado, sin que nada avisara del problema.
+    if (!customerRow) {
+      return NextResponse.json(
+        { success: false, error: 'El cliente no pertenece a la organización activa.' },
+        { status: 404 }
+      )
+    }
+
+    const customerCreditLimit = Number(customerRow.credit_limit || 0)
+
     // 1. Obtener Reparaciones con saldo pendiente
     const { data: rawRepairs } = await supabase
       .from('repairs')
@@ -59,6 +91,34 @@ export async function GET(
 
         if (pending > 0 && !isPaid && cost > 0) {
           const isDelivered = (r.status || '').toLowerCase() === 'entregado' || Boolean(r.delivered_at)
+          const opStatus = (r.status || 'recibido').toLowerCase()
+          
+          let repairCategory: 'in_progress' | 'ready_for_pickup' | 'delivered_unpaid' = 'in_progress'
+          let statusLabel = 'En taller (En curso)'
+          let debtReason = 'Anticipo a cuenta (reparación en proceso técnico)'
+
+          if (isDelivered) {
+            repairCategory = 'delivered_unpaid'
+            statusLabel = 'Retirado (Entregado con saldo)'
+            debtReason = 'Equipo ya retirado por el cliente con deuda pendiente'
+          } else if (opStatus === 'listo' || opStatus === 'reparado') {
+            repairCategory = 'ready_for_pickup'
+            statusLabel = 'Terminado (Pendiente de retiro)'
+            debtReason = 'Reparación finalizada con éxito, listo para entregar'
+          } else if (opStatus === 'diagnostico') {
+            repairCategory = 'in_progress'
+            statusLabel = 'En taller (En diagnóstico)'
+            debtReason = 'En diagnóstico técnico (presupuesto estimado)'
+          } else if (opStatus === 'reparacion') {
+            repairCategory = 'in_progress'
+            statusLabel = 'En taller (En reparación)'
+            debtReason = 'En proceso de reparación técnica en taller'
+          } else {
+            repairCategory = 'in_progress'
+            statusLabel = 'En taller (Recibido)'
+            debtReason = 'Equipo recibido en taller'
+          }
+
           debtItems.push({
             id: r.id,
             type: 'repair',
@@ -69,7 +129,10 @@ export async function GET(
             pendingAmount: pending,
             dueDate: r.created_at,
             isOverdue: isDelivered, // Si ya fue entregado y no se pagó, se considera prioritario
-            status: r.status || 'En taller',
+            status: statusLabel,
+            operationalStatus: opStatus,
+            repairCategory,
+            debtReason,
           })
         }
       }
@@ -99,6 +162,7 @@ export async function GET(
           if (!isPaid && amount > 0) {
             const dueDateObj = inst.due_date ? new Date(inst.due_date) : null
             const isLate = inst.status === 'late' || (dueDateObj ? dueDateObj < today : false)
+            const debtReason = isLate ? 'Cuota de crédito vencida' : 'Cuota de crédito al día'
 
             debtItems.push({
               id: inst.id,
@@ -111,6 +175,8 @@ export async function GET(
               dueDate: inst.due_date || undefined,
               isOverdue: isLate,
               status: isLate ? 'Vencida' : 'Pendiente',
+              operationalStatus: isLate ? 'vencido' : 'vigente',
+              debtReason,
               creditId: inst.credit_id,
             })
           }
@@ -119,16 +185,22 @@ export async function GET(
     }
 
     // 3. Saldo a favor disponible
-    let storeBalance = 0
-    const { data: movements } = await supabase
-      .from('customer_store_credit_movements')
-      .select('amount')
-      .eq('customer_id', customerId)
-      .eq('organization_id', organization.id)
-
-    if (movements) {
-      storeBalance = movements.reduce((acc, m) => acc + Number(m.amount || 0), 0)
-    }
+    //
+    // El saldo del libro mayor no es lo que el cliente puede gastar: un pedido
+    // web pendiente puede tener parte reservada. Mostrar el bruto hacia el
+    // mostrador contradecia lo que el propio cliente ve en su cuenta, donde
+    // /api/public/store-credit ya descuenta las reservas.
+    // La tabla es `customer_store_credits`. Antes se consultaba
+    // `customer_store_credit_movements`, que no existe en ninguna migracion: el
+    // error no se revisaba y el saldo a favor salia siempre en 0.
+    const storeCredit = await readStoreCreditBalance(
+      supabase as unknown as Parameters<typeof readStoreCreditBalance>[0],
+      organization.id,
+      customerId,
+    )
+    const storeLedgerBalance = storeCredit.ledger
+    const storeReservedBalance = storeCredit.reserved
+    const storeBalance = storeCredit.available
 
     // Ordenar deudas por prioridad contable FIFO:
     // 1. Reparaciones entregadas / vencidas
@@ -149,10 +221,13 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
+      creditLimit: customerCreditLimit,
       debts: debtItems,
       totalDebt,
       overdueDebt,
       storeBalance,
+      storeLedgerBalance,
+      storeReservedBalance,
     })
   } catch (error) {
     console.error('[GET /api/customers/[id]/collect-payment] error:', error)
@@ -420,10 +495,16 @@ export async function POST(
       }
     }
 
-    // 4. Si hubo excedente, acreditar a la billetera de saldo a favor
+    // 4. Si hubo excedente, acreditar a la billetera de saldo a favor.
+    //
+    // Insertaba en `customer_store_credit_movements`, que no existe, y el error
+    // no se revisaba: el excedente que pagaba el cliente se cobraba y nunca se
+    // le acreditaba. Ahora va a la tabla real y, si falla, se avisa en la
+    // respuesta en vez de perderse.
+    let storeCreditWarning: string | null = null
     if (excessToStoreCredit > 0) {
-      await supabase
-        .from('customer_store_credit_movements')
+      const { error: storeCreditError } = await supabase
+        .from('customer_store_credits')
         .insert({
           customer_id: customerId,
           organization_id: organization.id,
@@ -433,6 +514,11 @@ export async function POST(
           created_by: staffAuth.user.id,
           created_at: nowIso,
         })
+
+      if (storeCreditError) {
+        console.error('[collect-payment] No se pudo acreditar el excedente:', storeCreditError)
+        storeCreditWarning = `El abono se registró, pero el excedente de ${excessToStoreCredit.toLocaleString('es-PY')} Gs no se pudo acreditar como saldo a favor. Registralo a mano.`
+      }
     }
 
     return NextResponse.json({
@@ -441,6 +527,7 @@ export async function POST(
       totalAmount,
       appliedAllocations,
       excessToStoreCredit,
+      storeCreditWarning,
       paymentMethod,
       bankName: bankName || null,
       referenceNumber: referenceNumber || null,

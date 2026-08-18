@@ -23,8 +23,10 @@ import {
   CheckCircle2, 
   Clock, 
   Loader2,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -48,7 +50,37 @@ interface RepairItemData {
 interface POSRepairChargeModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onAddRepairToCart: (item: CartItem) => void
+  /** Se pasa tambien la reparacion: el carrito la necesita para armar la
+   *  linea aunque el equipo no sea del cliente activo del POS. */
+  onAddRepairToCart: (item: CartItem, repair: RepairItemData) => void
+}
+
+/**
+ * Estados en los que el servidor acepta cerrar la reparacion.
+ *
+ * `process_pos_sale_atomic` rechaza con REPAIR_DELIVERY_INVALID_STATE cualquier
+ * equipo que no este listo. Ofrecer el boton igual hacia fallar la venta entera
+ * recien al confirmar el pago, con el codigo crudo en pantalla.
+ */
+const READY_STATUSES = ['listo', 'ready_for_pickup', 'completed']
+
+function isRepairReady(status: string) {
+  return READY_STATUSES.includes(String(status ?? '').trim().toLowerCase())
+}
+
+/** Que le falta al equipo, dicho en el idioma del mostrador. */
+function notReadyReason(status: string) {
+  const normalized = String(status ?? '').trim().toLowerCase()
+  if (normalized === 'recibido' || normalized === 'pending') {
+    return 'El equipo está recibido pero todavía no se diagnosticó.'
+  }
+  if (normalized === 'diagnostico') {
+    return 'El equipo está en diagnóstico: falta presupuestar y reparar.'
+  }
+  if (normalized === 'reparacion' || normalized === 'in_progress') {
+    return 'El equipo está en reparación y todavía no se terminó.'
+  }
+  return 'El equipo todavía no está listo para entregar.'
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -180,7 +212,7 @@ export function POSRepairChargeModal({
       sku: `REP-${repair.ticket_number || repair.id.substring(0, 6)}`
     }
 
-    onAddRepairToCart(cartItem)
+    onAddRepairToCart(cartItem, repair)
     toast.success('Reparación agregada al carrito', {
       description: `${cartItem.name} — ${formatCurrency(cartItem.price)}`
     })
@@ -237,11 +269,17 @@ export function POSRepairChargeModal({
                   const paidAmount = Number(repair.paid_amount || 0)
                   const balanceDue = Math.max(0, totalCost - paidAmount)
                   const statusMeta = STATUS_LABELS[repair.status] || { label: repair.status, color: 'bg-muted text-foreground' }
+                  const ready = isRepairReady(repair.status)
 
                   return (
                     <div
                       key={repair.id}
-                      className="p-4 rounded-xl border border-border/70 bg-card hover:border-indigo-500/40 hover:bg-muted/20 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                      className={cn(
+                        'p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all',
+                        ready
+                          ? 'border-border/70 bg-card hover:border-indigo-500/40 hover:bg-muted/20'
+                          : 'border-border/50 bg-muted/30 opacity-75',
+                      )}
                     >
                       <div className="space-y-1.5 min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -271,6 +309,13 @@ export function POSRepairChargeModal({
                             Falla: {repair.problem_description}
                           </p>
                         )}
+
+                        {!ready && (
+                          <p className="flex items-start gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                            {notReadyReason(repair.status)}
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-center sm:flex-col sm:items-end justify-between sm:justify-center gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
@@ -288,11 +333,17 @@ export function POSRepairChargeModal({
 
                         <Button
                           size="sm"
-                          className="h-8 gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+                          disabled={!ready}
+                          className={cn(
+                            'h-8 gap-1.5 text-xs shadow-sm',
+                            ready && 'bg-indigo-600 hover:bg-indigo-700 text-white',
+                          )}
+                          variant={ready ? 'default' : 'outline'}
+                          title={ready ? undefined : notReadyReason(repair.status)}
                           onClick={() => handleSelectRepair(repair)}
                         >
                           <Plus className="h-3.5 w-3.5" />
-                          Sumar al Carrito
+                          {ready ? 'Sumar al Carrito' : 'No disponible'}
                         </Button>
                       </div>
                     </div>

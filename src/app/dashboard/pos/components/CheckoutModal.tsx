@@ -1,7 +1,8 @@
-﻿'use client'
+'use client'
 
 import React, { memo } from 'react'
 import Link from 'next/link'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -241,23 +242,31 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
         {paymentStatus !== 'idle' && (
           <div aria-live="polite" className="mx-6 mt-3 mb-1">
             {paymentStatus === 'processing' && (
-              <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                <span className="text-sm">Procesando pago... Esto puede tardar unos segundos.</span>
+              <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
+                <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+                <div className="text-xs">
+                  <span className="font-semibold text-foreground">Procesando venta...</span>
+                  <span className="text-muted-foreground ml-1.5">Validando inventario, pagos y caja registradora.</span>
+                </div>
               </div>
             )}
             {paymentStatus === 'success' && (
-              <div className="flex items-center gap-2 rounded-md border border-green-300 bg-green-50 px-3 py-2 dark:bg-green-900/20">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <span className="text-sm font-medium">Pago exitoso</span>
+              <div className="flex items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 dark:border-emerald-800 dark:bg-emerald-950/40">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div>
+                  <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300">¡Venta completada con éxito!</div>
+                  <div className="text-[11px] text-emerald-700 dark:text-emerald-400">Generando comprobante de venta...</div>
+                </div>
               </div>
             )}
             {paymentStatus === 'failed' && (
-              <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2">
-                <XCircle className="h-4 w-4 text-destructive mt-0.5" />
-                <div>
-                  <div className="text-sm font-medium">Pago fallido</div>
-                  <div className="text-xs text-muted-foreground">{paymentError || 'Ocurrio un error durante el pago. Verifique la conexion y los datos ingresados.'}</div>
+              <div className="flex items-start gap-3 rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 dark:border-rose-900/50 dark:bg-rose-950/40">
+                <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400 mt-0.5 shrink-0" />
+                <div className="space-y-0.5 min-w-0">
+                  <div className="text-xs font-bold text-rose-800 dark:text-rose-300">No se pudo completar la venta</div>
+                  <div className="text-xs text-rose-700 dark:text-rose-300 font-medium">
+                    {paymentError || 'Ocurrió un error al procesar el cobro. Verifique la conexión y los datos ingresados.'}
+                  </div>
                 </div>
               </div>
             )}
@@ -404,18 +413,49 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Acciones ({selectedRepairIds.length} seleccionados)</span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                         <div className="flex items-center justify-between rounded-lg border p-2 bg-background hover:bg-muted/20 transition-colors">
-                            <div className="flex gap-2 items-center">
-                               <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
-                                  <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                               </div>
-                               <div>
-                                  <div className="text-xs font-semibold leading-tight">Marcar como entregados</div>
-                                  <div className="text-[10px] text-muted-foreground leading-tight">Actualizar estado a &quot;Entregado&quot;</div>
-                               </div>
-                            </div>
-                            <Switch checked={markRepairDelivered} onCheckedChange={setMarkRepairDelivered} />
-                         </div>
+                         {(() => {
+                            // El servidor solo entrega equipos en estado "listo".
+                            // Antes el interruptor se ofrecia igual y la venta
+                            // entera fallaba al confirmar, con el codigo crudo
+                            // REPAIR_DELIVERY_INVALID_STATE en pantalla.
+                            const notReady = customerRepairs.filter(
+                              (repair) => selectedRepairIds.includes(repair.id)
+                                && String(repair.status ?? '').toLowerCase() !== 'listo'
+                            )
+                            const canDeliver = notReady.length === 0
+
+                            return (
+                              <div className={cn(
+                                'flex items-center justify-between rounded-lg border p-2 transition-colors',
+                                canDeliver ? 'bg-background hover:bg-muted/20' : 'bg-muted/30',
+                              )}>
+                                 <div className="flex gap-2 items-center">
+                                    <div className={cn(
+                                      'h-8 w-8 rounded-full flex items-center justify-center shrink-0',
+                                      canDeliver ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted',
+                                    )}>
+                                       <CheckCircle2 className={cn(
+                                         'h-4 w-4',
+                                         canDeliver ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground',
+                                       )} />
+                                    </div>
+                                    <div>
+                                       <div className="text-xs font-semibold leading-tight">Marcar como entregados</div>
+                                       <div className="text-[10px] text-muted-foreground leading-tight">
+                                          {canDeliver
+                                            ? 'Actualizar estado a "Entregado"'
+                                            : `${notReady.length === 1 ? 'La reparación no está' : `${notReady.length} reparaciones no están`} en "Listo para entrega". Podés cobrarla igual.`}
+                                       </div>
+                                    </div>
+                                 </div>
+                                 <Switch
+                                   checked={canDeliver && markRepairDelivered}
+                                   onCheckedChange={setMarkRepairDelivered}
+                                   disabled={!canDeliver}
+                                 />
+                              </div>
+                            )
+                         })()}
 
                          {/* Delivery outcome selector: visible when markRepairDelivered is ON */}
                          {markRepairDelivered && (
@@ -585,6 +625,32 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                   )}
                 </Button>
               )}
+
+              {!isRegisterOpen ? (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
+                  ⚠️ La caja registradora debe estar abierta para confirmar la venta.
+                </p>
+              ) : paymentMethod === 'cash' && cashReceived < amountDue ? (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
+                  💡 Ingresa el efectivo recibido o haz clic en <strong>Monto Exacto</strong>.
+                </p>
+              ) : paymentMethod === 'card' && cardNumber.length < 4 ? (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
+                  💡 Ingresa los 4 dígitos finales del ticket de tarjeta.
+                </p>
+              ) : paymentMethod === 'transfer' && !transferReference ? (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
+                  💡 Ingresa el número de referencia de la transferencia.
+                </p>
+              ) : paymentMethod === 'credit' && !activeCustomer ? (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
+                  💡 Selecciona un cliente en la columna izquierda para vender a crédito.
+                </p>
+              ) : paymentMethod === 'credit' && !canUseCredit ? (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
+                  💡 Habilita la línea de crédito del cliente en el panel de pago.
+                </p>
+              ) : null}
 
               <Button
                 variant="outline"

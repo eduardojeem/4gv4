@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
 import { FilterPanel } from '@/components/shared'
-import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt, RefreshCw, Download, Users, Info } from 'lucide-react'
+import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt, RefreshCw, Download, Users, Info, ShoppingBag, Plus, Wallet, AlertTriangle, ArrowRight } from 'lucide-react'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { CREDITS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { formatCurrency } from '@/lib/currency'
@@ -387,57 +388,174 @@ function CreditsDashboardContent() {
     setActiveTab('cuotas')
   }
 
+  const router = useRouter()
+
   return (
     <RouteGuard route="/dashboard/credits" redirectTo="/dashboard">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      {/* Header con Título y Acciones Rápidas */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pb-2 border-b border-border/40">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-            <CreditCard className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+          <div className="p-2.5 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl text-white shadow-sm shadow-blue-500/20">
+            <CreditCard className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Créditos y Cuotas</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Gestión completa de créditos y pagos de clientes
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                Créditos y Cobranzas
+              </h1>
+              <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20 text-xs font-semibold">
+                Cuentas Corrientes
+              </Badge>
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+              Control integral de cuotas, cartera de financiación, cobros y estado de clientes
             </p>
           </div>
         </div>
 
-        {/* Headline KPIs + acciones (siempre visibles) */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="rounded-xl border border-border bg-card px-4 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total por cobrar</p>
-            <p className="text-xl font-bold tabular-nums text-foreground">{formatCurrency(portfolioTotals.outstanding)}</p>
-          </div>
-          <button
-            type="button"
-            onClick={handleFilterOverdue}
-            className="rounded-xl border border-red-200 bg-red-50/70 px-4 py-2 text-left transition-colors hover:bg-red-100/70 dark:border-red-900/50 dark:bg-red-950/20 dark:hover:bg-red-950/40"
+        {/* Acciones principales de 1-Clic */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => router.push('/dashboard/pos')}
+            className="h-9 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
           >
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-red-700 dark:text-red-300">Vencido</p>
-            <p className="text-xl font-bold tabular-nums text-red-700 dark:text-red-300">{formatCurrency(portfolioTotals.overdue)}</p>
-          </button>
-          <div className="flex items-center gap-2">
-            <SectionGuideButton guide={CREDITS_GUIDE} />
-            <Button variant="outline" size="sm" className="h-9" onClick={refreshData} disabled={loading || isPending}>
-              <RefreshCw className={`h-4 w-4 mr-1.5 ${loading || isPending ? 'animate-spin' : ''}`} />
-              Actualizar
-            </Button>
-            <Button variant="outline" size="sm" className="h-9" onClick={exportInstallmentsCsv}>
-              <Download className="h-4 w-4 mr-1.5" />
-              Exportar
-            </Button>
-          </div>
+            <ShoppingBag className="h-4 w-4" />
+            <span>+ Venta a Crédito (POS)</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push('/dashboard/customers')}
+            className="h-9 gap-1.5 font-medium"
+          >
+            <Users className="h-4 w-4 text-slate-500" />
+            <span>Líneas de Clientes</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-9 gap-1.5" 
+            onClick={refreshData} 
+            disabled={loading || isPending}
+          >
+            <RefreshCw className={`h-4 w-4 ${loading || isPending ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Actualizar</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-9 gap-1.5" 
+            onClick={exportInstallmentsCsv}
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Exportar</span>
+          </Button>
+          <SectionGuideButton guide={CREDITS_GUIDE} />
         </div>
+      </div>
+
+      {/* Tarjetas KPI de Resumen Rápido */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Saldo Total por Cobrar */}
+        <Card className="border border-slate-200/80 dark:border-white/10 shadow-xs bg-white dark:bg-[#0d1117] rounded-2xl">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total por Cobrar</p>
+              <p className="text-xl sm:text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
+                {formatCurrency(portfolioTotals.outstanding)}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Cartera total activa
+              </p>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+              <Wallet className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Cuotas en Mora / Vencidas */}
+        <Card 
+          onClick={handleFilterOverdue}
+          className="border border-rose-200 dark:border-rose-900/40 shadow-xs bg-rose-50/40 dark:bg-rose-950/20 rounded-2xl cursor-pointer hover:border-rose-400 transition-all group"
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300">En Mora / Vencido</p>
+                {overdueCount > 0 && (
+                  <Badge className="bg-rose-600 text-white text-[10px] px-1.5 py-0 font-bold animate-pulse">
+                    {overdueCount} cuotas
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xl sm:text-2xl font-bold font-mono text-rose-700 dark:text-rose-300 mt-1">
+                {formatCurrency(portfolioTotals.overdue)}
+              </p>
+              <p className="text-[11px] text-rose-600/80 dark:text-rose-400/80 mt-0.5 flex items-center gap-1 group-hover:underline">
+                <span>Ver cuotas a cobrar</span>
+                <ArrowRight className="h-3 w-3" />
+              </p>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Vencimientos de Hoy */}
+        <Card 
+          onClick={handleFilterDueToday}
+          className="border border-amber-200 dark:border-amber-900/40 shadow-xs bg-amber-50/40 dark:bg-amber-950/20 rounded-2xl cursor-pointer hover:border-amber-400 transition-all group"
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">Vence Hoy</p>
+              <p className="text-xl sm:text-2xl font-bold font-mono text-amber-800 dark:text-amber-300 mt-1">
+                {dueTodayCount} {dueTodayCount === 1 ? 'cuota' : 'cuotas'}
+              </p>
+              <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-0.5 flex items-center gap-1 group-hover:underline">
+                <span>Cobranza programada</span>
+                <ArrowRight className="h-3 w-3" />
+              </p>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+              <CalendarClock className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Clientes Financiados */}
+        <Card 
+          onClick={() => setActiveTab('credits')}
+          className="border border-slate-200/80 dark:border-white/10 shadow-xs bg-white dark:bg-[#0d1117] rounded-2xl cursor-pointer hover:border-blue-300 transition-all group"
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Clientes con Crédito</p>
+              <p className="text-xl sm:text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
+                {credits.filter(c => c.status === 'active').length}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                <span>Ver lista de clientes</span>
+                <ArrowRight className="h-3 w-3" />
+              </p>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+              <Users className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Error Banner */}
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
+        <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
           <span className="font-medium">Error al cargar los datos:</span> {error}
           <button
-            className="ml-auto underline underline-offset-2 hover:no-underline text-xs"
+            className="ml-auto underline underline-offset-2 hover:no-underline text-xs font-bold"
             onClick={refreshData}
           >
             Reintentar
@@ -445,30 +563,45 @@ function CreditsDashboardContent() {
         </div>
       )}
 
+      {/* Pestañas de Navegación */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:w-auto lg:inline-grid gap-1.5 h-auto">
-          <TabsTrigger value="overview" className="gap-2">
-            <LayoutDashboard className="h-4 w-4" />
-            Resumen
-          </TabsTrigger>
-          <TabsTrigger value="credits" className="gap-2">
-            <Users className="h-4 w-4" />
-            Clientes
-          </TabsTrigger>
-          <TabsTrigger value="cuotas" className="gap-2">
-            <CalendarClock className="h-4 w-4" />
-            Cobranza
-            {(overdueCount + dueTodayCount) > 0 && (
-              <Badge variant="destructive" className="ml-1 h-5 min-w-5 p-0 px-1 text-xs">
-                {overdueCount + dueTodayCount}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="pagos" className="gap-2">
-            <Receipt className="h-4 w-4" />
-            Historial
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/90 p-1 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/70">
+          <TabsList className="inline-flex h-auto min-w-max gap-1 bg-transparent p-0">
+            <TabsTrigger
+              value="overview"
+              className="flex min-h-9 items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-slate-600 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm dark:text-slate-400 dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              <span>Resumen Ejecutivo</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="credits"
+              className="flex min-h-9 items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-slate-600 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm dark:text-slate-400 dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white"
+            >
+              <Users className="h-4 w-4" />
+              <span>Clientes ({credits.filter(c => c.status === 'active').length})</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="cuotas"
+              className="flex min-h-9 items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-slate-600 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm dark:text-slate-400 dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white"
+            >
+              <CalendarClock className="h-4 w-4" />
+              <span>Cobranzas y Cuotas</span>
+              {(overdueCount + dueTodayCount) > 0 && (
+                <Badge variant="destructive" className="ml-1 h-5 min-w-5 px-1.5 text-[10px] font-bold">
+                  {overdueCount + dueTodayCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger
+              value="pagos"
+              className="flex min-h-9 items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-slate-600 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm dark:text-slate-400 dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white"
+            >
+              <Receipt className="h-4 w-4" />
+              <span>Historial ({payments.length})</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Tab Content: Resumen */}
         <TabsContent value="overview" className="space-y-6">
@@ -915,8 +1048,13 @@ function CreditsDashboardContent() {
           interestRate: creditById[selectedDialogCreditId]?.interest_rate || 0,
           termMonths: creditById[selectedDialogCreditId]?.term_months || 0,
           remainingBalance: remainingByCredit[selectedDialogCreditId] || 0,
+          totalCreditAmount: creditById[selectedDialogCreditId]?.principal || 0,
+          totalInstallments: creditById[selectedDialogCreditId]?.term_months || installments.filter(i => i.credit_id === selectedDialogCreditId).length,
+          paidInstallmentsCount: installments.filter(i => i.credit_id === selectedDialogCreditId && i.status === 'paid').length,
+          pendingInstallmentsCount: installments.filter(i => i.credit_id === selectedDialogCreditId && i.status !== 'paid').length,
           nextInstallmentNumber: selectedDialogInstallment?.installment_number,
           nextDueDate: selectedDialogInstallment?.due_date,
+          installmentAmount: selectedDialogInstallment?.amount,
           creditCode: selectedDialogDisplay?.creditCode,
           creditTypeLabel: selectedDialogDisplay?.creditTypeLabel,
           originLabel: selectedDialogDisplay?.originLabel,

@@ -48,6 +48,14 @@ interface CreditPaymentDialogProps {
         remainingBalance: number
         nextInstallmentNumber?: number
         nextDueDate?: string
+        nextDueAmount?: number
+        installmentAmount?: number
+        totalCreditAmount?: number
+        totalInstallments?: number
+        paidInstallmentsCount?: number
+        pendingInstallmentsCount?: number
+        customerRuc?: string
+        customerPhone?: string
         creditCode?: string
         creditTypeLabel?: string
         originLabel?: string
@@ -88,57 +96,61 @@ export function CreditPaymentDialog({
 
     const handleAmountChange = (value: string) => {
         const rawNumber = parseThousands(value)
-        const strVal = rawNumber > 0 ? String(rawNumber) : (value === '' ? '' : '0')
-        setAmount(strVal)
-        const numericAmount = rawNumber
-        const maxAllowed = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
-        const balanceLabel = allowFullDebtPayment ? 'la deuda total' : 'esta cuota'
-
-        if (numericAmount <= 0 && value !== '') {
-            setError('El monto debe ser mayor a 0')
-        } else if (typeof maxAllowed === 'number' && numericAmount > maxAllowed) {
-            setError(`El monto excede el saldo disponible para ${balanceLabel} (${formatCurrency(maxAllowed)})`)
-        } else {
-            setError('')
-        }
-    }
-    const handleConfirm = async () => {
-        const numericAmount = parseFloat(amount)
-        const maxAllowed = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
-        const balanceLabel = allowFullDebtPayment ? 'la deuda total' : 'esta cuota'
-        if (isNaN(numericAmount) || numericAmount <= 0) {
-            setError('Ingrese un monto válido')
-            return
-        }
-        if (typeof maxAllowed === 'number' && numericAmount > maxAllowed) {
-            setError(`El monto excede el saldo disponible para ${balanceLabel}`)
-            return
-        }
-
+        setAmount(rawNumber ? String(rawNumber) : '')
         setError('')
+    }
+
+    const handleQuickAmount = (percentage: number) => {
+        const effectiveMaxAmount = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
+        if (!effectiveMaxAmount) return
+        const calculatedAmount = Math.round(effectiveMaxAmount * percentage)
+        setAmount(String(calculatedAmount))
+        setError('')
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+
+        const numAmount = parseFloat(amount)
+        const effectiveMaxAmount = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
+
+        if (!numAmount || numAmount <= 0) {
+            setError('El monto debe ser mayor a 0')
+            return
+        }
+
+        if (effectiveMaxAmount !== undefined && numAmount > effectiveMaxAmount) {
+            setError(`El monto no puede exceder ${formatCurrency(effectiveMaxAmount)}`)
+            return
+        }
+
         setSubmitting(true)
+        setError('')
+
         try {
-            const result = await onConfirm(method, numericAmount, reference || undefined, notes || undefined)
-            if (result.success === false) {
-                setError(result.error || 'No se pudo registrar el pago.')
+            const result = await onConfirm(method, numAmount, reference || undefined, notes || undefined)
+
+            if (!result || result.success === false) {
+                setError((result as { success: false; error?: string })?.error || 'Error al registrar el pago')
+                setSubmitting(false)
                 return
             }
 
-            const paid = {
+            setPaymentDone({
                 method,
-                amount: typeof result.appliedAmount === 'number' ? result.appliedAmount : numericAmount,
+                amount: numAmount,
                 reference: reference || undefined,
                 notes: notes || undefined,
                 date: new Date()
-            }
-            setPaymentDone(paid)
-            // No cerramos el dialog aquí; mostramos pantalla de éxito
-        } catch {
-            setError('No se pudo registrar el pago.')
-        } finally {
+            })
+            setSubmitting(false)
+        } catch (err: any) {
+            setError(err.message || 'Error inesperado al registrar el pago')
             setSubmitting(false)
         }
     }
+
+    const handleConfirm = handleSubmit
 
     const getMethodLabel = (m: PaymentMethod) => {
         switch (m) {
@@ -148,9 +160,9 @@ export function CreditPaymentDialog({
         }
     }
 
-    const isValid = amount && !error && parseFloat(amount) > 0
     const effectiveMaxAmount = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
     const canPayFullDebt = allowFullDebtPayment && typeof totalDebtAmount === 'number' && totalDebtAmount > 0
+    const isValid = !!amount && !error && parseFloat(amount) > 0
 
     const generateReceiptDoc = async () => {
         if (!paymentDone) return null
@@ -164,6 +176,8 @@ export function CreditPaymentDialog({
             customerName: creditInfo?.customerName || 'Cliente',
             customerId: creditInfo?.customerId,
             customerCode: creditInfo?.customerCode,
+            customerRuc: creditInfo?.customerRuc,
+            customerPhone: creditInfo?.customerPhone,
             creditId: creditInfo?.id || '',
             creditCode: creditInfo?.creditCode,
             creditTypeLabel: creditInfo?.creditTypeLabel,
@@ -171,13 +185,19 @@ export function CreditPaymentDialog({
             creditLabel: creditInfo?.creditLabel,
             saleCode: creditInfo?.saleCode,
             productSummary: creditInfo?.productSummary,
+            totalCreditAmount: creditInfo?.totalCreditAmount ?? creditInfo?.principal,
+            totalInstallments: creditInfo?.totalInstallments ?? creditInfo?.termMonths,
+            paidInstallmentsCount: creditInfo?.paidInstallmentsCount,
+            pendingInstallmentsCount: creditInfo?.pendingInstallmentsCount,
             installmentNumber: allowFullDebtPayment ? null : creditInfo?.nextInstallmentNumber,
             installmentDueDate: allowFullDebtPayment ? null : creditInfo?.nextDueDate,
+            installmentAmount: creditInfo?.installmentAmount,
             currentCreditBalance: creditInfo ? Math.max(0, creditInfo.remainingBalance - paymentDone.amount) : null,
+            nextDueDate: creditInfo?.nextDueDate,
+            nextDueAmount: creditInfo?.nextDueAmount,
         })
 
         return { doc: sharedReceipt.doc, receiptNum: sharedReceipt.receiptNumber }
-
     }
 
     const downloadReceipt = async () => {

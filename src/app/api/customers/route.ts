@@ -89,7 +89,8 @@ async function findCustomersWithHistory(
     supabase.from('sales').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
     supabase.from('customer_credits').select('customer_id').in('customer_id', ids),
     supabase.from('repairs').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
-    supabase.from('customer_store_credit_movements').select('customer_id').in('customer_id', ids),
+    // `customer_store_credit_movements` no existe: la tabla es `customer_store_credits`.
+    supabase.from('customer_store_credits').select('customer_id').in('customer_id', ids),
     supabase.from('after_sales_cases').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
   ])
 

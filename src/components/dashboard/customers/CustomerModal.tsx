@@ -66,9 +66,23 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   const [storeBalance, setStoreBalance] = useState(0)
   const [storeMovements, setStoreMovements] = useState<Array<{ id: string; amount: number; reason: string; source_type: string; created_at: string }>>([])
   const [storeExpanded, setStoreExpanded] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [livePurchases, setLivePurchases] = useState<number | null>(null)
   const [liveSpent, setLiveSpent] = useState<number | null>(null)
-  const [liveCredits, setLiveCredits] = useState<{ total: number; active: number; pendingBalance: number } | null>(null)
+  const [liveCredits, setLiveCredits] = useState<{
+    total: number
+    active: number
+    pendingBalance: number
+    financedTotal: number
+    paidTotal: number
+  } | null>(null)
+  // Deuda y limite tal como los ve el servidor que aprueba las ventas a credito:
+  // incluye reparaciones, no solo cuotas.
+  const [creditStanding, setCreditStanding] = useState<{
+    limit: number
+    debt: number
+    overdue: number
+  } | null>(null)
 
   useEffect(() => {
     setMode(initialMode)
@@ -82,16 +96,20 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       setLivePurchases(null)
       setLiveSpent(null)
       setLiveCredits(null)
+      setCreditStanding(null)
+      setLoadError(null)
       return
     }
     let cancelled = false
     const load = async () => {
+      setLoadError(null)
       try {
-        const [creditRes, salesRes, repairsRes, creditsRes] = await Promise.allSettled([
+        const [creditRes, salesRes, repairsRes, creditsRes, standingRes] = await Promise.allSettled([
           fetch(`/api/customers/${customer.id}/store-credit?page=1&pageSize=10`),
           fetch(`/api/customers/${customer.id}/sales?limit=1`),
           fetch(`/api/customers/${customer.id}/repairs?limit=1`),
           fetch(`/api/customers/${customer.id}/credits`),
+          fetch(`/api/customers/${customer.id}/collect-payment`),
         ])
 
         if (!cancelled && creditRes.status === 'fulfilled' && creditRes.value.ok) {
@@ -109,6 +127,19 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               total: creditsPayload.stats.totalCredits || 0,
               active: creditsPayload.stats.activeCredits || 0,
               pendingBalance: creditsPayload.stats.pendingBalance || 0,
+              financedTotal: creditsPayload.stats.financedTotal || 0,
+              paidTotal: creditsPayload.stats.paidTotal || 0,
+            })
+          }
+        }
+
+        if (!cancelled && standingRes.status === 'fulfilled' && standingRes.value.ok) {
+          const standingPayload = await standingRes.value.json().catch(() => null)
+          if (standingPayload?.success) {
+            setCreditStanding({
+              limit: Number(standingPayload.creditLimit || 0),
+              debt: Number(standingPayload.totalDebt || 0),
+              overdue: Number(standingPayload.overdueDebt || 0),
             })
           }
         }
@@ -136,7 +167,13 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           setLivePurchases(salesCount)
           setLiveSpent(salesTotal + repairsTotal)
         }
-      } catch { /* silent */ }
+      } catch (error) {
+        // Antes era un catch mudo: si fallaba, el modal mostraba saldo 0,
+        // creditos vacios y un "total gastado" sin la parte de reparaciones,
+        // todo con apariencia de dato bueno.
+        console.error('[CustomerModal] No se pudo cargar el detalle del cliente:', error)
+        if (!cancelled) setLoadError('No pudimos cargar algunos datos del cliente.')
+      }
     }
     void load()
     return () => { cancelled = true }
@@ -289,6 +326,15 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           </div>
         </DialogHeader>
 
+        {loadError && (
+          <div
+            role="alert"
+            className="mt-3 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+          >
+            {loadError} Los importes que se muestran pueden estar incompletos.
+          </div>
+        )}
+
         <div className="pt-2">
           {mode === 'view' && customer ? (
             // Vista de solo lectura
@@ -412,41 +458,156 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               </Card>
 
               {/* Estado de Crédito y Deudas */}
-              <Card className={liveCredits && (liveCredits.active > 0 || liveCredits.pendingBalance > 0) ? 'border-purple-200 bg-purple-50/50 dark:bg-purple-950/20 dark:border-purple-500/20' : ''}>
-                <CardHeader className="pb-3">
-                  <CardTitle className={`flex items-center justify-between text-sm ${liveCredits && liveCredits.active > 0 ? 'text-purple-800 dark:text-purple-300' : 'text-muted-foreground'}`}>
-                    <div className="flex items-center gap-2">
-                      <CreditCard className={`h-4 w-4 ${liveCredits && liveCredits.active > 0 ? 'text-purple-600' : 'text-muted-foreground'}`} />
-                      Créditos del Cliente
-                    </div>
-                    {liveCredits && liveCredits.active > 0 ? (
-                      <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-800/40 dark:text-purple-300 border-0 text-xs font-bold">
-                        {liveCredits.active} crédito{liveCredits.active !== 1 ? 's' : ''} activo{liveCredits.active !== 1 ? 's' : ''}
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs">Sin créditos activos</Badge>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 pt-0">
-                  <div className="flex items-end justify-between">
-                    <div>
-                      <p className={`text-2xl font-bold tabular-nums ${liveCredits && liveCredits.pendingBalance > 0 ? 'text-purple-700 dark:text-purple-300' : 'text-muted-foreground'}`}>
-                        {formatCurrency(liveCredits?.pendingBalance || customer.current_balance || 0)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {liveCredits && liveCredits.pendingBalance > 0 ? 'Saldo deudor total en cuotas' : 'Sin saldo deudor pendiente'}
-                      </p>
-                    </div>
-                    {customer.credit_limit && customer.credit_limit > 0 && (
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Límite Aprobado</p>
-                        <p className="text-sm font-semibold tabular-nums">{formatCurrency(customer.credit_limit)}</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              {(() => {
+                // Mientras no llega la respuesta no se afirma nada: antes caia a
+                // `customer.current_balance`, una columna que nadie actualiza, y
+                // decia "sin saldo deudor" antes de saberlo.
+                if (!creditStanding) {
+                  return (
+                    <Card className="border-l-4 border-l-muted">
+                      <CardContent className="space-y-3 p-4" aria-busy="true" aria-label="Cargando crédito">
+                        <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+                        <div className="h-8 w-32 animate-pulse rounded bg-muted" />
+                        <div className="h-1.5 w-full animate-pulse rounded bg-muted" />
+                      </CardContent>
+                    </Card>
+                  )
+                }
+
+                const limit = creditStanding.limit
+                const debt = creditStanding.debt
+                const available = Math.max(0, limit - debt)
+                const utilization = limit > 0 ? Math.min(100, Math.round((debt / limit) * 100)) : 0
+                const hasOverdue = creditStanding.overdue > 0
+
+                // El acento dice el estado, no decora: en mora o al limite es
+                // alerta, con cupo usado es atencion, y libre es neutro.
+                const tone = hasOverdue || utilization >= 90
+                  ? { border: 'border-l-destructive', text: 'text-destructive', bar: 'bg-destructive' }
+                  : utilization >= 60
+                    ? { border: 'border-l-amber-500', text: 'text-amber-600 dark:text-amber-400', bar: 'bg-amber-500' }
+                    : { border: 'border-l-emerald-500', text: 'text-foreground', bar: 'bg-emerald-500' }
+
+                return (
+                  <Card className={cn('border-l-4', tone.border)}>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2">
+                          <CreditCard className="h-4 w-4 text-muted-foreground" />
+                          Crédito del cliente
+                        </span>
+                        {liveCredits && liveCredits.active > 0 ? (
+                          <Badge variant="outline" className="text-xs font-medium">
+                            {liveCredits.active} activo{liveCredits.active !== 1 ? 's' : ''}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                            Sin créditos activos
+                          </Badge>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+
+                    <CardContent className="space-y-3 pt-0">
+                      {limit > 0 ? (
+                        <>
+                          {/* Lo que el vendedor necesita saber va primero y grande. */}
+                          <div>
+                            <p className="text-xs text-muted-foreground">Disponible para vender a crédito</p>
+                            <p className={cn('text-2xl font-bold tabular-nums', tone.text)}>
+                              {formatCurrency(available)}
+                            </p>
+                          </div>
+
+                          <div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                              <div className={cn('h-full rounded-full', tone.bar)} style={{ width: `${utilization}%` }} />
+                            </div>
+                            <div className="mt-1.5 flex justify-between text-xs text-muted-foreground">
+                              <span>{utilization}% usado</span>
+                              <span className="tabular-nums">Límite {formatCurrency(limit)}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-end justify-between border-t pt-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Deuda total</p>
+                              <p className="text-sm font-semibold tabular-nums">{formatCurrency(debt)}</p>
+                              {/* Se aclara que incluye reparaciones porque es la
+                                  regla con la que el servidor autoriza la venta. */}
+                              <p className="text-[11px] text-muted-foreground">Cuotas y reparaciones sin pagar</p>
+                            </div>
+                            {hasOverdue && (
+                              <Badge variant="destructive" className="text-[11px]">
+                                {formatCurrency(creditStanding.overdue)} en mora
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* Desglose de las financiaciones: las tres cifras
+                              cierran entre si (financiado = pagado + faltante),
+                              asi que se pueden verificar de un vistazo. */}
+                          {liveCredits && liveCredits.financedTotal > 0 && (
+                            <div className="rounded-lg border bg-muted/30 p-3">
+                              <div className="mb-2 flex items-center justify-between">
+                                <p className="text-xs font-semibold">Financiaciones</p>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {liveCredits.total} crédito{liveCredits.total !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+
+                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                                <div
+                                  className="h-full rounded-full bg-emerald-500"
+                                  style={{ width: `${Math.min(100, Math.round((liveCredits.paidTotal / liveCredits.financedTotal) * 100))}%` }}
+                                />
+                              </div>
+
+                              <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                                <div>
+                                  <p className="text-[11px] text-muted-foreground">Total</p>
+                                  <p className="text-sm font-semibold tabular-nums">{formatCurrency(liveCredits.financedTotal)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] text-muted-foreground">Pagado</p>
+                                  <p className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                                    {formatCurrency(liveCredits.paidTotal)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] text-muted-foreground">Faltante</p>
+                                  <p className={cn(
+                                    'text-sm font-semibold tabular-nums',
+                                    liveCredits.pendingBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
+                                  )}>
+                                    {formatCurrency(liveCredits.pendingBalance)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-muted-foreground">Sin línea de crédito asignada</p>
+                            <p className="text-xs text-muted-foreground">
+                              {debt > 0
+                                ? `Tiene ${formatCurrency(debt)} de deuda pendiente.`
+                                : 'No puede comprar a crédito hasta asignarle un límite.'}
+                            </p>
+                          </div>
+                          {hasOverdue && (
+                            <Badge variant="destructive" className="text-[11px] shrink-0">
+                              {formatCurrency(creditStanding.overdue)} en mora
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })()}
 
               {/* Información adicional */}
               <Card>

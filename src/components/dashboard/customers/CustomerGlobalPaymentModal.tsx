@@ -76,6 +76,9 @@ export interface DebtItem {
   dueDate?: string
   isOverdue: boolean
   status: string
+  operationalStatus?: string
+  repairCategory?: 'in_progress' | 'ready_for_pickup' | 'delivered_unpaid'
+  debtReason?: string
   creditId?: string
 }
 
@@ -261,6 +264,23 @@ Alias SIPAP: 0981123456`
 
   const handleQuickAmount = (amt: number) => {
     setAmountInput(amt.toString())
+  }
+
+  const handlePaySingleDebt = (debt: DebtItem) => {
+    setMode('manual')
+    const newManual: Record<string, number> = {}
+    debts.forEach((d) => {
+      newManual[d.id] = d.id === debt.id ? debt.pendingAmount : 0
+    })
+    setManualAllocations(newManual)
+    setAmountInput(debt.pendingAmount.toString())
+
+    const isIncompleteRepair = debt.type === 'repair' && debt.operationalStatus !== 'entregado' && debt.operationalStatus !== 'listo'
+    if (isIncompleteRepair) {
+      toast.info(`Monto fijado como Adelanto para: ${debt.title} (reparación en curso)`)
+    } else {
+      toast.info(`Monto fijado para abonar exclusivamente a: ${debt.title}`)
+    }
   }
 
   const handleManualAllocationChange = (debtId: string, value: string) => {
@@ -925,132 +945,272 @@ Alias SIPAP: 0981123456`
 
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
                   {previewAllocations.length > 0
-                    ? previewAllocations.map(({ debt, allocated, newPending, isFullyPaid }) => (
-                        <div
-                          key={debt.id}
-                          className={cn(
-                            'p-3.5 text-xs transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3',
-                            allocated > 0
-                              ? 'bg-purple-50/40 dark:bg-purple-950/10'
-                              : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                          )}
-                        >
-                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                            <div
-                              className={cn(
-                                'h-8 w-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
-                                debt.type === 'repair'
-                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40'
-                                  : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40'
-                              )}
-                            >
-                              {debt.type === 'repair' ? (
-                                <Wrench className="h-4 w-4" />
-                              ) : (
-                                <CreditCard className="h-4 w-4" />
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-bold text-slate-900 dark:text-white truncate">
-                                  {debt.title}
-                                </p>
-                                {debt.isOverdue && (
-                                  <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-0 text-[9px] font-bold h-4 px-1.5">
-                                    Vencida
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-slate-500 truncate">{debt.subtitle}</p>
-                            </div>
-                          </div>
+                    ? previewAllocations.map(({ debt, allocated, newPending, isFullyPaid }) => {
+                        const isRepair = debt.type === 'repair'
+                        const isDelivered = isRepair && (debt.repairCategory === 'delivered_unpaid' || debt.operationalStatus === 'entregado')
+                        const isReady = isRepair && (debt.repairCategory === 'ready_for_pickup' || debt.operationalStatus === 'listo')
+                        const isInProgress = isRepair && !isDelivered && !isReady
 
-                          <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0">
-                            {/* Deuda Original */}
-                            <div className="text-right">
-                              <p className="text-[10px] text-slate-400">Saldo Actual</p>
-                              <p className="font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
-                                {formatCurrency(debt.pendingAmount)}
-                              </p>
-                            </div>
-
-                            {/* Abono asignado */}
-                            {mode === 'auto' ? (
-                              <div className="text-right min-w-[5.5rem]">
-                                <p className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">
-                                  Abono Cascada
-                                </p>
-                                <p className="font-bold text-purple-700 dark:text-purple-300 tabular-nums text-sm">
-                                  {allocated > 0 ? `+${formatCurrency(allocated)}` : '-'}
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="w-28">
-                                <Input
-                                  type="text"
-                                  inputMode="numeric"
-                                  placeholder="0"
-                                  value={manualAllocations[debt.id] ? manualAllocations[debt.id].toLocaleString('es-PY') : ''}
-                                  onChange={(e) => handleManualAllocationChange(debt.id, e.target.value)}
-                                  className="h-8 text-xs font-bold text-right tabular-nums"
-                                />
-                              </div>
+                        return (
+                          <div
+                            key={debt.id}
+                            className={cn(
+                              'p-3.5 text-xs transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-3',
+                              allocated > 0
+                                ? 'bg-purple-50/40 dark:bg-purple-950/10'
+                                : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
                             )}
-
-                            {/* Saldo Resultante */}
-                            <div className="text-right min-w-[5.5rem]">
-                              <p className="text-[10px] text-slate-400">Saldo Final</p>
-                              <p
+                          >
+                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                              <div
                                 className={cn(
-                                  'font-bold tabular-nums text-xs',
-                                  isFullyPaid
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-slate-900 dark:text-white'
+                                  'h-9 w-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
+                                  isRepair
+                                    ? isDelivered
+                                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40'
+                                      : isReady
+                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40'
+                                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40'
+                                    : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40'
                                 )}
                               >
-                                {isFullyPaid ? '0 Gs (Liquidado)' : formatCurrency(newPending)}
+                                {isRepair ? (
+                                  <Wrench className="h-4 w-4" />
+                                ) : (
+                                  <CreditCard className="h-4 w-4" />
+                                )}
+                              </div>
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <p className="font-bold text-slate-900 dark:text-white truncate">
+                                    {debt.title}
+                                  </p>
+                                  {isRepair ? (
+                                    isDelivered ? (
+                                      <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 text-[9px] font-bold h-4 px-1.5">
+                                        📦 Retirado (Entregado con saldo pendiente)
+                                      </Badge>
+                                    ) : isReady ? (
+                                      <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-[9px] font-bold h-4 px-1.5">
+                                        ✅ Listo en Taller (Pendiente de Retiro)
+                                      </Badge>
+                                    ) : (
+                                      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-[9px] font-bold h-4 px-1.5">
+                                        🛠️ En Taller ({debt.operationalStatus === 'diagnostico' ? 'En Diagnóstico' : debt.operationalStatus === 'reparacion' ? 'En Reparación' : 'En Curso'})
+                                      </Badge>
+                                    )
+                                  ) : (
+                                    debt.isOverdue ? (
+                                      <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 text-[9px] font-bold h-4 px-1.5">
+                                        💳 Cuota Vencida
+                                      </Badge>
+                                    ) : (
+                                      <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 text-[9px] font-bold h-4 px-1.5">
+                                        💳 Cuota al día
+                                      </Badge>
+                                    )
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 truncate">{debt.subtitle}</p>
+                                <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                                  <span>Total: <strong className="text-slate-700 dark:text-slate-300">{formatCurrency(debt.totalAmount)}</strong></span>
+                                  <span>·</span>
+                                  <span>Abonado: <strong className="text-emerald-700 dark:text-emerald-400">{formatCurrency(debt.paidAmount)}</strong></span>
+                                  {debt.debtReason && (
+                                    <>
+                                      <span>·</span>
+                                      <span className="italic text-slate-600 dark:text-slate-400">{debt.debtReason}</span>
+                                    </>
+                                  )}
+                                </div>
+
+                                {allocated > 0 && isInProgress && (
+                                  <div className="mt-1.5 p-1.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-[10.5px] text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                    <span>
+                                      <strong>Adelanto a Cuenta:</strong> Equipo aún en taller. El pago se guardará como anticipo y se descontará del saldo final al entregar.
+                                    </span>
+                                  </div>
+                                )}
+
+                                {allocated > 0 && isReady && (
+                                  <div className="mt-1.5 p-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-[10.5px] text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                    <span>
+                                      <strong>Equipo Listo en Taller:</strong> Al liquidar el saldo ({formatCurrency(newPending)}), el equipo quedará listo para retiro inmediato.
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between lg:justify-end gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100 dark:border-slate-800">
+                              {/* Botón contextual */}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handlePaySingleDebt(debt)}
+                                className={cn(
+                                  "h-7 px-2.5 text-[11px] font-semibold transition-all",
+                                  isInProgress
+                                    ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200"
+                                    : isReady
+                                      ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200"
+                                      : isDelivered
+                                        ? "bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200"
+                                        : "bg-white hover:bg-purple-50 text-purple-700 border-purple-200 dark:bg-slate-900 dark:border-purple-800 dark:text-purple-300"
+                                )}
+                              >
+                                {isInProgress ? 'Dar Adelanto' : isReady ? 'Liquidar y Retirar' : isDelivered ? 'Pagar Deuda' : 'Pagar Cuota'}
+                              </Button>
+
+                              {/* Deuda Original */}
+                              <div className="text-right">
+                                <p className="text-[10px] text-slate-400">Saldo Actual</p>
+                                <p className="font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
+                                  {formatCurrency(debt.pendingAmount)}
+                                </p>
+                              </div>
+
+                              {/* Abono asignado */}
+                              {mode === 'auto' ? (
+                                <div className="text-right min-w-[5.5rem]">
+                                  <p className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">
+                                    {isInProgress ? 'Adelanto' : 'Abono'}
+                                  </p>
+                                  <p className="font-bold text-purple-700 dark:text-purple-300 tabular-nums text-sm">
+                                    {allocated > 0 ? `+${formatCurrency(allocated)}` : '-'}
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="w-28">
+                                  <Input
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="0"
+                                    value={manualAllocations[debt.id] ? manualAllocations[debt.id].toLocaleString('es-PY') : ''}
+                                    onChange={(e) => handleManualAllocationChange(debt.id, e.target.value)}
+                                    className="h-8 text-xs font-bold text-right tabular-nums"
+                                  />
+                                </div>
+                              )}
+
+                              {/* Saldo Resultante */}
+                              <div className="text-right min-w-[5.5rem]">
+                                <p className="text-[10px] text-slate-400">Saldo Final</p>
+                                <p
+                                  className={cn(
+                                    'font-bold tabular-nums text-xs',
+                                    isFullyPaid
+                                      ? 'text-emerald-600 dark:text-emerald-400'
+                                      : 'text-slate-900 dark:text-white'
+                                  )}
+                                >
+                                  {isFullyPaid ? (
+                                    isInProgress ? '100% Cubierto (Anticipo)' : isReady ? '0 Gs (Listo p/ Retiro)' : '0 Gs (Liquidado)'
+                                  ) : (
+                                    formatCurrency(newPending)
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    : debts.map((d) => {
+                        const isRepair = d.type === 'repair'
+                        const isDelivered = isRepair && (d.repairCategory === 'delivered_unpaid' || d.operationalStatus === 'entregado')
+                        const isReady = isRepair && (d.repairCategory === 'ready_for_pickup' || d.operationalStatus === 'listo')
+                        const isInProgress = isRepair && !isDelivered && !isReady
+
+                        return (
+                          <div
+                            key={d.id}
+                            className="p-3.5 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                          >
+                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                              <div
+                                className={cn(
+                                  'h-9 w-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
+                                  isRepair
+                                    ? isDelivered
+                                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40'
+                                      : isReady
+                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40'
+                                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40'
+                                    : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40'
+                                )}
+                              >
+                                {isRepair ? (
+                                  <Wrench className="h-4 w-4" />
+                                ) : (
+                                  <CreditCard className="h-4 w-4" />
+                                )}
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <p className="font-bold text-slate-900 dark:text-white">{d.title}</p>
+                                  {isRepair ? (
+                                    isDelivered ? (
+                                      <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 text-[9px] font-bold">
+                                        📦 Retirado (Entregado con saldo)
+                                      </Badge>
+                                    ) : isReady ? (
+                                      <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 text-[9px] font-bold">
+                                        ✅ Listo en Taller (Pendiente de Retiro)
+                                      </Badge>
+                                    ) : (
+                                      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 text-[9px] font-bold">
+                                        🛠️ En Taller (En proceso)
+                                      </Badge>
+                                    )
+                                  ) : (
+                                    d.isOverdue ? (
+                                      <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 text-[9px] font-bold">
+                                        💳 Cuota Vencida
+                                      </Badge>
+                                    ) : (
+                                      <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 text-[9px] font-bold">
+                                        💳 Cuota al día
+                                      </Badge>
+                                    )
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500">{d.subtitle}</p>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                  <span>Total: {formatCurrency(d.totalAmount)}</span>
+                                  <span>·</span>
+                                  <span>Abonado: {formatCurrency(d.paidAmount)}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between sm:justify-end gap-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handlePaySingleDebt(d)}
+                                className={cn(
+                                  "h-7 px-2.5 text-[11px] font-semibold",
+                                  isInProgress
+                                    ? "bg-amber-50 text-amber-800 border-amber-300"
+                                    : isReady
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                      : isDelivered
+                                        ? "bg-rose-50 text-rose-800 border-rose-300"
+                                        : "text-purple-700 border-purple-200"
+                                )}
+                              >
+                                {isInProgress ? 'Dar Adelanto' : isReady ? 'Liquidar y Retirar' : isDelivered ? 'Pagar Deuda' : 'Pagar Cuota'}
+                              </Button>
+                              <p className="font-bold text-slate-900 dark:text-white tabular-nums">
+                                {formatCurrency(d.pendingAmount)}
                               </p>
                             </div>
                           </div>
-                        </div>
-                      ))
-                    : debts.map((d) => (
-                        <div
-                          key={d.id}
-                          className="p-3.5 text-xs flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              className={cn(
-                                'h-8 w-8 rounded-lg flex items-center justify-center shrink-0',
-                                d.type === 'repair'
-                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40'
-                                  : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40'
-                              )}
-                            >
-                              {d.type === 'repair' ? (
-                                <Wrench className="h-4 w-4" />
-                              ) : (
-                                <CreditCard className="h-4 w-4" />
-                              )}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-bold text-slate-900 dark:text-white">{d.title}</p>
-                                {d.isOverdue && (
-                                  <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-0 text-[9px] font-bold">
-                                    Vencida
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-slate-500">{d.subtitle}</p>
-                            </div>
-                          </div>
-                          <p className="font-bold text-slate-900 dark:text-white tabular-nums">
-                            {formatCurrency(d.pendingAmount)}
-                          </p>
-                        </div>
-                      ))}
+                        )
+                      })}
                 </div>
               </div>
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import useSWR from 'swr'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,11 +13,11 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle2,
-  Phone,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import type { Customer } from '@/hooks/use-customer-state'
+import { customerService } from '@/services/customer-service'
 
 interface CustomerAlertsProps {
   customers: Customer[]
@@ -63,16 +64,36 @@ function waLink(phone: string, message: string): string {
 export function CustomerAlerts({ customers, onViewCustomer }: CustomerAlertsProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
+  /**
+   * El saldo sale de las cuotas pendientes, no de `customers.current_balance`:
+   * esa columna no la actualiza nadie y quedaba en 0, asi que esta alerta
+   * —la mas importante para un taller— no aparecia nunca.
+   */
+  const customerIds = useMemo(
+    () => customers.map((customer) => customer.id).filter(Boolean),
+    [customers],
+  )
+
+  const { data: outstandingByCustomer } = useSWR(
+    customerIds.length > 0 ? ['customers-outstanding', customerIds.join(',')] : null,
+    () => customerService.getCustomersCreditOutstanding(customerIds),
+    { revalidateOnFocus: false, dedupingInterval: 60_000 },
+  )
+
+  // Una sola marca de tiempo por montaje: leer el reloj dentro del useMemo lo
+  // volvia impuro y movia el corte de "inactivo" en cada recalculo.
+  const [now] = useState(() => Date.now())
+
   const groups = useMemo<AlertGroup[]>(() => {
-    const now = Date.now()
     const result: AlertGroup[] = []
+    const debtOf = (customer: Customer) => outstandingByCustomer?.get(customer.id) ?? 0
 
     // 1. Saldo pendiente (deuda) — lo más importante para un taller
     const withDebt = customers
-      .filter(c => (c.current_balance || 0) > 0)
-      .sort((a, b) => (b.current_balance || 0) - (a.current_balance || 0))
+      .filter(c => debtOf(c) > 0)
+      .sort((a, b) => debtOf(b) - debtOf(a))
     if (withDebt.length > 0) {
-      const total = withDebt.reduce((s, c) => s + (c.current_balance || 0), 0)
+      const total = withDebt.reduce((s, c) => s + debtOf(c), 0)
       result.push({
         id: 'debt',
         severity: 'critical',
@@ -81,7 +102,7 @@ export function CustomerAlerts({ customers, onViewCustomer }: CustomerAlertsProp
         description: `${withDebt.length} cliente(s) deben ${formatCurrency(total)} en total`,
         customers: withDebt,
         buildMessage: c =>
-          `Hola ${c.name}, te recordamos que tenés un saldo pendiente de ${formatCurrency(c.current_balance || 0)}. ¡Cualquier consulta estamos a tu disposición!`,
+          `Hola ${c.name}, te recordamos que tenés un saldo pendiente de ${formatCurrency(debtOf(c))}. ¡Cualquier consulta estamos a tu disposición!`,
       })
     }
 
@@ -124,7 +145,9 @@ export function CustomerAlerts({ customers, onViewCustomer }: CustomerAlertsProp
     }
 
     return result
-  }, [customers])
+    // Sin `outstandingByCustomer` el memo no se recalcula cuando llegan los
+    // saldos, y la alerta seguiria sin aparecer.
+  }, [customers, now, outstandingByCustomer])
 
   if (groups.length === 0) {
     return (

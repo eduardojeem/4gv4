@@ -1,7 +1,8 @@
-'use client'
+import { useState, useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import {
     Table,
     TableBody,
@@ -10,7 +11,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table'
-import { Users, DollarSign, Calendar, Percent, TrendingUp, Eye, LayoutGrid, List, Table2 } from 'lucide-react'
+import { Users, DollarSign, Calendar, Percent, TrendingUp, Eye, LayoutGrid, List, Table2, Search, X } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { formatCustomerId } from '@/lib/utils'
 import { CreditRow, InstallmentRow } from '@/hooks/use-credits'
@@ -63,6 +64,17 @@ export function CreditList({
     viewMode = 'cards',
     onChangeViewMode,
 }: CreditListProps) {
+    const [searchTerm, setSearchTerm] = useState('')
+
+    const filteredCredits = useMemo(() => {
+        if (!searchTerm.trim()) return credits
+        const q = searchTerm.toLowerCase().trim()
+        return credits.filter(c => 
+            (c.customer_name || '').toLowerCase().includes(q) ||
+            (c.customer_code || '').toLowerCase().includes(q) ||
+            c.id.toLowerCase().includes(q)
+        )
+    }, [credits, searchTerm])
 
     const renderEmpty = () => (
         <div className="flex flex-col items-center justify-center py-16 text-center rounded-xl border border-dashed border-border">
@@ -76,7 +88,7 @@ export function CreditList({
 
     const renderCards = () => (
         <div className="space-y-3">
-            {credits.map((c) => {
+            {filteredCredits.map((c) => {
                 const paid = Number(paidByCredit[c.id] || 0)
                 const remaining = Number(remainingByCredit[c.id] || 0)
                 const total = paid + remaining
@@ -186,7 +198,7 @@ export function CreditList({
 
     const renderList = () => (
         <div className="rounded-xl border border-border/50 overflow-hidden divide-y divide-border/30">
-            {credits.map((c, idx) => {
+            {filteredCredits.map((c, idx) => {
                 const paid = Number(paidByCredit[c.id] || 0)
                 const remaining = Number(remainingByCredit[c.id] || 0)
                 const total = paid + remaining
@@ -252,7 +264,7 @@ export function CreditList({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {credits.map((c) => {
+                    {filteredCredits.map((c) => {
                         const paid = Number(paidByCredit[c.id] || 0)
                         const remaining = Number(remainingByCredit[c.id] || 0)
                         const total = paid + remaining
@@ -307,35 +319,57 @@ export function CreditList({
 
     return (
         <Card className="border border-border/60 shadow-sm bg-white dark:bg-white/[0.02]">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                     <Users className="h-4.5 w-4.5 text-blue-600" />
-                    Créditos activos
-                    <Badge variant="secondary" className="ml-1 text-xs">{credits.length}</Badge>
+                    <span>Clientes con Crédito Activo</span>
+                    <Badge variant="secondary" className="ml-1 text-xs">{filteredCredits.length}{filteredCredits.length !== credits.length ? ` de ${credits.length}` : ''}</Badge>
                 </CardTitle>
-                {/* View mode toggle — embedded in header */}
-                {onChangeViewMode && (
-                    <div className="flex items-center rounded-lg border border-border/60 overflow-hidden">
-                        {([
-                            { mode: 'cards' as const, Icon: LayoutGrid, label: 'Tarjetas' },
-                            { mode: 'list' as const, Icon: List, label: 'Lista' },
-                            { mode: 'table' as const, Icon: Table2, label: 'Tabla' },
-                        ]).map(({ mode, Icon, label }) => (
+                
+                <div className="flex items-center gap-2">
+                    {/* Live search input */}
+                    <div className="relative w-full sm:w-64">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                            placeholder="Buscar cliente, código o ticket..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="h-8 pl-8 pr-8 text-xs bg-muted/30 focus-visible:bg-transparent"
+                        />
+                        {searchTerm && (
                             <button
-                                key={mode}
-                                type="button"
-                                title={label}
-                                onClick={() => onChangeViewMode(mode)}
-                                className={`flex items-center justify-center h-8 w-8 transition-colors ${viewMode === mode ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'}`}
+                                onClick={() => setSearchTerm('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                             >
-                                <Icon className="h-3.5 w-3.5" />
+                                <X className="h-3 w-3" />
                             </button>
-                        ))}
+                        )}
                     </div>
-                )}
+
+                    {/* View mode toggle — embedded in header */}
+                    {onChangeViewMode && (
+                        <div className="flex items-center rounded-lg border border-border/60 overflow-hidden shrink-0">
+                            {([
+                                { mode: 'cards' as const, Icon: LayoutGrid, label: 'Tarjetas' },
+                                { mode: 'list' as const, Icon: List, label: 'Lista' },
+                                { mode: 'table' as const, Icon: Table2, label: 'Tabla' },
+                            ]).map(({ mode, Icon, label }) => (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    title={label}
+                                    onClick={() => onChangeViewMode(mode)}
+                                    className={`flex items-center justify-center h-8 w-8 transition-colors ${viewMode === mode ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'}`}
+                                >
+                                    <Icon className="h-3.5 w-3.5" />
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </CardHeader>
             <CardContent className="pt-0">
-                {credits.length === 0
+                {filteredCredits.length === 0
                     ? renderEmpty()
                     : viewMode === 'table'
                         ? renderTable()

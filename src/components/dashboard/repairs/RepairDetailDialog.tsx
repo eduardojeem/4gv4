@@ -84,7 +84,7 @@ const STATUS_FLOW_LABELS: Record<string, string> = {
 
 export function RepairDetailDialog({
   open,
-  repair,
+  repair: propRepair,
   onClose,
   onEdit,
   onDeliver,
@@ -105,13 +105,13 @@ export function RepairDetailDialog({
   const [deliveredEditWarningOpen, setDeliveredEditWarningOpen] = useState(false)
 
   // Estado local sincronizado para actualización reactiva instantánea
-  const [localRepair, setLocalRepair] = useState<Repair | null>(repair)
+  const [localRepair, setLocalRepair] = useState<Repair | null>(propRepair)
 
   React.useEffect(() => {
-    setLocalRepair(repair)
-  }, [repair])
+    setLocalRepair(propRepair)
+  }, [propRepair])
 
-  const activeRepair = localRepair || repair
+  const activeRepair = propRepair || localRepair
 
   // Modal de búsqueda de repuestos en inventario dentro del detalle
   const [inventorySearchOpen, setInventorySearchOpen] = useState(false)
@@ -286,7 +286,7 @@ export function RepairDetailDialog({
 
     if (activeRepair && open) {
       const ticketNum = activeRepair.ticketNumber || activeRepair.id
-      const customerName = activeRepair.customer.name
+      const customerName = activeRepair.customer?.name || 'Cliente'
       const dateObj = new Date(activeRepair.createdAt)
 
       fetch('/api/repairs/sign', {
@@ -322,7 +322,9 @@ export function RepairDetailDialog({
     }
   }, [open])
 
-  if (!activeRepair) return null
+  if (!open || !activeRepair) return null
+
+  const repair = activeRepair
 
   const StatusIcon = statusConfig[activeRepair.status]?.icon || AlertCircle
   const DeviceIcon = deviceTypeConfig[activeRepair.deviceType]?.icon || Smartphone
@@ -352,7 +354,7 @@ export function RepairDetailDialog({
   const getPrintPayload = (): RepairPrintPayload => {
     if (!repair) throw new Error("No repair")
     // Campos opcionales que el tipo Repair['customer'] no declara.
-    const extraCustomerFields = repair.customer as Partial<{
+    const extraCustomerFields = (repair.customer || {}) as Partial<{
       address: string
       city: string
       country: string
@@ -360,15 +362,15 @@ export function RepairDetailDialog({
     }>
     return {
       ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase(),
-      date: new Date(repair.createdAt),
+      date: new Date(repair.createdAt || new Date()),
       priority: repair.priority,
       urgency: repair.urgency,
       customer: {
-        id: repair.customer.id,
-        name: repair.customer.name,
-        customerCode: repair.customer.customerCode,
-        phone: repair.customer.phone,
-        email: repair.customer.email,
+        id: repair.customer?.id || '',
+        name: repair.customer?.name || 'Cliente',
+        customerCode: repair.customer?.customerCode || '',
+        phone: repair.customer?.phone || '',
+        email: repair.customer?.email || '',
         address: extraCustomerFields.address,
         city: extraCustomerFields.city,
         country: extraCustomerFields.country,
@@ -463,7 +465,7 @@ export function RepairDetailDialog({
           ? `\nCosto final: ${formatCurrency(repair.finalCost)}`
           : ''
       return [
-        `Hola ${repair.customer.name},`,
+        `Hola ${repair.customer?.name || 'estimado/a cliente'},`,
         '',
         `Tu ${deviceLabel} (reparacion #${ticket}) ya esta *${statusLabel}*.`,
         'Puedes pasar por el local para retirarlo.',
@@ -476,7 +478,7 @@ export function RepairDetailDialog({
     }
 
     return [
-      `Hola ${repair.customer.name},`,
+      `Hola ${repair.customer?.name || 'estimado/a cliente'},`,
       '',
       `Actualizamos el estado de tu reparacion #${ticket}: *${statusLabel}*.`,
       `Equipo: ${deviceLabel}.`,
@@ -554,16 +556,22 @@ export function RepairDetailDialog({
                   <Badge variant="outline" className="bg-background font-mono text-xs">
                     #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
                   </Badge>
-                  <Badge className={cn("gap-1", statusConfig[repair.status]?.color)}>
+                  <Badge className={cn("gap-1", statusConfig[repair.status]?.color || 'bg-slate-100 text-slate-800')}>
                     <StatusIcon className="h-3.5 w-3.5" />
-                    {statusConfig[repair.status]?.label || repair.status}
+                    {statusConfig[repair.status]?.label || repair.status || 'En Proceso'}
                   </Badge>
-                  <Badge variant="outline" className={cn(priorityConfig[repair.priority].color)}>
-                    Prioridad {priorityConfig[repair.priority].label}
-                  </Badge>
-                  {repair.urgency === 'urgent' && (
-                    <Badge className={cn(urgencyConfig[repair.urgency].color)}>
-                      {urgencyConfig[repair.urgency].label}
+                  {(repair.priority ? priorityConfig[repair.priority] : null) ? (
+                    <Badge variant="outline" className={cn(priorityConfig[repair.priority]?.color)}>
+                      Prioridad {priorityConfig[repair.priority]?.label}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200">
+                      Prioridad Normal
+                    </Badge>
+                  )}
+                  {repair.urgency && urgencyConfig[repair.urgency] && (
+                    <Badge className={cn(urgencyConfig[repair.urgency]?.color)}>
+                      {urgencyConfig[repair.urgency]?.label}
                     </Badge>
                   )}
                 </div>
@@ -1045,21 +1053,21 @@ export function RepairDetailDialog({
                 <div className="rounded-xl border bg-card p-4 space-y-3.5 shadow-sm">
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-sm">
-                      {repair.customer.name
+                      {((repair.customer?.name || 'Cliente')
                         .split(' ')
                         .map((w) => w[0])
                         .filter(Boolean)
                         .slice(0, 2)
                         .join('')
-                        .toUpperCase()}
+                        .toUpperCase()) || 'C'}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold truncate text-sm">{repair.customer.name}</p>
-                      <p className="text-xs text-muted-foreground">Cliente registrado</p>
+                      <p className="font-semibold truncate text-sm">{repair.customer?.name || 'Cliente Registrado'}</p>
+                      <p className="text-xs text-muted-foreground">Cliente de la orden</p>
                     </div>
                   </div>
                   <div className="space-y-2 text-sm">
-                    {repair.customer.phone && (
+                    {repair.customer?.phone && (
                       <a
                         href={`tel:${repair.customer.phone}`}
                         className="flex items-center gap-2.5 text-foreground/90 hover:text-primary transition-colors"
@@ -1068,7 +1076,7 @@ export function RepairDetailDialog({
                         {repair.customer.phone}
                       </a>
                     )}
-                    {repair.customer.email && (
+                    {repair.customer?.email && (
                       <a
                         href={`mailto:${repair.customer.email}`}
                         className="flex items-center gap-2.5 text-foreground/90 hover:text-primary transition-colors break-all"
@@ -1078,7 +1086,7 @@ export function RepairDetailDialog({
                       </a>
                     )}
                   </div>
-                  {repair.customer.phone && (
+                  {repair.customer?.phone && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -1916,7 +1924,7 @@ export function RepairDetailDialog({
                 Reparación Entregada y Cerrada
               </DialogTitle>
               <DialogDescription className="text-xs text-amber-800 dark:text-amber-300 font-medium">
-                Orden #{activeRepair.ticketNumber || activeRepair.id.slice(0, 8).toUpperCase()} · Cliente: {activeRepair.customer.name}
+                Orden #{activeRepair.ticketNumber || activeRepair.id.slice(0, 8).toUpperCase()} · Cliente: {activeRepair.customer?.name || 'Cliente'}
               </DialogDescription>
             </div>
           </div>

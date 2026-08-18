@@ -107,6 +107,8 @@ export function CustomerFilters({
   // Metrics for quick filter counter badges
   const filterCounts = useMemo(() => {
     return {
+      withDebt: customers.filter(c => (c.pending_amount || 0) > 0 || (c.current_balance || 0) > 0).length,
+      hasCredit: customers.filter(c => (c.credit_limit || 0) > 0).length,
       vip: customers.filter(c => c.customer_type === 'premium' || c.segment === 'vip').length,
       wholesale: customers.filter(c => c.customer_type === 'wholesale' || c.customer_type === 'empresa').length,
       active: customers.filter(c => c.status === 'active').length,
@@ -118,6 +120,26 @@ export function CustomerFilters({
 
   // Quick smart filter definitions with active detection and toggle
   const quickFilters = [
+    {
+      id: "with_debt",
+      label: "Con Deuda",
+      icon: DollarSign,
+      count: filterCounts.withDebt,
+      isActive: Boolean(filters.has_debt),
+      action: () => {
+        handleFilterChange("has_debt", !filters.has_debt)
+      }
+    },
+    {
+      id: "has_credit",
+      label: "Línea de Crédito",
+      icon: CreditCard,
+      count: filterCounts.hasCredit,
+      isActive: Boolean(filters.has_credit_limit),
+      action: () => {
+        handleFilterChange("has_credit_limit", !filters.has_credit_limit)
+      }
+    },
     {
       id: "vip",
       label: "VIP / Premium",
@@ -203,7 +225,9 @@ export function CustomerFilters({
       tags: [],
       purchases_min: 0,
       spent_min: 0,
-      loyalty_points_min: 0
+      loyalty_points_min: 0,
+      has_debt: false,
+      has_credit_limit: false
     })
     toast.info("Filtros restablecidos")
   }, [onFiltersChange])
@@ -233,6 +257,8 @@ export function CustomerFilters({
     if (filters.customer_type !== "all") count++
     if (filters.segment !== "all") count++
     if (filters.city !== "all") count++
+    if (filters.has_debt) count++
+    if (filters.has_credit_limit) count++
     if (filters.tags.length > 0) count += filters.tags.length
     count += activeAdvancedCount
     return count
@@ -346,6 +372,20 @@ export function CustomerFilters({
         id: "credit_score",
         label: `Score: ${filters.credit_score_range[0]} - ${filters.credit_score_range[1]}`,
         onRemove: () => handleFilterChange("credit_score_range", [0, 10])
+      })
+    }
+    if (filters.has_debt) {
+      chips.push({
+        id: "has_debt",
+        label: "Con Deuda Pendiente",
+        onRemove: () => handleFilterChange("has_debt", false)
+      })
+    }
+    if (filters.has_credit_limit) {
+      chips.push({
+        id: "has_credit_limit",
+        label: "Con Línea de Crédito",
+        onRemove: () => handleFilterChange("has_credit_limit", false)
       })
     }
     filters.tags.forEach(tag => {

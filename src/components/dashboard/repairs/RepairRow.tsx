@@ -66,8 +66,8 @@ const DEFAULT_COMPANY_INFO: RepairPrintCompanyInfo = {
 
 export const RepairRow = memo<RepairRowProps>(
   function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver, onQuickPay, onClaimWarranty, companyInfo }) {
-    const StatusIcon = statusConfig[repair.status].icon
-    const priority = priorityConfig[repair.priority]
+    const StatusIcon = statusConfig[repair.status]?.icon || Clock
+    const priority = priorityConfig[repair.priority] || priorityConfig.medium
     const { notifyRepairStatus, notifyRepairReady, sendPaymentReminder } = useWhatsApp()
     const resolvedCompanyInfo = companyInfo || DEFAULT_COMPANY_INFO
     const customerDetails = repair.customer as RepairCustomerDetails

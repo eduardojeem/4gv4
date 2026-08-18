@@ -38,8 +38,8 @@ const statusBorderColors: Record<string, string> = {
 
 export const RepairCard = memo<RepairCardProps>(
   function RepairCard({ repair, onClick, className }) {
-    const status = statusConfig[repair.status]
-    const priority = priorityConfig[repair.priority]
+    const status = statusConfig[repair.status] || statusConfig.recibido
+    const priority = priorityConfig[repair.priority] || priorityConfig.medium
     const borderColor = statusBorderColors[repair.status] || 'border-l-gray-300'
     const imageCount = Array.isArray(repair.images) ? repair.images.length : 0
     const ticketLabel = repair.ticketNumber || repair.id.slice(0, 8)

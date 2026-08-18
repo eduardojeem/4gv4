@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
+import { readStoreCreditBalance } from '@/lib/credits/store-credit-balance'
 import { logger } from '@/lib/logger'
 
 /**
@@ -21,19 +22,24 @@ async function getRouteId(routeContext: unknown) {
 }
 
 /** Saldo actual, siempre recalculado desde el libro. */
+/**
+ * Saldo que el cliente puede gastar hoy: el ledger menos lo reservado.
+ *
+ * Antes devolvia el ledger crudo y con eso se validaba el gasto, asi que la
+ * plata retenida por un pedido pendiente se podia gastar igual: la misma plata
+ * dos veces.
+ */
 async function readBalance(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   customerId: string
 ) {
-  const { data, error } = await supabase
-    .from('customer_store_credits')
-    .select('amount')
-    .eq('organization_id', organizationId)
-    .eq('customer_id', customerId)
-
-  if (error) throw error
-  return (data ?? []).reduce((total, row) => total + Number(row.amount || 0), 0)
+  const balance = await readStoreCreditBalance(
+    supabase as unknown as Parameters<typeof readStoreCreditBalance>[0],
+    organizationId,
+    customerId,
+  )
+  return balance.available
 }
 
 export const GET = withTenantAuth(

@@ -297,7 +297,14 @@ export function useCreditSystem(): UseCreditSystemReturn {
       (i.status === 'pending' || i.status === 'late')
     )
     
-    const currentBalance = pendingInstallments.reduce((sum, i) => sum + i.amount, 0)
+    // Lo adeudado es el saldo de cada cuota, no su importe completo: una cuota
+    // pagada a medias contaba entera y bloqueaba ventas que el servidor —que
+    // resta `amount_paid`— si habria aceptado.
+    const currentBalance = pendingInstallments.reduce((sum, i) => {
+      const amount = Math.max(0, Number(i.amount || 0))
+      const paid = Math.min(amount, Math.max(0, Number((i as { amount_paid?: number | null }).amount_paid || 0)))
+      return sum + (amount - paid)
+    }, 0)
     const availableCredit = customer.credit_limit - currentBalance
     
     return availableCredit >= amount

@@ -46,6 +46,11 @@ export async function GET(
     let pendingBalance = 0
     let totalInstallments = 0
     let pendingInstallments = 0
+    // Lo financiado y lo cobrado salen de las cuotas, no del capital: con
+    // interes el total a pagar es mayor al principal, y el detalle del cliente
+    // tiene que cuadrar (financiado = pagado + faltante).
+    let financedTotal = 0
+    let paidTotal = 0
 
     if (creditIds.length > 0) {
       const { data: installments } = await supabase
@@ -61,6 +66,14 @@ export async function GET(
           const paid = Number(i.amount_paid || 0)
           return sum + Math.max(0, amt - paid)
         }, 0)
+        financedTotal = installments.reduce((sum, i) => sum + Math.max(0, Number(i.amount || 0)), 0)
+        paidTotal = installments.reduce((sum, i) => {
+          const amt = Math.max(0, Number(i.amount || 0))
+          // Una cuota marcada como pagada cuenta entera aunque no registre el
+          // monto abonado; el resto cuenta lo que efectivamente se cobro.
+          const paid = i.status === 'paid' ? amt : Math.min(amt, Math.max(0, Number(i.amount_paid || 0)))
+          return sum + paid
+        }, 0)
       }
     }
 
@@ -71,6 +84,8 @@ export async function GET(
         totalCredits,
         activeCredits,
         totalPrincipal,
+        financedTotal,
+        paidTotal,
         pendingBalance,
         totalInstallments,
         pendingInstallments,

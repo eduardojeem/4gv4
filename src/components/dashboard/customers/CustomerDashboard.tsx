@@ -778,120 +778,6 @@ export function CustomerDashboard() {
                       transition={{ duration: 0.15 }}
                       className="space-y-4"
                     >
-                      <Card className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center justify-between gap-3 text-base font-semibold text-slate-900 dark:text-slate-100">
-                          <span className="flex items-center gap-2">
-                            <CreditCard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                            Créditos activos
-                          </span>
-                          <Badge variant="outline">{customersWithActiveCredits.length}</Badge>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex flex-col gap-2 lg:flex-row">
-                          <Input
-                            placeholder="Buscar cliente"
-                            value={creditSearchTerm}
-                            onChange={(e) => setCreditSearchTerm(e.target.value)}
-                            className="lg:w-1/3"
-                          />
-                          <Select value={selectedCreditCustomerId} onValueChange={setSelectedCreditCustomerId}>
-                            <SelectTrigger className="lg:w-1/3">
-                              <SelectValue placeholder="Seleccionar cliente" />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-[300px]">
-                              {customersWithActiveCredits.map(c => (
-                                <SelectItem key={c.id} value={c.id}>
-                                  {c.name} • {c.email || c.phone || ""}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <div className="flex flex-wrap gap-2">
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryCSV}>CSV</Button>
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryExcel}>Excel</Button>
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryPDF}>PDF</Button>
-                          </div>
-                        </div>
-                        {selectedCreditCustomerId && (
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            <UpcomingInstallments
-                              installments={selectedInstallments.filter(i => i.status === 'pending' || i.status === 'late')}
-                              onMarkPaid={(id, method, amount) => markInstallmentPaid(id, method, amount)}
-                              creditById={{}}
-                            />
-                            <Card className="rounded-lg border border-slate-200 shadow-sm dark:border-slate-800">
-                              <CardHeader>
-                                <CardTitle className="flex items-center justify-between">
-                                  <span>Historial Completo</span>
-                                  <Badge variant="secondary">{selectedInstallments.length}</Badge>
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent className="space-y-4">
-                                <div className="overflow-x-auto">
-                                  <table className="min-w-full text-sm">
-                                    <thead>
-                                      <tr>
-                                        <th className="text-left p-2">Cuota</th>
-                                        <th className="text-left p-2">Vence</th>
-                                        <th className="text-right p-2">Monto</th>
-                                        <th className="text-left p-2">Estado</th>
-                                        <th className="text-right p-2">Pagado</th>
-                                        <th className="text-left p-2">Método</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {selectedInstallments.map(i => {
-                                        const isLate = i.status === "pending" && new Date(i.due_date) < new Date()
-                                        return (
-                                          <tr key={i.id} className="border-t">
-                                            <td className="p-2">{i.installment_number}</td>
-                                            <td className="p-2">{new Date(i.due_date).toLocaleDateString()}</td>
-                                            <td className="p-2 text-right">{formatCurrency(i.amount)}</td>
-                                            <td className="p-2">
-                                              <Badge variant={isLate ? "destructive" : "outline"}>{isLate ? "late" : i.status}</Badge>
-                                            </td>
-                                            <td className="p-2 text-right">{formatCurrency(Number(i.amount_paid || 0))}</td>
-                                            <td className="p-2">{i.payment_method || ""}</td>
-                                          </tr>
-                                        )
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                                <div className="overflow-x-auto">
-                                  <table className="min-w-full text-sm">
-                                    <thead>
-                                      <tr>
-                                        <th className="text-left p-2">Fecha</th>
-                                        <th className="text-left p-2">Crédito</th>
-                                        <th className="text-left p-2">Cuota</th>
-                                        <th className="text-right p-2">Monto</th>
-                                        <th className="text-left p-2">Método</th>
-                                        <th className="text-left p-2">Referencia</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {selectedPayments.map(p => (
-                                        <tr key={p.id} className="border-t">
-                                          <td className="p-2">{p.created_at ? new Date(p.created_at).toLocaleDateString() : ""}</td>
-                                          <td className="p-2">{p.credit_id}</td>
-                                          <td className="p-2">{p.installment_id || ""}</td>
-                                          <td className="p-2 text-right">{formatCurrency(p.amount)}</td>
-                                          <td className="p-2">{p.payment_method || ""}</td>
-                                          <td className="p-2"></td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
                     <CustomerFilters
                       filters={filters}
                       onFiltersChange={handleFiltersChange}
@@ -1015,7 +901,13 @@ export function CustomerDashboard() {
                       try {
                         const result = await updateCustomer(selectedCustomer.id, formData as Partial<Customer>)
                         if (result.success) {
-                          // Actualizar el cliente en la lista local si es necesible
+                          const updated = (result as any).data || result.customer
+                          if (updated) {
+                            setSelectedCustomer(updated)
+                          } else {
+                            setSelectedCustomer(prev => prev ? ({ ...prev, ...formData } as Customer) : null)
+                          }
+                          // Actualizar el cliente en la lista local si es necesario
                           handleBackToList()
                           // Refresh the customer list
                           await refreshCustomers()

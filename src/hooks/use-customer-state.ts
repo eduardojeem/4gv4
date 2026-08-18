@@ -68,6 +68,8 @@ export interface CustomerFilters {
   purchases_min: number
   spent_min: number
   loyalty_points_min: number
+  has_debt?: boolean
+  has_credit_limit?: boolean
 }
 
 export interface CustomerState {

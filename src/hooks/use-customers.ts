@@ -129,6 +129,26 @@ export function useCustomers(options: UseCustomersOptions = {}) {
             )
         }
 
+        // Filtro inteligente: con deuda pendiente
+        if (filters.has_debt) {
+            filtered = filtered.filter(c => (c.pending_amount || 0) > 0 || (c.current_balance || 0) > 0)
+        }
+
+        // Filtro inteligente: con límite de crédito activo
+        if (filters.has_credit_limit) {
+            filtered = filtered.filter(c => (c.credit_limit || 0) > 0)
+        }
+
+        // Filtro inteligente: gasto mínimo
+        if (filters.spent_min && filters.spent_min > 0) {
+            filtered = filtered.filter(c => (c.lifetime_value || 0) >= filters.spent_min)
+        }
+
+        // Filtro inteligente: compras mínimas
+        if (filters.purchases_min && filters.purchases_min > 0) {
+            filtered = filtered.filter(c => (c.total_purchases || 0) >= filters.purchases_min)
+        }
+
         return filtered
     }, [customers, debouncedSearch, filters])
 

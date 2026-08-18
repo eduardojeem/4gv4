@@ -199,12 +199,16 @@ export function useAdminDashboard() {
   })
 
   const [isLoading, setIsLoading] = useState(false)
+  // El hook no tenia donde reportar una falla: la carga se caia, las metricas
+  // quedaban en sus ceros iniciales y la pantalla se veia normal.
+  const [error, setError] = useState<string | null>(null)
   
   const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true)
+      setError(null)
       try {
         // Fetch Settings from database
         const { data: settingsData, error: settingsError } = await supabase
@@ -257,6 +261,11 @@ export function useAdminDashboard() {
 
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
+        setError(
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron cargar las métricas del panel.'
+        )
       } finally {
         setIsLoading(false)
       }
@@ -450,6 +459,7 @@ export function useAdminDashboard() {
     securityLogs,
     settings,
     isLoading,
+    error,
     summary,
     createUser,
     updateUser,

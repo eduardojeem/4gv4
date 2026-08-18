@@ -59,11 +59,14 @@ export async function GET(
     }
 
     // 2. Calcular estadísticas reales de compras del cliente
+    // El monto ya excluia las canceladas; el conteo no, asi que "N compras" y
+    // "Total gastado" hablaban de conjuntos distintos.
     const { count: totalPurchases } = await supabase
       .from('sales')
       .select('id', { count: 'exact', head: true })
       .eq('customer_id', customerId)
       .eq('organization_id', organization.id)
+      .not('status', 'eq', 'cancelado')
 
     const { data: totalsData } = await supabase
       .from('sales')
