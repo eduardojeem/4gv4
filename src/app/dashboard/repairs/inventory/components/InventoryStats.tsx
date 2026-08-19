@@ -38,6 +38,11 @@ export function InventoryStats() {
       p => (p.stock_quantity || 0) === 0
     ).length
 
+    // Repuestos con stock normal (óptimo)
+    const inStockCount = inventory.filter(
+      p => (p.stock_quantity || 0) > (p.min_stock || 5)
+    ).length
+
     // Margen de ganancia promedio de servicios
     const avgServicePrice = services.length > 0
       ? services.reduce((acc, s) => acc + (s.sale_price || 0), 0) / services.length
@@ -49,6 +54,7 @@ export function InventoryStats() {
       totalPhysicalUnits,
       productCount: inventory.length,
       serviceCount: services.length,
+      inStockCount,
       lowStockCount,
       outOfStockCount,
       avgServicePrice
@@ -91,12 +97,17 @@ export function InventoryStats() {
           </div>
         </CardHeader>
         <CardContent className="relative z-10">
-          <div className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-100">
-            {stats.productCount} <span className="text-xs font-medium text-muted-foreground">ítems</span>
+          <div className="flex items-baseline justify-between">
+            <div className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-100">
+              {stats.productCount} <span className="text-xs font-medium text-muted-foreground">ítems</span>
+            </div>
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/60">
+              {stats.inStockCount} con stock
+            </span>
           </div>
           <div className="flex items-center justify-between text-xs text-muted-foreground mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
             <span>Unidades físicas:</span>
-            <strong className="text-slate-700 dark:text-slate-300 font-bold">{stats.totalPhysicalUnits} u.</strong>
+            <strong className="text-slate-700 dark:text-slate-300 font-bold">{stats.totalPhysicalUnits} u. en total</strong>
           </div>
         </CardContent>
       </Card>

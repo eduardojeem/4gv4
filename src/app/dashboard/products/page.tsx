@@ -77,6 +77,7 @@ export default function ProductsPage() {
     setSort: setServerSort,
     setPagination: setServerPagination,
     totalProducts,
+    resultTruncated,
   } = useProductsSupabase();
 
   const {
@@ -138,6 +139,7 @@ export default function ProductsPage() {
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [showGuide, setShowGuide] = useState(true);
+  const [showBranchNotice, setShowBranchNotice] = useState(true);
   const canCreateProducts =
     hasPermission("products.create") ||
     hasPermission("products.create") ||
@@ -170,6 +172,7 @@ export default function ProductsPage() {
       low_stock: dashboardStats.lowStockCount,
       out_of_stock: dashboardStats.outOfStockCount,
       active: dashboardStats.activeProducts,
+      inactive: Math.max(0, dashboardStats.totalProducts - dashboardStats.activeProducts),
     };
   }, [dashboardStats]);
 
@@ -205,7 +208,11 @@ export default function ProductsPage() {
           : undefined;
 
     const quickFilterIsActive =
-      filters.quick_filter === "active" ? true : undefined;
+      filters.quick_filter === "active"
+        ? true
+        : filters.quick_filter === "inactive"
+          ? false
+          : undefined;
 
     return {
       search: serverSearch || "",
@@ -628,15 +635,29 @@ export default function ProductsPage() {
           onDismissAlert={handleDismissAlert}
         />
 
-        <Alert className="border-border bg-muted/30">
-          <Warehouse className="h-4 w-4" />
-          <AlertTitle>
-            {selectedBranch ? `Inventario de ${selectedBranch.name}` : "Inventario general"}
-          </AlertTitle>
-          <AlertDescription>
-            Nombre, SKU, imagenes y precios se comparten entre todas las sucursales. Las existencias, movimientos y alertas corresponden {selectedBranch ? "solamente a la sucursal seleccionada" : "al inventario general"}.
-          </AlertDescription>
-        </Alert>
+        {showBranchNotice && (
+          <div className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 min-w-0">
+              <Warehouse className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="truncate">
+                <strong className="text-slate-900 dark:text-slate-100">
+                  {selectedBranch ? `Inventario: ${selectedBranch.name}` : "Inventario general"}
+                </strong>
+                {" — Las existencias, movimientos y alertas corresponden a la sucursal seleccionada."}
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0 rounded-lg"
+              onClick={() => setShowBranchNotice(false)}
+              title="Ocultar aviso"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
 
         {/* Search and Actions Bar */}
         <SearchAndActionsBar
@@ -663,8 +684,8 @@ export default function ProductsPage() {
 
         {/* Filter Panel (Collapsible) */}
         {isFilterPanelOpen && (
-          <Card className="border-0 shadow-md">
-            <div className="p-6">
+          <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="p-4 sm:p-5">
               <FilterPanel
                 isOpen={isFilterPanelOpen}
                 products={products}
@@ -673,6 +694,7 @@ export default function ProductsPage() {
                 filters={filters}
                 onFiltersChange={handleFilterChange}
                 onClearFilters={clearFilters}
+                onClose={() => setIsFilterPanelOpen(false)}
                 brandOptions={brands.map((b) => b.name).filter(Boolean)}
                 resultCount={totalProducts}
               />
@@ -697,6 +719,70 @@ export default function ProductsPage() {
 
         <Card className="border-0 shadow-md">
           <div className="p-6">
+            {/* Cuantos se ven ahora, cuantos matchean los filtros y cuantos hay
+                en total. Sin esto no habia forma de saber si la pantalla mostraba
+                todo el catalogo o solo una pagina. */}
+            {!loading && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3 dark:border-gray-800">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                  <span className="font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
+                    {paginatedProducts.length}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {paginatedProducts.length === 1 ? 'producto en pantalla' : 'productos en pantalla'}
+                  </span>
+                  {totalItems > paginatedProducts.length && (
+                    <span className="text-muted-foreground">
+                      · de <span className="font-semibold text-gray-900 tabular-nums dark:text-gray-100">{totalItems}</span> que coinciden
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {/* El total del catalogo sale de las metricas globales, no de la
+                      pagina: sirve para notar cuanto esta filtrando la busqueda. */}
+                  {globalMetrics.total_products > 0 && (
+                    <span className="text-muted-foreground">
+                      Catálogo completo:{' '}
+                      <span className="font-semibold text-gray-900 tabular-nums dark:text-gray-100">
+                        {globalMetrics.total_products}
+                      </span>
+                    </span>
+                  )}
+                  {globalMetrics.total_products > totalItems && (
+                    <Badge variant="outline" className="text-[11px] font-normal">
+                      {globalMetrics.total_products - totalItems} ocultos por los filtros
+                    </Badge>
+                  )}
+                  {totalPages > 1 && (
+                    <Badge variant="outline" className="text-[11px] font-normal">
+                      Página {currentPage} de {totalPages}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* El filtro de stock se resuelve en memoria sobre un barrido
+                acotado. Si se llego al tope, el listado y el total son
+                parciales: decirlo es preferible a mostrar un numero incompleto
+                como si fuera el definitivo. */}
+            {!loading && resultTruncated && (
+              <div
+                role="status"
+                className="mb-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30"
+              >
+                <p className="font-semibold text-amber-900 dark:text-amber-200">
+                  Resultado parcial
+                </p>
+                <p className="text-amber-800/90 dark:text-amber-200/80">
+                  El filtro por stock revisó solo una parte del catálogo, así que pueden faltar
+                  productos y el total no es exacto. Acotá con una categoría, marca o búsqueda para
+                  ver el resultado completo.
+                </p>
+              </div>
+            )}
+
             {viewMode === "grid" ? (
               <ProductGrid
                 products={paginatedProducts}

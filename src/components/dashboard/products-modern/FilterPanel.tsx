@@ -29,6 +29,7 @@ export interface FilterPanelProps {
   filters: DashboardFilters
   onFiltersChange: (filters: DashboardFilters) => void
   onClearFilters: () => void
+  onClose?: () => void
   /** Full brand list (e.g. from the brands table). Falls back to brands derived from `products`. */
   brandOptions?: string[]
   /** Global result count. When provided overrides the count derived from `products`. */
@@ -44,6 +45,7 @@ export function FilterPanel({
   filters,
   onFiltersChange,
   onClearFilters,
+  onClose,
   brandOptions,
   resultCount,
   className
@@ -80,28 +82,45 @@ export function FilterPanel({
       id="filter-panel"
       role="region"
       aria-label="Panel de filtros avanzados"
-      className={cn('space-y-6', className)}
+      className={cn('space-y-4 text-xs', className)}
     >
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Filtros Avanzados</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1" role="status" aria-live="polite">
-            {filteredCount} {filteredCount === 1 ? 'producto' : 'productos'} encontrados
-          </p>
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 dark:border-slate-800">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Filtros Avanzados</h3>
+          <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800" role="status">
+            {filteredCount} {filteredCount === 1 ? 'producto' : 'productos'}
+          </span>
         </div>
-        {hasActiveFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label="Limpiar todos los filtros"
-            onClick={onClearFilters}
-            className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-          >
-            <X className="h-4 w-4 mr-2" />
-            Limpiar
-          </Button>
-        )}
+
+        <div className="flex items-center gap-2">
+          {hasActiveFilters && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label="Limpiar todos los filtros"
+              onClick={onClearFilters}
+              className="h-7 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              Limpiar
+            </Button>
+          )}
+
+          {onClose && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onClose}
+              className="h-7 px-2.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 rounded-lg gap-1"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cerrar filtros
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters Grid */}

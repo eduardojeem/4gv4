@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, ArrowUpCircle, Info } from 'lucide-react'
+import { AlertTriangle, ArrowUpCircle, Info, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type ResourceKey = 'users' | 'branches' | 'cashRegisters' | 'products' | 'categories'
@@ -34,6 +34,7 @@ interface Props {
 
 export function PlanLimitBanner({ resource, reloadSignal = 0, className }: Props) {
   const [usage, setUsage] = useState<Usage | null>(null)
+  const [isDismissed, setIsDismissed] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -48,8 +49,8 @@ export function PlanLimitBanner({ resource, reloadSignal = 0, className }: Props
     }
   }, [resource, reloadSignal])
 
-  // Plan ilimitado o sin datos → no mostramos nada.
-  if (!usage || usage.limit === null) return null
+  // Plan ilimitado o sin datos o cerrado → no mostramos nada.
+  if (isDismissed || !usage || usage.limit === null) return null
 
   const { current, limit, remaining, planName } = usage
   const noun = NOUNS[resource].plural
@@ -67,7 +68,7 @@ export function PlanLimitBanner({ resource, reloadSignal = 0, className }: Props
   return (
     <div
       className={cn(
-        'flex flex-col gap-2 rounded-xl border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between',
+        'flex flex-col gap-2 rounded-xl border px-3.5 py-2 text-xs sm:flex-row sm:items-center sm:justify-between shadow-xs',
         tone,
         className,
       )}
@@ -89,15 +90,26 @@ export function PlanLimitBanner({ resource, reloadSignal = 0, className }: Props
         </span>
       </div>
 
-      {(atLimit || nearLimit) && (
-        <Link
-          href="/admin/subscriptions/change-plan"
-          className="inline-flex items-center gap-1.5 self-start rounded-lg bg-background/70 px-3 py-1.5 text-xs font-semibold underline-offset-2 hover:underline sm:self-auto"
+      <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+        {(atLimit || nearLimit) && (
+          <Link
+            href="/admin/subscriptions/change-plan"
+            className="inline-flex items-center gap-1 rounded-lg bg-background/70 px-2.5 py-1 text-[11px] font-semibold underline-offset-2 hover:underline"
+          >
+            <ArrowUpCircle className="h-3.5 w-3.5" />
+            Subir de plan
+          </Link>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setIsDismissed(true)}
+          className="p-1 text-current opacity-60 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 rounded-md transition-opacity"
+          title="Ocultar aviso"
         >
-          <ArrowUpCircle className="h-3.5 w-3.5" />
-          Subir de plan
-        </Link>
-      )}
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   )
 }

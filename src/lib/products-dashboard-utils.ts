@@ -85,6 +85,9 @@ export function applyFilters(products: Product[], filters: DashboardFilters): Pr
       case 'active':
         filtered = filtered.filter(p => p.is_active)
         break
+      case 'inactive':
+        filtered = filtered.filter(p => !p.is_active)
+        break
       case 'all':
       default:
         // No additional filtering

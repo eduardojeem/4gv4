@@ -182,8 +182,20 @@ export function ServicesTab() {
                 </span>
                 Catálogo de Servicios
               </CardTitle>
-              <CardDescription>
-                Gestiona los servicios de reparación y mano de obra
+              <CardDescription className="flex items-center gap-2 mt-0.5 text-xs">
+                <span>Gestiona servicios y mano de obra</span>
+                <span>•</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  Total: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{services.length}</strong>
+                </span>
+                {filteredServices.length !== services.length && (
+                  <>
+                    <span>•</span>
+                    <span>
+                      Coincidentes: <strong className="text-purple-600 dark:text-purple-400 font-mono">{filteredServices.length}</strong>
+                    </span>
+                  </>
+                )}
               </CardDescription>
             </div>
 

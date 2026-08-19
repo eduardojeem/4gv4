@@ -149,7 +149,7 @@ export function useProductsDashboard({
   }, [])
 
   // Handle quick filters
-  const handleQuickFilter = useCallback((filter: 'all' | 'low_stock' | 'out_of_stock' | 'active') => {
+  const handleQuickFilter = useCallback((filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive') => {
     // Clear custom filters when applying quick filter
     setFilters({
       quick_filter: filter

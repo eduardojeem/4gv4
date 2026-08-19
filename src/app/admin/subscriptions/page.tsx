@@ -244,6 +244,24 @@ export default async function AdminSubscriptionsPage() {
               </div>
               <p className="text-sm text-muted-foreground">{organization.name}</p>
             </div>
+            {/* Sin este aviso, una organizacion cuyo plan no esta en la tabla
+                `plans` operaba con limites de respaldo sin enterarse: la
+                pantalla mostraba su plan y los cupos eran otros. */}
+            {state.currentPlan.limits_are_fallback && (
+              <div
+                role="alert"
+                className="rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30"
+              >
+                <p className="font-semibold text-amber-900 dark:text-amber-200">
+                  No pudimos leer la configuración de tu plan
+                </p>
+                <p className="text-amber-800/90 dark:text-amber-200/80">
+                  Se están aplicando los cupos por defecto de {state.currentPlan.code}. Si notás
+                  límites distintos a los contratados, avisanos para revisarlo.
+                </p>
+              </div>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <p className="text-xs font-medium uppercase text-muted-foreground">Plan actual</p>

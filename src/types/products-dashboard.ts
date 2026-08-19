@@ -7,7 +7,7 @@ import { Product, ProductFilters as BaseProductFilters, ProductAlert, Category, 
 
 // Extended filter interface for dashboard
 export interface DashboardFilters extends BaseProductFilters {
-  quick_filter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | null
+  quick_filter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | null
 }
 
 // Sort configuration

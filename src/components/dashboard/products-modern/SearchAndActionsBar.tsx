@@ -42,8 +42,8 @@ export function SearchAndActionsBar({
   className
 }: SearchAndActionsBarProps) {
   return (
-    <Card className={cn('border-0 shadow-md bg-white dark:bg-gray-800', className)}>
-      <CardContent className="p-4">
+    <Card className={cn('rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/60 shadow-sm backdrop-blur-md overflow-hidden', className)}>
+      <CardContent className="p-3.5 sm:p-4">
         <div className="flex flex-col gap-3 xl:flex-row">
           {/* Search Bar */}
           <SearchBar

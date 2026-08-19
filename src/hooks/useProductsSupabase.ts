@@ -66,6 +66,9 @@ interface ProductsListApiPayload {
     total?: number
     page?: number
     per_page?: number
+    /** El filtro de stock barrio hasta el tope: el listado y el total son parciales. */
+    truncated?: boolean
+    scan_cap?: number
   }
   error?: string
   message?: string
@@ -110,6 +113,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [totalCount, setTotalCount] = useState(0)
+  // Marca que el resultado quedo incompleto por el tope del barrido de stock.
+  const [resultTruncated, setResultTruncated] = useState(false)
 
   // Estados para filtros, ordenamiento y paginación
   const [filters, setFilters] = useState<ProductFilters>({
@@ -258,6 +263,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       setProducts(payload.data.products)
       setTotalCount(Number(payload.data.total || 0))
+      setResultTruncated(payload.data.truncated === true)
     } catch (err) {
       console.error('Error fetching products:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -1217,6 +1223,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     loading,
     error,
     totalCount,
+    resultTruncated,
     pagination: {
       totalPages: Math.max(1, Math.ceil(totalCount / Math.max(1, pagination.limit))),
       hasNextPage: pagination.page < Math.max(1, Math.ceil(totalCount / Math.max(1, pagination.limit))),
