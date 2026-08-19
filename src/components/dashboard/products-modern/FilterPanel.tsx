@@ -124,7 +124,25 @@ export function FilterPanel({
       </div>
 
       {/* Filters Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Item Type (Product vs Service) Filter */}
+        <div className="space-y-2">
+          <Label htmlFor="item-type-filter">Tipo de Ítem</Label>
+          <Select
+            value={filters.item_type || ALL_OPTION_VALUE}
+            onValueChange={(value) => handleFilterChange('item_type', value === ALL_OPTION_VALUE ? undefined : value)}
+          >
+            <SelectTrigger id="item-type-filter">
+              <SelectValue placeholder="Todos los tipos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_OPTION_VALUE}>📦 + ⚙️ Todos los tipos</SelectItem>
+              <SelectItem value="products">📦 Solo Productos Físicos</SelectItem>
+              <SelectItem value="services">⚙️ Solo Servicios</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Category Filter */}
         <div className="space-y-2">
           <Label htmlFor="category-filter">Categoría</Label>

@@ -4,12 +4,15 @@
  */
 
 import React from 'react'
+import { Maximize2, Minimize2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { SearchBar } from './SearchBar'
 import { FilterToggle } from './FilterToggle'
 import { ViewModeSelector } from './ViewModeSelector'
+import { GroupBySelector } from './GroupBySelector'
 import { ActionButtons } from './ActionButtons'
-import { ViewMode } from '@/types/products-dashboard'
+import { ViewMode, GroupByMode } from '@/types/products-dashboard'
 import { cn } from '@/lib/utils'
 
 export interface SearchAndActionsBarProps {
@@ -19,6 +22,10 @@ export interface SearchAndActionsBarProps {
   onToggleFilters: () => void
   viewMode: ViewMode
   onViewModeChange: (mode: ViewMode) => void
+  groupBy?: GroupByMode
+  onGroupByChange?: (mode: GroupByMode) => void
+  isMaximizedSpace?: boolean
+  onToggleMaximizeSpace?: () => void
   onRefresh: () => void
   onExport: () => void
   onExportPdf?: () => void
@@ -34,6 +41,10 @@ export function SearchAndActionsBar({
   onToggleFilters,
   viewMode,
   onViewModeChange,
+  groupBy = 'none',
+  onGroupByChange,
+  isMaximizedSpace = false,
+  onToggleMaximizeSpace,
   onRefresh,
   onExport,
   onExportPdf,
@@ -59,11 +70,48 @@ export function SearchAndActionsBar({
               onToggle={onToggleFilters}
             />
 
+            {/* Group By Selector (Desglose por secciones) */}
+            {onGroupByChange && (
+              <GroupBySelector
+                groupBy={groupBy}
+                onGroupByChange={onGroupByChange}
+              />
+            )}
+
             {/* View Mode Selector */}
             <ViewModeSelector
               viewMode={viewMode}
               onViewModeChange={onViewModeChange}
             />
+
+            {/* Maximize space for products toggle */}
+            {onToggleMaximizeSpace && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onToggleMaximizeSpace}
+                className={cn(
+                  'h-9 px-2.5 text-xs font-semibold rounded-xl gap-1.5 transition-all shadow-xs',
+                  isMaximizedSpace
+                    ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
+                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800'
+                )}
+                title={isMaximizedSpace ? 'Restaurar resumen superior' : 'Maximizar espacio vertical para productos'}
+              >
+                {isMaximizedSpace ? (
+                  <>
+                    <Minimize2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    <span className="hidden sm:inline">Ver resumen</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="h-3.5 w-3.5 text-slate-500" />
+                    <span className="hidden sm:inline">Más espacio</span>
+                  </>
+                )}
+              </Button>
+            )}
 
             {/* Action Buttons */}
             <ActionButtons

@@ -10,6 +10,7 @@ import {
   Edit, Trash2, Copy, Eye, Package,
   TrendingUp, AlertTriangle, XCircle,
   Sparkles, Globe, EyeOff, MoreHorizontal,
+  Wrench,
 } from 'lucide-react'
 import {
   Table,
@@ -31,7 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Product } from '@/types/products'
 import { SortConfig } from '@/types/products-dashboard'
-import { getStockStatus } from '@/lib/products-dashboard-utils'
+import { getStockStatus, isServiceLikeProduct } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 
@@ -129,6 +130,7 @@ function SkeletonRow({ compact }: { compact: boolean }) {
         </div>
       </TableCell>
       <TableCell className="py-3"><div className="h-5 w-16 rounded-md bg-muted animate-pulse" /></TableCell>
+      <TableCell className="py-3"><div className="h-5 w-20 rounded-full bg-muted animate-pulse" /></TableCell>
       <TableCell className="py-3"><div className="h-5 w-20 rounded-full bg-muted animate-pulse" /></TableCell>
       <TableCell className="py-3 text-right"><div className="h-3.5 w-10 rounded bg-muted animate-pulse ml-auto" /></TableCell>
       <TableCell className="py-3 text-right"><div className="h-3.5 w-16 rounded bg-muted animate-pulse ml-auto" /></TableCell>
@@ -238,6 +240,7 @@ export function ProductTable({
             {loading
               ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} compact={isCompact} />)
               : products.map((product) => {
+                  const isService = isServiceLikeProduct(product)
                   const isSelected = selectedProductIds.includes(product.id)
                   const stockStatus = getStockStatus(product)
                   const cfg = STOCK_CONFIG[stockStatus]
@@ -306,7 +309,11 @@ export function ProductTable({
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center">
-                              <Package className={cn('text-muted-foreground/40', isCompact ? 'h-4 w-4' : 'h-5 w-5')} />
+                              {isService ? (
+                                <Wrench className={cn('text-purple-500/60', isCompact ? 'h-4 w-4' : 'h-5 w-5')} />
+                              ) : (
+                                <Package className={cn('text-muted-foreground/40', isCompact ? 'h-4 w-4' : 'h-5 w-5')} />
+                              )}
                             </div>
                           )}
                         </div>
@@ -337,6 +344,29 @@ export function ProductTable({
                         </span>
                       </TableCell>
 
+                      {/* Tipo (Producto vs Servicio) */}
+                      <TableCell className={cn(isCompact ? 'py-2' : 'py-3.5')}>
+                        {isService ? (
+                          <span className={cn(
+                            'inline-flex items-center gap-1 rounded-full border font-bold',
+                            'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/60',
+                            isCompact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-0.5 text-xs'
+                          )}>
+                            <Wrench className="h-2.5 w-2.5" />
+                            Servicio
+                          </span>
+                        ) : (
+                          <span className={cn(
+                            'inline-flex items-center gap-1 rounded-full border font-medium',
+                            'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/60',
+                            isCompact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-0.5 text-xs'
+                          )}>
+                            <Package className="h-2.5 w-2.5" />
+                            Producto
+                          </span>
+                        )}
+                      </TableCell>
+
                       {/* Category */}
                       <TableCell className={cn(isCompact ? 'py-2' : 'py-3.5')}>
                         {product.category?.name ? (
@@ -353,28 +383,37 @@ export function ProductTable({
 
                       {/* Stock */}
                       <TableCell className={cn('text-right', isCompact ? 'py-2' : 'py-3.5')}>
-                        <div className="flex flex-col items-end gap-1.5">
-                          <div className="flex items-baseline gap-1">
-                            <span className={cn(
-                              'font-bold tabular-nums leading-none',
-                              isCompact ? 'text-xs' : 'text-sm',
-                              cfg.text,
-                            )}>
-                              {product.stock_quantity}
+                        {isService ? (
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                              Sin límite
                             </span>
-                            {!isCompact && product.min_stock != null && (
-                              <span className="text-[10px] text-muted-foreground/50">/ {product.min_stock}</span>
+                            <span className="text-[10px] text-muted-foreground/60">Servicio</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-end gap-1.5">
+                            <div className="flex items-baseline gap-1">
+                              <span className={cn(
+                                'font-bold tabular-nums leading-none',
+                                isCompact ? 'text-xs' : 'text-sm',
+                                cfg.text,
+                              )}>
+                                {product.stock_quantity}
+                              </span>
+                              {!isCompact && product.min_stock != null && (
+                                <span className="text-[10px] text-muted-foreground/50">/ {product.min_stock}</span>
+                              )}
+                            </div>
+                            {!isCompact && (
+                              <div className="h-1 w-14 overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className={cn('h-full rounded-full transition-all duration-500', cfg.bar)}
+                                  style={{ width: `${stockPct}%` }}
+                                />
+                              </div>
                             )}
                           </div>
-                          {!isCompact && (
-                            <div className="h-1 w-14 overflow-hidden rounded-full bg-muted">
-                              <div
-                                className={cn('h-full rounded-full transition-all duration-500', cfg.bar)}
-                                style={{ width: `${stockPct}%` }}
-                              />
-                            </div>
-                          )}
-                        </div>
+                        )}
                       </TableCell>
 
                       {/* Price */}
@@ -389,14 +428,27 @@ export function ProductTable({
 
                       {/* Status badge */}
                       <TableCell className={cn(isCompact ? 'py-2' : 'py-3.5')}>
-                        <span className={cn(
-                          'inline-flex items-center gap-1.5 rounded-full border font-medium',
-                          isCompact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs',
-                          cfg.badge,
-                        )}>
-                          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', cfg.dot)} />
-                          {cfg.label}
-                        </span>
+                        {isService ? (
+                          <span className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full border font-medium',
+                            isCompact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs',
+                            product.is_active
+                              ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/60'
+                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                          )}>
+                            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', product.is_active ? 'bg-purple-500' : 'bg-slate-400')} />
+                            {product.is_active ? 'Activo' : 'Inactivo'}
+                          </span>
+                        ) : (
+                          <span className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full border font-medium',
+                            isCompact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs',
+                            cfg.badge,
+                          )}>
+                            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', cfg.dot)} />
+                            {cfg.label}
+                          </span>
+                        )}
                       </TableCell>
 
                       {/* Visibility toggle */}

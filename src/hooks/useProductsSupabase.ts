@@ -35,6 +35,8 @@ interface PaginationOptions {
 
 interface DashboardStats {
   totalProducts: number
+  physicalProductsCount?: number
+  servicesCount?: number
   activeProducts: number
   totalStockValue: number
   totalCostValue: number
@@ -158,7 +160,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       // Obtener productos para calcular estadísticas
       const { data: products, error: productsError } = await supabase
         .from('products')
-        .select('id, sku, name, purchase_price, sale_price, stock_quantity, min_stock, is_active')
+        .select('id, sku, name, purchase_price, sale_price, stock_quantity, min_stock, is_active, unit_measure, category:categories(name)')
 
       if (productsError) throw productsError
 
@@ -186,16 +188,20 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       // Calcular estadísticas
       const productList = await applySelectedBranchStock((products || []) as unknown as Product[])
       const totalProducts = productList?.length || 0
+      const servicesCount = productList?.filter(isServiceLikeProduct)?.length || 0
+      const physicalProductsCount = Math.max(0, totalProducts - servicesCount)
       const activeProducts = productList?.filter(p => p.is_active)?.length || 0
-      const totalStockValue = productList?.reduce((sum, p) => sum + ((p.sale_price || 0) * (p.stock_quantity || 0)), 0) || 0
-      const totalCostValue = productList?.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.stock_quantity || 0)), 0) || 0
+      const totalStockValue = productList?.filter(p => !isServiceLikeProduct(p))?.reduce((sum, p) => sum + ((p.sale_price || 0) * (p.stock_quantity || 0)), 0) || 0
+      const totalCostValue = productList?.filter(p => !isServiceLikeProduct(p))?.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.stock_quantity || 0)), 0) || 0
       const totalMargin = totalStockValue - totalCostValue
       const avgMarginPercentage = totalCostValue > 0 ? (totalMargin / totalCostValue) * 100 : 0
-      const lowStockCount = productList?.filter(isLowStock)?.length || 0
-      const outOfStockCount = productList?.filter(isOutOfStock)?.length || 0
+      const lowStockCount = productList?.filter(p => !isServiceLikeProduct(p) && isLowStock(p))?.length || 0
+      const outOfStockCount = productList?.filter(p => !isServiceLikeProduct(p) && isOutOfStock(p))?.length || 0
 
       setDashboardStats({
         totalProducts,
+        physicalProductsCount,
+        servicesCount,
         activeProducts,
         totalStockValue,
         totalCostValue,

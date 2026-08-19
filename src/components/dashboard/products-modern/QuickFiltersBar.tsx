@@ -1,18 +1,15 @@
-/**
- * QuickFiltersBar Component - Rediseñado
- * Barra compacta y moderna con filtros rápidos
- */
-
 import React, { useMemo } from 'react'
-import { AlertTriangle, ShieldAlert, CheckCircle2, EyeOff, Package, X } from 'lucide-react'
+import { AlertTriangle, ShieldAlert, CheckCircle2, EyeOff, Package, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Product } from '@/types/products'
-import { isLowStock, isOutOfStock } from '@/lib/products-dashboard-utils'
+import { isLowStock, isOutOfStock, isServiceLikeProduct } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
 
 export interface QuickFilterCounts {
   all: number
+  products?: number
+  services?: number
   low_stock: number
   out_of_stock: number
   active: number
@@ -22,8 +19,8 @@ export interface QuickFilterCounts {
 export interface QuickFiltersBarProps {
   products: Product[]
   counts?: QuickFilterCounts
-  activeFilter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | null
-  onFilterClick: (filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive') => void
+  activeFilter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | null
+  onFilterClick: (filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services') => void
   className?: string
 }
 
@@ -36,16 +33,26 @@ export function QuickFiltersBar({
 }: QuickFiltersBarProps) {
   // Prefer global counts; otherwise derive from local products
   const counts = useMemo(() => {
-    if (providedCounts) return providedCounts
+    if (providedCounts) {
+      return {
+        ...providedCounts,
+        products: providedCounts.products ?? Math.max(0, providedCounts.all - (providedCounts.services ?? 0)),
+        services: providedCounts.services ?? 0,
+      }
+    }
 
     const total = products.length
-    const lowStock = products.filter(isLowStock).length
-    const outOfStock = products.filter(isOutOfStock).length
+    const services = products.filter(isServiceLikeProduct).length
+    const physicalProducts = total - services
+    const lowStock = products.filter(p => !isServiceLikeProduct(p) && isLowStock(p)).length
+    const outOfStock = products.filter(p => !isServiceLikeProduct(p) && isOutOfStock(p)).length
     const active = products.filter(p => p.is_active).length
     const inactive = products.filter(p => !p.is_active).length
 
     return {
       all: total,
+      products: physicalProducts,
+      services,
       low_stock: lowStock,
       out_of_stock: outOfStock,
       active,
@@ -64,7 +71,7 @@ export function QuickFiltersBar({
     >
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1 hidden sm:inline">
-          Filtros rápidos:
+          Filtros:
         </span>
 
         {/* Todos */}
@@ -86,6 +93,54 @@ export function QuickFiltersBar({
             {counts.all}
           </Badge>
         </Button>
+
+        {/* Solo Productos Físicos */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onFilterClick('products')}
+          className={cn(
+            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
+            activeFilter === 'products'
+              ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-400 dark:border-indigo-700 text-indigo-800 dark:text-indigo-300 shadow-xs'
+              : 'hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border-indigo-200/80 dark:border-indigo-800/60'
+          )}
+        >
+          <Package className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+          <span>Solo Productos</span>
+          <Badge
+            variant="outline"
+            className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-indigo-100/60 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700"
+          >
+            {counts.products ?? 0}
+          </Badge>
+        </Button>
+
+        {/* Solo Servicios */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onFilterClick('services')}
+          className={cn(
+            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
+            activeFilter === 'services'
+              ? 'bg-purple-50 dark:bg-purple-950/60 border-purple-400 dark:border-purple-700 text-purple-800 dark:text-purple-300 shadow-xs'
+              : 'hover:bg-purple-50/50 dark:hover:bg-purple-950/30 text-purple-700 dark:text-purple-400 border-purple-200/80 dark:border-purple-800/60'
+          )}
+        >
+          <Wrench className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+          <span>Solo Servicios</span>
+          <Badge
+            variant="outline"
+            className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-purple-100/60 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-700"
+          >
+            {counts.services ?? 0}
+          </Badge>
+        </Button>
+
+        <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
 
         {/* Bajo Stock */}
         <Button

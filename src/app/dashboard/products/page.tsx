@@ -7,7 +7,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Info, Plus, RefreshCw, Warehouse, X } from "lucide-react";
+import { AlertCircle, Info, Plus, RefreshCw, Warehouse, X, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +27,7 @@ import {
   FilterPanel,
   ProductGrid,
   ProductTable,
+  ProductSectionGroup,
   BulkActionsToolbar,
   AlertsBanner,
   ProductQuickViewModal,
@@ -46,8 +47,9 @@ import { Pagination } from "@/components/ui/pagination";
 import {
   exportProductsToInventoryCSV,
   downloadCSV,
+  isServiceLikeProduct,
 } from "@/lib/products-dashboard-utils";
-import type { DashboardMetrics } from "@/types/products-dashboard";
+import type { DashboardMetrics, GroupByMode } from "@/types/products-dashboard";
 import type { QuickFilterCounts } from "@/components/dashboard/products-modern/QuickFiltersBar";
 import type { Database } from "@/lib/supabase/types";
 import { PlanLimitBanner } from "@/components/subscription/PlanLimitBanner";
@@ -58,6 +60,18 @@ export default function ProductsPage() {
   const router = useRouter();
   const { hasPermission } = usePermissions();
   const { selectedBranch } = useBranch();
+  const [showBranchNotice, setShowBranchNotice] = useState(true);
+
+  // Group by mode (desglose por secciones) y modo de maximizar espacio
+  const [groupBy, setGroupBy] = useState<GroupByMode>("none");
+  const [isMaximizedSpace, setIsMaximizedSpace] = useState(false);
+
+  // Permissions check
+  const canViewCost = hasPermission('cost_prices.read')
+  const canCreateProducts = hasPermission('products.create') || hasPermission('products.manage')
+  const canEditProducts = hasPermission('products.update') || hasPermission('products.manage')
+  const canDeleteProducts = hasPermission('products.delete') || hasPermission('products.manage')
+
   const {
     products,
     categories,
@@ -124,7 +138,6 @@ export default function ProductsPage() {
   useEffect(() => {
     if (initialUrlApplied.current || typeof window === "undefined") return;
     initialUrlApplied.current = true;
-
     const params = new URLSearchParams(window.location.search);
     if (params.get("new") === "true") {
       setCreateModalOpen(true);
@@ -133,17 +146,13 @@ export default function ProductsPage() {
       handleQuickFilter("low_stock");
     }
   }, [handleQuickFilter]);
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [serverSearch, setServerSearch] = useState("");
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [showGuide, setShowGuide] = useState(true);
-  const [showBranchNotice, setShowBranchNotice] = useState(true);
-  const canCreateProducts =
-    hasPermission("products.create") ||
-    hasPermission("products.create") ||
-    hasPermission("products.manage");
 
   const normalizedAlerts = useMemo(() => {
     return alerts
@@ -159,6 +168,8 @@ export default function ProductsPage() {
   // calculadas sobre la vista actual para no quedar en blanco.
   const globalMetrics = useMemo<DashboardMetrics>(() => ({
     total_products: dashboardStats?.totalProducts ?? metrics.total_products,
+    physical_products_count: dashboardStats?.physicalProductsCount ?? metrics.physical_products_count,
+    services_count: dashboardStats?.servicesCount ?? metrics.services_count,
     active_products: dashboardStats?.activeProducts ?? metrics.active_products,
     low_stock_count: dashboardStats?.lowStockCount ?? metrics.low_stock_count,
     out_of_stock_count: dashboardStats?.outOfStockCount ?? metrics.out_of_stock_count,
@@ -169,6 +180,8 @@ export default function ProductsPage() {
     if (!dashboardStats) return undefined;
     return {
       all: dashboardStats.totalProducts,
+      products: dashboardStats.physicalProductsCount ?? Math.max(0, dashboardStats.totalProducts - (dashboardStats.servicesCount ?? 0)),
+      services: dashboardStats.servicesCount ?? 0,
       low_stock: dashboardStats.lowStockCount,
       out_of_stock: dashboardStats.outOfStockCount,
       active: dashboardStats.activeProducts,
@@ -575,12 +588,20 @@ export default function ProductsPage() {
 
   // Handle metric click
   const handleMetricClick = (
-    metric: "all" | "low_stock" | "out_of_stock" | "value",
+    metric: "all" | "low_stock" | "out_of_stock" | "value" | "products" | "services" | "active",
   ) => {
     switch (metric) {
       case "all":
         handleQuickFilter("all");
-        toast.info(`Mostrando todos los productos (${totalProducts})`);
+        toast.info(`Mostrando todo el catálogo (${globalMetrics.total_products})`);
+        break;
+      case "products":
+        handleQuickFilter("products");
+        toast.info("Mostrando solo productos físicos");
+        break;
+      case "services":
+        handleQuickFilter("services");
+        toast.info("Mostrando solo servicios profesionales");
         break;
       case "low_stock":
         handleQuickFilter("low_stock");
@@ -592,70 +613,128 @@ export default function ProductsPage() {
         break;
       case "value":
         handleQuickFilter("all");
-        toast.info("Mostrando todos los productos para analizar valor total");
+        toast.info("Mostrando catálogo completo para analizar valor total");
+        break;
+      case "active":
+        handleQuickFilter("active");
+        toast.info("Mostrando productos activos");
         break;
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50/50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 p-4 sm:p-6 lg:p-8 transition-colors duration-300">
-      <div className="max-w-[1800px] mx-auto space-y-6">
-        <PlanLimitBanner resource="products" reloadSignal={totalProducts} />
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 dark:from-white dark:via-gray-200 dark:to-gray-400 bg-clip-text text-transparent">
-              Gestión de Productos
-            </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Dashboard moderno y funcional
-            </p>
-          </div>
+      <div className="max-w-[1800px] mx-auto space-y-5">
+        {!isMaximizedSpace ? (
+          <>
+            <PlanLimitBanner resource="products" reloadSignal={totalProducts} />
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 dark:from-white dark:via-gray-200 dark:to-gray-400 bg-clip-text text-transparent">
+                  Gestión de Productos
+                </h1>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Dashboard moderno y funcional
+                </p>
+              </div>
 
-          <div className="flex items-center gap-2.5">
-            <SectionGuideButton guide={PRODUCTS_GUIDE} />
+              <div className="flex items-center gap-2.5">
+                {/* Botón Más Espacio al lado de ¿Cómo funciona? */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsMaximizedSpace(!isMaximizedSpace)}
+                  className="h-10 px-3.5 text-xs font-semibold rounded-xl gap-1.5 transition-all shadow-xs border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  title="Ocultar paneles superiores para que los productos ocupen más espacio"
+                >
+                  <Maximize2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span>Más espacio</span>
+                </Button>
 
-            {canCreateProducts && (
-              <Button
-                size="lg"
-                onClick={() => setCreateModalOpen(true)}
-                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/30 transition-all duration-200 cursor-pointer"
-              >
-                <Plus className="h-5 w-5 mr-2" />
-                Nuevo Producto
-              </Button>
-            )}
-          </div>
-        </div>
+                <SectionGuideButton guide={PRODUCTS_GUIDE} />
 
-        {/* Alerts Banner */}
-        <AlertsBanner
-          alerts={normalizedAlerts as any}
-          onAlertClick={handleAlertClick}
-          onDismissAlert={handleDismissAlert}
-        />
-
-        {showBranchNotice && (
-          <div className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 text-xs text-muted-foreground">
-            <div className="flex items-center gap-2 min-w-0">
-              <Warehouse className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span className="truncate">
-                <strong className="text-slate-900 dark:text-slate-100">
-                  {selectedBranch ? `Inventario: ${selectedBranch.name}` : "Inventario general"}
-                </strong>
-                {" — Las existencias, movimientos y alertas corresponden a la sucursal seleccionada."}
-              </span>
+                {canCreateProducts && (
+                  <Button
+                    size="lg"
+                    onClick={() => setCreateModalOpen(true)}
+                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/30 transition-all duration-200 cursor-pointer"
+                  >
+                    <Plus className="h-5 w-5 mr-2" />
+                    Nuevo Producto
+                  </Button>
+                )}
+              </div>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0 rounded-lg"
-              onClick={() => setShowBranchNotice(false)}
-              title="Ocultar aviso"
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
+
+            {/* Metrics Grid */}
+            <MetricsGrid
+              metrics={globalMetrics}
+              canViewCost={canViewCost}
+              onMetricClick={handleMetricClick}
+            />
+
+            {/* Alerts Banner */}
+            <AlertsBanner
+              alerts={normalizedAlerts as any}
+              onAlertClick={handleAlertClick}
+              onDismissAlert={handleDismissAlert}
+            />
+
+            {showBranchNotice && (
+              <div className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Warehouse className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <span className="truncate">
+                    <strong className="text-slate-900 dark:text-slate-100">
+                      {selectedBranch ? `Inventario: ${selectedBranch.name}` : "Inventario general"}
+                    </strong>
+                    {" — Las existencias, movimientos y alertas corresponden a la sucursal seleccionada."}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0 rounded-lg"
+                  onClick={() => setShowBranchNotice(false)}
+                  title="Ocultar aviso"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          /* Maximized Space Header Indicator */
+          <div className="flex items-center justify-between px-4 py-2 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200 font-semibold">
+              <span className="flex h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
+              <span>Modo Espacio Maximizado</span>
+              <span className="text-muted-foreground font-normal hidden sm:inline">· Mayor área visible para productos y secciones</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsMaximizedSpace(false)}
+                className="h-7 px-2.5 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg"
+              >
+                Restaurar resumen
+              </Button>
+              {canCreateProducts && (
+                <Button
+                  size="sm"
+                  onClick={() => setCreateModalOpen(true)}
+                  className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Nuevo
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
@@ -667,6 +746,10 @@ export default function ProductsPage() {
           onToggleFilters={() => setIsFilterPanelOpen(!isFilterPanelOpen)}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          groupBy={groupBy}
+          onGroupByChange={setGroupBy}
+          isMaximizedSpace={isMaximizedSpace}
+          onToggleMaximizeSpace={() => setIsMaximizedSpace(prev => !prev)}
           onRefresh={handleRefresh}
           onExport={handleExport}
           onExportPdf={handleExportPdf}
@@ -724,18 +807,30 @@ export default function ProductsPage() {
                 todo el catalogo o solo una pagina. */}
             {!loading && (
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3 dark:border-gray-800">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-                  <span className="font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
-                    {paginatedProducts.length}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {paginatedProducts.length === 1 ? 'producto en pantalla' : 'productos en pantalla'}
-                  </span>
-                  {totalItems > paginatedProducts.length && (
-                    <span className="text-muted-foreground">
-                      · de <span className="font-semibold text-gray-900 tabular-nums dark:text-gray-100">{totalItems}</span> que coinciden
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
+                      {paginatedProducts.length}
                     </span>
-                  )}
+                    <span className="text-muted-foreground">
+                      {paginatedProducts.length === 1 ? 'ítem en pantalla' : 'ítems en pantalla'}
+                    </span>
+                    {totalItems > paginatedProducts.length && (
+                      <span className="text-muted-foreground">
+                        · de <span className="font-semibold text-gray-900 tabular-nums dark:text-gray-100">{totalItems}</span> que coinciden
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Micro desglose de lo que se ve en pantalla */}
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Badge variant="outline" className="px-2 py-0 h-5 font-semibold border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 bg-indigo-50/60 dark:bg-indigo-950/40">
+                      📦 {paginatedProducts.filter(p => !isServiceLikeProduct(p)).length} productos
+                    </Badge>
+                    <Badge variant="outline" className="px-2 py-0 h-5 font-bold border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 bg-purple-50/60 dark:bg-purple-950/40">
+                      ⚙️ {paginatedProducts.filter(isServiceLikeProduct).length} servicios
+                    </Badge>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -783,7 +878,24 @@ export default function ProductsPage() {
               </div>
             )}
 
-            {viewMode === "grid" ? (
+            {groupBy !== "none" ? (
+              <ProductSectionGroup
+                products={paginatedProducts}
+                groupBy={groupBy}
+                viewMode={viewMode}
+                selectedProductIds={selectedProductIds}
+                sortConfig={sortConfig}
+                onSort={handleSort}
+                onSelectAll={handleSelectAllOnPage}
+                onSelect={handleSelectProduct}
+                onEdit={handleProductEdit}
+                onDelete={handleProductDelete}
+                onDuplicate={handleProductDuplicate}
+                onViewDetails={handleProductViewDetails}
+                onToggleActive={handleToggleActive}
+                loading={loading || isPending}
+              />
+            ) : viewMode === "grid" ? (
               <ProductGrid
                 products={paginatedProducts}
                 selectedProductIds={selectedProductIds}

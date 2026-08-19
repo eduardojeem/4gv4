@@ -4,27 +4,29 @@
  */
 
 import React from 'react'
-import { Package2, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react'
+import { Package2, AlertTriangle, TrendingUp, DollarSign, CheckCircle2 } from 'lucide-react'
 import { MetricCard } from './MetricCard'
 import { DashboardMetrics } from '@/types/products-dashboard'
-import { formatLargeNumber } from '@/lib/products-dashboard-utils'
 import { formatCurrencyCompact } from '@/lib/currency'
 
 export interface MetricsGridProps {
   metrics: DashboardMetrics
-  onMetricClick?: (metric: 'all' | 'low_stock' | 'out_of_stock' | 'value') => void
+  canViewCost?: boolean
+  onMetricClick?: (metric: 'all' | 'low_stock' | 'out_of_stock' | 'value' | 'products' | 'services' | 'active') => void
 }
 
-export function MetricsGrid({ metrics, onMetricClick }: MetricsGridProps) {
+export function MetricsGrid({ metrics, canViewCost = true, onMetricClick }: MetricsGridProps) {
   const formattedValue = formatCurrencyCompact(metrics.inventory_value)
+  const physicalCount = metrics.physical_products_count ?? Math.max(0, metrics.total_products - (metrics.services_count ?? 0))
+  const servicesCount = metrics.services_count ?? 0
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {/* Total Products Card */}
       <MetricCard
-        title="Total Productos"
+        title="Catálogo Total"
         value={metrics.total_products}
-        subtitle="En inventario"
+        subtitle={`${physicalCount} productos · ${servicesCount} servicios`}
         icon={Package2}
         gradient="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/40 dark:to-blue-900/20"
         iconBg="bg-blue-500 dark:bg-blue-600"
@@ -32,11 +34,11 @@ export function MetricsGrid({ metrics, onMetricClick }: MetricsGridProps) {
         onClick={() => onMetricClick?.('all')}
       />
 
-      {/* Low Stock Card */}
+      {/* Low Stock Card (Physical inventory) */}
       <MetricCard
         title="Bajo Stock"
         value={metrics.low_stock_count}
-        subtitle="Requieren atención"
+        subtitle="Inventario físico"
         icon={AlertTriangle}
         gradient="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/20"
         iconBg="bg-amber-500 dark:bg-amber-600"
@@ -44,11 +46,11 @@ export function MetricsGrid({ metrics, onMetricClick }: MetricsGridProps) {
         onClick={() => onMetricClick?.('low_stock')}
       />
 
-      {/* Out of Stock Card */}
+      {/* Out of Stock Card (Physical inventory) */}
       <MetricCard
         title="Agotados"
         value={metrics.out_of_stock_count}
-        subtitle="Sin existencias"
+        subtitle="Sin existencias físicas"
         icon={TrendingUp}
         gradient="bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/40 dark:to-red-900/20"
         iconBg="bg-red-500 dark:bg-red-600"
@@ -57,17 +59,30 @@ export function MetricsGrid({ metrics, onMetricClick }: MetricsGridProps) {
         className="[&_svg]:rotate-180"
       />
 
-      {/* Inventory Value Card */}
-      <MetricCard
-        title="Valor Total"
-        value={formattedValue}
-        subtitle="En inventario"
-        icon={DollarSign}
-        gradient="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/40 dark:to-green-900/20"
-        iconBg="bg-green-500 dark:bg-green-600"
-        textColor="text-green-700 dark:text-green-300"
-        onClick={() => onMetricClick?.('value')}
-      />
+      {/* 4th Card: Valor Total (for Admins/Financial) or Productos Activos (for Vendedores) */}
+      {canViewCost ? (
+        <MetricCard
+          title="Valor Total"
+          value={formattedValue}
+          subtitle="Stock físico activo"
+          icon={DollarSign}
+          gradient="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/40 dark:to-green-900/20"
+          iconBg="bg-green-500 dark:bg-green-600"
+          textColor="text-green-700 dark:text-green-300"
+          onClick={() => onMetricClick?.('value')}
+        />
+      ) : (
+        <MetricCard
+          title="Activos en Venta"
+          value={metrics.active_products}
+          subtitle="Disponibles en tienda"
+          icon={CheckCircle2}
+          gradient="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/40 dark:to-emerald-900/20"
+          iconBg="bg-emerald-500 dark:bg-emerald-600"
+          textColor="text-emerald-700 dark:text-emerald-300"
+          onClick={() => onMetricClick?.('active')}
+        />
+      )}
     </div>
   )
 }

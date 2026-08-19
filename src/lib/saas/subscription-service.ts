@@ -448,6 +448,52 @@ async function applyScheduledDowngradeIfDue(organizationId: string) {
  * ciclo abierto, asi que tambien sirve para dar por regularizada a una
  * organizacion que volvio a entrar en su cupo.
  */
+export type ProductGraceStatus = {
+  stage: 'grace' | 'deactivated' | 'archived'
+  productLimit: number
+  activeProducts: number
+  excessProducts: number
+  daysLeft: number
+}
+
+/**
+ * Etapa del ciclo de regularizacion, para mostrarla en la pantalla de
+ * suscripcion. Devuelve null cuando no hay ciclo abierto.
+ */
+export async function getProductGraceStatus(
+  organizationId: string
+): Promise<ProductGraceStatus | null> {
+  const supabase = createAdminSupabase()
+  const { data, error } = await supabase
+    .from('plan_downgrade_grace')
+    .select('stage, product_limit, active_products_at_start, grace_ends_at, archive_deadline_at')
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[subscription] No se pudo leer el ciclo de regularizacion', { organizationId, error })
+    return null
+  }
+  if (!data || data.stage === 'resolved') return null
+
+  const stage = data.stage as ProductGraceStatus['stage']
+  const deadline = stage === 'grace' ? data.grace_ends_at : data.archive_deadline_at
+  const daysLeft = deadline
+    ? Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / 86_400_000))
+    : 0
+
+  const productLimit = Number(data.product_limit) || 0
+  const activeProducts = Number(data.active_products_at_start) || 0
+
+  return {
+    stage,
+    productLimit,
+    activeProducts,
+    excessProducts: Math.max(0, activeProducts - productLimit),
+    daysLeft,
+  }
+}
+
 export async function openProductGraceIfOverLimit(
   organizationId: string,
   planCode: string
