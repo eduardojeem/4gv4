@@ -25,9 +25,10 @@ function selectionFromRequest(request: NextRequest) {
 async function getHandler(
   request: NextRequest,
   context: AdminAuthContext,
-  params?: { id?: string },
+  paramsPromise?: Promise<{ id: string }> | { id: string },
 ) {
-  const entryId = params?.id
+  const resolvedParams = paramsPromise instanceof Promise ? await paramsPromise : paramsPromise
+  const entryId = resolvedParams?.id
   if (!entryId) {
     return NextResponse.json({ error: 'Falta el identificador de la entrada de nómina.' }, { status: 400 })
   }
@@ -53,4 +54,11 @@ async function getHandler(
   }
 }
 
-export const GET = withAdminAuth(getHandler)
+export function GET(
+  request: NextRequest,
+  routeContext: { params: Promise<{ id: string }> },
+) {
+  return withAdminAuth((req, authContext) =>
+    getHandler(req, authContext, routeContext.params),
+  )(request)
+}
