@@ -11,7 +11,7 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AuthModal } from '@/components/public/AuthModal'
 
 const navLinks = [
-  { label: 'Caracteristicas', href: '/saas#caracteristicas' },
+  { label: 'Características', href: '/saas#caracteristicas' },
   { label: 'Negocios', href: '/saas/negocios' },
   { label: 'Planes', href: '/saas/planes' },
 ]

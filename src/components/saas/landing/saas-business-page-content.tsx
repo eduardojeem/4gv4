@@ -173,7 +173,7 @@ export function SaaSBusinessPageContent() {
 
             <motion.div {...fadeUp(0.1)}>
               <Button asChild variant="outline" className="w-fit gap-2">
-                <Link href="/empresas">
+                <Link href="/marketplace/empresas">
                   Ver empresas publicadas
                   <ArrowRight className="h-4 w-4" />
                 </Link>
