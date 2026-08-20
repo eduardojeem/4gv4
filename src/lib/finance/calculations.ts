@@ -109,6 +109,8 @@ export function calculateFinancialSummary(
               code: 'MISSING_DIRECT_COST',
               message: 'El ingreso no tiene un costo directo registrado.',
               sourceId: line.id ?? `revenue-${index + 1}`,
+              sourceLabel: line.label,
+              sourceType: line.sourceType,
             },
           ],
   )

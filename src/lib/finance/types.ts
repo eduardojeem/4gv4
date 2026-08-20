@@ -27,9 +27,18 @@ export interface FinanceFilters {
   branchId?: string | null
 }
 
+/** Tipo de registro que origina un importe, para poder nombrarlo en el panel. */
+export type FinanceSourceType = 'sale' | 'repair' | 'order'
+
 export interface FinancialSourceLine {
   id?: string
   amount: number
+  /**
+   * Identificador legible del registro: codigo de venta, ticket de reparacion,
+   * numero de pedido. El id es un uuid y no le dice nada a quien lee el aviso.
+   */
+  label?: string
+  sourceType?: FinanceSourceType
 }
 
 export interface FinancialRevenueLine extends FinancialSourceLine {
@@ -82,6 +91,9 @@ export interface CoverageWarning {
   code: CoverageWarningCode
   message: string
   sourceId?: string
+  /** Como nombrar el registro en pantalla, para poder ir a completarlo. */
+  sourceLabel?: string
+  sourceType?: FinanceSourceType
 }
 
 export interface FinanceSummary {

@@ -172,6 +172,41 @@ describe('FinancesSystem', () => {
     expect(screen.getAllByText('El ingreso no tiene un costo directo registrado.')).toHaveLength(1)
   })
 
+  // Agrupar no puede significar esconder: el aviso decia que faltaba algo pero
+  // no cual registro, y no habia forma de saber que ir a completar.
+  it('names the records behind a grouped coverage warning', () => {
+    mockUseAdminFinances.mockReturnValue({
+      summary: {
+        ...summary,
+        coverageWarnings: [
+          {
+            code: 'MISSING_DIRECT_COST',
+            message: 'El ingreso no tiene un costo directo registrado.',
+            sourceId: 'sale-a',
+            sourceLabel: 'Venta V-0012',
+          },
+          {
+            code: 'MISSING_DIRECT_COST',
+            message: 'El ingreso no tiene un costo directo registrado.',
+            sourceId: 'rep-b',
+            sourceLabel: 'Reparación REP-77',
+          },
+        ],
+      },
+      filters: summary.filters,
+      setFilters: vi.fn(),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    render(<FinancesSystem />)
+
+    expect(screen.getByText(/2 registros/)).toBeInTheDocument()
+    expect(screen.getByText(/Venta V-0012/)).toBeInTheDocument()
+    expect(screen.getByText(/Reparación REP-77/)).toBeInTheDocument()
+  })
+
   it('switches between devengado and caja metrics with accessible tabs', async () => {
     const user = userEvent.setup()
     mockUseAdminFinances.mockReturnValue({

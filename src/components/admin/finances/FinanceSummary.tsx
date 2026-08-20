@@ -26,6 +26,9 @@ import { formatCurrency } from '@/lib/currency'
 import type { FinanceSummaryReport } from '@/lib/finance/server'
 import { cn } from '@/lib/utils'
 
+/** Cuantos registros se nombran antes de resumir el resto en "y N mas". */
+const MAX_LISTED_SOURCES = 6
+
 type MetricTone = 'positive' | 'expense' | 'neutral'
 
 const METRIC_TONE: Record<MetricTone, { border: string; icon: string }> = {
@@ -572,18 +575,32 @@ export function FinanceSummary({
   onViewPayroll?: () => void
 }) {
   const [view, setView] = useState<'accrued' | 'cash'>('accrued')
-  const coverageWarnings = useMemo(
-    () =>
-      Array.from(
-        new Map(
-          summary.coverageWarnings.map((warning) => [
-            `${warning.code}:${warning.message}`,
-            warning,
-          ]),
-        ).values(),
-      ),
-    [summary.coverageWarnings],
-  )
+  /**
+   * Los avisos vienen de a uno por registro. Antes se deduplicaban por mensaje y
+   * se descartaba el registro, asi que el panel decia que faltaba algo pero no
+   * que: 200 avisos colapsados en una frase. Ahora se agrupan conservando
+   * cuantos son y como se llaman, para poder ir a completarlos.
+   */
+  const coverageWarnings = useMemo(() => {
+    const groups = new Map<
+      string,
+      { code: string; message: string; count: number; labels: string[] }
+    >()
+    for (const warning of summary.coverageWarnings) {
+      const key = `${warning.code}:${warning.message}`
+      const group = groups.get(key) ?? {
+        code: warning.code,
+        message: warning.message,
+        count: 0,
+        labels: [],
+      }
+      group.count += 1
+      const label = warning.sourceLabel?.trim()
+      if (label && !group.labels.includes(label)) group.labels.push(label)
+      groups.set(key, group)
+    }
+    return Array.from(groups.values())
+  }, [summary.coverageWarnings])
 
   // Margen bruto y margen neto calculados
   const grossMarginPercent =
@@ -822,9 +839,22 @@ export function FinanceSummary({
             <p className="mb-2">
               Se detectaron registros sin costo unitario o asignación requerida. La ganancia bruta y neta no pueden calcularse de forma definitiva hasta completar estos datos.
             </p>
-            <ul role="list" className="list-disc pl-4 space-y-1">
+            <ul role="list" className="list-disc pl-4 space-y-1.5">
               {coverageWarnings.map((warning) => (
-                <li key={`${warning.code}-${warning.message}`}>{warning.message}</li>
+                <li key={`${warning.code}-${warning.message}`}>
+                  <span>{warning.message}</span>{' '}
+                  <span className="font-semibold whitespace-nowrap">
+                    ({warning.count}{' '}
+                    {warning.count === 1 ? 'registro' : 'registros'})
+                  </span>
+                  {warning.labels.length > 0 && (
+                    <span className="mt-0.5 block text-muted-foreground">
+                      {warning.labels.slice(0, MAX_LISTED_SOURCES).join(' · ')}
+                      {warning.labels.length > MAX_LISTED_SOURCES &&
+                        ` y ${warning.labels.length - MAX_LISTED_SOURCES} más`}
+                    </span>
+                  )}
+                </li>
               ))}
             </ul>
             {onViewProfitability && (

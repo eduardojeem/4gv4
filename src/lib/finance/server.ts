@@ -1591,6 +1591,22 @@ type FinanceSalePaymentRecord = {
   amount: number
 }
 
+/**
+ * Cobro fechado de una reparacion (`repair_payments`).
+ *
+ * `repairs.paid_amount` es un acumulado sin fecha: sirve para saber cuanto debe
+ * el cliente, no para saber cuando entro la plata. El libro de cobros existe
+ * desde la migracion de cierre financiero de reparaciones y es el que permite
+ * ubicar cada cobro en su periodo.
+ */
+type FinanceRepairPaymentRecord = {
+  repairId: string
+  branchId: string | null
+  paymentDate: string
+  paymentMethod: string
+  amount: number
+}
+
 type FinanceRepairRecord = {
   id: string
   ticketNumber?: string | null
@@ -1634,6 +1650,49 @@ type FinancePaymentRecord = {
   amount: number
 }
 
+/** Item de un pedido web con su costo historico capturado al crearlo. */
+export interface FinanceOrderItemRecord {
+  orderId: string
+  productId: string | null
+  quantity: number
+  unitCost: number | null
+}
+
+/**
+ * Pago a un tecnico por su trabajo del periodo.
+ *
+ * Se registra en `technician_payments` y sale de la caja, pero el resumen solo
+ * miraba `payroll_entries`: era costo de mano de obra real que no llegaba nunca
+ * a la utilidad.
+ */
+export interface FinanceTechnicianPaymentRecord {
+  id: string
+  paidAt: string | null
+  amount: number
+  /** En efectivo salio de la caja; por transferencia tambien es plata que se fue. */
+  method: string | null
+  status: string | null
+}
+
+/**
+ * Pedido de la tienda web.
+ *
+ * Los pedidos no generaban ninguna fila en `sales`, y el resumen solo leia
+ * ventas del mostrador y reparaciones: toda la facturacion del canal web era
+ * invisible para Finanzas.
+ */
+export interface FinanceOrderRecord {
+  id: string
+  code: string | null
+  branchId: string | null
+  createdAt: string
+  status: string | null
+  paymentStatus: string | null
+  totalAmount: number
+  /** Cobrado: no hay importes parciales, un pedido pagado cuenta por su total. */
+  paidAmount: number
+}
+
 /** Devolucion de posventa ya cerrada, con su costo historico resuelto. */
 export interface FinanceRefundRecord {
   id: string
@@ -1662,6 +1721,18 @@ export interface FinanceSummaryRecords {
   payrollPayments: FinancePaymentRecord[]
   /** Opcional: un despliegue sin la tabla de posventa sigue funcionando. */
   refunds?: FinanceRefundRecord[]
+  /** Opcional: pedidos de la tienda web, si el modulo esta habilitado. */
+  orders?: FinanceOrderRecord[]
+  /** Opcional: pagos a tecnicos del periodo. */
+  technicianPayments?: FinanceTechnicianPaymentRecord[]
+  /** Opcional: costos historicos de los items de pedidos web. */
+  orderItems?: FinanceOrderItemRecord[]
+  /** Cobros fechados de reparaciones del periodo (vista de caja). */
+  repairPayments?: FinanceRepairPaymentRecord[]
+  /** Cobros fechados de las reparaciones seleccionadas (cobertura). */
+  repairPaymentsBySelectedRepair?: FinanceRepairPaymentRecord[]
+  /** `false` si el despliegue todavia no tiene la tabla `repair_payments`. */
+  repairPaymentTimingAvailable?: boolean
 }
 
 export interface FinanceSummaryReport extends FinanceSummary {
@@ -1741,6 +1812,11 @@ function isUsedRepairPart(status: string | null | undefined): boolean {
   )
 }
 
+/** Como nombrar una reparacion en un aviso: el ticket es lo que ve el usuario. */
+function repairLabel(repair: FinanceRepairRecord): string | undefined {
+  return repair.ticketNumber ? `Reparación ${repair.ticketNumber}` : undefined
+}
+
 function isCompletedNonCreditSalePayment(payment: FinanceSalePaymentRecord): boolean {
   return (
     payment.status === 'completed' &&
@@ -1775,6 +1851,12 @@ function buildFinancialSummary(
     items.push(item)
     saleItemsBySaleId.set(item.saleId, items)
   }
+  const orderItemsByOrderId = new Map<string, FinanceOrderItemRecord[]>()
+  for (const item of records.orderItems ?? []) {
+    const items = orderItemsByOrderId.get(item.orderId) ?? []
+    items.push(item)
+    orderItemsByOrderId.set(item.orderId, items)
+  }
   const partsByRepairId = new Map<string, FinanceRepairPartRecord[]>()
   for (const part of records.repairParts) {
     const parts = partsByRepairId.get(part.repairId) ?? []
@@ -1787,6 +1869,14 @@ function buildFinancialSummary(
       isInBranch(sale.branchId, filters) &&
       isInPeriod(sale.createdAt, filters) &&
       isCompletedSaleStatus(sale.status),
+  )
+  // Un pedido cuenta como venta salvo que este cancelado: es facturacion del
+  // canal web y hasta ahora no entraba en ningun total.
+  const selectedOrders = (records.orders ?? []).filter(
+    (order) =>
+      isInBranch(order.branchId, filters) &&
+      isInPeriod(order.createdAt, filters) &&
+      String(order.status ?? '').toUpperCase() !== 'CANCELLED',
   )
   const selectedRepairs = records.repairs.filter(
     (repair) =>
@@ -1810,6 +1900,8 @@ function buildFinancialSummary(
         amount: money(sale.totalAmount),
         cashAmount: 0,
         hasCost,
+        label: sale.code ? `Venta ${sale.code}` : undefined,
+        sourceType: 'sale' as const,
       }
     }),
     ...selectedRepairs.map((repair) => {
@@ -1819,6 +1911,22 @@ function buildFinancialSummary(
         amount: money(repair.revenueAmount),
         cashAmount: 0,
         hasCost: parts.every((part) => part.unitCost !== null),
+        label: repairLabel(repair),
+        sourceType: 'repair' as const,
+      }
+    }),
+    // El costo se captura al crear el pedido (trigger sobre customer_order_items).
+    // Un pedido sin snapshot —anterior a esa migracion— queda declarado sin
+    // cobertura en vez de estimarle un costo con la lista de precios de hoy.
+    ...selectedOrders.map((order) => {
+      const items = orderItemsByOrderId.get(order.id) ?? []
+      return {
+        id: order.id,
+        amount: money(order.totalAmount),
+        cashAmount: 0,
+        hasCost: items.length > 0 && items.every((item) => item.unitCost !== null),
+        label: order.code ? `Pedido ${order.code}` : undefined,
+        sourceType: 'order' as const,
       }
     }),
   ]
@@ -1835,6 +1943,17 @@ function buildFinancialSummary(
         part.unitCost === null
           ? []
           : [{ id: `${repair.id}:part`, amount: money(part.quantity) * money(part.unitCost), paidAmount: 0 }],
+      ),
+    ),
+    ...selectedOrders.flatMap((order) =>
+      (orderItemsByOrderId.get(order.id) ?? []).flatMap((item) =>
+        item.unitCost === null
+          ? []
+          : [{
+              id: `${order.id}:${item.productId ?? 'item'}`,
+              amount: money(item.quantity) * money(item.unitCost),
+              paidAmount: 0,
+            }],
       ),
     ),
   ]
@@ -1854,6 +1973,23 @@ function buildFinancialSummary(
         isInPeriod(entry.approvedAt, filters),
     )
     .map((entry) => ({ id: entry.id, amount: money(entry.netAmount), paidAmount: 0 }))
+
+  // Pagos a tecnicos: son mano de obra igual que la nomina, pero viven en su
+  // propia tabla y no entraban en ningun total. Se cuentan como pagados porque
+  // el registro se crea cuando la plata ya salio.
+  const technicianPayments = (records.technicianPayments ?? [])
+    .filter((payment) => {
+      const status = String(payment.status ?? '').toLowerCase()
+      if (status === 'anulado' || status === 'pendiente') return false
+      return isInPeriod(payment.paidAt, filters)
+    })
+    .map((payment) => ({
+      id: payment.id,
+      amount: money(payment.amount),
+      paidAmount: money(payment.amount),
+    }))
+
+  const payrollWithTechnicians = [...payroll, ...technicianPayments]
   // Las devoluciones cerradas en el periodo revierten la venta que ya se conto.
   const selectedRefunds = (records.refunds ?? []).filter(
     (refund) =>
@@ -1865,7 +2001,7 @@ function buildFinancialSummary(
     recoveredCost: Math.min(money(refund.recoveredCost), money(refund.amount)),
     cashAmount: Math.min(money(refund.cashAmount), money(refund.amount)),
   }))
-  const summary = calculateFinancialSummary({ revenue, directCosts, expenses, payroll, refunds })
+  const summary = calculateFinancialSummary({ revenue, directCosts, expenses, payroll: payrollWithTechnicians, refunds })
   const refundedCash = refunds.reduce((total, refund) => total + refund.cashAmount, 0)
   const saleCollected = [...(records.salePayments ?? []), ...(records.creditPayments ?? [])]
     .filter(
@@ -1875,9 +2011,38 @@ function buildFinancialSummary(
         isCompletedNonCreditSalePayment(payment),
     )
     .reduce((total, payment) => total + money(payment.amount), 0)
+  // Los pedidos no tienen cobros fechados: se toma el total de los que figuran
+  // pagados. Es menos preciso que un pago con fecha, pero deja de ignorar por
+  // completo la plata que entro por la tienda.
+  const orderCollected = selectedOrders
+    .filter((order) => String(order.paymentStatus ?? '').toUpperCase() === 'PAID')
+    .reduce((total, order) => total + money(order.paidAmount || order.totalAmount), 0)
+  // Cobros de reparaciones que si entraron en el periodo. Antes valian cero:
+  // Finanzas no leia `repair_payments` y la plata de reparaciones no aparecia
+  // en la vista de caja. Se excluyen `credit` y `mixed` por el mismo motivo que
+  // en ventas: esa parte se cobra despues como cuota y ya se cuenta ahi.
+  const repairCollected = (records.repairPayments ?? [])
+    .filter(
+      (payment) =>
+        isInBranch(payment.branchId, filters) &&
+        isInPeriod(payment.paymentDate, filters) &&
+        ['cash', 'card', 'transfer'].includes(payment.paymentMethod),
+    )
+    .reduce((total, payment) => total + money(payment.amount), 0)
+  // Los pagos a tecnicos salen de `technician_payments`, no de `payroll_payments`
+  // —esa tabla la alimenta la nomina administrativa—, asi que no hay doble conteo.
+  const technicianPaid = technicianPayments.reduce((total, payment) => total + payment.paidAmount, 0)
   const paid = signedPayments(records.financePayments, filters) +
     signedPayments(records.payrollPayments, filters) +
-    refundedCash
+    refundedCash +
+    technicianPaid
+  const datedRepairPayments = new Map<string, number>()
+  for (const payment of records.repairPaymentsBySelectedRepair ?? records.repairPayments ?? []) {
+    datedRepairPayments.set(
+      payment.repairId,
+      (datedRepairPayments.get(payment.repairId) ?? 0) + money(payment.amount),
+    )
+  }
   const cashTimingWarnings = [
     ...(records.salePaymentTimingAvailable === false
       ? selectedSales.map((sale) => ({
@@ -1900,11 +2065,21 @@ function buildFinancialSummary(
           }))
       : []),
     ...selectedRepairs
-      .filter((repair) => money(repair.paidAmount) > 0)
+      .filter((repair) => {
+        const paid = money(repair.paidAmount)
+        if (paid <= 0) return false
+        // Sin la tabla de cobros no hay nada con que respaldar el acumulado.
+        if (records.repairPaymentTimingAvailable === false) return true
+        // Tolerancia de medio guarani: el acumulado y la suma de cobros pueden
+        // diferir por redondeo sin que falte ningun registro.
+        return (datedRepairPayments.get(repair.id) ?? 0) < paid - 0.5
+      })
       .map((repair) => ({
         code: 'MISSING_CASH_TIMING' as const,
         message: 'La reparación solo tiene un total pagado acumulado, sin un cobro fechado.',
         sourceId: repair.id,
+        sourceLabel: repairLabel(repair),
+        sourceType: 'repair' as const,
       })),
   ]
 
@@ -1922,9 +2097,9 @@ function buildFinancialSummary(
       netProfit: summary.accrued.netProfit === null ? null : roundMoneyValue(summary.accrued.netProfit),
     },
     cash: {
-      collected: roundMoneyValue(saleCollected),
+      collected: roundMoneyValue(saleCollected + orderCollected + repairCollected),
       paid: roundMoneyValue(paid),
-      netCashFlow: roundMoneyValue(saleCollected - paid),
+      netCashFlow: roundMoneyValue(saleCollected + orderCollected + repairCollected - paid),
     },
   }
 }
@@ -2005,6 +2180,130 @@ function assertBoundedFinanceRows(
  * que usa el costo directo de la venta: asi la reversion usa exactamente el
  * costo con el que se conto el ingreso, y no el precio de compra de hoy.
  */
+/**
+ * Pedidos de la tienda web del periodo.
+ *
+ * Se leen aparte porque pagar un pedido no genera una fila en `sales`: el pago
+ * solo queda en `customer_order_payment_history`.
+ */
+/**
+ * Pagos a tecnicos del periodo.
+ *
+ * Se leen de su propia tabla y no de `cash_movements`: ahi conviven aperturas,
+ * ventas, retiros y reintegros, y distinguirlos por el texto del motivo seria
+ * adivinar. La tabla propia tiene monto, fecha y estado explicitos.
+ */
+/** Costos historicos de los items de los pedidos indicados. */
+async function loadOrderItemCosts(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  orderIds: string[],
+): Promise<FinanceOrderItemRecord[]> {
+  if (orderIds.length === 0) return []
+
+  const results = await Promise.all(
+    chunkQueryValues(orderIds).map((ids) =>
+      admin
+        .from('customer_order_item_cost_snapshots')
+        .select('order_id, product_id, quantity, unit_cost', { count: 'exact' })
+        .eq('organization_id', organizationId)
+        .in('order_id', ids)
+        .limit(FINANCE_REPORT_QUERY_LIMIT),
+    ),
+  )
+
+  const items: FinanceOrderItemRecord[] = []
+  for (const result of results) {
+    if (result.error) {
+      // Sin la migracion de snapshots los pedidos quedan explicitamente sin
+      // cobertura, igual que las ventas: el resumen avisa en vez de estimar.
+      if (isMissingTableError(result.error, 'customer_order_item_cost_snapshots')) return []
+      throw toFinanceApiError(result.error)
+    }
+    assertBoundedFinanceRows(result.data as unknown[] | null, 'costos de pedidos', result.count)
+    for (const row of result.data ?? []) {
+      items.push({
+        orderId: String(row.order_id),
+        productId: (row.product_id as string | null) ?? null,
+        quantity: Number(row.quantity) || 0,
+        unitCost: row.unit_cost === null ? null : money(row.unit_cost as number | string),
+      })
+    }
+  }
+  return items
+}
+
+async function loadTechnicianPayments(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  startDate: string,
+  queryEndDate: string,
+): Promise<FinanceTechnicianPaymentRecord[]> {
+  const result = await admin
+    .from('technician_payments')
+    .select('id, amount, method, status, paid_at', { count: 'exact' })
+    .eq('organization_id', organizationId)
+    .gte('paid_at', startDate)
+    .lt('paid_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
+    .limit(FINANCE_REPORT_QUERY_LIMIT)
+
+  if (result.error) {
+    // Un despliegue sin el modulo de tecnicos no tiene la tabla.
+    if (isMissingTableError(result.error, 'technician_payments')) return []
+    throw toFinanceApiError(result.error)
+  }
+  assertBoundedFinanceRows(result.data as unknown[] | null, 'pagos a tecnicos', result.count)
+
+  return ((result.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    paidAt: row.paid_at ? String(row.paid_at) : null,
+    amount: money(row.amount as number | string | null),
+    method: (row.method as string | null) ?? null,
+    status: (row.status as string | null) ?? null,
+  }))
+}
+
+async function loadCustomerOrders(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  startDate: string,
+  queryEndDate: string,
+  filters: FinanceFilters,
+): Promise<FinanceOrderRecord[]> {
+  let query = admin
+    .from('customer_orders')
+    .select('id, order_number, branch_id, created_at, status, payment_status, total', { count: 'exact' })
+    .eq('organization_id', organizationId)
+    .gte('created_at', startDate)
+    .lt('created_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
+    .limit(FINANCE_REPORT_QUERY_LIMIT)
+
+  if (filters.branchId) query = query.eq('branch_id', filters.branchId)
+
+  const result = await query
+
+  if (result.error) {
+    // Un despliegue sin el modulo de tienda no tiene la tabla: no es motivo
+    // para romper el resumen entero.
+    if (isMissingTableError(result.error, 'customer_orders')) return []
+    throw toFinanceApiError(result.error)
+  }
+  assertBoundedFinanceRows(result.data as unknown[] | null, 'pedidos de la tienda', result.count)
+
+  return ((result.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    code: (row.order_number as string | null) ?? null,
+    branchId: (row.branch_id as string | null) ?? null,
+    createdAt: String(row.created_at),
+    status: (row.status as string | null) ?? null,
+    paymentStatus: (row.payment_status as string | null) ?? null,
+    totalAmount: money(row.total as number | string | null),
+    // `customer_orders` no guarda un monto cobrado: el pago es un estado, no un
+    // importe parcial, asi que un pedido pagado cuenta por su total.
+    paidAmount: money(row.total as number | string | null),
+  }))
+}
+
 async function loadAfterSalesRefunds(
   admin: ReturnType<typeof createAdminSupabase>,
   organizationId: string,
@@ -2226,9 +2525,28 @@ async function loadFinanceSummaryRecords(
   )
 
   const refunds = await loadAfterSalesRefunds(admin, organizationId, startDate, queryEndDate)
+  const orders = await loadCustomerOrders(admin, organizationId, startDate, queryEndDate, filters)
+  const technicianPayments = await loadTechnicianPayments(admin, organizationId, startDate, queryEndDate)
+  const orderItems = await loadOrderItemCosts(admin, organizationId, orders.map((order) => order.id))
+  const repairPaymentResult = await loadRepairPayments(
+    admin,
+    organizationId,
+    filters,
+    startDate,
+    queryEndDate,
+  )
+  const repairPaymentsBySelectedRepair = repairPaymentResult.available
+    ? await loadRepairPaymentsForRepairs(admin, repairs.map((repair) => repair.id))
+    : []
 
   return {
     refunds,
+    orders,
+    orderItems,
+    repairPayments: repairPaymentResult.payments,
+    repairPaymentsBySelectedRepair,
+    repairPaymentTimingAvailable: repairPaymentResult.available,
+    technicianPayments,
     sales,
     saleItems,
     salePayments: salePaymentResult.payments,
@@ -2467,6 +2785,87 @@ async function loadSaleItems(
     }
   }
   return items
+}
+
+function toRepairPaymentRecord(row: {
+  repair_id: unknown
+  branch_id?: unknown
+  created_at: unknown
+  payment_method?: unknown
+  amount: unknown
+}): FinanceRepairPaymentRecord {
+  return {
+    repairId: String(row.repair_id),
+    branchId: (row.branch_id as string | null) ?? null,
+    paymentDate: String(row.created_at),
+    paymentMethod: String(row.payment_method ?? '').trim().toLowerCase(),
+    amount: money(row.amount as number | string),
+  }
+}
+
+const REPAIR_PAYMENT_COLUMNS = 'repair_id, branch_id, amount, payment_method, created_at'
+
+/**
+ * Cobros de reparaciones fechados dentro del periodo, para la vista de caja.
+ */
+async function loadRepairPayments(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  filters: FinanceFilters,
+  startDate: string,
+  endDate: string,
+): Promise<{ payments: FinanceRepairPaymentRecord[]; available: boolean }> {
+  let query = admin
+    .from('repair_payments')
+    .select(REPAIR_PAYMENT_COLUMNS, { count: 'exact' })
+    .eq('organization_id', organizationId)
+    .gte('created_at', startDate)
+    .lt('created_at', `${nextDay(endDate)}T00:00:00.000Z`)
+    .limit(FINANCE_REPORT_QUERY_LIMIT)
+  if (filters.branchId) query = query.eq('branch_id', filters.branchId)
+
+  const result = await query
+  if (result.error) {
+    if (isMissingTableError(result.error, 'repair_payments')) {
+      return { payments: [], available: false }
+    }
+    throw toFinanceApiError(result.error)
+  }
+  assertBoundedFinanceRows(result.data as unknown[] | null, 'cobros de reparación', result.count)
+  return { payments: (result.data ?? []).map(toRepairPaymentRecord), available: true }
+}
+
+/**
+ * Cobros de las reparaciones del periodo, sin filtrar por fecha.
+ *
+ * La cobertura pregunta otra cosa que la caja: si el acumulado de una reparacion
+ * esta respaldado por registros fechados. Un cobro posterior al periodo lo
+ * respalda igual, asi que acotarlo por fecha daria un aviso falso.
+ */
+async function loadRepairPaymentsForRepairs(
+  admin: ReturnType<typeof createAdminSupabase>,
+  repairIds: string[],
+): Promise<FinanceRepairPaymentRecord[]> {
+  if (repairIds.length === 0) return []
+  const results = await Promise.all(
+    chunkQueryValues(repairIds).map((ids) =>
+      admin
+        .from('repair_payments')
+        .select(REPAIR_PAYMENT_COLUMNS, { count: 'exact' })
+        .in('repair_id', ids)
+        .limit(FINANCE_REPORT_QUERY_LIMIT),
+    ),
+  )
+  const payments: FinanceRepairPaymentRecord[] = []
+  for (const result of results) {
+    if (result.error) {
+      if (isMissingTableError(result.error, 'repair_payments')) return []
+      throw toFinanceApiError(result.error)
+    }
+    assertBoundedFinanceRows(result.data as unknown[] | null, 'cobros de reparación', result.count)
+    for (const row of result.data ?? []) payments.push(toRepairPaymentRecord(row))
+  }
+  return payments
 }
 
 async function loadRepairParts(
