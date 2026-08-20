@@ -153,6 +153,25 @@ export const commissionRuleInputSchema = z
     if (input.scopeType === 'role' && !input.role) {
       context.addIssue({ code: 'custom', path: ['role'], message: 'Selecciona un rol.' })
     }
+    // Un porcentaje mayor a 100 es siempre un dedazo: no existe comisionar mas
+    // que el importe que la genera. Sin este tope, escribir 50 en vez de 5 se
+    // guarda sin aviso y recien aparece cuando sale la corrida de nomina.
+    if (input.calculationType === 'percentage' && input.value > 100) {
+      context.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'El porcentaje no puede superar el 100% del importe base.',
+      })
+    }
+    // Una vigencia que termina antes de empezar no rige nunca: se guarda como
+    // regla activa y no comisiona nada.
+    if (input.effectiveTo && input.effectiveTo < input.effectiveFrom) {
+      context.addIssue({
+        code: 'custom',
+        path: ['effectiveTo'],
+        message: 'La fecha de fin no puede ser anterior a la de inicio.',
+      })
+    }
     if (
       (input.sourceType === 'product' || input.sourceType === 'category') &&
       !input.sourceReferenceId

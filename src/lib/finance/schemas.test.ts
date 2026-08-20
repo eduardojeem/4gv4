@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { expenseInputSchema, paymentInputSchema, payrollPaymentInputSchema } from './schemas'
+import {
+  commissionRuleInputSchema,
+  expenseInputSchema,
+  paymentInputSchema,
+  payrollPaymentInputSchema,
+} from './schemas'
 
 const branchId = 'c6ba2f4d-5ed0-41ca-94a4-a0926ea5c42d'
 const categoryId = '08e261aa-8cad-4432-a1a6-3f4a9cdb885d'
@@ -180,5 +185,58 @@ describe('payrollPaymentInputSchema', () => {
 
   it('rejects a client-provided branch identifier', () => {
     expect(payrollPaymentInputSchema.safeParse({ ...payment, branchId }).success).toBe(false)
+  })
+})
+
+describe('commissionRuleInputSchema', () => {
+  const employeeId = '3f4d6c1a-7b2e-4a58-9c31-2e5f8a0d6b74'
+  const base = {
+    scopeType: 'employee' as const,
+    employeeId,
+    sourceType: 'sale' as const,
+    calculationType: 'percentage' as const,
+    value: 5,
+    effectiveFrom: '2026-08-01',
+  }
+
+  it('accepts a normal percentage rule', () => {
+    expect(commissionRuleInputSchema.safeParse(base).success).toBe(true)
+  })
+
+  it('accepts exactly 100%', () => {
+    expect(commissionRuleInputSchema.safeParse({ ...base, value: 100 }).success).toBe(true)
+  })
+
+  // Escribir 50 en vez de 5 se guardaba sin aviso y aparecia recien en la corrida.
+  it('rejects a percentage above 100', () => {
+    const result = commissionRuleInputSchema.safeParse({ ...base, value: 500 })
+    expect(result.success).toBe(false)
+  })
+
+  // El tope es del porcentaje, no del importe: un monto fijo alto es legitimo.
+  it('still allows a large fixed amount', () => {
+    const result = commissionRuleInputSchema.safeParse({
+      ...base,
+      calculationType: 'fixed',
+      value: 500_000,
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts a rule with an end date', () => {
+    const result = commissionRuleInputSchema.safeParse({
+      ...base,
+      effectiveTo: '2026-12-31',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  // Una vigencia invertida se guardaba como regla activa que no comisiona nada.
+  it('rejects an end date before the start date', () => {
+    const result = commissionRuleInputSchema.safeParse({
+      ...base,
+      effectiveTo: '2026-07-01',
+    })
+    expect(result.success).toBe(false)
   })
 })

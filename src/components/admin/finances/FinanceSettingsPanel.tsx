@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   Building2,
+  Ban,
   Calendar,
   CheckCircle2,
   Coins,
@@ -106,6 +107,19 @@ const ROLE_OPTIONS: Array<{ value: string; label: string }> = [
 ]
 
 const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS.map((r) => [r.value, r.label]))
+
+/**
+ * Sobre que importe se calcula el porcentaje, en palabras.
+ *
+ * Es la decision mas cara de una regla y no figuraba en ninguna parte de la
+ * pantalla: la comision de venta se calcula sobre el total facturado, no sobre
+ * la ganancia, asi que con poco margen puede superar la utilidad de esa venta.
+ */
+const BASIS_LABEL: Record<SourceType, string> = {
+  sale: 'del total facturado de la venta',
+  repair: 'del total de la reparación',
+  repair_labor: 'de la mano de obra',
+}
 
 // Modal para editar / asignar sueldo base
 function EditSalaryDialog({
@@ -281,6 +295,7 @@ export function FinanceSettingsPanel({
   const [calculationType, setCalculationType] = useState<CalculationType>('percentage')
   const [value, setValue] = useState('')
   const [effectiveFrom, setEffectiveFrom] = useState('')
+  const [effectiveTo, setEffectiveTo] = useState('')
 
   const loadCompensations = useCallback(async () => {
     try {
@@ -335,6 +350,7 @@ export function FinanceSettingsPanel({
     setCalculationType('percentage')
     setValue('')
     setEffectiveFrom('')
+    setEffectiveTo('')
   }
 
   async function submit(status: RuleStatus) {
@@ -343,6 +359,12 @@ export function FinanceSettingsPanel({
     if (scopeType === 'role' && !role) return setError('Elegí un rol para la regla.')
     if (!value || Number(value) <= 0) return setError('Ingresá un valor mayor a cero.')
     if (!effectiveFrom) return setError('Indicá desde cuándo rige la regla.')
+    if (effectiveTo && effectiveTo < effectiveFrom) {
+      return setError('La fecha de fin no puede ser anterior a la de inicio.')
+    }
+    if (calculationType === 'percentage' && Number(value) > 100) {
+      return setError('El porcentaje no puede superar el 100% del importe base.')
+    }
 
     setIsSaving(true)
     setError(null)
@@ -360,6 +382,7 @@ export function FinanceSettingsPanel({
         value: Number(value),
         status,
         effectiveFrom,
+        effectiveTo: effectiveTo || undefined,
       }),
     })
     const payload = (await response.json().catch(() => null)) as { error?: string } | null
@@ -404,6 +427,45 @@ export function FinanceSettingsPanel({
     await load()
   }
 
+  /**
+   * Retira una regla aprobada: deja de comisionar de aca en adelante.
+   *
+   * No se borra. La base tiene `on delete restrict` sobre los devengados, asi
+   * que una regla que ya genero comisiones no se puede eliminar —y esta bien:
+   * borrarla dejaria sin explicacion las comisiones que ya se pagaron.
+   */
+  async function retireRule(rule: Rule) {
+    if (approvingId) return
+    setApprovingId(rule.id)
+    setError(null)
+    const response = await fetch(`/api/admin/finances/commission-rules?organizationId=${organizationId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: rule.id,
+        branchId: rule.branch_id ?? undefined,
+        scopeType: rule.scope_type,
+        employeeId: rule.scope_type === 'employee' ? rule.employee_id ?? undefined : undefined,
+        role: rule.scope_type === 'role' ? rule.role ?? undefined : undefined,
+        sourceType: rule.source_type,
+        sourceReferenceId: rule.source_reference_id ?? undefined,
+        accrualStatus: rule.accrual_status ?? undefined,
+        calculationType: rule.calculation_type,
+        value: Number(rule.value),
+        status: 'retired',
+        effectiveFrom: rule.effective_from,
+        effectiveTo: rule.effective_to ?? undefined,
+      }),
+    })
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null
+    setApprovingId(null)
+    if (!response.ok) {
+      setError(payload?.error ?? 'No se pudo retirar la regla.')
+      return
+    }
+    await load()
+  }
+
   const needsAccrualStatus = sourceType === 'repair' || sourceType === 'repair_labor'
 
   // Previsualización dinámica de la regla
@@ -424,16 +486,28 @@ export function FinanceSettingsPanel({
 
     const valText = value
       ? calculationType === 'percentage'
-        ? `${value}% del importe base`
+        ? `${value}% ${BASIS_LABEL[sourceType]}`
         : formatCurrency(Number(value))
       : calculationType === 'percentage'
-      ? '[X]%'
+      ? `[X]% ${BASIS_LABEL[sourceType]}`
       : '[Monto]'
 
     const dateText = effectiveFrom ? `a partir del ${effectiveFrom}` : 'desde su fecha de vigencia'
+    const endText = effectiveTo ? ` y hasta el ${effectiveTo}` : ' sin fecha de fin'
 
-    return `Aplica para ${targetName}: percibirá ${valText} por ${actName}, ${dateText}.`
-  }, [accrualStatus, calculationType, effectiveFrom, employeeId, employees, role, scopeType, sourceType, value])
+    return `Aplica para ${targetName}: percibirá ${valText} por ${actName}, ${dateText}${endText}.`
+  }, [
+    accrualStatus,
+    calculationType,
+    effectiveFrom,
+    effectiveTo,
+    employeeId,
+    employees,
+    role,
+    scopeType,
+    sourceType,
+    value,
+  ])
 
   // Filtrado de reglas
   const filteredRules = useMemo(() => {
@@ -711,7 +785,7 @@ export function FinanceSettingsPanel({
                     />
                     <p className="text-[11px] text-muted-foreground">
                       {calculationType === 'percentage'
-                        ? 'Porcentaje sobre el total facturado'
+                        ? `Porcentaje ${BASIS_LABEL[sourceType]} (máximo 100%)`
                         : 'Importe fijo por cada operación'}
                     </p>
                   </div>
@@ -735,6 +809,31 @@ export function FinanceSettingsPanel({
                     />
                     <p className="text-[11px] text-muted-foreground">
                       Las ventas o reparaciones ocurridas a partir de esta fecha calcularán comisiones con esta regla.
+                    </p>
+                  </div>
+
+                  {/* 8. Vigencia Hasta (opcional) */}
+                  <div className="space-y-1.5 rounded-xl border border-border/60 bg-muted/10 p-3.5 sm:col-span-2 lg:col-span-3">
+                    <Label
+                      htmlFor="rule-to"
+                      className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
+                    >
+                      <Calendar className="h-3.5 w-3.5 text-primary" />
+                      Vigente hasta <span className="font-medium normal-case">(opcional)</span>
+                    </Label>
+                    <Input
+                      id="rule-to"
+                      aria-label="Vigente hasta"
+                      type="date"
+                      value={effectiveTo}
+                      min={effectiveFrom || undefined}
+                      onChange={(event) => setEffectiveTo(event.target.value)}
+                      className="max-w-xs"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Dejalo vacío si la comisión no vence. Para una promoción por
+                      temporada, poné la fecha de cierre acá y la regla deja de
+                      comisionar sola.
                     </p>
                   </div>
                 </div>
@@ -841,7 +940,9 @@ export function FinanceSettingsPanel({
                       : `Rol: ${ROLE_LABEL[String(rule.role)] ?? rule.role}`
                   const source = SOURCE_LABEL[rule.source_type] ?? rule.source_type
                   const amount =
-                    rule.calculation_type === 'percentage' ? `${rule.value}% sobre base` : formatCurrency(rule.value)
+                    rule.calculation_type === 'percentage'
+                      ? `${rule.value}% ${BASIS_LABEL[rule.source_type as SourceType] ?? 'del importe base'}`
+                      : formatCurrency(rule.value)
                   const isRepair = rule.source_type === 'repair' || rule.source_type === 'repair_labor'
 
                   return (
@@ -868,7 +969,10 @@ export function FinanceSettingsPanel({
                             <span>·</span>
                             <span className="font-bold text-emerald-600 dark:text-emerald-400">{amount}</span>
                             <span>·</span>
-                            <span>Desde {rule.effective_from}</span>
+                            <span>
+                              Desde {rule.effective_from}
+                              {rule.effective_to ? ` hasta ${rule.effective_to}` : ''}
+                            </span>
                             {rule.accrual_status ? (
                               <>
                                 <span>·</span>
@@ -890,6 +994,19 @@ export function FinanceSettingsPanel({
                           >
                             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
                             {approvingId === rule.id ? 'Aprobando…' : 'Aprobar regla'}
+                          </Button>
+                        ) : null}
+                        {rule.status === 'approved' ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1.5 h-8 text-xs font-semibold text-muted-foreground hover:text-destructive"
+                            onClick={() => void retireRule(rule)}
+                            disabled={approvingId === rule.id}
+                            title="Deja de comisionar de aquí en adelante. Las comisiones ya devengadas no se tocan."
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                            {approvingId === rule.id ? 'Retirando…' : 'Retirar'}
                           </Button>
                         ) : null}
                       </div>

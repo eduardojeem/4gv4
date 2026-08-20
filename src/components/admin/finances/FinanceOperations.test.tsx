@@ -197,6 +197,85 @@ describe('finance operational dialogs', () => {
     expect(JSON.parse(request.body)).toMatchObject({ id: uuid, status: 'approved', effectiveFrom: '2026-08-01' })
   })
 
+  // Una regla aprobada no se podia frenar desde la pantalla: no habia fecha de
+  // fin ni accion de retiro, asi que una comision de temporada corria para
+  // siempre. No se borra —la base restringe borrar reglas con devengos— se retira.
+  it('retires an approved rule instead of deleting its history', async () => {
+    const user = userEvent.setup()
+    const approvedRule = {
+      id: uuid,
+      branch_id: null,
+      scope_type: 'role',
+      role: 'seller',
+      employee_id: null,
+      source_type: 'sale',
+      source_reference_id: null,
+      accrual_status: null,
+      calculation_type: 'percentage',
+      value: 15,
+      status: 'approved',
+      effective_from: '2026-08-01',
+      effective_to: null,
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ employees: [] }))
+      .mockResolvedValueOnce(json({ rules: [approvedRule] }))
+      .mockResolvedValueOnce(json({ rule: { ...approvedRule, status: 'retired' } }))
+      .mockResolvedValueOnce(json({ employees: [] }))
+      .mockResolvedValueOnce(json({ rules: [{ ...approvedRule, status: 'retired' }] }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Retirar' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5))
+    const [, request] = fetchMock.mock.calls[2]
+    expect(request.method).toBe('PATCH')
+    expect(JSON.parse(request.body)).toMatchObject({ id: uuid, status: 'retired' })
+  })
+
+  // Escribir 50 en vez de 5 se guardaba sin aviso y recien aparecia en la corrida.
+  it('refuses a commission above 100% before sending it', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ employees: [] }))
+      .mockResolvedValueOnce(json({ rules: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
+
+    await user.selectOptions(await screen.findByLabelText('Alcance'), 'role')
+    await user.selectOptions(screen.getByLabelText('Rol'), 'seller')
+    await user.type(screen.getByLabelText('Valor'), '500')
+    await user.type(screen.getByLabelText('Vigente desde'), '2026-08-01')
+    await user.click(screen.getByRole('button', { name: 'Crear y aprobar regla' }))
+
+    expect(await screen.findByText(/no puede superar el 100%/i)).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('sends the end date so a seasonal rule stops on its own', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ employees: [] }))
+      .mockResolvedValueOnce(json({ rules: [] }))
+      .mockResolvedValueOnce(json({ rule: { id: uuid } }, 201))
+      .mockResolvedValueOnce(json({ employees: [] }))
+      .mockResolvedValueOnce(json({ rules: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
+
+    await user.selectOptions(await screen.findByLabelText('Alcance'), 'role')
+    await user.selectOptions(screen.getByLabelText('Rol'), 'seller')
+    await user.type(screen.getByLabelText('Valor'), '5')
+    await user.type(screen.getByLabelText('Vigente desde'), '2026-08-01')
+    await user.type(screen.getByLabelText('Vigente hasta'), '2026-08-31')
+    await user.click(screen.getByRole('button', { name: 'Crear y aprobar regla' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5))
+    const [, request] = fetchMock.mock.calls[2]
+    expect(JSON.parse(request.body)).toMatchObject({ effectiveTo: '2026-08-31' })
+  })
+
   it('propagates the current period and branch to profitability exports', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({ rows: [] }))
