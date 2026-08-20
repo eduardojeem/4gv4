@@ -73,6 +73,20 @@ describe('repair financial closure contracts', () => {
     })
   })
 
+  it('keeps an advance as partial while the repair price is still unknown', () => {
+    expect(getRepairPaymentSummary({
+      finalCost: null,
+      estimatedCost: 0,
+      paidAmount: 40_000,
+    })).toEqual({
+      total: null,
+      paid: 40_000,
+      balance: null,
+      status: 'parcial',
+      priceDefined: false,
+    })
+  })
+
   it('clamps invalid aggregates without hiding an overpaid persisted row', () => {
     expect(getRepairPaymentSummary({
       finalCost: 100_000,

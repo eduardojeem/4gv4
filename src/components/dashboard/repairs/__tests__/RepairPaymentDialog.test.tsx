@@ -33,6 +33,8 @@ vi.mock('@/app/dashboard/pos/components/OpenCashRegisterDialog', () => ({
 
 vi.mock('@/lib/currency', () => ({
   formatCurrency: (amount: number) => `${amount}`,
+  formatThousands: (amount: string | number | null | undefined) => String(amount ?? ''),
+  parseThousands: (amount: string) => Number(amount.replace(/\D/g, '')),
   getCurrencyFractionDigits: () => 0,
 }))
 
@@ -67,8 +69,9 @@ describe('RepairPaymentDialog', () => {
     expect(screen.getByRole('button', { name: 'Registrar Crédito' })).toBeEnabled()
   })
 
-  it('blocks payment without a defined price and routes the user to price editing', () => {
-    const onDefinePrice = vi.fn()
+  it('allows an advance without a defined price and labels it separately from a balance payment', async () => {
+    cashRegisterMocks.checkOpenSession.mockResolvedValue({ id: 'session-1' })
+    const onConfirm = vi.fn().mockResolvedValue(undefined)
     const repairWithoutPrice = { ...repair, finalCost: 0, estimatedCost: 0, paidAmount: 0 }
 
     render(
@@ -76,17 +79,20 @@ describe('RepairPaymentDialog', () => {
         open
         repair={repairWithoutPrice}
         onOpenChange={vi.fn()}
-        onConfirm={vi.fn()}
-        onDefinePrice={onDefinePrice}
+        onConfirm={onConfirm}
       />,
     )
 
-    expect(screen.getByText('Primero definí el precio de la reparación')).toBeVisible()
-    expect(screen.queryByText('Método de pago')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Confirmar Cobro' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Definir precio' }))
-    expect(onDefinePrice).toHaveBeenCalledWith(expect.objectContaining({ id: 'repair-1' }))
-    expect(cashRegisterMocks.checkOpenSession).not.toHaveBeenCalled()
+    expect(await screen.findByText('Precio pendiente de definir')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Registrar adelanto' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Crédito' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Monto del adelanto'), { target: { value: '50000' } })
+    fireEvent.change(screen.getByLabelText('Efectivo recibido del cliente'), { target: { value: '50000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar adelanto' }))
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('repair-1', expect.objectContaining({
+      purpose: 'deposit', amount: 50000, method: 'cash',
+    })))
   })
 
   it('shows a settled state instead of payment controls when the repair is fully paid', () => {

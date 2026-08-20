@@ -87,6 +87,23 @@ describe('RepairDetailDialog payment summary', () => {
     expect(screen.getByRole('button', { name: 'Cobrar saldo' })).toBeEnabled()
   })
 
+  it('shows an advance without claiming the repair is fully paid when price is unknown', () => {
+    render(
+      <RepairDetailDialog
+        open
+        repair={{ ...baseRepair, finalCost: null, estimatedCost: 0, paidAmount: 30 }}
+        onClose={vi.fn()}
+        onQuickPay={vi.fn()}
+      />,
+    )
+
+    const summary = screen.getByRole('region', { name: 'Estado del pago' })
+    expect(within(summary).getByText('Precio pendiente')).toBeVisible()
+    expect(within(summary).getByText('Anticipo recibido')).toBeVisible()
+    expect(within(summary).getByText('30')).toBeVisible()
+    expect(within(summary).queryByText('Pago completado')).not.toBeInTheDocument()
+  })
+
   it('opens quick price editing from the costs section', async () => {
     const user = userEvent.setup()
     render(

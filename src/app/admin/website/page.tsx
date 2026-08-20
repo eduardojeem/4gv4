@@ -11,6 +11,7 @@ import { CheckoutSettingsEditor } from '@/components/admin/website/CheckoutSetti
 import { OffersSectionEditor } from '@/components/admin/website/OffersSectionEditor'
 import { PromotionalCarouselEditor } from '@/components/admin/website/PromotionalCarouselEditor'
 import { SetupGuide } from '@/components/admin/website/SetupGuide'
+import { WebsiteHowItWorksDialog } from '@/components/admin/website/WebsiteHowItWorksDialog'
 import { Building2, Briefcase, Eye, Footprints, GalleryHorizontalEnd, Globe, ShoppingCart, Sparkles, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -85,24 +86,30 @@ export default function WebsiteAdminPage() {
             <p className="text-sm text-muted-foreground">Contenido, ventas y experiencia de tu tienda online</p>
           </div>
         </div>
-        {orgSlug ? (
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/${orgSlug}/inicio`} target="_blank" rel="noreferrer">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <WebsiteHowItWorksDialog
+            currentTab={tab}
+            onNavigateToTab={handleTabChange}
+          />
+          {orgSlug ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/${orgSlug}/inicio`} target="_blank" rel="noreferrer">
+                <Eye className="mr-2 h-4 w-4" />
+                Vista previa
+              </Link>
+            </Button>
+          ) : orgSlug === null ? (
+            <Button variant="outline" size="sm" disabled aria-label="Cargando enlace de vista previa">
               <Eye className="mr-2 h-4 w-4" />
-              Vista previa
-            </Link>
-          </Button>
-        ) : orgSlug === null ? (
-          <Button variant="outline" size="sm" disabled aria-label="Cargando enlace de vista previa">
-            <Eye className="mr-2 h-4 w-4" />
-            Cargando vista previa
-          </Button>
-        ) : (
-          <Button variant="outline" size="sm" disabled aria-label="Vista previa no disponible">
-            <Eye className="mr-2 h-4 w-4" />
-            Vista previa no disponible
-          </Button>
-        )}
+              Cargando vista previa
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled aria-label="Vista previa no disponible">
+              <Eye className="mr-2 h-4 w-4" />
+              Vista previa no disponible
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Setup Guide */}

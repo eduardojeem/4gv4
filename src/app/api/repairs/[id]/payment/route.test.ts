@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const closeFinancial = vi.fn()
+const registerUnpricedDeposit = vi.fn()
 const fetchRepair = vi.fn()
 
 function queryResult(result: { data: unknown; error: null }) {
@@ -51,6 +52,9 @@ vi.mock('@/lib/repairs/financial-closure-rpc', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/repairs/financial-closure-rpc')>()
   return { ...actual, closeRepairAndRegisterPayment: (...args: unknown[]) => closeFinancial(...args) }
 })
+vi.mock('@/lib/repairs/unpriced-deposit-rpc', () => ({
+  registerUnpricedRepairDeposit: (...args: unknown[]) => registerUnpricedDeposit(...args),
+}))
 describe('POST /api/repairs/:id/payment', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -59,6 +63,7 @@ describe('POST /api/repairs/:id/payment', () => {
       pricing_mode: 'automatic', labor_cost: 100_000, discount_amount: 0, parts: [],
     })
     closeFinancial.mockResolvedValue({ payment_id: 'payment-1', idempotent: false })
+    registerUnpricedDeposit.mockResolvedValue({ payment_id: 'deposit-1', idempotent: false })
     fetchRepair.mockResolvedValue({ data: { id: 'repair-1', payment_status: 'pagado' }, error: null })
   })
 
@@ -115,6 +120,23 @@ describe('POST /api/repairs/:id/payment', () => {
 
     expect(response.status).toBe(422)
     expect(payload).toMatchObject({ code: 'REPAIR_HAS_NO_BALANCE', currentBalance: 0 })
+    expect(closeFinancial).not.toHaveBeenCalled()
+  })
+
+  it('registers an explicit deposit when the repair price is still unknown', async () => {
+    repairRecord.labor_cost = 0
+    repairRecord.final_cost = null
+    repairRecord.estimated_cost = 0
+    const { POST } = await import('./route')
+    const request = { json: async () => ({
+      purpose: 'deposit', method: 'cash', amount: 50_000, idempotencyKey: 'deposit-unpriced-1',
+    }) } as never
+    const response = await POST(request, { params: Promise.resolve({ id: 'repair-1' }) })
+
+    expect(response.status).toBe(200)
+    expect(registerUnpricedDeposit).toHaveBeenCalledWith(ctx.supabase, expect.objectContaining({
+      repairId: 'repair-1', amount: 50_000, cashSessionId: 'cash-1',
+    }))
     expect(closeFinancial).not.toHaveBeenCalled()
   })
 

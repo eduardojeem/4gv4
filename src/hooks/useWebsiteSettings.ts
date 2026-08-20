@@ -14,10 +14,6 @@ let publicRealtimeRefCount = 0
 let publicRealtimeSupabase: RealtimeClient | null = null
 let publicRealtimeChannel: RealtimeChannel | null = null
 
-let adminRealtimeRefCount = 0
-let adminRealtimeSupabase: RealtimeClient | null = null
-let adminRealtimeChannel: RealtimeChannel | null = null
-
 const WEBSITE_SETTINGS_CACHE_KEY = '/api/public/website/settings'
 const ADMIN_WEBSITE_SETTINGS_CACHE_KEY = '/api/admin/website/settings'
 
@@ -53,36 +49,6 @@ function releasePublicWebsiteSettingsRealtime() {
 
   publicRealtimeSupabase.removeChannel(publicRealtimeChannel)
   publicRealtimeChannel = null
-}
-
-function ensureAdminWebsiteSettingsRealtime() {
-  if (adminRealtimeChannel) return
-
-  if (!adminRealtimeSupabase) {
-    adminRealtimeSupabase = createSupabaseClient()
-  }
-
-  adminRealtimeChannel = adminRealtimeSupabase
-    .channel('realtime:website_settings_admin')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'website_settings'
-      },
-      async () => {
-        await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
-      }
-    )
-    .subscribe()
-}
-
-function releaseAdminWebsiteSettingsRealtime() {
-  if (!adminRealtimeSupabase || !adminRealtimeChannel) return
-
-  adminRealtimeSupabase.removeChannel(adminRealtimeChannel)
-  adminRealtimeChannel = null
 }
 
 export function useWebsiteSettings() {
@@ -155,7 +121,11 @@ export function useAdminWebsiteSettings() {
     throw err
   }, [])
 
-  const { data, error, isLoading } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, fetcher)
+  const { data, error, isLoading } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    revalidateIfStale: false,
+  })
 
   const updateSettings = async (values: Partial<WebsiteSettings>) => {
     const previous = data
@@ -230,25 +200,6 @@ export function useAdminWebsiteSettings() {
       setIsInitializing(false)
     }
   }
-
-  // Realtime subscription: reflect changes done by other admins
-  useEffect(() => {
-    adminRealtimeRefCount += 1
-    try {
-      ensureAdminWebsiteSettingsRealtime()
-    } catch {
-      // Supabase not configured; skip realtime
-      adminRealtimeRefCount = Math.max(0, adminRealtimeRefCount - 1)
-      return
-    }
-
-    return () => {
-      adminRealtimeRefCount = Math.max(0, adminRealtimeRefCount - 1)
-      if (adminRealtimeRefCount === 0) {
-        releaseAdminWebsiteSettingsRealtime()
-      }
-    }
-  }, [])
 
   return {
     settings: data ?? null,
