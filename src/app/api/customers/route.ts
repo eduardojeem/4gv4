@@ -9,6 +9,10 @@ const customerSchema = z.object({
   name: z.string().trim().min(1).max(200),
   email: z.string().trim().email().optional().or(z.literal('')).nullable(),
   phone: z.string().trim().max(50).optional().nullable(),
+  // Contacto de un tercero: el celular del cliente suele ser el equipo que dejo
+  // en el taller, asi que ahi no se lo puede ubicar.
+  alternate_phone: z.string().trim().max(50).optional().nullable(),
+  alternate_phone_label: z.string().trim().max(60).optional().nullable(),
   address: z.string().trim().max(500).optional().nullable(),
   city: z.string().trim().max(120).optional().nullable(),
   ruc: z.string().trim().max(50).optional().nullable(),

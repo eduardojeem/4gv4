@@ -34,7 +34,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { isValidEmail } from '@/lib/auth/password-validation'
+import { validateCustomerContact, ALTERNATE_PHONE_LABELS } from '@/lib/customers/contact-rules'
 import { formatThousands, parseThousands } from '@/lib/currency'
 
 export interface SimpleCustomerFormData {
@@ -42,6 +42,10 @@ export interface SimpleCustomerFormData {
   lastName?: string
   ruc?: string
   phone: string
+  /** Contacto de un tercero, para avisarle cuando su equipo esta en el taller. */
+  alternatePhone?: string
+  /** De quien es ese telefono: sin esto nadie sabe con quien va a hablar. */
+  alternatePhoneLabel?: string
   email: string
   city?: string
   address: string
@@ -102,16 +106,23 @@ const popularCities = [
   'Encarnación'
 ]
 
+// Las reglas viven en `@/lib/customers/contact-rules` para que este formulario y
+// los dos de reparaciones dejen de pedir campos distintos para lo mismo.
 function validateForm(data: SimpleCustomerFormData): ValidationErrors {
+  const contactErrors = validateCustomerContact({
+    name: data.firstName,
+    phone: data.phone,
+    email: data.email,
+    alternatePhone: data.alternatePhone,
+    alternatePhoneLabel: data.alternatePhoneLabel,
+  })
+
   const errors: ValidationErrors = {}
-
-  if (!data.firstName || data.firstName.trim().length < 2) {
-    errors.firstName = 'El nombre o razón social es obligatorio (mín. 2 caracteres)'
-  }
-
-  if (data.email && data.email.trim().length > 0 && !isValidEmail(data.email.trim())) {
-    errors.email = 'Correo electrónico inválido'
-  }
+  if (contactErrors.name) errors.firstName = contactErrors.name
+  if (contactErrors.phone) errors.phone = contactErrors.phone
+  if (contactErrors.email) errors.email = contactErrors.email
+  if (contactErrors.alternatePhone) errors.alternatePhone = contactErrors.alternatePhone
+  if (contactErrors.alternatePhoneLabel) errors.alternatePhoneLabel = contactErrors.alternatePhoneLabel
 
   return errors
 }
@@ -275,7 +286,7 @@ export function CustomerFormSimple({
           <div className="space-y-1">
             <Label htmlFor="phone" className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
               <Phone className="h-3.5 w-3.5 text-slate-400" />
-              <span>Teléfono / WhatsApp</span>
+              <span>Teléfono / WhatsApp <span className="text-red-500">*</span></span>
             </Label>
             <Input
               id="phone"
@@ -283,9 +294,76 @@ export function CustomerFormSimple({
               value={formData.phone}
               onChange={(e) => handleInputChange('phone', e.target.value)}
               placeholder="Ej: 0981 123456 ó +595 981..."
-              className="h-9 text-xs font-mono rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
+              className={cn(
+                "h-9 text-xs font-mono rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900",
+                errors.phone && "border-red-500 focus-visible:ring-red-500"
+              )}
             />
+            {errors.phone && (
+              <p className="text-[11px] text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {errors.phone}
+              </p>
+            )}
           </div>
+
+          {/* Contacto alternativo.
+              En un taller el celular del cliente suele ser el equipo que dejó:
+              este es el número de un tercero al que sí se lo puede ubicar. */}
+          <div className="space-y-1">
+            <Label htmlFor="alternatePhone" className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+              <Phone className="h-3.5 w-3.5 text-slate-400" />
+              <span>Otro teléfono para avisarle (opcional)</span>
+            </Label>
+            <Input
+              id="alternatePhone"
+              type="tel"
+              value={formData.alternatePhone || ''}
+              onChange={(e) => handleInputChange('alternatePhone', e.target.value)}
+              placeholder="Si deja su celular en reparación"
+              className={cn(
+                "h-9 text-xs font-mono rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900",
+                errors.alternatePhone && "border-red-500 focus-visible:ring-red-500"
+              )}
+            />
+            {errors.alternatePhone && (
+              <p className="text-[11px] text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {errors.alternatePhone}
+              </p>
+            )}
+          </div>
+
+          {/* Solo tiene sentido preguntar de quién es si hay un número cargado. */}
+          {(formData.alternatePhone || '').trim().length > 0 && (
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="alternatePhoneLabel" className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                ¿De quién es ese teléfono? <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="alternatePhoneLabel"
+                list="alternate-phone-labels"
+                value={formData.alternatePhoneLabel || ''}
+                onChange={(e) => handleInputChange('alternatePhoneLabel', e.target.value)}
+                placeholder="Ej: hermana, jefe, hijo…"
+                className={cn(
+                  "h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900",
+                  errors.alternatePhoneLabel && "border-red-500 focus-visible:ring-red-500"
+                )}
+              />
+              <datalist id="alternate-phone-labels">
+                {ALTERNATE_PHONE_LABELS.map((label) => (
+                  <option key={label} value={label} />
+                ))}
+              </datalist>
+              {errors.alternatePhoneLabel && (
+                <p className="text-[11px] text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.alternatePhoneLabel}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Correo Electrónico */}
           <div className="space-y-1 sm:col-span-2">

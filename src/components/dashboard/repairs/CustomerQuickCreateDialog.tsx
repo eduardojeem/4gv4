@@ -20,15 +20,39 @@ import { Badge } from '@/components/ui/badge'
 import { Loader2, Save, X, UserPlus, Sparkles, CheckCircle2, Building2, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Customer } from '@/hooks/use-customers'
+import { validateCustomerContact, normalizePhone, MIN_PHONE_DIGITS, ALTERNATE_PHONE_LABELS } from '@/lib/customers/contact-rules'
 
-const customerSchema = z.object({
-    first_name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
-    last_name: z.string().min(2, 'El apellido debe tener al menos 2 caracteres'),
-    phone: z.string().min(6, 'El teléfono debe tener al menos 6 dígitos'),
-    email: z.string().email('Email inválido').optional().or(z.literal('')),
-    ruc: z.string().optional().or(z.literal('')),
-    is_wholesale: z.boolean().optional(),
-})
+// El apellido deja de ser obligatorio: una empresa no tiene, y exigirlo obligaba
+// a inventar uno para poder cargarla. El telefono si, y ademas se admite un
+// contacto alternativo porque el celular del cliente suele ser el equipo que
+// dejo en el taller.
+const customerSchema = z
+    .object({
+        first_name: z.string().min(2, 'El nombre o razón social debe tener al menos 2 caracteres'),
+        last_name: z.string().optional().or(z.literal('')),
+        phone: z.string().min(MIN_PHONE_DIGITS, `El teléfono debe tener al menos ${MIN_PHONE_DIGITS} dígitos`),
+        alternate_phone: z.string().optional().or(z.literal('')),
+        alternate_phone_label: z.string().optional().or(z.literal('')),
+        email: z.string().email('Email inválido').optional().or(z.literal('')),
+        ruc: z.string().optional().or(z.literal('')),
+        is_wholesale: z.boolean().optional(),
+    })
+    .superRefine((data, ctx) => {
+        const errors = validateCustomerContact({
+            name: data.first_name,
+            phone: data.phone,
+            email: data.email,
+            alternatePhone: data.alternate_phone,
+            alternatePhoneLabel: data.alternate_phone_label,
+        })
+
+        if (errors.alternatePhone) {
+            ctx.addIssue({ code: 'custom', path: ['alternate_phone'], message: errors.alternatePhone })
+        }
+        if (errors.alternatePhoneLabel) {
+            ctx.addIssue({ code: 'custom', path: ['alternate_phone_label'], message: errors.alternatePhoneLabel })
+        }
+    })
 
 type CustomerFormData = z.infer<typeof customerSchema>
 
@@ -50,6 +74,7 @@ export function CustomerQuickCreateDialog({
     const {
         register,
         handleSubmit,
+        watch,
         formState: { errors },
         reset,
     } = useForm<CustomerFormData>({
@@ -58,6 +83,8 @@ export function CustomerQuickCreateDialog({
             first_name: '',
             last_name: '',
             phone: '',
+            alternate_phone: '',
+            alternate_phone_label: '',
             email: '',
             ruc: '',
             is_wholesale: false,
@@ -76,8 +103,10 @@ export function CustomerQuickCreateDialog({
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    name: `${data.first_name} ${data.last_name}`.trim(),
-                    phone: data.phone,
+                    name: `${data.first_name} ${data.last_name || ''}`.trim(),
+                    phone: normalizePhone(data.phone),
+                    alternate_phone: data.alternate_phone ? normalizePhone(data.alternate_phone) : null,
+                    alternate_phone_label: data.alternate_phone?.trim() ? (data.alternate_phone_label || null) : null,
                     email: data.email || null,
                     ruc: data.ruc || null,
                     customer_type: isWholesale ? 'wholesale' : 'regular',
@@ -211,7 +240,7 @@ export function CustomerQuickCreateDialog({
                         {/* First Name */}
                         <div className="space-y-1.5">
                             <Label htmlFor="first_name" className="text-xs font-bold">
-                                Nombre <span className="text-red-500">*</span>
+                                Nombre o razón social <span className="text-red-500">*</span>
                             </Label>
                             <Input
                                 id="first_name"
@@ -229,7 +258,7 @@ export function CustomerQuickCreateDialog({
                         {/* Last Name */}
                         <div className="space-y-1.5">
                             <Label htmlFor="last_name" className="text-xs font-bold">
-                                Apellido <span className="text-red-500">*</span>
+                                Apellido <span className="text-[10px] text-muted-foreground font-normal">(opcional)</span>
                             </Label>
                             <Input
                                 id="last_name"
@@ -261,6 +290,49 @@ export function CustomerQuickCreateDialog({
                                 <p className="text-[11px] text-red-500">{errors.phone.message}</p>
                             )}
                         </div>
+
+                        {/* Contacto alternativo: el celular del cliente suele ser
+                            el equipo que acaba de dejar en el taller. */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="alternate_phone" className="text-xs font-bold">
+                                Otro teléfono para avisarle{' '}
+                                <span className="text-[10px] text-muted-foreground font-normal">(opcional)</span>
+                            </Label>
+                            <Input
+                                id="alternate_phone"
+                                {...register('alternate_phone')}
+                                placeholder="Si deja su celular acá"
+                                className={cn("h-10 text-xs font-medium", errors.alternate_phone && 'border-red-500')}
+                                disabled={isSubmitting}
+                            />
+                            {errors.alternate_phone && (
+                                <p className="text-[11px] text-red-500">{errors.alternate_phone.message}</p>
+                            )}
+                        </div>
+
+                        {watch('alternate_phone')?.trim() ? (
+                            <div className="space-y-1.5 sm:col-span-2">
+                                <Label htmlFor="alternate_phone_label" className="text-xs font-bold">
+                                    ¿De quién es ese teléfono? <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                    id="alternate_phone_label"
+                                    list="repair-alternate-phone-labels"
+                                    {...register('alternate_phone_label')}
+                                    placeholder="Ej: hermana, jefe, hijo…"
+                                    className={cn("h-10 text-xs font-medium", errors.alternate_phone_label && 'border-red-500')}
+                                    disabled={isSubmitting}
+                                />
+                                <datalist id="repair-alternate-phone-labels">
+                                    {ALTERNATE_PHONE_LABELS.map((label) => (
+                                        <option key={label} value={label} />
+                                    ))}
+                                </datalist>
+                                {errors.alternate_phone_label && (
+                                    <p className="text-[11px] text-red-500">{errors.alternate_phone_label.message}</p>
+                                )}
+                            </div>
+                        ) : null}
 
                         {/* RUC / CI */}
                         <div className="space-y-1.5">
