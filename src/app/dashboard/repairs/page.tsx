@@ -344,7 +344,9 @@ function RepairsPageContent() {
       }
 
       await refreshRepairs()
-      const baseMsg = result.method === 'credit' ? 'Crédito registrado' : 'Pago registrado'
+      const baseMsg = result.purpose === 'deposit'
+        ? 'Anticipo registrado'
+        : result.method === 'credit' ? 'Crédito registrado' : 'Pago registrado'
       toast.success(`${baseMsg} exitosamente`)
     } catch (err) {
       const code = (err as { code?: string } | null)?.code
@@ -419,6 +421,7 @@ function RepairsPageContent() {
             try {
               await handleQuickPayConfirm(created.id, {
                 idempotencyKey: `repair-deposit-${crypto.randomUUID()}`,
+                purpose: 'deposit',
                 method: data.depositMethod,
                 amount: data.depositAmount!,
                 reference: data.depositReference || undefined,

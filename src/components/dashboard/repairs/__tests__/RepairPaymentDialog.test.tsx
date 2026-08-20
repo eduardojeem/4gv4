@@ -72,7 +72,7 @@ describe('RepairPaymentDialog', () => {
   it('allows an advance without a defined price and labels it separately from a balance payment', async () => {
     cashRegisterMocks.checkOpenSession.mockResolvedValue({ id: 'session-1' })
     const onConfirm = vi.fn().mockResolvedValue(undefined)
-    const repairWithoutPrice = { ...repair, finalCost: 0, estimatedCost: 0, paidAmount: 0 }
+    const repairWithoutPrice = { ...repair, finalCost: null, estimatedCost: 0, paidAmount: 0 }
 
     render(
       <RepairPaymentDialog
@@ -145,7 +145,7 @@ describe('RepairPaymentDialog', () => {
 
     await waitFor(() => expect(cashRegisterMocks.openRegister).toHaveBeenCalledWith('principal', 50000, undefined, 'Turno tarde'))
     expect(await screen.findByText('Caja abierta')).toBeVisible()
-    expect(screen.getByLabelText('Monto aplicado a la reparación')).toHaveValue(100000)
+    expect(screen.getByLabelText('Monto aplicado a la reparación')).toHaveValue('100000')
     expect(screen.getByPlaceholderText(/Cliente pagó/i)).toHaveValue('Seña del cliente')
   })
 
@@ -196,7 +196,7 @@ describe('RepairPaymentDialog', () => {
     fireEvent.change(screen.getByLabelText('Efectivo recibido del cliente'), { target: { value: '180000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Cobro' }))
 
-    await waitFor(() => expect(screen.getByLabelText('Monto aplicado a la reparación')).toHaveValue(100000))
+    await waitFor(() => expect(screen.getByLabelText('Monto aplicado a la reparación')).toHaveValue('100000'))
     expect(screen.getByRole('dialog', { name: /Procesar pago de reparación/i })).toBeVisible()
     expect(screen.getByText('Saldo pendiente').parentElement).toHaveTextContent('100000')
   })

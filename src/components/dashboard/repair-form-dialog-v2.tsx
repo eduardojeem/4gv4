@@ -738,11 +738,11 @@ export function RepairFormDialogV2({
         toast.error('Especifica el motivo del precio manual por debajo de los repuestos.')
         return
       }
-      if ((baseSubmissionData.depositAmount ?? 0) > pricing.customerTotal) {
+      const hasPricingDetails = pricing.laborCost > 0 || pricing.partsPrice > 0 || baseSubmissionData.finalCost !== null
+      if (hasPricingDetails && (baseSubmissionData.depositAmount ?? 0) > pricing.customerTotal) {
         toast.error('El adelanto no puede superar el total de la reparación.')
         return
       }
-      const hasPricingDetails = pricing.laborCost > 0 || pricing.partsPrice > 0 || baseSubmissionData.finalCost !== null
       const submissionData = baseSubmissionData.devices.length === 1 && hasPricingDetails
         ? {
             ...baseSubmissionData,

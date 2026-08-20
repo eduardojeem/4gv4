@@ -89,6 +89,7 @@ export default function WebsiteAdminPage() {
         <div className="flex flex-wrap items-center gap-2.5">
           <WebsiteHowItWorksDialog
             currentTab={tab}
+            orgSlug={orgSlug}
             onNavigateToTab={handleTabChange}
           />
           {orgSlug ? (

@@ -10,6 +10,7 @@ import {
   closeRepairAndRegisterPayment,
   FinancialClosureRpcError,
 } from '@/lib/repairs/financial-closure-rpc'
+import { registerUnpricedRepairDeposit } from '@/lib/repairs/unpriced-deposit-rpc'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -29,6 +30,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
     const { id } = await context.params
     const input = parsed.data
     const isCredit = input.method === 'credit'
+    const isUnpricedDeposit = input.purpose === 'deposit'
 
     const { data: financialRepair, error: financialRepairError } = await ctx.supabase
       .from('repairs')
@@ -59,8 +61,21 @@ export async function POST(request: NextRequest, context: RouteParams) {
     const currentTotal = pricing.customerTotal
     const currentPaid = pricing.paidAmount
     const currentBalance = pricing.balance
+    const priceDefined = financialRepair.final_cost !== null
+      || Number(financialRepair.estimated_cost) > 0
+      || currentTotal > 0
 
-    if (currentBalance <= 0) {
+    if (isUnpricedDeposit && priceDefined) {
+      return NextResponse.json({
+        error: 'La reparación ya tiene precio. Registrá el importe como pago del saldo.',
+        code: 'REPAIR_PRICE_ALREADY_DEFINED',
+        currentTotal,
+        currentPaid,
+        currentBalance,
+      }, { status: 422 })
+    }
+
+    if (!isUnpricedDeposit && currentBalance <= 0) {
       return NextResponse.json({
         error: 'La reparación ya no tiene saldo pendiente para cobrar.',
         code: 'REPAIR_HAS_NO_BALANCE',
@@ -70,7 +85,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
       }, { status: 422 })
     }
 
-    if (input.amount > currentBalance) {
+    if (!isUnpricedDeposit && input.amount > currentBalance) {
       return NextResponse.json({
         error: `El saldo pendiente cambió. El monto máximo actual es ${currentBalance}.`,
         code: 'REPAIR_PAYMENT_EXCEEDS_BALANCE',
@@ -121,29 +136,45 @@ export async function POST(request: NextRequest, context: RouteParams) {
       }
     }
 
-    const operation = await closeRepairAndRegisterPayment(ctx.supabase, {
-      repairId: id,
-      organizationId: ctx.organizationId,
-      branchId: ctx.branchId,
-      actorId: ctx.userId,
-      deliver: false,
-      allowOutstandingBalance: false,
-      payment: input,
-      cashSessionId,
-      creditId: null,
-      source: 'repairs',
-    })
+    const operation = isUnpricedDeposit
+      ? await registerUnpricedRepairDeposit(ctx.supabase, {
+          repairId: id,
+          organizationId: ctx.organizationId,
+          branchId: ctx.branchId,
+          actorId: ctx.userId,
+          method: input.method as 'cash' | 'card' | 'transfer',
+          amount: input.amount,
+          reference: input.reference,
+          note: input.note,
+          idempotencyKey: input.idempotencyKey,
+          cashSessionId: cashSessionId!,
+        })
+      : await closeRepairAndRegisterPayment(ctx.supabase, {
+          repairId: id,
+          organizationId: ctx.organizationId,
+          branchId: ctx.branchId,
+          actorId: ctx.userId,
+          deliver: false,
+          allowOutstandingBalance: false,
+          payment: input,
+          cashSessionId,
+          creditId: null,
+          source: 'repairs',
+        })
 
     const { data: repair, error } = await fetchRepairById(ctx, id)
     if (error) throw error
     if (!repair) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
 
+    const creditId = 'credit_id' in operation ? operation.credit_id : null
+    const creditTotal = 'credit_total' in operation ? operation.credit_total : null
+
     return NextResponse.json({
       repair,
       payment: operation.payment_id ? { id: operation.payment_id } : null,
-      credit: operation.credit_id ? {
-        creditId: operation.credit_id,
-        financedTotal: Number(operation.credit_total ?? input.amount),
+      credit: creditId ? {
+        creditId,
+        financedTotal: Number(creditTotal ?? input.amount),
       } : null,
       idempotent: operation.idempotent,
     })

@@ -60,6 +60,15 @@ describe('repair financial closure contracts', () => {
     },
   )
 
+  it('rejects credit as the method for an unpriced deposit', () => {
+    expect(parseRepairPaymentRequest({
+      purpose: 'deposit',
+      method: 'credit',
+      amount: 50_000,
+      idempotencyKey: 'deposit-credit-123',
+    }).success).toBe(false)
+  })
+
   it('derives a partial financial state independently from delivery', () => {
     expect(getRepairPaymentSummary({
       finalCost: 100_000,
@@ -70,6 +79,7 @@ describe('repair financial closure contracts', () => {
       paid: 40_000,
       balance: 60_000,
       status: 'parcial',
+      priceDefined: true,
     })
   })
 
@@ -97,6 +107,7 @@ describe('repair financial closure contracts', () => {
       paid: 120_000,
       balance: 0,
       status: 'pagado',
+      priceDefined: true,
     })
   })
 

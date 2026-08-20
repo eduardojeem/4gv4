@@ -36,6 +36,7 @@ export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
 
 export interface RepairPaymentResult {
   idempotencyKey: string
+  purpose?: 'payment' | 'deposit'
   method: QuickPayMethod
   amount: number
   reference?: string
@@ -85,7 +86,12 @@ export function RepairPaymentDialog({
   // Usa el mismo total persistido que muestran el detalle y valida la API.
   // La lista puede no incluir el desglose completo de una reparación
   // automática, por lo que recalcularlo aquí puede producir un falso cero.
-  const totalDue = repair
+  const hasDefinedPrice = Boolean(repair) && (
+    (repair!.finalCost !== null && repair!.finalCost !== undefined)
+    || Number(repair!.estimatedCost) > 0
+  )
+  const isUnpricedDeposit = Boolean(repair) && !hasDefinedPrice
+  const totalDue = hasDefinedPrice && repair
     ? Math.max(0, Number(repair.finalCost ?? repair.estimatedCost) || 0)
     : 0
   const alreadyPaid = repair?.paidAmount ?? 0
@@ -131,11 +137,15 @@ export function RepairPaymentDialog({
   useEffect(() => {
     if (open) {
       setIdempotencyKey(`repair-payment-${crypto.randomUUID()}`)
-      if (totalDue > 0 && persistedBalanceDue > 0) {
+      if (isUnpricedDeposit || (totalDue > 0 && persistedBalanceDue > 0)) {
         void refreshCashStatus()
       }
     }
-  }, [open, repair?.id, persistedBalanceDue, refreshCashStatus, totalDue])
+  }, [isUnpricedDeposit, open, repair?.id, persistedBalanceDue, refreshCashStatus, totalDue])
+
+  useEffect(() => {
+    if (open && isUnpricedDeposit && method === 'credit') setMethod('cash')
+  }, [isUnpricedDeposit, method, open])
 
   useEffect(() => {
     if (!open || !isCredit || !repair?.customer?.id) {
@@ -192,8 +202,8 @@ export function RepairPaymentDialog({
   }
   const parsedAmount = parseFloat(amount) || 0
   const parsedCashReceived = parseFloat(cashReceived) || 0
-  const amountExceedsBalance = parsedAmount > balanceDue
-  const invalidCreditAmount = isCredit && parsedAmount !== balanceDue
+  const amountExceedsBalance = hasDefinedPrice && parsedAmount > balanceDue
+  const invalidCreditAmount = isCredit && (!hasDefinedPrice || parsedAmount !== balanceDue)
   const insufficientCash = method === 'cash' && parsedCashReceived < parsedAmount
   const changeDue = method === 'cash' ? Math.max(0, parsedCashReceived - parsedAmount) : 0
   const requiresOpenRegister = !isCredit
@@ -234,7 +244,7 @@ export function RepairPaymentDialog({
     if (!repair) return
     const parsed = parseFloat(amount)
     if (!parsed || parsed <= 0) return
-    if (parsed > balanceDue || (isCredit && parsed !== balanceDue)) return
+    if ((hasDefinedPrice && parsed > balanceDue) || (isCredit && parsed !== balanceDue)) return
     if (method === 'cash' && parsedCashReceived < parsed) return
 
     const selectedMethod = METHODS.find(m => m.id === method)
@@ -248,6 +258,7 @@ export function RepairPaymentDialog({
     try {
       await onConfirm(repair.id, {
         idempotencyKey,
+        purpose: isUnpricedDeposit ? 'deposit' : 'payment',
         method,
         amount: parsed,
         reference: reference.trim() || undefined,
@@ -285,10 +296,9 @@ export function RepairPaymentDialog({
   const creditCount = Math.max(1, Math.floor(Number(installmentCount) || 0))
   const creditFinanced = creditPrincipal * (1 + (Math.max(0, Number(interestRate) || 0) / 100))
   const creditPerInstallment = creditCount > 0 ? creditFinanced / creditCount : 0
-  const hasDefinedPrice = totalDue > 0
   const isFullyPaid = hasDefinedPrice && balanceDue <= 0
 
-  const canConfirm = parsedAmount > 0 && !amountExceedsBalance && !invalidCreditAmount && balanceDue > 0 &&
+  const canConfirm = parsedAmount > 0 && !amountExceedsBalance && !invalidCreditAmount && (isUnpricedDeposit || balanceDue > 0) &&
     (!METHODS.find(m => m.id === method)?.requiresRef || reference.trim().length > 0) &&
     (!isCredit || creditCount >= 1) &&
     (!insufficientCash) &&
@@ -323,27 +333,7 @@ export function RepairPaymentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {!hasDefinedPrice ? (
-          <>
-            <div className="space-y-4 py-2">
-              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30" role="status">
-                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-                <div className="space-y-1">
-                  <h3 className="font-semibold text-amber-950 dark:text-amber-100">Primero definí el precio de la reparación</h3>
-                  <p className="text-sm leading-5 text-amber-900/80 dark:text-amber-200/80">
-                    Agregá mano de obra, repuestos o un total acordado mayor que cero antes de registrar un cobro.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleClose}>Cancelar</Button>
-              {onDefinePrice && (
-                <Button onClick={() => onDefinePrice(repair)}>Definir precio</Button>
-              )}
-            </DialogFooter>
-          </>
-        ) : isFullyPaid ? (
+        {isFullyPaid ? (
           <>
             <div className="space-y-4 py-2">
               <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/30" role="status">
@@ -365,21 +355,38 @@ export function RepairPaymentDialog({
         ) : (
           <>
         <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto px-1">
+          {isUnpricedDeposit && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30" role="status">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+              <div className="space-y-1">
+                <h3 className="font-semibold text-amber-950 dark:text-amber-100">Precio pendiente de definir</h3>
+                <p className="text-sm leading-5 text-amber-900/80 dark:text-amber-200/80">
+                  Este importe quedará registrado como anticipo. El saldo se calculará cuando se defina el precio final.
+                </p>
+                {alreadyPaid > 0 && <p className="text-xs font-medium">Anticipos registrados: {formatCurrency(alreadyPaid)}</p>}
+                {onDefinePrice && (
+                  <button type="button" className="text-xs font-semibold text-primary underline-offset-2 hover:underline" onClick={() => onDefinePrice(repair)}>
+                    Definir precio ahora
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           {/* Saldo pendiente destacado */}
-          <div className="flex items-center justify-between rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 px-4 py-3">
+          {!isUnpricedDeposit && <div className="flex items-center justify-between rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 px-4 py-3">
             <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
               {alreadyPaid > 0 ? 'Saldo pendiente' : 'Total a cobrar'}
             </span>
             <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
               {formatCurrency(balanceDue)}
             </span>
-          </div>
+          </div>}
           {balanceRefreshMessage && (
             <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200" role="status">
               {balanceRefreshMessage}
             </p>
           )}
-          {alreadyPaid > 0 && (
+          {alreadyPaid > 0 && !isUnpricedDeposit && (
             <p className="text-xs text-muted-foreground -mt-2">
               Ya se registraron {formatCurrency(alreadyPaid)} de {formatCurrency(totalDue)}.
             </p>
@@ -389,7 +396,7 @@ export function RepairPaymentDialog({
           <div className="space-y-2">
             <Label>Método de pago</Label>
             <div className="grid grid-cols-2 gap-2" data-help-id="repair-credit">
-              {METHODS.map(m => {
+              {METHODS.filter(m => !isUnpricedDeposit || m.id !== 'credit').map(m => {
                 const Icon = m.icon
                 const selected = method === m.id
                 return (
@@ -450,7 +457,7 @@ export function RepairPaymentDialog({
 
           {/* Monto */}
           <div className="space-y-1.5" data-help-id="repair-payment-amount">
-            <Label htmlFor="pay-amount">{isCredit ? 'Monto a financiar' : 'Monto aplicado a la reparación'}</Label>
+            <Label htmlFor="pay-amount">{isUnpricedDeposit ? 'Monto del adelanto' : isCredit ? 'Monto a financiar' : 'Monto aplicado a la reparación'}</Label>
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-sm font-bold text-slate-400">₲</span>
               <Input
@@ -459,7 +466,7 @@ export function RepairPaymentDialog({
                 inputMode="numeric"
                 value={formatThousands(amount)}
                 onChange={e => setAmount(parseThousands(e.target.value).toString())}
-                placeholder={formatThousands(balanceDue)}
+                placeholder={isUnpricedDeposit ? '0' : formatThousands(balanceDue)}
                 className="pl-7 text-lg font-bold font-mono"
                 disabled={isSubmitting}
               />
@@ -470,7 +477,7 @@ export function RepairPaymentDialog({
             {invalidCreditAmount && !amountExceedsBalance && (
               <p className="text-xs text-amber-700 dark:text-amber-300">El crédito debe cubrir el saldo completo.</p>
             )}
-            <button
+            {!isUnpricedDeposit && <button
               type="button"
               className="text-xs text-primary underline-offset-2 hover:underline"
               onClick={() => {
@@ -479,7 +486,7 @@ export function RepairPaymentDialog({
               }}
             >
               Usar saldo pendiente ({formatCurrency(balanceDue)})
-            </button>
+            </button>}
           </div>
 
           {method === 'cash' && (
@@ -705,7 +712,7 @@ export function RepairPaymentDialog({
             ) : (
               <DollarSign className="h-4 w-4" />
             )}
-            {isCredit ? 'Registrar Crédito' : 'Confirmar Cobro'}
+            {isUnpricedDeposit ? 'Registrar adelanto' : isCredit ? 'Registrar Crédito' : 'Confirmar Cobro'}
           </Button>
         </DialogFooter>
           </>

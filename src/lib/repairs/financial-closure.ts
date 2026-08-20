@@ -31,7 +31,17 @@ function requireAuditablePaymentReference(
 }
 
 export const repairPaymentRequestSchema = repairPaymentBaseSchema
+  .extend({ purpose: z.enum(['payment', 'deposit']).default('payment') })
   .superRefine(requireAuditablePaymentReference)
+  .superRefine((payment, ctx) => {
+    if (payment.purpose === 'deposit' && payment.method === 'credit') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['method'],
+        message: 'Un anticipo debe representar dinero recibido, no crédito.',
+      })
+    }
+  })
 
 export const repairDeliveryRequestSchema = z.object({
   outcome: z.enum(['repaired', 'withdrawn', 'unrepairable']),
@@ -67,8 +77,20 @@ export function parseRepairDeliveryRequest(input: unknown) {
 }
 
 export function getRepairPaymentSummary(input: RepairPaymentSummaryInput) {
-  const total = Math.max(0, Number(input.finalCost ?? input.estimatedCost) || 0)
+  const priceDefined = (input.finalCost !== null && input.finalCost !== undefined)
+    || Number(input.estimatedCost) > 0
   const paid = Math.max(0, Number(input.paidAmount) || 0)
+  if (!priceDefined) {
+    return {
+      total: null,
+      paid,
+      balance: null,
+      status: paid > 0 ? 'parcial' as const : 'pendiente' as const,
+      priceDefined: false as const,
+    }
+  }
+
+  const total = Math.max(0, Number(input.finalCost ?? input.estimatedCost) || 0)
   const balance = Math.max(0, total - paid)
   const status: RepairPaymentStatus = paid <= 0
     ? 'pendiente'
@@ -76,7 +98,7 @@ export function getRepairPaymentSummary(input: RepairPaymentSummaryInput) {
       ? 'pagado'
       : 'parcial'
 
-  return { total, paid, balance, status }
+  return { total, paid, balance, status, priceDefined: true as const }
 }
 
 export function getRepairFinancialPresentation(input: RepairFinancialPresentationInput) {
@@ -91,7 +113,9 @@ export function getRepairFinancialPresentation(input: RepairFinancialPresentatio
   return {
     ...summary,
     delivered,
-    label: delivered ? `Entregado · ${financialLabel}` : financialLabel,
-    canCollect: input.status !== 'cancelado' && summary.balance > 0,
+    label: summary.priceDefined
+      ? (delivered ? `Entregado · ${financialLabel}` : financialLabel)
+      : (summary.paid > 0 ? 'Anticipo recibido · precio pendiente' : 'Precio pendiente'),
+    canCollect: input.status !== 'cancelado' && (!summary.priceDefined || summary.balance > 0),
   }
 }

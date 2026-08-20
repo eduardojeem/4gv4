@@ -949,7 +949,9 @@ export function RepairDetailDialog({
                               : 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200',
                         )}
                       >
-                        {financial.status === 'pagado'
+                        {!financial.priceDefined
+                          ? (financial.paid > 0 ? 'Anticipo recibido' : 'Precio pendiente')
+                          : financial.status === 'pagado'
                           ? 'Pago completado'
                           : financial.status === 'parcial'
                             ? 'Pago parcial'
@@ -959,25 +961,27 @@ export function RepairDetailDialog({
                     <dl className="divide-y divide-emerald-200/80 rounded-lg border border-emerald-200 bg-background/80 text-sm dark:divide-emerald-900/60 dark:border-emerald-900/60">
                       <div className="flex items-center justify-between px-3 py-2">
                         <dt className="text-muted-foreground">Total</dt>
-                        <dd className="font-semibold tabular-nums">{formatCurrency(financial.total)}</dd>
+                        <dd className="font-semibold tabular-nums">
+                          {financial.priceDefined ? formatCurrency(financial.total) : 'Precio pendiente'}
+                        </dd>
                       </div>
                       <div className="flex items-center justify-between px-3 py-2">
-                        <dt className="text-muted-foreground">Pagado</dt>
+                        <dt className="text-muted-foreground">{financial.priceDefined ? 'Pagado' : 'Anticipo recibido'}</dt>
                         <dd className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{formatCurrency(financial.paid)}</dd>
                       </div>
                       <div className="flex items-center justify-between px-3 py-2">
                         <dt className="font-medium">Pendiente</dt>
                         <dd className={cn(
                           'font-bold tabular-nums',
-                          financial.balance > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300',
+                          financial.balance !== null && financial.balance > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300',
                         )}>
-                          {formatCurrency(financial.balance)}
+                          {financial.priceDefined ? formatCurrency(financial.balance) : 'Por calcular'}
                         </dd>
                       </div>
                     </dl>
                     {repair.finalCost === null || repair.finalCost === undefined ? (
                       <p className="text-muted-foreground text-[11px] leading-snug">
-                        * Costo estimado — el final se determina al completar el diagnóstico
+                        * Precio final pendiente — el saldo se calculará al definirlo
                       </p>
                     ) : (
                       <div className="flex items-center gap-3 text-muted-foreground text-xs pt-1">
@@ -1005,7 +1009,9 @@ export function RepairDetailDialog({
                         }}
                       >
                         <DollarSign className="h-4 w-4" />
-                        Pagar monto pendiente ({formatCurrency(financial.balance)})
+                        {financial.priceDefined
+                          ? `Pagar monto pendiente (${formatCurrency(financial.balance)})`
+                          : financial.paid > 0 ? 'Registrar otro adelanto' : 'Registrar adelanto'}
                       </Button>
                     )}
                   </div>
@@ -1361,7 +1367,7 @@ export function RepairDetailDialog({
                           <span className="font-bold text-slate-900 dark:text-white">Total de la Reparación:</span>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-lg text-emerald-600 dark:text-emerald-400">
-                              {formatCurrency(displayCost)}
+                              {financial.priceDefined ? formatCurrency(displayCost) : 'Precio pendiente'}
                             </span>
                             {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
                               <Badge variant="outline" className="text-xs">
@@ -1383,12 +1389,12 @@ export function RepairDetailDialog({
                           <span
                             className={cn(
                               'font-bold text-base tabular-nums',
-                              financial.balance > 0
+                              financial.balance !== null && financial.balance > 0
                                 ? 'text-amber-600 dark:text-amber-400'
                                 : 'text-emerald-600 dark:text-emerald-400',
                             )}
                           >
-                            {formatCurrency(financial.balance)}
+                            {financial.priceDefined ? formatCurrency(financial.balance) : 'Por calcular'}
                           </span>
                         </div>
 
@@ -1405,7 +1411,9 @@ export function RepairDetailDialog({
                               }}
                             >
                               <DollarSign className="h-4 w-4" />
-                              Cobrar saldo pendiente ({formatCurrency(financial.balance)})
+                              {financial.priceDefined
+                                ? `Cobrar saldo pendiente (${formatCurrency(financial.balance)})`
+                                : financial.paid > 0 ? 'Registrar otro adelanto' : 'Registrar adelanto'}
                             </Button>
                           </div>
                         )}
@@ -1413,7 +1421,7 @@ export function RepairDetailDialog({
                           <div className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-2 flex items-start gap-2">
                             <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
                             <span className="text-amber-700 dark:text-amber-400">
-                              El total final se calcula según el presupuesto inicial acordado.
+                              El precio final todavía no fue definido. Los anticipos registrados se descontarán cuando se establezca el total.
                             </span>
                           </div>
                         ) : null}
@@ -1651,7 +1659,11 @@ export function RepairDetailDialog({
                   }}
                 >
                   <DollarSign className="h-4 w-4" />
-                  {repair.status === 'entregado' ? 'Cobrar saldo' : `Pagar monto pendiente (${formatCurrency(financial.balance)})`}
+                  {!financial.priceDefined
+                    ? 'Registrar adelanto'
+                    : repair.status === 'entregado'
+                      ? 'Cobrar saldo'
+                      : `Pagar monto pendiente (${formatCurrency(financial.balance)})`}
                 </Button>
               )}
               {repair.status !== 'entregado' && repair.status !== 'cancelado' && (

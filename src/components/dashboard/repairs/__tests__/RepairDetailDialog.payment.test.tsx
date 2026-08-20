@@ -99,8 +99,8 @@ describe('RepairDetailDialog payment summary', () => {
 
     const summary = screen.getByRole('region', { name: 'Estado del pago' })
     expect(within(summary).getByText('Precio pendiente')).toBeVisible()
-    expect(within(summary).getByText('Anticipo recibido')).toBeVisible()
-    expect(within(summary).getByText('30')).toBeVisible()
+    expect(within(summary).getAllByText('Anticipo recibido')).toHaveLength(2)
+    expect(within(summary).getByText(/30/)).toBeVisible()
     expect(within(summary).queryByText('Pago completado')).not.toBeInTheDocument()
   })
 

@@ -72,7 +72,9 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, 
                     onClick={() => onQuickPay(repair)}
                   >
                     <DollarSign className="mr-2 h-3.5 w-3.5" />
-                    {repair.status === 'entregado' ? 'Cobrar saldo' : 'Cobrar aquí'}
+                    {!financial.priceDefined
+                      ? 'Registrar adelanto'
+                      : repair.status === 'entregado' ? 'Cobrar saldo' : 'Cobrar aquí'}
                   </DropdownMenuItem>
                 )}
                 {onDeliver && repair.status === 'listo' && (
