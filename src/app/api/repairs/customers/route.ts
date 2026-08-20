@@ -14,6 +14,11 @@ const repairCustomerSchema = z.object({
   ruc: z.string().trim().max(50).optional().nullable(),
   customer_type: z.string().trim().max(50).optional().nullable(),
   is_wholesale: z.boolean().optional(),
+  // Contacto de un tercero: el celular del cliente suele ser el equipo que dejo
+  // en el taller, asi que ahi no se lo puede ubicar. Sin estos campos en el
+  // esquema, Zod los descartaba en silencio y el dato nunca llegaba al insert.
+  alternate_phone: z.string().trim().max(50).optional().nullable(),
+  alternate_phone_label: z.string().trim().max(60).optional().nullable(),
 })
 
 const repairCustomerUpdateSchema = repairCustomerSchema.partial().extend({
@@ -23,9 +28,20 @@ const repairCustomerUpdateSchema = repairCustomerSchema.partial().extend({
 function normalizeCustomerPayload(payload: z.infer<typeof repairCustomerSchema>) {
   const isWholesale = Boolean(payload.is_wholesale || payload.customer_type === 'wholesale' || payload.customer_type === 'mayorista')
   const customerType = isWholesale ? 'wholesale' : (payload.customer_type || 'regular')
-  const { is_wholesale, ...rest } = payload
+  const { is_wholesale, alternate_phone, alternate_phone_label, ...rest } = payload
+  // Las columnas del contacto alternativo solo se mandan si hay algo que
+  // guardar. Asi un despliegue sin la migracion sigue creando clientes como
+  // siempre, y solo falla -con motivo- si alguien intenta usar el campo nuevo.
+  const alternateContact = alternate_phone
+    ? {
+        alternate_phone,
+        // Sin telefono la aclaracion de quien atiende no significa nada.
+        alternate_phone_label: alternate_phone_label || null,
+      }
+    : {}
   return {
     ...rest,
+    ...alternateContact,
     email: payload.email || null,
     phone: payload.phone || '',
     address: payload.address || null,
@@ -36,6 +52,57 @@ function normalizeCustomerPayload(payload: z.infer<typeof repairCustomerSchema>)
     status: 'active' as const,
     updated_at: new Date().toISOString(),
   }
+}
+
+function normalizeCustomerUpdatePayload(payload: z.infer<typeof repairCustomerUpdateSchema>) {
+  const { id, is_wholesale, alternate_phone, alternate_phone_label, ...rest } = payload
+  const isWholesale = is_wholesale !== undefined
+    ? is_wholesale
+    : payload.customer_type !== undefined
+      ? Boolean(payload.customer_type === 'wholesale' || payload.customer_type === 'mayorista')
+      : undefined
+
+  const customerType = isWholesale !== undefined
+    ? (isWholesale ? 'wholesale' : 'regular')
+    : payload.customer_type
+
+  const alternateContact: Record<string, string | null> = {}
+  if (alternate_phone !== undefined) {
+    alternateContact.alternate_phone = alternate_phone || null
+    if (alternate_phone_label !== undefined) {
+      alternateContact.alternate_phone_label = alternate_phone ? (alternate_phone_label || null) : null
+    }
+  }
+
+  const updates: Record<string, unknown> = {
+    ...rest,
+    ...alternateContact,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (customerType !== undefined) {
+    updates.customer_type = customerType
+  }
+  if (isWholesale !== undefined) {
+    updates.segment = isWholesale ? 'wholesale' : 'regular'
+  }
+  if (payload.email !== undefined) {
+    updates.email = payload.email || null
+  }
+  if (payload.phone !== undefined) {
+    updates.phone = payload.phone || ''
+  }
+  if (payload.address !== undefined) {
+    updates.address = payload.address || null
+  }
+  if (payload.city !== undefined) {
+    updates.city = payload.city || null
+  }
+  if (payload.ruc !== undefined) {
+    updates.ruc = payload.ruc || null
+  }
+
+  return { id, updates }
 }
 
 const readPermissions = ['repairs.orders.read', 'crm.customers.read'] as const
@@ -121,14 +188,11 @@ export const PUT = withTenantAuth({ permission: [...writePermissions], module: '
       return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
     }
 
-    const { id, ...updates } = validation.data
+    const { id, updates } = normalizeCustomerUpdatePayload(validation.data)
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('customers')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', id)
       .eq('organization_id', organization.id)
       .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')

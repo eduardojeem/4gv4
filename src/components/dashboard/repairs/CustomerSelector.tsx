@@ -125,8 +125,6 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
     }, [refreshCustomers, debouncedSearch])
 
     const selectedCustomer = useMemo(() => {
-        const fromList = customers.find(c => c.id === value)
-        if (fromList) return fromList
         if (optimisticCustomer?.id === value) return optimisticCustomer
         if (initialCustomer?.id === value) {
             return mapCustomerRow({
@@ -138,6 +136,8 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                 status: 'active',
             })
         }
+        const fromList = customers.find(c => c.id === value)
+        if (fromList) return fromList
     }, [customers, initialCustomer, optimisticCustomer, value])
 
     // `customers` ya viene filtrado del servidor (ver refreshCustomers):

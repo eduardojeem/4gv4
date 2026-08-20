@@ -16,12 +16,19 @@ import {
 import { User, Phone, Mail, Loader2, UserPlus, Pencil, Building2, Sparkles, CheckCircle2, Globe } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import {
+  ALTERNATE_PHONE_LABELS,
+  hasContactErrors,
+  validateCustomerContact,
+} from '@/lib/customers/contact-rules'
 
 export interface QuickCustomerData {
   id: string
   name: string
   phone: string
   email: string
+  alternate_phone?: string | null
+  alternate_phone_label?: string | null
   ruc?: string
   customer_type?: string
   is_wholesale?: boolean
@@ -47,6 +54,8 @@ export function QuickCustomerModal({
     name: '',
     phone: '',
     email: '',
+    alternatePhone: '',
+    alternatePhoneLabel: '',
     ruc: '',
     isWholesale: false,
     sendWebInvite: false,
@@ -65,6 +74,8 @@ export function QuickCustomerModal({
           name: customerToEdit.name || '',
           phone: customerToEdit.phone || '',
           email: customerToEdit.email || '',
+          alternatePhone: customerToEdit.alternate_phone || '',
+          alternatePhoneLabel: customerToEdit.alternate_phone_label || '',
           ruc: customerToEdit.ruc || '',
           isWholesale,
           sendWebInvite: false,
@@ -74,6 +85,8 @@ export function QuickCustomerModal({
           name: '',
           phone: '',
           email: '',
+          alternatePhone: '',
+          alternatePhoneLabel: '',
           ruc: '',
           isWholesale: false,
           sendWebInvite: false,
@@ -85,8 +98,24 @@ export function QuickCustomerModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!formData.name.trim()) {
-      toast.error('El nombre del cliente es requerido')
+    // Las mismas reglas que los otros dos formularios de alta: sin telefono no
+    // hay forma de avisarle al cliente que su equipo esta listo.
+    const contactErrors = validateCustomerContact({
+      name: formData.name,
+      phone: formData.phone,
+      email: formData.email,
+      alternatePhone: formData.alternatePhone,
+      alternatePhoneLabel: formData.alternatePhoneLabel,
+    })
+    if (hasContactErrors(contactErrors)) {
+      toast.error(
+        contactErrors.name ??
+          contactErrors.phone ??
+          contactErrors.alternatePhone ??
+          contactErrors.alternatePhoneLabel ??
+          contactErrors.email ??
+          'Revisá los datos de contacto.'
+      )
       return
     }
 
@@ -101,6 +130,10 @@ export function QuickCustomerModal({
         name: formData.name.trim(),
         phone: formData.phone.trim() || null,
         email: formData.email.trim() || null,
+        alternate_phone: formData.alternatePhone.trim() || null,
+        alternate_phone_label: formData.alternatePhone.trim()
+          ? formData.alternatePhoneLabel.trim() || null
+          : null,
         ruc: formData.ruc.trim() || null,
         customer_type: formData.isWholesale ? 'wholesale' : 'regular',
         is_wholesale: formData.isWholesale,
@@ -214,7 +247,7 @@ export function QuickCustomerModal({
 
   const handleClose = () => {
     if (!isSubmitting) {
-      setFormData({ name: '', phone: '', email: '', ruc: '', isWholesale: false, sendWebInvite: false })
+      setFormData({ name: '', phone: '', email: '', alternatePhone: '', alternatePhoneLabel: '', ruc: '', isWholesale: false, sendWebInvite: false })
       onClose()
     }
   }
@@ -269,7 +302,7 @@ export function QuickCustomerModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="customer-phone" className="text-xs font-bold">
-                Teléfono / WhatsApp
+                Teléfono / WhatsApp <span className="text-red-500">*</span>
               </Label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -302,6 +335,51 @@ export function QuickCustomerModal({
                 />
               </div>
             </div>
+          </div>
+
+          {/* Contacto alternativo: el celular del cliente suele ser justamente
+              el equipo que acaba de dejar en el taller. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="customer-alt-phone" className="text-xs font-bold">
+                Otro teléfono para avisarle{' '}
+                <span className="text-[10px] text-muted-foreground font-normal">(opcional)</span>
+              </Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="customer-alt-phone"
+                  type="tel"
+                  placeholder="Si deja su celular acá"
+                  value={formData.alternatePhone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, alternatePhone: e.target.value }))}
+                  className="pl-9 h-10 text-xs font-medium"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+
+            {formData.alternatePhone.trim() ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="customer-alt-phone-label" className="text-xs font-bold">
+                  ¿De quién es ese teléfono? <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="customer-alt-phone-label"
+                  list="quick-customer-alt-labels"
+                  placeholder="Ej: hermana, jefe, hijo…"
+                  value={formData.alternatePhoneLabel}
+                  onChange={(e) => setFormData(prev => ({ ...prev, alternatePhoneLabel: e.target.value }))}
+                  className="h-10 text-xs font-medium"
+                  disabled={isSubmitting}
+                />
+                <datalist id="quick-customer-alt-labels">
+                  {ALTERNATE_PHONE_LABELS.map((label) => (
+                    <option key={label} value={label} />
+                  ))}
+                </datalist>
+              </div>
+            ) : null}
           </div>
 
           {/* Email */}

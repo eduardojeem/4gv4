@@ -243,7 +243,7 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
             <span className={`block text-[10px] font-medium leading-tight ${
               companyInfo?.headerStyle === 'accent' ? 'text-white/80' : 'text-muted-foreground'
             }`}>
-              {'Reparación y Service'}
+              {companyInfo?.slogan || 'Reparación y Servicios'}
             </span>
           </div>
         </Link>

@@ -227,6 +227,7 @@ export function CompanyInfoForm() {
       headerColor: formData.headerColor || '',
       showTopBar: formData.showTopBar !== undefined ? formData.showTopBar : true,
       whatsapp: formData.whatsapp || '',
+      slogan: formData.slogan || '',
       ruc: formData.ruc || '',
       businessType: formData.businessType || '',
       instagram: formData.instagram || '',
@@ -317,7 +318,7 @@ export function CompanyInfoForm() {
       {/* Identidad */}
       <SectionCard icon={Building2} title="Identidad" description="Nombre y logo de la empresa">
         <div className="grid gap-8 md:grid-cols-3 md:gap-10">
-          <div className="space-y-2 md:col-span-2">
+          <div className="space-y-2 md:col-span-1">
             <Label htmlFor="companyName" className="text-sm font-medium">Nombre de la empresa</Label>
             <Input
               id="companyName"
@@ -329,6 +330,22 @@ export function CompanyInfoForm() {
               className="h-11"
             />
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
+          </div>
+
+          <div className="space-y-2 md:col-span-1">
+            <Label htmlFor="companySlogan" className="text-sm font-medium">
+              Subtítulo / Eslogan <span className="text-xs font-normal text-muted-foreground">— debajo del nombre</span>
+            </Label>
+            <Input
+              id="companySlogan"
+              value={formData.slogan || ''}
+              onChange={(e) => handleChange('slogan', e.target.value)}
+              placeholder="Reparación y Servicios"
+              maxLength={100}
+              aria-invalid={!!errors.slogan}
+              className="h-11"
+            />
+            {errors.slogan && <p className="text-xs text-destructive">{errors.slogan}</p>}
           </div>
 
           <div className="space-y-2">
@@ -644,7 +661,7 @@ export function CompanyInfoForm() {
                     )}
                     <div className="leading-tight">
                       <span className="block text-[10px] font-extrabold tracking-tight">{formData.name || 'Empresa'}</span>
-                      <span className={`block text-[8px] font-medium ${headerPreview.subtitle}`}>Reparación y service</span>
+                      <span className={`block text-[8px] font-medium ${headerPreview.subtitle}`}>{formData.slogan || 'Reparación y servicios'}</span>
                     </div>
                   </div>
 

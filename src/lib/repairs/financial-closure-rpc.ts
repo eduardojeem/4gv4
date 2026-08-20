@@ -95,10 +95,18 @@ function getFinancialErrorMessage(code: string, rawMessage: string) {
   }
 
   const messages: Record<string, string> = {
+    REPAIR_DELIVERY_INVALID_STATE: 'Solo se puede entregar como reparada una orden que esté en estado "Listo para entrega". Cambiá el estado a Listo primero o elegí retirado sin reparar.',
+    REPAIR_PAYMENT_INVALID_STATE: 'No se puede procesar cobros en una reparación cancelada.',
+    REPAIR_DELIVERY_OUTCOME_INVALID: 'El resultado de entrega no es válido.',
+    REPAIR_FINAL_COST_REQUIRED: 'Definí el costo final de la reparación antes de realizar la entrega.',
+    REPAIR_PAYMENT_EXCEEDS_BALANCE: 'El monto ingresado supera el saldo pendiente de la reparación.',
+    REPAIR_OUTSTANDING_CONFIRMATION_REQUIRED: 'Confirmá la casilla para autorizar la entrega con saldo pendiente.',
     REPAIR_CREDIT_CUSTOMER_REQUIRED: 'La reparación no tiene un cliente asociado para cobrar a crédito.',
     REPAIR_CREDIT_LIMIT_DISABLED: 'El cliente no tiene un límite de crédito habilitado.',
     REPAIR_CREDIT_TERMS_INVALID: 'Revisá el interés, la cantidad y la frecuencia de las cuotas.',
     REPAIR_PAYMENT_REFERENCE_REQUIRED: 'Ingresá la referencia del comprobante para este método de pago.',
+    REPAIR_ALREADY_DELIVERED: 'Esta reparación ya fue marcada como entregada previamente.',
+    REPAIR_CASH_REGISTER_NOT_OPEN: 'No hay una caja abierta en esta sucursal. Abrí caja antes de registrar cobros en efectivo.',
   }
   return messages[code] ?? rawMessage
 }
