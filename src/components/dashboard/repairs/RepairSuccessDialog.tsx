@@ -41,6 +41,7 @@ export function RepairSuccessDialog({
   data
 }: RepairSuccessDialogProps) {
   const [paperFormat, setPaperFormat] = useState<'80mm' | '58mm' | 'A4'>('80mm')
+  const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
     try {
@@ -58,6 +59,12 @@ export function RepairSuccessDialog({
     } catch {}
   }
 
+  // El corte va despues de TODOS los hooks: el dialogo vive montado con `data`
+  // en null y recibe el payload recien cuando la reparacion se creo. Declarar un
+  // hook debajo de este return cambia la cantidad de hooks entre un render y el
+  // siguiente, y React tira "Rendered more hooks than during the previous
+  // render" justo al terminar de cargar la reparacion, que es cuando hay que
+  // ofrecer la impresion.
   if (!data) return null
 
   const mainDevice = data.devices[0]
@@ -71,8 +78,6 @@ export function RepairSuccessDialog({
       printRepairReceipt('technician', data, paperFormat)
     }, 600)
   }
-
-  const [showSettings, setShowSettings] = useState(false)
 
   return (
     <>
