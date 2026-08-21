@@ -79,7 +79,7 @@ export async function GET() {
   ] = await Promise.all([
       admin
         .from('organization_settings')
-        .select('display_name, currency, timezone, modules')
+        .select('display_name, currency, timezone, modules, repair_max_discount_percent, repair_labor_tax_rate')
         .eq('organization_id', organizationId)
         .maybeSingle(),
       admin
@@ -112,6 +112,8 @@ export async function GET() {
   if (orgSettings?.display_name) effectiveSettings.companyName = orgSettings.display_name
   if (orgSettings?.currency) effectiveSettings.currency = orgSettings.currency
   if (orgSettings?.timezone) effectiveSettings.timeZone = orgSettings.timezone
+  effectiveSettings.repairMaxDiscountPercent = Number(orgSettings?.repair_max_discount_percent ?? 20)
+  effectiveSettings.repairLaborTaxRate = (orgSettings?.repair_labor_tax_rate ?? 10) as 0 | 5 | 10
   // Compatibilidad con organizaciones creadas antes de que el contacto de
   // empresa se guardara en admin_settings. Una vez configurado, la sucursal ya
   // no vuelve a sobrescribir estos datos.

@@ -53,6 +53,8 @@ export interface SharedSettings {
   city: string
   currency: string
   taxRate: number
+  repairMaxDiscountPercent: number
+  repairLaborTaxRate: 0 | 5 | 10
 
   // Appearance
   theme: string
@@ -99,6 +101,8 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   city: 'Asunción',
   currency: 'PYG',
   taxRate: 10,
+  repairMaxDiscountPercent: 20,
+  repairLaborTaxRate: 10,
   theme: 'system',
   primaryColor: DEFAULT_SYSTEM_COLOR_SCHEME,
   sessionTimeout: 60,
@@ -134,6 +138,8 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
     city: data.city ?? DEFAULT_SHARED_SETTINGS.city,
     currency: data.currency || DEFAULT_SHARED_SETTINGS.currency,
     taxRate: data.tax_rate === null || data.tax_rate === undefined ? DEFAULT_SHARED_SETTINGS.taxRate : Number(data.tax_rate),
+    repairMaxDiscountPercent: Number((data as { repair_max_discount_percent?: number }).repair_max_discount_percent ?? DEFAULT_SHARED_SETTINGS.repairMaxDiscountPercent),
+    repairLaborTaxRate: ((data as { repair_labor_tax_rate?: 0 | 5 | 10 }).repair_labor_tax_rate ?? DEFAULT_SHARED_SETTINGS.repairLaborTaxRate),
     theme: data.theme || DEFAULT_SHARED_SETTINGS.theme,
     primaryColor: data.primary_color || DEFAULT_SHARED_SETTINGS.primaryColor,
     sessionTimeout: data.session_timeout ?? DEFAULT_SHARED_SETTINGS.sessionTimeout,

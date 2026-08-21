@@ -176,6 +176,8 @@ export function useAdminDashboard() {
     city: 'Asunción',
     currency: ((process.env.NEXT_PUBLIC_CURRENCY || 'PYG') as 'PYG' | 'USD' | 'EUR' | 'MXN'),
     taxRate: parseFloat(process.env.NEXT_PUBLIC_TAX_RATE || '0.10') * 100,
+    repairMaxDiscountPercent: 20,
+    repairLaborTaxRate: 10,
     theme: 'system',
     primaryColor: DEFAULT_SYSTEM_COLOR_SCHEME,
     dateFormat: 'DD/MM/YYYY',

@@ -169,8 +169,8 @@ export function RepairDetailDialog({
     estimatedCost: activeRepair.estimatedCost,
     paidAmount: activeRepair.paidAmount,
   })
-  const configuredTaxRate = [0, 5, 10].includes(Number(settings.taxRate))
-    ? Number(settings.taxRate) as 0 | 5 | 10
+  const configuredTaxRate = [0, 5, 10].includes(Number(settings.repairLaborTaxRate))
+    ? Number(settings.repairLaborTaxRate) as 0 | 5 | 10
     : 10
   const repairCostSummary = activeRepair.costSummary ?? calculateRepairCost({
     currency: settings.currency || 'PYG',
@@ -1368,6 +1368,7 @@ export function RepairDetailDialog({
         <RepairCostsEditorDialog
           open={isCostsEditorOpen}
           repair={activeRepair}
+          maxDiscountPercent={settings.repairMaxDiscountPercent}
           laborTaxRate={configuredTaxRate}
           onOpenChange={setIsCostsEditorOpen}
           onSaved={async () => {
