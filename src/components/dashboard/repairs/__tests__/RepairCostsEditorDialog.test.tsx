@@ -22,6 +22,7 @@ describe('RepairCostsEditorDialog', () => {
     const user = userEvent.setup()
     render(<RepairCostsEditorDialog open repair={repair} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
 
+    expect(screen.getByRole('dialog')).toHaveClass('max-w-[1400px]', 'h-[96dvh]')
     expect(screen.getByText('Ana · Marca Modelo')).toBeVisible()
     expect(screen.getByText('Paso 1 de 2')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Cancelar' })).toBeEnabled()
