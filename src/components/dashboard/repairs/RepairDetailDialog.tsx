@@ -958,6 +958,43 @@ export function RepairDetailDialog({
                             : 'Pago pendiente'}
                       </Badge>
                     </div>
+                    <div
+                      role="status"
+                      className={cn(
+                        'rounded-lg border px-3 py-2.5 text-sm',
+                        financial.priceDefined && financial.status === 'pagado'
+                          ? 'border-emerald-300 bg-emerald-100/80 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-100'
+                          : financial.paid > 0
+                            ? 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100'
+                            : 'border-emerald-200 bg-background/70 text-foreground dark:border-emerald-900/60',
+                      )}
+                    >
+                      {financial.priceDefined && financial.status === 'pagado' ? (
+                        <>
+                          <p className="font-semibold">Equipo pagado en su totalidad</p>
+                          <p className="mt-0.5 text-xs opacity-80">Podés entregarlo sin registrar otro cobro.</p>
+                        </>
+                      ) : !financial.priceDefined && financial.paid > 0 ? (
+                        <>
+                          <p className="font-semibold">{`Anticipo recibido: ${formatCurrency(financial.paid)}`}</p>
+                          <p className="mt-0.5 text-xs opacity-80">El precio final todavía está pendiente; el saldo se calculará cuando lo definas.</p>
+                        </>
+                      ) : financial.paid > 0 ? (
+                        <>
+                          <p className="font-semibold">{`Anticipo recibido: ${formatCurrency(financial.paid)}`}</p>
+                          <p className="mt-0.5 text-xs opacity-80">{`Saldo pendiente al entregar: ${formatCurrency(financial.balance)}`}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-semibold">Sin pagos registrados</p>
+                          <p className="mt-0.5 text-xs opacity-80">
+                            {financial.priceDefined
+                              ? `Saldo pendiente: ${formatCurrency(financial.balance)}`
+                              : 'El saldo se calculará cuando definas el precio final.'}
+                          </p>
+                        </>
+                      )}
+                    </div>
                     <dl className="divide-y divide-emerald-200/80 rounded-lg border border-emerald-200 bg-background/80 text-sm dark:divide-emerald-900/60 dark:border-emerald-900/60">
                       <div className="flex items-center justify-between px-3 py-2">
                         <dt className="text-muted-foreground">Total</dt>

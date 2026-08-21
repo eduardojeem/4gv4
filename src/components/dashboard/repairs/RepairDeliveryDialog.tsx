@@ -140,6 +140,11 @@ export function RepairDeliveryDialog({
   const totalDue = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
   const alreadyPaid = repair?.paidAmount ?? 0
   const balanceDue = Math.max(0, totalDue - alreadyPaid)
+  const priceDefined = repair
+    ? (repair.finalCost !== null && repair.finalCost !== undefined) || Number(repair.estimatedCost) > 0
+    : false
+  const fullyPaid = priceDefined && totalDue > 0 && balanceDue <= 0
+  const hasAdvance = alreadyPaid > 0 && !fullyPaid
   const isCredit = method === 'credit'
 
   const [customerCreditLimit, setCustomerCreditLimit] = useState<number | null>(null)
@@ -341,6 +346,18 @@ export function RepairDeliveryDialog({
     return 'Confirmar Entrega'
   }, [isCredit, selected, unrepairedDraft, wantsCharge])
 
+  const dialogTitle = step === 'payment' && selected !== 'repaired'
+    ? 'Cerrar reparación sin reparar'
+    : step === 'payment' && selected === 'repaired' && balanceDue > 0
+      ? 'Cobrar saldo y entregar'
+      : !priceDefined
+        ? 'Confirmar entrega con precio pendiente'
+        : fullyPaid
+          ? 'Confirmar entrega — equipo pagado'
+          : hasAdvance
+            ? 'Confirmar entrega — anticipo recibido'
+            : 'Confirmar Entrega'
+
   if (!repair) return null
 
   return (
@@ -350,7 +367,7 @@ export function RepairDeliveryDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-            {step === 'payment' ? selected === 'repaired' ? 'Cobrar reparación' : 'Cerrar reparación sin reparar' : 'Confirmar Entrega'}
+            {dialogTitle}
           </DialogTitle>
           <DialogDescription asChild>
             <div className="space-y-1 mt-1">
@@ -381,6 +398,52 @@ export function RepairDeliveryDialog({
             step === 'payment' ? 'border-primary bg-primary/5 text-primary' : 'text-muted-foreground',
           )}>
             2. Cierre y entrega
+          </div>
+        </div>
+
+        <div
+          role="status"
+          className={cn(
+            'flex items-start gap-2 rounded-md border px-3 py-2.5 text-sm',
+            fullyPaid
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100'
+              : hasAdvance
+                ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100'
+                : 'border-border bg-muted/30 text-foreground',
+          )}
+        >
+          {fullyPaid ? (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+          ) : (
+            <DollarSign className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          )}
+          <div className="space-y-0.5">
+            {fullyPaid ? (
+              <>
+                <p className="font-semibold">Equipo pagado en su totalidad</p>
+                <p className="text-xs opacity-80">Podés entregarlo sin registrar otro cobro.</p>
+              </>
+            ) : !priceDefined && alreadyPaid > 0 ? (
+              <>
+                <p className="font-semibold">{`Anticipo recibido: ${formatCurrency(alreadyPaid)}`}</p>
+                <p className="text-xs opacity-80">El precio final todavía está pendiente; el saldo se calculará cuando lo definas.</p>
+              </>
+            ) : hasAdvance ? (
+              <>
+                <p className="font-semibold">{`Anticipo recibido: ${formatCurrency(alreadyPaid)}`}</p>
+                <p className="text-xs opacity-80">{`Saldo pendiente al entregar: ${formatCurrency(balanceDue)}`}</p>
+              </>
+            ) : !priceDefined ? (
+              <>
+                <p className="font-semibold">Precio final pendiente</p>
+                <p className="text-xs opacity-80">Definí el precio antes de entregar o confirmá el cierre según corresponda.</p>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold">Sin pagos registrados</p>
+                <p className="text-xs opacity-80">{`Saldo pendiente al entregar: ${formatCurrency(balanceDue)}`}</p>
+              </>
+            )}
           </div>
         </div>
 

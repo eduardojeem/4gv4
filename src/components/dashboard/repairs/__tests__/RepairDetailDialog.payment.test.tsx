@@ -71,6 +71,8 @@ describe('RepairDetailDialog payment summary', () => {
     expect(within(summary).getByText('Total')).toBeInTheDocument()
     expect(within(summary).getByText('Pagado')).toBeInTheDocument()
     expect(within(summary).getByText('Pendiente')).toBeInTheDocument()
+    expect(within(summary).getByText('Equipo pagado en su totalidad')).toBeVisible()
+    expect(within(summary).getByText('Podés entregarlo sin registrar otro cobro.')).toBeVisible()
   })
 
   it('shows the outstanding amount and collection action after delivery', () => {
@@ -84,6 +86,9 @@ describe('RepairDetailDialog payment summary', () => {
     )
 
     expect(screen.getByText('Pago parcial')).toBeInTheDocument()
+    const paymentMessage = within(screen.getByRole('region', { name: 'Estado del pago' })).getByRole('status')
+    expect(paymentMessage).toHaveTextContent(/Anticipo recibido:.*40/)
+    expect(paymentMessage).toHaveTextContent(/Saldo pendiente al entregar:.*60/)
     expect(screen.getByRole('button', { name: 'Cobrar saldo' })).toBeEnabled()
   })
 
@@ -100,8 +105,11 @@ describe('RepairDetailDialog payment summary', () => {
     const summary = screen.getByRole('region', { name: 'Estado del pago' })
     expect(within(summary).getByText('Precio pendiente')).toBeVisible()
     expect(within(summary).getAllByText('Anticipo recibido')).toHaveLength(2)
-    expect(within(summary).getByText(/30/)).toBeVisible()
+    expect(within(summary).getAllByText(/30/)).not.toHaveLength(0)
     expect(within(summary).queryByText('Pago completado')).not.toBeInTheDocument()
+    const paymentMessage = within(summary).getByRole('status')
+    expect(paymentMessage).toHaveTextContent(/Anticipo recibido:.*30/)
+    expect(paymentMessage).toHaveTextContent('El precio final todavía está pendiente; el saldo se calculará cuando lo definas.')
   })
 
   it('opens quick price editing from the costs section', async () => {

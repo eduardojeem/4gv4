@@ -56,6 +56,45 @@ describe('RepairDeliveryDialog', () => {
     cashRegisterMocks.checkOpenSession.mockResolvedValue({ id: 'session-1' })
   })
 
+  it('makes it explicit that a fully paid device can be delivered without another charge', () => {
+    render(<RepairDeliveryDialog
+      open
+      repair={{ ...repair, paidAmount: 100 }}
+      onOpenChange={vi.fn()}
+      onConfirm={vi.fn()}
+    />)
+
+    expect(screen.getByRole('heading', { name: 'Confirmar entrega — equipo pagado' })).toBeVisible()
+    expect(screen.getByText('Equipo pagado en su totalidad')).toBeVisible()
+    expect(screen.getByText('Podés entregarlo sin registrar otro cobro.')).toBeVisible()
+  })
+
+  it('shows the advance and remaining balance before delivery', () => {
+    render(<RepairDeliveryDialog
+      open
+      repair={{ ...repair, paidAmount: 40 }}
+      onOpenChange={vi.fn()}
+      onConfirm={vi.fn()}
+    />)
+
+    expect(screen.getByRole('heading', { name: 'Confirmar entrega — anticipo recibido' })).toBeVisible()
+    expect(screen.getByText('Anticipo recibido: 40')).toBeVisible()
+    expect(screen.getByText('Saldo pendiente al entregar: 60')).toBeVisible()
+  })
+
+  it('explains an advance when the final price is still unknown', () => {
+    render(<RepairDeliveryDialog
+      open
+      repair={{ ...repair, finalCost: null, estimatedCost: 0, paidAmount: 30 }}
+      onOpenChange={vi.fn()}
+      onConfirm={vi.fn()}
+    />)
+
+    expect(screen.getByRole('heading', { name: 'Confirmar entrega con precio pendiente' })).toBeVisible()
+    expect(screen.getByText('Anticipo recibido: 30')).toBeVisible()
+    expect(screen.getByText('El precio final todavía está pendiente; el saldo se calculará cuando lo definas.')).toBeVisible()
+  })
+
   it('blocks cash collection and offers to open a closed register', async () => {
     cashRegisterMocks.checkOpenSession.mockResolvedValue(null)
 
@@ -117,7 +156,7 @@ describe('RepairDeliveryDialog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
     expect(await screen.findByText('Caja abierta')).toBeVisible()
-    expect(screen.getByRole('heading', { name: 'Cobrar reparación' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Cobrar saldo y entregar' })).toBeInTheDocument()
     expect(screen.getByLabelText('Monto a cobrar')).toHaveValue('100')
     expect(screen.queryByRole('button', { name: /Retirado sin reparar/i })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
@@ -210,7 +249,7 @@ describe('RepairDeliveryDialog', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Caja cerrada durante el cobro')
     expect(screen.getByText('Caja cerrada')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Abrir caja' })).toBeEnabled()
-    expect(screen.getByRole('heading', { name: 'Cobrar reparación' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Cobrar saldo y entregar' })).toBeVisible()
     expect(screen.getByLabelText('Monto a cobrar')).toHaveValue('100')
   })
 })
