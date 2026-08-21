@@ -10,9 +10,18 @@ interface RepairReviewProps {
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
   submitting: boolean
+  priority: 'low' | 'medium' | 'high' | 'urgent'
   customer: { name: string; phone?: string; wholesale: boolean }
-  devices: Array<{ brand: string; model: string; issue: string; technician?: string }>
-  parts: Array<{ name: string; quantity: number; cost: number }>
+  devices: Array<{
+    brand: string
+    model: string
+    serialNumber?: string
+    issue: string
+    description?: string
+    accessType?: string
+    technician?: string
+  }>
+  parts: Array<{ name: string; quantity: number; cost: number; stockAvailable?: number | null }>
   pricing: { labor: number; discount: number; total: number; deposit: number }
   warranty: { months: number; type: 'labor' | 'parts' | 'full' }
 }
@@ -24,7 +33,7 @@ const warrantyLabels = {
 }
 
 export function RepairReview({
-  open, onOpenChange, onConfirm, submitting, customer, devices, parts, pricing, warranty,
+  open, onOpenChange, onConfirm, submitting, priority, customer, devices, parts, pricing, warranty,
 }: RepairReviewProps) {
   const partsTotal = parts.reduce((sum, part) => sum + part.cost * part.quantity, 0)
   return (
@@ -34,6 +43,12 @@ export function RepairReview({
           <DialogTitle>Revisión final de la reparación</DialogTitle>
           <DialogDescription>Verificá la información antes de crear la orden definitiva.</DialogDescription>
         </DialogHeader>
+
+        <div className="flex justify-end">
+          <Badge variant={priority === 'urgent' || priority === 'high' ? 'destructive' : 'secondary'}>
+            Prioridad {{ low: 'baja', medium: 'media', high: 'alta', urgent: 'urgente' }[priority]}
+          </Badge>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2" aria-live="polite">
           <section className="rounded-lg border p-4">
@@ -57,7 +72,12 @@ export function RepairReview({
               {devices.map((device, index) => (
                 <li key={`${device.brand}-${device.model}-${index}`} className="py-2 first:pt-0 last:pb-0">
                   <p className="font-medium">{device.brand} {device.model}</p>
+                  {device.serialNumber && <p className="text-xs text-muted-foreground">Serie / IMEI: {device.serialNumber}</p>}
                   <p className="text-sm text-muted-foreground">{device.issue}{device.technician ? ` · Técnico: ${device.technician}` : ''}</p>
+                  {device.description && <p className="mt-1 text-sm">{device.description}</p>}
+                  {device.accessType && device.accessType !== 'none' && (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Acceso registrado: {device.accessType.toUpperCase()}</p>
+                  )}
                 </li>
               ))}
             </ul>
@@ -72,7 +92,12 @@ export function RepairReview({
               <ul className="mt-2 divide-y">
                 {parts.map((part, index) => (
                   <li key={`${part.name}-${index}`} className="flex justify-between gap-3 py-2 text-sm">
-                    <span>{part.name} × {part.quantity}</span>
+                    <span>
+                      {part.name} × {part.quantity}
+                      {part.stockAvailable !== null && part.stockAvailable !== undefined && (
+                        <small className="block text-muted-foreground">Stock validado: {part.stockAvailable}</small>
+                      )}
+                    </span>
                     <span className="font-medium">{formatCurrency(part.cost * part.quantity)}</span>
                   </li>
                 ))}

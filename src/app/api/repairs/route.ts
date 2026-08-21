@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger'
 import { parseCreateRepairInput, type CreateRepairInput } from '@/lib/repairs/create-repair-input'
 import { RepairPartsStockError, replaceRepairPartsWithInventory } from '@/lib/repairs/replace-parts'
 import { RepairPricingWriteError, resolveRepairPricingWrite } from '@/lib/repairs/pricing-write'
+import { resolveCatalogPartPrice } from '@/lib/repairs/catalog-part-pricing'
 import {
   fingerprintRepairCreateInput,
   resolveRepairCreationReplay,
@@ -79,7 +80,7 @@ async function validateRepairRelations(
 ) {
   const customerResult = await supabase
     .from('customers')
-    .select('id')
+    .select('id, customer_type')
     .eq('id', input.customer_id)
     .eq('organization_id', organizationId)
     .maybeSingle()
@@ -117,7 +118,7 @@ async function validateRepairRelations(
     const [productsResult, inventoryResult] = await Promise.all([
       supabase
         .from('products')
-        .select('id, purchase_price')
+        .select('id, purchase_price, sale_price, wholesale_price')
         .eq('organization_id', organizationId)
         .in('id', productIds),
       supabase
@@ -136,9 +137,19 @@ async function validateRepairRelations(
       return 'Uno de los repuestos seleccionados no pertenece al inventario de esta sucursal.'
     }
 
-    const purchaseCosts = new Map((productsResult.data ?? []).map((row) => [row.id, Number(row.purchase_price) || 0]))
+    const customerIsWholesale = ['wholesale', 'mayorista'].includes(
+      String(customerResult.data.customer_type || '').toLowerCase()
+    )
+    const verifiedPricing = new Map((productsResult.data ?? []).map((row) => [
+      row.id,
+      resolveCatalogPartPrice(row, customerIsWholesale),
+    ]))
     for (const part of input.parts) {
-      if (part.product_id) part.unit_cost = purchaseCosts.get(part.product_id) ?? 0
+      if (part.product_id) {
+        const pricing = verifiedPricing.get(part.product_id)
+        part.unit_cost = pricing?.unitCost ?? 0
+        part.unit_price = pricing?.unitPrice ?? 0
+      }
     }
   }
 

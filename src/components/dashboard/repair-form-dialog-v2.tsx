@@ -125,6 +125,7 @@ import { buildSectionState } from './repairs/new-repair/repair-form-sections'
 import { RepairFormSectionNav } from './repairs/new-repair/RepairFormSectionNav'
 import { RepairReview } from './repairs/new-repair/RepairReview'
 import { RepairFieldHelp } from './repairs/new-repair/RepairFieldHelp'
+import { invalidateBranchCatalogParts } from './repairs/new-repair/branch-catalog-selection'
 
 export type RepairFormMode = 'add' | 'edit'
 
@@ -413,10 +414,28 @@ export function RepairFormDialogV2({
   })
 
   // Field array for parts
-  const { fields: partsFields, append: appendPart, remove: removePart } = useFieldArray({
+  const { fields: partsFields, append: appendPart, remove: removePart, replace: replaceParts } = useFieldArray({
     control,
     name: 'parts'
   })
+  const previousBranchId = useRef(selectedBranchId)
+
+  useEffect(() => {
+    const previous = previousBranchId.current
+    previousBranchId.current = selectedBranchId
+    if (!open || mode !== 'add' || !previous || previous === selectedBranchId) return
+
+    const currentParts = getValues('parts') || []
+    const preservedManualParts = invalidateBranchCatalogParts(currentParts)
+    if (preservedManualParts.length !== currentParts.length) {
+      replaceParts(preservedManualParts)
+      toast.warning('Se quitaron los repuestos vinculados a la sucursal anterior.', {
+        description: 'Volvé a seleccionarlos para validar stock y precio en la sucursal actual.',
+      })
+    }
+    setInventorySearchOpen(false)
+    setServiceSearchIndex(null)
+  }, [getValues, mode, open, replaceParts, selectedBranchId])
 
   // Field array for notes
   const { fields: notesFields, append: appendNote, remove: removeNote } = useFieldArray({
@@ -2889,6 +2908,7 @@ export function RepairFormDialogV2({
           void onSubmitForm(confirmedData)
         }}
         submitting={isSubmitting}
+        priority={reviewData.priority}
         customer={{
           name: reviewData.customerName,
           phone: reviewData.customerPhone,
@@ -2897,13 +2917,17 @@ export function RepairFormDialogV2({
         devices={reviewData.devices.map((device) => ({
           brand: device.brand,
           model: device.model,
+          serialNumber: device.serialNumber,
           issue: device.issue,
+          description: device.description,
+          accessType: device.accessType,
           technician: technicians.find((technician) => technician.id === device.technician)?.name,
         }))}
         parts={(reviewData.parts || []).map((part) => ({
           name: part.name,
           quantity: part.quantity,
           cost: part.cost,
+          stockAvailable: part.stockAvailable,
         }))}
         pricing={{
           labor: calculatedPricing.laborCost,
