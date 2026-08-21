@@ -56,6 +56,15 @@ describe('RepairDeliveryDialog', () => {
     cashRegisterMocks.checkOpenSession.mockResolvedValue({ id: 'session-1' })
   })
 
+  it('uses a responsive full-height flow with scrollable content and fixed actions', () => {
+    render(<RepairDeliveryDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
+
+    expect(screen.getByTestId('repair-delivery-modal')).toHaveClass('max-sm:h-[100dvh]', 'sm:max-w-2xl')
+    expect(screen.getByTestId('repair-delivery-header')).toHaveClass('py-2')
+    expect(screen.getByTestId('repair-delivery-body')).toHaveClass('flex-1', 'overflow-y-auto')
+    expect(screen.getByTestId('repair-delivery-actions')).toHaveClass('max-sm:grid', 'max-sm:grid-cols-2')
+  })
+
   it('makes it explicit that a fully paid device can be delivered without another charge', () => {
     render(<RepairDeliveryDialog
       open

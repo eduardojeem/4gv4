@@ -307,14 +307,15 @@ export function RepairPaymentDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md" data-help-id="repair-payment">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-emerald-500" />
-            Procesar pago de reparación
+      <DialogContent data-testid="repair-payment-modal" className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-full max-sm:rounded-none sm:max-w-lg" data-help-id="repair-payment">
+        <DialogHeader data-testid="repair-payment-header" className="shrink-0 border-b px-3 py-2 pr-12 sm:px-6 sm:py-4 sm:pr-12">
+          <DialogTitle className="flex min-w-0 items-center gap-2 text-base sm:text-lg">
+            <DollarSign className="h-5 w-5 shrink-0 text-emerald-500" />
+            <span className="sm:hidden">Procesar pago</span>
+            <span className="max-sm:hidden">Procesar pago de reparación</span>
           </DialogTitle>
           <DialogDescription asChild>
-            <div className="space-y-1 mt-1">
+            <div className="mt-1 space-y-1 max-sm:hidden">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="font-mono text-xs">
                   #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
@@ -335,7 +336,7 @@ export function RepairPaymentDialog({
 
         {isFullyPaid ? (
           <>
-            <div className="space-y-4 py-2">
+            <div data-testid="repair-payment-body" className="flex-1 space-y-4 overflow-y-auto px-3 py-3 sm:px-6 sm:py-4">
               <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/30" role="status">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                 <div className="space-y-1">
@@ -350,11 +351,11 @@ export function RepairPaymentDialog({
               </dl>
               {balanceRefreshMessage && <p className="text-sm text-muted-foreground" role="status">{balanceRefreshMessage}</p>}
             </div>
-            <DialogFooter><Button onClick={handleClose}>Cerrar</Button></DialogFooter>
+            <DialogFooter data-testid="repair-payment-actions" className="shrink-0 border-t px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4"><Button onClick={handleClose} className="min-h-11 sm:min-h-9">Cerrar</Button></DialogFooter>
           </>
         ) : (
           <>
-        <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto px-1">
+        <div data-testid="repair-payment-body" className="flex-1 space-y-4 overflow-y-auto px-3 py-3 sm:px-6 sm:py-4">
           {isUnpricedDeposit && (
             <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30" role="status">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
@@ -696,14 +697,14 @@ export function RepairPaymentDialog({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+        <DialogFooter data-testid="repair-payment-actions" className="shrink-0 border-t px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:grid max-sm:grid-cols-2 sm:px-6 sm:py-4">
+          <Button variant="outline" onClick={handleClose} disabled={isSubmitting} className="min-h-11 sm:min-h-9">
             Cancelar
           </Button>
           <Button
             onClick={handleConfirm}
             disabled={!canConfirm || isSubmitting}
-            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="min-h-11 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white sm:min-h-9"
           >
             {isSubmitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />

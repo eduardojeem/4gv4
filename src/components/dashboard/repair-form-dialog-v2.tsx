@@ -3292,31 +3292,32 @@ export function RepairFormDialogV2({
 
     {/* Modal de Búsqueda de Servicios y Mano de Obra */}
     <Dialog open={serviceSearchIndex !== null} onOpenChange={(open) => !open && setServiceSearchIndex(null)}>
-      <DialogContent className="sm:max-w-[650px] max-h-[88vh] flex flex-col p-0 overflow-hidden rounded-2xl bg-white/95 dark:bg-slate-950/95 backdrop-blur-2xl border-slate-200 dark:border-slate-800 shadow-2xl">
-        <DialogHeader className="p-5 pb-3.5 border-b bg-gradient-to-r from-emerald-600/10 via-teal-600/10 to-blue-600/10 dark:from-emerald-950/40 dark:via-teal-950/40 dark:to-blue-950/40">
+      <DialogContent className="flex max-h-[88vh] flex-col overflow-hidden rounded-2xl border-slate-200 bg-white/95 p-0 shadow-2xl backdrop-blur-2xl max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-full max-sm:rounded-none dark:border-slate-800 dark:bg-slate-950/95 sm:max-w-[720px]">
+        <DialogHeader className="shrink-0 border-b bg-gradient-to-r from-emerald-600/10 via-teal-600/10 to-blue-600/10 px-3 py-2 pr-12 dark:from-emerald-950/40 dark:via-teal-950/40 dark:to-blue-950/40 sm:p-5 sm:pr-12 sm:pb-3.5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="hidden h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20 sm:flex">
                 <Wrench className="h-5 w-5" />
               </div>
-              <div>
-                <DialogTitle className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
-                  Catálogo de Servicios y Mano de Obra
+              <div className="min-w-0">
+                <DialogTitle className="truncate text-base font-extrabold text-slate-900 dark:text-slate-100 sm:text-lg">
+                  <span className="sm:hidden">Agregar servicio</span>
+                  <span className="max-sm:hidden">Catálogo de Servicios y Mano de Obra</span>
                 </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                <DialogDescription className="mt-0.5 text-xs text-muted-foreground max-sm:hidden">
                   Selecciona un servicio técnico para auto-completar el diagnóstico, mano de obra y repuestos.
                 </DialogDescription>
               </div>
             </div>
             {customerIsWholesale && (
-              <Badge className="bg-violet-600 text-white text-[10px] font-extrabold px-2 py-0.5 shadow-sm">
-                Tarifa Mayorista
+              <Badge className="shrink-0 bg-violet-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-sm">
+                <span className="sm:hidden">Mayorista</span><span className="max-sm:hidden">Tarifa Mayorista</span>
               </Badge>
             )}
           </div>
         </DialogHeader>
 
-        <div className="p-4 pb-3 border-b bg-slate-50/70 dark:bg-slate-900/40 space-y-3">
+        <div className="shrink-0 space-y-2 border-b bg-slate-50/70 p-3 dark:bg-slate-900/40 sm:space-y-3 sm:p-4 sm:pb-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -3341,6 +3342,7 @@ export function RepairFormDialogV2({
               type="button"
               variant="outline"
               size="sm"
+              className="max-sm:w-full"
               disabled={!selectedBranchId || !hasPermission('products.create')}
               onClick={() => {
                 setQuickServiceDeviceIndex(serviceSearchIndex)
@@ -3354,7 +3356,7 @@ export function RepairFormDialogV2({
           </div>
 
           {/* Filtros rápidos por categoría de servicio */}
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain sm:flex-wrap">
             {[
               { label: 'Todos', query: '' },
               { label: '📱 Pantallas', query: 'pantalla' },
@@ -3369,7 +3371,7 @@ export function RepairFormDialogV2({
                 type="button"
                 onClick={() => setServiceSearchQuery(chip.query)}
                 className={cn(
-                  "text-[10px] font-semibold px-2.5 py-1 rounded-full border transition-all",
+                  "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-all",
                   (chip.query === '' && serviceSearchQuery === '') || (chip.query !== '' && serviceSearchQuery.toLowerCase().includes(chip.query))
                     ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
                     : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -3380,12 +3382,12 @@ export function RepairFormDialogV2({
             ))}
           </div>
 
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2 text-[11px] leading-relaxed text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2 text-[11px] leading-relaxed text-emerald-900 max-sm:hidden dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
             El servicio conserva su precio completo. Si tiene materiales incluidos, se registran como costo interno con Gs. 0 adicionales al cliente.
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 min-h-[320px] max-h-[50vh]">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:min-h-[320px] sm:max-h-[50vh] sm:p-4">
           {serviceSearch.status === 'error' ? (
             <div role="alert" className="flex flex-col items-center justify-center gap-3 py-16 text-center">
               <AlertCircle className="h-8 w-8 text-red-500" />

@@ -56,6 +56,15 @@ describe('RepairPaymentDialog', () => {
     vi.clearAllMocks()
   })
 
+  it('uses a full-height mobile layout with compact header and fixed actions', () => {
+    render(<RepairPaymentDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
+
+    expect(screen.getByTestId('repair-payment-modal')).toHaveClass('max-sm:h-[100dvh]', 'sm:max-w-lg')
+    expect(screen.getByTestId('repair-payment-header')).toHaveClass('py-2')
+    expect(screen.getByTestId('repair-payment-body')).toHaveClass('flex-1', 'overflow-y-auto')
+    expect(screen.getByTestId('repair-payment-actions')).toHaveClass('max-sm:grid', 'max-sm:grid-cols-2')
+  })
+
   it('blocks cash payments when the register is closed but allows credit', async () => {
     cashRegisterMocks.checkOpenSession.mockResolvedValue(null)
 

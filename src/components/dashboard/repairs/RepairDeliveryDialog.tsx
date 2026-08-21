@@ -363,14 +363,14 @@ export function RepairDeliveryDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-            {dialogTitle}
+      <DialogContent data-testid="repair-delivery-modal" className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-full max-sm:rounded-none sm:max-w-2xl">
+        <DialogHeader data-testid="repair-delivery-header" className="shrink-0 border-b px-3 py-2 pr-12 sm:px-6 sm:py-4 sm:pr-12">
+          <DialogTitle className="flex min-w-0 items-center gap-2 text-sm sm:text-lg">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+            <span className="truncate">{dialogTitle}</span>
           </DialogTitle>
           <DialogDescription asChild>
-            <div className="space-y-1 mt-1">
+            <div className="mt-1 space-y-1 max-sm:hidden">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="font-mono text-xs">
                   #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
@@ -386,6 +386,7 @@ export function RepairDeliveryDialog({
           </DialogDescription>
         </DialogHeader>
 
+        <div data-testid="repair-delivery-body" className="flex-1 space-y-3 overflow-y-auto px-3 py-3 sm:px-6 sm:py-4">
         <div className="grid grid-cols-2 gap-2" aria-label="Progreso de entrega">
           <div className={cn(
             'rounded-md border px-3 py-2 text-xs font-semibold',
@@ -447,7 +448,7 @@ export function RepairDeliveryDialog({
           </div>
         </div>
 
-        <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto px-1">
+        <div className="space-y-4 py-1">
           {step === 'outcome' && <div className="space-y-3" data-help-id="repair-delivery-resolution">
             <p className="text-sm font-medium">¿Cuál fue el resultado?</p>
             <div className="flex flex-col gap-2">
@@ -620,7 +621,7 @@ export function RepairDeliveryDialog({
                 Entregar y cobrar después
               </Button>
 
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                 {PAYMENT_METHODS.map(m => {
                   const Icon = m.icon
                   const isSelected = method === m.id
@@ -824,22 +825,23 @@ export function RepairDeliveryDialog({
             </div>
           )}
         </div>
+        </div>
 
-        <DialogFooter>
+        <DialogFooter data-testid="repair-delivery-actions" className="shrink-0 border-t px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:grid max-sm:grid-cols-2 sm:px-6 sm:py-4">
           {step === 'payment' ? (
-            <Button variant="outline" onClick={() => setStep('outcome')} disabled={isSubmitting}>
+            <Button variant="outline" onClick={() => setStep('outcome')} disabled={isSubmitting} className="min-h-11 sm:min-h-9">
               <ArrowLeft className="h-4 w-4" />
               Volver
             </Button>
           ) : (
-            <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+            <Button variant="outline" onClick={handleClose} disabled={isSubmitting} className="min-h-11 sm:min-h-9">
               Cancelar
             </Button>
           )}
           <Button
             onClick={handleConfirm}
             disabled={!canConfirm}
-            className="gap-2"
+            className="min-h-11 gap-2 sm:min-h-9"
           >
             {isSubmitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
