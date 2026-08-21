@@ -125,7 +125,7 @@ export function RepairDeliveryDialog({
   const [amount, setAmount] = useState('')
   const [reference, setReference] = useState('')
   const [deliverUnpaid, setDeliverUnpaid] = useState(false)
-  const [installmentCount, setInstallmentCount] = useState('3')
+  const [installmentCount, setInstallmentCount] = useState('1')
   const [frequency, setFrequency] = useState<CreditFrequency>('monthly')
   const [interestRate, setInterestRate] = useState('0')
   const [idempotencyKey, setIdempotencyKey] = useState('')
