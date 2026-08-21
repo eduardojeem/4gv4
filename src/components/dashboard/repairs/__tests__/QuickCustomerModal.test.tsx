@@ -81,4 +81,58 @@ describe('QuickCustomerModal', () => {
       alternate_phone_label: 'Hermana',
     })
   })
+
+  it('populates and saves updated RUC when editing a customer', async () => {
+    const user = userEvent.setup()
+    const onCustomerUpdated = vi.fn()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({
+        success: true,
+        data: {
+          id: 'cust-123',
+          name: 'Carlos Benítez',
+          phone: '0981777888',
+          email: 'carlos@example.com',
+          ruc: '80012345-6',
+          customer_type: 'regular'
+        }
+      }, 200))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <QuickCustomerModal
+        open
+        customerToEdit={{
+          id: 'cust-123',
+          name: 'Carlos Benítez',
+          phone: '0981777888',
+          email: 'carlos@example.com',
+          ruc: '444555-1',
+        }}
+        onClose={vi.fn()}
+        onCustomerUpdated={onCustomerUpdated}
+      />
+    )
+
+    const rucInput = screen.getByLabelText(/RUC \/ C\.I\./i) as HTMLInputElement
+    expect(rucInput.value).toBe('444555-1')
+
+    await user.clear(rucInput)
+    await user.type(rucInput, '80012345-6')
+    await user.click(screen.getByRole('button', { name: /Guardar Cambios|Actualizar/i }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(fetchMock.mock.calls[0][1].method).toBe('PUT')
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body).toMatchObject({
+      id: 'cust-123',
+      name: 'Carlos Benítez',
+      ruc: '80012345-6',
+    })
+    expect(onCustomerUpdated).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'cust-123',
+      ruc: '80012345-6',
+    }))
+  })
 })

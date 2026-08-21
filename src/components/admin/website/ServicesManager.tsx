@@ -450,14 +450,27 @@ export function ServicesManager() {
           </div>
 
           {/* Toggle publicar */}
-          <div className="flex items-center gap-3 rounded-xl border bg-background px-4 py-2.5 shadow-sm">
+          <div className={cn(
+            'flex items-center gap-3.5 rounded-2xl border-2 px-4 py-2.5 shadow-sm transition-all',
+            pageEnabled
+              ? 'border-emerald-400 bg-emerald-500/10 dark:border-emerald-700 dark:bg-emerald-950/40'
+              : 'border-border bg-background'
+          )}>
             <div>
-              <p className="text-xs font-semibold">Mostrar en la web</p>
-              <p className="text-[11px] text-muted-foreground">Se guarda al instante</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs font-extrabold text-foreground">Visualización Pública</p>
+                <span className={cn(
+                  'text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full',
+                  pageEnabled ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'
+                )}>
+                  {pageEnabled ? 'Online' : 'Oculto'}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">En ruta /servicios e inicio</p>
             </div>
             {updatingVis
-              ? <Loader2 className="h-4 w-4 animate-spin" />
-              : <Switch checked={pageEnabled} onCheckedChange={handlePageVisibility} disabled={isSaving} />
+              ? <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
+              : <Switch checked={pageEnabled} onCheckedChange={handlePageVisibility} disabled={isSaving} className="data-[state=checked]:bg-emerald-600" />
             }
           </div>
         </div>

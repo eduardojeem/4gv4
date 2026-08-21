@@ -122,7 +122,7 @@ export const GET = withTenantAuth({ permission: [...readPermissions], module: 'r
     const supabase = await createClient()
     let query = supabase
       .from('customers')
-      .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')
+      .select('id, customer_code, name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at')
       .eq('organization_id', organization.id)
 
     if (term) {
@@ -131,6 +131,7 @@ export const GET = withTenantAuth({ permission: [...readPermissions], module: 'r
         `name.ilike.%${term}%`,
         `email.ilike.%${term}%`,
         `customer_code.ilike.%${term}%`,
+        `ruc.ilike.%${term}%`,
       ]
       // Buscar por teléfono solo si el término tiene dígitos: de lo
       // contrario `phone.ilike.%%` matchea todo y arruina el resto del filtro.
@@ -169,7 +170,7 @@ export const POST = withTenantAuth({ permission: [...writePermissions], module: 
         created_at: now,
         updated_at: now,
       })
-      .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')
+      .select('id, customer_code, name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at')
       .single()
 
     if (error) throw error
@@ -197,7 +198,7 @@ export const PUT = withTenantAuth({ permission: [...writePermissions], module: '
       .update(updates)
       .eq('id', id)
       .eq('organization_id', organization.id)
-      .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')
+      .select('id, customer_code, name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at')
       .single()
 
     if (error) throw error

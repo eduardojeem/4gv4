@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { Loader2, Save, Phone, Mail, MapPin, Clock, Check, Sparkles, MessageCircle, Building2, Upload, Info, Globe, ExternalLink } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import { CompanyInfo } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
@@ -420,30 +421,13 @@ export function CompanyInfoForm() {
             )}
           </div>
 
-          <div className="flex flex-col gap-4 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="marketplacePublic" className="text-sm font-semibold">Visibilidad en Marketplace</Label>
-                <span
-                  className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                    formData.marketplacePublic !== false
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400'
-                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                  }`}
-                >
-                  {formData.marketplacePublic !== false ? 'Público' : 'Privado'}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Si está activo, tu empresa aparecerá listada en el marketplace general. (Tu sitio directo siempre funcionará).
-              </p>
-            </div>
-            <Switch
-              id="marketplacePublic"
-              checked={formData.marketplacePublic !== false}
-              onCheckedChange={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
-            />
-          </div>
+          <PublicVisibilityCard
+            title="Visibilidad en Marketplace General"
+            badgeLabel="Directorio Público"
+            description="Si está activo, tu negocio aparecerá listado en el marketplace general. Tu sitio web directo siempre funcionará en ambos casos."
+            enabled={formData.marketplacePublic !== false}
+            onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
+          />
         </div>
       </SectionCard>
 
@@ -594,28 +578,14 @@ export function CompanyInfoForm() {
                 </p>
               </div>
 
-              <div className="flex flex-col justify-between rounded-lg border bg-muted/30 p-3.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <Label htmlFor="showTopBar" className="text-sm font-semibold">Barra superior</Label>
-                    <p className="mt-0.5 pr-2 text-xs text-muted-foreground">Datos de contacto rápidos arriba del menú</p>
-                  </div>
-                  <Switch
-                    id="showTopBar"
-                    checked={formData.showTopBar !== false}
-                    onCheckedChange={(checked) => setDraft((current) => ({ ...(current ?? formData), showTopBar: checked }))}
-                  />
-                </div>
-                <span
-                  className={`mt-3 inline-flex w-fit items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                    formData.showTopBar !== false
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400'
-                      : 'bg-muted text-muted-foreground'
-                  }`}
-                >
-                  {formData.showTopBar !== false ? 'Activo' : 'Inactivo'}
-                </span>
-              </div>
+              <PublicVisibilityCard
+                title="Barra Superior de Contacto"
+                badgeLabel="Encabezado"
+                description="Muestra la barra superior con número de WhatsApp, teléfono comercial y horarios arriba del menú de navegación."
+                enabled={formData.showTopBar !== false}
+                onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), showTopBar: checked }))}
+                compact
+              />
             </div>
           </div>
 

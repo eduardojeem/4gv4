@@ -647,7 +647,17 @@ export function RepairFormDialogV2({
         depositMethod: initialData?.depositMethod ?? null,
         depositReference: initialData?.depositReference || ''
       })
-      setSelectedQuickCustomer(null)
+      if (initialData?.existingCustomerId) {
+        setSelectedQuickCustomer({
+          id: initialData.existingCustomerId,
+          name: initialData.customerName || '',
+          phone: initialData.customerPhone || '',
+          email: initialData.customerEmail || '',
+          ruc: initialData.customerDocument || '',
+        })
+      } else {
+        setSelectedQuickCustomer(null)
+      }
       setCalculationMode(initialData?.pricingMode || 'automatic')
     }
   }, [open, mode, repair?.id, initialData, reset, user?.id, technicians])
@@ -775,6 +785,7 @@ export function RepairFormDialogV2({
     setValue('customerName', customer.name, { shouldDirty: true, shouldValidate: true })
     setValue('customerPhone', customer.phone, { shouldDirty: true, shouldValidate: true })
     setValue('customerEmail', customer.email, { shouldDirty: true, shouldValidate: true })
+    setValue('customerDocument', customer.ruc || '', { shouldDirty: true, shouldValidate: true })
     setSelectedQuickCustomer(customer)
     if (customer.is_wholesale !== undefined) {
       setCustomerIsWholesale(Boolean(customer.is_wholesale))
@@ -785,6 +796,7 @@ export function RepairFormDialogV2({
     setValue('customerName', customer.name, { shouldDirty: true, shouldValidate: true })
     setValue('customerPhone', customer.phone, { shouldDirty: true, shouldValidate: true })
     setValue('customerEmail', customer.email, { shouldDirty: true, shouldValidate: true })
+    setValue('customerDocument', customer.ruc || '', { shouldDirty: true, shouldValidate: true })
     setSelectedQuickCustomer(customer)
     if (customer.is_wholesale !== undefined) {
       setCustomerIsWholesale(Boolean(customer.is_wholesale))
@@ -797,15 +809,19 @@ export function RepairFormDialogV2({
     const name = watch('customerName')
     const phone = watch('customerPhone')
     const email = watch('customerEmail')
+    const document = watch('customerDocument')
 
     if (id) {
       setEditingCustomer({
         id,
-        name: name || '',
-        phone: phone || '',
-        email: email || '',
+        name: name || selectedQuickCustomer?.name || '',
+        phone: phone || selectedQuickCustomer?.phone || '',
+        email: email || selectedQuickCustomer?.email || '',
+        ruc: document || selectedQuickCustomer?.ruc || '',
+        alternate_phone: selectedQuickCustomer?.alternate_phone || null,
+        alternate_phone_label: selectedQuickCustomer?.alternate_phone_label || null,
         is_wholesale: customerIsWholesale,
-        customer_type: customerIsWholesale ? 'wholesale' : 'regular',
+        customer_type: customerIsWholesale ? 'wholesale' : (selectedQuickCustomer?.customer_type || 'regular'),
       })
       setShowQuickCustomerModal(true)
     }
@@ -1066,7 +1082,8 @@ export function RepairFormDialogV2({
                     id: initialData.existingCustomerId,
                     name: initialData.customerName || '',
                     phone: initialData.customerPhone || '',
-                    email: initialData.customerEmail || ''
+                    email: initialData.customerEmail || '',
+                    ruc: initialData.customerDocument || '',
                   } : undefined)}
                   onChange={(customerId, customerData) => {
                     setValue('existingCustomerId', customerId, { shouldDirty: true, shouldValidate: true })
@@ -1075,6 +1092,7 @@ export function RepairFormDialogV2({
                       setValue('customerName', '', { shouldDirty: true, shouldValidate: true })
                       setValue('customerPhone', '', { shouldDirty: true, shouldValidate: true })
                       setValue('customerEmail', '', { shouldDirty: true, shouldValidate: true })
+                      setValue('customerDocument', '', { shouldDirty: true, shouldValidate: true })
                       setSelectedQuickCustomer(null)
                       return
                     }
@@ -1084,12 +1102,21 @@ export function RepairFormDialogV2({
                       setValue('customerName', customerData.name, { shouldDirty: true, shouldValidate: true })
                       setValue('customerPhone', customerData.phone || '', { shouldDirty: true, shouldValidate: true })
                       setValue('customerEmail', customerData.email || '', { shouldDirty: true, shouldValidate: true })
+                      setValue('customerDocument', customerData.ruc || '', { shouldDirty: true, shouldValidate: true })
                       setSelectedQuickCustomer({
                         id: customerId,
                         name: customerData.name || '',
                         phone: customerData.phone || '',
-                        email: customerData.email || ''
+                        email: customerData.email || '',
+                        ruc: customerData.ruc || '',
+                        alternate_phone: customerData.alternate_phone || null,
+                        alternate_phone_label: customerData.alternate_phone_label || null,
+                        customer_type: customerData.customer_type || (customerData.is_wholesale ? 'wholesale' : 'regular'),
+                        is_wholesale: customerData.is_wholesale,
                       })
+                      if (customerData.is_wholesale !== undefined) {
+                        setCustomerIsWholesale(Boolean(customerData.is_wholesale))
+                      }
                     }
                   }}
                   error={errors.existingCustomerId?.message}
@@ -1099,9 +1126,21 @@ export function RepairFormDialogV2({
                 {watch('existingCustomerId') && (
                   <div className="pt-3 border-t border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-3 flex-wrap bg-slate-50/70 dark:bg-slate-900/40 p-3 rounded-xl">
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                        {watch('customerName') || 'Cliente seleccionado'}
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          {watch('customerName') || 'Cliente seleccionado'}
+                        </p>
+                        {(watch('customerDocument') || selectedQuickCustomer?.ruc) && (
+                          <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 h-4 border-slate-300 dark:border-slate-700 bg-background/80">
+                            RUC/CI: {watch('customerDocument') || selectedQuickCustomer?.ruc}
+                          </Badge>
+                        )}
+                        {customerIsWholesale && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30">
+                            Mayorista
+                          </Badge>
+                        )}
+                      </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground dark:text-slate-400 flex-wrap">
                         {watch('customerPhone') && (
                           <div className="flex items-center gap-1.5">

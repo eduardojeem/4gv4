@@ -13,6 +13,8 @@ import { RepairCostCalculator } from '../RepairCostCalculator'
 vi.mock('@/lib/currency', () => ({
   formatCurrency: (amount: number) => `$${amount.toFixed(2)}`,
   getCurrencyFractionDigits: () => 2,
+  formatThousands: (value: number | string | null | undefined) => (value ? String(value) : ''),
+  parseThousands: (value: string) => Number(value) || 0,
 }))
 
 vi.mock('@/lib/pos-calculator', () => ({

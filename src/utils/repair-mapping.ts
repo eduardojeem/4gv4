@@ -8,6 +8,10 @@ interface SupabaseCustomer {
     phone?: string
     email?: string
     customer_code?: string
+    ruc?: string
+    customer_type?: string
+    alternate_phone?: string
+    alternate_phone_label?: string
 }
 
 interface SupabaseTechnician {
@@ -149,7 +153,12 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
             customerCode: cust?.customer_code,
             name: cust?.name || (cust?.first_name ? `${cust?.first_name} ${cust?.last_name || ''}`.trim() : 'Cliente Desconocido'),
             phone: cust?.phone || '',
-            email: cust?.email || ''
+            email: cust?.email || '',
+            ruc: cust?.ruc || '',
+            alternate_phone: cust?.alternate_phone || null,
+            alternate_phone_label: cust?.alternate_phone_label || null,
+            customer_type: cust?.customer_type || 'regular',
+            is_wholesale: cust?.customer_type === 'wholesale' || cust?.customer_type === 'mayorista',
         },
         device: `${r.device_brand} ${r.device_model}`,
         deviceType: (r.device_type as DeviceType) || 'smartphone',

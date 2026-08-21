@@ -16,8 +16,14 @@ import { HeroContent, HeroStats } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
+import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 
-export function HeroEditor() {
+interface HeroEditorProps {
+  initialContent?: HeroContent
+  initialStats?: HeroStats
+}
+
+export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {}) {
   const { settings, isLoading, error, isSaving, updateSettings } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults()
   const [heroContentDraft, setHeroContentDraft] = useState<HeroContent | null>(null)
@@ -114,29 +120,13 @@ export function HeroEditor() {
 
   return (
     <form onSubmit={handleSave} className="space-y-6 pb-24 md:pb-6">
-      <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${heroContent.enabled !== false ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
-            {heroContent.enabled !== false ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
-          </div>
-          <div>
-            <p className="text-sm font-semibold">Mostrar Hero en la página de inicio</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Al ocultarlo se conserva todo el contenido para volver a publicarlo más adelante.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-3 sm:justify-end">
-          <span className={`text-xs font-semibold ${heroContent.enabled !== false ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-            {heroContent.enabled !== false ? 'Publicado' : 'Oculto'}
-          </span>
-          <Switch
-            checked={heroContent.enabled !== false}
-            onCheckedChange={(checked) => updateContent('enabled', checked)}
-            aria-label="Mostrar Hero en la página de inicio"
-          />
-        </div>
-      </div>
+      <PublicVisibilityCard
+        title="Visualización de Portada (Hero)"
+        badgeLabel="Banner de Inicio"
+        description="Define si el banner principal de bienvenida y garantías de confianza se muestran en la página principal de tu sitio web."
+        enabled={heroContent.enabled !== false}
+        onToggle={(checked) => updateContent('enabled', checked)}
+      />
 
       {/* Live preview */}
       <Card className="relative overflow-hidden">
@@ -362,14 +352,14 @@ export function HeroEditor() {
 
       {/* Stats */}
       <SectionCard icon={TrendingUp} title="Estadísticas" description="Números mostrados en la sección hero">
-        <div className="mb-6 flex items-center justify-between rounded-lg border p-4">
-          <div className="space-y-0.5">
-            <Label className="text-base font-semibold">Mostrar Estadísticas</Label>
-            <p className="text-sm text-muted-foreground">Activa esta opción para mostrar los 3 números destacados.</p>
-          </div>
-          <Switch
-            checked={heroStats.enabled !== false}
-            onCheckedChange={(checked) => updateStat('enabled', checked)}
+        <div className="mb-6">
+          <PublicVisibilityCard
+            title="Visualización de Estadísticas"
+            badgeLabel="Métricas de Confianza"
+            description="Muestra los 3 contadores numéricos (Reparaciones, Satisfacción y Tiempo promedio) en la portada."
+            enabled={heroStats.enabled !== false}
+            onToggle={(checked) => updateStat('enabled', checked)}
+            compact
           />
         </div>
         {heroStats.enabled !== false && (

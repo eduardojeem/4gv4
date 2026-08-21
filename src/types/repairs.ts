@@ -35,6 +35,11 @@ export interface Customer {
   name: string
   phone: string
   email: string
+  ruc?: string
+  alternate_phone?: string | null
+  alternate_phone_label?: string | null
+  customer_type?: string
+  is_wholesale?: boolean
 }
 
 export interface Technician {

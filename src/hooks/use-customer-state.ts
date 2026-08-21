@@ -10,6 +10,8 @@ export interface Customer {
   name: string
   email: string
   phone: string
+  alternate_phone?: string | null
+  alternate_phone_label?: string | null
   ruc?: string
   customer_type: "premium" | "empresa" | "regular" | "wholesale"
   status: "active" | "inactive" | "suspended"

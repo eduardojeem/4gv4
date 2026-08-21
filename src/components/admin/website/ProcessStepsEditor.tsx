@@ -27,6 +27,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -337,46 +338,16 @@ export function ProcessStepsEditor() {
         </Button>
       </div>
 
-      <section className="rounded-lg border p-4 sm:p-5" aria-labelledby="process-status-title">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex gap-3">
-            <div
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${
-                processEnabled
-                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                  : 'bg-muted text-muted-foreground'
-              }`}
-            >
-              {processEnabled
-                ? <Eye className="h-4 w-4" aria-hidden="true" />
-                : <EyeOff className="h-4 w-4" aria-hidden="true" />}
-            </div>
-            <div>
-              <h3 id="process-status-title" className="text-sm font-semibold">
-                {processEnabled ? 'Sección visible' : 'Sección oculta'}
-              </h3>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                {processEnabled
-                  ? `${activeFlowsCount} de ${flows.length} procesos se mostrarán al público.`
-                  : 'Los procesos se conservan, pero no aparecen en el inicio.'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-4 rounded-md border bg-muted/20 px-3 py-2 sm:min-w-[220px]">
-            <div>
-              <Label htmlFor="enable-process" className="text-sm font-medium">
-                Mostrar sección
-              </Label>
-              <p className="text-[11px] text-muted-foreground">Se aplica al guardar.</p>
-            </div>
-            <Switch
-              id="enable-process"
-              checked={processEnabled !== false}
-              onCheckedChange={setProcessEnabledDraft}
-            />
-          </div>
-        </div>
-        <SectionHowItWorks
+      <PublicVisibilityCard
+        title="Visualización de la Sección de Procesos"
+        badgeLabel="Cómo Trabajamos"
+        description={processEnabled
+          ? `Sección activa: ${activeFlowsCount} de ${flows.length} procesos configurados se mostrarán en la portada.`
+          : 'Sección oculta: Los procesos se conservan pero no se muestran a los clientes en la portada.'}
+        enabled={processEnabled !== false}
+        onToggle={setProcessEnabledDraft}
+      />
+      <SectionHowItWorks
           sectionName="los procesos públicos"
           steps={[
             {
@@ -393,7 +364,6 @@ export function ProcessStepsEditor() {
             },
           ]}
         />
-      </section>
 
       <section className="rounded-lg border p-4" aria-labelledby="process-selector-title">
         <div className="flex items-center justify-between gap-3">

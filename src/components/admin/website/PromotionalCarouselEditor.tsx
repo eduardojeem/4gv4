@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import { cn } from '@/lib/utils'
 import { PromotionalCarouselSlideSchema } from '@/lib/validation/website-settings'
 import { getPromotionStoragePathFromUrl } from '@/lib/website/promotional-carousel-storage'
@@ -659,18 +660,22 @@ export function PromotionalCarouselEditor() {
         description="Publicá campañas con imágenes y mensajes propios en la página de inicio"
       >
         <div className="space-y-6">
-          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-            <div className="flex items-start gap-3">
-              <div className={cn('mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md', current.enabled ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground')}>
-                {current.enabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-              </div>
-              <div>
-                <p className="text-sm font-semibold">Mostrar carrusel en el inicio</p>
-                <p className="mt-1 text-xs text-muted-foreground">Solo se publica cuando tiene al menos una diapositiva activa.</p>
-              </div>
-              <Switch className="ml-auto lg:ml-3" checked={current.enabled} onCheckedChange={(value) => patch('enabled', value)} aria-label="Mostrar carrusel" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex-1">
+              <PublicVisibilityCard
+                title="Visualización del Carrusel de Promociones"
+                badgeLabel="Banners de Portada"
+                description="Activa o desactiva el carrusel en la página de inicio. Requiere al menos una diapositiva activa."
+                enabled={current.enabled}
+                onToggle={(value) => patch('enabled', value)}
+              />
             </div>
-            <Button type="button" onClick={openNewSlide} disabled={current.slides.length >= MAX_SLIDES}>
+            <Button
+              type="button"
+              onClick={openNewSlide}
+              disabled={current.slides.length >= MAX_SLIDES}
+              className="shrink-0 font-bold self-start sm:self-center h-10 px-4"
+            >
               <Plus className="mr-2 h-4 w-4" />
               Nueva diapositiva
             </Button>

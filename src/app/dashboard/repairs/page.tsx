@@ -643,6 +643,7 @@ function RepairsPageContent() {
         customerName: selectedRepair.customer.name,
         customerPhone: selectedRepair.customer.phone,
         customerEmail: selectedRepair.customer.email,
+        customerDocument: selectedRepair.customer.ruc || '',
         priority: selectedRepair.priority,
         urgency: selectedRepair.urgency === 'urgent' ? 'high' : 'medium',
         laborCost: selectedRepair.laborCost || 0,

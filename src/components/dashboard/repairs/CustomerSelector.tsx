@@ -22,6 +22,8 @@ interface RepairCustomerRow {
     name?: string | null
     email?: string | null
     phone?: string | null
+    alternate_phone?: string | null
+    alternate_phone_label?: string | null
     address?: string | null
     city?: string | null
     ruc?: string | null
@@ -43,6 +45,8 @@ function mapCustomerRow(row: RepairCustomerRow): Customer {
         name: row.name || '',
         email: row.email || '',
         phone: row.phone || '',
+        alternate_phone: row.alternate_phone || null,
+        alternate_phone_label: row.alternate_phone_label || null,
         ruc: row.ruc || '',
         customer_type: (row.customer_type as Customer['customer_type']) || 'regular',
         status: (row.status as Customer['status']) || 'active',
@@ -79,7 +83,7 @@ function mapCustomerRow(row: RepairCustomerRow): Customer {
 
 interface CustomerSelectorProps {
     value?: string
-    initialCustomer?: Pick<Customer, 'id' | 'name' | 'phone' | 'email'>
+    initialCustomer?: Pick<Customer, 'id' | 'name' | 'phone' | 'email'> & { ruc?: string; customer_type?: string }
     onChange: (customerId: string, customerData?: Customer) => void
     error?: string
     disabled?: boolean
@@ -132,7 +136,8 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                 name: initialCustomer.name,
                 email: initialCustomer.email,
                 phone: initialCustomer.phone,
-                customer_type: 'regular',
+                ruc: initialCustomer.ruc || null,
+                customer_type: initialCustomer.customer_type || 'regular',
                 status: 'active',
             })
         }
@@ -216,6 +221,11 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                             • {selectedCustomer.phone}
                                         </span>
                                     )}
+                                    {selectedCustomer.ruc && (
+                                        <span className="text-muted-foreground text-xs">
+                                            • RUC: {selectedCustomer.ruc}
+                                        </span>
+                                    )}
                                 </div>
                             ) : (
                                 <span className="flex items-center gap-2">
@@ -251,42 +261,27 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                     size="sm"
                                     onClick={handleCreateNew}
                                     disabled={disabled}
-                                    className="h-7 text-xs px-2.5 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg gap-1"
+                                    className="h-8"
                                 >
-                                    <Plus className="h-3.5 w-3.5" />
-                                    + Nuevo
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Nuevo
                                 </Button>
                             </div>
                         </div>
-                        <div>
-                            <div className="border-b px-3 py-2">
-                                <Input
-                                    placeholder="Buscar por nombre, teléfono o email..."
-                                    value={searchValue}
-                                    onChange={(event) => setSearchValue(event.target.value)}
-                                    autoComplete="off"
-                                    className="h-9 border-0 px-0 shadow-none focus-visible:ring-0"
-                                />
-                            </div>
-                            <div className="max-h-[300px] overflow-y-auto overflow-x-hidden p-1">
-                                {!isLoading && filteredCustomers.length === 0 && recentCustomers.length === 0 && (
-                                    <div className="text-center py-6">
-                                        <p className="text-sm text-muted-foreground mb-3">
-                                            No se encontró ningún cliente
-                                        </p>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="default"
-                                            onPointerDown={(event) => {
-                                                event.preventDefault()
-                                                handleCreateNew()
-                                            }}
-                                            className="gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold"
-                                        >
-                                            <Plus className="h-4 w-4" />
-                                            Crear nuevo cliente
-                                        </Button>
+                        <div className="border-t p-2">
+                            <Input
+                                placeholder="Buscar por nombre, teléfono, RUC o código..."
+                                value={searchValue}
+                                onChange={(e) => setSearchValue(e.target.value)}
+                                className="h-8 text-sm"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto">
+                            <div className="p-1">
+                                {customers.length === 0 && !isLoading && (
+                                    <div className="text-center py-6 text-sm text-muted-foreground">
+                                        No se encontraron clientes
                                     </div>
                                 )}
                                 <div>
@@ -326,8 +321,9 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                                     <div className="font-medium truncate">
                                                         {customer.name || 'Cliente sin nombre'}
                                                     </div>
-                                                    <div className="text-xs text-muted-foreground flex gap-2">
+                                                    <div className="text-xs text-muted-foreground flex gap-2 flex-wrap">
                                                         {customer.phone && <span>{customer.phone}</span>}
+                                                        {customer.ruc && <span>• RUC: {customer.ruc}</span>}
                                                         {customer.email && <span>• {customer.email}</span>}
                                                     </div>
                                                 </div>
@@ -358,8 +354,9 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                                 <div className="font-medium truncate">
                                                     {customer.name || 'Cliente sin nombre'}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground flex gap-2">
+                                                <div className="text-xs text-muted-foreground flex gap-2 flex-wrap">
                                                     {customer.phone && <span>{customer.phone}</span>}
+                                                    {customer.ruc && <span>• RUC: {customer.ruc}</span>}
                                                     {customer.email && <span>• {customer.email}</span>}
                                                 </div>
                                             </div>
