@@ -17,10 +17,16 @@ export function fingerprintRepairCreateInput(input: unknown) {
 }
 
 export function resolveRepairCreationReplay(
-  existing: { creation_payload_hash?: string | null },
+  existing: { creation_payload_hash?: string | null; creation_completed_at?: string | null },
   incomingHash: string
-): { replayed: true } | { replayed: false; conflict: string } {
-  if (existing.creation_payload_hash === incomingHash) return { replayed: true }
+): { replayed: true } | { replayed: false; conflict: string } | { replayed: false; pending: string } {
+  if (existing.creation_payload_hash === incomingHash) {
+    if (existing.creation_completed_at) return { replayed: true }
+    return {
+      replayed: false,
+      pending: 'La reparación todavía se está creando. Reintentá en unos segundos.',
+    }
+  }
   return {
     replayed: false,
     conflict: 'La clave de creación ya fue usada con otros datos.',

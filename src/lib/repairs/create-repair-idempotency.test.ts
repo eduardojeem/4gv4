@@ -34,10 +34,18 @@ describe('repair creation idempotency', () => {
 
   it('replays equal payloads and rejects reuse with changed data', () => {
     const hash = fingerprintRepairCreateInput(base)
-    expect(resolveRepairCreationReplay({ creation_payload_hash: hash }, hash)).toEqual({ replayed: true })
-    expect(resolveRepairCreationReplay({ creation_payload_hash: 'other' }, hash)).toEqual({
+    expect(resolveRepairCreationReplay({ creation_payload_hash: hash, creation_completed_at: '2026-08-21T00:00:00.000Z' }, hash)).toEqual({ replayed: true })
+    expect(resolveRepairCreationReplay({ creation_payload_hash: 'other', creation_completed_at: null }, hash)).toEqual({
       replayed: false,
       conflict: 'La clave de creación ya fue usada con otros datos.',
+    })
+  })
+
+  it('does not replay a provisional repair while related rows are still being saved', () => {
+    const hash = fingerprintRepairCreateInput(base)
+    expect(resolveRepairCreationReplay({ creation_payload_hash: hash, creation_completed_at: null }, hash)).toEqual({
+      replayed: false,
+      pending: 'La reparación todavía se está creando. Reintentá en unos segundos.',
     })
   })
 

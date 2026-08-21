@@ -174,6 +174,12 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         )
       }
+      if ('pending' in replay) {
+        return NextResponse.json(
+          { error: replay.pending, code: 'REPAIR_CREATION_IN_PROGRESS' },
+          { status: 409, headers: { 'Retry-After': '2' } }
+        )
+      }
       return NextResponse.json({ repair: existingResult.data, replayed: true }, { status: 200 })
     }
 
@@ -270,6 +276,12 @@ export async function POST(request: NextRequest) {
         if (racedResult.error) throw racedResult.error
         if (racedResult.data) {
           const replay = resolveRepairCreationReplay(racedResult.data, creationPayloadHash)
+          if ('pending' in replay) {
+            return NextResponse.json(
+              { error: replay.pending, code: 'REPAIR_CREATION_IN_PROGRESS' },
+              { status: 409, headers: { 'Retry-After': '2' } }
+            )
+          }
           if (!('conflict' in replay)) {
             return NextResponse.json({ repair: racedResult.data, replayed: true }, { status: 200 })
           }
@@ -339,6 +351,15 @@ export async function POST(request: NextRequest) {
           updatedBy: ctx.userId,
         },
       })
+
+      const { error: completionError } = await supabase
+        .from('repairs')
+        .update({ creation_completed_at: new Date().toISOString() })
+        .eq('id', repairId)
+        .eq('organization_id', ctx.organizationId)
+        .eq('branch_id', ctx.branchId)
+        .eq('creation_idempotency_key', idempotencyKey)
+      if (completionError) throw completionError
     } catch (relatedError) {
       const rollbackResult = await supabase
         .from('repairs')
