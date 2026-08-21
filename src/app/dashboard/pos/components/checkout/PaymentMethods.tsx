@@ -7,7 +7,7 @@ import React, { useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CreditCard, Users, Clock, AlertCircle, Trash2, Sparkles, Loader2, PlusCircle } from 'lucide-react'
+import { CreditCard, Users, Clock, AlertCircle, Trash2, Sparkles, Loader2 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useCheckout } from '../../contexts/CheckoutContext'
 import { usePOSCustomer } from '../../contexts/POSCustomerContext'
@@ -15,7 +15,7 @@ import { useCreditSystem } from '@/hooks/use-credit-system'
 import { toast } from 'sonner'
 import { CreditStatusPanel } from './CreditStatusPanel'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
-import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
+import { formatThousands, parseThousands } from '@/lib/currency'
 
 /**
  * Genera sugerencias inteligentes de billetes basadas en el monto total
@@ -191,12 +191,6 @@ export function PaymentMethods({
     { id: 'transfer', label: 'Transferencia', icon: Users, color: 'text-muted-foreground' },
     { id: 'credit', label: 'Crédito', icon: Clock, color: 'text-muted-foreground' }
   ]
-  const creditPlan = React.useMemo(() => buildCreditInstallmentPlan({
-    principalAmount: cartTotal,
-    interestRate: creditTerms.interestRate,
-    installmentCount: creditTerms.count,
-    frequency: creditTerms.frequency,
-  }), [cartTotal, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
   const existingCreditPrincipal = React.useMemo(
     () => paymentSplit
       .filter(split => split.method === 'credit')
@@ -216,8 +210,11 @@ export function PaymentMethods({
   return (
     <div className="space-y-4">
       {/* Toggle entre pago simple y mixto */}
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">Método de Pago</h3>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold">¿Cómo paga el cliente?</h4>
+          <p className="text-xs text-muted-foreground">Seleccioná una opción para continuar.</p>
+        </div>
         <Button
           variant="outline"
           size="sm"
@@ -228,7 +225,7 @@ export function PaymentMethods({
             setSplitAmount(0)
             if (!nextMixed) setPaymentSplit([])
           }}
-          className="text-xs"
+          className="shrink-0 text-xs"
         >
           {isMixedPayment ? 'Pago Simple' : 'Pago Mixto'}
         </Button>
@@ -237,25 +234,29 @@ export function PaymentMethods({
       {!isMixedPayment ? (
         // Pago simple
         <div className="space-y-2">
-          {paymentMethods.map(method => (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {paymentMethods.map(method => (
             <Button
               key={method.id}
               variant={paymentMethod === method.id ? "default" : "outline"}
-              className={`w-full justify-start transition-all ${
+              aria-pressed={paymentMethod === method.id}
+              className={`h-auto min-h-16 w-full flex-col items-start justify-center gap-1 px-3 py-2 text-left transition-all ${
                 method.id === 'credit' && !canUseCredit 
                   ? 'opacity-70' // Visualmente distinto pero interactivo
                   : paymentMethod === method.id 
-                  ? 'ring-2 ring-primary ring-offset-2' 
+                  ? 'ring-2 ring-primary ring-offset-1'
                   : 'hover:bg-accent'
               }`}
               onClick={() => setPaymentMethod(method.id)}
               // Permitimos seleccionar crédito incluso si no es válido para mostrar la advertencia
               // disabled={method.id === 'credit' && !canUseCredit}
             >
-              <method.icon className={`h-4 w-4 mr-2 ${method.color}`} />
-              <span className="flex-1 text-left">{method.label}</span>
+              <span className="flex w-full items-center gap-2">
+                <method.icon className={`h-4 w-4 ${method.color}`} aria-hidden="true" />
+                <span className="font-semibold">{method.label}</span>
+              </span>
               {method.id === 'credit' && (
-                <div className="ml-auto flex flex-col items-end">
+                <div className="flex min-h-4 w-full flex-col items-start">
                   {creditSummary && (creditSummary.availableCredit + creditSummary.usedCredit) > 0 ? (
                     // Cliente con crédito configurado
                     <>
@@ -282,7 +283,8 @@ export function PaymentMethods({
                 </div>
               )}
             </Button>
-          ))}
+            ))}
+          </div>
           
           {/* Información adicional para venta a crédito */}
           {paymentMethod === 'credit' && canUseCredit && creditSummary && (

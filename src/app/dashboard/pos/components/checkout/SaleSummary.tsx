@@ -59,7 +59,7 @@ export function SaleSummary({
 
   return (
     <div className="space-y-4">
-      <h3 className="font-semibold mb-4">Resumen de la Venta</h3>
+      <h4 className="mb-4 text-sm font-semibold text-muted-foreground">Detalle del total</h4>
       
       {/* Items del carrito */}
       <div className="space-y-2 text-sm">
@@ -68,9 +68,9 @@ export function SaleSummary({
             ? (typeof item.wholesalePrice === 'number' ? item.wholesalePrice : (item.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
             : item.price
           return (
-            <div key={item.id} className="flex justify-between">
-              <span>{item.name} x{item.quantity}</span>
-              <span>{formatCurrency(appliedUnit * item.quantity)}</span>
+            <div key={item.id} className="flex items-start justify-between gap-3">
+              <span className="min-w-0 break-words">{item.name} <span className="text-muted-foreground">× {item.quantity}</span></span>
+              <span className="shrink-0 font-medium tabular-nums">{formatCurrency(appliedUnit * item.quantity)}</span>
             </div>
           )
         })}
@@ -144,9 +144,9 @@ export function SaleSummary({
       <Separator />
 
       {/* Total */}
-      <div className="flex justify-between font-bold text-lg">
+      <div className="flex items-end justify-between gap-3 rounded-lg bg-primary/10 px-3 py-3">
         <span>{isCreditSale ? 'Total financiado:' : 'Total:'}</span>
-        <span className="text-primary">{formatCurrency(displayedTotal)}</span>
+        <span className="text-xl font-bold tabular-nums text-primary sm:text-2xl">{formatCurrency(displayedTotal)}</span>
       </div>
 
       {/* El saldo a favor no baja el total: baja lo que hay que cobrar. */}

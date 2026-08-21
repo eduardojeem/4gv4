@@ -61,6 +61,18 @@ describe('atomic POS store-credit contract', () => {
     expect(modal).toContain("if (!open && paymentStatus !== 'processing') onCancel()")
     expect(modal).toContain('max-sm:h-[100dvh]')
     expect(modal).toContain('data-testid="pos-checkout-actions"')
-    expect(modal).toContain('max-sm:sticky max-sm:bottom-0')
+    expect(modal).toContain('max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0')
+  })
+
+  it('guides checkout through customer, payment and confirmation with secondary options collapsed', () => {
+    const modal = readFileSync(resolve(workspace, 'src/app/dashboard/pos/components/CheckoutModal.tsx'), 'utf8')
+    const methods = readFileSync(resolve(workspace, 'src/app/dashboard/pos/components/checkout/PaymentMethods.tsx'), 'utf8')
+
+    expect(modal).toContain('1. Cliente')
+    expect(modal).toContain('2. Forma de cobro')
+    expect(modal).toContain('3. Revisar y confirmar')
+    expect(modal).toContain('Opciones adicionales')
+    expect(modal).toContain('data-testid="pos-checkout-footer"')
+    expect(methods).toContain('grid-cols-2 sm:grid-cols-4')
   })
 })

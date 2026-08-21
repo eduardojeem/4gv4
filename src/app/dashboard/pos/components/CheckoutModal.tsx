@@ -25,6 +25,10 @@ import {
   Users,
   Clock,
   PackageX,
+  ChevronDown,
+  UserRound,
+  WalletCards,
+  ReceiptText,
 } from 'lucide-react'
 import { CustomerCreditHistory } from '@/components/pos/CustomerCreditHistory'
 import { useCreditSystem } from '@/hooks/use-credit-system'
@@ -190,34 +194,44 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
       if (!open && paymentStatus !== 'processing') onCancel()
     }}>
       <DialogContent showCloseButton={paymentStatus !== 'processing'} className="flex max-h-[92vh] w-[95vw] flex-col overflow-hidden p-0 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-full max-sm:rounded-none sm:max-w-3xl md:max-w-5xl lg:max-w-6xl">
-        <DialogHeader className="shrink-0 border-b bg-muted/30 px-3 py-2 pr-12 sm:px-6 sm:py-4">
+        <DialogHeader className="shrink-0 border-b bg-muted/30 px-4 py-3 pr-12 sm:px-6 sm:py-4">
           <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
-            <DollarSign className="h-4 w-4 text-primary" />
-            Procesar Pago
+            <DollarSign className="h-4 w-4 text-primary" aria-hidden="true" />
+            Cobrar venta
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            Revisa los items, selecciona el método de pago y confirma la venta desde el POS.
+          <DialogDescription className="text-xs sm:text-sm">
+            Verificá el cliente, elegí cómo cobra la venta y confirmá el total.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="shrink-0 overflow-x-auto border-b bg-background/90 px-3 py-2 sm:px-6 sm:py-3">
-          <div className="grid min-w-[30rem] grid-cols-4 gap-2 text-sm md:min-w-0">
-            <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Items</p>
-              <p className="font-semibold">{cart.length}</p>
-            </div>
-            <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Reparaciones</p>
-              <p className="font-semibold">{selectedRepairIds.length}</p>
-            </div>
-            <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Pago</p>
-              <p className="font-semibold capitalize">{isMixedPayment ? 'Mixto' : (paymentMethod || 'Sin seleccionar')}</p>
-            </div>
-            <div className="rounded-lg border bg-muted/20 px-3 py-2 text-right">
-              <p className="text-[11px] text-muted-foreground">Total</p>
-              <p className="font-semibold text-primary">{formatCurrency(displayTotal)}</p>
-            </div>
+        <div className="shrink-0 border-b bg-background/95 px-4 py-2.5 sm:px-6 sm:py-3">
+          <ol className="grid grid-cols-3 gap-1.5 text-xs sm:gap-3 sm:text-sm" aria-label="Pasos para cobrar la venta">
+            <li className="flex min-w-0 items-center gap-2 rounded-md bg-primary/10 px-2 py-2 text-primary sm:px-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</span>
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">Cliente</span>
+                <span className="hidden truncate text-[10px] text-muted-foreground sm:block">{activeCustomer?.name || 'Consumidor final'}</span>
+              </span>
+            </li>
+            <li className="flex min-w-0 items-center gap-2 rounded-md border bg-card px-2 py-2 sm:px-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-background text-xs font-bold">2</span>
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">Forma de cobro</span>
+                <span className="hidden truncate text-[10px] capitalize text-muted-foreground sm:block">{isMixedPayment ? 'Pago mixto' : (paymentMethod || 'Elegir método')}</span>
+              </span>
+            </li>
+            <li className="flex min-w-0 items-center gap-2 rounded-md border bg-card px-2 py-2 sm:px-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-background text-xs font-bold">3</span>
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">Confirmar</span>
+                <span className="hidden truncate text-[10px] text-muted-foreground sm:block">{formatCurrency(displayTotal)}</span>
+              </span>
+            </li>
+          </ol>
+          <div className="sr-only">
+            <span>1. Cliente</span>
+            <span>2. Forma de cobro</span>
+            <span>3. Revisar y confirmar</span>
           </div>
         </div>
         
@@ -275,9 +289,18 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-xl border bg-card/70 p-4 md:p-5 space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 max-sm:pb-44 sm:px-6">
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.72fr)]">
+          <div className="space-y-4 rounded-xl border bg-card/70 p-4 md:p-5">
+            <div className="flex items-center gap-3 border-b pb-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <UserRound className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold">1. Cliente</h3>
+                <p className="text-xs text-muted-foreground">Identificá al comprador y vinculá reparaciones si corresponde.</p>
+              </div>
+            </div>
             <CustomerSelection
               creditSummary={creditSummary || undefined}
               showCreditHistory={showCreditHistory}
@@ -510,6 +533,15 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               formatCurrency={formatCurrency}
             />
 
+            <div className="flex items-center gap-3 border-b pb-3 pt-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <WalletCards className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold">2. Forma de cobro</h3>
+                <p className="text-xs text-muted-foreground">Elegí un método simple o combiná varios en pago mixto.</p>
+              </div>
+            </div>
             <PaymentMethods
               cartTotal={amountDue}
               canUseCredit={canUseCredit}
@@ -518,40 +550,57 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               currency={currency}
             />
 
-            {/* Seccion de Promociones */}
-            <div className="pt-2">
-              <PromotionsSection
-                cart={cart}
-                cartTotal={cartCalculations.total}
-                allPromotions={allPromotions}
-                onApplyPromoCode={onApplyPromoCode}
-                formatCurrency={formatCurrency}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Descuento (%)</label>
-              <Input
-                type="number"
-                value={discount}
-                onChange={(e) => onDiscountChange(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
-                placeholder="0"
-                min="0"
-                max="100"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Notas</label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Notas adicionales..."
-              />
-            </div>
+            <details className="group rounded-lg border bg-muted/15">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <span>
+                  Opciones adicionales
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">Promoción, descuento o nota</span>
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <div className="space-y-4 border-t px-3 py-4">
+                <PromotionsSection
+                  cart={cart}
+                  cartTotal={cartCalculations.total}
+                  allPromotions={allPromotions}
+                  onApplyPromoCode={onApplyPromoCode}
+                  formatCurrency={formatCurrency}
+                />
+                <div>
+                  <label className="mb-2 block text-sm font-medium" htmlFor="pos-checkout-discount">Descuento general (%)</label>
+                  <Input
+                    id="pos-checkout-discount"
+                    type="number"
+                    value={discount}
+                    onChange={(e) => onDiscountChange(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                    placeholder="0"
+                    min="0"
+                    max="100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium" htmlFor="pos-checkout-notes">Nota interna</label>
+                  <Textarea
+                    id="pos-checkout-notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Información adicional de la venta"
+                  />
+                </div>
+              </div>
+            </details>
           </div>
 
-          <div className="rounded-xl border bg-card/70 p-4 md:p-5">
+          <div className="rounded-xl border bg-card/70 p-4 md:sticky md:top-0 md:p-5">
+            <div className="mb-4 flex items-center gap-3 border-b pb-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <ReceiptText className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold">3. Revisar y confirmar</h3>
+                <p className="text-xs text-muted-foreground">Comprobá los importes antes de registrar la venta.</p>
+              </div>
+            </div>
             <SaleSummary
               cart={cart}
               cartCalculations={cartCalculations}
@@ -560,7 +609,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               formatCurrency={formatCurrency}
             />
 
-            <div data-testid="pos-checkout-actions" className="mt-6 space-y-2 max-sm:sticky max-sm:bottom-0 max-sm:z-20 max-sm:-mx-4 max-sm:border-t max-sm:bg-background/95 max-sm:p-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:backdrop-blur">
+            <div data-testid="pos-checkout-actions" className="mt-6 space-y-2 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-50 max-sm:border-t max-sm:bg-background/95 max-sm:px-4 max-sm:pt-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.45)] max-sm:backdrop-blur">
+              <span data-testid="pos-checkout-footer" className="sr-only">Confirmación de la venta</span>
               {!isMixedPayment ? (
                 <>
                   {paymentMethod === 'credit' ? (
