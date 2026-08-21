@@ -33,6 +33,8 @@ vi.mock('@/app/dashboard/pos/components/OpenCashRegisterDialog', () => ({
 
 vi.mock('@/lib/currency', () => ({
   formatCurrency: (amount: number) => `${amount}`,
+  formatThousands: (value: string | number) => String(value),
+  parseThousands: (value: string) => value,
 }))
 
 const repair = {
@@ -116,7 +118,7 @@ describe('RepairDeliveryDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
     expect(await screen.findByText('Caja abierta')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Cobrar reparación' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Monto a cobrar')).toHaveValue(100)
+    expect(screen.getByLabelText('Monto a cobrar')).toHaveValue('100')
     expect(screen.queryByRole('button', { name: /Retirado sin reparar/i })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
     expect(screen.getByRole('button', { name: /Reparado y funcionando/i })).toBeVisible()
@@ -190,7 +192,7 @@ describe('RepairDeliveryDialog', () => {
 
     await waitFor(() => expect(cashRegisterMocks.openRegister).toHaveBeenCalledWith('principal', 50000, undefined, 'Turno tarde'))
     expect(await screen.findByText('Caja abierta')).toBeVisible()
-    expect(screen.getByLabelText('Monto a cobrar')).toHaveValue(40)
+    expect(screen.getByLabelText('Monto a cobrar')).toHaveValue('40')
     expect(screen.getByLabelText('N° de Referencia')).toHaveValue('TRX-2')
     expect(screen.getByPlaceholderText(/Se cambió la pantalla/i)).toHaveValue('Cliente conforme')
   })
@@ -209,6 +211,6 @@ describe('RepairDeliveryDialog', () => {
     expect(screen.getByText('Caja cerrada')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Abrir caja' })).toBeEnabled()
     expect(screen.getByRole('heading', { name: 'Cobrar reparación' })).toBeVisible()
-    expect(screen.getByLabelText('Monto a cobrar')).toHaveValue(100)
+    expect(screen.getByLabelText('Monto a cobrar')).toHaveValue('100')
   })
 })
