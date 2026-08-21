@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, PackagePlus, Search, Trash2 } from 'lucide-react'
+import { AlertTriangle, Loader2, PackagePlus, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -40,10 +40,11 @@ function NumericField({ label, value, onChange, disabled }: {
     onChange={(event) => onChange(Number(event.target.value) || 0)} className="h-9 tabular-nums" />
 }
 
-export function RepairPartsEditor({ parts, onChange, disabled }: {
+export function RepairPartsEditor({ parts, onChange, disabled, invalidPartKeys = new Set() }: {
   parts: EditableRepairPart[]
   onChange: (parts: EditableRepairPart[]) => void
   disabled?: boolean
+  invalidPartKeys?: ReadonlySet<string>
 }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<InventorySuggestion[]>([])
@@ -96,9 +97,9 @@ export function RepairPartsEditor({ parts, onChange, disabled }: {
           placeholder="Nombre o SKU" className="pl-9" />
         {loading && <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin" />}
       </div>
-      {results.length > 0 && <div role="listbox" className="absolute z-20 mt-1 w-full rounded-md border bg-popover p-1 shadow-md">
+      {results.length > 0 && <div role="listbox" className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border bg-popover p-1 shadow-md">
         {results.map((item) => <button key={item.productId} type="button" role="option" aria-selected="false"
-          onClick={() => addSuggestion(item)} className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm hover:bg-accent">
+          onClick={() => addSuggestion(item)} className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <span><strong>{item.name}</strong><small className="block text-muted-foreground">{item.sku} · Stock {item.availableStock}</small></span>
           <span className="tabular-nums">{formatCurrency(item.unitPrice)}</span>
         </button>)}
@@ -111,11 +112,11 @@ export function RepairPartsEditor({ parts, onChange, disabled }: {
       <div className="hidden overflow-x-auto rounded-lg border md:block">
         <table className="w-full min-w-[850px] text-sm">
           <thead className="bg-muted/50"><tr><th className="p-2 text-left">Repuesto</th><th>Cantidad</th><th>Costo</th><th>Precio cobrado</th><th>Descuento</th><th>IVA</th><th>Subtotal</th><th><span className="sr-only">Acciones</span></th></tr></thead>
-          <tbody>{parts.map((part, index) => <tr key={part.key} className="border-t">
+          <tbody>{parts.map((part, index) => <tr key={part.key} className={invalidPartKeys.has(part.key) ? 'border-t bg-destructive/5' : 'border-t'}>
             <td className="p-2 font-medium">{part.name}<small className="block text-muted-foreground">{part.partNumber}</small></td>
             <td className="p-2"><NumericField label={`Cantidad de ${part.name}`} value={part.quantity} disabled={disabled} onChange={(quantity) => update(index, { quantity })} /></td>
             <td className="p-2 tabular-nums">{formatCurrency(part.unitCost)}</td>
-            <td className="p-2"><NumericField label={`Precio cobrado de ${part.name}`} value={part.unitPrice} disabled={disabled} onChange={(unitPrice) => update(index, { unitPrice })} /></td>
+            <td className="p-2"><NumericField label={`Precio cobrado de ${part.name}`} value={part.unitPrice} disabled={disabled} onChange={(unitPrice) => update(index, { unitPrice })} />{invalidPartKeys.has(part.key) && <p className="mt-1 flex items-center gap-1 text-xs text-destructive"><AlertTriangle className="h-3 w-3" />Revisar precio</p>}</td>
             <td className="p-2"><NumericField label={`Descuento de ${part.name}`} value={part.discountAmount} disabled={disabled} onChange={(discountAmount) => update(index, { discountAmount })} /></td>
             <td className="p-2 text-center">{part.taxRate}%</td>
             <td className="p-2 text-right font-semibold tabular-nums">{formatCurrency(Math.max(0, part.quantity * part.unitPrice - part.discountAmount))}</td>
@@ -123,9 +124,11 @@ export function RepairPartsEditor({ parts, onChange, disabled }: {
           </tr>)}</tbody>
         </table>
       </div>
-      <div className="space-y-3 md:hidden">{parts.map((part, index) => <section key={part.key} className="rounded-lg border p-3">
-        <div className="flex justify-between"><div><h4 className="font-medium">{part.name}</h4><p className="text-xs text-muted-foreground">Costo {formatCurrency(part.unitCost)} · IVA {part.taxRate}%</p></div><Button type="button" variant="ghost" size="icon" aria-label={`Eliminar ${part.name}`} onClick={() => onChange(parts.filter((_, current) => current !== index))}><Trash2 className="h-4 w-4" /></Button></div>
-        <div className="mt-3 grid grid-cols-2 gap-2"><NumericField label={`Cantidad de ${part.name}`} value={part.quantity} onChange={(quantity) => update(index, { quantity })} /><NumericField label={`Precio cobrado de ${part.name}`} value={part.unitPrice} onChange={(unitPrice) => update(index, { unitPrice })} /><div className="col-span-2"><NumericField label={`Descuento de ${part.name}`} value={part.discountAmount} onChange={(discountAmount) => update(index, { discountAmount })} /></div></div>
+      <div className="space-y-3 md:hidden">{parts.map((part, index) => <section key={part.key} className={`rounded-lg border p-3 ${invalidPartKeys.has(part.key) ? 'border-destructive/50 bg-destructive/5' : ''}`}>
+        <div className="flex justify-between"><div><h4 className="font-medium">{part.name}</h4><p className="text-xs text-muted-foreground">Costo {formatCurrency(part.unitCost)} · IVA {part.taxRate}%</p></div><Button type="button" variant="ghost" size="icon" disabled={disabled} aria-label={`Eliminar ${part.name}`} onClick={() => onChange(parts.filter((_, current) => current !== index))}><Trash2 className="h-4 w-4" /></Button></div>
+        <div className="mt-3 grid grid-cols-2 gap-3"><div><p className="mb-1 text-xs text-muted-foreground">Cantidad</p><NumericField label={`Cantidad de ${part.name}`} value={part.quantity} disabled={disabled} onChange={(quantity) => update(index, { quantity })} /></div><div><p className="mb-1 text-xs text-muted-foreground">Precio cobrado</p><NumericField label={`Precio cobrado de ${part.name}`} value={part.unitPrice} disabled={disabled} onChange={(unitPrice) => update(index, { unitPrice })} /></div><div className="col-span-2"><p className="mb-1 text-xs text-muted-foreground">Descuento</p><NumericField label={`Descuento de ${part.name}`} value={part.discountAmount} disabled={disabled} onChange={(discountAmount) => update(index, { discountAmount })} /></div></div>
+        {invalidPartKeys.has(part.key) && <p className="mt-3 flex items-center gap-1 text-xs font-medium text-destructive"><AlertTriangle className="h-3.5 w-3.5" />El precio queda debajo del costo de inventario.</p>}
+        <div className="mt-3 flex justify-between border-t pt-3 text-sm"><span className="text-muted-foreground">Subtotal</span><strong className="tabular-nums">{formatCurrency(Math.max(0, part.quantity * part.unitPrice - part.discountAmount))}</strong></div>
       </section>)}</div>
     </div>}
   </div>

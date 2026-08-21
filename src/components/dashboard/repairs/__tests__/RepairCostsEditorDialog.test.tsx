@@ -22,6 +22,12 @@ describe('RepairCostsEditorDialog', () => {
     const user = userEvent.setup()
     render(<RepairCostsEditorDialog open repair={repair} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
 
+    expect(screen.getByText('Ana · Marca Modelo')).toBeVisible()
+    expect(screen.getByText('Paso 1 de 2')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeEnabled()
+    expect(screen.getByText('Subtotal antes de descuentos')).toBeVisible()
+    expect(screen.getByText('IVA incluido')).toBeVisible()
+
     const labor = screen.getByLabelText('Mano de obra fija')
     await user.clear(labor)
     await user.type(labor, '120000')
@@ -29,6 +35,8 @@ describe('RepairCostsEditorDialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Revisar y confirmar' }))
     expect(screen.getByRole('heading', { name: 'Vista previa de costos' })).toBeVisible()
+    expect(screen.getByText('Paso 2 de 2')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Confirmar costos' })).toBeEnabled()
     expect(screen.getByText('Monto total final')).toBeVisible()
     expect(screen.getByText('Monto total final').parentElement).toHaveTextContent('220.000')
   })
