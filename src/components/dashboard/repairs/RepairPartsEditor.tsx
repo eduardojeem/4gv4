@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Loader2, PackagePlus, Search, Trash2 } from 'lucide-react'
+import { AlertTriangle, Loader2, PackagePlus, Plus, Search, Trash2, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -42,9 +42,10 @@ function NumericField({ label, value, onChange, disabled }: {
     onChange={(event) => onChange(Number(event.target.value) || 0)} className="h-9 tabular-nums" />
 }
 
-export function RepairPartsEditor({ parts, onChange, repairId, customerIsWholesale = false, disabled, invalidPartKeys = new Set() }: {
+export function RepairPartsEditor({ parts, onChange, onAddService, repairId, customerIsWholesale = false, disabled, invalidPartKeys = new Set() }: {
   parts: EditableRepairPart[]
   onChange: (parts: EditableRepairPart[]) => void
+  onAddService: () => void
   repairId: string
   customerIsWholesale?: boolean
   disabled?: boolean
@@ -90,10 +91,17 @@ export function RepairPartsEditor({ parts, onChange, repairId, customerIsWholesa
     setQuery('')
     setResults([])
   }
+  const addManualPart = () => {
+    onChange([...parts, {
+      key: `manual-${crypto.randomUUID()}`, productId: null, name: 'Repuesto manual',
+      supplier: 'Carga manual', quantity: 1, unitPrice: 0, unitCost: 0,
+      discountAmount: 0, taxRate: 10, availableStock: null,
+    }])
+  }
 
   return <div className="space-y-3">
     <div className="relative">
-      <Label htmlFor="repair-part-search">Buscar en inventario</Label>
+      <div className="flex flex-wrap items-center justify-between gap-2"><Label htmlFor="repair-part-search">Buscar en inventario</Label><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onAddService}><Wrench className="mr-1.5 h-3.5 w-3.5" />Agregar servicio</Button><Button type="button" variant="outline" size="sm" disabled={disabled} onClick={addManualPart}><Plus className="mr-1.5 h-3.5 w-3.5" />Agregar repuesto</Button></div></div>
       <div className="relative mt-1">
         <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input id="repair-part-search" role="combobox" aria-expanded={results.length > 0}
@@ -118,9 +126,9 @@ export function RepairPartsEditor({ parts, onChange, repairId, customerIsWholesa
         <table className="w-full min-w-[850px] text-sm">
           <thead className="bg-muted/50"><tr><th className="p-2 text-left">Repuesto</th><th>Cantidad</th><th>Costo</th><th>Precio cobrado</th><th>Descuento</th><th>IVA</th><th>Subtotal</th><th><span className="sr-only">Acciones</span></th></tr></thead>
           <tbody>{parts.map((part, index) => <tr key={part.key} className={invalidPartKeys.has(part.key) ? 'border-t bg-destructive/5' : 'border-t'}>
-            <td className="p-2 font-medium">{part.name}<small className="block text-muted-foreground">{part.partNumber}</small></td>
+            <td className="p-2 font-medium">{part.productId ? <>{part.name}<small className="block text-muted-foreground">{part.partNumber}</small></> : <><Input aria-label="Nombre del repuesto manual" value={part.name} disabled={disabled} onChange={(event) => update(index, { name: event.target.value })} className="h-9" /><small className="mt-1 block text-muted-foreground">Carga manual · no descuenta stock</small></>}</td>
             <td className="p-2"><NumericField label={`Cantidad de ${part.name}`} value={part.quantity} disabled={disabled} onChange={(quantity) => update(index, { quantity })} /></td>
-            <td className="p-2 tabular-nums">{formatCurrency(part.unitCost)}</td>
+            <td className="p-2 tabular-nums">{part.productId ? formatCurrency(part.unitCost) : <NumericField label={`Costo interno de ${part.name}`} value={part.unitCost} disabled={disabled} onChange={(unitCost) => update(index, { unitCost })} />}</td>
             <td className="p-2"><NumericField label={`Precio cobrado de ${part.name}`} value={part.unitPrice} disabled={disabled} onChange={(unitPrice) => update(index, { unitPrice })} />{invalidPartKeys.has(part.key) && <p className="mt-1 flex items-center gap-1 text-xs text-destructive"><AlertTriangle className="h-3 w-3" />Revisar precio</p>}</td>
             <td className="p-2"><NumericField label={`Descuento de ${part.name}`} value={part.discountAmount} disabled={disabled} onChange={(discountAmount) => update(index, { discountAmount })} /></td>
             <td className="p-2 text-center">{part.taxRate}%</td>
@@ -130,8 +138,8 @@ export function RepairPartsEditor({ parts, onChange, repairId, customerIsWholesa
         </table>
       </div>
       <div className="space-y-3 md:hidden">{parts.map((part, index) => <section key={part.key} className={`rounded-lg border p-3 ${invalidPartKeys.has(part.key) ? 'border-destructive/50 bg-destructive/5' : ''}`}>
-        <div className="flex justify-between"><div><h4 className="font-medium">{part.name}</h4><p className="text-xs text-muted-foreground">Costo {formatCurrency(part.unitCost)} · IVA {part.taxRate}%</p></div><Button type="button" variant="ghost" size="icon" disabled={disabled} aria-label={`Eliminar ${part.name}`} onClick={() => onChange(parts.filter((_, current) => current !== index))}><Trash2 className="h-4 w-4" /></Button></div>
-        <div className="mt-3 grid grid-cols-2 gap-3"><div><p className="mb-1 text-xs text-muted-foreground">Cantidad</p><NumericField label={`Cantidad de ${part.name}`} value={part.quantity} disabled={disabled} onChange={(quantity) => update(index, { quantity })} /></div><div><p className="mb-1 text-xs text-muted-foreground">Precio cobrado</p><NumericField label={`Precio cobrado de ${part.name}`} value={part.unitPrice} disabled={disabled} onChange={(unitPrice) => update(index, { unitPrice })} /></div><div className="col-span-2"><p className="mb-1 text-xs text-muted-foreground">Descuento</p><NumericField label={`Descuento de ${part.name}`} value={part.discountAmount} disabled={disabled} onChange={(discountAmount) => update(index, { discountAmount })} /></div></div>
+        <div className="flex justify-between gap-2"><div className="min-w-0 flex-1">{part.productId ? <h4 className="font-medium">{part.name}</h4> : <><Input aria-label="Nombre del repuesto manual" value={part.name} disabled={disabled} onChange={(event) => update(index, { name: event.target.value })} /><p className="mt-1 text-xs text-muted-foreground">Carga manual · no descuenta stock</p></>}<p className="text-xs text-muted-foreground">Costo {formatCurrency(part.unitCost)} · IVA {part.taxRate}%</p></div><Button type="button" variant="ghost" size="icon" disabled={disabled} aria-label={`Eliminar ${part.name}`} onClick={() => onChange(parts.filter((_, current) => current !== index))}><Trash2 className="h-4 w-4" /></Button></div>
+        <div className="mt-3 grid grid-cols-2 gap-3"><div><p className="mb-1 text-xs text-muted-foreground">Cantidad</p><NumericField label={`Cantidad de ${part.name}`} value={part.quantity} disabled={disabled} onChange={(quantity) => update(index, { quantity })} /></div>{!part.productId && <div><p className="mb-1 text-xs text-muted-foreground">Costo interno</p><NumericField label={`Costo interno de ${part.name}`} value={part.unitCost} disabled={disabled} onChange={(unitCost) => update(index, { unitCost })} /></div>}<div><p className="mb-1 text-xs text-muted-foreground">Precio cobrado</p><NumericField label={`Precio cobrado de ${part.name}`} value={part.unitPrice} disabled={disabled} onChange={(unitPrice) => update(index, { unitPrice })} /></div><div className={part.productId ? 'col-span-2' : ''}><p className="mb-1 text-xs text-muted-foreground">Descuento</p><NumericField label={`Descuento de ${part.name}`} value={part.discountAmount} disabled={disabled} onChange={(discountAmount) => update(index, { discountAmount })} /></div></div>
         {invalidPartKeys.has(part.key) && <p className="mt-3 flex items-center gap-1 text-xs font-medium text-destructive"><AlertTriangle className="h-3.5 w-3.5" />El precio queda debajo del costo de inventario.</p>}
         <div className="mt-3 flex justify-between border-t pt-3 text-sm"><span className="text-muted-foreground">Subtotal</span><strong className="tabular-nums">{formatCurrency(Math.max(0, part.quantity * part.unitPrice - part.discountAmount))}</strong></div>
       </section>)}</div>

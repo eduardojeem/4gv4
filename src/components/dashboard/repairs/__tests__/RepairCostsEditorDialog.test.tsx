@@ -69,4 +69,27 @@ describe('RepairCostsEditorDialog', () => {
     expect(screen.getByText('Esta reparación no tiene mano de obra cargada. Podés dejarla en cero.')).toBeVisible()
     expect(screen.getByLabelText('Mano de obra opcional')).toHaveValue(0)
   })
+
+  it('adds a manual service as labor when it is not in the catalog', async () => {
+    const user = userEvent.setup()
+    render(<RepairCostsEditorDialog open repair={{ ...repair, laborCost: 0 }} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Agregar servicio' }))
+    expect(screen.getByText('Agregar servicio manual')).toBeVisible()
+    await user.type(screen.getByLabelText('Monto del servicio'), '75000')
+    await user.click(screen.getByRole('button', { name: 'Aplicar servicio' }))
+
+    expect(screen.getByLabelText('Mano de obra fija')).toHaveValue(75000)
+    expect(screen.getByText('Servicio técnico')).toBeVisible()
+  })
+
+  it('adds an editable manual part without linking inventory', async () => {
+    const user = userEvent.setup()
+    render(<RepairCostsEditorDialog open repair={repair} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Agregar repuesto' }))
+
+    expect(screen.getAllByLabelText('Nombre del repuesto manual')[0]).toBeVisible()
+    expect(screen.getAllByText('Carga manual · no descuenta stock')[0]).toBeVisible()
+  })
 })
