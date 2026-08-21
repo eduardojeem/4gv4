@@ -53,4 +53,20 @@ describe('RepairCostsEditorDialog', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('debajo del costo de inventario')
     expect(screen.getByRole('button', { name: 'Revisar y confirmar' })).toBeDisabled()
   })
+
+  it('identifies a wholesale service repair', () => {
+    render(<RepairCostsEditorDialog open repair={{ ...repair, customer: { ...repair.customer, is_wholesale: true } }} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
+
+    expect(screen.getByText('Cliente mayorista')).toBeVisible()
+    expect(screen.getByText('Servicio técnico')).toBeVisible()
+    expect(screen.getByText('La mano de obra fue precargada para este servicio.')).toBeVisible()
+  })
+
+  it('identifies a parts-only repair and keeps labor optional at zero', () => {
+    render(<RepairCostsEditorDialog open repair={{ ...repair, laborCost: 0 }} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
+
+    expect(screen.getByText('Solo repuestos')).toBeVisible()
+    expect(screen.getByText('Esta reparación no tiene mano de obra cargada. Podés dejarla en cero.')).toBeVisible()
+    expect(screen.getByLabelText('Mano de obra opcional')).toHaveValue(0)
+  })
 })

@@ -31,6 +31,8 @@ type InventorySuggestion = {
   unitPrice: number
   taxRate: RepairTaxRate
   version: string
+  retailPrice?: number
+  wholesalePriceApplied?: boolean
 }
 
 function NumericField({ label, value, onChange, disabled }: {
@@ -40,9 +42,11 @@ function NumericField({ label, value, onChange, disabled }: {
     onChange={(event) => onChange(Number(event.target.value) || 0)} className="h-9 tabular-nums" />
 }
 
-export function RepairPartsEditor({ parts, onChange, disabled, invalidPartKeys = new Set() }: {
+export function RepairPartsEditor({ parts, onChange, repairId, customerIsWholesale = false, disabled, invalidPartKeys = new Set() }: {
   parts: EditableRepairPart[]
   onChange: (parts: EditableRepairPart[]) => void
+  repairId: string
+  customerIsWholesale?: boolean
   disabled?: boolean
   invalidPartKeys?: ReadonlySet<string>
 }) {
@@ -59,7 +63,7 @@ export function RepairPartsEditor({ parts, onChange, disabled, invalidPartKeys =
     const timer = window.setTimeout(async () => {
       setLoading(true)
       try {
-        const response = await fetch(`/api/repairs/inventory/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+        const response = await fetch(`/api/repairs/inventory/search?q=${encodeURIComponent(query)}&repairId=${encodeURIComponent(repairId)}`, { signal: controller.signal })
         const body = await response.json().catch(() => ({}))
         setResults(response.ok && Array.isArray(body.items) ? body.items : [])
       } catch (error) {
@@ -69,7 +73,7 @@ export function RepairPartsEditor({ parts, onChange, disabled, invalidPartKeys =
       }
     }, 250)
     return () => { window.clearTimeout(timer); controller.abort() }
-  }, [query])
+  }, [query, repairId])
 
   const update = (index: number, patch: Partial<EditableRepairPart>) => {
     onChange(parts.map((part, current) => current === index ? { ...part, ...patch } : part))
@@ -100,10 +104,11 @@ export function RepairPartsEditor({ parts, onChange, disabled, invalidPartKeys =
       {results.length > 0 && <div role="listbox" className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border bg-popover p-1 shadow-md">
         {results.map((item) => <button key={item.productId} type="button" role="option" aria-selected="false"
           onClick={() => addSuggestion(item)} className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <span><strong>{item.name}</strong><small className="block text-muted-foreground">{item.sku} · Stock {item.availableStock}</small></span>
-          <span className="tabular-nums">{formatCurrency(item.unitPrice)}</span>
+          <span><strong>{item.name}</strong><small className="block text-muted-foreground">{item.sku} · Stock {item.availableStock}</small>{item.wholesalePriceApplied && <small className="block font-medium text-sky-700 dark:text-sky-300">Precio mayorista aplicado</small>}</span>
+          <span className="text-right tabular-nums"><strong>{formatCurrency(item.unitPrice)}</strong>{item.wholesalePriceApplied && item.retailPrice ? <small className="block text-muted-foreground line-through">{formatCurrency(item.retailPrice)}</small> : null}</span>
         </button>)}
       </div>}
+      {customerIsWholesale && <p className="mt-1 text-xs text-sky-700 dark:text-sky-300">La búsqueda utiliza la tarifa mayorista configurada para cada repuesto.</p>}
     </div>
 
     {parts.length === 0 ? <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">

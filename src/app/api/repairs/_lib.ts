@@ -7,7 +7,7 @@ import { roleHasPermission, type Permission } from '@/lib/saas/permissions'
 
 export const FULL_REPAIR_SELECT = `
   *,
-  customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email),
+  customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email, customer_type),
   technician:profiles!technician_id(id, full_name),
   images:repair_images(id, image_url, description),
   parts:repair_parts(*),

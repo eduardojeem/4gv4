@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const productsLimit = vi.fn()
 const inventoryIn = vi.fn()
+const repairMaybeSingle = vi.fn()
 const ctx = {
   organizationId: 'org-1', branchId: 'branch-1', userId: 'user-1',
   role: 'admin', organizationRole: 'admin',
@@ -58,5 +59,22 @@ describe('GET /api/repairs/inventory/search', () => {
 
     expect(response.status).toBe(400)
     expect(ctx.supabase.from).not.toHaveBeenCalled()
+  })
+
+  it('uses the server-verified wholesale price for a wholesale repair customer', async () => {
+    repairMaybeSingle.mockResolvedValue({ data: { id: 'repair-1', customer: { customer_type: 'wholesale' } }, error: null })
+    productsLimit.mockResolvedValue({ data: [{ id: 'product-1', sku: 'BAT-1', name: 'Batería', purchase_price: 100_000, sale_price: 180_000, wholesale_price: 150_000, tax_rate: 10, updated_at: 'v1' }], error: null })
+    inventoryIn.mockResolvedValue({ data: [{ product_id: 'product-1', stock_quantity: 3, updated_at: 'v2' }], error: null })
+    const repairBuilder = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: repairMaybeSingle }
+    const productBuilder = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), or: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(), limit: productsLimit }
+    const inventoryBuilder = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: inventoryIn }
+    ctx.supabase.from.mockImplementation((table: string) => table === 'repairs' ? repairBuilder : table === 'products' ? productBuilder : inventoryBuilder)
+
+    const { GET } = await import('./route')
+    const response = await GET(new Request('http://localhost/api/repairs/inventory/search?q=bateria&repairId=repair-1'))
+    const body = await response.json()
+
+    expect(body.customerIsWholesale).toBe(true)
+    expect(body.items[0]).toEqual(expect.objectContaining({ unitPrice: 150_000, retailPrice: 180_000, wholesalePriceApplied: true }))
   })
 })
