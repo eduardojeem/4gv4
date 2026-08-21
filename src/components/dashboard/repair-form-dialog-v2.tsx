@@ -896,8 +896,8 @@ export function RepairFormDialogV2({
   return (
     <>
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
-      <DialogContent className={`overflow-hidden flex flex-col p-0 transition-all duration-300 rounded-lg border-border/60 shadow-xl max-sm:w-screen max-sm:h-[100dvh] max-sm:max-w-full max-sm:rounded-none ${isFullscreen ? 'sm:w-[98vw] sm:max-w-[98vw] sm:h-[96vh] sm:max-h-[96vh]' : 'sm:w-[94vw] sm:max-w-6xl sm:h-[90vh] sm:max-h-[90vh]'} dark:bg-slate-950 dark:border-slate-800`}>
-        <DialogHeader className="flex-shrink-0 px-4 sm:px-6 py-3.5 border-b border-border bg-muted/20 dark:border-slate-800">
+      <DialogContent showCloseButton={false} className={`overflow-hidden flex flex-col p-0 transition-all duration-300 rounded-lg border-border/60 shadow-xl max-sm:w-screen max-sm:h-[100dvh] max-sm:max-w-full max-sm:rounded-none ${isFullscreen ? 'sm:w-[98vw] sm:max-w-[98vw] sm:h-[96vh] sm:max-h-[96vh]' : 'sm:w-[94vw] sm:max-w-6xl sm:h-[90vh] sm:max-h-[90vh]'} dark:bg-slate-950 dark:border-slate-800`}>
+        <DialogHeader className="flex-shrink-0 border-b border-border bg-muted/20 px-3 py-2.5 sm:px-6 sm:py-3.5 dark:border-slate-800">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
@@ -907,12 +907,12 @@ export function RepairFormDialogV2({
                 <DialogTitle className="text-lg font-bold tracking-tight truncate">
                   {mode === 'add' ? 'Nueva Reparación' : 'Editar Reparación'}
                 </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground dark:text-slate-400 truncate">
+                <DialogDescription className="text-xs text-muted-foreground dark:text-slate-400 truncate max-sm:hidden">
                   Complete los datos del cliente y los dispositivos a reparar
                 </DialogDescription>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0 mr-8">
+            <div className="flex items-center gap-1 shrink-0">
               {mode === 'edit' && repair && (
                 <Badge variant="outline" className="bg-background font-mono text-xs px-2.5 py-1">
                   #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
@@ -923,17 +923,27 @@ export function RepairFormDialogV2({
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="h-9 w-9"
+                className="hidden h-9 w-9 sm:inline-flex"
                 title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
                 aria-label={isFullscreen ? "Salir de pantalla completa" : "Ver en pantalla completa"}
               >
                 {isFullscreen ? <Minimize2 className="h-[18px] w-[18px]" /> : <Maximize2 className="h-[18px] w-[18px]" />}
               </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                className="min-h-11 min-w-11 sm:h-9 sm:min-h-9 sm:w-9 sm:min-w-9"
+                aria-label="Cerrar formulario de reparación"
+              >
+                <X className="h-5 w-5" />
+              </Button>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto bg-muted/20 px-3 py-4 sm:px-6 sm:py-5 dark:bg-slate-950">
+        <div className="flex-1 overflow-y-auto bg-muted/20 px-3 py-3 sm:px-6 sm:py-5 dark:bg-slate-950">
           <form
             id={formId}
             onSubmit={handleSubmit(mode === 'add' ? handleReviewForm : onSubmitForm, handleFormError)}
@@ -2894,7 +2904,7 @@ export function RepairFormDialogV2({
         </div>
 
         {/* Form Actions */}
-        <DialogFooter className="flex-shrink-0 border-t border-border bg-background px-3 py-3 sm:px-4 dark:border-slate-800">
+        <DialogFooter className="flex-shrink-0 border-t border-border bg-background px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:py-3 dark:border-slate-800">
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="min-h-5 min-w-0 text-sm">
               {!isValid && Object.keys(errors).length > 0 && (
@@ -2910,6 +2920,7 @@ export function RepairFormDialogV2({
                 variant="outline"
                 onClick={onClose}
                 disabled={isSubmitting}
+                className="min-h-11 sm:min-h-9"
               >
                 Cancelar
               </Button>
@@ -2918,7 +2929,7 @@ export function RepairFormDialogV2({
                 type="submit"
                 disabled={isSubmitting}
                 className={cn(
-                  "min-w-0 sm:min-w-[160px] font-bold shadow-sm transition-all",
+                  "min-h-11 min-w-0 sm:min-h-9 sm:min-w-[160px] font-bold shadow-sm transition-all",
                   quickMode && mode === 'add'
                     ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
                     : ""

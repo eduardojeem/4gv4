@@ -20,4 +20,20 @@ describe('RepairFormSectionNav', () => {
     await user.click(screen.getByRole('button', { name: /diagnóstico inicial.*2 errores/i }))
     expect(onSelect).toHaveBeenCalledWith('diagnosis')
   })
+
+  it('uses a compact touch-friendly horizontal navigator on mobile', () => {
+    render(<RepairFormSectionNav
+      activeSection="customer"
+      onSelect={vi.fn()}
+      sectionState={{
+        customer: { errorCount: 0 }, device: { errorCount: 0 }, diagnosis: { errorCount: 0 },
+        catalog: { errorCount: 0 }, estimate: { errorCount: 0 }, review: { errorCount: 0 },
+      }}
+    />)
+
+    const nav = screen.getByRole('navigation', { name: 'Secciones del formulario' })
+    expect(nav).toHaveClass('max-sm:-mx-3')
+    expect(screen.getByRole('button', { name: /Cliente/ })).toHaveClass('min-h-11')
+    expect(screen.getByText('Identificación y contacto')).toHaveClass('max-sm:hidden')
+  })
 })

@@ -399,16 +399,16 @@ export function RepairDetailDialog({
             ? "sm:w-[98vw] sm:max-w-[98vw] sm:h-[96vh] sm:max-h-[96vh]"
             : "sm:w-[92vw] sm:max-w-5xl sm:h-[85vh] sm:max-h-[85vh]"
         )}>
-        <DialogHeader className="px-4 sm:px-6 py-3.5 bg-muted/20 border-b shrink-0">
-          <div className="flex justify-between items-start gap-4">
-            <div className="flex items-start gap-4 min-w-0">
+        <DialogHeader data-testid="repair-detail-header" className="border-b bg-muted/20 px-3 py-3 max-sm:py-2.5 sm:px-6 sm:py-3.5 shrink-0">
+          <div className="flex justify-between items-start gap-2 sm:gap-4">
+            <div className="flex items-start gap-2 sm:gap-4 min-w-0">
               <div className={cn(
                 "hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm",
                 statusConfig[repair.status]?.bgColor || 'bg-slate-500'
               )}>
                 <DeviceIcon className="h-6 w-6" />
               </div>
-              <div className="space-y-1.5 min-w-0">
+              <div className="min-w-0 space-y-1 sm:space-y-1.5">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <Badge variant="outline" className="bg-background font-mono text-xs">
                     #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
@@ -418,31 +418,31 @@ export function RepairDetailDialog({
                     {statusConfig[repair.status]?.label || repair.status || 'En Proceso'}
                   </Badge>
                   {(repair.priority ? priorityConfig[repair.priority] : null) ? (
-                    <Badge variant="outline" className={cn(priorityConfig[repair.priority]?.color)}>
+                    <Badge variant="outline" className={cn('max-sm:hidden', priorityConfig[repair.priority]?.color)}>
                       Prioridad {priorityConfig[repair.priority]?.label}
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200">
+                    <Badge variant="outline" className="max-sm:hidden bg-slate-50 text-slate-600 border-slate-200">
                       Prioridad Normal
                     </Badge>
                   )}
                   {repair.urgency && urgencyConfig[repair.urgency] && (
-                    <Badge className={cn(urgencyConfig[repair.urgency]?.color)}>
+                    <Badge className={cn('max-sm:hidden', urgencyConfig[repair.urgency]?.color)}>
                       {urgencyConfig[repair.urgency]?.label}
                     </Badge>
                   )}
                 </div>
-                <DialogTitle className="text-xl font-bold tracking-tight truncate">
+                <DialogTitle className="truncate text-base font-bold tracking-tight sm:text-xl">
                   {repair.device}
                 </DialogTitle>
-                <DialogDescription className="flex items-center gap-2 text-sm flex-wrap">
+                <DialogDescription className="flex items-center gap-1.5 text-xs sm:gap-2 sm:text-sm flex-wrap">
                   <span>{deviceTypeConfig[repair.deviceType]?.label || repair.deviceType}</span>
                   <span className="text-muted-foreground/50">•</span>
                   <span>{repair.brand} {repair.model}</span>
                   {(repair.serialNumber || repair.imei) && (
                     <>
                       <span className="text-muted-foreground/50">•</span>
-                      <span className="font-mono text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">
+                      <span className="max-sm:hidden font-mono text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">
                         IMEI/SN: {repair.serialNumber || repair.imei}
                       </span>
                     </>
@@ -450,10 +450,10 @@ export function RepairDetailDialog({
                 </DialogDescription>
               </div>
             </div>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex gap-1 sm:gap-2 shrink-0">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="Compartir" title="Compartir reparación">
+                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11 sm:h-9 sm:min-h-9 sm:w-9 sm:min-w-9" aria-label="Compartir" title="Compartir reparación">
                     <Share2 className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -483,6 +483,7 @@ export function RepairDetailDialog({
                 size="icon"
                 onClick={() => setIsMaximized(!isMaximized)}
                 title={isMaximized ? "Restaurar tamaño" : "Maximizar"}
+                className="max-sm:hidden"
               >
                 {isMaximized ? (
                   <Minimize2 className="h-4 w-4" />
@@ -492,7 +493,7 @@ export function RepairDetailDialog({
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" title="Imprimir documentos de la reparación">
+                  <Button variant="outline" size="sm" className="max-sm:hidden" title="Imprimir documentos de la reparación">
                     <Printer className="h-4 w-4 sm:mr-2" />
                     <span className="hidden sm:inline">Imprimir</span>
                     <ChevronDown className="h-3.5 w-3.5 ml-1 hidden sm:block opacity-60" />
@@ -533,7 +534,7 @@ export function RepairDetailDialog({
                   type="button"
                   size="sm"
                   onClick={() => setWarrantyClaimOpen(true)}
-                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs gap-1.5 shadow-xs"
+                  className="max-sm:hidden bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs gap-1.5 shadow-xs"
                 >
                   <Shield className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Procesar Garantía</span>
@@ -543,6 +544,7 @@ export function RepairDetailDialog({
                 <Button
                   variant="outline"
                   size="sm"
+                  className="max-sm:hidden"
                   onClick={() => {
                     if (activeRepair.status === 'entregado') {
                       setDeliveredEditWarningOpen(true)
@@ -555,8 +557,8 @@ export function RepairDetailDialog({
                   <span className="hidden sm:inline">Editar</span>
                 </Button>
               )}
-              <Button variant="ghost" size="icon" onClick={onClose}>
-                <span className="sr-only">Cerrar</span>
+              <Button variant="ghost" size="icon" onClick={onClose} className="min-h-11 min-w-11 sm:h-9 sm:min-h-9 sm:w-9 sm:min-w-9" aria-label="Cerrar detalle de reparación">
+                <span className="sr-only">Cerrar detalle de reparación</span>
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -564,7 +566,7 @@ export function RepairDetailDialog({
         </DialogHeader>
 
         {/* Stepper de progreso */}
-        <div className="px-4 sm:px-6 py-2 border-b bg-background shrink-0">
+        <div className="border-b bg-background px-3 py-1.5 sm:px-6 sm:py-2 shrink-0">
           {isCancelled ? (
             <div className="flex items-center gap-3 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 px-4 py-2.5">
               <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0" />
@@ -598,7 +600,8 @@ export function RepairDetailDialog({
                         {done ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                       </div>
                       <span className={cn(
-                        "text-[10px] font-medium leading-none hidden sm:block",
+                        "text-[10px] font-medium leading-none",
+                        current ? 'block' : 'hidden sm:block',
                         current ? "text-foreground" : "text-muted-foreground"
                       )}>
                         {current && isPaused ? 'Pausado' : STATUS_FLOW_LABELS[step]}
@@ -613,12 +616,12 @@ export function RepairDetailDialog({
 
         {/* Quick status transitions container */}
         {repair && onStatusChange && !isCancelled && (
-          <div className="px-4 sm:px-6 py-2.5 border-b bg-slate-50/50 dark:bg-slate-900/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
-            <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+          <div className="border-b bg-slate-50/50 px-3 py-2 dark:bg-slate-900/10 flex items-center gap-2 shrink-0 sm:flex-wrap sm:justify-between sm:px-6 sm:py-2.5">
+            <span className="max-sm:hidden text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
               Cambio rápido de estado:
             </span>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto overscroll-x-contain sm:flex-wrap">
               {getAvailableTransitions(repair.status).map((nextStatus) => {
                 const cfg = statusConfig[nextStatus]
                 if (!cfg) return null
@@ -630,7 +633,7 @@ export function RepairDetailDialog({
                     size="sm"
                     variant="outline"
                     className={cn(
-                      "h-7 rounded-xl text-xs font-bold gap-1.5 transition-all active:scale-95",
+                      "h-11 shrink-0 rounded-xl text-xs font-bold gap-1.5 transition-all active:scale-95 sm:h-7",
                       cfg.color,
                       "hover:bg-slate-100 dark:hover:bg-slate-900 border border-slate-200 dark:border-slate-800"
                     )}
@@ -676,7 +679,7 @@ export function RepairDetailDialog({
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-7 rounded-xl text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                  className="h-11 shrink-0 rounded-xl text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 sm:h-7"
                   onClick={async () => {
                     setIsUpdatingStatus(true)
                     try {
@@ -701,7 +704,7 @@ export function RepairDetailDialog({
         )}
 
         <ScrollArea className="flex-1 min-h-0 bg-background w-full">
-          <div className="p-4 sm:p-6 space-y-5">
+          <div className="space-y-4 p-3 sm:space-y-5 sm:p-6">
             {/* Mensaje de Estado de Pago */}
             {repair.status === 'listo' && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900/50 rounded-lg p-4">
@@ -788,7 +791,7 @@ export function RepairDetailDialog({
               {/* ─── Columna lateral: resumen siempre visible ─── */}
               <aside className="w-full lg:w-80 shrink-0 space-y-4">
                 {/* Estado financiero: independiente de si el equipo ya fue entregado. */}
-                <section aria-labelledby="repair-payment-summary-title" className="relative overflow-hidden rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/30">
+                <section aria-labelledby="repair-payment-summary-title" className="relative overflow-hidden rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm sm:p-5 dark:border-emerald-900/60 dark:bg-emerald-950/30">
                   <DollarSign className="pointer-events-none absolute -right-4 -top-4 h-28 w-28 text-emerald-600/5" />
                   <div className="relative space-y-3">
                     <div className="flex items-center justify-between gap-2">
@@ -1117,18 +1120,18 @@ export function RepairDetailDialog({
               {/* ─── Área principal: detalle por pestañas ─── */}
               <main className="flex-1 min-w-0 w-full">
                 <Tabs defaultValue="diagnostic" className="w-full">
-                  <TabsList className="w-full justify-start overflow-x-auto h-auto p-1">
-                    <TabsTrigger value="diagnostic" className="text-xs sm:text-sm">
+                  <TabsList className="sticky top-0 z-10 h-auto w-full justify-start overflow-x-auto bg-background/95 p-1 backdrop-blur">
+                    <TabsTrigger value="diagnostic" className="min-h-11 shrink-0 text-xs sm:min-h-9 sm:text-sm">
                       Diagnóstico
                     </TabsTrigger>
-                    <TabsTrigger value="finance" className="text-xs sm:text-sm">
+                    <TabsTrigger value="finance" className="min-h-11 shrink-0 text-xs sm:min-h-9 sm:text-sm">
                       Costos y Piezas
                     </TabsTrigger>
-                    <TabsTrigger value="history" className="text-xs sm:text-sm gap-1.5">
+                    <TabsTrigger value="history" className="min-h-11 shrink-0 text-xs sm:min-h-9 sm:text-sm gap-1.5">
                       <History className="h-3.5 w-3.5" />
                       <span>Historial y Bitácora</span>
                     </TabsTrigger>
-                    <TabsTrigger value="images" className="text-xs sm:text-sm">
+                    <TabsTrigger value="images" className="min-h-11 shrink-0 text-xs sm:min-h-9 sm:text-sm">
                       Imágenes ({repair.images?.length || 0})
                     </TabsTrigger>
                   </TabsList>
@@ -1297,16 +1300,30 @@ export function RepairDetailDialog({
           </div>
         </ScrollArea>
 
-        <DialogFooter className="px-4 py-3 border-t bg-background flex flex-wrap justify-between sm:justify-end gap-2 shrink-0">
-          <Button variant="outline" onClick={onClose}>
+        <DialogFooter data-testid="repair-detail-actions" className="border-t bg-background px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 sm:flex sm:flex-wrap sm:justify-end sm:px-4 sm:py-3 shrink-0">
+          <Button variant="outline" onClick={onClose} className="min-h-11 sm:min-h-9">
             Cerrar
           </Button>
+
+          {onEdit && (
+            <Button
+              variant="outline"
+              className="min-h-11 gap-2 sm:hidden"
+              onClick={() => {
+                if (activeRepair.status === 'entregado') setDeliveredEditWarningOpen(true)
+                else onEdit(activeRepair)
+              }}
+            >
+              <Edit className="h-4 w-4" />
+              Editar
+            </Button>
+          )}
 
           <>
               {onQuickPay && financial.canCollect && (
                 <Button
                   variant="default"
-                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                  className="min-h-11 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold max-sm:col-span-2 sm:min-h-9"
                   onClick={() => {
                     onClose()
                     onQuickPay(repair)
@@ -1323,7 +1340,7 @@ export function RepairDetailDialog({
               {repair.status !== 'entregado' && repair.status !== 'cancelado' && (
               <Button
                 variant="outline"
-                className="gap-2"
+                className="min-h-11 gap-2 sm:min-h-9"
                 onClick={() => {
                   if (repair.customer?.id) {
                     window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
@@ -1338,7 +1355,7 @@ export function RepairDetailDialog({
               {onDeliver && repair.status === 'listo' && (
                 <Button
                   variant="outline"
-                  className="gap-2"
+                  className="min-h-11 gap-2 sm:min-h-9"
                   onClick={() => {
                     onClose()
                     onDeliver(repair)

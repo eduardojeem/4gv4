@@ -79,6 +79,21 @@ describe('RepairDetailDialog payment summary', () => {
     expect(within(summary).getByText('Podés entregarlo sin registrar otro cobro.')).toBeVisible()
   })
 
+  it('exposes a compact mobile header and touch-friendly action bar', () => {
+    render(
+      <RepairDetailDialog
+        open
+        repair={{ ...baseRepair, status: 'reparacion', paidAmount: 0 }}
+        onClose={vi.fn()}
+        onQuickPay={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTestId('repair-detail-header')).toHaveClass('max-sm:py-2.5')
+    expect(screen.getByRole('button', { name: 'Cerrar detalle de reparación' })).toHaveClass('min-h-11')
+    expect(screen.getByTestId('repair-detail-actions')).toHaveClass('max-sm:grid')
+  })
+
   it('shows the outstanding amount and collection action after delivery', () => {
     render(
       <RepairDetailDialog
