@@ -98,6 +98,11 @@ import { POSCashMovementDialog } from './components/POSCashMovementDialog'
 import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
 import { getMixedPaymentValidation } from './lib/payment-validation'
 import { getRepairBalanceDue, type ChargeableRepair } from './lib/repair-charge'
+import { hasProductCredit } from './lib/product-credit'
+import {
+  applyProductCreditFilter,
+  type ProductCreditSort,
+} from './lib/product-credit-filter'
 
 /** Lo minimo que necesita el carrito para armar la linea de una reparacion. */
 type PosCartRepair = ChargeableRepair & {
@@ -656,6 +661,9 @@ function POSPageContent() {
   // pudiera notarlo (no hay control de precio en esta vista).
   const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: Number.POSITIVE_INFINITY })
   const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all')
+  const [creditOnly, setCreditOnly] = useState(false)
+  const [minimumInstallments, setMinimumInstallments] = useState(1)
+  const [creditSort, setCreditSort] = useState<ProductCreditSort | null>(null)
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const activeFiltersCount = useMemo(() => {
     let count = 0
@@ -664,8 +672,11 @@ function POSPageContent() {
     if (sortBy !== 'name' || sortOrder !== 'asc') count += 1
     if (stockFilter !== 'all') count += 1
     if (priceRange.min > 0 || (priceRange.max < Number.POSITIVE_INFINITY && priceRange.max > 0)) count += 1
+    if (creditOnly) count += 1
+    if (minimumInstallments > 1) count += 1
+    if (creditSort) count += 1
     return count
-  }, [selectedCategory, showFeatured, sortBy, sortOrder, stockFilter, priceRange])
+  }, [selectedCategory, showFeatured, sortBy, sortOrder, stockFilter, priceRange, creditOnly, minimumInstallments, creditSort])
 
   const handleResetFilters = useCallback(() => {
     setSelectedCategory('all')
@@ -674,6 +685,9 @@ function POSPageContent() {
     setSortBy('name')
     setSortOrder('asc')
     setPriceRange({ min: 0, max: Number.POSITIVE_INFINITY })
+    setCreditOnly(false)
+    setMinimumInstallments(1)
+    setCreditSort(null)
     setSearchTerm('')
     toast.info('Filtros restablecidos')
   }, [setSearchTerm])
@@ -685,7 +699,7 @@ function POSPageContent() {
   // Resetear página al cambiar filtros
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy])
+  }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy, creditOnly, minimumInstallments, creditSort])
 
 
   // Persistencia en localStorage: restaurar preferencias (el carrito se maneja en el hook)
@@ -711,6 +725,13 @@ function POSPageContent() {
           setPriceRange({ min, max })
         }
         if (prefs.stockFilter) setStockFilter(prefs.stockFilter)
+        if (typeof prefs.creditOnly === 'boolean') setCreditOnly(prefs.creditOnly)
+        if ([1, 3, 6, 12, 18, 24, 36, 48, 60].includes(prefs.minimumInstallments)) {
+          setMinimumInstallments(prefs.minimumInstallments)
+        }
+        if (['installment_low', 'rate_low', 'installments_high', 'financed_total_low'].includes(prefs.creditSort)) {
+          setCreditSort(prefs.creditSort)
+        }
         if (prefs.recentSearches) setRecentSearches(prefs.recentSearches)
         if (typeof prefs.sidebarCollapsed === 'boolean') setSidebarCollapsed(prefs.sidebarCollapsed)
         if (prefs.itemsPerPage) setItemsPerPage(prefs.itemsPerPage)
@@ -740,6 +761,9 @@ function POSPageContent() {
         sortOrder,
         priceRange,
         stockFilter,
+        creditOnly,
+        minimumInstallments,
+        creditSort,
         recentSearches,
         sidebarCollapsed,
         itemsPerPage,
@@ -748,7 +772,7 @@ function POSPageContent() {
     } catch (e) {
       console.error('Error saving preferences to localStorage:', e)
     }
-  }, [selectedCategory, showFeatured, viewMode, sortBy, sortOrder, priceRange, stockFilter, recentSearches, sidebarCollapsed, itemsPerPage])
+  }, [selectedCategory, showFeatured, viewMode, sortBy, sortOrder, priceRange, stockFilter, creditOnly, minimumInstallments, creditSort, recentSearches, sidebarCollapsed, itemsPerPage])
 
   // Medidas del viewport para virtualización dinámica
   const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== 'undefined' ? window.innerWidth : 1024)
@@ -809,6 +833,11 @@ function POSPageContent() {
       max: Math.max(...prices)
     }
   }, [inventoryProducts])
+
+  const financedProductsCount = useMemo(
+    () => inventoryProducts.filter(hasProductCredit).length,
+    [inventoryProducts],
+  )
 
   // Generar sugerencias de búsqueda (now using smart search)
   const generateSearchSuggestions = useCallback((term: string) => {
@@ -942,8 +971,12 @@ function POSPageContent() {
       }
       return sortOrder === 'asc' ? comparison : -comparison
     })
-    return filtered
-  }, [filteredList, sortBy, sortOrder])
+    return applyProductCreditFilter(filtered, {
+      creditOnly,
+      minimumInstallments,
+      creditSort,
+    })
+  }, [filteredList, sortBy, sortOrder, creditOnly, minimumInstallments, creditSort])
 
   // Productos paginados
   const paginatedProducts = useMemo(() => {
@@ -2224,6 +2257,18 @@ function POSPageContent() {
                   Destacados
                 </Button>
 
+                <Button
+                  variant={creditOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCreditOnly(current => !current)}
+                  aria-pressed={creditOnly}
+                  className="h-8 px-2.5 text-xs"
+                >
+                  <CreditCard className="mr-1 h-3.5 w-3.5" />
+                  Con cuotas
+                  <span className="ml-1 text-[10px] opacity-75">({financedProductsCount})</span>
+                </Button>
+
                 {/* Botón Filtros Avanzados con Contador */}
                 <Button
                   variant={showAdvancedFilters || activeFiltersCount > 0 ? "default" : "outline"}
@@ -2401,6 +2446,45 @@ function POSPageContent() {
                     </button>
                   </Badge>
                 )}
+                {creditOnly && (
+                  <Badge variant="secondary" className="gap-1 border-sky-500/20 bg-sky-500/10 py-0.5 pl-2 pr-1 text-xs text-sky-700 dark:text-sky-300">
+                    Con cuotas
+                    <button
+                      type="button"
+                      onClick={() => setCreditOnly(false)}
+                      className="rounded-full p-0.5 hover:bg-sky-500/20"
+                      aria-label="Quitar filtro de productos con cuotas"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {minimumInstallments > 1 && (
+                  <Badge variant="secondary" className="gap-1 border-sky-500/20 bg-sky-500/10 py-0.5 pl-2 pr-1 text-xs text-sky-700 dark:text-sky-300">
+                    Desde {minimumInstallments} cuotas
+                    <button
+                      type="button"
+                      onClick={() => setMinimumInstallments(1)}
+                      className="rounded-full p-0.5 hover:bg-sky-500/20"
+                      aria-label="Quitar mínimo de cuotas"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {creditSort && (
+                  <Badge variant="secondary" className="gap-1 border-sky-500/20 bg-sky-500/10 py-0.5 pl-2 pr-1 text-xs text-sky-700 dark:text-sky-300">
+                    Crédito: {creditSort === 'installment_low' ? 'menor cuota' : creditSort === 'rate_low' ? 'menor tasa' : creditSort === 'installments_high' ? 'más cuotas' : 'menor total'}
+                    <button
+                      type="button"
+                      onClick={() => setCreditSort(null)}
+                      className="rounded-full p-0.5 hover:bg-sky-500/20"
+                      aria-label="Quitar orden financiero"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
                 {stockFilter !== 'all' && (
                   <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
                     Stock: {stockFilter === 'in_stock' ? 'En stock' : stockFilter === 'low_stock' ? 'Stock bajo' : 'Sin stock'}
@@ -2452,7 +2536,7 @@ function POSPageContent() {
             {showAdvancedFilters && (
               <Card className="mt-2.5 border-border/70 shadow-sm bg-card/95 backdrop-blur animate-in slide-in-from-top-2 duration-200">
                 <CardContent className="p-3.5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3.5">
                     {/* Disponibilidad de Stock */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -2554,6 +2638,44 @@ function POSPageContent() {
                           }}
                           className="h-8 text-xs"
                         />
+                      </div>
+                    </div>
+
+                    {/* Condiciones de financiación */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                        <CreditCard className="h-3.5 w-3.5 text-primary" /> Financiación
+                      </label>
+                      <div className="grid gap-2">
+                        <Select
+                          value={String(minimumInstallments)}
+                          onValueChange={(value) => setMinimumInstallments(Number(value))}
+                        >
+                          <SelectTrigger className="h-8 text-xs" aria-label="Cantidad mínima de cuotas">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">Cualquier cantidad</SelectItem>
+                            {[3, 6, 12, 18, 24, 36, 48, 60].map(count => (
+                              <SelectItem key={count} value={String(count)}>Desde {count} cuotas</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={creditSort ?? 'none'}
+                          onValueChange={(value) => setCreditSort(value === 'none' ? null : value as ProductCreditSort)}
+                        >
+                          <SelectTrigger className="h-8 text-xs" aria-label="Ordenar por condiciones de financiación">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Sin orden financiero</SelectItem>
+                            <SelectItem value="installment_low">Menor cuota</SelectItem>
+                            <SelectItem value="rate_low">Menor tasa</SelectItem>
+                            <SelectItem value="installments_high">Más cuotas</SelectItem>
+                            <SelectItem value="financed_total_low">Menor total financiado</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
 
