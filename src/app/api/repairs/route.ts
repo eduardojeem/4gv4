@@ -221,6 +221,7 @@ export async function POST(request: NextRequest) {
       resolvedPricing = resolveRepairPricingWrite({
         mode: input.pricing_mode,
         currency: organizationSettings?.currency || 'PYG',
+        estimatedCost: input.estimated_cost,
         laborCost: input.labor_cost,
         finalCost: input.final_cost,
         discountAmount: input.discount_amount,

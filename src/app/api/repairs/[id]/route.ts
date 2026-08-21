@@ -208,6 +208,7 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
     const resolvedPricing = resolveRepairPricingWrite({
       mode: requestedMode,
       currency: organizationSettings?.currency || 'PYG',
+      estimatedCost: Number(repairPayload.estimatedCost ?? current.estimated_cost ?? 0),
       laborCost: Number(repairPayload.laborCost ?? current.labor_cost ?? 0),
       finalCost: repairPayload.finalCost === undefined
         ? (current.final_cost === null ? null : Number(current.final_cost))

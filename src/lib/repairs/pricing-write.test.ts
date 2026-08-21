@@ -4,6 +4,23 @@ import { RepairPricingWriteError, resolveRepairPricingWrite } from './pricing-wr
 const parts = [{ unit_price: 100, unit_cost: 60, quantity: 2 }]
 
 describe('resolveRepairPricingWrite', () => {
+  it('preserves an initial estimate when no detailed pricing exists yet', () => {
+    const result = resolveRepairPricingWrite({
+      mode: 'automatic',
+      currency: 'PYG',
+      estimatedCost: 350_000,
+      laborCost: 0,
+      finalCost: null,
+      discountAmount: 0,
+      paidAmount: 0,
+      parts: [],
+      role: 'tecnico',
+    })
+
+    expect(result.estimatedCost).toBe(350_000)
+    expect(result.finalCost).toBeNull()
+  })
+
   it('ignores a forged final total in automatic mode', () => {
     const result = resolveRepairPricingWrite({
       mode: 'automatic',

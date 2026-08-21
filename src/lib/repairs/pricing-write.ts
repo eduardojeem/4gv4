@@ -22,6 +22,7 @@ export class RepairPricingWriteError extends Error {
 export function resolveRepairPricingWrite(input: {
   mode: RepairPricingMode
   currency: string
+  estimatedCost?: number | null
   laborCost: number
   finalCost: number | null
   discountAmount: number
@@ -40,6 +41,38 @@ export function resolveRepairPricingWrite(input: {
       'MANUAL_PRICING_FORBIDDEN',
       403,
     )
+  }
+
+  const initialEstimate = Math.max(0, Number(input.estimatedCost) || 0)
+  const hasDetailedCustomerPrice = input.laborCost > 0 ||
+    input.finalCost !== null ||
+    input.discountAmount > 0 ||
+    input.parts.some((part) => (Number(part.unit_price) || 0) * (Number(part.quantity) || 0) > 0)
+
+  if (input.mode === 'automatic' && !hasDetailedCustomerPrice && initialEstimate > 0) {
+    if (input.paidAmount > initialEstimate) {
+      throw new RepairPricingWriteError(
+        'El costo estimado no puede ser menor que el monto ya pagado.',
+        'ESTIMATE_BELOW_PAID_AMOUNT',
+      )
+    }
+
+    return {
+      laborCost: 0,
+      finalCost: null,
+      estimatedCost: initialEstimate,
+      discountAmount: 0,
+      pricingMode: input.mode,
+      overrideReason: null,
+      margin: initialEstimate,
+      balance: initialEstimate - input.paidAmount,
+      servicesSubtotal: 0,
+      chargedPartsSubtotal: 0,
+      includedMaterialsInternalCost: input.parts.reduce(
+        (total, part) => total + (Number(part.unit_cost) || 0) * (Number(part.quantity) || 0),
+        0,
+      ),
+    }
   }
 
   const pricingInput = {
