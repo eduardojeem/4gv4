@@ -28,7 +28,7 @@
 
 - `src/lib/repairs/cost-breakdown.ts`: pure money, included-VAT and validation model shared by UI and route tests.
 - `src/lib/repairs/cost-breakdown.test.ts`: unit coverage for calculations and rule violations.
-- `supabase/migrations/20260820220000_repair_cost_revisions.sql`: settings, product/part tax snapshots, immutable revisions, RLS and atomic RPC.
+- `supabase/migrations/20260821013000_repair_cost_revisions.sql`: settings, product/part tax snapshots, immutable revisions, RLS and atomic RPC.
 - `src/lib/repairs/cost-revision-migration.test.ts`: executable SQL contract checks.
 - `src/lib/repairs/save-cost-revision.ts`: typed RPC adapter and stable error mapping.
 - `src/lib/repairs/save-cost-revision.test.ts`: adapter payload/error tests.
@@ -131,7 +131,7 @@ git commit -m "feat: add canonical repair cost breakdown"
 ### Task 2: Database snapshots, immutable history and atomic write
 
 **Files:**
-- Create: `supabase/migrations/20260820220000_repair_cost_revisions.sql`
+- Create: `supabase/migrations/20260821013000_repair_cost_revisions.sql`
 - Create: `src/lib/repairs/cost-revision-migration.test.ts`
 
 **Interfaces:**
@@ -219,7 +219,7 @@ execution remains unverified; static string tests are not deployment proof.
 - [ ] **Step 7: Commit the persistence slice**
 
 ```bash
-git add supabase/migrations/20260820220000_repair_cost_revisions.sql src/lib/repairs/cost-revision-migration.test.ts
+git add supabase/migrations/20260821013000_repair_cost_revisions.sql src/lib/repairs/cost-revision-migration.test.ts
 git commit -m "feat: add atomic repair cost revisions"
 ```
 
