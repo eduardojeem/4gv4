@@ -194,6 +194,7 @@ function POSPageContent() {
   const { 
     selectedCustomer, 
     setSelectedCustomer, 
+    activeCustomer,
     customers, 
     setNewCustomerOpen
   } = usePOSCustomer()
@@ -225,6 +226,7 @@ function POSPageContent() {
     notes,
     setNotes,
     creditTerms,
+    setCreditTerms,
     paymentSplit,
     setPaymentSplit,
     addPaymentSplit,
@@ -3658,6 +3660,27 @@ function POSPageContent() {
         onOpenChange={setIsDetailDialogOpen}
         onAddToCart={(product, qty) => {
           addToCartHook(product, qty)
+        }}
+        creditContext={{
+          hasCustomer: Boolean(activeCustomer),
+          hasCreditLine: Number(activeCustomer?.credit_limit || 0) > 0,
+          availableCredit: Math.max(
+            0,
+            Number(activeCustomer?.credit_limit || 0) - Number(activeCustomer?.current_balance || 0),
+          ),
+          isRegisterOpen: getCurrentRegister.isOpen,
+        }}
+        onUseCreditPlan={(product, qty, plan) => {
+          addToCartHook(product, qty)
+          setPaymentMethod('credit')
+          setCreditTerms({
+            count: plan.count,
+            interestRate: plan.rate,
+            frequency: plan.frequency,
+          })
+          toast.success(`Plan de ${plan.count} cuotas preparado`, {
+            description: 'Revisá las condiciones sobre el total del ticket antes de confirmar.',
+          })
         }}
         isWholesale={isWholesale}
         wholesaleDiscountRate={WHOLESALE_DISCOUNT_RATE}
