@@ -11,5 +11,7 @@ describe('delivery without payment migration', () => {
 
     expect(migration).toContain("p_payment_method is distinct from ''credit''")
     expect(migration).toContain('execute replace(function_definition, old_condition, new_condition)')
+    expect(migration).toContain('if position(new_condition in function_definition) > 0 then')
+    expect(migration).toContain('return;')
   })
 })

@@ -12,6 +12,11 @@ begin
     'public.close_repair_and_register_payment_v2(uuid,uuid,uuid,uuid,boolean,text,text,boolean,text,numeric,text,text,text,uuid,uuid,uuid,text,numeric,integer,text)'::regprocedure
   ) into function_definition;
 
+  -- Re-running migrations during local resets or manual recovery must be safe.
+  if position(new_condition in function_definition) > 0 then
+    return;
+  end if;
+
   if position(old_condition in function_definition) = 0 then
     raise exception 'Expected credit branch condition was not found';
   end if;
