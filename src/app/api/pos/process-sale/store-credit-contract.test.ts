@@ -75,4 +75,16 @@ describe('atomic POS store-credit contract', () => {
     expect(modal).toContain('data-testid="pos-checkout-footer"')
     expect(methods).toContain('grid-cols-2 sm:grid-cols-4')
   })
+
+  it('keeps customer selection compact after choosing a customer', () => {
+    const customer = readFileSync(resolve(workspace, 'src/app/dashboard/pos/components/checkout/CustomerSelection.tsx'), 'utf8')
+
+    expect(customer).toContain('Cambiar cliente')
+    expect(customer).toContain('Resumen comercial')
+    expect(customer).toContain('Crédito disponible')
+    expect(customer).toContain('Reparaciones activas')
+    expect(customer).toContain('grid-cols-2')
+    expect(customer).not.toContain('Origen:')
+    expect(customer).not.toContain('ID: <span')
+  })
 })
