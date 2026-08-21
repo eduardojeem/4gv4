@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isNextResponse, resolveRepairRouteContext } from '@/app/api/repairs/_lib'
+import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 
 function safeSearchTerm(value: string) {
   return value.trim().replace(/[%_,().]/g, ' ').replace(/\s+/g, ' ').slice(0, 80)
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     const { data: products, error: productsError } = await ctx.supabase
       .from('products')
-      .select('id, sku, name, purchase_price, sale_price, wholesale_price, tax_rate, updated_at')
+      .select('id, sku, name, purchase_price, sale_price, wholesale_price, tax_rate, unit_measure, updated_at')
       .eq('organization_id', ctx.organizationId)
       .eq('is_active', true)
       .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
@@ -62,19 +63,25 @@ export async function GET(request: NextRequest) {
     )
     const items = (products ?? []).map((product) => {
       const stock = stockByProduct.get(product.id)
+      const isService = isServiceLikeProduct(product)
       const wholesalePrice = Number(product.wholesale_price ?? 0)
       const retailPrice = Number(product.sale_price ?? 0)
       const wholesalePriceApplied = customerIsWholesale && wholesalePrice > 0
+      const wholesalePriceFallback = customerIsWholesale && wholesalePrice <= 0
+      const internalCost = Number(product.purchase_price ?? 0)
       return {
         productId: product.id,
         sku: product.sku ?? '',
         name: product.name,
-        availableStock: Number(stock?.stock_quantity ?? 0),
-        unitCost: Number(product.purchase_price ?? 0),
+        availableStock: isService ? null : Number(stock?.stock_quantity ?? 0),
+        unitCost: isService ? 0 : internalCost,
+        includedMaterialCost: isService ? internalCost : 0,
         unitPrice: wholesalePriceApplied ? wholesalePrice : retailPrice,
         retailPrice,
         wholesalePrice: wholesalePrice > 0 ? wholesalePrice : null,
         wholesalePriceApplied,
+        wholesalePriceFallback,
+        lineType: isService ? 'service' : 'charged_part',
         taxRate: [0, 5, 10].includes(Number(product.tax_rate)) ? Number(product.tax_rate) : 10,
         version: `${product.updated_at ?? ''}:${stock?.updated_at ?? ''}`,
       }

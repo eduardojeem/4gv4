@@ -105,4 +105,25 @@ describe('resolveRepairPricingWrite', () => {
       overrideReason: 'Descuento comercial documentado',
     })).toThrowError(/autorizacion administrativa/i)
   })
+
+  it('preserves classified service and included-material totals', () => {
+    const result = resolveRepairPricingWrite({
+      mode: 'automatic',
+      currency: 'PYG',
+      laborCost: 0,
+      finalCost: null,
+      discountAmount: 0,
+      paidAmount: 0,
+      parts: [
+        { line_type: 'service', unit_price: 250_000, unit_cost: 0, quantity: 1 },
+        { line_type: 'included_material', unit_price: 0, unit_cost: 100_000, quantity: 1 },
+      ],
+      role: 'tecnico',
+    })
+
+    expect(result.servicesSubtotal).toBe(250_000)
+    expect(result.chargedPartsSubtotal).toBe(0)
+    expect(result.finalCost).toBe(250_000)
+    expect(result.margin).toBe(150_000)
+  })
 })

@@ -1,9 +1,11 @@
 import { calculateRepairPricing, validateRepairPricing, type RepairPricingMode } from './pricing'
+import type { RepairLineType } from './line-types'
 
 type PersistedPart = {
   unit_price?: number | null
   unit_cost?: number | null
   quantity?: number | null
+  line_type?: RepairLineType | null
 }
 
 export class RepairPricingWriteError extends Error {
@@ -51,6 +53,7 @@ export function resolveRepairPricingWrite(input: {
       cost: part.unit_price,
       internalCost: part.unit_cost,
       quantity: part.quantity,
+      lineType: part.line_type,
     })),
   }
   const pricing = calculateRepairPricing(pricingInput)
@@ -109,5 +112,8 @@ export function resolveRepairPricingWrite(input: {
     overrideReason: needsReason ? reason : null,
     margin: pricing.margin,
     balance: pricing.balance,
+    servicesSubtotal: pricing.servicesSubtotal,
+    chargedPartsSubtotal: pricing.chargedPartsSubtotal,
+    includedMaterialsInternalCost: pricing.includedMaterialsInternalCost,
   }
 }

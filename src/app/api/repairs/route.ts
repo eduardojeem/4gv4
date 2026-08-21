@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger'
 import { parseCreateRepairInput, type CreateRepairInput } from '@/lib/repairs/create-repair-input'
 import { RepairPartsStockError, replaceRepairPartsWithInventory } from '@/lib/repairs/replace-parts'
 import { RepairPricingWriteError, resolveRepairPricingWrite } from '@/lib/repairs/pricing-write'
-import { resolveCatalogPartPrice } from '@/lib/repairs/catalog-part-pricing'
+import { resolveCatalogRepairLines } from '@/lib/repairs/resolve-catalog-line'
 import {
   fingerprintRepairCreateInput,
   resolveRepairCreationReplay,
@@ -115,42 +115,45 @@ async function validateRepairRelations(
 
   const productIds = [...new Set(input.parts.flatMap((part) => part.product_id ? [part.product_id] : []))]
   if (productIds.length > 0) {
-    const [productsResult, inventoryResult] = await Promise.all([
-      supabase
-        .from('products')
-        .select('id, purchase_price, sale_price, wholesale_price')
-        .eq('organization_id', organizationId)
-        .in('id', productIds),
-      supabase
-        .from('branch_inventory')
-        .select('product_id')
-        .eq('branch_id', branchId)
-        .in('product_id', productIds),
-    ])
+    const productsResult = await supabase
+      .from('products')
+      .select('id, name, sku, unit_measure, purchase_price, sale_price, wholesale_price, tax_rate')
+      .eq('organization_id', organizationId)
+      .in('id', productIds)
 
     if (productsResult.error) throw productsResult.error
-    if (inventoryResult.error) throw inventoryResult.error
 
-    const organizationProducts = new Set((productsResult.data ?? []).map((row) => row.id))
-    const branchProducts = new Set((inventoryResult.data ?? []).map((row) => row.product_id))
-    if (productIds.some((id) => !organizationProducts.has(id) || !branchProducts.has(id))) {
-      return 'Uno de los repuestos seleccionados no pertenece al inventario de esta sucursal.'
+    const productsById = new Map((productsResult.data ?? []).map((row) => [row.id, row]))
+    if (productIds.some((id) => !productsById.has(id))) {
+      return 'Uno de los productos seleccionados no pertenece a la organizacion activa.'
     }
 
     const customerIsWholesale = ['wholesale', 'mayorista'].includes(
       String(customerResult.data.customer_type || '').toLowerCase()
     )
-    const verifiedPricing = new Map((productsResult.data ?? []).map((row) => [
-      row.id,
-      resolveCatalogPartPrice(row, customerIsWholesale),
-    ]))
-    for (const part of input.parts) {
-      if (part.product_id) {
-        const pricing = verifiedPricing.get(part.product_id)
-        part.unit_cost = pricing?.unitCost ?? 0
-        part.unit_price = pricing?.unitPrice ?? 0
+    const resolvedLines = input.parts.flatMap((part) => {
+      if (!part.product_id) return [part]
+      const product = productsById.get(part.product_id)
+      return product
+        ? resolveCatalogRepairLines(product, customerIsWholesale, part.quantity)
+        : []
+    })
+    const inventoryProductIds = [...new Set(resolvedLines.flatMap((line) => (
+      line.line_type === 'charged_part' && line.product_id ? [line.product_id] : []
+    )))]
+    if (inventoryProductIds.length > 0) {
+      const inventoryResult = await supabase
+        .from('branch_inventory')
+        .select('product_id')
+        .eq('branch_id', branchId)
+        .in('product_id', inventoryProductIds)
+      if (inventoryResult.error) throw inventoryResult.error
+      const branchProducts = new Set((inventoryResult.data ?? []).map((row) => row.product_id))
+      if (inventoryProductIds.some((id) => !branchProducts.has(id))) {
+        return 'Uno de los repuestos seleccionados no pertenece al inventario de esta sucursal.'
       }
     }
+    input.parts.splice(0, input.parts.length, ...resolvedLines)
   }
 
   return null
