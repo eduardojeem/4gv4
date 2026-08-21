@@ -239,9 +239,17 @@ export const POS_GUIDE: SectionGuideData = {
     {
       title: 'Cobro y Comprobante Térmico',
       description: 'Presiona "Cobrar" (F4), selecciona el cliente o consumidor final, el método de pago e imprime automáticamente el ticket en tu impresora térmica o envíalo por WhatsApp.'
+    },
+    {
+      title: 'Encontrar productos con financiación',
+      description: 'Activa el filtro "Con cuotas" y compara por cantidad de cuotas, menor tasa, menor cuota o menor total financiado. Las tarjetas muestran el plan destacado y la ficha del producto detalla todas las alternativas.'
+    },
+    {
+      title: 'Aplicar un plan de producto',
+      description: 'En la ficha selecciona "Usar este plan". El POS precarga las condiciones para el ticket completo y verifica cliente, línea de crédito disponible, stock y caja abierta antes de confirmar la venta.'
     }
   ],
-  tip: 'Usa los atajos de teclado (F2 para buscar, F4 para cobrar, Esc para cancelar) para atender el triple de rápido en mostrador.'
+  tip: 'El plan del producto es una sugerencia: revisa cuotas, tasa y total financiado en el cobro. Si cambias las condiciones, el POS las marcará como ajustadas manualmente.'
 }
 
 export const POS_DASHBOARD_GUIDE: SectionGuideData = {
