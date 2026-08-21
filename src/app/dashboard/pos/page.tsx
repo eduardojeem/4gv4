@@ -1433,14 +1433,17 @@ function POSPageContent() {
       // Crear datos del ticket
       const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
       const creditSummaryForReceipt = paymentMethod === 'credit'
-        ? buildPosCreditSummary(cartCalculations.total, creditTerms)
+        ? buildPosCreditSummary(amountDueAfterStoreCredit, creditTerms)
         : null
+      const receiptPaymentAmount = creditSummaryForReceipt?.financedTotal ?? amountDueAfterStoreCredit
       const receiptCalculations = {
         subtotal: cartCalculations.subtotal,
         totalDiscount: cartCalculations.totalDiscount,
         tax: cartCalculations.tax,
         repairCost: cartCalculations.repairCost,
-        total: creditSummaryForReceipt?.financedTotal ?? cartCalculations.total,
+        total: creditSummaryForReceipt
+          ? storeCreditApplied + creditSummaryForReceipt.financedTotal
+          : cartCalculations.total,
         change: cartCalculations.change,
         creditInfo: creditSummaryForReceipt
           ? {
@@ -1449,13 +1452,20 @@ function POSPageContent() {
             }
           : undefined,
       }
-      const payments = [{
+      const payments = [
+        ...(storeCreditApplied > 0 ? [{
+          id: 'store-credit',
+          method: 'store_credit' as const,
+          amount: storeCreditApplied,
+        }] : []),
+        ...(receiptPaymentAmount > 0 ? [{
         id: '1',
-        method: paymentMethod as any,
-        amount: creditSummaryForReceipt?.financedTotal ?? cartCalculations.total,
+        method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
+        amount: receiptPaymentAmount,
         reference: paymentMethod === 'transfer' ? transferReference : undefined,
         cardLast4: paymentMethod === 'card' && cardNumber ? cardNumber.slice(-4) : undefined
-      }]
+        }] : []),
+      ]
 
       const receiptData = createReceiptData(
         combinedCartItems,
@@ -1573,6 +1583,7 @@ function POSPageContent() {
 
 
   const processMixedPayment = useCallback(async () => {
+    const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)
     if (!getCurrentRegister.isOpen) {
       toast.error('La caja está cerrada. No se pueden procesar ventas.')
       return
@@ -1581,7 +1592,7 @@ function POSPageContent() {
       toast.error('No se pudo identificar la sesión de caja abierta.')
       return
     }
-    const paymentValidation = getMixedPaymentValidation(cartCalculations.total, paymentSplit)
+    const paymentValidation = getMixedPaymentValidation(amountDueAfterStoreCredit, paymentSplit)
     if (!paymentValidation.valid) {
       const msg = paymentValidation.code === 'PAYMENT_INCOMPLETE'
         ? `Faltan ${formatCurrency(paymentValidation.remaining)} para completar el pago`
@@ -1612,6 +1623,14 @@ function POSPageContent() {
     const mixedCreditSummary = creditPrincipal > 0
       ? buildPosCreditSummary(creditPrincipal, creditTerms)
       : null
+    const receiptPayments = [
+      ...(storeCreditApplied > 0 ? [{
+        id: 'store-credit',
+        method: 'store_credit' as const,
+        amount: storeCreditApplied,
+      }] : []),
+      ...paymentSplit,
+    ]
     const receiptData = createReceiptData(
       combinedCartItems,
       mixedCreditSummary
@@ -1623,7 +1642,7 @@ function POSPageContent() {
             },
           }
         : cartCalculations,
-      paymentSplit,
+      receiptPayments,
       customer,
       cashierName
     )

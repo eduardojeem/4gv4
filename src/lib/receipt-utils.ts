@@ -10,7 +10,7 @@ export interface CartItem {
 
 export interface PaymentSplit {
   id: string
-  method: 'cash' | 'card' | 'transfer' | 'credit'
+  method: 'cash' | 'card' | 'transfer' | 'credit' | 'store_credit'
   amount: number
   reference?: string
   cardLast4?: string
@@ -345,7 +345,8 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
       cash: '💵 Efectivo',
       card: '💳 Tarjeta',
       transfer: '🏦 Transferencia',
-      credit: '📝 Crédito'
+      credit: '📝 Crédito',
+      store_credit: '💰 Saldo a favor'
     }
     return labels[method as keyof typeof labels] || method
   }

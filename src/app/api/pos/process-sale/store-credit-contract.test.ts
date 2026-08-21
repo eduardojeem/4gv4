@@ -39,4 +39,28 @@ describe('atomic POS store-credit contract', () => {
     expect(page).toContain('store_credit_amount: storeCreditApplied')
     expect(page).not.toContain('await redeemStoreCredit({')
   })
+
+  it('uses the post-credit balance for mixed validation and receipt payments', () => {
+    const page = readFileSync(resolve(workspace, 'src/app/dashboard/pos/page.tsx'), 'utf8')
+
+    expect(page).toContain('getMixedPaymentValidation(amountDueAfterStoreCredit, paymentSplit)')
+    expect(page).toContain('buildPosCreditSummary(amountDueAfterStoreCredit, creditTerms)')
+    expect(page).toContain('const receiptPaymentAmount = creditSummaryForReceipt?.financedTotal ?? amountDueAfterStoreCredit')
+    expect(page).toContain("method: 'store_credit' as const")
+  })
+
+  it('never falls back to v3 when store credit must be debited', () => {
+    const route = readFileSync(resolve(workspace, 'src/app/api/pos/process-sale/route.ts'), 'utf8')
+
+    expect(route).toContain('storeCreditAmount <= 0 && rpcResponse.error')
+  })
+
+  it('keeps checkout open while processing and exposes a mobile action bar', () => {
+    const modal = readFileSync(resolve(workspace, 'src/app/dashboard/pos/components/CheckoutModal.tsx'), 'utf8')
+
+    expect(modal).toContain("if (!open && paymentStatus !== 'processing') onCancel()")
+    expect(modal).toContain('max-sm:h-[100dvh]')
+    expect(modal).toContain('data-testid="pos-checkout-actions"')
+    expect(modal).toContain('max-sm:sticky max-sm:bottom-0')
+  })
 })

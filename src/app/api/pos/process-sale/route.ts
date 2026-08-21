@@ -333,7 +333,7 @@ export const POST = withTenantAuth(
     })
 
     // Fallback a v3 si v4 aún no está cargada en la base de datos y no se utilizó saldo a favor
-    if (rpcResponse.error && (rpcResponse.error.message?.includes('process_pos_sale_atomic_v4') || rpcResponse.error.code === '42883')) {
+    if (storeCreditAmount <= 0 && rpcResponse.error && (rpcResponse.error.message?.includes('process_pos_sale_atomic_v4') || rpcResponse.error.code === '42883')) {
       rpcResponse = await supabase.rpc('process_pos_sale_atomic_v3', {
         p_organization_id: organization.id,
         p_branch_id: branchScope.branchId,

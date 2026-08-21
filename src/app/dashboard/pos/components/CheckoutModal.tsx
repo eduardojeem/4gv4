@@ -186,10 +186,12 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   const displayTotal = paymentMethod === 'credit' ? creditPlan.financedTotal : amountDue
   const creditSummary = activeCustomer ? getCreditSummary(activeCustomer) : null
   return (
-    <Dialog open={isCheckoutOpen} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="flex max-h-[90vh] w-[95vw] flex-col p-0 overflow-hidden sm:max-w-3xl md:max-w-5xl lg:max-w-6xl">
-        <DialogHeader className="px-6 py-4 border-b bg-muted/30">
-          <DialogTitle className="flex items-center gap-2">
+    <Dialog open={isCheckoutOpen} onOpenChange={(open) => {
+      if (!open && paymentStatus !== 'processing') onCancel()
+    }}>
+      <DialogContent showCloseButton={paymentStatus !== 'processing'} className="flex max-h-[92vh] w-[95vw] flex-col overflow-hidden p-0 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-full max-sm:rounded-none sm:max-w-3xl md:max-w-5xl lg:max-w-6xl">
+        <DialogHeader className="shrink-0 border-b bg-muted/30 px-3 py-2 pr-12 sm:px-6 sm:py-4">
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
             <DollarSign className="h-4 w-4 text-primary" />
             Procesar Pago
           </DialogTitle>
@@ -198,8 +200,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-3 border-b bg-background/90">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+        <div className="shrink-0 overflow-x-auto border-b bg-background/90 px-3 py-2 sm:px-6 sm:py-3">
+          <div className="grid min-w-[30rem] grid-cols-4 gap-2 text-sm md:min-w-0">
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
               <p className="text-[11px] text-muted-foreground">Items</p>
               <p className="font-semibold">{cart.length}</p>
@@ -332,7 +334,19 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                      {/* Header Row - Click to toggle */}
                                      <div 
                                         className="p-3 flex items-center justify-between cursor-pointer select-none"
+                                        role="checkbox"
+                                        aria-checked={isSelected}
+                                        tabIndex={paymentStatus === 'processing' ? -1 : 0}
                                         onClick={() => {
+                                           if (isSelected) {
+                                              setSelectedRepairIds(selectedRepairIds.filter(id => id !== repair.id))
+                                           } else {
+                                              setSelectedRepairIds([...selectedRepairIds, repair.id])
+                                           }
+                                        }}
+                                        onKeyDown={(event) => {
+                                           if (event.key !== 'Enter' && event.key !== ' ') return
+                                           event.preventDefault()
                                            if (isSelected) {
                                               setSelectedRepairIds(selectedRepairIds.filter(id => id !== repair.id))
                                            } else {
@@ -546,7 +560,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               formatCurrency={formatCurrency}
             />
 
-            <div className="mt-6 space-y-2">
+            <div data-testid="pos-checkout-actions" className="mt-6 space-y-2 max-sm:sticky max-sm:bottom-0 max-sm:z-20 max-sm:-mx-4 max-sm:border-t max-sm:bg-background/95 max-sm:p-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:backdrop-blur">
               {!isMixedPayment ? (
                 <>
                   {paymentMethod === 'credit' ? (

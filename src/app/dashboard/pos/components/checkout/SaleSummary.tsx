@@ -49,12 +49,11 @@ export function SaleSummary({
   formatCurrency
 }: SaleSummaryProps) {
   const { discount, paymentMethod, creditTerms, storeCreditApplied } = useCheckout()
-  const creditSummary = React.useMemo(() => buildPosCreditSummary(cartCalculations.total, creditTerms), [
-    cartCalculations.total,
-    creditTerms.count,
-    creditTerms.frequency,
-    creditTerms.interestRate,
-  ])
+  const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)
+  const creditSummary = React.useMemo(
+    () => buildPosCreditSummary(amountDueAfterStoreCredit, creditTerms),
+    [amountDueAfterStoreCredit, creditTerms],
+  )
   const isCreditSale = paymentMethod === 'credit'
   const displayedTotal = isCreditSale ? creditSummary.financedTotal : cartCalculations.total
 
@@ -158,9 +157,9 @@ export function SaleSummary({
             <span>- {formatCurrency(storeCreditApplied)}</span>
           </div>
           <div className="flex justify-between font-bold">
-            <span>A cobrar:</span>
+            <span>{isCreditSale ? 'A financiar:' : 'A cobrar:'}</span>
             <span className="text-primary">
-              {formatCurrency(Math.max(0, displayedTotal - storeCreditApplied))}
+              {formatCurrency(isCreditSale ? displayedTotal : amountDueAfterStoreCredit)}
             </span>
           </div>
         </>
