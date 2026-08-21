@@ -126,6 +126,7 @@ import { RepairFormSectionNav } from './repairs/new-repair/RepairFormSectionNav'
 import { RepairReview } from './repairs/new-repair/RepairReview'
 import { RepairFieldHelp } from './repairs/new-repair/RepairFieldHelp'
 import { invalidateBranchCatalogParts } from './repairs/new-repair/branch-catalog-selection'
+import { CatalogSearchDialogFooter } from './repairs/new-repair/CatalogSearchDialogFooter'
 
 export type RepairFormMode = 'add' | 'edit'
 
@@ -3225,6 +3226,7 @@ export function RepairFormDialogV2({
             </div>
           )}
         </div>
+        <CatalogSearchDialogFooter onClose={() => setInventorySearchOpen(false)} />
       </DialogContent>
     </Dialog>
 
@@ -3546,6 +3548,7 @@ export function RepairFormDialogV2({
             </div>
           )}
         </div>
+        <CatalogSearchDialogFooter onClose={() => setServiceSearchIndex(null)} />
       </DialogContent>
     </Dialog>
 
