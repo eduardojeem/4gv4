@@ -1268,57 +1268,75 @@ export function ProductModal({
                                     return (
                                       <div
                                         key={preset}
-                                        className="flex items-center gap-1 rounded-lg border-2 border-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-1 shadow-sm"
+                                        className="flex flex-col gap-1.5 rounded-lg border-2 border-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 p-2 shadow-sm"
                                       >
-                                        <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 shrink-0">{preset}c</span>
-                                        <span className="text-[10px] text-gray-500 shrink-0">Rec.%:</span>
-                                        <input
-                                          type="number"
-                                          step="0.1"
-                                          min={0}
-                                          max={999}
-                                          autoFocus
-                                          value={currentRate}
-                                          onChange={(e) => setChipRate((prev) => ({ ...prev, [preset]: e.target.value }))}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter' || e.key === 'Tab') {
-                                              e.preventDefault()
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 shrink-0">{preset}c</span>
+                                          <span className="text-[10px] text-gray-500 shrink-0">Rec.%:</span>
+                                          <input
+                                            type="number"
+                                            step="0.1"
+                                            min={0}
+                                            max={999}
+                                            autoFocus
+                                            value={currentRate}
+                                            onChange={(e) => setChipRate((prev) => ({ ...prev, [preset]: e.target.value }))}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter' || e.key === 'Tab') {
+                                                e.preventDefault()
+                                                appendInstallment({ count: preset, rate: Number(currentRate) || 0 })
+                                                setExpandedChip(null)
+                                                setChipRate((prev) => { const n = { ...prev }; delete n[preset]; return n })
+                                              }
+                                              if (e.key === 'Escape') {
+                                                setExpandedChip(null)
+                                              }
+                                            }}
+                                            className="w-14 h-6 text-xs rounded border border-indigo-300 px-1.5 bg-white dark:bg-slate-900 dark:border-indigo-700 outline-none focus:ring-1 focus:ring-indigo-500"
+                                            placeholder="0"
+                                          />
+                                          {previewAmount && (
+                                            <span className="text-[10px] text-indigo-600/80 dark:text-indigo-400/80 shrink-0">
+                                              = {formatPrice(previewAmount.installments[0]?.amount ?? 0)}
+                                            </span>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => {
                                               appendInstallment({ count: preset, rate: Number(currentRate) || 0 })
                                               setExpandedChip(null)
                                               setChipRate((prev) => { const n = { ...prev }; delete n[preset]; return n })
-                                            }
-                                            if (e.key === 'Escape') {
-                                              setExpandedChip(null)
-                                            }
-                                          }}
-                                          className="w-14 h-6 text-xs rounded border border-indigo-300 px-1.5 bg-white dark:bg-slate-900 dark:border-indigo-700 outline-none focus:ring-1 focus:ring-indigo-500"
-                                          placeholder="0"
-                                        />
-                                        {previewAmount && (
-                                          <span className="text-[10px] text-indigo-600/80 dark:text-indigo-400/80 shrink-0">
-                                            = {formatPrice(previewAmount.installments[0]?.amount ?? 0)}
-                                          </span>
-                                        )}
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            appendInstallment({ count: preset, rate: Number(currentRate) || 0 })
-                                            setExpandedChip(null)
-                                            setChipRate((prev) => { const n = { ...prev }; delete n[preset]; return n })
-                                          }}
-                                          className="ml-0.5 flex items-center justify-center h-5 w-5 rounded bg-indigo-500 text-white hover:bg-indigo-600 text-xs font-bold shrink-0"
-                                          title="Confirmar (Enter)"
-                                        >
-                                          ✓
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => setExpandedChip(null)}
-                                          className="flex items-center justify-center h-5 w-5 rounded bg-gray-200 dark:bg-gray-700 text-gray-500 hover:text-gray-700 text-xs shrink-0"
-                                          title="Cancelar (Esc)"
-                                        >
-                                          ×
-                                        </button>
+                                            }}
+                                            className="ml-0.5 flex items-center justify-center h-5 w-5 rounded bg-indigo-500 text-white hover:bg-indigo-600 text-xs font-bold shrink-0"
+                                            title="Confirmar (Enter)"
+                                          >
+                                            ✓
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setExpandedChip(null)}
+                                            className="flex items-center justify-center h-5 w-5 rounded bg-gray-200 dark:bg-gray-700 text-gray-500 hover:text-gray-700 text-xs shrink-0"
+                                            title="Cancelar (Esc)"
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 pl-[3.25rem]">
+                                          {[0, 10, 15, 20, 30].map(r => (
+                                            <button
+                                              key={r}
+                                              type="button"
+                                              onClick={() => {
+                                                appendInstallment({ count: preset, rate: r })
+                                                setExpandedChip(null)
+                                                setChipRate((prev) => { const n = { ...prev }; delete n[preset]; return n })
+                                              }}
+                                              className="px-1.5 py-0.5 text-[10px] font-medium rounded-md bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 hover:border-indigo-300 transition-colors"
+                                            >
+                                              {r}%
+                                            </button>
+                                          ))}
+                                        </div>
                                       </div>
                                     )
                                   }
@@ -1396,25 +1414,44 @@ export function ProductModal({
                                             {n === 1 ? '1 cuota' : `${n} cuotas`}
                                             {already && <span className="ml-1 text-[10px] text-indigo-500">✓</span>}
                                           </span>
-                                          <div className="flex items-center gap-1 flex-1">
-                                            <span className="text-[10px] text-gray-400 shrink-0">Rec.%</span>
-                                            <input
-                                              type="number"
-                                              step="0.1"
-                                              min={0}
-                                              max={999}
-                                              disabled={already || !entry.checked}
-                                              value={entry.rate}
-                                              onClick={(e) => e.preventDefault()}
-                                              onChange={(e) =>
-                                                setBulkDraft((prev) => ({
-                                                  ...prev,
-                                                  [n]: { ...prev[n], rate: e.target.value },
-                                                }))
-                                              }
-                                              className="w-14 h-6 text-xs rounded border border-gray-200 dark:border-gray-700 px-1.5 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                                              placeholder="0"
-                                            />
+                                          <div className="flex flex-col gap-1 flex-1">
+                                            <div className="flex items-center gap-1">
+                                              <span className="text-[10px] text-gray-400 shrink-0">Rec.%</span>
+                                              <input
+                                                type="number"
+                                                step="0.1"
+                                                min={0}
+                                                max={999}
+                                                disabled={already || !entry.checked}
+                                                value={entry.rate}
+                                                onClick={(e) => e.preventDefault()}
+                                                onChange={(e) =>
+                                                  setBulkDraft((prev) => ({
+                                                    ...prev,
+                                                    [n]: { ...prev[n], rate: e.target.value },
+                                                  }))
+                                                }
+                                                className="w-14 h-6 text-xs rounded border border-gray-200 dark:border-gray-700 px-1.5 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                placeholder="0"
+                                              />
+                                            </div>
+                                            {entry.checked && !already && (
+                                              <div className="flex items-center gap-1">
+                                                {[0, 10, 15, 20, 30].map(r => (
+                                                  <button
+                                                    key={r}
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.preventDefault()
+                                                      setBulkDraft((prev) => ({ ...prev, [n]: { ...prev[n], rate: String(r) } }))
+                                                    }}
+                                                    className="px-1 py-0.5 text-[9px] font-medium rounded border border-indigo-200/50 dark:border-indigo-800/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors"
+                                                  >
+                                                    {r}%
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
                                           </div>
                                           {previewBulk && (
                                             <span className="text-[10px] text-indigo-600/80 dark:text-indigo-400 shrink-0 ml-auto">
