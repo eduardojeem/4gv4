@@ -4,6 +4,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 import { logger } from '@/lib/logger'
+import { getCustomerWriteErrorResponse } from './customer-api-errors'
 
 const repairCustomerSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -176,7 +177,8 @@ export const POST = withTenantAuth({ permission: [...writePermissions], module: 
     return NextResponse.json({ success: true, data }, { status: 201 })
   } catch (error) {
     logger.error('Repair customers API POST error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo crear el cliente.' }, { status: 500 })
+    const response = getCustomerWriteErrorResponse(error as { code?: string; message?: string })
+    return NextResponse.json(response.body, { status: response.status })
   }
 })
 
