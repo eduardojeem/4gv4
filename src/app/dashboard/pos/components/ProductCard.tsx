@@ -1,7 +1,7 @@
 'use client'
 
 import React, { memo } from 'react'
-import { Plus, Star, Package, ShoppingCart, AlertTriangle, EyeOff, Eye, Info } from 'lucide-react'
+import { Plus, Star, Package, ShoppingCart, AlertTriangle, EyeOff, Eye, Info, CreditCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import { formatStockStatus } from '@/lib/inventory-manager'
 import { resolveProductImageUrl } from '@/lib/images'
 import { cn } from '@/lib/utils'
 import type { Product } from '@/types/product-unified'
+import { getFeaturedProductCreditPlan } from '../lib/product-credit'
 
 interface ProductCardProps {
   product: Product
@@ -50,6 +51,10 @@ export const ProductCard = memo(({
   const hasExplicitWholesale = typeof product.wholesale_price === 'number' && product.wholesale_price > 0
   const computedWholesale = Math.round(price * (1 - (wholesaleDiscountRate / 100)))
   const appliedPrice = isWholesale ? (hasExplicitWholesale ? product.wholesale_price! : computedWholesale) : price
+  const featuredCreditPlan = getFeaturedProductCreditPlan(product, appliedPrice)
+  const financingAriaLabel = featuredCreditPlan
+    ? ` Hasta ${featuredCreditPlan.count} cuotas desde ${formatCurrency(featuredCreditPlan.installmentAmount)} por mes.`
+    : ''
   const imageSrc = product.image ? resolveProductImageUrl(product.image) : ''
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -84,7 +89,7 @@ export const ProductCard = memo(({
         onKeyDown={handleKeyDown}
         tabIndex={0}
         role="button"
-        aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.`}
+        aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.${financingAriaLabel}`}
       >
         <CardContent className="p-2">
           <div className="flex items-center gap-3">
@@ -133,6 +138,14 @@ export const ProductCard = memo(({
                   </>
                 )}
               </div>
+              {featuredCreditPlan && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] text-sky-700 dark:text-sky-300">
+                  <CreditCard className="h-3 w-3" aria-hidden="true" />
+                  <span className="font-semibold">Hasta {featuredCreditPlan.count} cuotas</span>
+                  <span>Desde {formatCurrency(featuredCreditPlan.installmentAmount)}/mes</span>
+                  <span>{featuredCreditPlan.rate === 0 ? 'Sin interés' : `Tasa ${featuredCreditPlan.rate}%`}</span>
+                </div>
+              )}
             </div>
 
             {/* Precios y Acciones */}
@@ -210,7 +223,7 @@ export const ProductCard = memo(({
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="button"
-      aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.`}
+      aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.${financingAriaLabel}`}
     >
       {/* Botón Ver Detalle (Flotante en esquina superior derecha) */}
       {onViewDetail && (
@@ -299,6 +312,20 @@ export const ProductCard = memo(({
               <span className="truncate tabular-nums font-medium">
                 {stock} disp.
               </span>
+            </div>
+          )}
+
+          {featuredCreditPlan && (
+            <div className="rounded-md border border-sky-500/20 bg-sky-500/10 px-1.5 py-1 text-[9px] leading-tight text-sky-800 dark:text-sky-200">
+              <div className="flex items-center gap-1 font-semibold">
+                <CreditCard className="h-2.5 w-2.5" aria-hidden="true" />
+                Hasta {featuredCreditPlan.count} cuotas
+              </div>
+              <div className="mt-0.5 flex flex-wrap gap-x-1">
+                <span>Desde {formatCurrency(featuredCreditPlan.installmentAmount)}/mes</span>
+                <span>·</span>
+                <span>{featuredCreditPlan.rate === 0 ? 'Sin interés' : `Tasa ${featuredCreditPlan.rate}%`}</span>
+              </div>
             </div>
           )}
 
