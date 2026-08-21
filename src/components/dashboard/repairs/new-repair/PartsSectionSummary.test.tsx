@@ -6,14 +6,14 @@ describe('PartsSectionSummary', () => {
   it('separates the parts subtotal from the informational reference price', () => {
     render(<PartsSectionSummary
       itemCount={2}
-      partsSubtotal={120_000}
+      itemsSubtotal={120_000}
       referencePrice={200_000}
-      laborCost={80_000}
     />)
 
-    expect(screen.getByText('2 repuestos')).toBeVisible()
-    expect(screen.getByText('Subtotal de repuestos')).toBeVisible()
+    expect(screen.getByText('2 ítems')).toBeVisible()
+    expect(screen.getByText('Subtotal de servicios y repuestos')).toBeVisible()
     expect(screen.getByText('Precio de referencia')).toBeVisible()
+    expect(screen.getByText('Total calculado antes de descuentos')).toBeVisible()
     expect(screen.getByText(/Referencia informativa/)).toBeVisible()
     expect(screen.getAllByText(/Gs\.\s*120\.000/)).toHaveLength(1)
     expect(screen.getAllByText(/Gs\.\s*200\.000/)).toHaveLength(1)

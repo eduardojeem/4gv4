@@ -5,15 +5,13 @@ import { formatCurrency } from '@/lib/currency'
 
 interface PartsSectionSummaryProps {
   itemCount: number
-  partsSubtotal: number
-  laborCost: number
+  itemsSubtotal: number
   referencePrice: number
 }
 
 export function PartsSectionSummary({
   itemCount,
-  partsSubtotal,
-  laborCost,
+  itemsSubtotal,
   referencePrice,
 }: PartsSectionSummaryProps) {
   return (
@@ -22,13 +20,13 @@ export function PartsSectionSummary({
         <div className="rounded-lg border border-orange-200 bg-background px-3 py-2 dark:border-orange-900/70">
           <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <Package className="h-3.5 w-3.5 text-orange-600" />
-            Subtotal de repuestos
+            Subtotal de servicios y repuestos
           </span>
           <strong className="mt-0.5 block text-base tabular-nums text-orange-700 dark:text-orange-300">
-            {formatCurrency(partsSubtotal)}
+            {formatCurrency(itemsSubtotal)}
           </strong>
           <span className="text-[10px] text-muted-foreground">
-            {itemCount} {itemCount === 1 ? 'repuesto' : 'repuestos'}
+            {itemCount} {itemCount === 1 ? 'ítem' : 'ítems'}
           </span>
         </div>
 
@@ -41,7 +39,7 @@ export function PartsSectionSummary({
             {formatCurrency(referencePrice)}
           </strong>
           <span className="text-[10px] text-muted-foreground">
-            Incluye {formatCurrency(laborCost)} de mano de obra
+            Total calculado antes de descuentos
           </span>
         </div>
       </div>

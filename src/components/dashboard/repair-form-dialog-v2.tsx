@@ -128,7 +128,7 @@ import { RepairFieldHelp } from './repairs/new-repair/RepairFieldHelp'
 import { invalidateBranchCatalogParts } from './repairs/new-repair/branch-catalog-selection'
 import { CatalogSearchDialogFooter } from './repairs/new-repair/CatalogSearchDialogFooter'
 import { PartsSectionSummary } from './repairs/new-repair/PartsSectionSummary'
-import { getRepairLinePresentation } from './repairs/new-repair/repair-line-presentation'
+import { countRepairLineItems, getRepairLinePresentation } from './repairs/new-repair/repair-line-presentation'
 
 export type RepairFormMode = 'add' | 'edit'
 
@@ -2097,9 +2097,8 @@ export function RepairFormDialogV2({
                     </div>
                   </div>
                   <PartsSectionSummary
-                    itemCount={partsFields.length}
-                    partsSubtotal={calculatedPricing.partsPrice}
-                    laborCost={calculatedPricing.laborCost}
+                    itemCount={countRepairLineItems(partsFields)}
+                    itemsSubtotal={calculatedPricing.servicesSubtotal + calculatedPricing.chargedPartsSubtotal}
                     referencePrice={calculatedPricing.subtotal}
                   />
                 </div>
@@ -2153,6 +2152,13 @@ export function RepairFormDialogV2({
                   const linePresentation = getRepairLinePresentation(partsFields, index)
                   const isService = linePresentation.lineType === 'service'
                   const isIncludedMaterial = linePresentation.lineType === 'included_material'
+                  const includedMaterialIndex = linePresentation.includedMaterialIndex
+                  const materialCost = includedMaterialIndex !== null
+                    ? watch(`parts.${includedMaterialIndex}.internalCost`) || 0
+                    : watch(`parts.${index}.internalCost`) || 0
+                  const serviceMargin = total - (materialCost * quantity)
+
+                  if (linePresentation.hidden) return null
                   
                   return (
                     <Card key={field.id} className="border-2 border-orange-200/50 dark:border-orange-900/30 hover:border-orange-300 dark:hover:border-orange-800 transition-colors bg-gradient-to-br from-white to-orange-50/20 dark:from-slate-900/50 dark:to-orange-950/10 shadow-sm">
@@ -2162,7 +2168,7 @@ export function RepairFormDialogV2({
                           <div className="md:col-span-12 flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2 flex-wrap">
                               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-600 dark:to-orange-700 flex items-center justify-center text-xs font-bold text-white shadow-sm">
-                                {index + 1}
+                                {linePresentation.displayNumber}
                               </div>
                               <span className="text-sm font-semibold text-orange-800 dark:text-orange-300">{linePresentation.title}</span>
 
@@ -2204,12 +2210,26 @@ export function RepairFormDialogV2({
                                   Total: {formatCurrency(total)}
                                 </Badge>
                               )}
+                              {isService && total > 0 && (
+                                <Badge variant="outline" className={cn(
+                                  'text-[11px] font-semibold',
+                                  serviceMargin >= 0
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300',
+                                )}>
+                                  Margen mano de obra: {formatCurrency(serviceMargin)}
+                                </Badge>
+                              )}
                             </div>
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => removePart(index)}
+                              onClick={() => removePart(
+                                isService && includedMaterialIndex !== null
+                                  ? [index, includedMaterialIndex]
+                                  : index,
+                              )}
                               className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/50 h-8 w-8 p-0"
                             >
                               <Trash className="h-4 w-4" />
@@ -2272,24 +2292,31 @@ export function RepairFormDialogV2({
 
                           {/* Costo real para margen y reportes */}
                           <div className="md:col-span-2 space-y-2">
-                            <Label className="text-sm font-medium">Costo interno</Label>
+                            <Label className="text-sm font-medium">
+                              {isService ? 'Costo del repuesto/material' : 'Costo interno'}
+                            </Label>
                             <div className="relative">
                               <span className="absolute left-3 top-2.5 font-bold text-xs text-slate-400">₲</span>
                               <Input
                                 type="text"
                                 inputMode="numeric"
-                                disabled={Boolean(productId)}
+                                disabled={!isService && Boolean(productId)}
                                 className="pl-7 font-mono font-medium"
-                                value={formatThousands(watch(`parts.${index}.internalCost`))}
+                                value={formatThousands(materialCost)}
                                 onChange={(e) => {
                                   const raw = parseThousands(e.target.value)
-                                  setValue(`parts.${index}.internalCost`, raw, { shouldDirty: true, shouldValidate: true })
+                                  const targetIndex = includedMaterialIndex ?? index
+                                  setValue(`parts.${targetIndex}.internalCost`, raw, { shouldDirty: true, shouldValidate: true })
                                 }}
                                 placeholder={productId ? 'Desde inventario' : '0'}
                               />
                             </div>
                             <p className="text-[11px] leading-4 text-muted-foreground">
-                              {productId ? 'Se toma del costo de compra del producto.' : 'Se usa para calcular el margen; no se muestra al cliente.'}
+                              {isService
+                                ? 'Se descuenta del precio final para calcular el margen de mano de obra.'
+                                : productId
+                                  ? 'Se toma del costo de compra del producto.'
+                                  : 'Se usa para calcular el margen; no se muestra al cliente.'}
                             </p>
                             {errors.parts?.[index]?.internalCost && (
                               <p className="flex items-center gap-1 text-xs text-red-500">
@@ -2311,6 +2338,13 @@ export function RepairFormDialogV2({
                               max={productId && stockAvailable !== null && stockAvailable !== undefined ? stockAvailable : undefined}
                               className="border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600 font-semibold text-center" 
                               {...register(`parts.${index}.quantity`, { valueAsNumber: true })} 
+                              onChange={(event) => {
+                                const nextQuantity = Math.max(1, Number(event.target.value) || 1)
+                                setValue(`parts.${index}.quantity`, nextQuantity, { shouldDirty: true, shouldValidate: true })
+                                if (isService && includedMaterialIndex !== null) {
+                                  setValue(`parts.${includedMaterialIndex}.quantity`, nextQuantity, { shouldDirty: true, shouldValidate: true })
+                                }
+                              }}
                               placeholder="1"
                             />
                             {productId && stockAvailable !== null && stockAvailable !== undefined && (
@@ -2325,7 +2359,7 @@ export function RepairFormDialogV2({
                           </div>
 
                           {/* Proveedor */}
-                          <div className="md:col-span-2 space-y-2">
+                          {!isService && <div className="md:col-span-2 space-y-2">
                             <Label className="text-sm font-medium flex items-center gap-1">
                               <Package className="h-3 w-3 text-orange-600 dark:text-orange-400" />
                               Proveedor
@@ -2335,10 +2369,10 @@ export function RepairFormDialogV2({
                               placeholder="Ej: Amazon, MercadoLibre..."
                               className="border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600"
                             />
-                          </div>
+                          </div>}
 
                           {/* Número de Parte (opcional) */}
-                          <div className="md:col-span-12 space-y-2">
+                          {!isService && <div className="md:col-span-12 space-y-2">
                             <Label className="text-sm font-medium text-muted-foreground dark:text-slate-400">
                               Número de Parte / SKU (opcional)
                             </Label>
@@ -2347,7 +2381,7 @@ export function RepairFormDialogV2({
                               placeholder="Ej: A2342, SKU-12345..."
                               className="border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600 text-sm"
                             />
-                          </div>
+                          </div>}
                         </div>
                       </CardContent>
                     </Card>
