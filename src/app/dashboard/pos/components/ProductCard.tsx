@@ -5,7 +5,6 @@ import { Plus, Star, Package, ShoppingCart, AlertTriangle, EyeOff, Eye, Info, Cr
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { formatCurrency } from '@/lib/currency'
 import { formatStockStatus } from '@/lib/inventory-manager'
 import { resolveProductImageUrl } from '@/lib/images'
 import { cn } from '@/lib/utils'
@@ -17,7 +16,7 @@ interface ProductCardProps {
   addToCart: (product: Product) => void
   formatCurrency: (amount: number) => string
   viewMode?: 'grid' | 'list'
-  inventoryManager?: any
+  inventoryManager?: unknown
   isWholesale?: boolean
   wholesaleDiscountRate?: number
   onQuickAdd?: (product: Product, quantity: number) => void
@@ -39,7 +38,6 @@ export const ProductCard = memo(({
   onViewDetail,
   cartQuantity = 0,
   showStock = true,
-  showBarcode = false
 }: ProductCardProps) => {
   const stock = product.stock_quantity || 0
   const minStock = product.min_stock || 5
@@ -56,6 +54,8 @@ export const ProductCard = memo(({
     ? ` Hasta ${featuredCreditPlan.count} cuotas desde ${formatCurrency(featuredCreditPlan.installmentAmount)} por mes.`
     : ''
   const imageSrc = product.image ? resolveProductImageUrl(product.image) : ''
+  const productFlags = product as Product & { is_featured?: boolean; isFeatured?: boolean }
+  const isFeatured = Boolean(product.featured || productFlags.is_featured || productFlags.isFeatured)
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -72,8 +72,6 @@ export const ProductCard = memo(({
     }
   }
 
-  // Stock bar percentage
-  const stockPercent = Math.min(100, Math.max(0, (stock / Math.max(minStock * 3, 1)) * 100))
   const stockBarColor = stockStatus?.status === 'out' ? 'bg-red-500' 
     : stockStatus?.status === 'critical' ? 'bg-orange-500' 
     : stockStatus?.status === 'low' ? 'bg-amber-400' 
@@ -106,7 +104,7 @@ export const ProductCard = memo(({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-0.5">
                 <h3 className="font-medium text-xs truncate">{product.name}</h3>
-                {Boolean(product.featured || (product as any).is_featured || (product as any).isFeatured) && (
+                {isFeatured && (
                   <Star className="h-3 w-3 text-amber-500 fill-amber-500 shrink-0" />
                 )}
                 {product.is_active === false && (
@@ -268,7 +266,7 @@ export const ProductCard = memo(({
       )}
 
       {/* Featured star */}
-      {Boolean(product.featured || (product as any).is_featured || (product as any).isFeatured) && (
+      {isFeatured && (
         <div className="absolute top-1.5 left-1.5 z-10">
           {cartQuantity === 0 && <Star className="h-3 w-3 text-amber-500 fill-amber-500 drop-shadow-xs" />}
         </div>
