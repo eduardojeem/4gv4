@@ -87,6 +87,9 @@ export interface RepairCostSummary {
   revisionNumber?: number | null
   laborAmount: number
   partsSubtotal: number
+  servicesSubtotal?: number
+  chargedPartsSubtotal?: number
+  includedMaterialsInternalCost?: number
   partsInternalCost: number
   additionalCharges: number
   deductions: number

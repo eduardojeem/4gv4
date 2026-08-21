@@ -50,6 +50,9 @@ interface SupabaseCostRevision {
     subtotal_before_discount: number | string
     final_total: number | string
     balance_snapshot: number | string
+    services_subtotal?: number | string
+    charged_parts_subtotal?: number | string
+    included_materials_internal_cost?: number | string
     tax_breakdown?: Array<{ rate: number; grossAmount: number; taxableBase: number; taxAmount: number }>
 }
 
@@ -164,6 +167,11 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
     const costRevision = Array.isArray(r.currentCostRevision)
         ? (r.currentCostRevision[0] ?? null)
         : (r.currentCostRevision ?? null)
+    const hasClassifiedRevisionTotals = Boolean(costRevision && (
+        Number(costRevision.services_subtotal) > 0 ||
+        Number(costRevision.charged_parts_subtotal) > 0 ||
+        Number(costRevision.included_materials_internal_cost) > 0
+    ))
     return {
         id: r.id,
         ticketNumber: r.ticket_number,
@@ -207,6 +215,11 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
             revisionNumber: Number(costRevision.revision_number) || 0,
             laborAmount: Number(r.labor_cost) || 0,
             partsSubtotal: Number(costRevision.parts_subtotal) || 0,
+            servicesSubtotal: Number(costRevision.services_subtotal) || 0,
+            chargedPartsSubtotal: hasClassifiedRevisionTotals
+                ? Number(costRevision.charged_parts_subtotal) || 0
+                : Number(costRevision.parts_subtotal) || 0,
+            includedMaterialsInternalCost: Number(costRevision.included_materials_internal_cost) || 0,
             partsInternalCost: Number(costRevision.parts_internal_cost) || 0,
             additionalCharges: Number(r.additional_charges) || 0,
             deductions: Number(r.deductions) || 0,

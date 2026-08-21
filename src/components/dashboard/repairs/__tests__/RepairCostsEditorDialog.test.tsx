@@ -29,7 +29,7 @@ describe('RepairCostsEditorDialog', () => {
     expect(screen.getByText('Subtotal antes de descuentos')).toBeVisible()
     expect(screen.getByText('IVA incluido')).toBeVisible()
 
-    const labor = screen.getByLabelText('Mano de obra fija')
+    const labor = screen.getByLabelText('Mano de obra adicional opcional')
     await user.clear(labor)
     await user.type(labor, '120000')
     expect(screen.getByTestId('editor-final-total')).toHaveTextContent('220.000')
@@ -59,7 +59,7 @@ describe('RepairCostsEditorDialog', () => {
 
     expect(screen.getByText('Cliente mayorista')).toBeVisible()
     expect(screen.getByText('Servicio técnico')).toBeVisible()
-    expect(screen.getByText('La mano de obra fue precargada para este servicio.')).toBeVisible()
+    expect(screen.getByText('El servicio ya conserva su precio completo. Usá este campo solo si existe una mano de obra adicional explícita.')).toBeVisible()
   })
 
   it('identifies a parts-only repair and keeps labor optional at zero', () => {
@@ -67,7 +67,7 @@ describe('RepairCostsEditorDialog', () => {
 
     expect(screen.getByText('Solo repuestos')).toBeVisible()
     expect(screen.getByText('Esta reparación no tiene mano de obra cargada. Podés dejarla en cero.')).toBeVisible()
-    expect(screen.getByLabelText('Mano de obra opcional')).toHaveValue(0)
+    expect(screen.getByLabelText('Mano de obra adicional opcional')).toHaveValue(0)
   })
 
   it('adds a manual service as a classified service line when it is not in the catalog', async () => {
@@ -80,7 +80,7 @@ describe('RepairCostsEditorDialog', () => {
     const serviceForm = screen.getByText('Agregar servicio manual').closest('section')!
     await user.click(within(serviceForm).getByRole('button', { name: 'Agregar servicio' }))
 
-    expect(screen.getByLabelText('Mano de obra fija')).toHaveValue(0)
+    expect(screen.getByLabelText('Mano de obra adicional opcional')).toHaveValue(0)
     expect(screen.getAllByText('Servicio')[0]).toBeVisible()
     expect(screen.getByText('Servicio técnico')).toBeVisible()
   })

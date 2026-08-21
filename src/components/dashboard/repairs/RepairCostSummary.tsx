@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { formatCurrency } from '@/lib/currency'
 import type { RepairCostSummary as RepairCostSummaryType } from '@/types/repairs'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
 
 type HistoryRow = {
   id: string
@@ -19,17 +20,16 @@ type HistoryRow = {
 
 export function RepairCostSummary({
   summary,
-  partsCount,
   editable,
   repairId,
   onEdit,
 }: {
   summary: RepairCostSummaryType
-  partsCount: number
   editable: boolean
   repairId?: string
   onEdit: () => void
 }) {
+  const canViewCost = useCanViewCost()
   const [history, setHistory] = useState<HistoryRow[]>([])
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export function RepairCostSummary({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">Costos de la reparación</h3>
-          <p className="text-xs text-muted-foreground">Mano de obra, repuestos y ajustes con IVA incluido</p>
+          <p className="text-xs text-muted-foreground">Servicios, repuestos cobrados y ajustes con IVA incluido</p>
         </div>
         {editable && (
           <Button type="button" variant="outline" size="sm" onClick={onEdit} aria-label="Editar costos y repuestos">
@@ -61,8 +61,10 @@ export function RepairCostSummary({
 
       <div className="grid gap-3 md:grid-cols-[1fr_1fr_1.2fr]">
         <dl className="space-y-2 rounded-lg border bg-card p-4 text-sm">
-          <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Mano de obra</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.laborAmount)}</dd></div>
-          <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Repuestos ({partsCount})</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.partsSubtotal)}</dd></div>
+          <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Servicios</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.servicesSubtotal ?? 0)}</dd></div>
+          <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Repuestos cobrados</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.chargedPartsSubtotal ?? summary.partsSubtotal)}</dd></div>
+          {summary.laborAmount > 0 && <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Mano de obra adicional</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.laborAmount)}</dd></div>}
+          {canViewCost && (summary.includedMaterialsInternalCost ?? 0) > 0 && <div className="rounded-md bg-amber-50 px-2 py-1.5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200"><div className="flex justify-between gap-3"><dt>Material incluido · interno</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.includedMaterialsInternalCost ?? 0)}</dd></div><p className="text-[11px]">Gs. 0 adicionales al cliente</p></div>}
           {summary.additionalCharges > 0 && <div className="flex justify-between gap-3"><dt>Cargos adicionales</dt><dd>{formatCurrency(summary.additionalCharges)}</dd></div>}
           <Separator />
           <div className="flex justify-between gap-3"><dt>Subtotal</dt><dd className="font-semibold">{formatCurrency(summary.subtotalBeforeDiscount)}</dd></div>

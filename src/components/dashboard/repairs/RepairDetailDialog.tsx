@@ -36,6 +36,7 @@ import { Repair, RepairDeliveryOutcome, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { getAvailableTransitions } from '@/lib/repairs/state-machine'
 import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
+import { normalizeRepairLineType } from '@/lib/repairs/line-types'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { PatternDrawer } from './PatternDrawer'
@@ -162,7 +163,14 @@ export function RepairDetailDialog({
   const isPaused = activeRepair.status === 'pausado'
   const isCancelled = activeRepair.status === 'cancelado'
   const currentStepIndex = isPaused ? 2 : STATUS_FLOW.indexOf(activeRepair.status)
-  const partsTotal = (activeRepair.parts || []).reduce((total, part) => total + part.cost * part.quantity, 0)
+  const lineTotals = (activeRepair.parts || []).reduce((totals, part) => {
+    const amount = Math.max(0, part.cost * part.quantity - (part.discountAmount ?? 0))
+    const lineType = normalizeRepairLineType(part.lineType)
+    if (lineType === 'service') totals.services += amount
+    else if (lineType === 'included_material') totals.includedInternal += (part.internalCost ?? 0) * part.quantity
+    else totals.chargedParts += amount
+    return totals
+  }, { services: 0, chargedParts: 0, includedInternal: 0 })
   const financial = getRepairFinancialPresentation({
     status: activeRepair.status,
     finalCost: activeRepair.finalCost,
@@ -183,6 +191,7 @@ export function RepairDetailDialog({
       unitCost: part.internalCost ?? part.cost,
       discountAmount: part.discountAmount ?? 0,
       taxRate: part.taxRate ?? configuredTaxRate,
+      lineType: part.lineType,
     })),
     additionalCharges: activeRepair.additionalCharges || 0,
     deductions: activeRepair.deductions || 0,
@@ -869,17 +878,12 @@ export function RepairDetailDialog({
                         * Precio final pendiente — el saldo se calculará al definirlo
                       </p>
                     ) : (
-                      <div className="flex items-center gap-3 text-muted-foreground text-xs pt-1">
-                        <span>
-                          <span>Mano de obra </span>
-                          <span className="font-semibold">{formatCurrency(repair.laborCost || 0)}</span>
-                        </span>
-                        <span aria-hidden="true">•</span>
-                        <span>
-                          <span>Piezas </span>
-                          <span className="font-semibold">{formatCurrency(partsTotal)}</span>
-                        </span>
-                      </div>
+                      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg bg-background/60 p-2 text-xs">
+                        <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Servicios</dt><dd className="font-semibold tabular-nums">{formatCurrency(lineTotals.services)}</dd></div>
+                        <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Repuestos cobrados</dt><dd className="font-semibold tabular-nums">{formatCurrency(lineTotals.chargedParts)}</dd></div>
+                        {(repair.laborCost || 0) > 0 && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Mano de obra adicional</dt><dd className="font-semibold tabular-nums">{formatCurrency(repair.laborCost || 0)}</dd></div>}
+                        {showSensitiveData && lineTotals.includedInternal > 0 && <div className="col-span-2 flex justify-between gap-2 border-t pt-1 text-amber-700 dark:text-amber-300"><dt>Material incluido · costo interno</dt><dd className="font-semibold tabular-nums">{formatCurrency(lineTotals.includedInternal)}</dd></div>}
+                      </dl>
                     )}
 
                     {onQuickPay && financial.canCollect && (
@@ -1217,7 +1221,6 @@ export function RepairDetailDialog({
                   <TabsContent value="finance" className="mt-4 space-y-5">
                     <RepairCostSummary
                       summary={repairCostSummary}
-                      partsCount={activeRepair.parts?.length || 0}
                       editable={activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado'}
                       repairId={activeRepair.id}
                       onEdit={() => setIsCostsEditorOpen(true)}
