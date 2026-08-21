@@ -1,4 +1,6 @@
 import { getCurrencyFractionDigits } from '@/lib/currency'
+import type { RepairLineType } from './line-types'
+import { normalizeRepairLineType } from './line-types'
 
 export type RepairPricingMode = 'automatic' | 'budget' | 'manual'
 
@@ -6,6 +8,7 @@ type RepairPricingPart = {
   cost?: number | null
   internalCost?: number | null
   quantity?: number | null
+  lineType?: RepairLineType | null
 }
 
 function nonNegative(value: unknown) {
@@ -37,16 +40,36 @@ export function calculateRepairPricing(input: RepairPricingInput) {
     : nonNegative(input.finalCost)
   const discountAmount = roundMoney(nonNegative(input.discountAmount), currency)
   const paidAmount = roundMoney(nonNegative(input.paidAmount), currency)
-  const partsPrice = (input.parts ?? []).reduce((total, part) => {
-    return total + nonNegative(part.cost) * nonNegative(part.quantity)
-  }, 0)
-  const partsInternalCost = (input.parts ?? []).reduce((total, part) => {
-    return total + nonNegative(part.internalCost) * nonNegative(part.quantity)
-  }, 0)
+  const lineTotals = (input.parts ?? []).reduce((totals, part) => {
+    const lineType = normalizeRepairLineType(part.lineType)
+    const quantity = nonNegative(part.quantity)
+    const customerAmount = nonNegative(part.cost) * quantity
+    const internalAmount = nonNegative(part.internalCost) * quantity
 
-  const roundedPartsPrice = roundMoney(partsPrice, currency)
-  const roundedInternalCost = roundMoney(partsInternalCost, currency)
-  const automaticSubtotal = roundMoney(enteredLabor + roundedPartsPrice, currency)
+    if (lineType === 'service') {
+      totals.servicesSubtotal += customerAmount
+    } else if (lineType === 'included_material') {
+      totals.includedMaterialsInternalCost += internalAmount
+      totals.partsInternalCost += internalAmount
+    } else {
+      totals.chargedPartsSubtotal += customerAmount
+      totals.partsInternalCost += internalAmount
+    }
+
+    return totals
+  }, {
+    servicesSubtotal: 0,
+    chargedPartsSubtotal: 0,
+    includedMaterialsInternalCost: 0,
+    partsInternalCost: 0,
+  })
+
+  const servicesSubtotal = roundMoney(lineTotals.servicesSubtotal, currency)
+  const chargedPartsSubtotal = roundMoney(lineTotals.chargedPartsSubtotal, currency)
+  const includedMaterialsInternalCost = roundMoney(lineTotals.includedMaterialsInternalCost, currency)
+  const roundedInternalCost = roundMoney(lineTotals.partsInternalCost, currency)
+  const billableLinesSubtotal = roundMoney(servicesSubtotal + chargedPartsSubtotal, currency)
+  const automaticSubtotal = roundMoney(enteredLabor + billableLinesSubtotal, currency)
   const automaticTotal = roundMoney(Math.max(0, automaticSubtotal - discountAmount), currency)
 
   let laborCost = roundMoney(enteredLabor, currency)
@@ -54,17 +77,21 @@ export function calculateRepairPricing(input: RepairPricingInput) {
 
   if (mode === 'budget') {
     customerTotal = roundMoney(enteredFinal ?? 0, currency)
-    laborCost = roundMoney(Math.max(0, customerTotal + discountAmount - roundedPartsPrice), currency)
+    laborCost = roundMoney(Math.max(0, customerTotal + discountAmount - billableLinesSubtotal), currency)
   } else if (mode === 'manual') {
     customerTotal = roundMoney(enteredFinal ?? automaticTotal, currency)
   }
 
-  const subtotal = roundMoney(laborCost + roundedPartsPrice, currency)
+  const subtotal = roundMoney(laborCost + billableLinesSubtotal, currency)
 
   return {
     mode,
     laborCost,
-    partsPrice: roundedPartsPrice,
+    servicesSubtotal,
+    chargedPartsSubtotal,
+    includedMaterialsInternalCost,
+    // Alias kept for callers that still render the separately charged parts total.
+    partsPrice: chargedPartsSubtotal,
     partsInternalCost: roundedInternalCost,
     subtotal,
     discountAmount,
@@ -90,7 +117,9 @@ export function validateRepairPricing(input: RepairPricingInput): RepairPricingV
   if ((result.mode === 'budget' || result.mode === 'manual') && input.finalCost == null) {
     violations.push('FINAL_REQUIRED')
   }
-  if (result.mode === 'budget' && result.customerTotal + result.discountAmount < result.partsPrice) {
+  if (result.mode === 'budget'
+    && result.customerTotal + result.discountAmount
+      < result.servicesSubtotal + result.chargedPartsSubtotal) {
     violations.push('FINAL_BELOW_PARTS_PRICE')
   }
   if (result.customerTotal < result.paidAmount) violations.push('FINAL_BELOW_PAID_AMOUNT')
