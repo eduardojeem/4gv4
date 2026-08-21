@@ -14,6 +14,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
+import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/auth-context'
 import { useBranch } from '@/contexts/branch-context'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
@@ -127,6 +128,7 @@ import { RepairFieldHelp } from './repairs/new-repair/RepairFieldHelp'
 import { invalidateBranchCatalogParts } from './repairs/new-repair/branch-catalog-selection'
 import { CatalogSearchDialogFooter } from './repairs/new-repair/CatalogSearchDialogFooter'
 import { PartsSectionSummary } from './repairs/new-repair/PartsSectionSummary'
+import { getRepairLinePresentation } from './repairs/new-repair/repair-line-presentation'
 
 export type RepairFormMode = 'add' | 'edit'
 
@@ -230,6 +232,23 @@ function findFirstErrorPath(value: unknown, prefix = ''): string | null {
     if (key === 'message' || key === 'type' || key === 'ref' || key === 'types' || key === 'root') continue
     const path = findFirstErrorPath(nestedValue, prefix ? `${prefix}.${key}` : key)
     if (path) return path
+  }
+
+  return null
+}
+
+function findFirstErrorMessage(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null
+
+  const record = value as Record<string, unknown>
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message
+  }
+
+  for (const [key, nestedValue] of Object.entries(record)) {
+    if (key === 'type' || key === 'ref' || key === 'types' || key === 'root') continue
+    const msg = findFirstErrorMessage(nestedValue)
+    if (msg) return msg
   }
 
   return null
@@ -725,6 +744,16 @@ export function RepairFormDialogV2({
     }
   }
 
+  const handleFormError = (formErrors: import('react-hook-form').FieldErrors<RepairFormData>) => {
+    logger.warn('Repair form validation failed', { formErrors })
+    const firstMsg = findFirstErrorMessage(formErrors)
+    if (firstMsg) {
+      toast.error(`Dato obligatorio: ${firstMsg}`)
+    } else {
+      toast.error('Completa los campos obligatorios del formulario.')
+    }
+  }
+
   const handleReviewForm = (data: RepairFormData) => {
     setActiveSection('review')
     setReviewData(data)
@@ -907,7 +936,7 @@ export function RepairFormDialogV2({
         <div className="flex-1 overflow-y-auto bg-muted/20 px-3 py-4 sm:px-6 sm:py-5 dark:bg-slate-950">
           <form
             id={formId}
-            onSubmit={handleSubmit(mode === 'add' ? handleReviewForm : onSubmitForm)}
+            onSubmit={handleSubmit(mode === 'add' ? handleReviewForm : onSubmitForm, handleFormError)}
             className="mx-auto max-w-[1800px] space-y-5"
           >
             {/* Banner de Advertencia si la Reparación ya fue Entregada */}
@@ -2121,6 +2150,9 @@ export function RepairFormDialogV2({
                   const productId = watch(`parts.${index}.productId`)
                   const stockAvailable = watch(`parts.${index}.stockAvailable`)
                   const total = cost * quantity
+                  const linePresentation = getRepairLinePresentation(partsFields, index)
+                  const isService = linePresentation.lineType === 'service'
+                  const isIncludedMaterial = linePresentation.lineType === 'included_material'
                   
                   return (
                     <Card key={field.id} className="border-2 border-orange-200/50 dark:border-orange-900/30 hover:border-orange-300 dark:hover:border-orange-800 transition-colors bg-gradient-to-br from-white to-orange-50/20 dark:from-slate-900/50 dark:to-orange-950/10 shadow-sm">
@@ -2132,9 +2164,19 @@ export function RepairFormDialogV2({
                               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-600 dark:to-orange-700 flex items-center justify-center text-xs font-bold text-white shadow-sm">
                                 {index + 1}
                               </div>
-                              <span className="text-sm font-semibold text-orange-800 dark:text-orange-300">Repuesto {index + 1}</span>
+                              <span className="text-sm font-semibold text-orange-800 dark:text-orange-300">{linePresentation.title}</span>
 
-                              {productId ? (
+                              {isService ? (
+                                <Badge variant="outline" className="bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800 text-[11px] gap-1">
+                                  <Wrench className="h-3 w-3" />
+                                  Catálogo de servicios
+                                </Badge>
+                              ) : isIncludedMaterial ? (
+                                <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 text-[11px] gap-1">
+                                  <Package className="h-3 w-3" />
+                                  Incluido en el servicio
+                                </Badge>
+                              ) : productId ? (
                                 <Badge variant="outline" className="bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800 text-[11px] gap-1">
                                   <Package className="h-3 w-3 text-cyan-600 dark:text-cyan-400" />
                                   Inventario Local
@@ -2178,7 +2220,7 @@ export function RepairFormDialogV2({
                           <div className="md:col-span-5 space-y-2">
                             <Label className="text-sm font-medium flex items-center gap-1">
                               <Package className="h-3 w-3 text-orange-600 dark:text-orange-400" />
-                              Nombre del Repuesto
+                              {linePresentation.nameLabel}
                               <span className="text-red-500">*</span>
                             </Label>
                             <Input 
@@ -2198,7 +2240,7 @@ export function RepairFormDialogV2({
                           <div className="md:col-span-3 space-y-2">
                             <Label className="text-sm font-medium flex items-center gap-1">
                               <DollarSign className="h-3 w-3 text-orange-600 dark:text-orange-400" />
-                              Precio al cliente
+                              {linePresentation.clientPriceLabel}
                             </Label>
                             <div className="relative">
                               <span className="absolute left-3 top-2.5 font-bold text-xs text-orange-600 dark:text-orange-400">₲</span>
@@ -2207,6 +2249,7 @@ export function RepairFormDialogV2({
                                 inputMode="numeric"
                                 className="pl-7 font-mono font-bold border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600" 
                                 value={formatThousands(watch(`parts.${index}.cost`))}
+                                disabled={isIncludedMaterial}
                                 onChange={(e) => {
                                   const raw = parseThousands(e.target.value)
                                   setValue(`parts.${index}.cost`, raw, { shouldDirty: true, shouldValidate: true })
@@ -2214,6 +2257,11 @@ export function RepairFormDialogV2({
                                 placeholder="0"
                               />
                             </div>
+                            {isIncludedMaterial && (
+                              <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                                Gs. 0 adicional: ya está incluido en el precio del servicio.
+                              </p>
+                            )}
                             {errors.parts?.[index]?.cost && (
                               <p className="flex items-center gap-1 text-xs text-red-500">
                                 <AlertCircle className="h-3 w-3" />
