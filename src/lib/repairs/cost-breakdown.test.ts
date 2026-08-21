@@ -57,6 +57,26 @@ describe('calculateRepairCost', () => {
     expect(result.finalTotal).toBe(0)
     expect(result.balance).toBe(0)
   })
+
+  it('groups services, charged parts and included materials without double charging', () => {
+    const result = calculateRepairCost({
+      ...baseInput,
+      laborAmount: 0,
+      additionalCharges: 0,
+      discountAmount: 0,
+      paidAmount: 0,
+      parts: [
+        { ...baseInput.parts[0], key: 'service', lineType: 'service', quantity: 1, unitPrice: 250_000, unitCost: 0, discountAmount: 0 },
+        { ...baseInput.parts[0], key: 'included', lineType: 'included_material', quantity: 1, unitPrice: 0, unitCost: 100_000, discountAmount: 0 },
+      ],
+    })
+
+    expect(result.servicesSubtotal).toBe(250_000)
+    expect(result.chargedPartsSubtotal).toBe(0)
+    expect(result.includedMaterialsInternalCost).toBe(100_000)
+    expect(result.partsSubtotal).toBe(250_000)
+    expect(result.finalTotal).toBe(250_000)
+  })
 })
 
 describe('validateRepairCost', () => {
@@ -88,6 +108,17 @@ describe('validateRepairCost', () => {
       isAdmin: true,
       overrideReason: 'Liquidación de repuesto dañado',
     })).not.toContainEqual(expect.objectContaining({ code: 'PART_BELOW_COST' }))
+  })
+
+  it('does not flag an included material as a below-cost sale', () => {
+    const input = {
+      ...baseInput,
+      parts: [{ ...baseInput.parts[0], lineType: 'included_material' as const, unitPrice: 0, unitCost: 100_000, discountAmount: 0 }],
+      discountAmount: 0,
+    }
+
+    expect(validateRepairCost(input, { maxDiscountPercent: 20, isAdmin: false }))
+      .not.toContainEqual(expect.objectContaining({ code: 'PART_BELOW_COST' }))
   })
 
   it('reports invalid amounts, excessive row discounts and a total below payments', () => {

@@ -39,6 +39,7 @@ interface SupabaseRepairPart {
     product_id?: string | null
     discount_amount?: number | string | null
     tax_rate?: number | string | null
+    line_type?: 'service' | 'included_material' | 'charged_part' | null
 }
 
 interface SupabaseCostRevision {
@@ -294,6 +295,7 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
             productId: p.product_id ?? null,
             discountAmount: Number(p.discount_amount) || 0,
             taxRate: ([0, 5, 10].includes(Number(p.tax_rate)) ? Number(p.tax_rate) : 10) as 0 | 5 | 10,
+            lineType: p.line_type || 'charged_part',
         })),
         images: Array.isArray(r.images)
             ? r.images.map((img: SupabaseRepairImage) => ({

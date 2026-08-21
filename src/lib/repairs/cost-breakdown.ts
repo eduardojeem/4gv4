@@ -1,4 +1,6 @@
 import { getCurrencyFractionDigits } from '@/lib/currency'
+import type { RepairLineType } from './line-types'
+import { normalizeRepairLineType } from './line-types'
 
 export type RepairTaxRate = 0 | 5 | 10
 
@@ -9,6 +11,7 @@ export type RepairCostPartInput = {
   unitCost: number
   discountAmount: number
   taxRate: RepairTaxRate
+  lineType?: RepairLineType | null
 }
 
 export type RepairCostInput = {
@@ -52,6 +55,9 @@ export type RepairTaxBreakdown = {
 export type RepairCostSummary = {
   laborAmount: number
   partsSubtotal: number
+  servicesSubtotal: number
+  chargedPartsSubtotal: number
+  includedMaterialsInternalCost: number
   partsInternalCost: number
   additionalCharges: number
   deductions: number
@@ -90,19 +96,33 @@ export function calculateRepairCost(input: RepairCostInput): RepairCostSummary {
   ]
   let partsSubtotal = 0
   let partsInternalCost = 0
+  let servicesSubtotal = 0
+  let chargedPartsSubtotal = 0
+  let includedMaterialsInternalCost = 0
 
   for (const part of input.parts ?? []) {
     const quantity = finiteNonNegative(part.quantity)
     const gross = finiteNonNegative(part.unitPrice) * quantity
     const rowDiscount = Math.min(gross, finiteNonNegative(part.discountAmount))
     const subtotal = moneyRound(gross - rowDiscount, currency)
+    const lineType = normalizeRepairLineType(part.lineType)
     partsSubtotal += subtotal
-    partsInternalCost += finiteNonNegative(part.unitCost) * quantity
+    if (lineType === 'service') {
+      servicesSubtotal += subtotal
+    } else {
+      const internalCost = finiteNonNegative(part.unitCost) * quantity
+      partsInternalCost += internalCost
+      if (lineType === 'included_material') includedMaterialsInternalCost += internalCost
+      else chargedPartsSubtotal += subtotal
+    }
     components.push({ rate: part.taxRate, gross: subtotal })
   }
 
   partsSubtotal = moneyRound(partsSubtotal, currency)
   partsInternalCost = moneyRound(partsInternalCost, currency)
+  servicesSubtotal = moneyRound(servicesSubtotal, currency)
+  chargedPartsSubtotal = moneyRound(chargedPartsSubtotal, currency)
+  includedMaterialsInternalCost = moneyRound(includedMaterialsInternalCost, currency)
   const subtotalBeforeDiscount = moneyRound(laborAmount + additionalCharges + partsSubtotal, currency)
   const finalTotal = moneyRound(
     Math.max(0, subtotalBeforeDiscount - discountAmount - deductions),
@@ -148,6 +168,9 @@ export function calculateRepairCost(input: RepairCostInput): RepairCostSummary {
   return {
     laborAmount,
     partsSubtotal,
+    servicesSubtotal,
+    chargedPartsSubtotal,
+    includedMaterialsInternalCost,
     partsInternalCost,
     additionalCharges,
     deductions,
@@ -192,7 +215,8 @@ export function validateRepairCost(
     const netUnitPrice = part.quantity > 0
       ? Math.max(0, gross - part.discountAmount) / part.quantity
       : 0
-    if (part.quantity > 0 && netUnitPrice < part.unitCost) {
+    if (normalizeRepairLineType(part.lineType) === 'charged_part'
+      && part.quantity > 0 && netUnitPrice < part.unitCost) {
       needsAdminOverride = true
       if (!policy.isAdmin) violations.push({ code: 'PART_BELOW_COST', partKey: part.key })
     }

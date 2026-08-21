@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { catalogItemPrice, toRepairPart } from './repair-catalog-selection'
+import { catalogItemPrice, toRepairPart, toRepairServiceLines } from './repair-catalog-selection'
 
 const part = {
   id: 'part-1', name: 'Módulo A05', sku: 'MOD-A05', sale_price: 120_000,
@@ -18,6 +18,14 @@ describe('repair catalog selection', () => {
       name: 'Módulo A05', cost: 90_000, internalCost: 70_000, quantity: 1,
       stockAvailable: 4, supplier: 'Inventario Local', partNumber: 'MOD-A05',
       productId: 'part-1',
+      lineType: 'charged_part',
     })
+  })
+
+  it('keeps the full service price and separates its included material cost', () => {
+    expect(toRepairServiceLines({ ...part, id: 'service-1', name: 'Cambio de módulo', unit_measure: 'servicio' }, true)).toEqual([
+      expect.objectContaining({ name: 'Cambio de módulo', cost: 90_000, internalCost: 0, productId: 'service-1', lineType: 'service' }),
+      expect.objectContaining({ name: 'Material incluido · Cambio de módulo', cost: 0, internalCost: 70_000, productId: null, lineType: 'included_material' }),
+    ])
   })
 })

@@ -1,4 +1,5 @@
 import type { RepairTaxRate } from './cost-breakdown'
+import type { RepairLineType } from './line-types'
 
 type RpcClient = {
   rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{
@@ -17,6 +18,7 @@ export type RepairCostPartIntent = {
   unitCost?: number
   discountAmount: number
   taxRate?: RepairTaxRate
+  lineType?: RepairLineType
 }
 
 export type RepairCostSaveIntent = {
@@ -126,6 +128,7 @@ export async function saveRepairCostRevision(
       unit_cost: part.unitCost ?? null,
       discount_amount: part.discountAmount,
       tax_rate: part.taxRate ?? null,
+      line_type: part.lineType ?? 'charged_part',
     })),
     p_additional_charges: intent.additionalCharges,
     p_deductions: intent.deductions,

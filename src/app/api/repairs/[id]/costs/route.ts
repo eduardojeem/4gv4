@@ -20,6 +20,7 @@ const partSchema = z.object({
   unitCost: z.coerce.number().finite().nonnegative().optional(),
   discountAmount: z.coerce.number().finite().nonnegative().default(0),
   taxRate: z.union([z.literal(0), z.literal(5), z.literal(10)]).optional(),
+  lineType: z.enum(['service', 'included_material', 'charged_part']).default('charged_part'),
 })
 
 const saveSchema = z.object({

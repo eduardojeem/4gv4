@@ -190,9 +190,10 @@ export const RepairPartSchema = z.object({
   partNumber: z.string().optional().or(z.literal('')),
   // Presente solo si el repuesto se eligió del inventario local; un repuesto
   // cargado a mano (proveedor externo, por ejemplo) no tiene product_id.
-  productId: z.string().optional().nullable()
+  productId: z.string().optional().nullable(),
+  lineType: z.enum(['service', 'included_material', 'charged_part']).optional(),
 }).superRefine((part, ctx) => {
-  if (part.productId && part.stockAvailable !== null && part.stockAvailable !== undefined && part.quantity > part.stockAvailable) {
+  if ((part.lineType ?? 'charged_part') === 'charged_part' && part.productId && part.stockAvailable !== null && part.stockAvailable !== undefined && part.quantity > part.stockAvailable) {
     ctx.addIssue({
       code: 'custom',
       path: ['quantity'],

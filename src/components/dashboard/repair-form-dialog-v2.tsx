@@ -18,7 +18,6 @@ import { useAuth } from '@/contexts/auth-context'
 import { useBranch } from '@/contexts/branch-context'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { calculateRepairPricing, validateRepairPricing } from '@/lib/repairs/pricing'
-import { resolveServicePricingSelection } from '@/lib/repairs/service-pricing-selection'
 import { cn } from '@/lib/utils'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -118,7 +117,7 @@ import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashR
 import { Repair } from '@/types/repairs'
 import { useRepairCatalogSearch } from './repairs/new-repair/useRepairCatalogSearch'
 import { CatalogQuickCreateDialog } from './repairs/new-repair/CatalogQuickCreateDialog'
-import { catalogItemPrice, toRepairPart } from './repairs/new-repair/repair-catalog-selection'
+import { catalogItemPrice, toRepairPart, toRepairServiceLines } from './repairs/new-repair/repair-catalog-selection'
 import type { CatalogItemKind, RepairCatalogItem } from './repairs/new-repair/types'
 import type { RepairFormSectionId } from './repairs/new-repair/types'
 import { buildSectionState } from './repairs/new-repair/repair-form-sections'
@@ -329,7 +328,6 @@ export function RepairFormDialogV2({
   const loadingServices = serviceSearch.status === 'loading'
   // Por defecto, cuando se busca un servicio de reparación (ej. Cambio de Pantalla A05),
   // se activa el cálculo de presupuesto cerrado (el total incluye repuestos).
-  const [serviceIncludesParts, setServiceIncludesParts] = useState(true)
 
   useEffect(() => {
     if (!inventorySearchOpen) setInventorySearchQuery('')
@@ -841,40 +839,10 @@ export function RepairFormDialogV2({
       setValue(`devices.${deviceIndex}.issue`, item.name, { shouldDirty: true, shouldValidate: true })
     }
 
-    const basePartCost = Number(item.purchase_price ?? 0)
-    if (basePartCost > 0) {
-      appendPart({
-        name: `${item.name} (Repuesto / Insumo)`,
-        cost: basePartCost,
-        internalCost: basePartCost,
-        quantity: 1,
-        supplier: 'Insumo de servicio',
-        partNumber: item.sku || '',
-      })
-      setCalculationMode('budget')
-      setValue('pricingMode', 'budget', { shouldDirty: true })
-      setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
-      const existingParts = getValues('parts') || []
-      const partsPrice = existingParts.reduce((sum, part) => sum + part.cost * part.quantity, 0)
-      setValue('laborCost', Math.max(0, price - partsPrice), { shouldDirty: true, shouldValidate: true })
-    } else {
-      const selection = resolveServicePricingSelection({
-        price,
-        includesParts: serviceIncludesParts,
-        deviceCount: fields.length,
-      })
-      if (selection.affectsCalculator && selection.pricingMode) {
-        setCalculationMode(selection.pricingMode)
-        setValue('pricingMode', selection.pricingMode, { shouldDirty: true })
-        if (selection.pricingMode === 'budget') {
-          setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
-          const partsPrice = (getValues('parts') || []).reduce((sum, part) => sum + part.cost * part.quantity, 0)
-          setValue('laborCost', Math.max(0, price - partsPrice), { shouldDirty: true, shouldValidate: true })
-        } else {
-          setValue('laborCost', price, { shouldDirty: true, shouldValidate: true })
-        }
-      }
-    }
+    toRepairServiceLines(item, customerIsWholesale).forEach((line) => appendPart(line))
+    setCalculationMode('automatic')
+    setValue('pricingMode', 'automatic', { shouldDirty: true })
+    setValue('laborCost', 0, { shouldDirty: true, shouldValidate: true })
 
     serviceSearch.refresh()
     toast.success(`Servicio "${item.name}" creado y aplicado a la reparación.`)
@@ -3319,19 +3287,9 @@ export function RepairFormDialogV2({
             ))}
           </div>
 
-          {/* Toggle para modo presupuesto cerrado */}
-          {fields.length === 1 && (
-            <label className="flex items-center gap-2.5 text-xs text-muted-foreground cursor-pointer bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
-              <Switch
-                checked={serviceIncludesParts}
-                onCheckedChange={setServiceIncludesParts}
-                className="h-4 w-7 [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3"
-              />
-              <span className="text-[11px] leading-tight">
-                <strong className="text-slate-800 dark:text-slate-200">Presupuesto cerrado:</strong> El precio total se mantiene fijo (si agregas repuestos después, se descuenta de la mano de obra).
-              </span>
-            </label>
-          )}
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2 text-[11px] leading-relaxed text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+            El servicio conserva su precio completo. Si tiene materiales incluidos, se registran como costo interno con Gs. 0 adicionales al cliente.
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 min-h-[320px] max-h-[50vh]">
@@ -3357,7 +3315,6 @@ export function RepairFormDialogV2({
                   ? svc.wholesale_price
                   : ((svc.offer_price || svc.sale_price) ?? 0)
                 const baseCost = svc.purchase_price || 0
-                const laborPart = Math.max(0, price - baseCost)
                 const guess = guessDeviceFromServiceName(svc.name)
 
                 return (
@@ -3394,67 +3351,17 @@ export function RepairFormDialogV2({
                       }
 
                       const basePartCost = Number(svc.purchase_price ?? 0)
-
-                      if (basePartCost > 0) {
-                        // 1. Agregar el repuesto/insumo base para reflejar el costo del material
-                        appendPart({
-                          name: `${svc.name} (Repuesto / Insumo)`,
-                          cost: basePartCost,
-                          internalCost: basePartCost,
-                          quantity: 1,
-                          supplier: 'Insumo de servicio',
-                          partNumber: svc.sku || '',
-                        })
-
-                        // 2. Fijar modo presupuesto cerrado
-                        setCalculationMode('budget')
-                        setValue('pricingMode', 'budget', { shouldDirty: true })
-                        setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
-
-                        // 3. Mano de Obra Neta = Total - Costo de Repuesto
-                        const currentPartsPrice = partsFields.reduce((sum, _, pIdx) => {
-                          const c = watch(`parts.${pIdx}.cost`) || 0
-                          const q = watch(`parts.${pIdx}.quantity`) || 1
-                          return sum + (c * q)
-                        }, 0) + basePartCost
-
-                        const derivedLabor = Math.max(0, price - currentPartsPrice)
-                        setValue('laborCost', derivedLabor, { shouldDirty: true, shouldValidate: true })
-                      } else {
-                        // Servicio puro sin costo de repuesto inicial
-                        const selection = resolveServicePricingSelection({
-                          price,
-                          includesParts: serviceIncludesParts,
-                          deviceCount: fields.length,
-                        })
-
-                        if (selection.affectsCalculator && selection.pricingMode) {
-                          setCalculationMode(selection.pricingMode)
-                          setValue('pricingMode', selection.pricingMode, { shouldDirty: true })
-
-                          if (selection.pricingMode === 'budget') {
-                            setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
-                            const currentPartsPrice = partsFields.reduce((sum, _, pIdx) => {
-                              const c = watch(`parts.${pIdx}.cost`) || 0
-                              const q = watch(`parts.${pIdx}.quantity`) || 1
-                              return sum + (c * q)
-                            }, 0)
-                            const derivedLabor = Math.max(0, price - currentPartsPrice)
-                            setValue('laborCost', derivedLabor, { shouldDirty: true, shouldValidate: true })
-                          } else {
-                            setValue('laborCost', price, { shouldDirty: true, shouldValidate: true })
-                          }
-                        }
-                      }
+                      toRepairServiceLines(svc, customerIsWholesale).forEach((line) => appendPart(line))
+                      setCalculationMode('automatic')
+                      setValue('pricingMode', 'automatic', { shouldDirty: true })
+                      setValue('laborCost', 0, { shouldDirty: true, shouldValidate: true })
 
                       toast.success(`Servicio "${svc.name}" — ${formatCurrency(price)}`, {
                         description: [
                           customerIsWholesale && svc.wholesale_price ? 'Precio mayorista aplicado.' : null,
                           basePartCost > 0
-                            ? `Repuesto (${formatCurrency(basePartCost)}) + Mano de Obra (${formatCurrency(Math.max(0, price - basePartCost))}).`
-                            : serviceIncludesParts
-                              ? 'Presupuesto cerrado: mano de obra se recalcula al agregar repuestos.'
-                              : 'Mano de obra fijada.',
+                            ? `Incluye ${formatCurrency(basePartCost)} de material interno; no se cobra por separado.`
+                            : 'Servicio cargado como concepto independiente.',
                           (guess.brand || guess.model || guess.deviceType)
                             ? 'Tipo/marca/modelo sugeridos.'
                             : null,
@@ -3477,6 +3384,11 @@ export function RepairFormDialogV2({
                             Mayorista
                           </Badge>
                         )}
+                        {customerIsWholesale && !svc.wholesale_price && (
+                          <Badge variant="outline" className="border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] font-bold text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                            Sin tarifa mayorista · precio minorista
+                          </Badge>
+                        )}
                         {guess.brand && (
                           <Badge variant="secondary" className="text-[9px] py-0 px-1 font-mono">
                             {guess.brand} {guess.model || ''}
@@ -3484,23 +3396,14 @@ export function RepairFormDialogV2({
                         )}
                       </div>
 
-                      {/* Desglose Matemático */}
+                      {/* Clasificación contable sin inferir mano de obra */}
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
-                        {baseCost > 0 ? (
-                          <>
-                            <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200/60 dark:border-amber-900/40 font-medium">
-                              Repuesto: {formatCurrency(baseCost)}
-                            </span>
-                            <span>+</span>
-                            <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-200/60 dark:border-emerald-900/40 font-bold">
-                              Mano de Obra: {formatCurrency(laborPart)}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-200/60 dark:border-emerald-900/40 font-bold">
-                            Mano de Obra pura: {formatCurrency(price)}
-                          </span>
-                        )}
+                        <span className="inline-flex items-center gap-1 rounded border border-emerald-200/60 bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300">
+                          Servicio: {formatCurrency(price)}
+                        </span>
+                        {baseCost > 0 && <span className="inline-flex items-center gap-1 rounded border border-amber-200/60 bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-300">
+                          Material incluido: {formatCurrency(baseCost)} interno · Gs. 0 adicional
+                        </span>}
                       </div>
                     </div>
 

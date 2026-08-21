@@ -15,6 +15,7 @@ import { logger } from '@/lib/logger'
 
 // Importar tipos centralizados
 import { Repair, RepairStatus, RepairPriority, RepairDeliveryOutcome, RepairPricingMode } from '@/types/repairs'
+import type { RepairLineType } from '@/lib/repairs/line-types'
 
 type SupabaseRepairPayload = Parameters<typeof mapSupabaseRepairToUi>[0]
 type RepairPartFormInput = {
@@ -26,6 +27,7 @@ type RepairPartFormInput = {
     supplier?: string
     partNumber?: string
     productId?: string | null
+    lineType?: RepairLineType
 }
 type RepairNoteFormInput = {
     id?: string | number
@@ -257,6 +259,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                         supplier: p.supplier,
                         part_number: p.partNumber,
                         product_id: p.productId || null,
+                        line_type: p.lineType || 'charged_part',
                     })) ?? [],
                     notes: notes?.map((n) => ({
                         note_text: n.text,

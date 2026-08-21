@@ -1,8 +1,12 @@
+'use client'
+
 import { CircleDollarSign, ReceiptText } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import type { RepairCostSummary } from '@/lib/repairs/cost-breakdown'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
 
 export function RepairCostLiveSummary({ summary }: { summary: RepairCostSummary }) {
+  const canViewCost = useCanViewCost()
   const includedTax = summary.taxBreakdown.reduce((total, row) => total + row.taxAmount, 0)
   const discounts = summary.discountAmount + summary.deductions
 
@@ -13,7 +17,9 @@ export function RepairCostLiveSummary({ summary }: { summary: RepairCostSummary 
     </div>
     <dl className="space-y-3 px-4 py-4 text-sm">
       <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Mano de obra</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.laborAmount)}</dd></div>
-      <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Repuestos</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.partsSubtotal)}</dd></div>
+      <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Servicios</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.servicesSubtotal)}</dd></div>
+      <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Repuestos cobrados</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.chargedPartsSubtotal)}</dd></div>
+      {canViewCost && summary.includedMaterialsInternalCost > 0 && <div className="rounded-md bg-amber-50 px-2 py-2 dark:bg-amber-950/30"><div className="flex justify-between gap-4"><dt className="text-amber-800 dark:text-amber-200">Material incluido</dt><dd className="font-medium tabular-nums text-amber-800 dark:text-amber-200">{formatCurrency(summary.includedMaterialsInternalCost)}</dd></div><p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">Costo interno; Gs. 0 adicionales al cliente.</p></div>}
       <div className="flex justify-between gap-4 border-t pt-3"><dt>Subtotal antes de descuentos</dt><dd className="font-semibold tabular-nums">{formatCurrency(summary.subtotalBeforeDiscount)}</dd></div>
       <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Cargos adicionales</dt><dd className="tabular-nums">{formatCurrency(summary.additionalCharges)}</dd></div>
       <div className="flex justify-between gap-4 text-rose-600 dark:text-rose-400"><dt>Descuentos y deducciones</dt><dd className="tabular-nums">- {formatCurrency(discounts)}</dd></div>

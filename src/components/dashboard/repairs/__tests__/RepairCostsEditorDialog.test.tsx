@@ -1,10 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Repair } from '@/types/repairs'
 import { RepairCostsEditorDialog } from '../RepairCostsEditorDialog'
 
-vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ isAdmin: false }) }))
+vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ isAdmin: false, hasPermission: () => true }) }))
 
 const repair = {
   id: 'repair-1', customer: { name: 'Ana', phone: '', email: '' }, device: 'Teléfono',
@@ -46,7 +46,7 @@ describe('RepairCostsEditorDialog', () => {
     const user = userEvent.setup()
     render(<RepairCostsEditorDialog open repair={repair} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
 
-    const price = screen.getAllByLabelText('Precio cobrado de Pantalla')[0]
+    const price = screen.getAllByLabelText('Precio al cliente de Pantalla')[0]
     await user.clear(price)
     await user.type(price, '50000')
 
@@ -70,16 +70,18 @@ describe('RepairCostsEditorDialog', () => {
     expect(screen.getByLabelText('Mano de obra opcional')).toHaveValue(0)
   })
 
-  it('adds a manual service as labor when it is not in the catalog', async () => {
+  it('adds a manual service as a classified service line when it is not in the catalog', async () => {
     const user = userEvent.setup()
     render(<RepairCostsEditorDialog open repair={{ ...repair, laborCost: 0 }} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
 
     await user.click(screen.getByRole('button', { name: 'Agregar servicio' }))
     expect(screen.getByText('Agregar servicio manual')).toBeVisible()
-    await user.type(screen.getByLabelText('Monto del servicio'), '75000')
-    await user.click(screen.getByRole('button', { name: 'Aplicar servicio' }))
+    await user.type(screen.getByLabelText('Precio al cliente'), '75000')
+    const serviceForm = screen.getByText('Agregar servicio manual').closest('section')!
+    await user.click(within(serviceForm).getByRole('button', { name: 'Agregar servicio' }))
 
-    expect(screen.getByLabelText('Mano de obra fija')).toHaveValue(75000)
+    expect(screen.getByLabelText('Mano de obra fija')).toHaveValue(0)
+    expect(screen.getAllByText('Servicio')[0]).toBeVisible()
     expect(screen.getByText('Servicio técnico')).toBeVisible()
   })
 
@@ -89,7 +91,7 @@ describe('RepairCostsEditorDialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Agregar repuesto' }))
 
-    expect(screen.getAllByLabelText('Nombre del repuesto manual')[0]).toBeVisible()
+    expect(screen.getAllByLabelText('Nombre del concepto manual')[0]).toBeVisible()
     expect(screen.getAllByText('Carga manual · no descuenta stock')[0]).toBeVisible()
   })
 })
