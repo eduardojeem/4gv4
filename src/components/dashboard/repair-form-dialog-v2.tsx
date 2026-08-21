@@ -16,7 +16,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import { useAuth } from '@/contexts/auth-context'
 import { useBranch } from '@/contexts/branch-context'
-import { branchHeaders } from '@/lib/branches/client'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { calculateRepairPricing, validateRepairPricing } from '@/lib/repairs/pricing'
 import { resolveServicePricingSelection } from '@/lib/repairs/service-pricing-selection'
@@ -117,6 +116,7 @@ import { PAYMENT_METHODS } from './repairs/RepairPaymentDialog'
 import { useCashRegister } from '@/hooks/useCashRegister'
 import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashRegisterDialog'
 import { Repair } from '@/types/repairs'
+import { useRepairCatalogSearch } from './repairs/new-repair/useRepairCatalogSearch'
 
 export type RepairFormMode = 'add' | 'edit'
 
@@ -290,126 +290,39 @@ export function RepairFormDialogV2({
   // Inventory part lookup states
   const [inventorySearchOpen, setInventorySearchOpen] = useState(false)
   const [inventorySearchQuery, setInventorySearchQuery] = useState('')
-  const [inventoryProducts, setInventoryProducts] = useState<Array<{
-    id: string
-    name: string
-    sku?: string | null
-    sale_price?: number | null
-    offer_price?: number | null
-    wholesale_price?: number | null
-    purchase_price?: number | null
-    stock_quantity?: number | null
-  }>>([])
-  const [loadingInventory, setLoadingInventory] = useState(false)
-
-  // Fetch inventory products with debounce
-  useEffect(() => {
-    if (!inventorySearchOpen) {
-      setInventoryProducts([])
-      setInventorySearchQuery('')
-      return
-    }
-
-    const controller = new AbortController()
-    setLoadingInventory(true)
-
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `/api/products?per_page=50&strict_branch_stock=true&query=${encodeURIComponent(inventorySearchQuery)}`,
-          {
-            signal: controller.signal,
-            headers: branchHeaders(selectedBranchId),
-          }
-        )
-        const payload = await res.json().catch(() => ({}))
-        const productsList = Array.isArray(payload?.data?.products) ? payload.data.products : []
-        // Filtrar exclusivamente repuestos y productos físicos (excluir servicios)
-        const partsOnly = productsList.filter((p: { unit_measure?: string | null; category?: { name?: string | null } | null }) => {
-          const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
-          const isServiceCategory = (p.category?.name || '').toLowerCase().includes('servicio')
-          return !isServiceUnit && !isServiceCategory
-        })
-        setInventoryProducts(partsOnly)
-      } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
-          setInventoryProducts([])
-        }
-      } finally {
-        setLoadingInventory(false)
-      }
-    }, 250)
-
-    return () => {
-      clearTimeout(t)
-      controller.abort()
-    }
-  }, [inventorySearchOpen, inventorySearchQuery, selectedBranchId])
+  const inventorySearch = useRepairCatalogSearch({
+    kind: 'part',
+    branchId: selectedBranchId,
+    open: inventorySearchOpen,
+    query: inventorySearchQuery,
+  })
+  const inventoryProducts = inventorySearch.items
+  const loadingInventory = inventorySearch.status === 'loading'
 
   // Buscador de servicios y repuestos (ej. "Cambio de pantalla A05" o "Modulo A05")
   // para autocompletar el Costo Estimado y calcular la mano de obra teniendo en cuenta
   // el precio mayorista y el costo base de compra.
   const [serviceSearchIndex, setServiceSearchIndex] = useState<number | null>(null)
   const [serviceSearchQuery, setServiceSearchQuery] = useState('')
-  const [serviceResults, setServiceResults] = useState<Array<{
-    id: string
-    name: string
-    sku?: string | null
-    sale_price?: number | null
-    wholesale_price?: number | null
-    purchase_price?: number | null
-    offer_price?: number | null
-    stock_quantity?: number | null
-    unit_measure?: string | null
-    category?: { name?: string | null } | null
-  }>>([])
-  const [loadingServices, setLoadingServices] = useState(false)
+  const serviceSearch = useRepairCatalogSearch({
+    kind: 'service',
+    branchId: selectedBranchId,
+    open: serviceSearchIndex !== null,
+    query: serviceSearchQuery,
+  })
+  const serviceResults = serviceSearch.items
+  const loadingServices = serviceSearch.status === 'loading'
   // Por defecto, cuando se busca un servicio de reparación (ej. Cambio de Pantalla A05),
   // se activa el cálculo de presupuesto cerrado (el total incluye repuestos).
   const [serviceIncludesParts, setServiceIncludesParts] = useState(true)
 
   useEffect(() => {
-    if (serviceSearchIndex === null) {
-      setServiceResults([])
-      setServiceSearchQuery('')
-      return
-    }
+    if (!inventorySearchOpen) setInventorySearchQuery('')
+  }, [inventorySearchOpen])
 
-    const controller = new AbortController()
-    setLoadingServices(true)
-
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `/api/products?per_page=50&query=${encodeURIComponent(serviceSearchQuery)}`,
-          {
-            signal: controller.signal,
-            headers: branchHeaders(selectedBranchId),
-          }
-        )
-        const payload = await res.json().catch(() => ({}))
-        const list = Array.isArray(payload?.data?.products) ? payload.data.products : []
-        // Filtrar exclusivamente servicios (unit_measure === 'servicio' o categoría 'Servicios')
-        const servicesOnly = list.filter((p: { unit_measure?: string | null; category?: { name?: string | null } | null }) => {
-          const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
-          const isServiceCategory = (p.category?.name || '').toLowerCase().includes('servicio')
-          return isServiceUnit || isServiceCategory
-        })
-        setServiceResults(servicesOnly)
-      } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
-          setServiceResults([])
-        }
-      } finally {
-        setLoadingServices(false)
-      }
-    }, 250)
-
-    return () => {
-      clearTimeout(t)
-      controller.abort()
-    }
-  }, [serviceSearchIndex, serviceSearchQuery, selectedBranchId])
+  useEffect(() => {
+    if (serviceSearchIndex === null) setServiceSearchQuery('')
+  }, [serviceSearchIndex])
 
   // Checklist visual de estado físico de recepción
   const [openChecklistIndex, setOpenChecklistIndex] = useState<number | null>(null)
