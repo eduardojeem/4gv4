@@ -13,7 +13,8 @@ export const FULL_REPAIR_SELECT = `
   parts:repair_parts(*),
   notes:repair_notes(*),
   payments:repair_payments(*),
-  closeout:repair_closeouts(*)
+  closeout:repair_closeouts(*),
+  currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
 `
 
 export type RepairRouteContext = {

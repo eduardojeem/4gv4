@@ -37,6 +37,19 @@ interface SupabaseRepairPart {
     supplier?: string
     part_number?: string
     product_id?: string | null
+    discount_amount?: number | string | null
+    tax_rate?: number | string | null
+}
+
+interface SupabaseCostRevision {
+    id: string
+    revision_number: number
+    parts_subtotal: number | string
+    parts_internal_cost: number | string
+    subtotal_before_discount: number | string
+    final_total: number | string
+    balance_snapshot: number | string
+    tax_breakdown?: Array<{ rate: number; grossAmount: number; taxableBase: number; taxAmount: number }>
 }
 
 interface SupabaseRepairNote {
@@ -102,6 +115,8 @@ interface SupabaseRepair {
     discount_amount?: number
     price_override_reason?: string
     pricing_updated_at?: string
+    additional_charges?: number | string
+    deductions?: number | string
     payment_status?: string
     paid_amount?: number
     technician?: SupabaseTechnician | SupabaseTechnician[]
@@ -128,6 +143,7 @@ interface SupabaseRepair {
     notes?: SupabaseRepairNote[]
     payments?: SupabaseRepairPayment[]
     closeout?: SupabaseRepairCloseout | SupabaseRepairCloseout[] | null
+    currentCostRevision?: SupabaseCostRevision | SupabaseCostRevision[] | null
 }
 
 /**
@@ -144,6 +160,9 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         ? (r.technician[0] ?? undefined)
         : r.technician
     const closeout = Array.isArray(r.closeout) ? (r.closeout[0] ?? null) : (r.closeout ?? null)
+    const costRevision = Array.isArray(r.currentCostRevision)
+        ? (r.currentCostRevision[0] ?? null)
+        : (r.currentCostRevision ?? null)
     return {
         id: r.id,
         ticketNumber: r.ticket_number,
@@ -180,6 +199,28 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         discountAmount: Number(r.discount_amount) || 0,
         priceOverrideReason: r.price_override_reason || undefined,
         pricingUpdatedAt: r.pricing_updated_at || null,
+        additionalCharges: Number(r.additional_charges) || 0,
+        deductions: Number(r.deductions) || 0,
+        costSummary: costRevision ? {
+            revisionId: costRevision.id,
+            revisionNumber: Number(costRevision.revision_number) || 0,
+            laborAmount: Number(r.labor_cost) || 0,
+            partsSubtotal: Number(costRevision.parts_subtotal) || 0,
+            partsInternalCost: Number(costRevision.parts_internal_cost) || 0,
+            additionalCharges: Number(r.additional_charges) || 0,
+            deductions: Number(r.deductions) || 0,
+            discountAmount: Number(r.discount_amount) || 0,
+            subtotalBeforeDiscount: Number(costRevision.subtotal_before_discount) || 0,
+            finalTotal: Number(costRevision.final_total) || 0,
+            paidAmount: Number(r.paid_amount) || 0,
+            balance: Number(costRevision.balance_snapshot) || 0,
+            taxBreakdown: (costRevision.tax_breakdown ?? []).map((tax) => ({
+                rate: ([0, 5, 10].includes(Number(tax.rate)) ? Number(tax.rate) : 10) as 0 | 5 | 10,
+                grossAmount: Number(tax.grossAmount) || 0,
+                taxableBase: Number(tax.taxableBase) || 0,
+                taxAmount: Number(tax.taxAmount) || 0,
+            })),
+        } : null,
         paymentStatus: (r.payment_status as Repair['paymentStatus']) || 'pendiente',
         paidAmount: Number(r.paid_amount) || 0,
         payments: [...(r.payments || [])]
@@ -250,7 +291,9 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
             quantity: p.quantity,
             supplier: p.supplier || '',
             partNumber: p.part_number || '',
-            productId: p.product_id ?? null
+            productId: p.product_id ?? null,
+            discountAmount: Number(p.discount_amount) || 0,
+            taxRate: ([0, 5, 10].includes(Number(p.tax_rate)) ? Number(p.tax_rate) : 10) as 0 | 5 | 10,
         })),
         images: Array.isArray(r.images)
             ? r.images.map((img: SupabaseRepairImage) => ({

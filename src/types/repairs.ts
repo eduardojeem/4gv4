@@ -69,6 +69,42 @@ export interface RepairPart {
    *  forma de descontar stock ni de saber qué repuestos vinieron del
    *  inventario vs. de un proveedor externo. */
   productId?: string | null
+  discountAmount?: number
+  taxRate?: 0 | 5 | 10
+}
+
+export interface RepairTaxBreakdown {
+  rate: 0 | 5 | 10
+  grossAmount: number
+  taxableBase: number
+  taxAmount: number
+}
+
+export interface RepairCostSummary {
+  revisionId?: string | null
+  revisionNumber?: number | null
+  laborAmount: number
+  partsSubtotal: number
+  partsInternalCost: number
+  additionalCharges: number
+  deductions: number
+  discountAmount: number
+  subtotalBeforeDiscount: number
+  finalTotal: number
+  paidAmount: number
+  balance: number
+  taxBreakdown: RepairTaxBreakdown[]
+}
+
+export interface RepairCostRevision {
+  id: string
+  revisionNumber: number
+  actorId?: string | null
+  actorRole: string
+  reason?: string | null
+  previousSnapshot?: Record<string, unknown> | null
+  summary: RepairCostSummary
+  createdAt: string
 }
 
 export interface RepairPartResolution {
@@ -153,6 +189,9 @@ export interface Repair {
   discountAmount?: number
   priceOverrideReason?: string
   pricingUpdatedAt?: string | null
+  additionalCharges?: number
+  deductions?: number
+  costSummary?: RepairCostSummary | null
   estimatedDuration?: number  // Duración estimada en minutos
   technician: Technician | null
   location: string
