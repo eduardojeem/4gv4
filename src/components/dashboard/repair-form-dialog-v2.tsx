@@ -120,6 +120,11 @@ import { useRepairCatalogSearch } from './repairs/new-repair/useRepairCatalogSea
 import { CatalogQuickCreateDialog } from './repairs/new-repair/CatalogQuickCreateDialog'
 import { catalogItemPrice, toRepairPart } from './repairs/new-repair/repair-catalog-selection'
 import type { CatalogItemKind, RepairCatalogItem } from './repairs/new-repair/types'
+import type { RepairFormSectionId } from './repairs/new-repair/types'
+import { buildSectionState } from './repairs/new-repair/repair-form-sections'
+import { RepairFormSectionNav } from './repairs/new-repair/RepairFormSectionNav'
+import { RepairReview } from './repairs/new-repair/RepairReview'
+import { RepairFieldHelp } from './repairs/new-repair/RepairFieldHelp'
 
 export type RepairFormMode = 'add' | 'edit'
 
@@ -282,6 +287,8 @@ export function RepairFormDialogV2({
     saveQuickModePreference(val)
   }, [])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [activeSection, setActiveSection] = useState<RepairFormSectionId>('customer')
+  const [reviewData, setReviewData] = useState<RepairFormData | null>(null)
   const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<QuickCustomerData | null>(null)
   const [selectedQuickCustomer, setSelectedQuickCustomer] = useState<QuickCustomerData | null>(null)
@@ -494,6 +501,7 @@ export function RepairFormDialogV2({
     paidAmount: repair?.paidAmount || 0,
     parts: watchedParts,
   }), [calculationMode, sharedSettings.currency, watchedLaborCost, watchedFinalCost, watchedDiscountAmount, repair?.paidAmount, watchedParts])
+  const sectionState = useMemo(() => buildSectionState(errors), [errors])
 
   useEffect(() => {
     if (calculationMode === 'budget') {
@@ -698,6 +706,27 @@ export function RepairFormDialogV2({
     }
   }
 
+  const handleReviewForm = (data: RepairFormData) => {
+    setActiveSection('review')
+    setReviewData(data)
+  }
+
+  const selectSection = (section: RepairFormSectionId) => {
+    if (section === 'review') {
+      ;(document.getElementById(formId) as HTMLFormElement | null)?.requestSubmit()
+      return
+    }
+    setActiveSection(section)
+    const targetBySection: Record<Exclude<RepairFormSectionId, 'review'>, string> = {
+      customer: 'repair-customer-section',
+      device: 'repair-device-section',
+      diagnosis: 'repair-diagnosis-section',
+      catalog: 'repair-catalog-section',
+      estimate: 'repair-estimate-section',
+    }
+    document.getElementById(targetBySection[section])?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   // Handle quick customer creation
   const handleQuickCustomerCreated = (customer: QuickCustomerData) => {
     // Auto-select the new customer
@@ -887,7 +916,11 @@ export function RepairFormDialogV2({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto bg-muted/20 px-3 py-4 sm:px-6 sm:py-5 dark:bg-slate-950">
-          <form id={formId} onSubmit={handleSubmit(onSubmitForm)} className="mx-auto max-w-[1800px] space-y-5">
+          <form
+            id={formId}
+            onSubmit={handleSubmit(mode === 'add' ? handleReviewForm : onSubmitForm)}
+            className="mx-auto max-w-[1800px] space-y-5"
+          >
             {/* Banner de Advertencia si la Reparación ya fue Entregada */}
             {mode === 'edit' && repair?.status === 'entregado' && (
               <div className="rounded-2xl border-2 border-amber-400 bg-amber-50/90 dark:bg-amber-950/40 p-4 sm:p-5 shadow-sm space-y-3">
@@ -979,28 +1012,11 @@ export function RepairFormDialogV2({
               />
             </div>
 
-            <nav aria-label="Secciones del formulario" className="sticky top-0 z-10 rounded-lg border bg-background/95 p-2 shadow-sm backdrop-blur">
-              <ol className="grid grid-cols-3 gap-1">
-                {[
-                  { id: 'repair-customer-section', number: 1, label: 'Cliente' },
-                  { id: 'repair-device-section', number: 2, label: 'Equipo' },
-                  { id: 'repair-details-section', number: 3, label: quickMode ? 'Asignación' : 'Detalles' },
-                ].map((step) => (
-                  <li key={step.id}>
-                    <button
-                      type="button"
-                      onClick={() => document.getElementById(step.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                      className="flex h-9 w-full items-center justify-center gap-2 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:text-sm"
-                    >
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
-                        {step.number}
-                      </span>
-                      <span className="truncate">{step.label}</span>
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            </nav>
+            <RepairFormSectionNav
+              activeSection={activeSection}
+              sectionState={sectionState}
+              onSelect={selectSection}
+            />
 
             {/* Sección 1: Información del Cliente (Ancho Completo) */}
             <Card id="repair-customer-section" className={`${sectionCardClass} scroll-mt-16`}>
@@ -1439,7 +1455,22 @@ export function RepairFormDialogV2({
                       </div>
 
                       {/* Problema y Descripción en ancho completo */}
-                      <div className="space-y-3 pt-2 border-t border-slate-200/70 dark:border-slate-800/80">
+                      <section
+                        id={index === 0 ? 'repair-diagnosis-section' : undefined}
+                        className="scroll-mt-24 space-y-3 pt-2 border-t border-slate-200/70 dark:border-slate-800/80"
+                        aria-labelledby={index === 0 ? 'repair-diagnosis-heading' : undefined}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <h4
+                            id={index === 0 ? 'repair-diagnosis-heading' : undefined}
+                            className="text-sm font-semibold text-slate-900 dark:text-slate-100"
+                          >
+                            Diagnóstico inicial
+                          </h4>
+                          <span className="text-[11px] text-muted-foreground">
+                            Equipo {index + 1}
+                          </span>
+                        </div>
                         {/* Issue */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
@@ -1697,7 +1728,7 @@ export function RepairFormDialogV2({
                             </p>
                           )}
                         </div>
-                      </div>
+                      </section>
 
                       {/* Acceso y Seguridad */}
                       <div className="space-y-3 pt-2 border-t border-slate-200/70 dark:border-slate-800/80">
@@ -1706,6 +1737,11 @@ export function RepairFormDialogV2({
                           <Label className="text-xs font-medium text-muted-foreground dark:text-slate-400">
                             Acceso al Dispositivo
                             <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
+                            <span className="ml-1.5 inline-flex align-middle">
+                              <RepairFieldHelp label="Ayuda sobre acceso al equipo">
+                                Registrá el acceso solo si el diagnóstico requiere desbloquear el equipo. Se mostrará únicamente al personal autorizado.
+                              </RepairFieldHelp>
+                            </span>
                           </Label>
                           
                           {/* Access Type Selector */}
@@ -2023,7 +2059,7 @@ export function RepairFormDialogV2({
               <>
             {/* Secciones de ancho completo: Repuestos, Notas y Calculadora */}
             {/* Parts */}
-            <Card data-help-id="repair-parts" className="shadow-lg border-2 hover:border-primary/30 transition-colors bg-gradient-to-br from-white to-orange-50/30 dark:from-slate-900 dark:to-orange-950/20 dark:border-slate-800 dark:hover:border-primary/50 mt-4">
+            <Card id="repair-catalog-section" data-help-id="repair-parts" className="scroll-mt-16 shadow-lg border-2 hover:border-primary/30 transition-colors bg-gradient-to-br from-white to-orange-50/30 dark:from-slate-900 dark:to-orange-950/20 dark:border-slate-800 dark:hover:border-primary/50 mt-4">
               <CardHeader className="pb-5 bg-gradient-to-r from-orange-50/50 to-transparent dark:from-orange-950/30 dark:to-transparent">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -2031,8 +2067,11 @@ export function RepairFormDialogV2({
                       <Package className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                      <CardTitle className="bg-gradient-to-r from-orange-700 to-orange-600 dark:from-orange-400 dark:to-orange-500 bg-clip-text text-transparent font-bold text-xl">
+                      <CardTitle className="flex items-center gap-2 font-bold text-xl text-orange-700 dark:text-orange-400">
                         Repuestos y Materiales
+                        <RepairFieldHelp label="Diferencia entre servicio y repuesto">
+                          Los repuestos físicos controlan stock de la sucursal. Los servicios se aplican como mano de obra o presupuesto y no descuentan existencias.
+                        </RepairFieldHelp>
                       </CardTitle>
                       {partsFields.length > 0 && (
                         <p className="text-xs text-muted-foreground dark:text-slate-400 mt-1">
@@ -2352,6 +2391,7 @@ export function RepairFormDialogV2({
             </Card>
 
             {/* Cost Calculator */}
+            <div id="repair-estimate-section" className="scroll-mt-16">
             <RepairCostCalculator
               laborCost={watch('laborCost') || 0}
               onLaborCostChange={(cost) => setValue('laborCost', cost, { shouldDirty: true, shouldValidate: true })}
@@ -2377,6 +2417,7 @@ export function RepairFormDialogV2({
               technicianName={technicians.find((tech) => tech.id === watchedTechnicianId)?.name}
               canViewCommission={user?.role === 'admin' || user?.role === 'super_admin'}
             />
+            </div>
 
             {/* Adelanto al recibir: solo tiene sentido con un equipo. Con
                 varios, el formulario ya obliga a costos compartidos (ver
@@ -2505,6 +2546,9 @@ export function RepairFormDialogV2({
                     <div>
                       <CardTitle className="text-base font-bold text-amber-800 dark:text-amber-300 flex items-center gap-2">
                         <span>🛡️ Configuración de Garantía del Servicio</span>
+                        <RepairFieldHelp label="Ayuda sobre garantía">
+                          Define cuánto tiempo y qué conceptos quedarán cubiertos en el comprobante entregado al cliente.
+                        </RepairFieldHelp>
                       </CardTitle>
                       <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
                         Establece el tiempo de cobertura y cláusulas que figurarán en el comprobante del cliente
@@ -2819,9 +2863,9 @@ export function RepairFormDialogV2({
                 {isSubmitting
                   ? 'Guardando...'
                   : quickMode && mode === 'add'
-                  ? '⚡ Ingreso Rápido'
+                  ? 'Revisar ingreso rápido'
                   : mode === 'add'
-                  ? 'Crear Reparación'
+                  ? 'Revisar reparación'
                   : 'Guardar Cambios'}
               </Button>
             </div>
@@ -2829,6 +2873,50 @@ export function RepairFormDialogV2({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {reviewData && (
+      <RepairReview
+        open
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isSubmitting) {
+            setReviewData(null)
+            setActiveSection('estimate')
+          }
+        }}
+        onConfirm={() => {
+          const confirmedData = reviewData
+          setReviewData(null)
+          void onSubmitForm(confirmedData)
+        }}
+        submitting={isSubmitting}
+        customer={{
+          name: reviewData.customerName,
+          phone: reviewData.customerPhone,
+          wholesale: customerIsWholesale,
+        }}
+        devices={reviewData.devices.map((device) => ({
+          brand: device.brand,
+          model: device.model,
+          issue: device.issue,
+          technician: technicians.find((technician) => technician.id === device.technician)?.name,
+        }))}
+        parts={(reviewData.parts || []).map((part) => ({
+          name: part.name,
+          quantity: part.quantity,
+          cost: part.cost,
+        }))}
+        pricing={{
+          labor: calculatedPricing.laborCost,
+          discount: calculatedPricing.discountAmount,
+          total: calculatedPricing.customerTotal,
+          deposit: reviewData.depositAmount || 0,
+        }}
+        warranty={{
+          months: reviewData.warrantyMonths,
+          type: reviewData.warrantyType,
+        }}
+      />
+    )}
 
     {/* Quick Customer Creation/Edit Modal */}
     <QuickCustomerModal

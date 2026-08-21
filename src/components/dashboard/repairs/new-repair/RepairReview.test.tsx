@@ -1,0 +1,30 @@
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+import { RepairReview } from './RepairReview'
+
+describe('RepairReview', () => {
+  it('shows the consolidated repair data before confirmation', async () => {
+    const user = userEvent.setup()
+    const onConfirm = vi.fn()
+    render(<RepairReview
+      open
+      onOpenChange={() => undefined}
+      onConfirm={onConfirm}
+      submitting={false}
+      customer={{ name: 'Ana López', phone: '0981000000', wholesale: true }}
+      devices={[{ brand: 'Samsung', model: 'A05', issue: 'No enciende', technician: 'Carlos' }]}
+      parts={[{ name: 'Módulo A05', quantity: 1, cost: 120000 }]}
+      pricing={{ labor: 80000, discount: 0, total: 200000, deposit: 50000 }}
+      warranty={{ months: 3, type: 'full' }}
+    />)
+
+    expect(screen.getByText('Ana López')).toBeVisible()
+    expect(screen.getByText('Cliente mayorista')).toBeVisible()
+    expect(screen.getByText(/Samsung A05/)).toBeVisible()
+    expect(screen.getByText(/Módulo A05/)).toBeVisible()
+    expect(screen.getByText(/Gs\.\s*200\.000/)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Confirmar reparación' }))
+    expect(onConfirm).toHaveBeenCalledTimes(1)
+  })
+})
