@@ -53,6 +53,24 @@ describe('parseCreateRepairInput', () => {
     }).success).toBe(false)
   })
 
+  it('defaults legacy lines and accepts only classified repair line types', () => {
+    const legacy = parseCreateRepairInput({
+      ...validInput,
+      parts: [{ part_name: 'Pantalla', unit_price: 100000, unit_cost: 80000, quantity: 1 }],
+    })
+    expect(legacy.success).toBe(true)
+    if (legacy.success) expect(legacy.data.parts[0].line_type).toBe('charged_part')
+
+    expect(parseCreateRepairInput({
+      ...validInput,
+      parts: [{ part_name: 'Servicio', unit_price: 250000, quantity: 1, line_type: 'service' }],
+    }).success).toBe(true)
+    expect(parseCreateRepairInput({
+      ...validInput,
+      parts: [{ part_name: 'Servicio', unit_price: 250000, quantity: 1, line_type: 'forged' }],
+    }).success).toBe(false)
+  })
+
   it('requires the unlock value when the access type needs it', () => {
     expect(parseCreateRepairInput({ ...validInput, access_type: 'pin', access_password: '' }).success).toBe(false)
   })

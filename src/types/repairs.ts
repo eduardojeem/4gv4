@@ -1,4 +1,5 @@
 import { LucideIcon } from 'lucide-react'
+import type { RepairLineType } from '@/lib/repairs/line-types'
 
 /**
  * Estado de la reparación (alineado con la base de datos)
@@ -71,6 +72,7 @@ export interface RepairPart {
   productId?: string | null
   discountAmount?: number
   taxRate?: 0 | 5 | 10
+  lineType?: RepairLineType
 }
 
 export interface RepairTaxBreakdown {

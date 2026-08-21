@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { REPAIR_LINE_TYPES } from './line-types'
 
 const MAX_COST = 1_000_000_000
 const optionalText = (max: number) => z.string().trim().max(max).optional().nullable()
@@ -12,6 +13,7 @@ export const repairPartInputSchema = z.object({
   supplier: optionalText(200),
   part_number: optionalText(100),
   product_id: z.string().uuid().optional().nullable(),
+  line_type: z.enum(REPAIR_LINE_TYPES).default('charged_part'),
 }).strict()
 
 const repairNoteSchema = z.object({
