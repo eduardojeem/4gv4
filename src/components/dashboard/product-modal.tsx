@@ -183,7 +183,7 @@ export function ProductModal({
   // Precio efectivo sobre el que se calculan las cuotas (respeta oferta)
   const installmentBase = hasOffer && Number(offerPrice) > 0 ? Number(offerPrice) : Number(salePrice) || 0
   // Cantidades de cuota sugeridas como chips rápidos
-  const INSTALLMENT_PRESETS = [1, 2, 3, 6, 9, 12, 18, 24]
+  const INSTALLMENT_PRESETS = [1, 2, 3, 4, 5, 6, 9, 12, 18, 24]
   // Estado para el chip expandido (popover inline de recargo)
   const [expandedChip, setExpandedChip] = useState<number | null>(null)
   const [chipRate, setChipRate] = useState<Record<number, string>>({})
