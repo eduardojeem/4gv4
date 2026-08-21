@@ -1,13 +1,10 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogFooter
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,19 +17,20 @@ import {
   Star,
   Barcode,
   Tag,
-  AlertTriangle,
   EyeOff,
   Check,
   Copy,
-  Info,
-  Layers,
-  Sparkles
+  Sparkles,
+  CreditCard,
+  CircleCheck,
+  CircleAlert,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { resolveProductImageUrl } from '@/lib/images'
-import { formatStockStatus } from '@/lib/inventory-manager'
 import { toast } from 'sonner'
 import type { Product } from '@/types/product-unified'
+import { getProductCreditPlans, type ProductCreditPlan } from '../lib/product-credit'
+import { buildCreditEligibility } from '../lib/credit-eligibility'
 
 interface POSProductDetailDialogProps {
   product: Product | null
@@ -41,6 +39,13 @@ interface POSProductDetailDialogProps {
   onAddToCart: (product: Product, quantity: number) => void
   isWholesale?: boolean
   wholesaleDiscountRate?: number
+  creditContext: {
+    hasCustomer: boolean
+    hasCreditLine: boolean
+    availableCredit: number
+    isRegisterOpen: boolean
+  }
+  onUseCreditPlan: (product: Product, quantity: number, plan: ProductCreditPlan) => void
 }
 
 export function POSProductDetailDialog({
@@ -48,32 +53,34 @@ export function POSProductDetailDialog({
   open,
   onOpenChange,
   onAddToCart,
+  creditContext,
+  onUseCreditPlan,
   isWholesale = false,
   wholesaleDiscountRate = 10
 }: POSProductDetailDialogProps) {
   const [quantity, setQuantity] = useState(1)
   const [copiedBarcode, setCopiedBarcode] = useState(false)
 
-  useEffect(() => {
-    if (open) {
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
       setQuantity(1)
       setCopiedBarcode(false)
     }
-  }, [open, product])
+    onOpenChange(nextOpen)
+  }
 
   if (!product) return null
 
   const stock = product.stock_quantity ?? 0
   const minStock = product.min_stock ?? 5
   const isOutOfStock = stock <= 0
-  const stockStatus = formatStockStatus(stock, minStock)
-
   const price = product.sale_price || 0
   const hasExplicitWholesale = typeof product.wholesale_price === 'number' && product.wholesale_price > 0
   const computedWholesale = Math.round(price * (1 - (wholesaleDiscountRate / 100)))
   const wholesalePrice = hasExplicitWholesale ? product.wholesale_price! : computedWholesale
   const activePrice = isWholesale ? wholesalePrice : price
   const imageSrc = product.image ? resolveProductImageUrl(product.image) : ''
+  const creditPlans = getProductCreditPlans(product, activePrice * quantity)
 
   const handleCopyBarcode = () => {
     if (product.barcode) {
@@ -94,13 +101,22 @@ export function POSProductDetailDialog({
     toast.success(`Agregado al carrito (${quantity} u.)`, {
       description: `${product.name} — ${formatCurrency(activePrice * quantity)}`
     })
-    onOpenChange(false)
+    handleDialogOpenChange(false)
+  }
+
+  const handleUseCreditPlan = (plan: ProductCreditPlan) => {
+    if (isOutOfStock || quantity > stock) {
+      toast.error('No hay stock suficiente para aplicar este plan')
+      return
+    }
+    onUseCreditPlan(product, quantity, plan)
+    handleDialogOpenChange(false)
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl p-0 overflow-hidden rounded-2xl bg-card border-border/80 shadow-2xl">
-        <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] max-h-[85vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] overflow-hidden p-0 sm:max-w-4xl bg-card border-border/80 shadow-2xl">
+        <div className="grid max-h-[92vh] grid-cols-1 overflow-y-auto md:grid-cols-[220px_1fr]">
           {/* Columna Izquierda: Imagen & Badges */}
           <div className="bg-muted/30 p-6 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-border/60 relative">
             {product.featured && (
@@ -210,6 +226,69 @@ export function POSProductDetailDialog({
                   {product.description}
                 </p>
               )}
+
+              {creditPlans.length > 0 && (
+                <section className="space-y-2.5" aria-labelledby="product-credit-plans-title">
+                  <div>
+                    <h3 id="product-credit-plans-title" className="flex items-center gap-1.5 text-sm font-semibold">
+                      <CreditCard className="h-4 w-4 text-sky-600" aria-hidden="true" />
+                      Opciones de crédito
+                    </h3>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      El plan seleccionado se aplicará al total financiado del ticket.
+                    </p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {creditPlans.map((plan) => {
+                      const requirements = buildCreditEligibility({
+                        ...creditContext,
+                        financedTotal: plan.financedTotal,
+                        stock,
+                        quantity,
+                      })
+                      const ready = requirements.every(requirement => requirement.met)
+
+                      return (
+                        <article key={`${plan.count}-${plan.rate}`} className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h4 className="font-semibold text-sky-900 dark:text-sky-100">{plan.count} cuotas</h4>
+                              <p className="text-lg font-bold text-primary">{formatCurrency(plan.installmentAmount)}<span className="text-[10px] font-normal text-muted-foreground">/mes</span></p>
+                            </div>
+                            <Badge variant="outline" className="text-[10px]">
+                              {plan.rate === 0 ? 'Sin interés' : `Tasa ${plan.rate}%`}
+                            </Badge>
+                          </div>
+                          <dl className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
+                            <div><dt className="text-muted-foreground">Interés</dt><dd className="font-medium">{formatCurrency(plan.interestAmount)}</dd></div>
+                            <div><dt className="text-muted-foreground">Total financiado</dt><dd className="font-medium">{formatCurrency(plan.financedTotal)}</dd></div>
+                          </dl>
+                          <ul className="mt-2 space-y-1" aria-label={`Requisitos para ${plan.count} cuotas`}>
+                            {requirements.map(requirement => (
+                              <li key={requirement.id} className="flex items-start gap-1 text-[10px]">
+                                {requirement.met
+                                  ? <CircleCheck className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" aria-hidden="true" />
+                                  : <CircleAlert className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" aria-hidden="true" />}
+                                <span className={requirement.met ? 'text-muted-foreground' : 'font-medium text-amber-800 dark:text-amber-300'}>{requirement.detail}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          <Button
+                            type="button"
+                            variant={ready ? 'default' : 'outline'}
+                            className="mt-2 h-8 w-full text-xs"
+                            disabled={isOutOfStock || quantity > stock}
+                            onClick={() => handleUseCreditPlan(plan)}
+                            aria-label={`Usar plan de ${plan.count} cuotas`}
+                          >
+                            Usar este plan
+                          </Button>
+                        </article>
+                      )
+                    })}
+                  </div>
+                </section>
+              )}
             </div>
 
             {/* Selector de Cantidad & Botón Agregar */}
@@ -257,7 +336,7 @@ export function POSProductDetailDialog({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => onOpenChange(false)}
+                  onClick={() => handleDialogOpenChange(false)}
                   className="h-10 text-xs"
                 >
                   Cerrar
