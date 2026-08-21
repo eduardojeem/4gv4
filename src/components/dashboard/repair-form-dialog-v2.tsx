@@ -117,6 +117,9 @@ import { useCashRegister } from '@/hooks/useCashRegister'
 import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashRegisterDialog'
 import { Repair } from '@/types/repairs'
 import { useRepairCatalogSearch } from './repairs/new-repair/useRepairCatalogSearch'
+import { CatalogQuickCreateDialog } from './repairs/new-repair/CatalogQuickCreateDialog'
+import { catalogItemPrice, toRepairPart } from './repairs/new-repair/repair-catalog-selection'
+import type { CatalogItemKind, RepairCatalogItem } from './repairs/new-repair/types'
 
 export type RepairFormMode = 'add' | 'edit'
 
@@ -304,6 +307,8 @@ export function RepairFormDialogV2({
   // el precio mayorista y el costo base de compra.
   const [serviceSearchIndex, setServiceSearchIndex] = useState<number | null>(null)
   const [serviceSearchQuery, setServiceSearchQuery] = useState('')
+  const [quickCatalogKind, setQuickCatalogKind] = useState<CatalogItemKind | null>(null)
+  const [quickServiceDeviceIndex, setQuickServiceDeviceIndex] = useState<number | null>(null)
   const serviceSearch = useRepairCatalogSearch({
     kind: 'service',
     branchId: selectedBranchId,
@@ -412,7 +417,7 @@ export function RepairFormDialogV2({
   })
 
   const [calculationMode, setCalculationMode] = useState<CostCalculationMode>(initialData?.pricingMode || 'automatic')
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
 
   // Estado de caja para el adelanto: si está cerrada, el campo se bloquea y
   // se ofrece abrirla ahí mismo en vez de dejar cargar un monto que el
@@ -765,6 +770,65 @@ export function RepairFormDialogV2({
       technician: '',
       estimatedCost: 0
     })
+  }
+
+  const handleQuickCatalogCreated = (item: RepairCatalogItem) => {
+    if (quickCatalogKind === 'part') {
+      appendPart(toRepairPart(item, customerIsWholesale))
+      inventorySearch.refresh()
+      toast.success(`Repuesto "${item.name}" creado y agregado a la reparación.`)
+      setInventorySearchOpen(false)
+      setQuickCatalogKind(null)
+      return
+    }
+
+    const deviceIndex = quickServiceDeviceIndex ?? 0
+    const price = catalogItemPrice(item, customerIsWholesale)
+    setValue(`devices.${deviceIndex}.estimatedCost`, price, { shouldDirty: true, shouldValidate: true })
+    if (!watch(`devices.${deviceIndex}.issue`) || watch(`devices.${deviceIndex}.issue`) === 'Reparación general') {
+      setValue(`devices.${deviceIndex}.issue`, item.name, { shouldDirty: true, shouldValidate: true })
+    }
+
+    const basePartCost = Number(item.purchase_price ?? 0)
+    if (basePartCost > 0) {
+      appendPart({
+        name: `${item.name} (Repuesto / Insumo)`,
+        cost: basePartCost,
+        internalCost: basePartCost,
+        quantity: 1,
+        supplier: 'Insumo de servicio',
+        partNumber: item.sku || '',
+      })
+      setCalculationMode('budget')
+      setValue('pricingMode', 'budget', { shouldDirty: true })
+      setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
+      const existingParts = getValues('parts') || []
+      const partsPrice = existingParts.reduce((sum, part) => sum + part.cost * part.quantity, 0)
+      setValue('laborCost', Math.max(0, price - partsPrice), { shouldDirty: true, shouldValidate: true })
+    } else {
+      const selection = resolveServicePricingSelection({
+        price,
+        includesParts: serviceIncludesParts,
+        deviceCount: fields.length,
+      })
+      if (selection.affectsCalculator && selection.pricingMode) {
+        setCalculationMode(selection.pricingMode)
+        setValue('pricingMode', selection.pricingMode, { shouldDirty: true })
+        if (selection.pricingMode === 'budget') {
+          setValue('finalCost', price, { shouldDirty: true, shouldValidate: true })
+          const partsPrice = (getValues('parts') || []).reduce((sum, part) => sum + part.cost * part.quantity, 0)
+          setValue('laborCost', Math.max(0, price - partsPrice), { shouldDirty: true, shouldValidate: true })
+        } else {
+          setValue('laborCost', price, { shouldDirty: true, shouldValidate: true })
+        }
+      }
+    }
+
+    serviceSearch.refresh()
+    toast.success(`Servicio "${item.name}" creado y aplicado a la reparación.`)
+    setServiceSearchIndex(null)
+    setQuickCatalogKind(null)
+    setQuickServiceDeviceIndex(null)
   }
 
   // Focus first error field on submit
@@ -2845,6 +2909,21 @@ export function RepairFormDialogV2({
               </button>
             )}
           </div>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!selectedBranchId || !hasPermission('products.create')}
+              onClick={() => {
+                setInventorySearchOpen(false)
+                setQuickCatalogKind('part')
+              }}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Crear repuesto en catálogo
+            </Button>
+          </div>
 
           {/* Filtros rápidos por tipo de repuesto */}
           <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -2874,7 +2953,13 @@ export function RepairFormDialogV2({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 min-h-[320px] max-h-[50vh]">
-          {loadingInventory ? (
+          {inventorySearch.status === 'error' ? (
+            <div role="alert" className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <AlertCircle className="h-8 w-8 text-red-500" />
+              <p className="text-sm font-semibold">{inventorySearch.error}</p>
+              <Button type="button" variant="outline" size="sm" onClick={inventorySearch.retry}>Reintentar</Button>
+            </div>
+          ) : loadingInventory ? (
             <div className="flex flex-col items-center justify-center py-20 text-sm text-muted-foreground gap-2">
               <Loader2 className="h-6 w-6 animate-spin text-cyan-600 dark:text-cyan-400" />
               <span>Consultando stock de repuestos en sucursal...</span>
@@ -3075,6 +3160,22 @@ export function RepairFormDialogV2({
               </button>
             )}
           </div>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!selectedBranchId || !hasPermission('products.create')}
+              onClick={() => {
+                setQuickServiceDeviceIndex(serviceSearchIndex)
+                setServiceSearchIndex(null)
+                setQuickCatalogKind('service')
+              }}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Crear servicio en catálogo
+            </Button>
+          </div>
 
           {/* Filtros rápidos por categoría de servicio */}
           <div className="flex flex-wrap items-center gap-1.5">
@@ -3119,7 +3220,13 @@ export function RepairFormDialogV2({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 min-h-[320px] max-h-[50vh]">
-          {loadingServices ? (
+          {serviceSearch.status === 'error' ? (
+            <div role="alert" className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <AlertCircle className="h-8 w-8 text-red-500" />
+              <p className="text-sm font-semibold">{serviceSearch.error}</p>
+              <Button type="button" variant="outline" size="sm" onClick={serviceSearch.retry}>Reintentar</Button>
+            </div>
+          ) : loadingServices ? (
             <div className="flex flex-col items-center justify-center py-20 text-sm text-muted-foreground gap-2">
               <Loader2 className="h-6 w-6 animate-spin text-emerald-600 dark:text-emerald-400" />
               <span>Consultando servicios técnicos disponibles...</span>
@@ -3327,6 +3434,22 @@ export function RepairFormDialogV2({
         </div>
       </DialogContent>
     </Dialog>
+
+    {quickCatalogKind && (
+      <CatalogQuickCreateDialog
+        open
+        kind={quickCatalogKind}
+        branchId={selectedBranchId || ''}
+        canCreate={Boolean(selectedBranchId) && hasPermission('products.create')}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setQuickCatalogKind(null)
+            setQuickServiceDeviceIndex(null)
+          }
+        }}
+        onCreated={handleQuickCatalogCreated}
+      />
+    )}
 
     {/* Modal de Configuración de Términos y Comprobante de Garantía */}
     <Dialog open={isWarrantyConfigOpen} onOpenChange={setIsWarrantyConfigOpen}>
