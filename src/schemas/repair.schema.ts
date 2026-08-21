@@ -242,6 +242,7 @@ export const WarrantySchema = z.object({
 })
 
 export const RepairFormSchema = z.object({
+  idempotencyKey: z.string().min(8).max(120).optional(),
   customerName: CustomerSchema.shape.name,
   customerPhone: CustomerSchema.shape.phone,
   customerEmail: CustomerSchema.shape.email,
@@ -315,6 +316,7 @@ export const RepairFormSchema = z.object({
 })
 
 export const RepairFormQuickSchema = z.object({
+  idempotencyKey: z.string().min(8).max(120).optional(),
   customerName: CustomerSchema.shape.name,
   customerPhone: CustomerSchema.shape.phone,
   customerEmail: CustomerSchema.shape.email,

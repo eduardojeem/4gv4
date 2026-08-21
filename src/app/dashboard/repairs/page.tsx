@@ -378,9 +378,10 @@ function RepairsPageContent() {
         }
 
         // Handle multiple devices - create one repair per device
-        const promises = data.devices.map(async (d) => {
+        const promises = data.devices.map(async (d, deviceIndex) => {
           const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
           const payload: PersistRepairFormData = {
+            idempotencyKey: `${data.idempotencyKey || crypto.randomUUID()}-${deviceIndex}`,
             customer_id: data.existingCustomerId || '',
             device: `${d.brand} ${d.model}`.trim(),
             deviceType: d.deviceType,

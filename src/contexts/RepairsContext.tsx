@@ -34,6 +34,7 @@ type RepairNoteFormInput = {
 }
 
 export interface RepairFormData {
+    idempotencyKey?: string
     customer_id: string
     device: string
     deviceType: string
@@ -225,6 +226,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     ...branchHeaders(selectedBranchId),
                 },
                 body: JSON.stringify({
+                    idempotency_key: repairData.idempotencyKey || crypto.randomUUID(),
                     customer_id: repairData.customer_id,
                     device_brand: repairData.brand,
                     device_model: repairData.model,

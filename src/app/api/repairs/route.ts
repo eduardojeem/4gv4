@@ -5,6 +5,10 @@ import { parseCreateRepairInput, type CreateRepairInput } from '@/lib/repairs/cr
 import { RepairPartsStockError, replaceRepairPartsWithInventory } from '@/lib/repairs/replace-parts'
 import { RepairPricingWriteError, resolveRepairPricingWrite } from '@/lib/repairs/pricing-write'
 import {
+  fingerprintRepairCreateInput,
+  resolveRepairCreationReplay,
+} from '@/lib/repairs/create-repair-idempotency'
+import {
   isNextResponse,
   resolveRepairRouteContext,
   type RepairRouteContext,
@@ -150,7 +154,28 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) return validationErrorResponse(parsed.error.issues)
 
     const input = parsed.data
-    const { parts, notes, images, ...repairFields } = input
+    const { idempotency_key: idempotencyKey, parts, notes, images, ...repairFields } = input
+    const creationPayloadHash = fingerprintRepairCreateInput({ parts, notes, images, ...repairFields })
+
+    const findExistingCreation = async () => ctx.supabase
+      .from('repairs')
+      .select(FULL_REPAIR_SELECT)
+      .eq('organization_id', ctx.organizationId)
+      .eq('creation_idempotency_key', idempotencyKey)
+      .maybeSingle()
+
+    const existingResult = await findExistingCreation()
+    if (existingResult.error) throw existingResult.error
+    if (existingResult.data) {
+      const replay = resolveRepairCreationReplay(existingResult.data, creationPayloadHash)
+      if ('conflict' in replay) {
+        return NextResponse.json(
+          { error: replay.conflict, code: 'IDEMPOTENCY_KEY_REUSED' },
+          { status: 409 }
+        )
+      }
+      return NextResponse.json({ repair: existingResult.data, replayed: true }, { status: 200 })
+    }
 
     const relationError = await validateRepairRelations(
       ctx.supabase,
@@ -229,6 +254,8 @@ export async function POST(request: NextRequest) {
         price_override_reason: resolvedPricing.overrideReason,
         pricing_updated_by: ctx.userId,
         pricing_updated_at: new Date().toISOString(),
+        creation_idempotency_key: idempotencyKey,
+        creation_payload_hash: creationPayloadHash,
         status: 'recibido',
         received_at: new Date().toISOString(),
         organization_id: ctx.organizationId,
@@ -238,6 +265,20 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (createError) {
+      if (createError.code === '23505') {
+        const racedResult = await findExistingCreation()
+        if (racedResult.error) throw racedResult.error
+        if (racedResult.data) {
+          const replay = resolveRepairCreationReplay(racedResult.data, creationPayloadHash)
+          if (!('conflict' in replay)) {
+            return NextResponse.json({ repair: racedResult.data, replayed: true }, { status: 200 })
+          }
+          return NextResponse.json(
+            { error: replay.conflict, code: 'IDEMPOTENCY_KEY_REUSED' },
+            { status: 409 }
+          )
+        }
+      }
       logger.error('Repairs API POST insert failed', {
         error: createError.message,
         code: createError.code,
@@ -343,7 +384,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'La reparacion se creo, pero no se pudo recuperar.' }, { status: 500 })
     }
 
-    return NextResponse.json({ repair: fullRepair }, { status: 201 })
+    return NextResponse.json({ repair: fullRepair, replayed: false }, { status: 201 })
   } catch (error) {
     const detail = error as SupabaseError
     logger.error('Repairs API POST failed', {

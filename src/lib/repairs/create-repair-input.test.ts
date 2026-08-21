@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseCreateRepairInput } from './create-repair-input'
 
 const validInput = {
+  idempotency_key: 'repair-create-123',
   customer_id: '11111111-1111-4111-8111-111111111111',
   device_brand: 'Samsung',
   device_model: 'Galaxy S23',
@@ -31,10 +32,8 @@ const validInput = {
 describe('parseCreateRepairInput', () => {
   it('accepts and normalizes the repair creation contract', () => {
     const result = parseCreateRepairInput(validInput)
-
     expect(result.success).toBe(true)
     if (!result.success) return
-
     expect(result.data.diagnosis).toBeNull()
     expect(result.data.warranty_notes).toBeNull()
     expect(result.data.status).toBeUndefined()
@@ -43,33 +42,28 @@ describe('parseCreateRepairInput', () => {
   it.each(['status', 'branch_id', 'organization_id', 'received_at', 'paid_amount', 'ticket_number']) (
     'rejects server-controlled field %s',
     (field) => {
-      const result = parseCreateRepairInput({ ...validInput, [field]: 'forged-value' })
-      expect(result.success).toBe(false)
+      expect(parseCreateRepairInput({ ...validInput, [field]: 'forged-value' }).success).toBe(false)
     }
   )
 
   it('rejects malformed nested rows instead of forwarding arbitrary columns', () => {
-    const result = parseCreateRepairInput({
+    expect(parseCreateRepairInput({
       ...validInput,
-      parts: [{
-        part_name: 'Pantalla',
-        unit_price: 100000,
-        unit_cost: 80000,
-        quantity: 1,
-        status: 'installed',
-      }],
-    })
-
-    expect(result.success).toBe(false)
+      parts: [{ part_name: 'Pantalla', unit_price: 100000, unit_cost: 80000, quantity: 1, status: 'installed' }],
+    }).success).toBe(false)
   })
 
   it('requires the unlock value when the access type needs it', () => {
-    const result = parseCreateRepairInput({
-      ...validInput,
-      access_type: 'pin',
-      access_password: '',
-    })
+    expect(parseCreateRepairInput({ ...validInput, access_type: 'pin', access_password: '' }).success).toBe(false)
+  })
 
-    expect(result.success).toBe(false)
+  it('requires a retry-safe creation key', () => {
+    const withoutKey = { ...validInput, idempotency_key: undefined }
+    expect(parseCreateRepairInput(withoutKey).success).toBe(false)
+  })
+
+  it('rejects creation keys outside the supported length', () => {
+    expect(parseCreateRepairInput({ ...validInput, idempotency_key: 'short' }).success).toBe(false)
+    expect(parseCreateRepairInput({ ...validInput, idempotency_key: 'x'.repeat(121) }).success).toBe(false)
   })
 })

@@ -359,6 +359,7 @@ export function RepairFormDialogV2({
     resolver,
     mode: 'onChange', // Validate on change for real-time feedback
     defaultValues: {
+      idempotencyKey: initialData?.idempotencyKey || crypto.randomUUID(),
       customerName: initialData?.customerName || '',
       customerPhone: initialData?.customerPhone || '',
       customerEmail: initialData?.customerEmail || '',
@@ -523,6 +524,7 @@ export function RepairFormDialogV2({
     if (dialogSessionRef.current !== sessionKey) {
       dialogSessionRef.current = sessionKey
       reset({
+        idempotencyKey: initialData?.idempotencyKey || crypto.randomUUID(),
         customerName: initialData?.customerName || '',
         customerPhone: initialData?.customerPhone || '',
         customerEmail: initialData?.customerEmail || '',

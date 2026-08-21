@@ -20,6 +20,7 @@ const repairNoteSchema = z.object({
 }).strict()
 
 const createRepairInputSchema = z.object({
+  idempotency_key: z.string().trim().min(8).max(120),
   customer_id: z.string().uuid(),
   device_brand: z.string().trim().min(2).max(100),
   device_model: z.string().trim().min(1).max(100),
