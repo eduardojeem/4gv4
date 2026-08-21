@@ -127,6 +127,7 @@ import { RepairReview } from './repairs/new-repair/RepairReview'
 import { RepairFieldHelp } from './repairs/new-repair/RepairFieldHelp'
 import { invalidateBranchCatalogParts } from './repairs/new-repair/branch-catalog-selection'
 import { CatalogSearchDialogFooter } from './repairs/new-repair/CatalogSearchDialogFooter'
+import { PartsSectionSummary } from './repairs/new-repair/PartsSectionSummary'
 
 export type RepairFormMode = 'add' | 'edit'
 
@@ -1041,7 +1042,7 @@ export function RepairFormDialogV2({
             {/* Sección 1: Información del Cliente (Ancho Completo) */}
             <Card id="repair-customer-section" className={`${sectionCardClass} scroll-mt-16`}>
               <CardHeader className={`pb-3 ${sectionHeaderClass}`}>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="flex items-center gap-3">
                     <div className={sectionIconClass}>
                       <User className="h-4 w-4" />
@@ -2093,20 +2094,19 @@ export function RepairFormDialogV2({
                           Los repuestos físicos controlan stock de la sucursal. Los servicios se aplican como mano de obra o presupuesto y no descuentan existencias.
                         </RepairFieldHelp>
                       </CardTitle>
-                      {partsFields.length > 0 && (
-                        <p className="text-xs text-muted-foreground dark:text-slate-400 mt-1">
-                          {partsFields.length} {partsFields.length === 1 ? 'repuesto' : 'repuestos'} • Total: {formatCurrency(
-                            partsFields.reduce((acc, _, index) => {
-                              const cost = watch(`parts.${index}.cost`) || 0
-                              const quantity = watch(`parts.${index}.quantity`) || 0
-                              return acc + (cost * quantity)
-                            }, 0)
-                          )}
-                        </p>
-                      )}
+                      <p className="mt-1 text-xs text-muted-foreground dark:text-slate-400">
+                        Gestioná cantidades, precios y disponibilidad de cada pieza.
+                      </p>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <PartsSectionSummary
+                    itemCount={partsFields.length}
+                    partsSubtotal={calculatedPricing.partsPrice}
+                    laborCost={calculatedPricing.laborCost}
+                    referencePrice={calculatedPricing.subtotal}
+                  />
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:flex sm:justify-end">
                     <Button
                       type="button"
                       variant="outline"
@@ -2135,7 +2135,6 @@ export function RepairFormDialogV2({
                       <Plus className="h-4 w-4" />
                       Agregar Repuesto
                     </Button>
-                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3 pt-6">
