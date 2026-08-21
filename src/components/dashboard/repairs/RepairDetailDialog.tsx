@@ -12,25 +12,21 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { Input } from '@/components/ui/input'
 import {
-  User, Phone, Mail, MapPin, Calendar, Wrench,
-  Smartphone, Tablet, Laptop, Monitor, AlertCircle,
+  Phone, Mail, Calendar, Wrench,
+  Smartphone, AlertCircle,
   DollarSign, Clock, FileText, Image as ImageIcon,
-  Edit, Trash, Trash2, Printer, Package as PackageIcon, CheckCircle,
+  Edit, Printer, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
   PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown,
-  Loader2, Plus, Search, Sparkles, History, FileCheck2
+  Loader2, Sparkles, History, FileCheck2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -58,7 +54,9 @@ import {
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { logger } from '@/lib/logger'
 import { formatWhatsAppPhone, getWhatsAppLink } from '@/lib/whatsapp'
-import { RepairQuickPriceDialog, type RepairQuickPriceUpdate } from './RepairQuickPriceDialog'
+import { RepairCostSummary } from './RepairCostSummary'
+import { RepairCostsEditorDialog } from './RepairCostsEditorDialog'
+import { calculateRepairCost } from '@/lib/repairs/cost-breakdown'
 
 interface RepairDetailDialogProps {
   open: boolean
@@ -67,7 +65,7 @@ interface RepairDetailDialogProps {
   onEdit?: (repair: Repair) => void
   onDeliver?: (repair: Repair) => void
   onQuickPay?: (repair: Repair) => void
-  onQuickPriceSave?: (repair: Repair, update: RepairQuickPriceUpdate) => Promise<boolean>
+  onCostSaved?: () => void | Promise<void>
   onStatusChange?: (id: string, status: RepairStatus) => Promise<boolean>
 }
 
@@ -89,7 +87,7 @@ export function RepairDetailDialog({
   onEdit,
   onDeliver,
   onQuickPay,
-  onQuickPriceSave,
+  onCostSaved,
   onStatusChange
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
@@ -99,7 +97,7 @@ export function RepairDetailDialog({
   const [showSensitiveData, setShowSensitiveData] = useState(false)
   const [isSendingStatusWhatsApp, setIsSendingStatusWhatsApp] = useState(false)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
-  const [isQuickPriceOpen, setIsQuickPriceOpen] = useState(false)
+  const [isCostsEditorOpen, setIsCostsEditorOpen] = useState(false)
   const { settings } = useSharedSettings()
   const [verificationHash, setVerificationHash] = useState<string | undefined>(undefined)
   const [deliveredEditWarningOpen, setDeliveredEditWarningOpen] = useState(false)
@@ -112,173 +110,6 @@ export function RepairDetailDialog({
   }, [propRepair])
 
   const activeRepair = propRepair || localRepair
-
-  // Modal de búsqueda de repuestos en inventario dentro del detalle
-  const [inventorySearchOpen, setInventorySearchOpen] = useState(false)
-  const [inventorySearchQuery, setInventorySearchQuery] = useState('')
-  const [inventoryProducts, setInventoryProducts] = useState<Array<{
-    id: string
-    name: string
-    sku?: string | null
-    sale_price?: number | null
-    offer_price?: number | null
-    wholesale_price?: number | null
-    purchase_price?: number | null
-    stock_quantity?: number | null
-    category?: { name?: string | null } | null
-  }>>([])
-  const [loadingInventory, setLoadingInventory] = useState(false)
-  const [isSavingParts, setIsSavingParts] = useState(false)
-
-  const customerIsWholesale = Boolean(
-    activeRepair?.customer && (
-      (activeRepair.customer as { customer_type?: string; segment?: string; is_wholesale?: boolean }).customer_type === 'wholesale' ||
-      (activeRepair.customer as { customer_type?: string; segment?: string; is_wholesale?: boolean }).segment === 'wholesale' ||
-      (activeRepair.customer as { customer_type?: string; segment?: string; is_wholesale?: boolean }).is_wholesale
-    )
-  )
-
-  // Fetch de productos físicos de inventario con debounce
-  React.useEffect(() => {
-    if (!inventorySearchOpen) {
-      setInventoryProducts([])
-      setInventorySearchQuery('')
-      return
-    }
-
-    const controller = new AbortController()
-    setLoadingInventory(true)
-
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `/api/products?per_page=50&strict_branch_stock=true&query=${encodeURIComponent(inventorySearchQuery)}`,
-          {
-            signal: controller.signal,
-          }
-        )
-        const payload = await res.json().catch(() => ({}))
-        const productsList = Array.isArray(payload?.data?.products) ? payload.data.products : []
-        const partsOnly = productsList.filter((p: { unit_measure?: string | null; category?: { name?: string | null } | null }) => {
-          const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
-          const isServiceCategory = (p.category?.name || '').toLowerCase().includes('servicio')
-          return !isServiceUnit && !isServiceCategory
-        })
-        setInventoryProducts(partsOnly)
-      } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
-          setInventoryProducts([])
-        }
-      } finally {
-        setLoadingInventory(false)
-      }
-    }, 250)
-
-    return () => {
-      clearTimeout(t)
-      controller.abort()
-    }
-  }, [inventorySearchOpen, inventorySearchQuery])
-
-  const handleSaveParts = async (nextParts: Repair['parts']) => {
-    if (!activeRepair) return
-    setIsSavingParts(true)
-    try {
-      const payloadParts = nextParts.map(p => ({
-        name: p.name,
-        cost: Number(p.cost) || 0,
-        internalCost: p.internalCost,
-        quantity: Math.max(1, Number(p.quantity) || 1),
-        stockAvailable: p.stockAvailable,
-        supplier: p.supplier || 'Inventario Local',
-        partNumber: p.partNumber || '',
-        productId: p.productId || (p as { product_id?: string }).product_id,
-      }))
-
-      const res = await fetch(`/api/repairs/${activeRepair.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ parts: payloadParts }),
-      })
-
-      const data = await res.json().catch(() => null)
-      if (!res.ok) {
-        throw new Error(data?.error || 'No se pudieron actualizar los repuestos')
-      }
-
-      setLocalRepair(prev => prev ? {
-        ...prev,
-        parts: nextParts,
-      } : null)
-
-      toast.success('Repuestos actualizados exitosamente')
-    } catch (err) {
-      const error = err as Error
-      toast.error(error.message || 'Error al guardar repuestos')
-    } finally {
-      setIsSavingParts(false)
-    }
-  }
-
-  const handleAddInventoryProduct = async (product: typeof inventoryProducts[number]) => {
-    if (!activeRepair) return
-    const existingIndex = (activeRepair.parts || []).findIndex(
-      p => (p.productId || (p as { product_id?: string }).product_id) === product.id
-    )
-
-    const partPrice = customerIsWholesale && product.wholesale_price
-      ? product.wholesale_price
-      : (product.offer_price || product.sale_price || 0)
-
-    let nextParts = [...(activeRepair.parts || [])]
-
-    if (existingIndex >= 0) {
-      const cur = nextParts[existingIndex]
-      const nextQuantity = (cur.quantity || 1) + 1
-      nextParts[existingIndex] = {
-        ...cur,
-        quantity: nextQuantity,
-      }
-      toast.success(`Cantidad de "${product.name}" actualizada a ${nextQuantity}`)
-    } else {
-      nextParts.push({
-        id: nextParts.length + 1,
-        name: product.name,
-        cost: partPrice,
-        internalCost: product.purchase_price ?? undefined,
-        quantity: 1,
-        stockAvailable: product.stock_quantity ?? null,
-        supplier: 'Inventario Local',
-        partNumber: product.sku || '',
-        productId: product.id,
-      })
-      toast.success(`Repuesto "${product.name}" agregado a la orden`)
-    }
-
-    await handleSaveParts(nextParts)
-  }
-
-  const handleUpdateQuantity = async (index: number, newQty: number) => {
-    if (!activeRepair) return
-    let nextParts = [...(activeRepair.parts || [])]
-    if (newQty <= 0) {
-      nextParts.splice(index, 1)
-    } else {
-      nextParts[index] = {
-        ...nextParts[index],
-        quantity: newQty,
-      }
-    }
-    await handleSaveParts(nextParts)
-  }
-
-  const handleRemovePart = async (index: number) => {
-    if (!activeRepair) return
-    const nextParts = (activeRepair.parts || []).filter((_, i) => i !== index)
-    await handleSaveParts(nextParts)
-  }
 
   // Fetch verification hash when repair is loaded
   React.useEffect(() => {
@@ -331,15 +162,32 @@ export function RepairDetailDialog({
   const isPaused = activeRepair.status === 'pausado'
   const isCancelled = activeRepair.status === 'cancelado'
   const currentStepIndex = isPaused ? 2 : STATUS_FLOW.indexOf(activeRepair.status)
-  const partsTotal = (activeRepair.parts || []).reduce((acc, part) => acc + (part.cost * part.quantity), 0)
-  const displayCost = activeRepair.finalCost !== null && activeRepair.finalCost !== undefined
-    ? activeRepair.finalCost
-    : (activeRepair.estimatedCost || 0)
+  const partsTotal = (activeRepair.parts || []).reduce((total, part) => total + part.cost * part.quantity, 0)
   const financial = getRepairFinancialPresentation({
     status: activeRepair.status,
     finalCost: activeRepair.finalCost,
     estimatedCost: activeRepair.estimatedCost,
     paidAmount: activeRepair.paidAmount,
+  })
+  const configuredTaxRate = [0, 5, 10].includes(Number(settings.taxRate))
+    ? Number(settings.taxRate) as 0 | 5 | 10
+    : 10
+  const repairCostSummary = activeRepair.costSummary ?? calculateRepairCost({
+    currency: settings.currency || 'PYG',
+    laborAmount: activeRepair.laborCost || 0,
+    laborTaxRate: configuredTaxRate,
+    parts: (activeRepair.parts || []).map((part, index) => ({
+      key: part.databaseId || String(part.id || index),
+      quantity: part.quantity,
+      unitPrice: part.cost,
+      unitCost: part.internalCost ?? part.cost,
+      discountAmount: part.discountAmount ?? 0,
+      taxRate: part.taxRate ?? configuredTaxRate,
+    })),
+    additionalCharges: activeRepair.additionalCharges || 0,
+    deductions: activeRepair.deductions || 0,
+    discountAmount: activeRepair.discountAmount || 0,
+    paidAmount: activeRepair.paidAmount || 0,
   })
 
   const formatDate = (dateString?: string | null) => {
@@ -1367,259 +1215,25 @@ export function RepairDetailDialog({
 
                   {/* Costos y Piezas */}
                   <TabsContent value="finance" className="mt-4 space-y-5">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-                          <DollarSign className="h-4 w-4" />
-                          Resumen Económico
-                        </h3>
-                        {repair.status !== 'cancelado' && onQuickPriceSave && (
-                          <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPriceOpen(true)}>
-                            <Edit className="h-4 w-4" />
-                            Editar precio
-                          </Button>
-                        )}
-                      </div>
-                      <div className="rounded-xl border bg-card p-5 shadow-sm space-y-3">
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Mano de Obra Técnica:</span>
-                          <span className="font-medium">{formatCurrency(repair.laborCost || 0)}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Repuestos e Insumos ({repair.parts?.length || 0}):</span>
-                          <span className="font-medium">{formatCurrency(partsTotal)}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Presupuesto Inicial:</span>
-                          <span className="font-medium">{formatCurrency(repair.estimatedCost || 0)}</span>
-                        </div>
-                        {repair.discountAmount && repair.discountAmount > 0 ? (
-                          <div className="flex justify-between items-center text-sm text-rose-600 dark:text-rose-400">
-                            <span>Descuento Comercial:</span>
-                            <span className="font-semibold">- {formatCurrency(repair.discountAmount)}</span>
-                          </div>
-                        ) : null}
-                        <Separator />
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-slate-900 dark:text-white">Total de la Reparación:</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-lg text-emerald-600 dark:text-emerald-400">
-                              {financial.priceDefined ? formatCurrency(displayCost) : 'Precio pendiente'}
-                            </span>
-                            {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
-                              <Badge variant="outline" className="text-xs">
-                                {repair.finalCost > repair.estimatedCost ? '↑' : '↓'}{' '}
-                                {formatCurrency(Math.abs(repair.finalCost - repair.estimatedCost))}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <Separator />
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Seña / Anticipo Pagado:</span>
-                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                            {formatCurrency(financial.paid)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="font-bold text-foreground">Saldo a Cobrar al Retirar:</span>
-                          <span
-                            className={cn(
-                              'font-bold text-base tabular-nums',
-                              financial.balance !== null && financial.balance > 0
-                                ? 'text-amber-600 dark:text-amber-400'
-                                : 'text-emerald-600 dark:text-emerald-400',
-                            )}
-                          >
-                            {financial.priceDefined ? formatCurrency(financial.balance) : 'Por calcular'}
-                          </span>
-                        </div>
-
-                        {onQuickPay && financial.canCollect && (
-                          <div className="pt-2">
-                            <Button
-                              type="button"
-                              variant="default"
-                              size="sm"
-                              className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-                              onClick={() => {
-                                onClose()
-                                onQuickPay(repair)
-                              }}
-                            >
-                              <DollarSign className="h-4 w-4" />
-                              {financial.priceDefined
-                                ? `Cobrar saldo pendiente (${formatCurrency(financial.balance)})`
-                                : financial.paid > 0 ? 'Registrar otro adelanto' : 'Registrar adelanto'}
-                            </Button>
-                          </div>
-                        )}
-                        {repair.finalCost === null || repair.finalCost === undefined ? (
-                          <div className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-2 flex items-start gap-2">
-                            <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
-                            <span className="text-amber-700 dark:text-amber-400">
-                              El precio final todavía no fue definido. Los anticipos registrados se descontarán cuando se establezca el total.
-                            </span>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
-                            <PackageIcon className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                              Repuestos y Materiales Utilizados
-                            </h3>
-                            <p className="text-[11px] text-muted-foreground">
-                              Piezas físicas asociadas a la orden de reparación
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => setInventorySearchOpen(true)}
-                              className="gap-1.5 text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white shadow-xs"
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                              Buscar Repuesto en Inventario
-                            </Button>
-                          )}
-                          {onEdit && activeRepair.status !== 'cancelado' && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                onClose()
-                                onEdit(activeRepair)
-                              }}
-                              className="gap-1.5 text-xs font-medium text-muted-foreground"
-                            >
-                              <Edit className="h-3 w-3" />
-                              Editar en Formulario
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      {(!activeRepair.parts || activeRepair.parts.length === 0) ? (
-                        <div className="bg-slate-50/60 dark:bg-slate-900/30 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center space-y-2">
-                          <PackageIcon className="h-8 w-8 text-muted-foreground/50 mx-auto" />
-                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                            No hay repuestos registrados para esta reparación
-                          </p>
-                          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                            Puedes buscar repuestos en el inventario de la sucursal para añadirlos y deducir stock automáticamente.
-                          </p>
-                          {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setInventorySearchOpen(true)}
-                              className="mt-2 text-xs font-bold text-cyan-600 dark:text-cyan-400 border-cyan-300 dark:border-cyan-800 hover:bg-cyan-50 dark:hover:bg-cyan-950/30"
-                            >
-                              <Plus className="h-3.5 w-3.5 mr-1" />
-                              + Buscar Repuesto en Inventario
-                            </Button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
-                          <table className="w-full text-xs min-w-[500px]">
-                            <thead className="bg-slate-50 dark:bg-slate-900/80 text-muted-foreground font-semibold border-b border-slate-200 dark:border-slate-800">
-                              <tr>
-                                <th className="px-4 py-3 text-left">Pieza / Repuesto</th>
-                                <th className="px-3 py-3 text-center">Cantidad</th>
-                                <th className="px-4 py-3 text-right">Precio Unit.</th>
-                                <th className="px-4 py-3 text-right">Subtotal</th>
-                                {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' && (
-                                  <th className="px-3 py-3 text-center w-14">Acción</th>
-                                )}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                              {activeRepair.parts.map((part, index) => (
-                                <tr key={index} className="bg-white dark:bg-slate-950/40 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
-                                  <td className="px-4 py-3">
-                                    <div className="font-bold text-slate-900 dark:text-slate-100">{part.name}</div>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                      {part.partNumber && (
-                                        <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-muted-foreground">
-                                          SKU: {part.partNumber}
-                                        </span>
-                                      )}
-                                      {part.supplier && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          • {part.supplier}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-3 text-center">
-                                    {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' ? (
-                                      <div className="inline-flex items-center border border-slate-200 dark:border-slate-800 rounded-lg p-0.5 bg-slate-50 dark:bg-slate-900">
-                                        <button
-                                          type="button"
-                                          disabled={isSavingParts}
-                                          onClick={() => handleUpdateQuantity(index, (part.quantity || 1) - 1)}
-                                          className="h-6 w-6 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold"
-                                        >
-                                          -
-                                        </button>
-                                        <span className="px-2 font-bold text-xs tabular-nums">
-                                          {part.quantity}
-                                        </span>
-                                        <button
-                                          type="button"
-                                          disabled={isSavingParts}
-                                          onClick={() => handleUpdateQuantity(index, (part.quantity || 1) + 1)}
-                                          className="h-6 w-6 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold"
-                                        >
-                                          +
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <span className="font-bold text-xs tabular-nums">{part.quantity}</span>
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-3 text-right font-medium text-slate-700 dark:text-slate-300">
-                                    {formatCurrency(part.cost)}
-                                  </td>
-                                  <td className="px-4 py-3 text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                                    {formatCurrency(part.cost * part.quantity)}
-                                  </td>
-                                  {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' && (
-                                    <td className="px-3 py-3 text-center">
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        disabled={isSavingParts}
-                                        onClick={() => handleRemovePart(index)}
-                                        className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
-                                        title="Eliminar repuesto"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </td>
-                                  )}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
+                    <RepairCostSummary
+                      summary={repairCostSummary}
+                      partsCount={activeRepair.parts?.length || 0}
+                      editable={activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado'}
+                      repairId={activeRepair.id}
+                      onEdit={() => setIsCostsEditorOpen(true)}
+                    />
+                    {onQuickPay && financial.canCollect && (
+                      <Button
+                        type="button"
+                        className="w-full bg-emerald-600 font-semibold text-white hover:bg-emerald-700"
+                        onClick={() => { onClose(); onQuickPay(activeRepair) }}
+                      >
+                        <DollarSign className="mr-2 h-4 w-4" />
+                        {financial.priceDefined
+                          ? `Cobrar saldo pendiente (${formatCurrency(financial.balance)})`
+                          : financial.paid > 0 ? 'Registrar otro adelanto' : 'Registrar adelanto'}
+                      </Button>
+                    )}
                   </TabsContent>
 
                   {/* Historial del Celular, Eventos y Bitácora */}
@@ -1751,212 +1365,15 @@ export function RepairDetailDialog({
           }
           onCreated={() => setWarrantyCaseVersion((version) => version + 1)}
         />
-        {onQuickPriceSave && (
-          <RepairQuickPriceDialog
-            open={isQuickPriceOpen}
-            repair={activeRepair}
-            onOpenChange={setIsQuickPriceOpen}
-            onSave={(update) => onQuickPriceSave(activeRepair, update)}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
-
-    {/* Modal de Búsqueda de Repuestos en Inventario (Dentro de Detalle) */}
-    <Dialog open={inventorySearchOpen} onOpenChange={setInventorySearchOpen}>
-      <DialogContent className="sm:max-w-[640px] max-h-[88vh] flex flex-col p-0 overflow-hidden rounded-2xl bg-white dark:bg-slate-950 shadow-2xl border-slate-200 dark:border-slate-800">
-        <DialogHeader className="p-5 pb-3 border-b bg-gradient-to-r from-cyan-600/10 via-teal-600/10 to-blue-600/10 dark:from-cyan-950/40 dark:via-teal-950/40 dark:to-blue-950/40">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
-                <PackageIcon className="h-5 w-5" />
-              </div>
-              <div>
-                <DialogTitle className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                  Buscar Repuesto en Inventario
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
-                  Selecciona repuestos físicos para agregar a la orden #{activeRepair.ticketNumber || activeRepair.id.slice(0, 8).toUpperCase()}.
-                </DialogDescription>
-              </div>
-            </div>
-            {customerIsWholesale && (
-              <Badge className="bg-violet-600 text-white text-[10px] font-bold px-2 py-0.5 shadow-xs">
-                Tarifa Mayorista
-              </Badge>
-            )}
-          </div>
-        </DialogHeader>
-
-        <div className="p-4 pb-3 border-b bg-slate-50/70 dark:bg-slate-900/30 space-y-2.5">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={inventorySearchQuery}
-              onChange={(e) => setInventorySearchQuery(e.target.value)}
-              placeholder="Buscar por nombre, modelo o código SKU (ej. Pantalla A05, Batería iPhone)..."
-              className="pl-9 pr-8 h-9 text-xs rounded-xl"
-              autoFocus
-            />
-            {inventorySearchQuery && (
-              <button
-                type="button"
-                onClick={() => setInventorySearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Filtros rápidos por tipo de repuesto */}
-          <div className="flex flex-wrap gap-1.5 pt-0.5">
-            {[
-              { label: 'Todos', query: '' },
-              { label: '📱 Pantallas / Módulos', query: 'pantalla' },
-              { label: '🔋 Baterías', query: 'bateria' },
-              { label: '⚡ Pines de carga', query: 'pin' },
-              { label: '🛡️ Tapas / Carcasas', query: 'tapa' },
-              { label: '🔬 Cámaras / Flex', query: 'flex' },
-            ].map((chip) => (
-              <button
-                key={chip.label}
-                type="button"
-                onClick={() => setInventorySearchQuery(chip.query)}
-                className={cn(
-                  "text-[10px] font-semibold px-2.5 py-1 rounded-full border transition-all cursor-pointer",
-                  (chip.query === '' && inventorySearchQuery === '') || (chip.query !== '' && inventorySearchQuery.toLowerCase().includes(chip.query))
-                    ? "bg-cyan-600 text-white border-cyan-600 shadow-xs"
-                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                )}
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 min-h-[320px] max-h-[50vh]">
-          {loadingInventory ? (
-            <div className="flex flex-col items-center justify-center py-20 text-sm text-muted-foreground gap-2">
-              <Loader2 className="h-6 w-6 animate-spin text-cyan-600 dark:text-cyan-400" />
-              <span>Consultando stock de repuestos en sucursal...</span>
-            </div>
-          ) : inventoryProducts.length > 0 ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground px-1 mb-1">
-                <span>{inventoryProducts.length} repuestos encontrados</span>
-                <span>Precio unitario</span>
-              </div>
-              {inventoryProducts.map((product) => {
-                const outOfStock = product.stock_quantity === 0
-                const alreadyAddedIndex = (activeRepair.parts || []).findIndex(
-                  p => (p.productId || (p as { product_id?: string }).product_id) === product.id
-                )
-                const currentQuantity = alreadyAddedIndex >= 0 ? (activeRepair.parts[alreadyAddedIndex].quantity || 0) : 0
-                const partPrice = customerIsWholesale && product.wholesale_price
-                  ? product.wholesale_price
-                  : (product.offer_price || product.sale_price || 0)
-
-                return (
-                  <div
-                    key={product.id}
-                    className={cn(
-                      "group relative flex items-center justify-between p-3 rounded-2xl border transition-all",
-                      alreadyAddedIndex >= 0
-                        ? "bg-cyan-50/40 dark:bg-cyan-950/20 border-cyan-300 dark:border-cyan-800 shadow-xs"
-                        : outOfStock
-                          ? "bg-slate-50/50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-800 opacity-60"
-                          : "bg-white dark:bg-slate-900/60 border-slate-200/80 dark:border-slate-800 hover:border-cyan-300 dark:hover:border-cyan-800 hover:shadow-xs"
-                    )}
-                  >
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-xs text-slate-900 dark:text-slate-100">
-                          {product.name}
-                        </span>
-                        {product.sku && (
-                          <span className="text-[10px] font-mono text-muted-foreground bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                            SKU: {product.sku}
-                          </span>
-                        )}
-                        {alreadyAddedIndex >= 0 && (
-                          <Badge className="bg-cyan-600 text-white text-[9px] px-1 py-0 h-4">
-                            En la orden ({currentQuantity})
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 text-[10px]">
-                        <span className={cn(
-                          "font-semibold flex items-center gap-1",
-                          outOfStock
-                            ? "text-red-600 dark:text-red-400"
-                            : (product.stock_quantity ?? 0) <= 2
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-emerald-600 dark:text-emerald-400"
-                        )}>
-                          • Stock: {product.stock_quantity ?? 0} un.
-                        </span>
-                        {product.category?.name && (
-                          <span className="text-muted-foreground">
-                            {product.category.name}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0 flex items-center gap-3 pl-3">
-                      <div>
-                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100 tabular-nums block">
-                          {formatCurrency(partPrice)}
-                        </span>
-                        {customerIsWholesale && product.wholesale_price && (
-                          <span className="text-[9px] text-violet-600 dark:text-violet-400 font-bold block">
-                            Mayorista
-                          </span>
-                        )}
-                      </div>
-
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={isSavingParts || (outOfStock && alreadyAddedIndex < 0)}
-                        onClick={() => handleAddInventoryProduct(product)}
-                        className={cn(
-                          "h-7 px-2.5 text-[11px] font-bold rounded-xl shadow-xs transition-all cursor-pointer",
-                          alreadyAddedIndex >= 0
-                            ? "bg-cyan-600 hover:bg-cyan-700 text-white"
-                            : "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-cyan-600 dark:hover:bg-cyan-600 dark:hover:text-white"
-                        )}
-                      >
-                        {isSavingParts ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : alreadyAddedIndex >= 0 ? (
-                          "+1 un."
-                        ) : (
-                          "+ Agregar"
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-16">
-              <PackageIcon className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                {inventorySearchQuery ? 'No se encontraron repuestos con ese criterio' : 'Escribe para buscar repuestos'}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
-                {inventorySearchQuery
-                  ? 'Verifica el nombre o SKU de la pieza en inventario.'
-                  : 'Filtra por nombre de pieza (ej. Pantalla, Batería) o código SKU.'}
-              </p>
-            </div>
-          )}
-        </div>
+        <RepairCostsEditorDialog
+          open={isCostsEditorOpen}
+          repair={activeRepair}
+          laborTaxRate={configuredTaxRate}
+          onOpenChange={setIsCostsEditorOpen}
+          onSaved={async () => {
+            await onCostSaved?.()
+          }}
+        />
       </DialogContent>
     </Dialog>
 

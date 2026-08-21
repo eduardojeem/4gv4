@@ -10,6 +10,10 @@ vi.mock('@/hooks/use-shared-settings', () => ({
   useSharedSettings: () => ({ settings: {} }),
 }))
 
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({ isAdmin: true }),
+}))
+
 vi.mock('@/components/dashboard/after-sales/CreateAfterSalesCaseDialog', () => ({
   CreateAfterSalesCaseDialog: () => null,
 }))
@@ -112,21 +116,20 @@ describe('RepairDetailDialog payment summary', () => {
     expect(paymentMessage).toHaveTextContent('El precio final todavía está pendiente; el saldo se calculará cuando lo definas.')
   })
 
-  it('opens quick price editing from the costs section', async () => {
+  it('opens cost and parts editing from the costs section', async () => {
     const user = userEvent.setup()
     render(
       <RepairDetailDialog
         open
         repair={{ ...baseRepair, status: 'listo', paidAmount: 40 }}
         onClose={vi.fn()}
-        onQuickPriceSave={vi.fn().mockResolvedValue(true)}
       />,
     )
 
     await user.click(screen.getByRole('tab', { name: 'Costos y Piezas' }))
-    await user.click(screen.getByRole('button', { name: 'Editar precio' }))
+    await user.click(screen.getByRole('button', { name: 'Editar costos y repuestos' }))
 
-    expect(screen.getByRole('heading', { name: 'Editar precio de reparación' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Editar costos y repuestos' })).toBeInTheDocument()
   })
 
   it('shows the financial and inventory result of an unrepaired closeout', () => {
