@@ -226,7 +226,7 @@ function POSPageContent() {
     notes,
     setNotes,
     creditTerms,
-    setCreditTerms,
+    applyProductCreditSuggestion,
     paymentSplit,
     setPaymentSplit,
     addPaymentSplit,
@@ -3673,7 +3673,9 @@ function POSPageContent() {
         onUseCreditPlan={(product, qty, plan) => {
           addToCartHook(product, qty)
           setPaymentMethod('credit')
-          setCreditTerms({
+          applyProductCreditSuggestion({
+            productId: product.id,
+            productName: product.name,
             count: plan.count,
             interestRate: plan.rate,
             frequency: plan.frequency,

@@ -99,7 +99,8 @@ export function PaymentMethods({
     addPaymentSplit,
     removePaymentSplit,
     creditTerms,
-    setCreditTerms
+    setCreditTerms,
+    creditPlanSuggestion,
   } = useCheckout()
 
   const { activeCustomer, refreshCustomers } = usePOSCustomer()
@@ -292,6 +293,7 @@ export function PaymentMethods({
               cartTotal={cartTotal}
               creditSummary={creditSummary}
               terms={creditTerms}
+              suggestion={creditPlanSuggestion}
               onTermsChange={setCreditTerms}
               formatCurrency={formatCurrency}
             />
@@ -659,6 +661,7 @@ export function PaymentMethods({
               cartTotal={splitAmount}
               creditSummary={creditSummary}
               terms={creditTerms}
+              suggestion={creditPlanSuggestion}
               onTermsChange={setCreditTerms}
               formatCurrency={formatCurrency}
             />
