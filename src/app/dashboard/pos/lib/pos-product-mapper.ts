@@ -1,4 +1,4 @@
-import type { Product } from '@/types/product-unified'
+import type { InstallmentPlanOption, Product } from '@/types/product-unified'
 
 export type PosProductRow = {
   id: string
@@ -16,6 +16,24 @@ export type PosProductRow = {
   unit_measure?: string | null
   is_active: boolean
   cost_price?: number | null
+  installments_enabled?: boolean | null
+  installments_public?: boolean | null
+  installments_plans?: unknown
+}
+
+function mapInstallmentPlans(value: unknown): InstallmentPlanOption[] {
+  if (!Array.isArray(value)) return []
+
+  return value.flatMap((plan) => {
+    if (!plan || typeof plan !== 'object') return []
+
+    const candidate = plan as Record<string, unknown>
+    const count = Number(candidate.count)
+    const rate = Number(candidate.rate)
+
+    if (!Number.isFinite(count) || !Number.isFinite(rate)) return []
+    return [{ count, rate }]
+  })
 }
 
 export function mapProductForPOS(row: PosProductRow): Product {
@@ -40,5 +58,8 @@ export function mapProductForPOS(row: PosProductRow): Product {
     unit_measure: row.unit_measure || 'unidad',
     is_active: row.is_active,
     purchase_price: Number(row.cost_price || 0),
+    installments_enabled: Boolean(row.installments_enabled),
+    installments_public: Boolean(row.installments_public),
+    installments_plans: mapInstallmentPlans(row.installments_plans),
   } as Product
 }

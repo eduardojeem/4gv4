@@ -15,6 +15,11 @@ export type DbBrand = Database['public']['Tables']['brands']['Row']
 // Json type compatibility
 type Json = Database['public']['Tables']['products']['Row']['dimensions']
 
+export interface InstallmentPlanOption {
+  count: number
+  rate: number
+}
+
 // Unified Product type - extends Supabase with computed fields and compatibility
 export type Product = Omit<DbProduct, 'dimensions'> & {
   // Fix dimensions type compatibility
@@ -32,6 +37,11 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   
   // New field
   visibility?: 'public' | 'wholesale' | 'hidden'
+
+  // Financing configuration (columns may be newer than generated DB types)
+  installments_enabled?: boolean | null
+  installments_public?: boolean | null
+  installments_plans?: InstallmentPlanOption[] | null
 
   // Legacy compatibility - ensure these exist
   stock_quantity: number
