@@ -13,4 +13,18 @@ describe('getCustomerWriteErrorResponse', () => {
         },
       })
   })
+
+  it('explains a rejected customer type instead of returning a generic error', () => {
+    expect(getCustomerWriteErrorResponse({
+      code: '23514',
+      message: 'violates check constraint "customers_customer_type_check"',
+    }, 'update')).toEqual({
+      status: 422,
+      body: {
+        success: false,
+        code: 'CUSTOMER_TYPE_INVALID',
+        error: 'El tipo de cliente seleccionado no es válido.',
+      },
+    })
+  })
 })

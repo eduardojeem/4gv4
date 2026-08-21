@@ -205,6 +205,7 @@ export const PUT = withTenantAuth({ permission: [...writePermissions], module: '
     return NextResponse.json({ success: true, data })
   } catch (error) {
     logger.error('Repair customers API PUT error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo actualizar el cliente.' }, { status: 500 })
+    const response = getCustomerWriteErrorResponse(error as { code?: string; message?: string }, 'update')
+    return NextResponse.json(response.body, { status: response.status })
   }
 })
