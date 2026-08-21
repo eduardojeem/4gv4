@@ -89,9 +89,13 @@ describe('RepairDetailDialog payment summary', () => {
       />,
     )
 
-    expect(screen.getByTestId('repair-detail-header')).toHaveClass('max-sm:py-2.5')
+    expect(screen.getByTestId('repair-detail-header')).toHaveClass('py-1.5')
     expect(screen.getByRole('button', { name: 'Cerrar detalle de reparación' })).toHaveClass('min-h-11')
     expect(screen.getByTestId('repair-detail-actions')).toHaveClass('max-sm:grid')
+    expect(screen.getByTestId('repair-detail-device-description')).toHaveClass('max-sm:hidden')
+    expect(screen.getByTestId('repair-detail-progress')).toHaveClass('max-sm:hidden')
+    expect(screen.getByTestId('repair-detail-sections')).toHaveClass('order-1')
+    expect(screen.getByTestId('repair-detail-summary')).toHaveClass('order-2')
   })
 
   it('shows the outstanding amount and collection action after delivery', () => {

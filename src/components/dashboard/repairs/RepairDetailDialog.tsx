@@ -399,7 +399,7 @@ export function RepairDetailDialog({
             ? "sm:w-[98vw] sm:max-w-[98vw] sm:h-[96vh] sm:max-h-[96vh]"
             : "sm:w-[92vw] sm:max-w-5xl sm:h-[85vh] sm:max-h-[85vh]"
         )}>
-        <DialogHeader data-testid="repair-detail-header" className="border-b bg-muted/20 px-3 py-3 max-sm:py-2.5 sm:px-6 sm:py-3.5 shrink-0">
+        <DialogHeader data-testid="repair-detail-header" className="border-b bg-muted/20 px-2 py-1.5 sm:px-6 sm:py-3.5 shrink-0">
           <div className="flex justify-between items-start gap-2 sm:gap-4">
             <div className="flex items-start gap-2 sm:gap-4 min-w-0">
               <div className={cn(
@@ -435,7 +435,7 @@ export function RepairDetailDialog({
                 <DialogTitle className="truncate text-base font-bold tracking-tight sm:text-xl">
                   {repair.device}
                 </DialogTitle>
-                <DialogDescription className="flex items-center gap-1.5 text-xs sm:gap-2 sm:text-sm flex-wrap">
+                <DialogDescription data-testid="repair-detail-device-description" className="flex items-center gap-1.5 text-xs max-sm:hidden sm:gap-2 sm:text-sm flex-wrap">
                   <span>{deviceTypeConfig[repair.deviceType]?.label || repair.deviceType}</span>
                   <span className="text-muted-foreground/50">•</span>
                   <span>{repair.brand} {repair.model}</span>
@@ -453,7 +453,7 @@ export function RepairDetailDialog({
             <div className="flex gap-1 sm:gap-2 shrink-0">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11 sm:h-9 sm:min-h-9 sm:w-9 sm:min-w-9" aria-label="Compartir" title="Compartir reparación">
+                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11 max-sm:hidden sm:h-9 sm:min-h-9 sm:w-9 sm:min-w-9" aria-label="Compartir" title="Compartir reparación">
                     <Share2 className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -566,7 +566,7 @@ export function RepairDetailDialog({
         </DialogHeader>
 
         {/* Stepper de progreso */}
-        <div className="border-b bg-background px-3 py-1.5 sm:px-6 sm:py-2 shrink-0">
+        <div data-testid="repair-detail-progress" className="border-b bg-background px-3 py-1.5 max-sm:hidden sm:px-6 sm:py-2 shrink-0">
           {isCancelled ? (
             <div className="flex items-center gap-3 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 px-4 py-2.5">
               <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0" />
@@ -789,7 +789,7 @@ export function RepairDetailDialog({
 
             <div className="flex flex-col lg:flex-row gap-6 items-start">
               {/* ─── Columna lateral: resumen siempre visible ─── */}
-              <aside className="w-full lg:w-80 shrink-0 space-y-4">
+              <aside data-testid="repair-detail-summary" className="order-2 w-full shrink-0 space-y-4 lg:order-1 lg:w-80">
                 {/* Estado financiero: independiente de si el equipo ya fue entregado. */}
                 <section aria-labelledby="repair-payment-summary-title" className="relative overflow-hidden rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm sm:p-5 dark:border-emerald-900/60 dark:bg-emerald-950/30">
                   <DollarSign className="pointer-events-none absolute -right-4 -top-4 h-28 w-28 text-emerald-600/5" />
@@ -1118,7 +1118,7 @@ export function RepairDetailDialog({
               </aside>
 
               {/* ─── Área principal: detalle por pestañas ─── */}
-              <main className="flex-1 min-w-0 w-full">
+              <main data-testid="repair-detail-sections" className="order-1 w-full min-w-0 flex-1 lg:order-2">
                 <Tabs defaultValue="diagnostic" className="w-full">
                   <TabsList className="sticky top-0 z-10 h-auto w-full justify-start overflow-x-auto bg-background/95 p-1 backdrop-blur">
                     <TabsTrigger value="diagnostic" className="min-h-11 shrink-0 text-xs sm:min-h-9 sm:text-sm">
