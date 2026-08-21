@@ -16,21 +16,27 @@ const REPAIR_SELECT_VARIANTS = [
     customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email, customer_type),
     technician:profiles!technician_id(id, full_name),
     images:repair_images(id, image_url, description),
-    payments:repair_payments(*)
+    payments:repair_payments(*),
+    parts:repair_parts(*),
+    currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
   `,
   `
     *,
     customer:customers!customer_id(id, name, phone, email, customer_type),
     technician:profiles!technician_id(id, full_name),
     images:repair_images(id, image_url, description),
-    payments:repair_payments(*)
+    payments:repair_payments(*),
+    parts:repair_parts(*),
+    currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
   `,
   `
     *,
     customer:customers!customer_id(id, first_name, last_name, phone, email, customer_type),
     technician:profiles!technician_id(id, full_name),
     images:repair_images(id, image_url, description),
-    payments:repair_payments(*)
+    payments:repair_payments(*),
+    parts:repair_parts(*),
+    currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
   `,
 ]
 
@@ -41,7 +47,8 @@ const FULL_REPAIR_SELECT = `
   images:repair_images(id, image_url, description),
   parts:repair_parts(*),
   notes:repair_notes(*),
-  payments:repair_payments(*)
+  payments:repair_payments(*),
+  currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
 `
 
 type SupabaseError = { message?: string; code?: string; details?: string; hint?: string }
