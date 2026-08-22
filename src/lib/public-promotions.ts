@@ -33,17 +33,25 @@ export function isPromotionActive(promotion: PublicPromotion, now = new Date()) 
   return true
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export function buildPublicOfferCandidateFilter(promotions: PublicPromotion[], now = new Date()) {
   const activeAutomaticPromotions = promotions
     .filter((promotion) => promotion.public_mode === 'automatic')
     .filter((promotion) => promotion.type === 'percentage' && isPromotionActive(promotion, now))
 
-  const productIds = Array.from(new Set(
+  // applicable_categories puede traer centinelas que no son UUID (el formulario
+  // del dashboard guarda 'service' para promos de reparaciones). Mandarlos a un
+  // filtro sobre una columna uuid aborta la query entera, así que se descartan.
+  // También evita inyección en el filtro de PostgREST vía ids manipulados.
+  const asUuidList = (ids: string[]) => Array.from(new Set(ids)).filter((id) => UUID_PATTERN.test(id))
+
+  const productIds = asUuidList(
     activeAutomaticPromotions.flatMap((promotion) => promotion.applicable_products ?? []),
-  ))
-  const categoryIds = Array.from(new Set(
+  )
+  const categoryIds = asUuidList(
     activeAutomaticPromotions.flatMap((promotion) => promotion.applicable_categories ?? []),
-  ))
+  )
   const filters = ['has_offer.eq.true']
 
   if (productIds.length > 0) filters.push(`id.in.(${productIds.join(',')})`)

@@ -34,6 +34,12 @@ import useSWR from 'swr'
 
 import { formatCurrency } from '@/lib/currency'
 import { getWhatsAppLink } from '@/lib/whatsapp'
+import {
+  OFFER_ACCENTS as CAROUSEL_ACCENTS,
+  OffersCarouselDeck,
+  type OfferSlide,
+} from '@/components/public/offers/OffersCarouselDeck'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OfferProduct {
@@ -66,6 +72,31 @@ function formatPrice(price: number): string {
 function calcDiscount(sale: number, offer: number): number {
   if (sale <= 0 || offer >= sale) return 0
   return Math.round(((sale - offer) / sale) * 100)
+}
+
+/**
+ * Convierte las ofertas de la página al formato del carrusel compartido,
+ * priorizando las de mayor descuento (es una banda de destacados).
+ */
+function toOfferSlides(offers: OfferProduct[], limit: number): OfferSlide[] {
+  return [...offers]
+    .sort((a, b) => calcDiscount(b.sale_price, b.offer_price) - calcDiscount(a.sale_price, a.offer_price))
+    .slice(0, Math.max(1, limit))
+    .map((offer) => {
+      const discount = calcDiscount(offer.sale_price, offer.offer_price)
+      return {
+        id: offer.id,
+        title: offer.name,
+        description: offer.description || 'Disponible para entrega inmediata y retiro en tienda.',
+        priceLabel: formatPrice(offer.offer_price),
+        originalPriceLabel: offer.sale_price > offer.offer_price ? formatPrice(offer.sale_price) : undefined,
+        tag: discount > 0 ? `-${discount}%` : 'Oferta activa',
+        ctaHref: `/productos/${offer.id}`,
+        image: offer.image || (Array.isArray(offer.images) && offer.images.length > 0 ? offer.images[0] : null),
+        brand: offer.brand,
+        inStock: offer.in_stock,
+      }
+    })
 }
 
 const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], {
@@ -359,6 +390,14 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
     0,
   )
 
+  // Carrusel de destacados: se alimenta de allOffers (no de displayedOffers)
+  // para que los filtros de la grilla no vacíen la banda superior.
+  // El `??` no es decorativo: unos settings servidos por una versión anterior no
+  // traen la clave `carousel`, y sin respaldo la página entera se caería acá.
+  const carouselSettings = offersSettings.carousel ?? getWebsiteSettingsDefaults().offers_section.carousel
+  const carouselAccent = CAROUSEL_ACCENTS[offersSettings.accentColor] ?? CAROUSEL_ACCENTS.rose
+  const carouselSlides = toOfferSlides(allOffers, carouselSettings.maxItems)
+
   // ── Not enabled ─────────────────────────────────────────────────────────────
   if (!offersSettings.enabled) {
     return (
@@ -446,6 +485,45 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
           </div>
         </div>
       </section>
+
+      {/* ── Carrusel de destacados ───────────────────────────────────────────── */}
+      {/* Mismo diseño que el carrusel del inicio público: comparten OffersCarouselDeck. */}
+      {carouselSettings.enabled && carouselSlides.length > 0 && (
+        <section className={cn('border-y py-14 md:py-20', carouselAccent.section)}>
+          <div className="container">
+            <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className={cn('flex items-center gap-2 text-sm font-bold uppercase tracking-[0.16em]', carouselAccent.eyebrow)}>
+                  <Tag className="h-4 w-4" />
+                  {offersSettings.eyebrow || 'Ofertas especiales'}
+                </p>
+                <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+                  {carouselSettings.title}
+                </h2>
+                {carouselSettings.subtitle && (
+                  <p className="mt-3 max-w-2xl text-muted-foreground">{carouselSettings.subtitle}</p>
+                )}
+              </div>
+              <Button asChild variant="outline" className="w-full sm:w-auto">
+                <Link href={`${tenantPrefix}/productos`}>
+                  Ver catálogo completo
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+
+            <OffersCarouselDeck
+              offers={carouselSlides}
+              accent={carouselAccent}
+              fallbackBrand={settings.company_info.name || 'Tienda'}
+              tenantPrefix={tenantPrefix}
+              autoplay={carouselSettings.autoplay}
+              intervalSeconds={carouselSettings.intervalSeconds}
+              ariaLabel="Carrusel de ofertas destacadas"
+            />
+          </div>
+        </section>
+      )}
 
       {/* ── Filters & Search (Premium Glassmorphism) ─────────────────────────── */}
       <div className="sticky top-[74px] z-40 border-b border-slate-200 bg-background/95 shadow-sm backdrop-blur-md dark:border-slate-800 lg:top-[108px]">

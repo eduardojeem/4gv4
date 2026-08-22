@@ -39,7 +39,15 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       eyebrow: 'Ofertas especiales',
       title: 'Precios que vale la pena aprovechar',
       subtitle: 'Productos seleccionados con descuentos activos en el catálogo.',
-      accentColor: 'rose'
+      accentColor: 'rose',
+      carousel: {
+        enabled: true,
+        title: 'Destacados de la semana',
+        subtitle: 'Las mejores rebajas activas, en rotación automática.',
+        autoplay: true,
+        intervalSeconds: 5,
+        maxItems: 8
+      }
     },
     promotional_carousel: {
       enabled: false,
@@ -126,7 +134,13 @@ export function applyWebsiteSettingsDefaults(
     },
     offers_section: {
       ...defaults.offers_section,
-      ...offersSection
+      ...offersSection,
+      // Merge anidado: los settings guardados antes de existir el carrusel no
+      // traen la clave, y un guardado parcial no debe borrar los defaults.
+      carousel: {
+        ...defaults.offers_section.carousel,
+        ...(offersSection.carousel ?? {})
+      }
     },
     promotional_carousel: {
       ...defaults.promotional_carousel,

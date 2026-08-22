@@ -45,12 +45,29 @@ export interface HeroContent {
   trackRepairText?: string
 }
 
+/** Carrusel destacado que se muestra arriba de la grilla en /ofertas. */
+export interface OffersCarouselSettings {
+  /** Muestra u oculta el carrusel en la página pública de ofertas. */
+  enabled: boolean
+  /** Encabezado de la banda del carrusel. */
+  title: string
+  /** Bajada opcional debajo del título. */
+  subtitle: string
+  /** Avance automático entre slides. */
+  autoplay: boolean
+  /** Segundos entre slides cuando autoplay está activo. */
+  intervalSeconds: number
+  /** Cantidad máxima de ofertas que entran al carrusel. */
+  maxItems: number
+}
+
 export interface OffersSectionSettings {
   enabled: boolean
   eyebrow: string
   title: string
   subtitle: string
   accentColor: 'brand' | 'rose' | 'amber' | 'orange' | 'emerald' | 'blue' | 'sky' | 'violet' | 'fuchsia' | 'red' | 'teal'
+  carousel: OffersCarouselSettings
 }
 
 export interface PromotionalCarouselSlide {

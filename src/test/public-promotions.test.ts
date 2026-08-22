@@ -46,13 +46,29 @@ describe('public promotions', () => {
     expect(result.offer_price).toBeNull()
   })
 
+  // Los ids acá son UUID a propósito: products.id y products.category_id son
+  // columnas uuid, y el filtro descarta cualquier valor que no lo sea.
+  const PRODUCT_UUID = '11111111-1111-4111-8111-111111111111'
+  const CATEGORY_UUID = '22222222-2222-4222-8222-222222222222'
+
   it('includes automatic promotion targets in the database offer filter', () => {
     const filter = buildPublicOfferCandidateFilter([
-      automatic,
-      { ...automatic, id: 'category-offer', applicable_products: [], applicable_categories: ['category-1'] },
+      { ...automatic, applicable_products: [PRODUCT_UUID] },
+      { ...automatic, id: 'category-offer', applicable_products: [], applicable_categories: [CATEGORY_UUID] },
     ])
 
-    expect(filter).toBe('has_offer.eq.true,id.in.(product-1),category_id.in.(category-1)')
+    expect(filter).toBe(`has_offer.eq.true,id.in.(${PRODUCT_UUID}),category_id.in.(${CATEGORY_UUID})`)
+  })
+
+  it('drops non-uuid sentinels so the query is not aborted by a type error', () => {
+    // El formulario del dashboard guarda 'service' en applicable_categories para
+    // las promos de reparaciones. Mandarlo a un filtro sobre una columna uuid
+    // hace fallar la consulta entera.
+    const filter = buildPublicOfferCandidateFilter([
+      { ...automatic, applicable_products: [], applicable_categories: ['service'] },
+    ])
+
+    expect(filter).toBe('has_offer.eq.true')
   })
 
   it('does not include expired automatic promotions in the database offer filter', () => {

@@ -19,7 +19,6 @@ import {
   Trash2,
   Sparkles,
   Tag,
-  Info,
 } from 'lucide-react'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { PROMOTIONS_GUIDE } from '@/components/dashboard/common/section-guides-data'
@@ -30,7 +29,8 @@ import {
   PromotionFilters,
   PromotionList,
   PromotionAlerts,
-  PromotionAnalytics
+  PromotionAnalytics,
+  OffersCarouselSettingsCard
 } from '@/components/dashboard/promotions'
 import { RouteGuard } from '@/components/auth/permission-guard'
 import { PlanGate } from '@/components/admin/PlanGate'
@@ -198,6 +198,9 @@ export default function PromotionsPage() {
             )}
           </div>
         </header>
+
+        {/* Carrusel de la tienda publica - se guarda en website_settings */}
+        {canEdit && <OffersCarouselSettingsCard />}
 
         {/* Alerts — derivadas de allPromotions para no ocultarse con filtros */}
         <PromotionAlerts
