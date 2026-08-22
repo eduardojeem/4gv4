@@ -16,6 +16,8 @@ import { toast } from 'sonner'
 import { CreditStatusPanel } from './CreditStatusPanel'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { formatThousands, parseThousands } from '@/lib/currency'
+import { ProductCreditPlanPicker } from './ProductCreditPlanPicker'
+import { buildProductCreditPayments, getProductCreditAllocation, type CartProductCreditPlan } from '../../lib/cart-credit-plans'
 
 /**
  * Genera sugerencias inteligentes de billetes basadas en el monto total
@@ -63,6 +65,7 @@ interface PaymentMethodsProps {
   
   formatCurrency: (amount: number) => string
   currency: string
+  productCreditPlans?: CartProductCreditPlan[]
 }
 
 export function PaymentMethods({
@@ -71,6 +74,7 @@ export function PaymentMethods({
   creditSummary,
   formatCurrency,
   currency,
+  productCreditPlans = [],
 }: PaymentMethodsProps) {
   
   const {
@@ -101,6 +105,7 @@ export function PaymentMethods({
     creditTerms,
     setCreditTerms,
     creditPlanSuggestion,
+    applyProductCreditSuggestion,
   } = useCheckout()
 
   const { activeCustomer, refreshCustomers } = usePOSCustomer()
@@ -207,6 +212,20 @@ export function PaymentMethods({
   const canUseMixedCredit = Boolean(
     creditSummary && creditSummary.availableCredit >= creditSplitPlan.financedTotal
   )
+  const handleProductPlanSelect = React.useCallback((plan: CartProductCreditPlan) => {
+    applyProductCreditSuggestion(plan)
+    const allocation = getProductCreditAllocation(plan, cartTotal)
+
+    if (allocation.dueNow <= 0) return
+
+    setPaymentSplit(buildProductCreditPayments(plan, cartTotal, () => crypto.randomUUID()))
+    setIsMixedPayment(true)
+    setPaymentMethod('')
+    setSplitAmount(0)
+    toast.info('Venta separada automáticamente', {
+      description: `${formatCurrency(allocation.financedPrincipal)} a crédito y ${formatCurrency(allocation.dueNow)} para pagar ahora.`,
+    })
+  }, [applyProductCreditSuggestion, cartTotal, formatCurrency, setIsMixedPayment, setPaymentMethod, setPaymentSplit, setSplitAmount])
 
   return (
     <div className="space-y-4">
@@ -288,6 +307,16 @@ export function PaymentMethods({
           </div>
           
           {/* Información adicional para venta a crédito */}
+          {paymentMethod === 'credit' && (
+            <ProductCreditPlanPicker
+              cartTotal={cartTotal}
+              plans={productCreditPlans}
+              selectedPlan={creditPlanSuggestion}
+              onSelect={handleProductPlanSelect}
+              formatCurrency={formatCurrency}
+            />
+          )}
+
           {paymentMethod === 'credit' && canUseCredit && creditSummary && (
             <CreditStatusPanel
               cartTotal={cartTotal}
@@ -426,6 +455,13 @@ export function PaymentMethods({
       ) : (
         // Pago mixto
         <div className="space-y-4">
+          <ProductCreditPlanPicker
+            cartTotal={cartTotal}
+            plans={productCreditPlans}
+            selectedPlan={creditPlanSuggestion}
+            onSelect={handleProductPlanSelect}
+            formatCurrency={formatCurrency}
+          />
           <div className="bg-muted rounded-lg p-3">
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm font-medium">Total a pagar:</span>

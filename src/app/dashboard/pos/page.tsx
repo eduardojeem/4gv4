@@ -78,6 +78,7 @@ import { ProductCard } from './components/ProductCard'
 import { POSHeader } from './components/POSHeader'
 import { POSCart } from './components/POSCart'
 import { CheckoutModal } from './components/CheckoutModal'
+import { getCartProductCreditPlans } from './lib/cart-credit-plans'
 import { OpenCashRegisterDialog } from './components/OpenCashRegisterDialog'
 import { useOptimizedCart } from './hooks/useOptimizedCart'
 import { useCheckout } from './contexts/CheckoutContext'
@@ -1187,6 +1188,28 @@ function POSPageContent() {
     return [...cart, ...repairItems]
   }, [cart, selectedRepairs])
   const canCheckout = combinedCartItems.length > 0
+  const checkoutProductCreditPlans = useMemo(() => getCartProductCreditPlans(
+    combinedCartItems.map(item => {
+      const retailUnitPrice = Number(item.price || 0)
+      const wholesaleUnitPrice = item.isService
+        ? retailUnitPrice
+        : Number(item.wholesalePrice ?? (retailUnitPrice * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
+      const unitPrice = isWholesale ? wholesaleUnitPrice : retailUnitPrice
+      const itemDiscountRate = Math.min(100, Math.max(0, Number(item.discount || 0)))
+      return {
+        ...item,
+        price: unitPrice * (1 - (itemDiscountRate / 100)),
+      }
+    }),
+    inventoryProducts.map(product => ({
+      id: product.id,
+      name: product.name,
+      price: product.sale_price,
+      quantity: 1,
+      installmentsEnabled: Boolean(product.installments_enabled),
+      installmentsPlans: Array.isArray(product.installments_plans) ? product.installments_plans : [],
+    })),
+  ), [combinedCartItems, inventoryProducts, isWholesale])
   const checkoutDisabledReason = canCheckout ? undefined : 'Agrega productos o vincula una reparacion para cobrar.'
 
   // Unified Remove Handler
@@ -2216,6 +2239,17 @@ function POSPageContent() {
 
               <div className="lg:hidden flex items-center justify-end gap-2">
                 <Button
+                  variant={creditOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCreditOnly(current => !current)}
+                  aria-pressed={creditOnly}
+                  className="h-7.5 px-2.5 text-xs"
+                >
+                  <CreditCard className="mr-1 h-3.5 w-3.5" />
+                  Con cuotas
+                  <span className="ml-1 text-[10px] opacity-75">({financedProductsCount})</span>
+                </Button>
+                <Button
                   variant={isMobileFiltersOpen ? "default" : "outline"}
                   size="sm"
                   onClick={() => setIsMobileFiltersOpen((v) => !v)}
@@ -2264,7 +2298,7 @@ function POSPageContent() {
                   size="sm"
                   onClick={() => setCreditOnly(current => !current)}
                   aria-pressed={creditOnly}
-                  className="h-8 px-2.5 text-xs"
+                  className="hidden h-8 px-2.5 text-xs lg:inline-flex"
                 >
                   <CreditCard className="mr-1 h-3.5 w-3.5" />
                   Con cuotas
@@ -3208,6 +3242,7 @@ function POSPageContent() {
         discount={generalDiscount}
         onDiscountChange={setGeneralDiscount}
         currency={settings.currency || 'PYG'}
+        productCreditPlans={checkoutProductCreditPlans}
         processSale={processSale}
         processMixedPayment={processMixedPayment}
         formatCurrency={formatCurrency}

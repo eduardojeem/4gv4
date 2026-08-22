@@ -7,7 +7,6 @@ import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import {
@@ -21,6 +20,7 @@ import {
 } from 'lucide-react'
 import { usePOSCustomer } from '../../contexts/POSCustomerContext'
 import { useCreditSystem } from '@/hooks/use-credit-system'
+import { CustomerQuickCreateDialog } from '@/components/dashboard/repairs/CustomerQuickCreateDialog'
 
 interface CreditSummary {
   totalCredit: number
@@ -66,6 +66,10 @@ export function CustomerSelection({
     selectedCustomer,
     setSelectedCustomer,
     activeCustomer,
+    customers,
+    setCustomers,
+    setCustomersSourceSupabase,
+    setLastCustomerRefreshCount,
     customerSearch,
     setCustomerSearch,
     customerTypeFilter,
@@ -77,19 +81,7 @@ export function CustomerSelection({
     lastCustomerRefreshCount,
     refreshCustomers,
     newCustomerOpen,
-    setNewCustomerOpen,
-    newFirstName,
-    setNewFirstName,
-    newLastName,
-    setNewLastName,
-    newPhone,
-    setNewPhone,
-    newEmail,
-    setNewEmail,
-    newType,
-    setNewType,
-    newCustomerSaving,
-    createNewCustomer
+    setNewCustomerOpen
   } = usePOSCustomer()
 
   const { loadCreditData } = useCreditSystem()
@@ -413,58 +405,41 @@ export function CustomerSelection({
           </div>
         )}
 
-        {/* Modal de nuevo cliente */}
-        <Dialog open={newCustomerOpen} onOpenChange={setNewCustomerOpen}>
-          <DialogContent className="max-w-md w-[92vw] sm:w-auto">
-            <DialogHeader>
-              <DialogTitle>Nuevo cliente</DialogTitle>
-              <DialogDescription className="sr-only">
-                Crea rápidamente un nuevo cliente para asociarlo a la venta actual.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <Input
-                  placeholder="Nombre"
-                  value={newFirstName}
-                  onChange={(e) => setNewFirstName(e.target.value)}
-                />
-                <Input
-                  placeholder="Apellido"
-                  value={newLastName}
-                  onChange={(e) => setNewLastName(e.target.value)}
-                />
-              </div>
-              <Input
-                placeholder="Teléfono"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-              />
-              <Input
-                placeholder="Email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-              />
-              <Select value={newType} onValueChange={setNewType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Tipo de cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="regular">Regular</SelectItem>
-                  <SelectItem value="vip">VIP</SelectItem>
-                  <SelectItem value="wholesale">Mayorista</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                className="w-full"
-                onClick={createNewCustomer}
-                disabled={newCustomerSaving}
-              >
-                {newCustomerSaving ? 'Guardando…' : 'Guardar'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <CustomerQuickCreateDialog
+          open={newCustomerOpen}
+          onClose={() => setNewCustomerOpen(false)}
+          onCreated={(customerId, customerData) => {
+            const createdCustomer = {
+              id: customerId,
+              name: customerData.name,
+              email: customerData.email || '',
+              phone: customerData.phone || '',
+              type: customerData.customer_type || customerData.segment || 'regular',
+              updated_at: customerData.created_at || new Date().toISOString(),
+              address: customerData.address || '',
+              city: customerData.city || '',
+              last_visit: customerData.last_visit || null,
+              loyalty_points: customerData.loyalty_points || 0,
+              total_purchases: customerData.total_purchases || 0,
+              total_repairs: customerData.total_repairs || 0,
+              current_balance: customerData.current_balance || 0,
+              credit_limit: customerData.credit_limit || 0,
+            }
+
+            setCustomers([
+              createdCustomer,
+              ...customers.filter(customer => customer.id !== customerId),
+            ])
+            setCustomersSourceSupabase(true)
+            setLastCustomerRefreshCount(lastCustomerRefreshCount == null ? 1 : lastCustomerRefreshCount + 1)
+            setSelectedCustomer(customerId)
+            setNewCustomerOpen(false)
+
+            refreshCustomers().catch(() => {
+              toast.info('El cliente fue creado y seleccionado, pero la lista no pudo actualizarse en segundo plano.')
+            })
+          }}
+        />
       </div>
   )
 }

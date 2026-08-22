@@ -87,4 +87,14 @@ describe('atomic POS store-credit contract', () => {
     expect(customer).not.toContain('Origen:')
     expect(customer).not.toContain('ID: <span')
   })
+
+  it('reuses the repair customer creation flow and selects the created customer', () => {
+    const customer = readFileSync(resolve(workspace, 'src/app/dashboard/pos/components/checkout/CustomerSelection.tsx'), 'utf8')
+
+    expect(customer).toContain("import { CustomerQuickCreateDialog } from '@/components/dashboard/repairs/CustomerQuickCreateDialog'")
+    expect(customer).toContain('<CustomerQuickCreateDialog')
+    expect(customer).toContain('setSelectedCustomer(customerId)')
+    expect(customer).toContain('refreshCustomers().catch')
+    expect(customer).not.toContain('<DialogTitle>Nuevo cliente</DialogTitle>')
+  })
 })

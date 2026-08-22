@@ -43,6 +43,7 @@ import type { Promotion } from '@/types/promotion'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { getMixedPaymentValidation } from '../lib/payment-validation'
 import { getRepairBalanceDue } from '../lib/repair-charge'
+import type { CartProductCreditPlan } from '../lib/cart-credit-plans'
 
 import { useCheckout } from '../contexts/CheckoutContext'
 import { usePOSCustomer } from '../contexts/POSCustomerContext'
@@ -94,6 +95,7 @@ export interface CheckoutModalProps {
   discount: number
   onDiscountChange: (discount: number) => void
   currency: string
+  productCreditPlans: CartProductCreditPlan[]
   
   // Actions
   processSale: () => void
@@ -128,6 +130,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   discount,
   onDiscountChange,
   currency,
+  productCreditPlans,
   processSale,
   processMixedPayment,
   formatCurrency,
@@ -548,6 +551,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               creditSummary={creditSummary || undefined}
               formatCurrency={formatCurrency}
               currency={currency}
+              productCreditPlans={productCreditPlans}
             />
 
             <details className="group rounded-lg border bg-muted/15">

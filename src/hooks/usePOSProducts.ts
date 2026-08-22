@@ -31,6 +31,8 @@ interface CartItem {
   stock: number
   subtotal: number
   discount_amount?: number
+  installmentsEnabled?: boolean
+  installmentsPlans?: Array<{ count: number; rate: number }>
 }
 
 interface StockMovement {
@@ -285,7 +287,9 @@ export function usePOSProducts() {
           price: product.sale_price || 0,
           quantity,
           stock: product.stock_quantity || 0,
-          subtotal: quantity * (product.sale_price || 0)
+          subtotal: quantity * (product.sale_price || 0),
+          installmentsEnabled: Boolean(product.installments_enabled),
+          installmentsPlans: Array.isArray(product.installments_plans) ? product.installments_plans : [],
         }
         return [...prevCart, newItem]
       }

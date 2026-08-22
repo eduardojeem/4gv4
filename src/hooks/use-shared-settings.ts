@@ -38,6 +38,7 @@ export interface SystemSettingsRow {
   retention_days: number
   updated_at: string
   updated_by: string | null
+  default_installment_rates?: Record<string, number>
 }
 
 // Shared settings interface used in the application
@@ -83,6 +84,9 @@ export interface SharedSettings {
 
   // Admin
   maintenanceMode: boolean
+
+  // Defaults
+  defaultInstallmentRates: Record<string, number>
 }
 
 export type SharedSettingsSource = 'remote' | 'default'
@@ -120,7 +124,8 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   maxLoginAttempts: 3,
   passwordMinLength: 8,
   requireTwoFactor: false,
-  maintenanceMode: false
+  maintenanceMode: false,
+  defaultInstallmentRates: {}
 }
 
 // ============================================================================

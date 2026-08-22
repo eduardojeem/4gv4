@@ -59,6 +59,7 @@ import { BrandModal } from '@/components/dashboard/brands/BrandModal'
 import { useCategories } from '@/hooks/useCategories'
 import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { removeFile, uploadFile } from '@/lib/supabase-storage'
 import { useForm, useFieldArray } from 'react-hook-form'
@@ -119,6 +120,7 @@ export function ProductModal({
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
   const canViewCost = useCanViewCost()
+  const { settings } = useSharedSettings()
 
   // Local state for lists to support instant updates
   const [localCategories, setLocalCategories] = useState<Category[]>(categories ?? [])
@@ -1350,7 +1352,7 @@ export function ProductModal({
                                       onClick={() => {
                                         setBulkOpen(false)
                                         setExpandedChip(preset)
-                                        setChipRate((prev) => ({ ...prev, [preset]: prev[preset] ?? '0' }))
+                                        setChipRate((prev) => ({ ...prev, [preset]: prev[preset] ?? String(settings.defaultInstallmentRates?.[String(preset)] ?? '0') }))
                                       }}
                                       className="h-7 px-2.5 text-xs border-dashed hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300 transition-colors"
                                     >
@@ -1380,7 +1382,7 @@ export function ProductModal({
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                     {INSTALLMENT_PRESETS.map((n) => {
                                       const already = (installmentsPlans ?? []).some((p) => Number(p?.count) === n)
-                                      const entry = bulkDraft[n] ?? { checked: false, rate: '0' }
+                                      const entry = bulkDraft[n] ?? { checked: false, rate: String(settings.defaultInstallmentRates?.[String(n)] ?? '0') }
                                       const previewBulk = installmentBase > 0 && entry.checked
                                         ? buildCreditInstallmentPlan({
                                             principalAmount: installmentBase,

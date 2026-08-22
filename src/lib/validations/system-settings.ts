@@ -95,7 +95,8 @@ export const SystemSettingsSchema = z.object({
 
   // Características y Redes
   socialLinks: z.record(z.string(), z.string()).default({}),
-  features: z.record(z.string(), z.boolean()).default({}),
+  features: z.record(z.string(), z.unknown()).default({}),
+  defaultInstallmentRates: z.record(z.string(), z.number()).default({}),
   retentionDays: z.number().int().min(30).max(3650).default(90),
   
   // Opciones del sistema
@@ -203,7 +204,8 @@ export function mapDBToSettings(dbData: z.infer<typeof SystemSettingsDBSchema>):
     requireEmailVerification: dbData.require_email_verification,
     maxLoginAttempts: dbData.max_login_attempts,
     passwordMinLength: dbData.password_min_length,
-    requireTwoFactor: dbData.require_two_factor
+    requireTwoFactor: dbData.require_two_factor,
+    defaultInstallmentRates: (dbData as { default_installment_rates?: Record<string, number> }).default_installment_rates || {}
   }
 }
 
@@ -235,6 +237,7 @@ export function mapSettingsToDB(settings: SystemSettingsPartial): Record<string,
   if (settings.socialLinks !== undefined) dbData.social_links = settings.socialLinks
   if (settings.features !== undefined) dbData.features = settings.features
   if (settings.retentionDays !== undefined) dbData.retention_days = settings.retentionDays
+  if (settings.defaultInstallmentRates !== undefined) dbData.default_installment_rates = settings.defaultInstallmentRates
 
   if (settings.autoBackup !== undefined) dbData.auto_backup = settings.autoBackup
   if (settings.emailNotifications !== undefined) dbData.email_notifications = settings.emailNotifications

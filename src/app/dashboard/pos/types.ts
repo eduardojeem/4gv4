@@ -1,4 +1,5 @@
 import type { Product as UnifiedProduct } from '@/types/product-unified'
+import type { InstallmentPlanOption } from '@/types/product-unified'
 import type { ComponentType } from 'react'
 
 // Use the unified Product type for consistency
@@ -31,6 +32,9 @@ export interface CartItem {
   // Identificador para servicios/reparaciones
   isService?: boolean
   promoCode?: string
+  // Condiciones comerciales del producto usadas por el selector de cuotas del checkout.
+  installmentsEnabled?: boolean
+  installmentsPlans?: InstallmentPlanOption[]
 }
 
 export interface PaymentSplit {
