@@ -3,11 +3,40 @@
 import { useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react'
 
 interface ProductPaginationProps {
   currentPage: number
   totalPages: number
+}
+
+/** Calcula el conjunto de números de página a mostrar con elipsis.
+ *  Siempre incluye la primera y la última página, y una ventana de 3
+ *  alrededor de la página actual. El separador `null` representa "…". */
+function buildPageRange(current: number, total: number): (number | null)[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+
+  const delta = 1 // páginas a cada lado de la actual
+  const range = new Set<number>()
+  range.add(1)
+  range.add(total)
+  for (let i = Math.max(2, current - delta); i <= Math.min(total - 1, current + delta); i++) {
+    range.add(i)
+  }
+
+  const sorted = Array.from(range).sort((a, b) => a - b)
+  const result: (number | null)[] = []
+
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) {
+      result.push(null) // elipsis
+    }
+    result.push(sorted[i])
+  }
+
+  return result
 }
 
 export function ProductPagination({ currentPage, totalPages }: ProductPaginationProps) {
@@ -28,8 +57,13 @@ export function ProductPagination({ currentPage, totalPages }: ProductPagination
 
   if (totalPages <= 1) return null
 
+  const pages = buildPageRange(currentPage, totalPages)
+
   return (
-    <nav className={`flex items-center justify-center gap-1 pt-10 ${isPending ? 'opacity-60 pointer-events-none' : ''}`} aria-label="Paginacion">
+    <nav
+      className={`flex items-center justify-center gap-1 pt-10 ${isPending ? 'opacity-60 pointer-events-none' : ''}`}
+      aria-label="Paginacion"
+    >
       <Button
         variant="outline"
         size="icon"
@@ -41,19 +75,16 @@ export function ProductPagination({ currentPage, totalPages }: ProductPagination
         <ChevronLeft className="h-4 w-4" />
       </Button>
 
-      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-        let pageNum: number
-        if (totalPages <= 5) {
-          pageNum = i + 1
-        } else if (currentPage <= 3) {
-          pageNum = i + 1
-        } else if (currentPage >= totalPages - 2) {
-          pageNum = totalPages - 4 + i
-        } else {
-          pageNum = currentPage - 2 + i
-        }
-
-        return (
+      {pages.map((pageNum, idx) =>
+        pageNum === null ? (
+          <span
+            key={`ellipsis-${idx}`}
+            className="flex h-9 w-9 items-center justify-center text-muted-foreground"
+            aria-hidden="true"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </span>
+        ) : (
           <Button
             key={pageNum}
             variant={currentPage === pageNum ? 'default' : 'ghost'}
@@ -68,7 +99,7 @@ export function ProductPagination({ currentPage, totalPages }: ProductPagination
             {pageNum}
           </Button>
         )
-      })}
+      )}
 
       <Button
         variant="outline"

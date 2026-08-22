@@ -14,16 +14,20 @@ import { logger } from '@/lib/logger'
 // ============================================================================
 
 // Importar tipos centralizados
-import { Repair, RepairStatus, RepairPriority, RepairDeliveryOutcome } from '@/types/repairs'
+import { Repair, RepairStatus, RepairPriority, RepairDeliveryOutcome, RepairPricingMode } from '@/types/repairs'
+import type { RepairLineType } from '@/lib/repairs/line-types'
 
 type SupabaseRepairPayload = Parameters<typeof mapSupabaseRepairToUi>[0]
 type RepairPartFormInput = {
     name?: string
     cost?: number
+    internalCost?: number
     quantity?: number
+    stockAvailable?: number | null
     supplier?: string
     partNumber?: string
     productId?: string | null
+    lineType?: RepairLineType
 }
 type RepairNoteFormInput = {
     id?: string | number
@@ -32,11 +36,15 @@ type RepairNoteFormInput = {
 }
 
 export interface RepairFormData {
+    idempotencyKey?: string
     customer_id: string
     device: string
     deviceType: string
     brand: string
     model: string
+    serial_number?: string | null
+    serialNumber?: string | null
+    imei?: string | null
     issue: string
     description?: string
     accessType?: 'none' | 'pin' | 'password' | 'pattern' | 'biometric' | 'other'
@@ -47,6 +55,9 @@ export interface RepairFormData {
     estimated_cost?: number
     laborCost?: number
     finalCost?: number | null
+    pricingMode?: RepairPricingMode
+    discountAmount?: number
+    priceOverrideReason?: string
     warrantyMonths?: number
     warrantyType?: 'labor' | 'parts' | 'full'
     warrantyNotes?: string
@@ -173,7 +184,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     // Fetch all repairs
     const fetchRepairs = useCallback(async () => {
         try {
-            setIsLoading(true)
+            setIsLoading((prev) => (repairs.length === 0 ? true : prev))
             setError(null)
 
             const { data, error: fetchError } = await fetchRepairsWithCustomerFallback()
@@ -194,7 +205,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         } finally {
             setIsLoading(false)
         }
-    }, [fetchRepairsWithCustomerFallback])
+    }, [fetchRepairsWithCustomerFallback, repairs.length])
 
     // Create repair
     const createRepair = useCallback(async (data: RepairFormData): Promise<Repair | null> => {
@@ -217,34 +228,38 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     ...branchHeaders(selectedBranchId),
                 },
                 body: JSON.stringify({
+                    idempotency_key: repairData.idempotencyKey || crypto.randomUUID(),
                     customer_id: repairData.customer_id,
                     device_brand: repairData.brand,
                     device_model: repairData.model,
+                    serial_number: repairData.serial_number || repairData.serialNumber || repairData.imei || null,
                     device_type: repairData.deviceType,
                     problem_description: repairData.issue,
                     diagnosis: repairData.description,
                     access_type: repairData.accessType || 'none',
                     access_password: repairData.accessPassword || null,
-                    status: 'recibido',
                     priority: repairData.priority,
                     urgency: repairData.urgency,
                     technician_id: repairData.technician_id || null,
                     estimated_cost: repairData.estimated_cost,
                     labor_cost: repairData.laborCost || 0,
                     final_cost: repairData.finalCost,
+                    pricing_mode: repairData.pricingMode || 'automatic',
+                    discount_amount: repairData.discountAmount || 0,
+                    price_override_reason: repairData.priceOverrideReason || null,
                     warranty_months: repairData.warrantyMonths || 0,
                     warranty_type: repairData.warrantyType || 'full',
                     warranty_notes: repairData.warrantyNotes || null,
                     warranty_expires_at: warrantyExpiresAt,
-                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
-                    received_at: new Date().toISOString(),
                     parts: parts?.map((p) => ({
                         part_name: p.name,
-                        unit_cost: p.cost,
+                        unit_price: p.cost,
+                        unit_cost: p.internalCost,
                         quantity: p.quantity,
                         supplier: p.supplier,
                         part_number: p.partNumber,
                         product_id: p.productId || null,
+                        line_type: p.lineType || 'charged_part',
                     })) ?? [],
                     notes: notes?.map((n) => ({
                         note_text: n.text,
@@ -414,7 +429,12 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     'Content-Type': 'application/json',
                     ...branchHeaders(selectedBranchId),
                 },
-                body: JSON.stringify({ outcome, note }),
+                body: JSON.stringify({
+                    outcome,
+                    note,
+                    allowOutstandingBalance: true,
+                    idempotencyKey: `repair-delivery-${crypto.randomUUID()}`,
+                }),
             })
             const payload = await response.json().catch(() => null) as { repair?: unknown; error?: string } | null
 

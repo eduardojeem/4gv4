@@ -53,6 +53,22 @@ const DEFAULT_TRUST_BADGES = [
   { icon: Wrench,       label: 'Técnicos certificados' },
 ]
 
+const HERO_BACKGROUNDS: Record<string, string> = {
+  blue: 'bg-blue-700',
+  green: 'bg-emerald-700',
+  purple: 'bg-purple-700',
+  orange: 'bg-orange-700',
+  red: 'bg-red-700',
+  indigo: 'bg-indigo-700',
+  teal: 'bg-teal-700',
+  rose: 'bg-rose-700',
+  amber: 'bg-amber-600',
+  emerald: 'bg-emerald-700',
+  cyan: 'bg-cyan-700',
+  sky: 'bg-sky-700',
+  custom: 'bg-primary',
+}
+
 function getTrustBadges(customBadges?: string[]) {
   const labels = customBadges
     ?.map((label) => label.trim())
@@ -87,105 +103,104 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
     },
     () => false,
   )
+  const heroBackground = HERO_BACKGROUNDS[companyInfo.brandColor || 'blue'] ?? HERO_BACKGROUNDS.blue
+
+  if (heroContent.enabled === false) return null
 
   return (
-    <section className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} py-20 text-white md:py-28`}>
-      {/* Background decoration */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-24 -top-24 h-96 w-96 rounded-full bg-white/5 blur-3xl" />
-        <div className="absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-black/10 blur-3xl" />
-        {/* Dot grid */}
-        <svg className="absolute inset-0 h-full w-full opacity-[0.07]" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="hero-dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-              <circle cx="2" cy="2" r="1.5" fill="white" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#hero-dots)" />
-        </svg>
-      </div>
-
-      <div className="container relative">
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+    <section className={cn('relative overflow-hidden border-b border-white/10 py-10 text-white sm:py-14 lg:py-16', heroBackground)}>
+      <div className="container">
+        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:gap-16">
 
           {/* ── Left column: text ── */}
           <div className="flex flex-col items-start">
             {/* Logo if available */}
             {companyInfo.logoUrl && (
-              <div className="mb-6">
+              <div className="mb-5 hidden sm:block">
                 <Image
                   src={companyInfo.logoUrl}
                   alt={companyInfo.name || 'Logo'}
                   width={64}
                   height={64}
-                  className="rounded-2xl shadow-xl ring-2 ring-white/20"
+                  className="rounded-lg shadow-lg ring-1 ring-white/20"
                 />
               </div>
             )}
 
             {/* Badge */}
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur-sm ring-1 ring-white/20">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-              {heroContent.badge}
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-md bg-white/15 px-3 py-1.5 text-sm font-semibold ring-1 ring-white/20">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+                {heroContent.badge}
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-white/80 lg:hidden">
+                <span className={cn('h-2 w-2 rounded-full', closedToday ? 'bg-slate-300' : 'bg-emerald-300')} />
+                {closedToday ? 'Hoy cerrado' : 'Atendemos hoy'}
+              </span>
             </div>
 
             {/* Title */}
-            <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+            <h1 className="max-w-2xl text-3xl font-black leading-tight sm:text-4xl lg:text-5xl">
               {heroContent.title}
             </h1>
 
             {/* Subtitle */}
-            <p className={`mt-5 text-lg leading-relaxed ${brand.text200} max-w-lg`}>
+            <p className={`mt-4 max-w-2xl text-base leading-relaxed sm:text-lg ${brand.text200}`}>
               {heroContent.subtitle}
             </p>
 
             {/* Trust badges */}
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-5 flex flex-wrap gap-2">
               {getTrustBadges(heroContent.trustBadges).map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 ring-1 ring-white/15 backdrop-blur-sm">
+                <div key={label} className="flex items-center gap-1.5 rounded-md bg-black/10 px-2.5 py-1.5 text-xs font-medium text-white/85 ring-1 ring-white/15">
                   <Icon className="h-3.5 w-3.5 text-emerald-300" />
                   {label}
                 </div>
               ))}
             </div>
 
+            {heroStats.enabled !== false && (
+              <div className="mt-5 grid w-full max-w-lg grid-cols-3 divide-x divide-white/15 border-y border-white/15 py-3 lg:hidden">
+                <AnimatedStat value={heroStats.repairs} label="Reparaciones" />
+                <div className="pl-3"><AnimatedStat value={heroStats.satisfaction} label="Satisfacción" /></div>
+                <div className="pl-3"><AnimatedStat value={heroStats.avgTime} label="Tiempo prom." /></div>
+              </div>
+            )}
+
             {/* CTAs */}
-            <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className={`rounded-xl bg-white ${brand.ctaBtn} font-bold shadow-lg shadow-black/20 hover:bg-white/90`}>
+            <div className="mt-6 grid w-full max-w-md grid-cols-2 gap-3">
+              <Button asChild size="lg" className={`rounded-md bg-white px-3 ${brand.ctaBtn} font-bold shadow-lg shadow-black/20 hover:bg-white/90`}>
                 <Link href={`${tenantPrefix}/productos`}>
-                  <ShoppingBag className="mr-2 h-5 w-5" />
+                  <ShoppingBag className="mr-2 h-4 w-4" />
                   {heroContent.ctaPrimaryText || 'Ver productos'}
-                  <ArrowRight className="ml-2 h-5 w-5" />
+                  <ArrowRight className="ml-2 hidden h-4 w-4 sm:block" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="rounded-xl border-white/25 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20">
+              <Button asChild size="lg" variant="outline" className="rounded-md border-white/30 bg-black/10 px-3 text-white hover:bg-white/15 hover:text-white">
                 <a href={contactHref} target={phoneClean ? '_blank' : undefined} rel={phoneClean ? 'noopener noreferrer' : undefined}>
-                  <MessageCircle className="mr-2 h-5 w-5" />
+                  <MessageCircle className="mr-2 h-4 w-4" />
                   {heroContent.ctaSecondaryText || 'Escribinos'}
                 </a>
               </Button>
             </div>
 
             {/* Repair tracking link */}
-            <div className="mt-5">
+            <div className="mt-4 max-w-[calc(100%-4rem)] sm:max-w-none">
               <Link
                 href={`${tenantPrefix}/mis-reparaciones`}
-                className={`inline-flex items-center gap-1.5 text-sm font-medium ${brand.text200} underline-offset-4 transition-colors hover:text-white hover:underline`}
+                className={`inline-flex items-start gap-1.5 text-sm font-medium leading-snug ${brand.text200} underline-offset-4 transition-colors hover:text-white hover:underline`}
               >
-                <Wrench className="h-3.5 w-3.5" />
+                <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 {heroContent.trackRepairText || '¿Tenés una reparación? Rastreá tu equipo'}
               </Link>
             </div>
           </div>
 
           {/* ── Right column: stats panel ── */}
-          <div className="flex justify-center lg:justify-end">
+          <div className="hidden lg:flex lg:justify-end">
             <div className="relative w-full max-w-sm">
               {/* Main stats card */}
-              <div className="relative overflow-hidden rounded-3xl bg-white/10 p-8 shadow-2xl ring-1 ring-white/20 backdrop-blur-md">
-                {/* Inner glow */}
-                <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-
+              <div className="rounded-lg bg-black/10 p-6 shadow-xl ring-1 ring-white/20">
                 {/* Stats grid */}
                 {heroStats.enabled !== false && (
                   <div className="grid grid-cols-3 gap-3 border-b border-white/15 pb-6">
@@ -199,21 +214,21 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
                 <div className={`space-y-3 ${heroStats.enabled !== false ? 'mt-6' : ''}`}>
                   <Link
                     href={`${tenantPrefix}/productos`}
-                    className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+                    className="flex items-center justify-between rounded-md bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
                   >
                     <span>Ver catálogo de productos</span>
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                   <Link
                     href={`${tenantPrefix}/ofertas`}
-                    className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+                    className="flex items-center justify-between rounded-md bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
                   >
                     <span>Ofertas activas</span>
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                   <Link
                     href={`${tenantPrefix}/mis-reparaciones`}
-                    className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+                    className="flex items-center justify-between rounded-md bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
                   >
                     <span>Rastrear reparación</span>
                     <ArrowRight className="h-4 w-4" />
@@ -223,7 +238,7 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
 
               {/* Floating badge: estado de atención del día */}
               <div className={cn(
-                'absolute -bottom-4 -left-4 flex items-center gap-2 rounded-2xl px-4 py-2.5 shadow-xl',
+                'absolute -bottom-4 -left-4 flex items-center gap-2 rounded-md px-4 py-2.5 shadow-xl',
                 closedToday ? 'bg-slate-600 shadow-slate-900/30' : 'bg-emerald-500 shadow-emerald-900/30'
               )}>
                 <span className={cn('flex h-2 w-2 rounded-full bg-white', !closedToday && 'animate-pulse')} />

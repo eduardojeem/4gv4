@@ -51,7 +51,7 @@ interface UseProductsDashboardReturn {
   // Actions
   handleSearch: (query: string) => void
   handleFilterChange: (newFilters: Partial<DashboardFilters>) => void
-  handleQuickFilter: (filter: 'all' | 'low_stock' | 'out_of_stock' | 'active') => void
+  handleQuickFilter: (filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services') => void
   handleSort: (field: SortConfig['field']) => void
   handleSelectProduct: (id: string) => void
   handleSelectAll: (selected: boolean) => void
@@ -149,7 +149,7 @@ export function useProductsDashboard({
   }, [])
 
   // Handle quick filters
-  const handleQuickFilter = useCallback((filter: 'all' | 'low_stock' | 'out_of_stock' | 'active') => {
+  const handleQuickFilter = useCallback((filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services') => {
     // Clear custom filters when applying quick filter
     setFilters({
       quick_filter: filter

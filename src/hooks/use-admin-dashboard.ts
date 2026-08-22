@@ -176,6 +176,9 @@ export function useAdminDashboard() {
     city: 'Asunción',
     currency: ((process.env.NEXT_PUBLIC_CURRENCY || 'PYG') as 'PYG' | 'USD' | 'EUR' | 'MXN'),
     taxRate: parseFloat(process.env.NEXT_PUBLIC_TAX_RATE || '0.10') * 100,
+    repairMaxDiscountPercent: 20,
+    repairLaborTaxRate: 10,
+    defaultInstallmentRates: {},
     theme: 'system',
     primaryColor: DEFAULT_SYSTEM_COLOR_SCHEME,
     dateFormat: 'DD/MM/YYYY',
@@ -199,12 +202,16 @@ export function useAdminDashboard() {
   })
 
   const [isLoading, setIsLoading] = useState(false)
+  // El hook no tenia donde reportar una falla: la carga se caia, las metricas
+  // quedaban en sus ceros iniciales y la pantalla se veia normal.
+  const [error, setError] = useState<string | null>(null)
   
   const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true)
+      setError(null)
       try {
         // Fetch Settings from database
         const { data: settingsData, error: settingsError } = await supabase
@@ -257,6 +264,11 @@ export function useAdminDashboard() {
 
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
+        setError(
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron cargar las métricas del panel.'
+        )
       } finally {
         setIsLoading(false)
       }
@@ -450,6 +462,7 @@ export function useAdminDashboard() {
     securityLogs,
     settings,
     isLoading,
+    error,
     summary,
     createUser,
     updateUser,

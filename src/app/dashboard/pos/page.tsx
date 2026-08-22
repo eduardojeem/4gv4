@@ -10,7 +10,8 @@ import {
   Clock, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save,
   Printer, Download, Share2, Settings, AlertTriangle,
   Loader2, CheckCircle2, XCircle, Tag, Sparkles, Award, ArrowRight, Wrench,
-  ArrowUpCircle, ArrowDownCircle, MoreHorizontal, Info
+  ArrowUpCircle, ArrowDownCircle, MoreHorizontal, Info,
+  UserPlus, DollarSign, RotateCcw, SlidersHorizontal, BookOpen
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useCashRegisterContext } from './contexts/CashRegisterContext'
@@ -42,7 +43,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 import { toast } from 'sonner'
-import { redeemStoreCredit } from '@/lib/after-sales/redeem-store-credit'
 import { showAddToCartToast } from '@/lib/pos-toasts'
 import { ReceiptGenerator } from '@/components/pos/ReceiptGenerator'
 import { createReceiptData, printReceipt, downloadReceipt, shareReceipt } from '@/lib/receipt-utils'
@@ -78,6 +78,7 @@ import { ProductCard } from './components/ProductCard'
 import { POSHeader } from './components/POSHeader'
 import { POSCart } from './components/POSCart'
 import { CheckoutModal } from './components/CheckoutModal'
+import { getCartProductCreditPlans } from './lib/cart-credit-plans'
 import { OpenCashRegisterDialog } from './components/OpenCashRegisterDialog'
 import { useOptimizedCart } from './hooks/useOptimizedCart'
 import { useCheckout } from './contexts/CheckoutContext'
@@ -88,8 +89,28 @@ import { CartItem, PaymentMethodOption } from './types'
 import type { Product } from '@/types/product-unified'
 import { branchHeaders } from '@/lib/branches/client'
 import { buildQuickItemPayload, getQuickItemApiError } from './lib/quick-item'
+import { useHeldSales, HeldSale } from './hooks/useHeldSales'
+import { HeldSalesModal } from './components/HeldSalesModal'
+import { POSShortcutsBar } from './components/POSShortcutsBar'
+import { POSRepairChargeModal } from './components/POSRepairChargeModal'
+import { QuickCustomerDialog } from './components/QuickCustomerDialog'
+import { POSProductDetailDialog } from './components/POSProductDetailDialog'
+import { POSCashMovementDialog } from './components/POSCashMovementDialog'
 import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
 import { getMixedPaymentValidation } from './lib/payment-validation'
+import { getRepairBalanceDue, type ChargeableRepair } from './lib/repair-charge'
+import { hasProductCredit } from './lib/product-credit'
+import {
+  applyProductCreditFilter,
+  type ProductCreditSort,
+} from './lib/product-credit-filter'
+
+/** Lo minimo que necesita el carrito para armar la linea de una reparacion. */
+type PosCartRepair = ChargeableRepair & {
+  id: string
+  device_brand?: string | null
+  device_model?: string | null
+}
 
 const getErrorMessage = (e: unknown) => {
   if (!e) return 'Unknown error'
@@ -98,18 +119,6 @@ const getErrorMessage = (e: unknown) => {
   try { return JSON.stringify(e) } catch { return String(e) }
 }
 
-type HeldSale = {
-  id: string
-  label: string
-  createdAt: string
-  cart: CartItem[]
-  itemCount: number
-  total: number
-  selectedCustomer: string
-  selectedRepairIds: string[]
-  isWholesale: boolean
-  discount: number
-}
 
 // Utilidades de código de barras (EAN-8/13)
 const normalizeBarcode = (raw: string) => raw.replace(/\D+/g, '').trim()
@@ -186,6 +195,7 @@ function POSPageContent() {
   const { 
     selectedCustomer, 
     setSelectedCustomer, 
+    activeCustomer,
     customers, 
     setNewCustomerOpen
   } = usePOSCustomer()
@@ -217,6 +227,7 @@ function POSPageContent() {
     notes,
     setNotes,
     creditTerms,
+    applyProductCreditSuggestion,
     paymentSplit,
     setPaymentSplit,
     addPaymentSplit,
@@ -228,7 +239,19 @@ function POSPageContent() {
 
 
   const [customerRepairs, setCustomerRepairs] = useState<any[]>([])
+  // Reparaciones sumadas desde el buscador del POS. Ese modal lista todas las
+  // del taller, no solo las del cliente activo, asi que hay que conservar sus
+  // datos: `customerRepairs` no las tiene y la linea del carrito no se podia
+  // construir.
+  const [manualRepairs, setManualRepairs] = useState<PosCartRepair[]>([])
   const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([])
+
+  const { heldSales, heldSalesCount, parkSale, deleteSale, clearAllSales } = useHeldSales()
+  const [isHeldSalesModalOpen, setIsHeldSalesModalOpen] = useState(false)
+  const [isRepairModalOpen, setIsRepairModalOpen] = useState(false)
+  const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false)
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null)
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
 
   // Pre-load customer and repair from URL params (e.g. coming from /dashboard/repairs)
   const searchParams = useSearchParams()
@@ -271,10 +294,16 @@ function POSPageContent() {
   // Opciones de vinculación de reparación
   const [markRepairDelivered, setMarkRepairDelivered] = useState(false)
   const [deliveryOutcome, setDeliveryOutcome] = useState<'repaired' | 'withdrawn' | 'unrepairable'>('repaired')
-  const selectedRepairs = useMemo(
-    () => customerRepairs.filter(repair => selectedRepairIds.includes(repair.id)),
-    [customerRepairs, selectedRepairIds]
-  )
+  const selectedRepairs = useMemo(() => {
+    // `customerRepairs` manda cuando existe —viene de Supabase y se mantiene al
+    // dia—; el resto sale de lo que se sumo a mano desde el buscador.
+    const byId = new Map<string, any>()
+    for (const repair of manualRepairs) byId.set(repair.id, repair)
+    for (const repair of customerRepairs) byId.set(repair.id, repair)
+    return selectedRepairIds
+      .map(id => byId.get(id))
+      .filter(Boolean)
+  }, [customerRepairs, manualRepairs, selectedRepairIds])
   const supabaseStatusToLabel: Record<string, string> = {
     recibido: 'Recibido',
     'diagnostico': 'En diagnóstico',
@@ -334,7 +363,6 @@ function POSPageContent() {
   const [showCartDialog, setShowCartDialog] = useState(false)
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
-  const [heldSales, setHeldSales] = useState<HeldSale[]>([])
   const [isQuickItemDialogOpen, setIsQuickItemDialogOpen] = useState(false)
   const [quickItemName, setQuickItemName] = useState('')
   const [quickItemPrice, setQuickItemPrice] = useState('')
@@ -636,18 +664,36 @@ function POSPageContent() {
   // pudiera notarlo (no hay control de precio en esta vista).
   const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: Number.POSITIVE_INFINITY })
   const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all')
+  const [creditOnly, setCreditOnly] = useState(false)
+  const [minimumInstallments, setMinimumInstallments] = useState(1)
+  const [creditSort, setCreditSort] = useState<ProductCreditSort | null>(null)
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const activeFiltersCount = useMemo(() => {
     let count = 0
     if (selectedCategory !== 'all') count += 1
     if (showFeatured) count += 1
-    if (viewMode !== 'grid') count += 1
-    if (showAdvancedFilters) count += 1
-    if (sortBy !== 'name') count += 1
-    if (sortOrder !== 'asc') count += 1
+    if (sortBy !== 'name' || sortOrder !== 'asc') count += 1
     if (stockFilter !== 'all') count += 1
+    if (priceRange.min > 0 || (priceRange.max < Number.POSITIVE_INFINITY && priceRange.max > 0)) count += 1
+    if (creditOnly) count += 1
+    if (minimumInstallments > 1) count += 1
+    if (creditSort) count += 1
     return count
-  }, [selectedCategory, showFeatured, viewMode, showAdvancedFilters, sortBy, sortOrder, stockFilter])
+  }, [selectedCategory, showFeatured, sortBy, sortOrder, stockFilter, priceRange, creditOnly, minimumInstallments, creditSort])
+
+  const handleResetFilters = useCallback(() => {
+    setSelectedCategory('all')
+    setShowFeatured(false)
+    setStockFilter('all')
+    setSortBy('name')
+    setSortOrder('asc')
+    setPriceRange({ min: 0, max: Number.POSITIVE_INFINITY })
+    setCreditOnly(false)
+    setMinimumInstallments(1)
+    setCreditSort(null)
+    setSearchTerm('')
+    toast.info('Filtros restablecidos')
+  }, [setSearchTerm])
 
   // Estados para paginación
   const [currentPage, setCurrentPage] = useState(1)
@@ -656,7 +702,7 @@ function POSPageContent() {
   // Resetear página al cambiar filtros
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy])
+  }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy, creditOnly, minimumInstallments, creditSort])
 
 
   // Persistencia en localStorage: restaurar preferencias (el carrito se maneja en el hook)
@@ -682,6 +728,13 @@ function POSPageContent() {
           setPriceRange({ min, max })
         }
         if (prefs.stockFilter) setStockFilter(prefs.stockFilter)
+        if (typeof prefs.creditOnly === 'boolean') setCreditOnly(prefs.creditOnly)
+        if ([1, 3, 6, 12, 18, 24, 36, 48, 60].includes(prefs.minimumInstallments)) {
+          setMinimumInstallments(prefs.minimumInstallments)
+        }
+        if (['installment_low', 'rate_low', 'installments_high', 'financed_total_low'].includes(prefs.creditSort)) {
+          setCreditSort(prefs.creditSort)
+        }
         if (prefs.recentSearches) setRecentSearches(prefs.recentSearches)
         if (typeof prefs.sidebarCollapsed === 'boolean') setSidebarCollapsed(prefs.sidebarCollapsed)
         if (prefs.itemsPerPage) setItemsPerPage(prefs.itemsPerPage)
@@ -711,6 +764,9 @@ function POSPageContent() {
         sortOrder,
         priceRange,
         stockFilter,
+        creditOnly,
+        minimumInstallments,
+        creditSort,
         recentSearches,
         sidebarCollapsed,
         itemsPerPage,
@@ -719,7 +775,7 @@ function POSPageContent() {
     } catch (e) {
       console.error('Error saving preferences to localStorage:', e)
     }
-  }, [selectedCategory, showFeatured, viewMode, sortBy, sortOrder, priceRange, stockFilter, recentSearches, sidebarCollapsed, itemsPerPage])
+  }, [selectedCategory, showFeatured, viewMode, sortBy, sortOrder, priceRange, stockFilter, creditOnly, minimumInstallments, creditSort, recentSearches, sidebarCollapsed, itemsPerPage])
 
   // Medidas del viewport para virtualización dinámica
   const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== 'undefined' ? window.innerWidth : 1024)
@@ -780,6 +836,11 @@ function POSPageContent() {
       max: Math.max(...prices)
     }
   }, [inventoryProducts])
+
+  const financedProductsCount = useMemo(
+    () => inventoryProducts.filter(hasProductCredit).length,
+    [inventoryProducts],
+  )
 
   // Generar sugerencias de búsqueda (now using smart search)
   const generateSearchSuggestions = useCallback((term: string) => {
@@ -859,7 +920,7 @@ function POSPageContent() {
         smartSearchResults.some(res => res.product.id === product.id)
 
       const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory
-      const matchesFeatured = !showFeatured || (product as any).featured === true  // CORREGIDO: verificación explícita
+      const matchesFeatured = !showFeatured || Boolean((product as any).featured || (product as any).is_featured || (product as any).isFeatured)
       const matchesPrice = product.sale_price >= priceRange.min && product.sale_price <= priceRange.max
 
       let matchesStock = true
@@ -913,8 +974,12 @@ function POSPageContent() {
       }
       return sortOrder === 'asc' ? comparison : -comparison
     })
-    return filtered
-  }, [filteredList, sortBy, sortOrder])
+    return applyProductCreditFilter(filtered, {
+      creditOnly,
+      minimumInstallments,
+      creditSort,
+    })
+  }, [filteredList, sortBy, sortOrder, creditOnly, minimumInstallments, creditSort])
 
   // Productos paginados
   const paginatedProducts = useMemo(() => {
@@ -969,16 +1034,13 @@ function POSPageContent() {
   const unifiedCalculations = useMemo(() => {
     // 1. Calculate Repair Costs
     //
-    // OJO: esto tiene que coincidir con lo que cobra el RPC
-    // process_pos_sale_atomic_v2 en el servidor, que recalcula el total de
-    // reparaciones de forma independiente a partir de repairs.final_cost /
-    // estimated_cost (NO resta paid_amount) y rechaza el pago si el monto
-    // pagado no calza exacto con ese total (PAYMENT_TOTAL_MISMATCH). Restar
-    // acá lo ya cobrado (p.ej. un adelanto por "Cobrar Aquí") rompería el
-    // checkout con esa reparación en vez de cobrar de menos. Mientras el RPC
-    // no soporte saldo parcial, esto se queda igual que antes: costo bruto.
+    // Cobra el saldo pendiente (getRepairBalanceDue), no el costo bruto: el
+    // RPC process_pos_sale_atomic_v2 en el servidor recalcula el total de la
+    // misma forma (resta paid_amount), así que ambos lados coinciden.
     const repairDetails = selectedRepairs.map(repair => {
-      const laborCost = repair.final_cost || repair.estimated_cost || 0
+      // Saldo pendiente: no volver a cobrar lo que ya se pagó como anticipo
+      // (p.ej. desde "Cobrar Aquí" en Reparaciones, que acumula paid_amount).
+      const laborCost = getRepairBalanceDue(repair)
       // Repairs in POS don't have separate parts cost in this context
       return calculateRepairTotal({
         laborCost,
@@ -1100,37 +1162,166 @@ function POSPageContent() {
   // ya pagado (ver nota en unifiedCalculations más abajo). Mostrar acá un
   // saldo menor generaría un monto que el checkout rechaza por no calzar.
   const combinedCartItems = useMemo(() => {
-    const repairItems: CartItem[] = selectedRepairs.map(repair => ({
-      id: repair.id,
-      name: `Reparación: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
-      price: repair.final_cost || repair.estimated_cost || 0,
-      quantity: 1,
-      isService: true,
-      // Add required fields for CartItem type safety
-      stock: 0,
-      subtotal: repair.final_cost || repair.estimated_cost || 0,
-      category: 'service',
-      // Prevent wholesale discount application in SaleSummary by setting wholesalePrice = price
-      wholesalePrice: repair.final_cost || repair.estimated_cost || 0,
-      sku: 'SERVICE'
-    }))
+    const repairItems: CartItem[] = selectedRepairs.map(repair => {
+      // Saldo pendiente: idem unifiedCalculations, para que el precio mostrado
+      // en el carrito coincida con lo que realmente se cobra.
+      const balanceDue = getRepairBalanceDue(repair)
+      const hasPriorPayment = (repair.paid_amount || 0) > 0
+      return {
+        id: repair.id,
+        name: hasPriorPayment
+          ? `Reparación (saldo): ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`
+          : `Reparación: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
+        price: balanceDue,
+        quantity: 1,
+        isService: true,
+        // Add required fields for CartItem type safety
+        stock: 0,
+        subtotal: balanceDue,
+        category: 'service',
+        // Prevent wholesale discount application in SaleSummary by setting wholesalePrice = price
+        wholesalePrice: balanceDue,
+        sku: 'SERVICE'
+      }
+    })
 
     return [...cart, ...repairItems]
   }, [cart, selectedRepairs])
   const canCheckout = combinedCartItems.length > 0
+  const checkoutProductCreditPlans = useMemo(() => getCartProductCreditPlans(
+    combinedCartItems.map(item => {
+      const retailUnitPrice = Number(item.price || 0)
+      const wholesaleUnitPrice = item.isService
+        ? retailUnitPrice
+        : Number(item.wholesalePrice ?? (retailUnitPrice * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
+      const unitPrice = isWholesale ? wholesaleUnitPrice : retailUnitPrice
+      const itemDiscountRate = Math.min(100, Math.max(0, Number(item.discount || 0)))
+      return {
+        ...item,
+        price: unitPrice * (1 - (itemDiscountRate / 100)),
+      }
+    }),
+    inventoryProducts.map(product => ({
+      id: product.id,
+      name: product.name,
+      price: product.sale_price,
+      quantity: 1,
+      installmentsEnabled: Boolean(product.installments_enabled),
+      installmentsPlans: Array.isArray(product.installments_plans) ? product.installments_plans : [],
+    })),
+  ), [combinedCartItems, inventoryProducts, isWholesale])
   const checkoutDisabledReason = canCheckout ? undefined : 'Agrega productos o vincula una reparacion para cobrar.'
 
   // Unified Remove Handler
   const handleRemoveItem = useCallback((id: string) => {
-    // Check if it's a repair
-    if (selectedRepairIds.includes(id)) {
-      setSelectedRepairIds(prev => prev.filter(repairId => repairId !== id))
+    const rawRepairId = id.startsWith('repair_') ? id.replace('repair_', '') : id
+    if (selectedRepairIds.includes(rawRepairId) || selectedRepairIds.includes(id)) {
+      setSelectedRepairIds(prev => prev.filter(repairId => repairId !== rawRepairId && repairId !== id))
+      // Se suelta tambien la copia manual para no acumularlas entre ventas.
+      setManualRepairs(prev => prev.filter(repair => repair.id !== rawRepairId && repair.id !== id))
       toast.info('Reparación removida del cobro')
-    } else {
-      // It's a product
-      removeFromCart(id)
     }
+    removeFromCart(id)
   }, [selectedRepairIds, removeFromCart])
+
+  // Hold / Park sale handler
+  const handleParkCurrentSale = useCallback(() => {
+    if (combinedCartItems.length === 0) {
+      toast.error('El carrito está vacío')
+      return
+    }
+    const currentCustName = customers.find(c => c.id === selectedCustomer)?.name || null
+    const success = parkSale(
+      combinedCartItems,
+      isWholesale,
+      generalDiscount,
+      unifiedCalculations.total,
+      currentCustName,
+      selectedCustomer,
+      selectedRepairIds
+    )
+    if (success) {
+      clearCart(true)
+      setSelectedRepairIds([])
+      setManualRepairs([])
+    }
+  }, [combinedCartItems, isWholesale, generalDiscount, unifiedCalculations.total, customers, selectedCustomer, selectedRepairIds, parkSale, clearCart])
+
+  // Restore parked sale
+  const handleRestoreHeldSale = useCallback((sale: HeldSale) => {
+    clearCart(true)
+    const saleItems = sale.cart || sale.items || []
+    saleItems.forEach(item => {
+      addToCartHook(item as any, item.quantity)
+    })
+    if (Array.isArray(sale.selectedRepairIds) && sale.selectedRepairIds.length > 0) {
+      setSelectedRepairIds(sale.selectedRepairIds)
+    }
+    setIsWholesale(Boolean(sale.isWholesale))
+    setGeneralDiscount(Number(sale.discount || 0))
+    const saleCustId = sale.selectedCustomer || sale.customerId
+    if (saleCustId) {
+      setSelectedCustomer(saleCustId)
+    }
+    toast.success('Venta recuperada al carrito', {
+      description: `${saleItems.length} producto${saleItems.length !== 1 ? 's' : ''} cargados.`
+    })
+  }, [clearCart, addToCartHook, setIsWholesale, setGeneralDiscount, setSelectedCustomer])
+
+  const handleAddRepairToCart = useCallback((item: CartItem, repair?: PosCartRepair) => {
+    // Solo se registra el id de la reparacion. La linea del carrito la produce
+    // `combinedCartItems` a partir de `selectedRepairIds`; agregarla tambien con
+    // `addToCartHook` la duplicaba —una linea con id `repair_<uuid>` y otra con
+    // el uuid pelado— y con dos reparaciones se veian cuatro renglones.
+    //
+    // Ademas la linea derivada es la que vale: usa el saldo con el que el
+    // servidor cobra, mientras que la del modal traia su propio precio.
+    const rawRepairId = item.id.startsWith('repair_') ? item.id.replace('repair_', '') : item.id
+    if (!rawRepairId) return
+
+    if (repair) {
+      setManualRepairs(prev => prev.some(r => r.id === rawRepairId)
+        ? prev
+        : [...prev, { ...repair, id: rawRepairId }])
+    }
+    setSelectedRepairIds(prev => prev.includes(rawRepairId) ? prev : [...prev, rawRepairId])
+  }, [])
+
+  // Global Keyboard Shortcuts (F2, F3, F4, F8, F9)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      const isInput = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable
+
+      if (e.key === 'F2') {
+        e.preventDefault()
+        const searchInput = document.getElementById('search-input') as HTMLInputElement | null
+        searchInput?.focus()
+        searchInput?.select()
+      } else if (e.key === 'F3') {
+        e.preventDefault()
+        setIsQuickCustomerOpen(true)
+      } else if (e.key === 'F4') {
+        e.preventDefault()
+        if (canCheckout) {
+          setIsCheckoutOpen(true)
+        }
+      } else if (e.key === 'F8') {
+        e.preventDefault()
+        if (combinedCartItems.length > 0) {
+          handleParkCurrentSale()
+        } else {
+          setIsHeldSalesModalOpen(true)
+        }
+      } else if (e.key === 'F9') {
+        e.preventDefault()
+        handleWholesaleToggle(!isWholesale)
+      }
+    }
+
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [canCheckout, combinedCartItems.length, handleParkCurrentSale, isWholesale, handleWholesaleToggle, setIsCheckoutOpen])
 
   const applyPromoCode = useCallback((code: string) => {
     const cartItems = combinedCartItems
@@ -1238,6 +1429,7 @@ function POSPageContent() {
   // Procesar venta
   const processSale = useCallback(async () => {
     return measureSaleProcessing(async () => {
+      const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)
       if (!getCurrentRegister.isOpen) {
         toast.error('La caja está cerrada. No se pueden procesar ventas.')
         return
@@ -1287,7 +1479,7 @@ function POSPageContent() {
         return
       }
 
-      if (paymentMethod === 'cash' && cashReceived < cartCalculations.total) {
+      if (paymentMethod === 'cash' && cashReceived < amountDueAfterStoreCredit) {
         const msg = 'Efectivo insuficiente'
         toast.error(msg)
         setPaymentStatus('failed')
@@ -1299,14 +1491,17 @@ function POSPageContent() {
       // Crear datos del ticket
       const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
       const creditSummaryForReceipt = paymentMethod === 'credit'
-        ? buildPosCreditSummary(cartCalculations.total, creditTerms)
+        ? buildPosCreditSummary(amountDueAfterStoreCredit, creditTerms)
         : null
+      const receiptPaymentAmount = creditSummaryForReceipt?.financedTotal ?? amountDueAfterStoreCredit
       const receiptCalculations = {
         subtotal: cartCalculations.subtotal,
         totalDiscount: cartCalculations.totalDiscount,
         tax: cartCalculations.tax,
         repairCost: cartCalculations.repairCost,
-        total: creditSummaryForReceipt?.financedTotal ?? cartCalculations.total,
+        total: creditSummaryForReceipt
+          ? storeCreditApplied + creditSummaryForReceipt.financedTotal
+          : cartCalculations.total,
         change: cartCalculations.change,
         creditInfo: creditSummaryForReceipt
           ? {
@@ -1315,13 +1510,20 @@ function POSPageContent() {
             }
           : undefined,
       }
-      const payments = [{
+      const payments = [
+        ...(storeCreditApplied > 0 ? [{
+          id: 'store-credit',
+          method: 'store_credit' as const,
+          amount: storeCreditApplied,
+        }] : []),
+        ...(receiptPaymentAmount > 0 ? [{
         id: '1',
-        method: paymentMethod as any,
-        amount: creditSummaryForReceipt?.financedTotal ?? cartCalculations.total,
+        method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
+        amount: receiptPaymentAmount,
         reference: paymentMethod === 'transfer' ? transferReference : undefined,
         cardLast4: paymentMethod === 'card' && cardNumber ? cardNumber.slice(-4) : undefined
-      }]
+        }] : []),
+      ]
 
       const receiptData = createReceiptData(
         combinedCartItems,
@@ -1353,16 +1555,16 @@ function POSPageContent() {
           })),
           total: (cartCalculations as any).total,
           payment_method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
-          payments: [{
+          payments: amountDueAfterStoreCredit > 0 ? [{
             payment_method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
-            amount: (cartCalculations as any).total,
+            amount: amountDueAfterStoreCredit,
             reference: paymentMethod === 'transfer' ? transferReference : undefined,
             card_last4: paymentMethod === 'card' && cardNumber ? cardNumber.slice(-4) : undefined,
             provider: paymentMethod === 'card' || paymentMethod === 'transfer' ? electronicProvider || undefined : undefined,
             institution: paymentMethod === 'card' || paymentMethod === 'transfer' ? electronicInstitution || undefined : undefined,
             channel: paymentMethod === 'card' ? 'card_terminal' : paymentMethod === 'transfer' ? electronicChannel : undefined,
             terminal_id: paymentMethod === 'card' ? terminalId || undefined : undefined,
-          }],
+          }] : [],
           session_id: currentSessionId,
           price_mode: isWholesale ? 'wholesale' : 'retail',
           order_discount_rate: generalDiscount,
@@ -1376,18 +1578,13 @@ function POSPageContent() {
           repair_ids: selectedRepairIds,
           mark_repairs_delivered: markRepairDelivered,
           delivery_outcome: deliveryOutcome,
+          store_credit_amount: storeCreditApplied,
         })
 
         if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
           throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta'))
         }
 
-        // El saldo a favor se consume recien con la venta confirmada.
-        await redeemStoreCredit({
-          customerId: selectedCustomer,
-          saleId: saleResult?.saleId,
-          amount: storeCreditApplied,
-        })
         const persistedReceipt = {
           ...receiptData,
           receiptNumber: saleResult?.saleId
@@ -1403,7 +1600,10 @@ function POSPageContent() {
         setLastSaleData(persistedReceipt)
         setCurrentReceipt(persistedReceipt)
         setPaymentStatus('success')
-        toast.success('Venta procesada exitosamente')
+        const receiptCode = persistedReceipt.receiptNumber || 'POS'
+        toast.success(`¡Venta completada! Comprobante #${receiptCode} generado (${formatCurrency(receiptCalculations.total)})`, {
+          duration: 4500,
+        })
         addPaymentAttempt({ status: 'success', method: 'single', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
         if (markRepairDelivered && selectedRepairIds.length > 0) {
           setCustomerRepairs(prev => prev.map(r => (
@@ -1416,7 +1616,7 @@ function POSPageContent() {
         const msg = normalizePaymentError(error)
         setPaymentStatus('failed')
         setPaymentError(msg)
-        toast.error('Error al procesar la venta: ' + msg)
+        toast.error(msg, { duration: 6000 })
         addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
         return
       }
@@ -1427,6 +1627,7 @@ function POSPageContent() {
       clearCart(true)
       setSelectedCustomer('')
       setSelectedRepairIds([])
+      setManualRepairs([])
       resetCheckoutState()
       
       // Cerrar luego de una breve confirmación visual
@@ -1435,11 +1636,12 @@ function POSPageContent() {
         setPaymentStatus('idle')
       }, 600)
     })
-  }, [addPaymentAttempt, cardNumber, cartCalculations, cashReceived, calculateCartSummary, cashierName, clearCart, combinedCartItems, creditTerms, currentSessionId, customers, deliveryOutcome, electronicChannel, electronicInstitution, electronicProvider, generalDiscount, getCurrentRegister.isOpen, isWholesale, markRepairDelivered, measureSaleProcessing, normalizePaymentError, notes, paymentMethod, processInventorySale, resetCheckoutState, selectedCustomer, selectedRepairIds, setPaymentError, setPaymentStatus, setSelectedCustomer, terminalId, transferReference])
+  }, [addPaymentAttempt, cardNumber, cartCalculations, cashReceived, calculateCartSummary, cashierName, clearCart, combinedCartItems, creditTerms, currentSessionId, customers, deliveryOutcome, electronicChannel, electronicInstitution, electronicProvider, generalDiscount, getCurrentRegister.isOpen, isWholesale, markRepairDelivered, measureSaleProcessing, normalizePaymentError, notes, paymentMethod, processInventorySale, resetCheckoutState, selectedCustomer, selectedRepairIds, setPaymentError, setPaymentStatus, setSelectedCustomer, storeCreditApplied, terminalId, transferReference])
 
 
 
   const processMixedPayment = useCallback(async () => {
+    const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)
     if (!getCurrentRegister.isOpen) {
       toast.error('La caja está cerrada. No se pueden procesar ventas.')
       return
@@ -1448,7 +1650,7 @@ function POSPageContent() {
       toast.error('No se pudo identificar la sesión de caja abierta.')
       return
     }
-    const paymentValidation = getMixedPaymentValidation(cartCalculations.total, paymentSplit)
+    const paymentValidation = getMixedPaymentValidation(amountDueAfterStoreCredit, paymentSplit)
     if (!paymentValidation.valid) {
       const msg = paymentValidation.code === 'PAYMENT_INCOMPLETE'
         ? `Faltan ${formatCurrency(paymentValidation.remaining)} para completar el pago`
@@ -1479,6 +1681,14 @@ function POSPageContent() {
     const mixedCreditSummary = creditPrincipal > 0
       ? buildPosCreditSummary(creditPrincipal, creditTerms)
       : null
+    const receiptPayments = [
+      ...(storeCreditApplied > 0 ? [{
+        id: 'store-credit',
+        method: 'store_credit' as const,
+        amount: storeCreditApplied,
+      }] : []),
+      ...paymentSplit,
+    ]
     const receiptData = createReceiptData(
       combinedCartItems,
       mixedCreditSummary
@@ -1490,7 +1700,7 @@ function POSPageContent() {
             },
           }
         : cartCalculations,
-      paymentSplit,
+      receiptPayments,
       customer,
       cashierName
     )
@@ -1540,18 +1750,13 @@ function POSPageContent() {
         repair_ids: selectedRepairIds,
         mark_repairs_delivered: markRepairDelivered,
         delivery_outcome: deliveryOutcome,
+        store_credit_amount: storeCreditApplied,
       })
 
       if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
         throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta'))
       }
 
-      // El saldo a favor se consume recien con la venta confirmada.
-      await redeemStoreCredit({
-        customerId: selectedCustomer,
-        saleId: saleResult?.saleId,
-        amount: storeCreditApplied,
-      })
       const persistedReceipt = {
         ...receiptData,
         receiptNumber: saleResult?.saleId
@@ -1567,7 +1772,10 @@ function POSPageContent() {
       setLastSaleData(persistedReceipt)
       setCurrentReceipt(persistedReceipt)
       setPaymentStatus('success')
-      toast.success('Venta procesada con múltiples métodos de pago')
+      const receiptCode = persistedReceipt.receiptNumber || 'POS'
+      toast.success(`¡Venta completada! Comprobante #${receiptCode} generado (${formatCurrency(cartCalculations.total)})`, {
+        duration: 4500,
+      })
       addPaymentAttempt({ status: 'success', method: 'mixed', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
       if (markRepairDelivered && selectedRepairIds.length > 0) {
         setCustomerRepairs(prev => prev.map(r => (
@@ -1580,7 +1788,7 @@ function POSPageContent() {
       const msg = normalizePaymentError(error)
       setPaymentStatus('failed')
       setPaymentError(msg)
-      toast.error('Error al procesar la venta: ' + msg)
+      toast.error(msg, { duration: 6000 })
       addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
       return
     }
@@ -1599,7 +1807,7 @@ function POSPageContent() {
       setIsCheckoutOpen(false)
       setPaymentStatus('idle')
     }, 600)
-  }, [addPaymentAttempt, cartCalculations, cashierName, clearCart, combinedCartItems, creditTerms, currentSessionId, customers, deliveryOutcome, formatCurrency, generalDiscount, getCurrentRegister.isOpen, isWholesale, markRepairDelivered, normalizePaymentError, notes, paymentSplit, processInventorySale, resetCheckoutState, selectedCustomer, selectedRepairIds, setGeneralDiscount, setPaymentError, setPaymentStatus, setSelectedCustomer])
+  }, [addPaymentAttempt, cartCalculations, cashierName, clearCart, combinedCartItems, creditTerms, currentSessionId, customers, deliveryOutcome, formatCurrency, generalDiscount, getCurrentRegister.isOpen, isWholesale, markRepairDelivered, normalizePaymentError, notes, paymentSplit, processInventorySale, resetCheckoutState, selectedCustomer, selectedRepairIds, setGeneralDiscount, setPaymentError, setPaymentStatus, setSelectedCustomer, storeCreditApplied])
 
 
   // Cerrar sugerencias al hacer clic fuera
@@ -1756,91 +1964,13 @@ function POSPageContent() {
     }
   }, [barcodeInput, addToCart, inventoryProducts])
 
-  // Persistencia de ventas en espera
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const raw = localStorage.getItem('pos.heldSales')
-      if (!raw) return
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) {
-        setHeldSales(parsed.slice(0, 20))
-      }
-    } catch (e) {
-      console.warn('No se pudo restaurar ventas en espera', e)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem('pos.heldSales', JSON.stringify(heldSales.slice(0, 20)))
-    } catch (e) {
-      console.error('No se pudo guardar ventas en espera', e)
-    }
-  }, [heldSales])
-
-  const holdCurrentSale = useCallback(() => {
-    if (cart.length === 0 && selectedRepairIds.length === 0) {
-      toast.error('No hay productos o reparaciones para poner en espera')
-      return
-    }
-
-    const customerName = customers.find(c => c.id === selectedCustomer)?.name || 'Cliente'
-    const timeLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    const label = `${customerName} - ${timeLabel}`
-
-    const held: HeldSale = {
-      id: `held-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      label,
-      createdAt: new Date().toISOString(),
-      cart: cart.map(item => ({ ...item })),
-      itemCount: cart.reduce((sum, item) => sum + item.quantity, 0) + selectedRepairIds.length,
-      total: Number(unifiedCalculations.total || 0),
-      selectedCustomer,
-      selectedRepairIds: [...selectedRepairIds],
-      isWholesale,
-      discount: generalDiscount
-    }
-
-    setHeldSales(prev => [held, ...prev].slice(0, 20))
-
-    clearCart(true)
-    setSelectedRepairIds([])
-    setSelectedCustomer('')
-    setGeneralDiscount(0)
-    setIsWholesale(false)
-    resetCheckoutState()
-    setPaymentAttempts([])
-    toast.success('Venta puesta en espera')
-  }, [
-    cart,
-    selectedRepairIds,
-    customers,
-    selectedCustomer,
-    isWholesale,
-    generalDiscount,
-    clearCart,
-    setSelectedRepairIds,
-    setSelectedCustomer,
-    setGeneralDiscount,
-    setIsWholesale,
-    unifiedCalculations.total,
-    resetCheckoutState
-  ])
+  const holdCurrentSale = handleParkCurrentSale
 
   const resumeHeldSale = useCallback((heldId: string) => {
     const held = heldSales.find(h => h.id === heldId)
     if (!held) return
-
-    replaceCart(Array.isArray(held.cart) ? held.cart : [])
-    setSelectedRepairIds(Array.isArray(held.selectedRepairIds) ? held.selectedRepairIds : [])
-    setSelectedCustomer(held.selectedCustomer || '')
-    setIsWholesale(Boolean(held.isWholesale))
-    setGeneralDiscount(Number(held.discount || 0))
-    setHeldSales(prev => prev.filter(h => h.id !== heldId))
-    toast.success(`Venta recuperada: ${held.label}`)
-  }, [heldSales, replaceCart, setSelectedRepairIds, setSelectedCustomer, setIsWholesale, setGeneralDiscount])
+    handleRestoreHeldSale(held)
+  }, [heldSales, handleRestoreHeldSale])
 
   const createQuickItem = useCallback(async () => {
     setQuickItemError('')
@@ -1894,13 +2024,13 @@ function POSPageContent() {
   }, [quickItemName, quickItemPrice, quickItemQty, quickItemSku, quickItemPublishToCatalog, selectedBranchId, syncProduct, addToCartHook])
 
   return (
-    <div className={`pos-theme pos-shell min-h-dvh flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-      <div className="flex flex-1 min-h-0">
+    <div className={`pos-theme pos-shell h-dvh max-h-dvh overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Contenido principal */}
-        <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-0'}`}>
+        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-0'}`}>
           {/* Header desktop optimizado */}
   <POSHeader
-    className="hidden lg:flex items-center justify-between bg-card/70 backdrop-blur-md border-b border-border/60 px-6 py-2 sticky top-0 z-20 shadow-sm"
+    className="hidden lg:flex items-center justify-between bg-card/70 backdrop-blur-md border-b border-border/60 px-4 py-1.5 sticky top-0 z-20 shadow-xs"
     registers={registers}
     activeRegisterId={activeRegisterId}
     onRegisterChange={handleRegisterChange}
@@ -1920,14 +2050,14 @@ function POSPageContent() {
     cartItemCount={cartItemCount}
   >
             {/* Branding */}
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-md shadow-indigo-500/20">
-                <ShoppingCart className="h-5 w-5 text-white" />
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-sm shadow-indigo-500/20">
+                <ShoppingCart className="h-4 w-4 text-white" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-base font-bold leading-none tracking-tight text-foreground">Punto de Venta</h1>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                <h1 className="text-sm font-bold leading-none tracking-tight text-foreground">Punto de Venta</h1>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className={`flex items-center gap-1 rounded-full px-1.5 py-0.2 text-[9px] font-semibold ${
                     registerState[activeRegisterId]?.isOpen
                       ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
                       : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
@@ -1935,7 +2065,7 @@ function POSPageContent() {
                     <span className={`h-1.5 w-1.5 rounded-full ${registerState[activeRegisterId]?.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
                     {registerState[activeRegisterId]?.isOpen ? 'Caja abierta' : 'Caja cerrada'}
                   </span>
-                  <div className="h-3 w-px bg-border/40" />
+                  <div className="h-2.5 w-px bg-border/40" />
                   <SupabaseStatus mode="minimal" />
                 </div>
               </div>
@@ -2055,102 +2185,36 @@ function POSPageContent() {
 
 
 
-          {/* Alertas de inventario desktop */}
-          <div className="hidden lg:block px-6 pt-4">
-            
-          </div>
-
-          {/* Guía de funcionamiento del POS */}
-          {showPosGuide ? (
-            <div className="px-4 lg:px-6 pt-2">
-              <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-                <details className="group">
-                  <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-4 pb-2.5">
-                    <div className="text-sm font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                      <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Punto de Venta (POS)?
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-                        <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-                        <span className="hidden group-open:flex items-center gap-1">Plegar guía ↑</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          handleHidePosGuide()
-                        }}
-                        className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors px-2 py-1 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-slate-200/60 dark:border-slate-800"
-                        title="Ocultar esta sección"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                        <span>Ocultar guía</span>
-                      </button>
-                    </div>
-                  </summary>
-                  <CardContent className="pt-0 pb-4 text-xs">
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                        <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                          <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                          Venta y Búsqueda
-                        </h4>
-                        <p className="text-muted-foreground leading-relaxed">
-                          Busca productos por nombre, SKU o escaneando el código de barras. Haz clic sobre el ítem para agregarlo al carrito. Puedes mezclar repuestos y servicios de mano de obra.
-                        </p>
-                      </div>
-                      <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                        <h4 className="font-semibold text-foreground flex items-center gap-2">
-                          <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                          Caja Abierta/Cerrada
-                        </h4>
-                        <p className="text-muted-foreground leading-relaxed">
-                          Para operar en el POS, la sucursal debe tener la caja abierta con saldo inicial. Todos los cobros se imputarán y sumarán directamente a la sesión activa del cajero.
-                        </p>
-                      </div>
-                      <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                        <h4 className="font-semibold text-foreground flex items-center gap-2">
-                          <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                          Proceso de Cobro
-                        </h4>
-                        <p className="text-muted-foreground leading-relaxed">
-                          Al presionar "Cobrar", selecciona cliente, el método de pago (efectivo, tarjeta, transferencia o mixto) y genera el comprobante digital o físico para impresión.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </details>
-              </Card>
-            </div>
-          ) : (
-            <div className="px-4 lg:px-6 pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={handleShowPosGuide}
-                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline px-2 py-1"
-              >
-                <Info className="h-3.5 w-3.5" />
-                <span>¿Cómo funciona el POS? (Mostrar guía)</span>
-              </button>
-            </div>
-          )}
-
           {/* Barra de búsqueda y filtros */}
-          <div className="border-b border-border bg-card/80 p-3 backdrop-blur lg:p-4">
-            <div className="pos-panel flex flex-col gap-3 rounded-xl p-3 lg:flex-row lg:items-center">
+          <div className="border-b border-border/70 bg-card/90 px-3 py-1.5 backdrop-blur-md lg:px-4">
+            <div className="pos-panel flex flex-col gap-1.5 rounded-lg p-1 lg:flex-row lg:items-center bg-muted/20 border border-border/50">
               {/* Búsqueda con autocompletado */}
               <div className="flex-1 relative" id="search-container">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <div className="relative flex items-center">
+                  <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-primary/70 h-3.5 w-3.5 pointer-events-none" />
                   <Input
                     id="search-input"
-                    placeholder="Buscar productos por nombre, SKU o código de barras..."
+                    placeholder="Buscar por nombre, código de barras, SKU o marca..."
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
-                    className="h-11 pl-10 pr-4 text-base lg:text-sm"
+                    className="h-8 pl-8 pr-12 text-xs rounded-md bg-background/80 border-border/70 focus-visible:ring-primary/40 focus-visible:border-primary shadow-xs transition-all placeholder:text-muted-foreground/60"
                   />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {searchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => handleSearchChange('')}
+                        className="p-0.5 text-muted-foreground hover:text-foreground rounded-full"
+                        title="Limpiar búsqueda"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                    <kbd className="hidden sm:inline-flex items-center text-[9px] font-mono font-medium text-muted-foreground bg-muted/80 px-1.5 py-0.2 rounded border border-border/50 select-none">
+                      F2
+                    </kbd>
+                  </div>
                 </div>
 
                 {/* Sugerencias de autocompletado */}
@@ -2175,166 +2239,492 @@ function POSPageContent() {
 
               <div className="lg:hidden flex items-center justify-end gap-2">
                 <Button
+                  variant={creditOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCreditOnly(current => !current)}
+                  aria-pressed={creditOnly}
+                  className="h-7.5 px-2.5 text-xs"
+                >
+                  <CreditCard className="mr-1 h-3.5 w-3.5" />
+                  Con cuotas
+                  <span className="ml-1 text-[10px] opacity-75">({financedProductsCount})</span>
+                </Button>
+                <Button
                   variant={isMobileFiltersOpen ? "default" : "outline"}
                   size="sm"
                   onClick={() => setIsMobileFiltersOpen((v) => !v)}
-                  className="h-8"
+                  className="h-7.5 text-xs"
                 >
-                  <Filter className="h-4 w-4 mr-2" />
+                  <Filter className="h-3.5 w-3.5 mr-1.5" />
                   Filtros
                   {activeFiltersCount > 0 && (
-                    <span className="ml-2 rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-semibold">
+                    <span className="ml-1.5 rounded-full bg-background/30 px-1 py-0.2 text-[9px] font-semibold">
                       {activeFiltersCount}
                     </span>
                   )}
-                  {isMobileFiltersOpen ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                  {isMobileFiltersOpen ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
                 </Button>
               </div>
 
-              {/* Filtros rápidos */}
-              <div className={`flex flex-wrap gap-2 ${isMobileFiltersOpen ? '' : 'hidden lg:flex'}`}>
+              {/* Filtros rápidos y botón Más */}
+              <div className={`flex flex-wrap items-center gap-1.5 ${isMobileFiltersOpen ? '' : 'hidden lg:flex'}`}>
+                {/* Selector de Categoría */}
                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger className="h-9 w-full sm:w-48 lg:w-44">
+                  <SelectTrigger className="h-8 w-full sm:w-40 lg:w-36 text-xs">
                     <SelectValue placeholder="Categoría" />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map(category => (
-                      <SelectItem key={category} value={category}>
+                      <SelectItem key={category} value={category} className="text-xs">
                         {category === 'all' ? 'Todas las categorías' : category}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
 
+                {/* Botón Destacados */}
                 <Button
                   variant={showFeatured ? "default" : "outline"}
                   size="sm"
                   onClick={() => setShowFeatured(!showFeatured)}
-                  className="h-9"
+                  className={`h-8 text-xs transition-all px-2.5 ${showFeatured ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs' : ''}`}
                 >
-                  <Star className="h-4 w-4 mr-2" />
+                  <Star className={`h-3 w-3 mr-1 ${showFeatured ? 'fill-white' : 'text-amber-500'}`} />
                   Destacados
                 </Button>
 
                 <Button
-                  variant={showAdvancedFilters ? "default" : "outline"}
+                  variant={creditOnly ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                  className="h-9"
+                  onClick={() => setCreditOnly(current => !current)}
+                  aria-pressed={creditOnly}
+                  className="hidden h-8 px-2.5 text-xs lg:inline-flex"
                 >
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filtros
-                  {showAdvancedFilters ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                  <CreditCard className="mr-1 h-3.5 w-3.5" />
+                  Con cuotas
+                  <span className="ml-1 text-[10px] opacity-75">({financedProductsCount})</span>
                 </Button>
 
+                {/* Botón Filtros Avanzados con Contador */}
+                <Button
+                  variant={showAdvancedFilters || activeFiltersCount > 0 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className="h-8 text-xs relative px-2.5"
+                >
+                  <SlidersHorizontal className="h-3 w-3 mr-1" />
+                  Filtros
+                  {activeFiltersCount > 0 && (
+                    <Badge className="ml-1 h-3.5 min-w-[14px] px-1 text-[9px] bg-white text-primary dark:bg-black dark:text-white font-bold rounded-full">
+                      {activeFiltersCount}
+                    </Badge>
+                  )}
+                  {showAdvancedFilters ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
+                </Button>
+
+                {/* Menú "Más" Potenciado */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-9">
-                      <MoreHorizontal className="h-4 w-4 mr-2" />
-                      Mas
+                    <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1 hover:bg-muted px-2.5">
+                      <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                      Más
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-64">
-                    <DropdownMenuItem onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
-                      {viewMode === 'grid' ? <List className="h-4 w-4 mr-2" /> : <Grid className="h-4 w-4 mr-2" />}
-                      Cambiar a vista {viewMode === 'grid' ? 'lista' : 'grilla'}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsQuickItemDialogOpen(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Item rapido
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={holdCurrentSale}
-                      disabled={cart.length === 0 && selectedRepairIds.length === 0}
+                  <DropdownMenuContent align="end" className="w-72 max-h-[75vh] sm:max-h-[80vh] overflow-y-auto p-2 shadow-xl border-border/80">
+                    {/* Sección Acciones Rápidas */}
+                    <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Acciones Rápidas
+                    </div>
+                    <DropdownMenuItem 
+                      onClick={() => setIsQuickItemDialogOpen(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
                     >
-                      <Clock className="h-4 w-4 mr-2" />
-                      Poner venta en espera
+                      <Plus className="h-4 w-4 text-emerald-500" />
+                      <div className="flex flex-col">
+                        <span className="font-medium">Crear Ítem Rápido</span>
+                        <span className="text-[10px] text-muted-foreground">Producto temporal al vuelo</span>
+                      </div>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {heldSales.length === 0 ? (
-                      <DropdownMenuItem disabled>No hay ventas en espera</DropdownMenuItem>
-                    ) : (
-                      heldSales.map((sale) => (
-                        <DropdownMenuItem key={sale.id} onClick={() => resumeHeldSale(sale.id)}>
-                          Recuperar {sale.label} - {formatCurrency(sale.total)}
-                        </DropdownMenuItem>
-                      ))
-                    )}
+                    <DropdownMenuItem 
+                      onClick={() => setIsQuickCustomerOpen(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <UserPlus className="h-4 w-4 text-blue-500" />
+                      <div className="flex flex-col flex-1">
+                        <span className="font-medium">Nuevo Cliente Express</span>
+                        <span className="text-[10px] text-muted-foreground">Alta en 10s (Nombre y CI)</span>
+                      </div>
+                      <kbd className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">F3</kbd>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setIsRepairModalOpen(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <Wrench className="h-4 w-4 text-amber-500" />
+                      <div className="flex flex-col">
+                        <span className="font-medium">Cobrar Reparación / Taller</span>
+                        <span className="text-[10px] text-muted-foreground">Importar saldo de ticket técnico</span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setIsMovementDialogOpen(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <DollarSign className="h-4 w-4 text-purple-500" />
+                      <div className="flex flex-col">
+                        <span className="font-medium">Movimiento de Caja</span>
+                        <span className="text-[10px] text-muted-foreground">Registrar ingreso o egreso manual</span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="gap-2.5 cursor-pointer py-2 text-xs">
+                      <Link href="/dashboard/pos/caja">
+                        <FileText className="h-4 w-4 text-blue-500" />
+                        <div className="flex flex-col">
+                          <span className="font-medium text-blue-600 dark:text-blue-400">Detalles de Caja</span>
+                          <span className="text-[10px] text-muted-foreground">Arqueo, cortes y estado del turno</span>
+                        </div>
+                      </Link>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator className="my-1" />
+
+                    {/* Sección Ventas en Espera */}
+                    <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Ventas en Espera
+                    </div>
+                    <DropdownMenuItem 
+                      onClick={handleParkCurrentSale}
+                      disabled={combinedCartItems.length === 0}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <Clock className="h-4 w-4 text-amber-500" />
+                      <div className="flex flex-col flex-1">
+                        <span className="font-medium">Pausar Venta Actual</span>
+                        <span className="text-[10px] text-muted-foreground">Guardar carrito y continuar</span>
+                      </div>
+                      <kbd className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">F8</kbd>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setIsHeldSalesModalOpen(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-medium flex items-center gap-2">
+                          <span>📂</span> Ver Ventas Pausadas
+                        </span>
+                        {heldSalesCount > 0 && (
+                          <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] h-4 px-1.5">
+                            {heldSalesCount}
+                          </Badge>
+                        )}
+                      </div>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator className="my-1" />
+
+                    {/* Sección Vistas y Ayuda */}
+                    <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Herramientas & Vista
+                    </div>
+                    <DropdownMenuItem 
+                      onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      {viewMode === 'grid' ? <List className="h-4 w-4 text-muted-foreground" /> : <Grid className="h-4 w-4 text-muted-foreground" />}
+                      <span>Cambiar a vista <strong>{viewMode === 'grid' ? 'Lista' : 'Grilla'}</strong></span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setShowKeyboardShortcuts(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <Keyboard className="h-4 w-4 text-muted-foreground" />
+                      <span>Atajos de Teclado (F2-F9)</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={handleShowPosGuide}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <BookOpen className="h-4 w-4 text-muted-foreground" />
+                      <span>Guía de Uso del POS</span>
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </div>
 
-            {/* Filtros avanzados */}
-            {showAdvancedFilters && (
-              <Card className={`mt-4 ${isMobileFiltersOpen ? '' : 'hidden lg:block'}`}>
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Ordenar por</label>
-                      <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="name">Nombre</SelectItem>
-                          <SelectItem value="price">Precio</SelectItem>
-                          <SelectItem value="stock">Stock</SelectItem>
-                          <SelectItem value="category">Categoría</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+            {/* Chips de Filtros Activos */}
+            {activeFiltersCount > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-2 px-1 text-xs">
+                <span className="text-muted-foreground text-[11px] font-medium mr-1 flex items-center gap-1">
+                  <Filter className="h-3 w-3" /> Filtros activos:
+                </span>
+                {selectedCategory !== 'all' && (
+                  <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-primary/10 text-primary border-primary/20">
+                    Cat: {selectedCategory}
+                    <button 
+                      onClick={() => setSelectedCategory('all')} 
+                      className="hover:bg-primary/20 rounded-full p-0.5"
+                      title="Quitar categoría"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {showFeatured && (
+                  <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+                    ★ Destacados
+                    <button 
+                      onClick={() => setShowFeatured(false)} 
+                      className="hover:bg-amber-500/20 rounded-full p-0.5"
+                      title="Quitar filtro destacados"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {creditOnly && (
+                  <Badge variant="secondary" className="gap-1 border-sky-500/20 bg-sky-500/10 py-0.5 pl-2 pr-1 text-xs text-sky-700 dark:text-sky-300">
+                    Con cuotas
+                    <button
+                      type="button"
+                      onClick={() => setCreditOnly(false)}
+                      className="rounded-full p-0.5 hover:bg-sky-500/20"
+                      aria-label="Quitar filtro de productos con cuotas"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {minimumInstallments > 1 && (
+                  <Badge variant="secondary" className="gap-1 border-sky-500/20 bg-sky-500/10 py-0.5 pl-2 pr-1 text-xs text-sky-700 dark:text-sky-300">
+                    Desde {minimumInstallments} cuotas
+                    <button
+                      type="button"
+                      onClick={() => setMinimumInstallments(1)}
+                      className="rounded-full p-0.5 hover:bg-sky-500/20"
+                      aria-label="Quitar mínimo de cuotas"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {creditSort && (
+                  <Badge variant="secondary" className="gap-1 border-sky-500/20 bg-sky-500/10 py-0.5 pl-2 pr-1 text-xs text-sky-700 dark:text-sky-300">
+                    Crédito: {creditSort === 'installment_low' ? 'menor cuota' : creditSort === 'rate_low' ? 'menor tasa' : creditSort === 'installments_high' ? 'más cuotas' : 'menor total'}
+                    <button
+                      type="button"
+                      onClick={() => setCreditSort(null)}
+                      className="rounded-full p-0.5 hover:bg-sky-500/20"
+                      aria-label="Quitar orden financiero"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {stockFilter !== 'all' && (
+                  <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                    Stock: {stockFilter === 'in_stock' ? 'En stock' : stockFilter === 'low_stock' ? 'Stock bajo' : 'Sin stock'}
+                    <button 
+                      onClick={() => setStockFilter('all')} 
+                      className="hover:bg-blue-500/20 rounded-full p-0.5"
+                      title="Quitar filtro stock"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {(sortBy !== 'name' || sortOrder !== 'asc') && (
+                  <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20">
+                    Orden: {sortBy === 'price' ? (sortOrder === 'asc' ? 'Menor Precio' : 'Mayor Precio') : sortBy === 'stock' ? 'Stock' : 'Z-A'}
+                    <button 
+                      onClick={() => { setSortBy('name'); setSortOrder('asc'); }} 
+                      className="hover:bg-purple-500/20 rounded-full p-0.5"
+                      title="Restablecer orden"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {(priceRange.min > 0 || (priceRange.max < Number.POSITIVE_INFINITY && priceRange.max > 0)) && (
+                  <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                    Precio: {priceRange.min > 0 ? `>${formatCurrency(priceRange.min)}` : ''} {priceRange.max < Number.POSITIVE_INFINITY ? `<${formatCurrency(priceRange.max)}` : ''}
+                    <button 
+                      onClick={() => setPriceRange({ min: 0, max: Number.POSITIVE_INFINITY })} 
+                      className="hover:bg-emerald-500/20 rounded-full p-0.5"
+                      title="Quitar rango de precio"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetFilters}
+                  className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive gap-1"
+                >
+                  <RotateCcw className="h-3 w-3" /> Limpiar todo
+                </Button>
+              </div>
+            )}
 
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Orden</label>
-                      <div className="flex gap-2">
-                        <Button
-                          variant={sortOrder === 'asc' ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setSortOrder('asc')}
+            {/* Panel de Filtros Avanzados */}
+            {showAdvancedFilters && (
+              <Card className="mt-2.5 border-border/70 shadow-sm bg-card/95 backdrop-blur animate-in slide-in-from-top-2 duration-200">
+                <CardContent className="p-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3.5">
+                    {/* Disponibilidad de Stock */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Package className="h-3.5 w-3.5 text-primary" /> Disponibilidad de Stock
+                      </label>
+                      <div className="grid grid-cols-2 gap-1 bg-muted/40 p-1 rounded-lg border border-border/40">
+                        <button
+                          type="button"
+                          onClick={() => setStockFilter('all')}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${stockFilter === 'all' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
                         >
-                          A-Z
-                        </Button>
-                        <Button
-                          variant={sortOrder === 'desc' ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setSortOrder('desc')}
+                          Todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStockFilter('in_stock')}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${stockFilter === 'in_stock' ? 'bg-background shadow-xs text-emerald-600 font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
                         >
-                          Z-A
-                        </Button>
+                          En Stock
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStockFilter('low_stock')}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${stockFilter === 'low_stock' ? 'bg-background shadow-xs text-amber-600 font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Stock Bajo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStockFilter('out_of_stock')}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${stockFilter === 'out_of_stock' ? 'bg-background shadow-xs text-rose-600 font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Agotados
+                        </button>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Stock</label>
-                      <Select value={stockFilter} onValueChange={(value: any) => setStockFilter(value)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos</SelectItem>
-                          <SelectItem value="in_stock">En stock</SelectItem>
-                          <SelectItem value="low_stock">Stock bajo</SelectItem>
-                          <SelectItem value="out_of_stock">Sin stock</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    {/* Ordenar Productos */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <SlidersHorizontal className="h-3.5 w-3.5 text-primary" /> Ordenar Por
+                      </label>
+                      <div className="grid grid-cols-2 gap-1 bg-muted/40 p-1 rounded-lg border border-border/40">
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('name'); setSortOrder('asc'); }}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${sortBy === 'name' && sortOrder === 'asc' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Nombre A-Z
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('name'); setSortOrder('desc'); }}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${sortBy === 'name' && sortOrder === 'desc' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Nombre Z-A
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('price'); setSortOrder('asc'); }}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${sortBy === 'price' && sortOrder === 'asc' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Menor Precio
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('price'); setSortOrder('desc'); }}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${sortBy === 'price' && sortOrder === 'desc' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Mayor Precio
+                        </button>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Acciones</label>
+                    {/* Rango de Precio */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <DollarSign className="h-3.5 w-3.5 text-primary" /> Rango de Precio
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          placeholder="Mín"
+                          value={priceRange.min > 0 ? priceRange.min : ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0
+                            setPriceRange(prev => ({ ...prev, min: val }))
+                          }}
+                          className="h-8 text-xs"
+                        />
+                        <span className="text-xs text-muted-foreground">-</span>
+                        <Input
+                          type="number"
+                          placeholder="Máx"
+                          value={priceRange.max < Number.POSITIVE_INFINITY && priceRange.max > 0 ? priceRange.max : ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || Number.POSITIVE_INFINITY
+                            setPriceRange(prev => ({ ...prev, max: val }))
+                          }}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Condiciones de financiación */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                        <CreditCard className="h-3.5 w-3.5 text-primary" /> Financiación
+                      </label>
+                      <div className="grid gap-2">
+                        <Select
+                          value={String(minimumInstallments)}
+                          onValueChange={(value) => setMinimumInstallments(Number(value))}
+                        >
+                          <SelectTrigger className="h-8 text-xs" aria-label="Cantidad mínima de cuotas">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">Cualquier cantidad</SelectItem>
+                            {[3, 6, 12, 18, 24, 36, 48, 60].map(count => (
+                              <SelectItem key={count} value={String(count)}>Desde {count} cuotas</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={creditSort ?? 'none'}
+                          onValueChange={(value) => setCreditSort(value === 'none' ? null : value as ProductCreditSort)}
+                        >
+                          <SelectTrigger className="h-8 text-xs" aria-label="Ordenar por condiciones de financiación">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Sin orden financiero</SelectItem>
+                            <SelectItem value="installment_low">Menor cuota</SelectItem>
+                            <SelectItem value="rate_low">Menor tasa</SelectItem>
+                            <SelectItem value="installments_high">Más cuotas</SelectItem>
+                            <SelectItem value="financed_total_low">Menor total financiado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Acciones de Filtro */}
+                    <div className="space-y-1.5 flex flex-col justify-end">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          setSearchTerm('')
-                          setSelectedCategory('all')
-                          setShowFeatured(false)
-                          setSortBy('name')
-                          setSortOrder('asc')
-                          setStockFilter('all')
-                        }}
+                        onClick={handleResetFilters}
+                        className="h-8 text-xs gap-1.5 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
                       >
-                        Limpiar filtros
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Restablecer Filtros
                       </Button>
                     </div>
                   </div>
@@ -2346,17 +2736,17 @@ function POSPageContent() {
           {/* Contenido principal con productos y carrito */}
           <div className="flex-1 min-h-0 flex overflow-hidden bg-muted/5">
             {/* Lista de productos */}
-            <div className="flex-1 min-h-0 p-3 sm:p-4 md:p-5 overflow-y-auto pb-24 md:pb-4" role="main" aria-label="Lista de productos">
-              <div className="mb-4 space-y-4">
-                <div className="pos-panel flex items-center justify-between p-3 rounded-xl">
-                  <h2 className="pos-heading text-lg md:text-xl font-semibold text-foreground flex items-center gap-2" id="products-heading">
-                    <Package className="h-5 w-5 text-primary" />
-                    Productos <span className="text-muted-foreground font-normal text-sm">({filteredProducts.length})</span>
+            <div className="flex-1 min-h-0 p-2.5 sm:p-3 md:p-4 overflow-y-auto pb-24 md:pb-4" role="main" aria-label="Lista de productos">
+              <div className="mb-2.5 space-y-2.5">
+                <div className="pos-panel flex items-center justify-between px-3 py-1.5 rounded-lg">
+                  <h2 className="pos-heading text-base md:text-lg font-semibold text-foreground flex items-center gap-2" id="products-heading">
+                    <Package className="h-4 w-4 text-primary" />
+                    Productos <span className="text-muted-foreground font-normal text-xs">({filteredProducts.length})</span>
                   </h2>
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full border border-border/50">
-                      <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground">Mayorista</span>
+                    <div className="flex items-center gap-1.5 bg-muted/50 px-2.5 py-1 rounded-full border border-border/50">
+                      <Tag className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Mayorista (F9)</span>
                       <Switch
                         checked={isWholesale}
                         onCheckedChange={handleWholesaleToggle}
@@ -2453,8 +2843,8 @@ function POSPageContent() {
                 </div>
               ) : !productsLoading && !productsError && inventoryProducts.length > 0 ? (
                 <div
-                  className={`grid gap-3 ${viewMode === 'grid'
-                      ? 'product-grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
+                  className={`grid gap-2 sm:gap-2.5 ${viewMode === 'grid'
+                      ? 'product-grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
                       : 'grid-cols-1 max-w-4xl mx-auto'
                     }`}
                   role="grid"
@@ -2472,6 +2862,10 @@ function POSPageContent() {
                       inventoryManager={inventoryManager}
                       isWholesale={isWholesale}
                       wholesaleDiscountRate={WHOLESALE_DISCOUNT_RATE}
+                      onViewDetail={(p) => {
+                        setDetailProduct(p)
+                        setIsDetailDialogOpen(true)
+                      }}
                     />
                   ))}
                 </div>
@@ -2489,9 +2883,9 @@ function POSPageContent() {
 
               {/* Controles de paginación */}
               {!productsLoading && !productsError && filteredProducts.length > 0 && filteredProducts.length <= virtualizationThreshold && (
-                <div className="pos-panel flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 py-4 px-3 rounded-xl">
+                <div className="pos-panel flex flex-col sm:flex-row items-center justify-between gap-3 mt-3 py-2 px-3 rounded-lg">
                   <div className="flex items-center gap-2 order-2 sm:order-1">
-                    <span className="text-sm text-muted-foreground">Mostrar:</span>
+                    <span className="text-xs text-muted-foreground">Mostrar:</span>
                     <Select
                       value={String(itemsPerPage)}
                       onValueChange={(value) => {
@@ -2499,7 +2893,7 @@ function POSPageContent() {
                         setCurrentPage(1)
                       }}
                     >
-                      <SelectTrigger className="h-8 w-[80px] text-xs">
+                      <SelectTrigger className="h-7 w-[72px] text-xs">
                         <SelectValue placeholder="12" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2516,18 +2910,18 @@ function POSPageContent() {
                   </div>
 
                   {totalPages > 1 && (
-                    <div className="flex items-center gap-2 order-1 sm:order-2">
+                    <div className="flex items-center gap-1.5 order-1 sm:order-2">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                         disabled={currentPage === 1}
-                        className="h-8 px-2 shadow-sm"
+                        className="h-7 px-2 text-xs shadow-xs"
                       >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        <ChevronLeft className="h-3.5 w-3.5 mr-0.5" />
                         Anterior
                       </Button>
-                      <span className="text-sm font-medium bg-muted/30 px-3 py-1 rounded-md border shadow-sm min-w-[80px] text-center">
+                      <span className="text-xs font-medium bg-muted/30 px-2 py-0.5 rounded border shadow-xs min-w-[60px] text-center">
                         {currentPage} / {totalPages}
                       </span>
                       <Button
@@ -2535,10 +2929,10 @@ function POSPageContent() {
                         size="sm"
                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                         disabled={currentPage === totalPages}
-                        className="h-8 px-2 shadow-sm"
+                        className="h-7 px-2 text-xs shadow-xs"
                       >
                         Siguiente
-                        <ChevronRight className="h-4 w-4 ml-1" />
+                        <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
                       </Button>
                     </div>
                   )}
@@ -2547,7 +2941,7 @@ function POSPageContent() {
             </div>
 
             {/* Carrito lateral mejorado - responsive */}
-            <div className="hidden md:flex min-h-0 flex-col w-[22rem] lg:w-96 xl:w-[26rem] h-full transition-all duration-300 z-20 p-2">
+            <div className="hidden md:flex min-h-0 flex-col w-72 lg:w-80 xl:w-[22rem] h-full transition-all duration-300 z-20 p-1.5">
               <POSCart
                 items={combinedCartItems}
                 onUpdateQuantity={updateQuantity}
@@ -2571,15 +2965,39 @@ function POSPageContent() {
                 taxRate={taxRate}
                 canCheckout={canCheckout}
                 checkoutDisabledReason={checkoutDisabledReason}
+                onHoldSale={handleParkCurrentSale}
+                onOpenHeldSales={() => setIsHeldSalesModalOpen(true)}
+                heldSalesCount={heldSalesCount}
+                onOpenRepairModal={() => setIsRepairModalOpen(true)}
               />
             </div>
           </div>
         </div>
       </div>
 
+      {/* Desktop shortcuts sticky footer */}
+      <POSShortcutsBar
+        onFocusSearch={() => {
+          const el = document.getElementById('search-input') as HTMLInputElement | null
+          el?.focus()
+          el?.select()
+        }}
+        onOpenCustomer={() => setIsQuickCustomerOpen(true)}
+        onCheckout={() => setIsCheckoutOpen(true)}
+        onHoldSale={handleParkCurrentSale}
+        onOpenHeldSales={() => setIsHeldSalesModalOpen(true)}
+        heldSalesCount={heldSalesCount}
+        onToggleWholesale={() => handleWholesaleToggle(!isWholesale)}
+        isWholesale={isWholesale}
+        onClearCart={() => clearCart()}
+        onOpenRepairModal={() => setIsRepairModalOpen(true)}
+        canCheckout={canCheckout}
+        cartItemCount={unifiedCalculations.totalItemCount}
+      />
+
       {/* Desktop floating checkout button — always visible when cart has items */}
       {canCheckout && (
-        <div className="hidden md:block fixed bottom-6 right-6 z-50">
+        <div className="hidden md:block fixed bottom-14 right-6 z-50">
           <Button
             onClick={() => setIsCheckoutOpen(true)}
             size="lg"
@@ -2637,6 +3055,16 @@ function POSPageContent() {
                   taxRate={taxRate}
                   canCheckout={canCheckout}
                   checkoutDisabledReason={checkoutDisabledReason}
+                  onHoldSale={handleParkCurrentSale}
+                  onOpenHeldSales={() => {
+                    setIsMobileCartOpen(false)
+                    setIsHeldSalesModalOpen(true)
+                  }}
+                  heldSalesCount={heldSalesCount}
+                  onOpenRepairModal={() => {
+                    setIsMobileCartOpen(false)
+                    setIsRepairModalOpen(true)
+                  }}
                 />
               </div>
             </SheetContent>
@@ -2814,6 +3242,7 @@ function POSPageContent() {
         discount={generalDiscount}
         onDiscountChange={setGeneralDiscount}
         currency={settings.currency || 'PYG'}
+        productCreditPlans={checkoutProductCreditPlans}
         processSale={processSale}
         processMixedPayment={processMixedPayment}
         formatCurrency={formatCurrency}
@@ -3223,97 +3652,76 @@ function POSPageContent() {
         />
       )}
 
-      {/* Diálogo de Registro de Movimiento */}
-      <Dialog open={isMovementDialogOpen} onOpenChange={setIsMovementDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Registrar Movimiento</DialogTitle>
-            <DialogDescription>
-              Seleccione el tipo de movimiento e ingrese los detalles.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="flex justify-center gap-4 mb-2">
-              <Button
-                type="button"
-                variant={movementType === 'in' ? 'default' : 'outline'}
-                className={movementType === 'in' ? 'bg-green-600 hover:bg-green-700' : 'text-green-600 border-green-200'}
-                onClick={() => setMovementType('in')}
-              >
-                <ArrowUpCircle className="mr-2 h-4 w-4" />
-                Ingreso
-              </Button>
-              <Button
-                type="button"
-                variant={movementType === 'out' ? 'default' : 'outline'}
-                className={movementType === 'out' ? 'bg-red-600 hover:bg-red-700' : 'text-red-600 border-red-200'}
-                onClick={() => setMovementType('out')}
-              >
-                <ArrowDownCircle className="mr-2 h-4 w-4" />
-                Egreso
-              </Button>
-            </div>
-            
-            <div className="grid gap-2">
-              <Label htmlFor="mov-amount">Monto</Label>
-              <Input
-                id="mov-amount"
-                type="number"
-                value={movementAmount}
-                onChange={(e) => setMovementAmount(e.target.value)}
-                placeholder="0.00"
-                autoFocus
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="mov-note">Motivo / Nota</Label>
-              <Input
-                id="mov-note"
-                value={movementNote}
-                onChange={(e) => setMovementNote(e.target.value)}
-                placeholder={movementType === 'in' ? "Ej. Cambio inicial" : "Ej. Pago a proveedor"}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsMovementDialogOpen(false)}>Cancelar</Button>
-            <Button 
-              variant={movementType === 'out' ? "destructive" : "default"}
-              className={movementType === 'in' ? "bg-green-600 hover:bg-green-700" : ""}
-              disabled={movementSaving}
-              onClick={async () => {
-                const amount = parseFloat(movementAmount)
-                if (!amount || amount <= 0) {
-                  toast.error('Ingrese un monto válido')
-                  return
-                }
-                setMovementSaving(true)
-                try {
-                  const saved = await addMovement(
-                    movementType === 'in' ? 'cash_in' : 'cash_out',
-                    amount,
-                    movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso')
-                  )
-                  if (saved) {
-                    setIsMovementDialogOpen(false)
-                    setMovementAmount('')
-                    setMovementNote('')
-                  }
-                } finally {
-                  setMovementSaving(false)
-                }
-              }}
-            >
-              {movementSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {movementSaving
-                ? 'Guardando...'
-                : movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Diálogo de Registro de Movimiento Potenciado */}
+      <POSCashMovementDialog
+        open={isMovementDialogOpen}
+        onOpenChange={setIsMovementDialogOpen}
+        onAddMovement={addMovement}
+        initialType={movementType}
+        currentBalance={registerState?.[activeRegisterId]?.balance || 0}
+      />
 
-      
+      {/* Modal de Ventas en Espera (Parked Sales) */}
+      <HeldSalesModal
+        open={isHeldSalesModalOpen}
+        onOpenChange={setIsHeldSalesModalOpen}
+        heldSales={heldSales}
+        onRestoreSale={handleRestoreHeldSale}
+        onDeleteSale={deleteSale}
+        onClearAll={clearAllSales}
+        currentCartHasItems={combinedCartItems.length > 0}
+      />
+
+      {/* Modal de Cobro de Reparación / Taller */}
+      <POSRepairChargeModal
+        open={isRepairModalOpen}
+        onOpenChange={setIsRepairModalOpen}
+        onAddRepairToCart={handleAddRepairToCart}
+      />
+
+      {/* Modal de Alta Rápida de Cliente */}
+      <QuickCustomerDialog
+        open={isQuickCustomerOpen}
+        onOpenChange={setIsQuickCustomerOpen}
+        onCustomerCreated={(customer) => {
+          setSelectedCustomer(customer.id)
+        }}
+      />
+
+      {/* Modal de Detalle de Producto */}
+      <POSProductDetailDialog
+        product={detailProduct}
+        open={isDetailDialogOpen}
+        onOpenChange={setIsDetailDialogOpen}
+        onAddToCart={(product, qty) => {
+          addToCartHook(product, qty)
+        }}
+        creditContext={{
+          hasCustomer: Boolean(activeCustomer),
+          hasCreditLine: Number(activeCustomer?.credit_limit || 0) > 0,
+          availableCredit: Math.max(
+            0,
+            Number(activeCustomer?.credit_limit || 0) - Number(activeCustomer?.current_balance || 0),
+          ),
+          isRegisterOpen: getCurrentRegister.isOpen,
+        }}
+        onUseCreditPlan={(product, qty, plan) => {
+          addToCartHook(product, qty)
+          setPaymentMethod('credit')
+          applyProductCreditSuggestion({
+            productId: product.id,
+            productName: product.name,
+            count: plan.count,
+            interestRate: plan.rate,
+            frequency: plan.frequency,
+          })
+          toast.success(`Plan de ${plan.count} cuotas preparado`, {
+            description: 'Revisá las condiciones sobre el total del ticket antes de confirmar.',
+          })
+        }}
+        isWholesale={isWholesale}
+        wholesaleDiscountRate={WHOLESALE_DISCOUNT_RATE}
+      />
     </div>
   )
 }

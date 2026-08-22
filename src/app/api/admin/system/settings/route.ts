@@ -66,7 +66,7 @@ async function handleTenantUpdate(
       supabase.from('system_settings').select('*').eq('id', 'system').single(),
       supabase
         .from('organization_settings')
-        .select('modules, currency')
+        .select('modules, currency, repair_max_discount_percent, repair_labor_tax_rate')
         .eq('organization_id', organizationId)
         .maybeSingle(),
       supabase.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
@@ -86,6 +86,8 @@ async function handleTenantUpdate(
     ...toFrontendSettings(globalRow as Record<string, unknown>),
     ...existingTenantSettings,
     ...(orgSettings?.currency ? { currency: orgSettings.currency } : {}),
+    repairMaxDiscountPercent: Number(orgSettings?.repair_max_discount_percent ?? 20),
+    repairLaborTaxRate: (orgSettings?.repair_labor_tax_rate ?? 10) as 0 | 5 | 10,
   }
   if (
     settings.currency !== undefined
@@ -116,6 +118,8 @@ async function handleTenantUpdate(
     currency: effectiveSettings.currency,
     timezone: effectiveSettings.timeZone,
     modules: mergeTenantAdminSettings(existingModules, tenantSettings),
+    repair_max_discount_percent: effectiveSettings.repairMaxDiscountPercent,
+    repair_labor_tax_rate: effectiveSettings.repairLaborTaxRate,
     updated_at: new Date().toISOString(),
   }
 

@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { motion  } from '../../../../components/ui/motion'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { useSubscriptionStatus, canExportReports } from '@/contexts/SubscriptionStatusContext'
 import {
   BarChart3,
@@ -44,6 +45,9 @@ import { createClient } from '@/lib/supabase/client'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
 import { cn } from '@/lib/utils'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
 
 // Datos mock eliminados
 
@@ -53,11 +57,14 @@ export default function ProductReportsPage() {
   const reportBrand = organizationName || 'Mi Negocio'
   const supabase = useMemo(() => createClient(), [])
   const canViewCost = useCanViewCost()
+  // Sin esto, esta página mezclaba ventas y stock de todas las sucursales
+  // sin avisar — a diferencia de /dashboard/reports (la página principal),
+  // que sí respeta la sucursal seleccionada en todas sus consultas.
+  const { selectedBranchId } = useBranch()
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<any[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [pdfFeedback, setPdfFeedback] = useState<string | null>(null)
-  
+
   // Datos para gráficas
   const [salesTrendData, setSalesTrendData] = useState<any[]>([])
   const [categoryData, setCategoryData] = useState<any[]>([])
@@ -79,7 +86,7 @@ export default function ProductReportsPage() {
       setLoading(true)
       setErrorMsg(null)
       try {
-        const { data: productsData, error: productsError } = await supabase
+        const { data: productsRaw, error: productsError } = await supabase
           .from('products')
           .select(`
             *,
@@ -89,16 +96,34 @@ export default function ProductReportsPage() {
 
         if (productsError) throw productsError
 
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('sale_items')
-          .select(`
-            product_id,
-            quantity,
-            unit_price,
-            subtotal,
-            product:products(name, category:categories(name), sale_price, purchase_price),
-            sale:sales!inner(created_at, status)
-          `)
+        // El catálogo de productos es compartido entre sucursales (misma
+        // convención que /dashboard/products): no se filtra la fila, se le
+        // pisa stock_quantity con el stock real de la sucursal elegida.
+        const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+          supabase as unknown as BranchInventoryClient,
+          selectedBranchId,
+          (productsRaw ?? []).map((p: { id: string }) => p.id)
+        )
+        const productsData = applyBranchInventoryToProducts(
+          (productsRaw ?? []) as Array<{ id: string; stock_quantity?: number | null; [key: string]: unknown }>,
+          stockMap,
+          branchScoped
+        )
+
+        const { data: itemsData, error: itemsError } = await withBranchFilter(
+          supabase
+            .from('sale_items')
+            .select(`
+              product_id,
+              quantity,
+              unit_price,
+              subtotal,
+              product:products(name, category:categories(name), sale_price, purchase_price),
+              sale:sales!inner(created_at, status, branch_id)
+            `),
+          selectedBranchId,
+          'sale.branch_id'
+        )
 
         if (itemsError) throw itemsError
 
@@ -201,7 +226,7 @@ export default function ProductReportsPage() {
       }
     }
     fetchData()
-  }, [supabase, dateRange])
+  }, [supabase, dateRange, selectedBranchId])
 
   // Filtrar datos basado en los filtros seleccionados
   const filteredData = useMemo(() => {
@@ -395,10 +420,13 @@ export default function ProductReportsPage() {
         doc.save(`${filename}.pdf`)
       }
 
+      const formatLabel = fileFormat === 'csv' ? 'CSV' : fileFormat === 'excel' ? 'Excel' : 'PDF'
+      toast.success(`Reporte de productos exportado en ${formatLabel}.`)
     } catch (error) {
       console.error('Error al exportar:', error)
-      setPdfFeedback('No se pudo generar el archivo. Intentá de nuevo.')
-      setTimeout(() => setPdfFeedback(null), 5000)
+      toast.error('No se pudo generar el archivo. Intentá de nuevo.', {
+        description: error instanceof Error ? error.message : undefined,
+      })
     } finally {
       setIsExporting(false)
     }
@@ -406,11 +434,6 @@ export default function ProductReportsPage() {
 
   return (
     <div className="min-h-screen">
-      {pdfFeedback && (
-        <div className="fixed bottom-4 right-4 z-50 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm shadow-lg max-w-sm">
-          {pdfFeedback}
-        </div>
-      )}
       {/* Header mejorado */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}

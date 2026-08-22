@@ -11,6 +11,7 @@ import {
     Building2,
     CreditCard,
     Star,
+    WalletCards,
     type LucideIcon
 } from 'lucide-react'
 
@@ -115,11 +116,19 @@ export const adminNavCategories: NavCategory[] = [
                 permissions: ['settings.read']
             },
             {
+                key: 'finances',
+                label: 'Finanzas',
+                icon: WalletCards,
+                href: '/admin/finances',
+                description: 'Gestión de gastos, nómina y rentabilidad',
+                permissions: ['finances.read']
+            },
+            {
                 key: 'subscriptions',
-                label: 'Suscripcion',
+                label: 'Suscripción',
                 icon: CreditCard,
                 href: '/admin/subscriptions',
-                description: 'Plan, pagos, limites y facturacion',
+                description: 'Plan, pagos, límites y facturación',
                 permissions: ['billing.manage']
             },
             {

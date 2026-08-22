@@ -1,52 +1,243 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { canCreateRepair } from '@/lib/saas/subscription-service'
 import { logger } from '@/lib/logger'
+import { parseCreateRepairInput, type CreateRepairInput } from '@/lib/repairs/create-repair-input'
+import { RepairPartsStockError, replaceRepairPartsWithInventory } from '@/lib/repairs/replace-parts'
+import { RepairPricingWriteError, resolveRepairPricingWrite } from '@/lib/repairs/pricing-write'
+import { resolveCatalogRepairLines } from '@/lib/repairs/resolve-catalog-line'
+import {
+  fingerprintRepairCreateInput,
+  resolveRepairCreationReplay,
+} from '@/lib/repairs/create-repair-idempotency'
 import {
   isNextResponse,
   resolveRepairRouteContext,
+  type RepairRouteContext,
 } from '@/app/api/repairs/_lib'
 
 const REPAIR_SELECT_VARIANTS = [
   `
     *,
-    customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email),
+    customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email, customer_type),
     technician:profiles!technician_id(id, full_name),
-    images:repair_images(id, image_url, description)
+    images:repair_images(id, image_url, description),
+    payments:repair_payments(*),
+    parts:repair_parts(*),
+    currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
   `,
   `
     *,
-    customer:customers!customer_id(id, name, phone, email),
+    customer:customers!customer_id(id, name, phone, email, customer_type),
     technician:profiles!technician_id(id, full_name),
-    images:repair_images(id, image_url, description)
+    images:repair_images(id, image_url, description),
+    payments:repair_payments(*),
+    parts:repair_parts(*),
+    currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
   `,
   `
     *,
-    customer:customers!customer_id(id, first_name, last_name, phone, email),
+    customer:customers!customer_id(id, first_name, last_name, phone, email, customer_type),
     technician:profiles!technician_id(id, full_name),
-    images:repair_images(id, image_url, description)
+    images:repair_images(id, image_url, description),
+    payments:repair_payments(*),
+    parts:repair_parts(*),
+    currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
   `,
 ]
 
 const FULL_REPAIR_SELECT = `
   *,
-  customer:customers!customer_id(id, name, phone, email),
+  customer:customers!customer_id(id, name, phone, email, customer_type),
   technician:profiles!technician_id(id, full_name),
   images:repair_images(id, image_url, description),
   parts:repair_parts(*),
-  notes:repair_notes(*)
+  notes:repair_notes(*),
+  payments:repair_payments(*),
+  currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
 `
+
+type SupabaseError = { message?: string; code?: string; details?: string; hint?: string }
+
+function validationErrorResponse(issues: Array<{ path: PropertyKey[]; message: string }>) {
+  return NextResponse.json(
+    {
+      error: 'Revisa los datos de la reparacion e intenta de nuevo.',
+      code: 'INVALID_REPAIR_INPUT',
+      fields: issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      })),
+    },
+    { status: 400 }
+  )
+}
+
+async function validateRepairRelations(
+  supabase: RepairRouteContext['supabase'],
+  input: CreateRepairInput,
+  organizationId: string,
+  branchId: string
+) {
+  const customerResult = await supabase
+    .from('customers')
+    .select('id, customer_type')
+    .eq('id', input.customer_id)
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+
+  if (customerResult.error) throw customerResult.error
+  if (!customerResult.data) return 'El cliente seleccionado no pertenece a la organizacion activa.'
+
+  if (input.technician_id) {
+    const [memberResult, assignmentResult] = await Promise.all([
+      supabase
+        .from('organization_members')
+        .select('user_id')
+        .eq('organization_id', organizationId)
+        .eq('user_id', input.technician_id)
+        .eq('status', 'active')
+        .maybeSingle(),
+      supabase
+        .from('user_branch_assignments')
+        .select('user_id')
+        .eq('branch_id', branchId)
+        .eq('user_id', input.technician_id)
+        .eq('is_active', true)
+        .maybeSingle(),
+    ])
+
+    if (memberResult.error) throw memberResult.error
+    if (assignmentResult.error) throw assignmentResult.error
+    if (!memberResult.data || !assignmentResult.data) {
+      return 'El tecnico seleccionado no esta activo en esta sucursal.'
+    }
+  }
+
+  const productIds = [...new Set(input.parts.flatMap((part) => part.product_id ? [part.product_id] : []))]
+  if (productIds.length > 0) {
+    const productsResult = await supabase
+      .from('products')
+      .select('id, name, sku, unit_measure, purchase_price, sale_price, wholesale_price, tax_rate')
+      .eq('organization_id', organizationId)
+      .in('id', productIds)
+
+    if (productsResult.error) throw productsResult.error
+
+    const productsById = new Map((productsResult.data ?? []).map((row) => [row.id, row]))
+    if (productIds.some((id) => !productsById.has(id))) {
+      return 'Uno de los productos seleccionados no pertenece a la organizacion activa.'
+    }
+
+    const customerIsWholesale = ['wholesale', 'mayorista'].includes(
+      String(customerResult.data.customer_type || '').toLowerCase()
+    )
+    const resolvedLines = input.parts.flatMap((part) => {
+      if (!part.product_id) return [part]
+      const product = productsById.get(part.product_id)
+      return product
+        ? resolveCatalogRepairLines(product, customerIsWholesale, part.quantity)
+        : []
+    })
+    const inventoryProductIds = [...new Set(resolvedLines.flatMap((line) => (
+      line.line_type === 'charged_part' && line.product_id ? [line.product_id] : []
+    )))]
+    if (inventoryProductIds.length > 0) {
+      const inventoryResult = await supabase
+        .from('branch_inventory')
+        .select('product_id')
+        .eq('branch_id', branchId)
+        .in('product_id', inventoryProductIds)
+      if (inventoryResult.error) throw inventoryResult.error
+      const branchProducts = new Set((inventoryResult.data ?? []).map((row) => row.product_id))
+      if (inventoryProductIds.some((id) => !branchProducts.has(id))) {
+        return 'Uno de los repuestos seleccionados no pertenece al inventario de esta sucursal.'
+      }
+    }
+    input.parts.splice(0, input.parts.length, ...resolvedLines)
+  }
+
+  return null
+}
 
 export async function POST(request: NextRequest) {
   try {
     const ctx = await resolveRepairRouteContext(request, 'repairs.orders.create')
     if (isNextResponse(ctx)) return ctx
 
-    const body = await request.json() as Record<string, unknown>
-    const { parts, notes, images, ...repairFields } = body as {
-      parts?: Array<Record<string, unknown>>
-      notes?: Array<Record<string, unknown>>
-      images?: string[]
-      [key: string]: unknown
+    const parsed = parseCreateRepairInput(await request.json())
+    if (!parsed.success) return validationErrorResponse(parsed.error.issues)
+
+    const input = parsed.data
+    const { idempotency_key: idempotencyKey, parts, notes, images, ...repairFields } = input
+    const creationPayloadHash = fingerprintRepairCreateInput({ parts, notes, images, ...repairFields })
+
+    const findExistingCreation = async () => ctx.supabase
+      .from('repairs')
+      .select(FULL_REPAIR_SELECT)
+      .eq('organization_id', ctx.organizationId)
+      .eq('creation_idempotency_key', idempotencyKey)
+      .maybeSingle()
+
+    const existingResult = await findExistingCreation()
+    if (existingResult.error) throw existingResult.error
+    if (existingResult.data) {
+      const replay = resolveRepairCreationReplay(existingResult.data, creationPayloadHash)
+      if ('conflict' in replay) {
+        return NextResponse.json(
+          { error: replay.conflict, code: 'IDEMPOTENCY_KEY_REUSED' },
+          { status: 409 }
+        )
+      }
+      if ('pending' in replay) {
+        return NextResponse.json(
+          { error: replay.pending, code: 'REPAIR_CREATION_IN_PROGRESS' },
+          { status: 409, headers: { 'Retry-After': '2' } }
+        )
+      }
+      return NextResponse.json({ repair: existingResult.data, replayed: true }, { status: 200 })
+    }
+
+    const relationError = await validateRepairRelations(
+      ctx.supabase,
+      input,
+      ctx.organizationId,
+      ctx.branchId
+    )
+    if (relationError) {
+      return NextResponse.json(
+        { error: relationError, code: 'INVALID_REPAIR_RELATION' },
+        { status: 400 }
+      )
+    }
+
+    const { data: organizationSettings } = await ctx.supabase
+      .from('organization_settings')
+      .select('currency')
+      .eq('organization_id', ctx.organizationId)
+      .maybeSingle()
+
+    let resolvedPricing
+    try {
+      resolvedPricing = resolveRepairPricingWrite({
+        mode: input.pricing_mode,
+        currency: organizationSettings?.currency || 'PYG',
+        estimatedCost: input.estimated_cost,
+        laborCost: input.labor_cost,
+        finalCost: input.final_cost,
+        discountAmount: input.discount_amount,
+        paidAmount: 0,
+        parts,
+        role: ctx.organizationRole,
+        overrideReason: input.price_override_reason,
+      })
+    } catch (error) {
+      if (error instanceof RepairPricingWriteError) {
+        return NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: error.status }
+        )
+      }
+      throw error
     }
 
     // Límite mensual de reparaciones según el plan (free 10/mes, basic 100/mes, pro+ ilimitado).
@@ -76,6 +267,18 @@ export async function POST(request: NextRequest) {
       .from('repairs')
       .insert({
         ...repairFields,
+        estimated_cost: resolvedPricing.estimatedCost,
+        labor_cost: resolvedPricing.laborCost,
+        final_cost: resolvedPricing.finalCost,
+        pricing_mode: resolvedPricing.pricingMode,
+        discount_amount: resolvedPricing.discountAmount,
+        price_override_reason: resolvedPricing.overrideReason,
+        pricing_updated_by: ctx.userId,
+        pricing_updated_at: new Date().toISOString(),
+        creation_idempotency_key: idempotencyKey,
+        creation_payload_hash: creationPayloadHash,
+        status: 'recibido',
+        received_at: new Date().toISOString(),
         organization_id: ctx.organizationId,
         branch_id: ctx.branchId,
       })
@@ -83,19 +286,38 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (createError) {
-      return NextResponse.json({ error: createError.message }, { status: 500 })
+      if (createError.code === '23505') {
+        const racedResult = await findExistingCreation()
+        if (racedResult.error) throw racedResult.error
+        if (racedResult.data) {
+          const replay = resolveRepairCreationReplay(racedResult.data, creationPayloadHash)
+          if ('pending' in replay) {
+            return NextResponse.json(
+              { error: replay.pending, code: 'REPAIR_CREATION_IN_PROGRESS' },
+              { status: 409, headers: { 'Retry-After': '2' } }
+            )
+          }
+          if (!('conflict' in replay)) {
+            return NextResponse.json({ repair: racedResult.data, replayed: true }, { status: 200 })
+          }
+          return NextResponse.json(
+            { error: replay.conflict, code: 'IDEMPOTENCY_KEY_REUSED' },
+            { status: 409 }
+          )
+        }
+      }
+      logger.error('Repairs API POST insert failed', {
+        error: createError.message,
+        code: createError.code,
+        organizationId: ctx.organizationId,
+        branchId: ctx.branchId,
+      })
+      return NextResponse.json({ error: 'No se pudo crear la reparacion.' }, { status: 500 })
     }
 
     const repairId = newRepair.id
 
     try {
-      if (parts && parts.length > 0) {
-        const { error: partsError } = await supabase
-          .from('repair_parts')
-          .insert(parts.map((p) => ({ ...p, repair_id: repairId })))
-        if (partsError) throw partsError
-      }
-
       if (notes && notes.length > 0) {
         const { error: notesError } = await supabase
           .from('repair_notes')
@@ -103,7 +325,7 @@ export async function POST(request: NextRequest) {
             ...n,
             repair_id: repairId,
             author_id: ctx.userId,
-            author_name: typeof n.author_name === 'string' ? n.author_name : 'Sistema',
+            author_name: 'Sistema',
           })))
         if (notesError) throw notesError
       }
@@ -124,10 +346,61 @@ export async function POST(request: NextRequest) {
           if (imagesError) throw imagesError
         }
       }
+
+      // Keep this last: the RPC atomically validates branch stock, consumes
+      // inventory, records movements and synchronizes repairs.parts_cost.
+      await replaceRepairPartsWithInventory({
+        supabase,
+        repairId,
+        organizationId: ctx.organizationId,
+        branchId: ctx.branchId,
+        actorId: ctx.userId,
+        parts,
+        pricing: {
+          laborCost: resolvedPricing.laborCost,
+          finalCost: resolvedPricing.finalCost,
+          estimatedCost: resolvedPricing.estimatedCost,
+          mode: resolvedPricing.pricingMode,
+          discountAmount: resolvedPricing.discountAmount,
+          overrideReason: resolvedPricing.overrideReason,
+          updatedBy: ctx.userId,
+        },
+      })
+
+      const { error: completionError } = await supabase
+        .from('repairs')
+        .update({ creation_completed_at: new Date().toISOString() })
+        .eq('id', repairId)
+        .eq('organization_id', ctx.organizationId)
+        .eq('branch_id', ctx.branchId)
+        .eq('creation_idempotency_key', idempotencyKey)
+      if (completionError) throw completionError
     } catch (relatedError) {
-      await supabase.from('repairs').delete().eq('id', repairId)
-      const message = relatedError instanceof Error ? relatedError.message : 'No se pudieron guardar los detalles de la reparacion'
-      return NextResponse.json({ error: message }, { status: 500 })
+      const rollbackResult = await supabase
+        .from('repairs')
+        .delete()
+        .eq('id', repairId)
+        .eq('organization_id', ctx.organizationId)
+        .eq('branch_id', ctx.branchId)
+
+      const detail = relatedError as SupabaseError
+      logger.error('Repairs API POST related rows failed', {
+        error: detail?.message || 'unknown',
+        code: detail?.code,
+        rollbackError: rollbackResult.error?.message,
+        repairId,
+        organizationId: ctx.organizationId,
+        branchId: ctx.branchId,
+      })
+      return NextResponse.json(
+        {
+          error: relatedError instanceof RepairPartsStockError
+            ? relatedError.message
+            : 'No se pudieron guardar los detalles de la reparacion.',
+          code: relatedError instanceof RepairPartsStockError ? 'REPAIR_STOCK_CHANGED' : 'REPAIR_DETAILS_FAILED',
+        },
+        { status: relatedError instanceof RepairPartsStockError ? 409 : 500 }
+      )
     }
 
     const { data: fullRepair, error: fetchError } = await supabase
@@ -139,13 +412,22 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (fetchError) {
-      return NextResponse.json({ error: fetchError.message }, { status: 500 })
+      logger.error('Repairs API POST fetch failed', {
+        error: fetchError.message,
+        code: fetchError.code,
+        repairId,
+      })
+      return NextResponse.json({ error: 'La reparacion se creo, pero no se pudo recuperar.' }, { status: 500 })
     }
 
-    return NextResponse.json({ repair: fullRepair }, { status: 201 })
+    return NextResponse.json({ repair: fullRepair, replayed: false }, { status: 201 })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Error interno del servidor'
-    return NextResponse.json({ error: message }, { status: 500 })
+    const detail = error as SupabaseError
+    logger.error('Repairs API POST failed', {
+      error: detail?.message || (error instanceof Error ? error.message : 'unknown'),
+      code: detail?.code,
+    })
+    return NextResponse.json({ error: 'Error interno al crear la reparacion.' }, { status: 500 })
   }
 }
 

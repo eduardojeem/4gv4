@@ -416,11 +416,20 @@ export default function AnalyticsDashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas las sucursales</SelectItem>
-                  {branchOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
+                  {branchOptions.map((option) => {
+                    // Subtítulo para distinguir sucursales con nombre igual o parecido.
+                    const subtitle = [option.city, option.code].filter(Boolean).join(' · ')
+                    return (
+                      <SelectItem key={option.id} value={option.id}>
+                        <div className="flex min-w-0 flex-col">
+                          <span className="truncate">{option.name}</span>
+                          {subtitle ? (
+                            <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
+                          ) : null}
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
 
@@ -475,8 +484,8 @@ export default function AnalyticsDashboard() {
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_280px]">
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-3">
-                  <MiniStat label="Total vendido" value={formatCurrency(snapshot.finance.grossRevenue)} tone="info" />
-                  <MiniStat label="Ganancia estimada" value={formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
+                  <MiniStat label="Total vendido" value={formatCurrency(snapshot.finance.operationalRevenue)} tone="info" />
+                  <MiniStat label="Ganancia neta devengada" value={snapshot.finance.netProfit === null ? 'Pendiente' : formatCurrency(snapshot.finance.netProfit)} tone={snapshot.finance.netProfit === null ? 'warning' : snapshot.finance.netProfit >= 0 ? 'success' : 'danger'} />
                   <MiniStat label="vs. periodo anterior" value={formatPercent(snapshot.finance.growth)} tone={snapshot.finance.growth !== null && snapshot.finance.growth >= 0 ? 'success' : 'warning'} />
                 </div>
 
@@ -531,6 +540,41 @@ export default function AnalyticsDashboard() {
         </SectionFrame>
 
         <SectionFrame
+          title="Dinero: ingresos vs gastos"
+          description="Cuánto entró, cuánto salió y cuánto quedó de ganancia. Se compara con el periodo anterior."
+          badge={<SectionBadge>Finanzas</SectionBadge>}
+          className="xl:col-span-4"
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniStat label="Entró" value={formatCurrency(snapshot.finance.grossRevenue)} tone="info" />
+            <MiniStat label="Salió" value={formatCurrency(snapshot.finance.visibleExpenses)} tone="warning" />
+            <MiniStat label="Quedó" value={snapshot.finance.estimatedProfit === null ? 'Pendiente' : formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit === null ? 'warning' : snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
+            <MiniStat label="Margen" value={snapshot.finance.margin === null ? 'Pendiente' : `${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin === null ? 'warning' : snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
+          </div>
+
+          {!snapshot.finance.complete ? (
+            <div role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+              <p className="font-semibold">Resultado financiero incompleto</p>
+              <p className="mt-1">{snapshot.finance.coverageWarnings[0]?.message || 'Faltan costos o cobros fechados para completar el resultado.'}</p>
+            </div>
+          ) : null}
+
+          <div ref={financeRef} className="mt-6 h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={snapshot.financeComparison}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={70} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="ingresos" fill="#2563eb" radius={[10, 10, 0, 0]} name="Ingresos" />
+                <Bar dataKey="egresos" fill="#d97706" radius={[10, 10, 0, 0]} name="Egresos" />
+                <Bar dataKey="ganancia" fill="#0f766e" radius={[10, 10, 0, 0]} name="Ganancia" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </SectionFrame>
+
+        <SectionFrame
           title="Lo que deberías saber"
           description="Alertas y observaciones importantes del periodo: qué mejoró, qué necesita atención y dónde hay riesgo."
           badge={<SectionBadge>Alertas</SectionBadge>}
@@ -548,14 +592,17 @@ export default function AnalyticsDashboard() {
             ))}
           </div>
 
+          {/* "Clientes que vuelven" es el único dato que no tiene sección
+              propia en otro lado, así que se queda acá. Margen, cajas abiertas
+              y poco stock se quitaron: ya se muestran en Dinero, Estado de
+              cajas e Inventario respectivamente — repetirlos era ruido. */}
           <Separator className="my-6" />
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-            <MiniStat label="Margen de ganancia" value={`${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
-            <MiniStat label="Clientes que vuelven" value={`${snapshot.customers.recurrenceRate.toFixed(1)}%`} tone={snapshot.customers.recurrenceRate >= 35 ? 'success' : 'info'} />
-            <MiniStat label="Cajas abiertas" value={String(snapshot.operations.openRegisters)} tone="info" />
-            <MiniStat label="Productos con poco stock" value={String(snapshot.inventory.lowStockCount)} tone={snapshot.inventory.lowStockCount > 0 ? 'warning' : 'success'} />
-          </div>
+          <MiniStat
+            label="Clientes que vuelven"
+            value={`${snapshot.customers.recurrenceRate.toFixed(1)}%`}
+            tone={snapshot.customers.recurrenceRate >= 35 ? 'success' : 'info'}
+          />
         </SectionFrame>
 
         <SectionFrame
@@ -662,7 +709,12 @@ export default function AnalyticsDashboard() {
           className="xl:col-span-4"
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <MiniStat label="Clientes nuevos" value={String(snapshot.customers.newCount)} tone="info" />
+            <MiniStat
+              label="Clientes nuevos"
+              value={String(snapshot.customers.newCount)}
+              tone="info"
+              hint={branch !== 'all' ? 'Todo el negocio (los clientes no son por sucursal)' : undefined}
+            />
             <MiniStat label="Volvieron a comprar" value={String(snapshot.customers.recurrentCount)} tone="success" />
             <MiniStat label="% que vuelven" value={`${snapshot.customers.recurrenceRate.toFixed(1)}%`} tone={snapshot.customers.recurrenceRate >= 35 ? 'success' : 'neutral'} />
             <MiniStat label="Crecimiento" value={formatPercent(snapshot.customers.growth)} tone={snapshot.customers.growth !== null && snapshot.customers.growth >= 0 ? 'success' : 'warning'} />
@@ -695,7 +747,7 @@ export default function AnalyticsDashboard() {
           title="Taller de reparaciones"
           description="Cuántas reparaciones hay en curso, cuántas se entregaron, cuánto tardan en promedio y cuánto facturó el taller."
           badge={<SectionBadge>Taller</SectionBadge>}
-          className="xl:col-span-6"
+          className="xl:col-span-8"
         >
           <div className="grid gap-3 md:grid-cols-4">
             <MiniStat label="En curso" value={String(snapshot.repairs.activeCount)} tone="info" />
@@ -736,34 +788,6 @@ export default function AnalyticsDashboard() {
                 </div>
               ))}
             </div>
-          </div>
-        </SectionFrame>
-
-        <SectionFrame
-          title="Dinero: ingresos vs gastos"
-          description="Cuánto entró, cuánto salió y cuánto quedó de ganancia. Se compara con el periodo anterior."
-          badge={<SectionBadge>Finanzas</SectionBadge>}
-          className="xl:col-span-6"
-        >
-          <div className="grid gap-3 md:grid-cols-4">
-            <MiniStat label="Entró" value={formatCurrency(snapshot.finance.grossRevenue)} tone="info" />
-            <MiniStat label="Salió" value={formatCurrency(snapshot.finance.visibleExpenses)} tone="warning" />
-            <MiniStat label="Quedó" value={formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
-            <MiniStat label="Margen" value={`${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
-          </div>
-
-          <div ref={financeRef} className="mt-6 h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={snapshot.financeComparison}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-                <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={70} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="ingresos" fill="#2563eb" radius={[10, 10, 0, 0]} name="Ingresos" />
-                <Bar dataKey="egresos" fill="#d97706" radius={[10, 10, 0, 0]} name="Egresos" />
-                <Bar dataKey="ganancia" fill="#0f766e" radius={[10, 10, 0, 0]} name="Ganancia" />
-              </BarChart>
-            </ResponsiveContainer>
           </div>
         </SectionFrame>
 

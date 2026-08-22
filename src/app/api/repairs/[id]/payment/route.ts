@@ -4,315 +4,188 @@ import {
   isNextResponse,
   resolveRepairRouteContext,
 } from '@/app/api/repairs/_lib'
-import { createCreditAccount, CreditAccountError } from '@/lib/credits/create-credit-account'
-import { normalizeCreditFrequency, normalizeInstallmentCount } from '@/lib/credits/installments'
+import { parseRepairPaymentRequest } from '@/lib/repairs/financial-closure'
+import { resolveRepairCollectionPricing } from '@/lib/repairs/collection-pricing'
+import {
+  closeRepairAndRegisterPayment,
+  FinancialClosureRpcError,
+} from '@/lib/repairs/financial-closure-rpc'
+import { registerUnpricedRepairDeposit } from '@/lib/repairs/unpriced-deposit-rpc'
 
 type RouteParams = { params: Promise<{ id: string }> }
-
-// 'credit' financia el cobro creando una cuenta de crédito en vez de mover caja.
-const VALID_METHODS = new Set(['cash', 'card', 'transfer', 'credit'])
-const VALID_OUTCOMES = new Set(['repaired', 'withdrawn', 'unrepairable'])
 
 export async function POST(request: NextRequest, context: RouteParams) {
   try {
     const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
     if (isNextResponse(ctx)) return ctx
 
-    const { id } = await context.params
-    const body = await request.json().catch(() => ({})) as {
-      method?: unknown
-      amount?: unknown
-      reference?: unknown
-      markDelivered?: unknown
-      outcome?: unknown
-      note?: unknown
-      interestRate?: unknown
-      installments?: { count?: unknown; frequency?: unknown }
-    }
-
-    const amount = Number(body.amount)
-    const method = typeof body.method === 'string' && VALID_METHODS.has(body.method)
-      ? body.method
-      : null
-    const markDelivered = Boolean(body.markDelivered)
-    const outcome = typeof body.outcome === 'string' && VALID_OUTCOMES.has(body.outcome)
-      ? body.outcome
-      : 'repaired'
-    const isCredit = method === 'credit'
-
-    if (!method) {
-      return NextResponse.json({ error: 'Metodo de pago invalido.' }, { status: 400 })
-    }
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return NextResponse.json({ error: 'Monto de pago invalido.' }, { status: 400 })
-    }
-
-    // El cobro a crédito es una operación financiera: los técnicos no pueden
-    // originarla (mismo criterio que la venta a crédito del POS).
-    if (isCredit && ctx.role === 'tecnico') {
+    const parsed = parseRepairPaymentRequest(await request.json().catch(() => ({})))
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Permisos insuficientes para cobrar a crédito.' },
-        { status: 403 }
+        { error: 'Revisa el metodo, monto y datos del pago.', code: 'INVALID_PAYMENT_REQUEST' },
+        { status: 400 },
       )
     }
 
-    // Igual que el POS: sin caja abierta no se cobra (a crédito no aplica,
-    // no mueve caja). Antes esto era "best-effort": si no había caja
-    // abierta, el cobro se guardaba en la reparación igual y el movimiento
-    // de caja se perdía en silencio (solo un console.warn en el server),
-    // sin que nadie en el mostrador se enterara ni quedara rastro en el
-    // arqueo o el cierre Z.
-    let cashSessionId: string | null = null
-    if (!isCredit) {
-      const { data: openSessions, error: sessionsError } = await ctx.supabase
-        .from('cash_closures')
-        .select('id, register_id, branch_id')
-        .eq('organization_id', ctx.organizationId)
-        .eq('branch_id', ctx.branchId)
-        .is('date', null)
-        .order('created_at', { ascending: false })
+    const { id } = await context.params
+    const input = parsed.data
+    const isCredit = input.method === 'credit'
+    const isUnpricedDeposit = input.purpose === 'deposit'
 
-      if (sessionsError) throw sessionsError
-
-      const openSessionsList = (openSessions ?? []) as Array<{
-        id: string
-        register_id: string | null
-        branch_id: string | null
-      }>
-      const targetSession =
-        openSessionsList.find((session) => (session.register_id ?? '').toLowerCase() === 'principal') ??
-        openSessionsList[0] ??
-        null
-
-      if (!targetSession) {
-        return NextResponse.json(
-          { error: 'No hay una caja abierta en esta sucursal. Abrí caja antes de cobrar la reparación.' },
-          { status: 409 }
-        )
-      }
-      cashSessionId = targetSession.id
-    }
-
-    // Estado actual del cobro: los pagos se ACUMULAN (antes `paid_amount` se
-    // sobreescribía, así que un segundo pago parcial borraba el primero) y se
-    // bloquea el cobro de una reparación ya saldada para evitar duplicados en
-    // caja (p.ej. cobrada por POS y de nuevo desde esta pantalla).
-    const { data: current, error: currentError } = await ctx.supabase
+    const { data: financialRepair, error: financialRepairError } = await ctx.supabase
       .from('repairs')
-      .select('id, ticket_number, customer_id, paid_amount, payment_status, final_cost, estimated_cost')
+      .select('id, pricing_mode, labor_cost, final_cost, estimated_cost, discount_amount, paid_amount, parts:repair_parts(unit_price, unit_cost, quantity)')
       .eq('id', id)
       .eq('organization_id', ctx.organizationId)
       .eq('branch_id', ctx.branchId)
       .maybeSingle()
 
-    if (currentError) throw currentError
-    if (!current) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
-
-    const currentRepair = current as {
-      ticket_number?: string | null
-      customer_id?: string | null
-      paid_amount?: number | null
-      payment_status?: string | null
-      final_cost?: number | null
-      estimated_cost?: number | null
+    if (financialRepairError) throw financialRepairError
+    if (!financialRepair) {
+      return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
     }
 
-    if (currentRepair.payment_status === 'pagado') {
+    const { pricing } = resolveRepairCollectionPricing({
+      mode: financialRepair.pricing_mode,
+      laborCost: financialRepair.labor_cost,
+      finalCost: financialRepair.final_cost,
+      estimatedCost: financialRepair.estimated_cost,
+      discountAmount: financialRepair.discount_amount,
+      paidAmount: financialRepair.paid_amount,
+      parts: financialRepair.parts?.map((part: { unit_price?: number | null; unit_cost?: number | null; quantity?: number | null }) => ({
+        cost: part.unit_price ?? part.unit_cost,
+        internalCost: part.unit_cost,
+        quantity: part.quantity,
+      })) ?? [],
+    })
+    const currentTotal = pricing.customerTotal
+    const currentPaid = pricing.paidAmount
+    const currentBalance = pricing.balance
+    const priceDefined = financialRepair.final_cost !== null
+      || Number(financialRepair.estimated_cost) > 0
+      || currentTotal > 0
+
+    if (isUnpricedDeposit && priceDefined) {
+      return NextResponse.json({
+        error: 'La reparación ya tiene precio. Registrá el importe como pago del saldo.',
+        code: 'REPAIR_PRICE_ALREADY_DEFINED',
+        currentTotal,
+        currentPaid,
+        currentBalance,
+      }, { status: 422 })
+    }
+
+    if (!isUnpricedDeposit && currentBalance <= 0) {
+      return NextResponse.json({
+        error: 'La reparación ya no tiene saldo pendiente para cobrar.',
+        code: 'REPAIR_HAS_NO_BALANCE',
+        currentTotal,
+        currentPaid,
+        currentBalance: 0,
+      }, { status: 422 })
+    }
+
+    if (!isUnpricedDeposit && input.amount > currentBalance) {
+      return NextResponse.json({
+        error: `El saldo pendiente cambió. El monto máximo actual es ${currentBalance}.`,
+        code: 'REPAIR_PAYMENT_EXCEEDS_BALANCE',
+        currentTotal,
+        currentPaid,
+        currentBalance,
+      }, { status: 422 })
+    }
+
+    if (isCredit && input.amount !== currentBalance) {
+      return NextResponse.json({
+        error: `El crédito debe cubrir el saldo pendiente actual de ${currentBalance}.`,
+        code: 'REPAIR_CREDIT_MUST_COVER_BALANCE',
+        currentTotal,
+        currentPaid,
+        currentBalance,
+      }, { status: 422 })
+    }
+
+    if (isCredit && (ctx.role === 'tecnico' || ctx.role === 'technician')) {
       return NextResponse.json(
-        { error: 'Esta reparacion ya figura como pagada.' },
-        { status: 409 }
+        { error: 'Permisos insuficientes para cobrar a credito.' },
+        { status: 403 },
       )
     }
 
-    const ticketLabel = currentRepair.ticket_number || id.slice(0, 8).toUpperCase()
-
-    // Cobro a crédito: se financia el monto creando una cuenta de crédito
-    // (deuda en cuotas) atada al cliente, en vez de mover caja. La reparación
-    // queda saldada desde su propio ledger; la deuda vive en el módulo de
-    // créditos. No hay `repair_id` en customer_credits, así que el vínculo se
-    // deja en el `label`.
-    let creditInfo: { creditId: string; financedTotal: number } | null = null
-    if (isCredit) {
-      if (!currentRepair.customer_id) {
-        return NextResponse.json(
-          { error: 'La reparación no tiene un cliente asociado para cobrar a crédito.' },
-          { status: 400 }
-        )
-      }
-
-      const { data: customerRow, error: customerError } = await ctx.supabase
-        .from('customers')
-        .select('id, credit_limit')
-        .eq('id', currentRepair.customer_id)
+    let cashSessionId: string | null = null
+    if (!isCredit) {
+      const { data, error } = await ctx.supabase
+        .from('cash_closures')
+        .select('id, register_id')
         .eq('organization_id', ctx.organizationId)
-        .maybeSingle()
+        .eq('branch_id', ctx.branchId)
+        .is('date', null)
+        .order('created_at', { ascending: false })
 
-      if (customerError) throw customerError
-      const creditLimit = Math.max(0, Number((customerRow as { credit_limit?: number | string | null } | null)?.credit_limit || 0))
-      if (!customerRow || creditLimit <= 0) {
+      if (error) throw error
+      const sessions = (data ?? []) as Array<{ id: string; register_id?: string | null }>
+      cashSessionId = sessions.find((session) => (session.register_id ?? '').toLowerCase() === 'principal')?.id
+        ?? sessions[0]?.id
+        ?? null
+
+      if (!cashSessionId) {
         return NextResponse.json(
-          { error: 'El cliente no tiene límite de crédito habilitado.' },
-          { status: 400 }
+          { error: 'No hay una caja abierta en esta sucursal. Abri caja antes de cobrar la reparacion.', code: 'REPAIR_CASH_REGISTER_NOT_OPEN' },
+          { status: 409 },
         )
       }
-
-      const result = await createCreditAccount({
-        supabase: ctx.supabase,
-        organizationId: ctx.organizationId,
-        customerId: currentRepair.customer_id,
-        creditLimit,
-        amount,
-        interestRate: Number.isFinite(Number(body.interestRate)) ? Number(body.interestRate) : 0,
-        installmentCount: normalizeInstallmentCount(body.installments?.count),
-        frequency: normalizeCreditFrequency(body.installments?.frequency),
-        saleId: null,
-        label: `Reparación ${ticketLabel}`,
-        creditType: 'repair_financing',
-        originType: 'repair',
-      })
-      creditInfo = { creditId: result.creditId, financedTotal: result.financedTotal }
     }
 
-    const previouslyPaid = Number(currentRepair.paid_amount) || 0
-    // A crédito, el monto financiado salda la reparación por completo (la deuda
-    // pasa al crédito). En efectivo/tarjeta/transferencia, se acumula.
-    const totalPaid = isCredit ? (currentRepair.final_cost ?? currentRepair.estimated_cost ?? amount) : previouslyPaid + amount
-    // El total a cobrar es el costo final si está definido; si no, el estimado.
-    const totalDue = Number(currentRepair.final_cost ?? currentRepair.estimated_cost) || 0
-    // A crédito queda saldada; si no, según lo acumulado vs total.
-    const isSettled = isCredit || totalDue <= 0 || totalPaid >= totalDue
-
-    const now = new Date().toISOString()
-    const updateData: Record<string, unknown> = {
-      payment_status: isSettled ? 'pagado' : 'parcial',
-      paid_amount: totalPaid,
-      updated_at: now,
-    }
-
-    const noteParts = [
-      isCredit ? `Cobro a crédito: ${amount}` : `Pago registrado: ${amount}`,
-      `Metodo: ${method}`,
-    ]
-
-    if (creditInfo) {
-      noteParts.push(`Crédito ${creditInfo.creditId} (total financiado: ${creditInfo.financedTotal})`)
-    }
-
-    if (!isCredit && previouslyPaid > 0) {
-      noteParts.push(`Acumulado: ${totalPaid}${totalDue > 0 ? ` de ${totalDue}` : ''}`)
-    }
-
-    if (typeof body.reference === 'string' && body.reference.trim()) {
-      noteParts.push(`Referencia: ${body.reference.trim()}`)
-    }
-
-    if (typeof body.note === 'string' && body.note.trim()) {
-      noteParts.push(`Nota: ${body.note.trim()}`)
-    }
-
-    if (markDelivered) {
-      updateData.status = 'entregado'
-      updateData.picked_up_at = now
-      updateData.delivered_at = now
-      updateData.completed_at = now
-      updateData.delivery_outcome = outcome
-      if (typeof body.note === 'string' && body.note.trim()) {
-        updateData.solution = body.note.trim()
-      }
-    }
-
-    // Guard anti doble cobro: solo actualiza si el estado de pago sigue siendo
-    // el que leímos. Si otra pantalla (p.ej. el POS) cobró en el intervalo, la
-    // condición no matchea y se aborta en vez de duplicar el movimiento.
-    let updateQuery = ctx.supabase
-      .from('repairs')
-      .update(updateData)
-      .eq('id', id)
-      .eq('organization_id', ctx.organizationId)
-      .eq('branch_id', ctx.branchId)
-
-    updateQuery = currentRepair.payment_status
-      ? updateQuery.eq('payment_status', currentRepair.payment_status)
-      : updateQuery.is('payment_status', null)
-
-    const { data, error } = await updateQuery.select('id').maybeSingle()
-
-    // Rollback del crédito recién creado si la reparación no pudo actualizarse
-    // (p.ej. otro cobro concurrente): evita dejar una deuda huérfana sin que la
-    // reparación quede saldada.
-    const rollbackCredit = async () => {
-      if (!creditInfo) return
-      await ctx.supabase.from('credit_installments').delete().eq('credit_id', creditInfo.creditId)
-      await ctx.supabase.from('customer_credits').delete()
-        .eq('id', creditInfo.creditId).eq('organization_id', ctx.organizationId)
-    }
-
-    if (error) {
-      await rollbackCredit()
-      throw error
-    }
-    if (!data) {
-      await rollbackCredit()
-      return NextResponse.json(
-        { error: 'El estado de pago cambio mientras se registraba. Refresca e intenta de nuevo.' },
-        { status: 409 }
-      )
-    }
-
-    // Reflejar el cobro en la caja que ya se confirmó abierta más arriba
-    // (misma convención que el POS: se registran todos los métodos,
-    // etiquetados con payment_method). A crédito no aplica: no entra
-    // efectivo, la deuda vive en créditos.
-    if (!isCredit && cashSessionId) {
-      const { error: cashMovementError } = await ctx.supabase
-        .from('cash_movements')
-        .insert({
-          session_id: cashSessionId,
-          type: 'cash_in',
-          amount,
-          reason: `Cobro reparación ${ticketLabel}`,
-          payment_method: method,
-          created_by: ctx.userId,
-          created_at: now,
-          organization_id: ctx.organizationId,
-          branch_id: ctx.branchId,
-        })
-
-      if (cashMovementError) {
-        // El cobro en la reparación ya se confirmó (arriba). No se revierte
-        // por un fallo acá (poco probable, ya se validó que la caja estaba
-        // abierta segundos antes) — se deja rastro en logs para reconciliar
-        // a mano en vez de devolver un 500 sobre un cobro que sí se guardó.
-        console.error('[repairs/payment] Cobro confirmado pero falló el movimiento de caja:', {
+    const operation = isUnpricedDeposit
+      ? await registerUnpricedRepairDeposit(ctx.supabase, {
           repairId: id,
           organizationId: ctx.organizationId,
-          error: cashMovementError,
+          branchId: ctx.branchId,
+          actorId: ctx.userId,
+          method: input.method as 'cash' | 'card' | 'transfer',
+          amount: input.amount,
+          reference: input.reference,
+          note: input.note,
+          idempotencyKey: input.idempotencyKey,
+          cashSessionId: cashSessionId!,
         })
-      }
-    }
+      : await closeRepairAndRegisterPayment(ctx.supabase, {
+          repairId: id,
+          organizationId: ctx.organizationId,
+          branchId: ctx.branchId,
+          actorId: ctx.userId,
+          deliver: false,
+          allowOutstandingBalance: false,
+          payment: input,
+          cashSessionId,
+          creditId: null,
+          source: 'repairs',
+        })
 
-    const { error: noteError } = await ctx.supabase
-      .from('repair_notes')
-      .insert({
-        repair_id: id,
-        author_id: ctx.userId,
-        author_name: 'Sistema',
-        note_text: noteParts.join(' | '),
-        is_internal: true,
-      })
+    const { data: repair, error } = await fetchRepairById(ctx, id)
+    if (error) throw error
+    if (!repair) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
 
-    if (noteError) throw noteError
+    const creditId = 'credit_id' in operation ? operation.credit_id : null
+    const creditTotal = 'credit_total' in operation ? operation.credit_total : null
 
-    const { data: repair, error: fetchError } = await fetchRepairById(ctx, id)
-    if (fetchError) throw fetchError
-
-    return NextResponse.json({ repair })
+    return NextResponse.json({
+      repair,
+      payment: operation.payment_id ? { id: operation.payment_id } : null,
+      credit: creditId ? {
+        creditId,
+        financedTotal: Number(creditTotal ?? input.amount),
+      } : null,
+      idempotent: operation.idempotent,
+    })
   } catch (error) {
-    if (error instanceof CreditAccountError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+    if (error instanceof FinancialClosureRpcError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     }
-    const message = error instanceof Error ? error.message : 'Error interno del servidor'
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[repair-payment] Unexpected payment failure', error)
+    return NextResponse.json(
+      { error: 'No se pudo registrar el pago de la reparación.' },
+      { status: 500 },
+    )
   }
 }

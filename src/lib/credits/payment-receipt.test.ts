@@ -7,6 +7,8 @@ import {
   getCreditPaymentReceiptHeight,
   getCreditPaymentReceiptLayout,
   getCreditPaymentMethodLabel,
+  buildPaymentDetailRows,
+  buildAccountStatusRows,
 } from './payment-receipt'
 
 describe('credit payment receipt helpers', () => {
@@ -70,5 +72,41 @@ describe('credit payment receipt helpers', () => {
     ]
 
     expect(getCreditCurrentBalance(installments, 'credit-a')).toBe(450)
+  })
+
+  it('includes installment number and remaining debt in receipt rows', () => {
+    const paymentRows = buildPaymentDetailRows({
+      paymentId: 'pay-1',
+      paymentAmount: 250000,
+      paymentMethod: 'cash',
+      installmentNumber: 2,
+      totalInstallments: 6,
+      installmentDueDate: '2026-09-01',
+      installmentAmount: 250000,
+    })
+
+    expect(paymentRows).toEqual(
+      expect.arrayContaining([
+        ['Cuota Pagada', 'Cuota #2 de 6'],
+        ['MONTO ABONADO', expect.stringContaining('250.000')],
+        ['Método de Pago', 'Efectivo'],
+      ])
+    )
+
+    const statusRows = buildAccountStatusRows({
+      paymentId: 'pay-1',
+      paymentAmount: 250000,
+      currentCreditBalance: 1000000,
+      pendingInstallmentsCount: 4,
+      nextDueDate: '2026-10-01',
+      nextDueAmount: 250000,
+    })
+
+    expect(statusRows).toEqual(
+      expect.arrayContaining([
+        ['SALDO PENDIENTE (FALTA)', expect.stringContaining('1.000.000')],
+        ['Cuotas por Pagar', '4 cuotas pendientes'],
+      ])
+    )
   })
 })

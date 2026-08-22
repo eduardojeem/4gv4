@@ -1,60 +1,75 @@
 import React from 'react'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-let AdminLayout: any
+import { AdminLayout } from '@/components/admin/layout/AdminLayout'
+import { AdminLayoutProvider } from '@/contexts/AdminLayoutContext'
 
-let authState = { user: { id: 'u1' }, loading: false, isAdmin: true }
+const router = {
+  push: vi.fn(),
+  refresh: vi.fn(),
+}
 
-
-vi.mock('../../modules/admin/components/AdminGuard', () => ({
-  default: ({ children }: any) => <>{children}</>
+vi.mock('@/components/admin/SubscriptionChip', () => ({
+  SubscriptionChip: () => null,
 }))
 
-vi.mock('../../modules/admin/components/AdminSidebar', () => ({
-  default: () => <div>Usuarios</div>
+vi.mock('@/components/branches/branch-selector', () => ({
+  BranchSelector: () => null,
 }))
 
-vi.mock('../../modules/admin/components/AdminBreadcrumbs', () => ({
-  default: () => <div>breadcrumbs users</div>
+vi.mock('@/components/profile/logout-dialog', () => ({
+  LogoutDialog: () => null,
 }))
 
-vi.mock('../../modules/admin/components/AdminNotificationsBar', () => ({
-  default: () => <div>notificaciones</div>
+vi.mock('@/components/saas/organization-switcher', () => ({
+  OrganizationSwitcher: () => null,
+}))
+
+vi.mock('@/components/ui/global-search', () => ({
+  GlobalSearch: () => null,
+}))
+
+vi.mock('@/components/ui/notification-bell', () => ({
+  NotificationBell: () => null,
+}))
+
+vi.mock('@/components/ui/theme-toggle', () => ({
+  ThemeToggle: () => null,
 }))
 
 vi.mock('@/contexts/auth-context', () => ({
-  useAuth: () => authState
-}))
-
-vi.mock('../../../contexts/auth-context', () => ({
-  useAuth: () => authState
+  useAuth: () => ({
+    hasPermission: () => true,
+    isAdmin: true,
+    isSuperAdmin: false,
+    user: {
+      id: 'admin-user',
+      email: 'admin@example.com',
+      role: 'admin',
+      profile: { name: 'Admin User' },
+    },
+    signOut: vi.fn().mockResolvedValue(undefined),
+  }),
 }))
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/admin/users'
+  usePathname: () => '/admin/users',
+  useRouter: () => router,
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 describe('Rutas Admin bajo AdminLayout', () => {
-  beforeEach(() => {
-    authState = { user: { id: 'u1' }, loading: false, isAdmin: true }
-  })
-
-  beforeEach(async () => {
-    const mod = await import('../../modules/admin/layouts/AdminLayout')
-    AdminLayout = mod.default
-  })
-
-  it('renderiza sidebar, breadcrumbs y contenido para admin', () => {
-    const { container } = render(
-      <AdminLayout>
-        <div data-testid="child">Contenido</div>
-      </AdminLayout>
+  it('muestra la navegacion actual de admin y el contenido de la ruta', () => {
+    render(
+      <AdminLayoutProvider>
+        <AdminLayout>
+          <p>Contenido de la ruta de usuarios</p>
+        </AdminLayout>
+      </AdminLayoutProvider>
     )
 
-    expect(screen.getByText('Usuarios')).toBeTruthy()
-    expect(container.textContent?.includes('users')).toBe(true)
-    expect(screen.getByTestId('child')).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Menu lateral' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Usuarios' })).toHaveAttribute('href', '/admin/users')
+    expect(screen.getByText('Contenido de la ruta de usuarios')).toBeInTheDocument()
   })
-
-  // Acceso se valida en pruebas unitarias de AdminGuard
 })

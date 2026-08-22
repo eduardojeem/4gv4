@@ -38,6 +38,23 @@ export interface PaymentInfo {
   notes?: string
 }
 
+export interface DebtItem {
+  id: string
+  type: 'repair' | 'installment' | 'sale'
+  title: string
+  subtitle?: string
+  totalAmount: number
+  paidAmount: number
+  pendingAmount: number
+  dueDate?: string
+  isOverdue: boolean
+  status: string
+  operationalStatus?: string
+  repairCategory?: 'in_progress' | 'ready_for_pickup' | 'delivered_unpaid'
+  debtReason?: string
+  creditId?: string
+}
+
 export interface CustomerCreditSummary {
   customer_id: string
   total_credits: number
@@ -49,7 +66,12 @@ export interface CustomerCreditSummary {
   total_pending: number
   current_balance: number
   credit_limit: number
+  available_credit: number
   credit_utilization: number // Porcentaje de crédito utilizado
+  store_balance: number // Saldo a favor disponible (ya descontadas las reservas)
+  store_reserved: number // Retenido por pedidos web pendientes
+  overdue_debt: number // Deuda vencida
+  debts: DebtItem[]
   payment_history: {
     on_time_payments: number
     late_payments: number
@@ -61,6 +83,7 @@ export interface CustomerCreditSummary {
     due_date: string
     days_until_due: number
     is_overdue: boolean
+    title?: string
   } | null
   risk_assessment: {
     risk_level: 'low' | 'medium' | 'high' | 'critical'
@@ -75,87 +98,151 @@ export interface CustomerWithCredits extends Customer {
   recent_payments: PaymentInfo[]
 }
 
-export function useCustomerCredits(customerId?: string) {
+export function useCustomerCredits(customerId?: string, initialCustomer?: Customer | null) {
   const [loading, setLoading] = useState(false)
   const [credits, setCredits] = useState<CreditInfo[]>([])
   const [installments, setInstallments] = useState<InstallmentInfo[]>([])
   const [payments, setPayments] = useState<PaymentInfo[]>([])
-  const [customerLimit, setCustomerLimit] = useState<number>(0)
+  const [customerLimit, setCustomerLimit] = useState<number>(Number(initialCustomer?.credit_limit || 0))
+  const [storeBalance, setStoreBalance] = useState<number>(Number((initialCustomer as any)?.store_credit || 0))
+  const [storeReserved, setStoreReserved] = useState<number>(0)
+  const [debts, setDebts] = useState<DebtItem[]>([])
+  const [totalCollectDebt, setTotalCollectDebt] = useState<number>(0)
+  const [overdueCollectDebt, setOverdueCollectDebt] = useState<number>(0)
   const [error, setError] = useState<string | null>(null)
+  const [refreshIndex, setRefreshIndex] = useState(0)
 
   const supabase = useMemo(() => createClient(), [])
 
-  // Cargar datos de créditos
+  // Sincronizar límite inicial si cambia en el prop del cliente
+  useEffect(() => {
+    if (initialCustomer?.credit_limit !== undefined) {
+      setCustomerLimit(Number(initialCustomer.credit_limit || 0))
+    }
+    if ((initialCustomer as any)?.store_credit !== undefined) {
+      setStoreBalance(Number((initialCustomer as any).store_credit || 0))
+    }
+  }, [initialCustomer?.credit_limit, (initialCustomer as any)?.store_credit])
+
+  // Cargar datos de créditos y deudas reales
   useEffect(() => {
     if (!customerId) return
+
+    let isMounted = true
 
     const loadCreditData = async () => {
       setLoading(true)
       setError(null)
 
       try {
-        if (!config.supabase.isConfigured) {
-          console.warn('Supabase not configured')
-          setCredits([])
-          setInstallments([])
-          setPayments([])
-          setCustomerLimit(0)
-          return
+        // 1. Cargar deudas unificadas reales y límite exacto desde el servidor
+        try {
+          const collectRes = await fetch(`/api/customers/${customerId}/collect-payment`)
+          if (collectRes.ok) {
+            const collectData = await collectRes.json()
+            if (isMounted && !collectData.success) {
+              setError(collectData.error || 'No se pudo cargar la deuda del cliente.')
+            }
+            if (isMounted && collectData.success) {
+              setDebts(collectData.debts || [])
+              setTotalCollectDebt(Number(collectData.totalDebt || 0))
+              setOverdueCollectDebt(Number(collectData.overdueDebt || 0))
+              setStoreBalance(Number(collectData.storeBalance || 0))
+              setStoreReserved(Number(collectData.storeReservedBalance || 0))
+              // Solo se pisa el limite que ya venia del cliente cuando el
+              // servidor manda uno de verdad: un 0 por cliente no encontrado
+              // borraba de la pantalla un limite correctamente cargado.
+              if (collectData.creditLimit !== undefined && collectData.creditLimit !== null) {
+                setCustomerLimit(Number(collectData.creditLimit) || 0)
+              }
+            }
+          } else if (isMounted) {
+            // Un 403 o un 500 tampoco puede pasar inadvertido: sin deuda
+            // cargada el panel afirmaria que tiene todo el cupo libre.
+            setError('No se pudo cargar la deuda del cliente.')
+          }
+        } catch (e) {
+          // Antes solo se avisaba por consola y el hook seguia como si nada:
+          // sin deudas cargadas el panel mostraba cupo completo disponible,
+          // que es justo el numero que no hay que inventar.
+          console.warn('Error fetching collect-payment:', e)
+          if (isMounted) setError('No se pudo cargar la deuda del cliente.')
         }
 
-        // Cargar límite de crédito del cliente
-        const { data: customerData, error: customerError } = await supabase
-          .from('customers')
-          .select('credit_limit')
-          .eq('id', customerId)
-          .single()
-
-        if (!customerError && customerData) {
-          setCustomerLimit(customerData.credit_limit || 0)
-        }
-
-        // Use API to bypass RLS
-        const response = await fetch('/api/credits/batch', {
+        // 2. Cargar contratos de crédito formales e historial de pagos
+        try {
+          const response = await fetch('/api/credits/batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ customerIds: [customerId] })
-        })
+          })
 
-        if (!response.ok) throw new Error('Failed to fetch credit data')
-
-        const { credits: creditsData, installments: installmentsData, payments: paymentsData } = await response.json()
-        
-        setCredits(creditsData || [])
-        setInstallments(installmentsData || [])
-        setPayments(paymentsData || [])
+          if (response.ok) {
+            const { credits: creditsData, installments: installmentsData, payments: paymentsData } = await response.json()
+            if (isMounted) {
+              setCredits(creditsData || [])
+              setInstallments(installmentsData || [])
+              setPayments(paymentsData || [])
+            }
+          } else if (isMounted) {
+            setError('No se pudieron cargar los créditos del cliente.')
+          }
+        } catch (e) {
+          console.warn('Error fetching credits batch:', e)
+          if (isMounted) setError('No se pudieron cargar los créditos del cliente.')
+        }
 
       } catch (err: any) {
-        setError(err.message || 'Error al cargar datos de créditos')
-        console.error('Error loading credit data:', err)
+        if (isMounted) {
+          setError(err.message || 'Error al cargar datos de créditos')
+          console.error('Error loading credit data:', err)
+        }
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
     loadCreditData()
-  }, [customerId, supabase])
 
-  // Calcular resumen de créditos del cliente
+    return () => {
+      isMounted = false
+    }
+  }, [customerId, supabase, refreshIndex])
+
+  // Calcular resumen consolidado y real de créditos del cliente
   const creditSummary = useMemo((): CustomerCreditSummary | null => {
-    if (!customerId || credits.length === 0) return null
+    if (!customerId) return null
 
     const activeCredits = credits.filter(c => c.status === 'active')
     const completedCredits = credits.filter(c => c.status === 'completed')
     const defaultedCredits = credits.filter(c => c.status === 'defaulted')
 
-    const totalPrincipal = credits.reduce((sum, c) => sum + c.principal, 0)
-    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0)
+    const totalPrincipal = credits.reduce((sum, c) => sum + Number(c.principal || 0), 0)
+    const totalPaidFromPayments = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
     
-    const pendingInstallments = installments.filter(i => i.status === 'pending' || i.status === 'late')
-    const totalPending = pendingInstallments.reduce((sum, i) => sum + i.amount, 0)
+    // Deuda real total consolidada (calculada desde deudas activas o cuotas)
+    // El saldo de una cuota es lo que falta pagar, no su importe completo: con
+    // el importe entero una cuota pagada a medias inflaba la deuda y mostraba
+    // menos credito disponible del que el servidor realmente autoriza.
+    const pendingFromInstallments = installments
+      .filter(i => i.status === 'pending' || i.status === 'late')
+      .reduce((sum, i) => {
+        const amount = Math.max(0, Number(i.amount || 0))
+        const paid = Math.min(amount, Math.max(0, Number(i.amount_paid || 0)))
+        return sum + (amount - paid)
+      }, 0)
+    const effectiveTotalPending = totalCollectDebt > 0
+      ? totalCollectDebt
+      : pendingFromInstallments
 
-    // Calcular historial de pagos
+    // Total abonado
     const paidInstallments = installments.filter(i => i.status === 'paid')
+    const totalPaidFromInstallments = paidInstallments.reduce((sum, i) => sum + Number(i.amount_paid || i.amount || 0), 0)
+    const totalPaid = Math.max(totalPaidFromPayments, totalPaidFromInstallments)
+
+    // Historial de pagos
     const latePayments = paidInstallments.filter(i => {
       if (!i.paid_at) return false
       const paidDate = new Date(i.paid_at)
@@ -164,74 +251,79 @@ export function useCustomerCredits(customerId?: string) {
     })
     const onTimePayments = paidInstallments.length - latePayments.length
     const missedPayments = installments.filter(i => {
-      if (i.status !== 'pending') return false
+      if (i.status !== 'pending' && i.status !== 'late') return false
       const dueDate = new Date(i.due_date)
       const now = new Date()
       const daysPastDue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
-      return daysPastDue > 30 // Consideramos perdido después de 30 días
+      return daysPastDue > 30
     }).length
 
     const totalPaymentEvents = onTimePayments + latePayments.length + missedPayments
     const paymentScore = totalPaymentEvents > 0 
       ? Math.round(((onTimePayments * 100) + (latePayments.length * 50)) / (totalPaymentEvents * 100) * 100)
-      : 100
+      : (overdueCollectDebt > 0 ? 65 : 100)
 
-    // Próximo pago
-    const nextInstallment = pendingInstallments
-      .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0]
-    
+    // Próximo pago (buscado entre deudas con vencimiento o cuotas pendientes)
     let nextPayment = null
-    if (nextInstallment) {
-      const dueDate = new Date(nextInstallment.due_date)
+    const pendingWithDueDate = debts
+      .filter(d => d.dueDate && d.pendingAmount > 0)
+      .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())[0]
+
+    if (pendingWithDueDate) {
+      const dueDate = new Date(pendingWithDueDate.dueDate!)
       const now = new Date()
       const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-      
       nextPayment = {
-        amount: nextInstallment.amount,
-        due_date: nextInstallment.due_date,
+        amount: pendingWithDueDate.pendingAmount,
+        due_date: pendingWithDueDate.dueDate!,
         days_until_due: daysUntilDue,
-        is_overdue: daysUntilDue < 0
+        is_overdue: daysUntilDue < 0 || pendingWithDueDate.isOverdue,
+        title: pendingWithDueDate.title
+      }
+    } else if (debts.length > 0 && debts.some(d => d.pendingAmount > 0)) {
+      const firstDebt = debts.find(d => d.pendingAmount > 0)!
+      nextPayment = {
+        amount: firstDebt.pendingAmount,
+        due_date: new Date().toISOString(),
+        days_until_due: 0,
+        is_overdue: firstDebt.isOverdue,
+        title: firstDebt.title
       }
     }
+
+    // Límite de crédito y utilización
+    const realLimit = customerLimit
+    const availableCredit = realLimit > 0 ? Math.max(0, realLimit - effectiveTotalPending) : 0
+    const creditUtilization = realLimit > 0 ? Math.min(100, Math.round((effectiveTotalPending / realLimit) * 100)) : 0
 
     // Evaluación de riesgo
     let riskScore = 0
     const riskFactors: string[] = []
 
-    // Factores de riesgo
-    if (latePayments.length > onTimePayments * 0.3) {
-      riskScore += 30
-      riskFactors.push('Historial de pagos tardíos')
+    if (overdueCollectDebt > 0) {
+      riskScore += 45
+      riskFactors.push('Registra deuda vencida en mora')
     }
-    
-    if (missedPayments > 0) {
-      riskScore += 40
-      riskFactors.push('Pagos perdidos')
+    if (latePayments.length > 0) {
+      riskScore += 20
+      riskFactors.push('Historial de pagos con retraso')
     }
-
+    if (creditUtilization > 85) {
+      riskScore += 25
+      riskFactors.push('Alta utilización de la línea de crédito')
+    }
     if (defaultedCredits.length > 0) {
       riskScore += 50
-      riskFactors.push('Créditos en mora')
-    }
-
-    const creditUtilization = totalPending / (totalPrincipal || 1) * 100
-    if (creditUtilization > 80) {
-      riskScore += 20
-      riskFactors.push('Alta utilización de crédito')
-    }
-
-    if (nextPayment?.is_overdue) {
-      riskScore += 25
-      riskFactors.push('Pago vencido')
+      riskFactors.push('Créditos formalmente en mora')
     }
 
     let riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'low'
-    if (riskScore >= 80) riskLevel = 'critical'
-    else if (riskScore >= 60) riskLevel = 'high'
-    else if (riskScore >= 30) riskLevel = 'medium'
+    if (riskScore >= 75) riskLevel = 'critical'
+    else if (riskScore >= 50) riskLevel = 'high'
+    else if (riskScore >= 25) riskLevel = 'medium'
 
     if (riskFactors.length === 0) {
-      riskFactors.push('Sin factores de riesgo identificados')
+      riskFactors.push('Cliente al día sin factores de riesgo detectados')
     }
 
     return {
@@ -242,10 +334,15 @@ export function useCustomerCredits(customerId?: string) {
       defaulted_credits: defaultedCredits.length,
       total_principal: totalPrincipal,
       total_paid: totalPaid,
-      total_pending: totalPending,
-      current_balance: totalPending,
-      credit_limit: 5000000, // Esto debería venir de la configuración del cliente
-      credit_utilization: Math.round(creditUtilization),
+      total_pending: effectiveTotalPending,
+      current_balance: effectiveTotalPending,
+      credit_limit: realLimit,
+      available_credit: availableCredit,
+      credit_utilization: creditUtilization,
+      store_balance: storeBalance,
+      store_reserved: storeReserved,
+      overdue_debt: overdueCollectDebt,
+      debts: debts,
       payment_history: {
         on_time_payments: onTimePayments,
         late_payments: latePayments.length,
@@ -259,105 +356,7 @@ export function useCustomerCredits(customerId?: string) {
         factors: riskFactors
       }
     }
-  }, [customerId, credits, installments, payments])
-
-  // Función para obtener resumen de múltiples clientes
-  const getMultipleCustomersSummary = async (customerIds: string[]): Promise<Record<string, CustomerCreditSummary>> => {
-    try {
-      const response = await fetch('/api/credits/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ customerIds })
-      })
-
-      if (!response.ok) throw new Error('Failed to fetch credit data')
-
-      const { credits: creditsData, installments: installmentsData } = await response.json()
-      const credits = (creditsData || []) as CreditInfo[]
-      const installments = (installmentsData || []) as InstallmentInfo[]
-
-      const summaries: Record<string, CustomerCreditSummary> = {}
-
-      for (const id of customerIds) {
-          const customerCredits = credits.filter(c => c.customer_id === id)
-          
-          if (customerCredits.length > 0) {
-              const customerCreditIds = customerCredits.map(c => c.id)
-              const customerInstallments = installments.filter(i => customerCreditIds.includes(i.credit_id))
-              
-              const activeCredits = customerCredits.filter(c => c.status === 'active')
-              const completedCredits = customerCredits.filter(c => c.status === 'completed')
-              const defaultedCredits = customerCredits.filter(c => c.status === 'defaulted')
-
-              const totalPrincipal = customerCredits.reduce((sum, c) => sum + c.principal, 0)
-              
-              const paidInstallments = customerInstallments.filter(i => i.status === 'paid')
-              const pendingInstallments = customerInstallments.filter(i => i.status === 'pending' || i.status === 'late')
-              
-              const totalPaid = paidInstallments.reduce((sum, i) => sum + (i.amount_paid || i.amount), 0)
-              const totalPending = pendingInstallments.reduce((sum, i) => sum + i.amount, 0)
-              
-              const latePayments = paidInstallments.filter(i => {
-                  if (!i.paid_at) return false
-                  return new Date(i.paid_at) > new Date(i.due_date)
-              })
-              
-              const nextInstallment = pendingInstallments
-                  .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0]
-              
-              let nextPayment = null
-              if (nextInstallment) {
-                  const dueDate = new Date(nextInstallment.due_date)
-                  const now = new Date()
-                  const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-                  
-                  nextPayment = {
-                      amount: nextInstallment.amount,
-                      due_date: nextInstallment.due_date,
-                      days_until_due: daysUntilDue,
-                      is_overdue: daysUntilDue < 0
-                  }
-              }
-
-              const riskScore = defaultedCredits.length * 50 + (nextPayment?.is_overdue ? 30 : 0)
-              let riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'low'
-              if (riskScore >= 80) riskLevel = 'critical'
-              else if (riskScore >= 50) riskLevel = 'high'
-              else if (riskScore >= 30) riskLevel = 'medium'
-
-              summaries[id] = {
-                  customer_id: id,
-                  total_credits: customerCredits.length,
-                  active_credits: activeCredits.length,
-                  completed_credits: completedCredits.length,
-                  defaulted_credits: defaultedCredits.length,
-                  total_principal: totalPrincipal,
-                  total_paid: totalPaid,
-                  total_pending: totalPending,
-                  current_balance: totalPending,
-                  credit_limit: 5000000,
-                  credit_utilization: Math.round((totalPending / 5000000) * 100),
-                  payment_history: {
-                      on_time_payments: paidInstallments.length - latePayments.length,
-                      late_payments: latePayments.length,
-                      missed_payments: 0,
-                      payment_score: 100
-                  },
-                  next_payment: nextPayment,
-                  risk_assessment: {
-                      risk_level: riskLevel,
-                      risk_score: Math.min(100, riskScore),
-                      factors: []
-                  }
-              }
-          }
-      }
-      return summaries
-    } catch (error) {
-      console.error('Error fetching multiple customer summaries:', error)
-      return {}
-    }
-  }
+  }, [customerId, credits, installments, payments, customerLimit, storeBalance, storeReserved, debts, totalCollectDebt, overdueCollectDebt])
 
   return {
     loading,
@@ -366,15 +365,7 @@ export function useCustomerCredits(customerId?: string) {
     installments,
     payments,
     creditSummary,
-    getMultipleCustomersSummary,
-    refresh: () => {
-      if (customerId) {
-        // Trigger reload
-        setCredits([])
-        setInstallments([])
-        setPayments([])
-      }
-    }
+    refresh: () => setRefreshIndex(prev => prev + 1)
   }
 }
 
@@ -435,7 +426,15 @@ export function useCustomersWithCredits(customers: Customer[]) {
                 const pendingInstallments = customerInstallments.filter(i => i.status === 'pending' || i.status === 'late')
                 
                 const totalPaid = paidInstallments.reduce((sum, i) => sum + (i.amount_paid || i.amount), 0)
-                const totalPending = pendingInstallments.reduce((sum, i) => sum + i.amount, 0)
+                // Lo adeudado de una cuota es lo que falta pagar, no su importe
+                // completo. Con el importe entero una cuota abonada a medias
+                // inflaba la deuda del cliente en toda la lista de creditos
+                // activos, y contradecia al detalle y al servidor.
+                const totalPending = pendingInstallments.reduce((sum, i) => {
+                    const amount = Math.max(0, Number(i.amount || 0))
+                    const paid = Math.min(amount, Math.max(0, Number(i.amount_paid || 0)))
+                    return sum + (amount - paid)
+                }, 0)
                 
                 // Payment history stats
                 const latePayments = paidInstallments.filter(i => {
@@ -453,8 +452,12 @@ export function useCustomersWithCredits(customers: Customer[]) {
                     const now = new Date()
                     const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
                     
+                    const nextAmount = Math.max(0, Number(nextInstallment.amount || 0))
+                    const nextPaid = Math.min(nextAmount, Math.max(0, Number(nextInstallment.amount_paid || 0)))
+
                     nextPayment = {
-                        amount: nextInstallment.amount,
+                        // Lo que queda por cobrar de esa cuota, no su importe original.
+                        amount: nextAmount - nextPaid,
                         due_date: nextInstallment.due_date,
                         days_until_due: daysUntilDue,
                         is_overdue: daysUntilDue < 0
@@ -468,6 +471,10 @@ export function useCustomersWithCredits(customers: Customer[]) {
                 else if (riskScore >= 50) riskLevel = 'high'
                 else if (riskScore >= 30) riskLevel = 'medium'
 
+                const customerLimit = Number(customer.credit_limit || 0)
+                const availableCredit = customerLimit > 0 ? Math.max(0, customerLimit - totalPending) : 0
+                const creditUtilization = customerLimit > 0 ? Math.min(100, Math.round((totalPending / customerLimit) * 100)) : 0
+
                 summaries[customer.id] = {
                     customer_id: customer.id,
                     total_credits: customerCredits.length,
@@ -478,13 +485,18 @@ export function useCustomersWithCredits(customers: Customer[]) {
                     total_paid: totalPaid,
                     total_pending: totalPending,
                     current_balance: totalPending,
-                    credit_limit: customer.credit_limit || 5000000,
-                    credit_utilization: Math.round((totalPending / (customer.credit_limit || 5000000)) * 100),
+                    credit_limit: customerLimit,
+                    available_credit: availableCredit,
+                    credit_utilization: creditUtilization,
+                    store_balance: Number((customer as any).store_credit || 0),
+                    store_reserved: 0,
+                    overdue_debt: nextPayment?.is_overdue ? (nextPayment.amount || 0) : 0,
+                    debts: [],
                     payment_history: {
                         on_time_payments: paidInstallments.length - latePayments.length,
                         late_payments: latePayments.length,
-                        missed_payments: 0, // Need to calculate properly if needed
-                        payment_score: 100 // Placeholder
+                        missed_payments: 0,
+                        payment_score: 100
                     },
                     next_payment: nextPayment,
                     risk_assessment: {

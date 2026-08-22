@@ -92,6 +92,17 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       return NextResponse.json({ ok: false, error: 'invalid_or_missing_stage' }, { status: 400 })
     }
 
+    if (stage === 'entregado') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'La entrega debe registrar resultado, garantia y estado financiero.',
+          code: 'USE_DELIVERY_ENDPOINT',
+        },
+        { status: 409 },
+      )
+    }
+
     const supabase = createAdminSupabase()
     const requestedBranchId = getRequestedBranchId(req)
     const branchScope = await resolveBranchScopeForUser({

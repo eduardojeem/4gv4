@@ -12,44 +12,56 @@ const MAX_FINAL_COST_MSG = `El costo final es demasiado alto. Maximo permitido: 
 export const CustomerSchema = z.object({
   name: z
     .string()
-    .min(3, 'El nombre debe tener al menos 3 caracteres')
-    .max(100, 'El nombre es demasiado largo (maximo 100 caracteres)')
-    .regex(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-\.\,\']+$/, 'El nombre contiene caracteres invalidos'),
+    .trim()
+    .min(1, 'El nombre del cliente es obligatorio')
+    .max(150, 'El nombre es demasiado largo (maximo 150 caracteres)'),
 
   phone: z
     .string()
-    .regex(/^\+?[0-9\s\-()]{7,20}$/, 'Formato de telefono invalido. Use numeros, espacios, guiones o parentesis')
+    .trim()
+    .max(50, 'El telefono es demasiado largo')
     .optional()
+    .nullable()
     .or(z.literal('')),
 
   email: z
     .string()
+    .trim()
     .email('Email invalido')
     .optional()
+    .nullable()
     .or(z.literal('')),
 
   address: z
     .string()
-    .max(200, 'La direccion es demasiado larga (maximo 200 caracteres)')
+    .trim()
+    .max(300, 'La direccion es demasiado larga')
     .optional()
+    .nullable()
     .or(z.literal('')),
 
   document: z
     .string()
-    .max(50, 'El documento es demasiado largo (maximo 50 caracteres)')
+    .trim()
+    .max(50, 'El documento es demasiado largo')
     .optional()
+    .nullable()
     .or(z.literal('')),
 
   city: z
     .string()
-    .max(100, 'La ciudad es demasiado larga (maximo 100 caracteres)')
+    .trim()
+    .max(100, 'La ciudad es demasiado larga')
     .optional()
+    .nullable()
     .or(z.literal('')),
 
   country: z
     .string()
-    .max(100, 'El pais es demasiado largo (maximo 100 caracteres)')
+    .trim()
+    .max(100, 'El pais es demasiado largo')
     .optional()
+    .nullable()
     .or(z.literal(''))
 })
 
@@ -111,47 +123,64 @@ const DeviceBaseSchema = z.object({
 
   brand: z
     .string()
-    .min(2, 'La marca debe tener al menos 2 caracteres')
-    .max(50, 'La marca es demasiado larga (maximo 50 caracteres)'),
+    .trim()
+    .min(1, 'La marca es obligatoria')
+    .max(100, 'La marca es demasiado larga (maximo 100 caracteres)'),
 
   model: z
     .string()
+    .trim()
     .min(1, 'El modelo es obligatorio')
     .max(100, 'El modelo es demasiado largo (maximo 100 caracteres)'),
 
+  serialNumber: z
+    .string()
+    .trim()
+    .max(100, 'El IMEI / Serie es demasiado largo (maximo 100 caracteres)')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
+
   issue: z
     .string()
-    .min(4, 'Describe el problema (minimo 4 caracteres)')
-    .max(200, 'La descripcion del problema es demasiado larga (maximo 200 caracteres)'),
+    .trim()
+    .min(1, 'Describe el problema del equipo')
+    .max(500, 'La descripcion del problema es demasiado larga (maximo 500 caracteres)'),
 
   description: z
     .string()
-    .max(1000, 'La descripcion es demasiado larga (maximo 1000 caracteres)')
+    .trim()
+    .max(2000, 'La descripcion es demasiado larga (maximo 2000 caracteres)')
     .optional()
+    .nullable()
     .or(z.literal('')),
 
-  accessType: AccessTypeEnum.optional().default('none'),
+  accessType: AccessTypeEnum.optional().nullable().default('none'),
 
   accessPassword: z
     .string()
+    .trim()
     .max(100, 'La contrasena es demasiado larga (maximo 100 caracteres)')
     .optional()
+    .nullable()
     .or(z.literal('')),
 
   images: z
     .array(z.string().min(1))
     .max(10, 'Maximo 10 imagenes por dispositivo')
     .optional()
+    .nullable()
     .default([]),
 
-  technician: z.string().optional().or(z.literal('')).default(''),
+  technician: z.string().optional().nullable().or(z.literal('')).default(''),
 
   estimatedCost: z
     .number()
-    .positive('El costo debe ser un numero positivo')
+    .min(0, 'El costo no puede ser negativo')
     .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG)
     .optional()
-    .or(z.literal(0))
+    .nullable()
+    .default(0)
 })
 
 export const DeviceSchema = DeviceBaseSchema.superRefine(validateDeviceAccess)
@@ -159,33 +188,69 @@ export const DeviceSchema = DeviceBaseSchema.superRefine(validateDeviceAccess)
 export const DeviceSchemaQuick = DeviceBaseSchema.omit({ issue: true }).extend({
   issue: z
     .string()
+    .trim()
     .min(1, 'Describe brevemente el problema')
-    .max(200, 'La descripcion del problema es demasiado larga (maximo 200 caracteres)')
+    .max(500, 'La descripcion del problema es demasiado larga (maximo 500 caracteres)')
 }).superRefine(validateDeviceAccess)
 
 export const PriorityEnum = z.enum(['low', 'medium', 'high'], 'Selecciona una prioridad valida')
 export const UrgencyEnum = z.enum(['low', 'medium', 'high'], 'Selecciona una urgencia valida')
 
 export const RepairPartSchema = z.object({
-  id: z.number().optional(),
-  name: z.string().min(1, 'El nombre del repuesto es obligatorio'),
+  id: z.number().optional().nullable(),
+  name: z.string().trim().min(1, 'El nombre del repuesto es obligatorio'),
   cost: z
     .number()
     .min(0, 'El costo no puede ser negativo')
     .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG),
-  quantity: z.number().min(1, 'La cantidad debe ser al menos 1'),
-  supplier: z.string().optional().or(z.literal('')),
-  partNumber: z.string().optional().or(z.literal('')),
+  internalCost: z
+    .number()
+    .min(0, 'El costo interno no puede ser negativo')
+    .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG)
+    .optional()
+    .nullable(),
+  quantity: z.number().int('La cantidad debe ser entera').min(1, 'La cantidad debe ser al menos 1'),
+  stockAvailable: z.number().int().min(0).optional().nullable(),
+  supplier: z.string().optional().nullable().or(z.literal('')),
+  partNumber: z.string().optional().nullable().or(z.literal('')),
   // Presente solo si el repuesto se eligió del inventario local; un repuesto
   // cargado a mano (proveedor externo, por ejemplo) no tiene product_id.
-  productId: z.string().optional().nullable()
+  productId: z.string().optional().nullable(),
+  lineType: z.enum(['service', 'included_material', 'charged_part']).optional().nullable(),
+}).superRefine((part, ctx) => {
+  if ((part.lineType ?? 'charged_part') === 'charged_part' && part.productId && part.stockAvailable !== null && part.stockAvailable !== undefined && part.quantity > part.stockAvailable) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['quantity'],
+      message: `Solo hay ${part.stockAvailable} unidades disponibles en esta sucursal`,
+    })
+  }
 })
 
 export const RepairNoteSchema = z.object({
-  id: z.number().optional(),
+  id: z.number().optional().nullable(),
   text: z.string().min(1, 'La nota no puede estar vacia'),
   isInternal: z.boolean().default(false)
 })
+
+export const RepairPricingModeEnum = z.enum(['automatic', 'budget', 'manual'])
+
+const RepairPricingFields = {
+  pricingMode: RepairPricingModeEnum.default('automatic'),
+  discountAmount: z
+    .number()
+    .min(0, 'El descuento no puede ser negativo')
+    .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG)
+    .optional()
+    .nullable()
+    .default(0),
+  priceOverrideReason: z
+    .string()
+    .max(300, 'El motivo no puede superar 300 caracteres')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
+}
 
 export const WarrantyTypeEnum = z.enum(['labor', 'parts', 'full'], 'Selecciona un tipo de garantia valido')
 
@@ -202,11 +267,13 @@ export const WarrantySchema = z.object({
     .string()
     .max(500, 'Las notas de garantia son demasiado largas (maximo 500 caracteres)')
     .optional()
+    .nullable()
     .or(z.literal(''))
 })
 
 export const RepairFormSchema = z.object({
-  customerName: CustomerSchema.shape.name,
+  idempotencyKey: z.string().min(8).max(120).optional(),
+  customerName: CustomerSchema.shape.name.optional().nullable().or(z.literal('')).default(''),
   customerPhone: CustomerSchema.shape.phone,
   customerEmail: CustomerSchema.shape.email,
   customerAddress: CustomerSchema.shape.address,
@@ -214,7 +281,7 @@ export const RepairFormSchema = z.object({
   customerCity: CustomerSchema.shape.city,
   customerCountry: CustomerSchema.shape.country,
 
-  existingCustomerId: z.string().min(1, 'Selecciona un cliente'),
+  existingCustomerId: z.string().min(1, 'Selecciona o registra un cliente'),
   isNewCustomer: z.boolean().default(false),
 
   priority: PriorityEnum,
@@ -225,14 +292,15 @@ export const RepairFormSchema = z.object({
     .min(1, 'Agrega al menos un dispositivo')
     .max(10, 'Maximo 10 dispositivos por reparacion'),
 
-  parts: z.array(RepairPartSchema).optional().default([]),
-  notes: z.array(RepairNoteSchema).optional().default([]),
+  parts: z.array(RepairPartSchema).optional().nullable().default([]),
+  notes: z.array(RepairNoteSchema).optional().nullable().default([]),
 
   laborCost: z
     .number()
     .min(0, 'El costo de mano de obra no puede ser negativo')
     .max(MAX_REPAIR_COST, MAX_LABOR_COST_MSG)
     .optional()
+    .nullable()
     .default(0),
 
   finalCost: z
@@ -242,6 +310,8 @@ export const RepairFormSchema = z.object({
     .optional()
     .nullable()
     .default(null),
+
+  ...RepairPricingFields,
 
   warrantyMonths: z
     .number()
@@ -255,10 +325,9 @@ export const RepairFormSchema = z.object({
     .string()
     .max(500, 'Las notas de garantia son demasiado largas (maximo 500 caracteres)')
     .optional()
+    .nullable()
     .or(z.literal('')),
 
-  // Adelanto opcional al recibir el equipo. Solo aplica con un solo
-  // dispositivo (con varios, el formulario ya obliga a costos compartidos).
   depositAmount: z
     .number()
     .min(0, 'El adelanto no puede ser negativo')
@@ -273,11 +342,13 @@ export const RepairFormSchema = z.object({
     .string()
     .max(100, 'La referencia es demasiado larga (maximo 100 caracteres)')
     .optional()
+    .nullable()
     .or(z.literal(''))
 })
 
 export const RepairFormQuickSchema = z.object({
-  customerName: CustomerSchema.shape.name,
+  idempotencyKey: z.string().min(8).max(120).optional(),
+  customerName: CustomerSchema.shape.name.optional().nullable().or(z.literal('')).default(''),
   customerPhone: CustomerSchema.shape.phone,
   customerEmail: CustomerSchema.shape.email,
   customerAddress: CustomerSchema.shape.address,
@@ -285,7 +356,7 @@ export const RepairFormQuickSchema = z.object({
   customerCity: CustomerSchema.shape.city,
   customerCountry: CustomerSchema.shape.country,
 
-  existingCustomerId: z.string().min(1, 'Selecciona un cliente'),
+  existingCustomerId: z.string().min(1, 'Selecciona o registra un cliente'),
   isNewCustomer: z.boolean().default(false),
 
   priority: PriorityEnum,
@@ -296,14 +367,15 @@ export const RepairFormQuickSchema = z.object({
     .min(1, 'Agrega al menos un dispositivo')
     .max(10, 'Maximo 10 dispositivos por reparacion'),
 
-  parts: z.array(RepairPartSchema).optional().default([]),
-  notes: z.array(RepairNoteSchema).optional().default([]),
+  parts: z.array(RepairPartSchema).optional().nullable().default([]),
+  notes: z.array(RepairNoteSchema).optional().nullable().default([]),
 
   laborCost: z
     .number()
     .min(0, 'El costo de mano de obra no puede ser negativo')
     .max(MAX_REPAIR_COST, MAX_LABOR_COST_MSG)
     .optional()
+    .nullable()
     .default(0),
 
   finalCost: z
@@ -313,6 +385,8 @@ export const RepairFormQuickSchema = z.object({
     .optional()
     .nullable()
     .default(null),
+
+  ...RepairPricingFields,
 
   warrantyMonths: z
     .number()
@@ -326,10 +400,9 @@ export const RepairFormQuickSchema = z.object({
     .string()
     .max(500, 'Las notas de garantia son demasiado largas (maximo 500 caracteres)')
     .optional()
+    .nullable()
     .or(z.literal('')),
 
-  // Adelanto opcional al recibir el equipo. Solo aplica con un solo
-  // dispositivo (con varios, el formulario ya obliga a costos compartidos).
   depositAmount: z
     .number()
     .min(0, 'El adelanto no puede ser negativo')
@@ -344,6 +417,7 @@ export const RepairFormQuickSchema = z.object({
     .string()
     .max(100, 'La referencia es demasiado larga (maximo 100 caracteres)')
     .optional()
+    .nullable()
     .or(z.literal(''))
 })
 

@@ -24,6 +24,8 @@ import { computeCategoryStats } from '@/hooks/use-category-stats'
 import { exportCategories } from '@/lib/utils/export-categories'
 
 // Components
+import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
+import { CATEGORIES_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { CategoryGrid } from '@/components/categories/CategoryCard'
 import { CategoryListView } from '@/components/categories/CategoryListView'
 import { CategoryTreeViewImproved } from '@/components/categories/CategoryTreeViewImproved'
@@ -242,6 +244,11 @@ export default function CategoriesPage() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
+                <SectionGuideButton 
+                  guide={CATEGORIES_GUIDE} 
+                  className="bg-white/15 border-white/20 text-white hover:bg-white/25 border"
+                />
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="secondary" className="bg-white/15 border-white/20 text-white hover:bg-white/25 gap-2 border">
@@ -258,7 +265,7 @@ export default function CategoriesPage() {
                 {canCreate && (
                   <Button
                     onClick={openCreateModal}
-                    className="bg-white text-purple-700 hover:bg-white/90 gap-2 font-semibold shadow-lg"
+                    className="bg-white text-violet-700 hover:bg-white/90 gap-2 font-bold shadow-lg shadow-black/10"
                   >
                     <Plus className="h-4 w-4" />
                     Nueva Categoría
@@ -267,7 +274,7 @@ export default function CategoriesPage() {
               </div>
             </div>
 
-            {/* Stats cards */}
+            {/* Quick Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[
                 { icon: Tag, label: 'Total', value: stats.total_categories, color: 'text-white' },
@@ -277,16 +284,16 @@ export default function CategoriesPage() {
               ].map((stat, i) => (
                 <motion.div
                   key={stat.label}
-                  initial={{ opacity: 0, y: 16 }}
+                  initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05 * i }}
-                  className="group rounded-xl bg-white/10 backdrop-blur-sm border border-white/15 p-4 hover:bg-white/15 transition-all duration-200"
+                  transition={{ delay: i * 0.05 }}
+                  className="rounded-xl bg-white/10 backdrop-blur-sm p-4 border border-white/10"
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-white/60 mb-1">{stat.label}</p>
-                      <p className="text-2xl font-bold text-white">
-                        {loading && categories.length === 0 ? '—' : stat.value}
+                      <p className="text-white/70 text-xs font-medium">{stat.label}</p>
+                      <p className="text-2xl font-bold text-white mt-1">
+                        {loading ? <Skeleton className="h-7 w-12 bg-white/20" /> : stat.value}
                       </p>
                     </div>
                     <stat.icon className={cn("h-5 w-5 opacity-80", stat.color)} />
@@ -296,62 +303,6 @@ export default function CategoriesPage() {
             </div>
           </div>
         </div>
-
-        {/* Guía de funcionamiento de categorías */}
-        {showGuide && (
-          <Card className="relative bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-            <button
-              type="button"
-              onClick={() => setShowGuide(false)}
-              className="absolute right-3 top-3 z-10 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/10 transition-colors"
-              title="Ocultar guía permanentemente durante esta sesión"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <details className="group">
-              <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3 pr-10">
-                <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                  <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Categorías?
-                </div>
-                <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-                  <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-                  <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-                </div>
-              </summary>
-              <CardContent className="pt-0 pb-5 text-xs">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                    <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                      Jerarquía y Árbol
-                    </h4>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Estructura tu catálogo creando categorías principales (ej: "Pantallas") y subcategorías (ej: "Pantallas iPhone"). Puedes ver este árbol jerárquico desde la pestaña "Árbol".
-                    </p>
-                  </div>
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                    <h4 className="font-semibold text-foreground flex items-center gap-2">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                      Asociación de Productos
-                    </h4>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Cada categoría te muestra cuántos artículos del catálogo tiene asociados. Al organizar tus productos con categorías, facilitarás el filtrado rápido en el Punto de Venta.
-                    </p>
-                  </div>
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                    <h4 className="font-semibold text-foreground flex items-center gap-2">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                      Estados de Categoría
-                    </h4>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Una categoría inactiva y sus subcategorías quedarán ocultas del menú del POS, previniendo que los cajeros vendan repuestos o productos que no deban estar en oferta.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </details>
-          </Card>
-        )}
 
         {error && (
           <Alert variant="destructive">

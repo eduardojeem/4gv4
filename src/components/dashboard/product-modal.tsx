@@ -59,6 +59,7 @@ import { BrandModal } from '@/components/dashboard/brands/BrandModal'
 import { useCategories } from '@/hooks/useCategories'
 import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { removeFile, uploadFile } from '@/lib/supabase-storage'
 import { useForm, useFieldArray } from 'react-hook-form'
@@ -119,6 +120,7 @@ export function ProductModal({
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
   const canViewCost = useCanViewCost()
+  const { settings } = useSharedSettings()
 
   // Local state for lists to support instant updates
   const [localCategories, setLocalCategories] = useState<Category[]>(categories ?? [])
@@ -183,7 +185,15 @@ export function ProductModal({
   // Precio efectivo sobre el que se calculan las cuotas (respeta oferta)
   const installmentBase = hasOffer && Number(offerPrice) > 0 ? Number(offerPrice) : Number(salePrice) || 0
   // Cantidades de cuota sugeridas como chips rápidos
-  const INSTALLMENT_PRESETS = [3, 4, 5, 6, 9, 12, 18, 24]
+  const INSTALLMENT_PRESETS = [1, 2, 3, 4, 5, 6, 9, 12, 18, 24]
+  // Estado para el chip expandido (popover inline de recargo)
+  const [expandedChip, setExpandedChip] = useState<number | null>(null)
+  const [chipRate, setChipRate] = useState<Record<number, string>>({})
+  // Estado para el panel bulk "agregar varios"
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkDraft, setBulkDraft] = useState<Record<number, { checked: boolean; rate: string }>>(
+    () => Object.fromEntries(INSTALLMENT_PRESETS.map(n => [n, { checked: false, rate: '0' }]))
+  )
   const warrantyMonths = watch('warranty_months')
   const returnWindowDays = watch('return_window_days')
   const exchangeWindowDays = watch('exchange_window_days')
@@ -1214,44 +1224,298 @@ export function ProductModal({
                               )}
                             />
 
-                            {/* Chips rápidos: agregar una opción de cuota */}
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-xs text-gray-500 dark:text-gray-400 mr-1">Agregar:</span>
-                              {INSTALLMENT_PRESETS.map((preset) => {
-                                const already = (installmentsPlans ?? []).some((p) => Number(p?.count) === preset)
-                                return (
-                                  <Button
-                                    key={preset}
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={already}
-                                    onClick={() => appendInstallment({ count: preset, rate: 0 })}
-                                    className="h-7 px-2 text-xs"
-                                  >
-                                    {preset} cuotas
-                                  </Button>
-                                )
-                              })}
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => appendInstallment({ count: 2, rate: 0 })}
-                                className="h-7 px-2 text-xs"
-                              >
-                                <Plus className="h-3 w-3 mr-1" /> Otra
-                              </Button>
+                            {/* ── Chips rápidos con recargo inline ── */}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Agregar plan rápido:</span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={bulkOpen ? 'secondary' : 'outline'}
+                                  onClick={() => setBulkOpen((v) => !v)}
+                                  className="h-6 px-2 text-[11px] gap-1"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  Agregar varios
+                                </Button>
+                              </div>
+
+                              {/* Chips individuales con popover de recargo inline */}
+                              <div className="flex flex-wrap gap-1.5">
+                                {INSTALLMENT_PRESETS.map((preset) => {
+                                  const already = (installmentsPlans ?? []).some((p) => Number(p?.count) === preset)
+                                  const isExpanded = expandedChip === preset
+                                  const currentRate = chipRate[preset] ?? '0'
+                                  const previewAmount = installmentBase > 0 && !already
+                                    ? buildCreditInstallmentPlan({
+                                        principalAmount: installmentBase,
+                                        interestRate: Number(currentRate) || 0,
+                                        installmentCount: preset,
+                                        frequency: 'monthly',
+                                      })
+                                    : null
+
+                                  if (already) {
+                                    return (
+                                      <span
+                                        key={preset}
+                                        className="inline-flex items-center gap-1 h-7 px-2.5 text-xs rounded-md border border-indigo-300 bg-indigo-100 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 cursor-default select-none"
+                                      >
+                                        ✓ {preset}c
+                                      </span>
+                                    )
+                                  }
+
+                                  if (isExpanded) {
+                                    return (
+                                      <div
+                                        key={preset}
+                                        className="flex flex-col gap-1.5 rounded-lg border-2 border-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 p-2 shadow-sm"
+                                      >
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 shrink-0">{preset}c</span>
+                                          <span className="text-[10px] text-gray-500 shrink-0">Rec.%:</span>
+                                          <input
+                                            type="number"
+                                            step="0.1"
+                                            min={0}
+                                            max={999}
+                                            autoFocus
+                                            value={currentRate}
+                                            onChange={(e) => setChipRate((prev) => ({ ...prev, [preset]: e.target.value }))}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter' || e.key === 'Tab') {
+                                                e.preventDefault()
+                                                appendInstallment({ count: preset, rate: Number(currentRate) || 0 })
+                                                setExpandedChip(null)
+                                                setChipRate((prev) => { const n = { ...prev }; delete n[preset]; return n })
+                                              }
+                                              if (e.key === 'Escape') {
+                                                setExpandedChip(null)
+                                              }
+                                            }}
+                                            className="w-14 h-6 text-xs rounded border border-indigo-300 px-1.5 bg-white dark:bg-slate-900 dark:border-indigo-700 outline-none focus:ring-1 focus:ring-indigo-500"
+                                            placeholder="0"
+                                          />
+                                          {previewAmount && (
+                                            <span className="text-[10px] text-indigo-600/80 dark:text-indigo-400/80 shrink-0">
+                                              = {formatPrice(previewAmount.installments[0]?.amount ?? 0)}
+                                            </span>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              appendInstallment({ count: preset, rate: Number(currentRate) || 0 })
+                                              setExpandedChip(null)
+                                              setChipRate((prev) => { const n = { ...prev }; delete n[preset]; return n })
+                                            }}
+                                            className="ml-0.5 flex items-center justify-center h-5 w-5 rounded bg-indigo-500 text-white hover:bg-indigo-600 text-xs font-bold shrink-0"
+                                            title="Confirmar (Enter)"
+                                          >
+                                            ✓
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setExpandedChip(null)}
+                                            className="flex items-center justify-center h-5 w-5 rounded bg-gray-200 dark:bg-gray-700 text-gray-500 hover:text-gray-700 text-xs shrink-0"
+                                            title="Cancelar (Esc)"
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 pl-[3.25rem]">
+                                          {[0, 10, 15, 20, 30].map(r => (
+                                            <button
+                                              key={r}
+                                              type="button"
+                                              onClick={() => {
+                                                appendInstallment({ count: preset, rate: r })
+                                                setExpandedChip(null)
+                                                setChipRate((prev) => { const n = { ...prev }; delete n[preset]; return n })
+                                              }}
+                                              className="px-1.5 py-0.5 text-[10px] font-medium rounded-md bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 hover:border-indigo-300 transition-colors"
+                                            >
+                                              {r}%
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+
+                                  return (
+                                    <Button
+                                      key={preset}
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setBulkOpen(false)
+                                        setExpandedChip(preset)
+                                        setChipRate((prev) => ({ ...prev, [preset]: prev[preset] ?? String(settings.defaultInstallmentRates?.[String(preset)] ?? '0') }))
+                                      }}
+                                      className="h-7 px-2.5 text-xs border-dashed hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300 transition-colors"
+                                    >
+                                      {preset === 1 ? '1 cuota' : `${preset}c`}
+                                    </Button>
+                                  )
+                                })}
+                                {/* Botón "Otra" para número personalizado */}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => appendInstallment({ count: 3, rate: 0 })}
+                                  className="h-7 px-2 text-xs text-gray-400 hover:text-gray-700"
+                                  title="Agregar fila con número personalizado"
+                                >
+                                  <Plus className="h-3 w-3 mr-0.5" /> Otra
+                                </Button>
+                              </div>
+
+                              {/* ── Panel bulk: Agregar varios de una vez ── */}
+                              {bulkOpen && (
+                                <div className="rounded-xl border-2 border-indigo-300 bg-indigo-50/60 dark:bg-indigo-950/20 dark:border-indigo-700 p-3 space-y-2 shadow-inner">
+                                  <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-1">
+                                    Seleccioná los planes a agregar y configurá el recargo de cada uno:
+                                  </p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                    {INSTALLMENT_PRESETS.map((n) => {
+                                      const already = (installmentsPlans ?? []).some((p) => Number(p?.count) === n)
+                                      const entry = bulkDraft[n] ?? { checked: false, rate: String(settings.defaultInstallmentRates?.[String(n)] ?? '0') }
+                                      const previewBulk = installmentBase > 0 && entry.checked
+                                        ? buildCreditInstallmentPlan({
+                                            principalAmount: installmentBase,
+                                            interestRate: Number(entry.rate) || 0,
+                                            installmentCount: n,
+                                            frequency: 'monthly',
+                                          })
+                                        : null
+
+                                      return (
+                                        <label
+                                          key={n}
+                                          className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 cursor-pointer transition-colors
+                                            ${already ? 'opacity-40 cursor-not-allowed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900' :
+                                              entry.checked ? 'border-indigo-400 bg-white dark:bg-slate-900 dark:border-indigo-600 shadow-sm' :
+                                              'border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-slate-900/40 hover:border-indigo-300 dark:hover:border-indigo-700'}`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            disabled={already}
+                                            checked={entry.checked || already}
+                                            onChange={(e) =>
+                                              setBulkDraft((prev) => ({
+                                                ...prev,
+                                                [n]: { ...prev[n], checked: e.target.checked },
+                                              }))
+                                            }
+                                            className="h-3.5 w-3.5 accent-indigo-600 shrink-0"
+                                          />
+                                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300 w-16 shrink-0">
+                                            {n === 1 ? '1 cuota' : `${n} cuotas`}
+                                            {already && <span className="ml-1 text-[10px] text-indigo-500">✓</span>}
+                                          </span>
+                                          <div className="flex flex-col gap-1 flex-1">
+                                            <div className="flex items-center gap-1">
+                                              <span className="text-[10px] text-gray-400 shrink-0">Rec.%</span>
+                                              <input
+                                                type="number"
+                                                step="0.1"
+                                                min={0}
+                                                max={999}
+                                                disabled={already || !entry.checked}
+                                                value={entry.rate}
+                                                onClick={(e) => e.preventDefault()}
+                                                onChange={(e) =>
+                                                  setBulkDraft((prev) => ({
+                                                    ...prev,
+                                                    [n]: { ...prev[n], rate: e.target.value },
+                                                  }))
+                                                }
+                                                className="w-14 h-6 text-xs rounded border border-gray-200 dark:border-gray-700 px-1.5 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                placeholder="0"
+                                              />
+                                            </div>
+                                            {entry.checked && !already && (
+                                              <div className="flex items-center gap-1">
+                                                {[0, 10, 15, 20, 30].map(r => (
+                                                  <button
+                                                    key={r}
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.preventDefault()
+                                                      setBulkDraft((prev) => ({ ...prev, [n]: { ...prev[n], rate: String(r) } }))
+                                                    }}
+                                                    className="px-1 py-0.5 text-[9px] font-medium rounded border border-indigo-200/50 dark:border-indigo-800/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors"
+                                                  >
+                                                    {r}%
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                          {previewBulk && (
+                                            <span className="text-[10px] text-indigo-600/80 dark:text-indigo-400 shrink-0 ml-auto">
+                                              = {formatPrice(previewBulk.installments[0]?.amount ?? 0)}
+                                            </span>
+                                          )}
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
+                                  <div className="flex items-center justify-between pt-1">
+                                    <span className="text-[11px] text-gray-500">
+                                      {Object.values(bulkDraft).filter(e => e.checked).length} seleccionados
+                                    </span>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          setBulkOpen(false)
+                                          setBulkDraft(Object.fromEntries(INSTALLMENT_PRESETS.map(n => [n, { checked: false, rate: '0' }])))
+                                        }}
+                                        className="h-7 px-2 text-xs"
+                                      >
+                                        Cancelar
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={() => {
+                                          const toAdd = INSTALLMENT_PRESETS.filter((n) => {
+                                            const already = (installmentsPlans ?? []).some((p) => Number(p?.count) === n)
+                                            return !already && bulkDraft[n]?.checked
+                                          })
+                                          toAdd.forEach((n) =>
+                                            appendInstallment({ count: n, rate: Number(bulkDraft[n]?.rate) || 0 })
+                                          )
+                                          setBulkOpen(false)
+                                          setBulkDraft(Object.fromEntries(INSTALLMENT_PRESETS.map(n => [n, { checked: false, rate: '0' }])))
+                                          if (toAdd.length === 0) toast.info('No hay planes nuevos para agregar.')
+                                        }}
+                                        className="h-7 px-3 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                                      >
+                                        Agregar {Object.values(bulkDraft).filter(e => e.checked).length > 0
+                                          ? `(${Object.values(bulkDraft).filter(e => e.checked).length})`
+                                          : ''} planes
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
 
                             {installmentFields.length === 0 && (
                               <p className="text-xs text-amber-600 dark:text-amber-400">
-                                Agregá al menos una opción de cuotas.
+                                Agregá al menos una opción de cuotas usando los botones de arriba.
                               </p>
                             )}
 
                             {/* Filas editables por opción */}
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                               {installmentFields.map((row, index) => {
                                 const count = Number(installmentsPlans?.[index]?.count) || 0
                                 const rate = Number(installmentsPlans?.[index]?.rate) || 0
@@ -1265,15 +1529,25 @@ export function ProductModal({
                                       })
                                     : null
                                 return (
-                                  <div key={row.id} className="flex items-start gap-2 rounded-lg border border-gray-200 dark:border-gray-700 p-2">
+                                  <div key={row.id} className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-slate-900/40 px-2.5 py-1.5">
                                     <FormField
                                       control={form.control}
                                       name={`installments_plans.${index}.count`}
                                       render={({ field }) => (
-                                        <FormItem className="w-20 shrink-0">
-                                          <FormLabel className="text-[10px] text-gray-500">Cuotas</FormLabel>
+                                        <FormItem className="w-[68px] shrink-0">
+                                          <FormLabel className="text-[10px] text-gray-400">Cuotas</FormLabel>
                                           <FormControl>
-                                            <Input type="number" min={1} max={60} className="h-8 text-sm" {...field} value={field.value ?? ''} />
+                                            <Input
+                                              type="number"
+                                              min={1}
+                                              max={60}
+                                              className="h-7 text-sm px-2"
+                                              {...field}
+                                              value={field.value ?? ''}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') { e.preventDefault(); (e.currentTarget.closest('[data-row]')?.querySelector('input[data-rate]') as HTMLInputElement)?.focus() }
+                                              }}
+                                            />
                                           </FormControl>
                                           <FormMessage className="text-[10px]" />
                                         </FormItem>
@@ -1283,16 +1557,38 @@ export function ProductModal({
                                       control={form.control}
                                       name={`installments_plans.${index}.rate`}
                                       render={({ field }) => (
-                                        <FormItem className="w-24 shrink-0">
-                                          <FormLabel className="text-[10px] text-gray-500">Recargo %</FormLabel>
+                                        <FormItem className="w-[80px] shrink-0">
+                                          <FormLabel className="text-[10px] text-gray-400">Recargo %</FormLabel>
                                           <FormControl>
-                                            <Input type="number" step="0.01" min={0} placeholder="0" className="h-8 text-sm" {...field} value={field.value ?? ''} />
+                                            <Input
+                                              type="number"
+                                              step="0.01"
+                                              min={0}
+                                              placeholder="0"
+                                              className="h-7 text-sm px-2"
+                                              data-rate
+                                              {...field}
+                                              value={field.value ?? ''}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                  e.preventDefault()
+                                                  // focus next row or append a new one
+                                                  const rows = document.querySelectorAll('[data-installment-row]')
+                                                  const nextRow = rows[index + 1] as HTMLElement | null
+                                                  if (nextRow) {
+                                                    (nextRow.querySelector('input') as HTMLInputElement)?.focus()
+                                                  } else {
+                                                    appendInstallment({ count: count + 1 > 60 ? 60 : count + 1, rate: 0 })
+                                                  }
+                                                }
+                                              }}
+                                            />
                                           </FormControl>
                                           <FormMessage className="text-[10px]" />
                                         </FormItem>
                                       )}
                                     />
-                                    <div className="flex-1 min-w-0 pt-4">
+                                    <div className="flex-1 min-w-0 pt-4" data-installment-row>
                                       {preview ? (
                                         <p className="text-xs text-indigo-700 dark:text-indigo-300 leading-snug">
                                           {count} × <strong>{formatPrice(preview.installments[0]?.amount ?? 0)}</strong>
@@ -1301,7 +1597,7 @@ export function ProductModal({
                                             : <span className="text-indigo-600/70"> · sin interés</span>}
                                         </p>
                                       ) : (
-                                        <p className="text-xs text-gray-400 pt-0.5">Definí precio de venta para ver el cálculo</p>
+                                        <p className="text-xs text-gray-400 pt-0.5">—</p>
                                       )}
                                     </div>
                                     <Button
@@ -1309,7 +1605,7 @@ export function ProductModal({
                                       size="sm"
                                       variant="ghost"
                                       onClick={() => removeInstallment(index)}
-                                      className="h-8 w-8 p-0 text-gray-400 hover:text-red-500 shrink-0"
+                                      className="h-7 w-7 p-0 text-gray-300 hover:text-red-500 shrink-0 mt-3"
                                       aria-label="Quitar opción de cuotas"
                                     >
                                       ×

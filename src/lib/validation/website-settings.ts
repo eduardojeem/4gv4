@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
+import { isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
 
 /**
  * Esquemas de validación para configuración del sitio web
@@ -11,6 +12,10 @@ export const CompanyInfoSchema = z.object({
   name: z.string()
     .min(2, 'Nombre debe tener al menos 2 caracteres')
     .max(100, 'Nombre no puede exceder 100 caracteres')
+    .optional()
+    .or(z.literal('')),
+  slogan: z.string()
+    .max(100, 'Eslogan no puede exceder 100 caracteres')
     .optional()
     .or(z.literal('')),
   phone: z.string()
@@ -25,6 +30,12 @@ export const CompanyInfoSchema = z.object({
     .max(200, 'Dirección no puede exceder 200 caracteres')
     .optional()
     .or(z.literal('')),
+  mapsUrl: z.string()
+    .trim()
+    .max(1000, 'El enlace de Google Maps es demasiado largo')
+    .optional()
+    .or(z.literal(''))
+    .refine((value) => !value || isValidGoogleMapsUrl(value), 'Ingresá un enlace HTTPS válido de Google Maps'),
   hours: z.object({
     weekdays: z.string().max(100).optional().or(z.literal('')),
     saturday: z.string().max(100).optional().or(z.literal('')),
@@ -65,6 +76,7 @@ export const CompanyInfoSchema = z.object({
 
 // Esquema para contenido del hero
 export const HeroContentSchema = z.object({
+  enabled: z.boolean().optional().default(true),
   badge: z.string()
     .min(3, 'Badge debe tener al menos 3 caracteres')
     .max(100, 'Badge no puede exceder 100 caracteres'),
@@ -115,6 +127,50 @@ export const OffersSectionSchema = z.object({
   // Opcional a propósito: el editor de /admin/website guarda offers_section sin
   // esta clave, y ese PUT no debe empezar a fallar por un campo que no manda.
   carousel: OffersCarouselSchema.optional(),
+})
+
+const PromotionalCarouselLinkSchema = z.string()
+  .max(500, 'El enlace no puede exceder 500 caracteres')
+  .optional()
+  .or(z.literal(''))
+  .refine(
+    (value) => !value || value.startsWith('/') || /^https?:\/\//i.test(value),
+    'El enlace debe ser una ruta interna o una URL http(s)'
+  )
+
+const PromotionalCarouselImageSchema = z.string()
+  .max(1000, 'La imagen no puede exceder 1000 caracteres')
+  .refine(
+    (value) => value.startsWith('/') || /^https?:\/\//i.test(value),
+    'La imagen debe ser una ruta interna o una URL http(s)'
+  )
+
+export const PromotionalCarouselSlideSchema = z.object({
+  id: z.string().min(1).max(100),
+  title: z.string().trim().min(3, 'Ingresá un título').max(100),
+  message: z.string().trim().min(3, 'Ingresá un mensaje').max(240),
+  imageUrl: PromotionalCarouselImageSchema,
+  imageAlt: z.string().trim().min(3, 'Describí la imagen').max(160),
+  ctaText: z.string().trim().max(50).optional().or(z.literal('')),
+  ctaHref: PromotionalCarouselLinkSchema,
+  active: z.boolean(),
+  textTone: z.enum(['light', 'dark']),
+  contentAlign: z.enum(['left', 'center', 'right']),
+}).superRefine((value, ctx) => {
+  if (Boolean(value.ctaText?.trim()) !== Boolean(value.ctaHref?.trim())) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['ctaText'],
+      message: 'Completá el texto y el enlace del botón, o dejá ambos vacíos',
+    })
+  }
+})
+
+export const PromotionalCarouselSchema = z.object({
+  enabled: z.boolean(),
+  autoplay: z.boolean(),
+  intervalSeconds: z.number().int().min(5).max(15),
+  slides: z.array(PromotionalCarouselSlideSchema).max(6, 'Máximo 6 diapositivas'),
 })
 
 const ServiceCtaUrlSchema = z.string()
@@ -195,7 +251,6 @@ export const ServiceSchema = z.object({
 
 // Esquema para array de servicios
 export const ServicesSchema = z.array(ServiceSchema)
-  .min(1, 'Debe haber al menos 1 servicio')
   .max(10, 'Máximo 10 servicios permitidos')
 
 // Esquema para un testimonio individual
@@ -259,6 +314,12 @@ export const ProcessFlowSchema = z.object({
   description: z.string().max(200, 'Descripción no puede exceder 200 caracteres').optional().or(z.literal('')),
   active: z.boolean().optional().default(true),
   steps: ProcessStepsSchema,
+})
+
+export const ServicesSectionSchema = z.object({
+  badge: z.string().max(60).optional(),
+  title: z.string().max(100).optional(),
+  subtitle: z.string().max(200).optional()
 })
 
 export const ProcessFlowsSchema = z.array(ProcessFlowSchema)
@@ -356,13 +417,16 @@ export const CheckoutSettingsSchema = z.object({
 export const WebsiteSettingsSchema = z.object({
   company_info: CompanyInfoSchema,
   hero_content: HeroContentSchema,
-  hero_stats: HeroStatsSchema,
-  offers_section: OffersSectionSchema,
+  hero_stats: HeroStatsSchema.optional(),
+  offers_section: OffersSectionSchema.optional(),
+  promotional_carousel: PromotionalCarouselSchema.optional(),
+  services_section: ServicesSectionSchema.optional(),
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
   process_steps: ProcessStepsSchema,
   process_flows: ProcessFlowsSchema,
-  maintenance_mode: MaintenanceModeSchema,
+  maintenance_mode: MaintenanceModeSchema.optional(),
+  checkout: CheckoutSettingsSchema.optional(),
 })
 
 // Tipo inferido del esquema
@@ -374,6 +438,8 @@ export const SETTING_SCHEMAS = {
   hero_content: HeroContentSchema,
   hero_stats: HeroStatsSchema,
   offers_section: OffersSectionSchema,
+  promotional_carousel: PromotionalCarouselSchema,
+  services_section: ServicesSectionSchema,
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
   process_steps: ProcessStepsSchema,
@@ -381,6 +447,10 @@ export const SETTING_SCHEMAS = {
   maintenance_mode: MaintenanceModeSchema,
   checkout: CheckoutSettingsSchema,
 } as const
+
+export function isWebsiteSettingKey(key: string): key is keyof typeof SETTING_SCHEMAS {
+  return Object.prototype.hasOwnProperty.call(SETTING_SCHEMAS, key)
+}
 
 /**
  * Valida un setting específico

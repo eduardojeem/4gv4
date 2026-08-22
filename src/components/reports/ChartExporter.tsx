@@ -6,6 +6,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { motion  } from '../ui/motion'
+import { toast } from 'sonner'
 import { 
   Download, 
   FileImage, 
@@ -196,17 +197,18 @@ export function ChartExporter({
   }, [options.chartQuality, options.chartFormat, buildSafeCaptureNode])
 
   // Función para exportar como imagen individual
-  const exportAsImage = useCallback(async (format: 'png' | 'jpeg' | 'svg') => {
+  const exportAsImage = useCallback(async (format: 'png' | 'jpeg') => {
     setIsExporting(true)
     setExportProgress(0)
 
     try {
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       const safeTitle = sanitizeFileName(title)
-      
+      let downloaded = 0
+
       for (let i = 0; i < chartRefs.length; i++) {
         setExportProgress((i / chartRefs.length) * 100)
-        
+
         const chartImage = await captureChart(chartRefs[i], chartTitles[i])
         if (chartImage) {
           // Crear enlace de descarga
@@ -214,15 +216,31 @@ export function ChartExporter({
           link.download = `${safeTitle}_${sanitizeFileName(chartTitles[i])}_${timestamp}.${format}`
           link.href = chartImage.dataURL
           link.click()
+          downloaded += 1
+          // Los navegadores bloquean o descartan descargas automáticas muy
+          // seguidas (varios .click() en el mismo tick) sin avisar — una
+          // pausa chica entre cada una evita perder imágenes en silencio.
+          if (i < chartRefs.length - 1) await new Promise((r) => setTimeout(r, 250))
         }
       }
 
       setExportProgress(100)
-      onExport?.(format, true)
-      
+      onExport?.(format, downloaded > 0)
+
+      if (downloaded === 0) {
+        toast.error('No se pudo generar ninguna imagen. Probá de nuevo.')
+      } else if (downloaded < chartRefs.length) {
+        toast.warning(`Se descargaron ${downloaded} de ${chartRefs.length} gráficos. Algunos no se pudieron capturar.`)
+      } else {
+        toast.success(`${downloaded} imagen${downloaded === 1 ? '' : 'es'} descargada${downloaded === 1 ? '' : 's'}.`)
+      }
+
     } catch (error) {
       console.error('Error exportando imágenes:', error)
       onExport?.(format, false)
+      toast.error('No se pudieron exportar las imágenes.', {
+        description: error instanceof Error ? error.message : undefined,
+      })
     } finally {
       setIsExporting(false)
       setTimeout(() => setExportProgress(0), 2000)
@@ -410,16 +428,25 @@ export function ChartExporter({
               const currentChartData = (chartData && chartData[i]) || data;
               const dataYPos = yPos + chartHeight + 30
               
+              const ROWS_IN_PDF_TABLE = 20
+              const isTruncated = currentChartData.length > ROWS_IN_PDF_TABLE
               doc.setFontSize(12)
               doc.setTextColor(31, 78, 121)
-              doc.text('Datos del gráfico:', margin, dataYPos)
+              doc.text(
+                isTruncated
+                  ? `Datos del gráfico (primeros ${ROWS_IN_PDF_TABLE} de ${currentChartData.length} registros):`
+                  : 'Datos del gráfico:',
+                margin,
+                dataYPos
+              )
 
-              // Agregar tabla con datos relevantes (primeros 8 registros y hasta 6 columnas)
+              // Tabla con datos relevantes (hasta 6 columnas, filas acotadas para
+              // que el PDF no crezca sin límite — se avisa arriba si se recorta).
               const headers = Object.keys(currentChartData[0] || {}).slice(0, 6)
-              const tableData = currentChartData.slice(0, 8).map((item: any) =>
+              const tableData = currentChartData.slice(0, ROWS_IN_PDF_TABLE).map((item: any) =>
                 headers.map((key) => String(item?.[key] ?? ''))
               )
-              
+
               if (tableData.length > 0 && headers.length > 0) {
                 autoTable(doc, {
                   startY: dataYPos + 20,
@@ -447,9 +474,13 @@ export function ChartExporter({
 
       setExportProgress(100)
       onExport?.('pdf-charts', true)
+      toast.success('PDF generado y descargado.')
 
     } catch (error) {
       console.error('Error exportando PDF con gráficos:', error)
+      toast.error('No se pudo generar el PDF.', {
+        description: error instanceof Error ? error.message : undefined,
+      })
       onExport?.('pdf-charts', false)
     } finally {
       setIsExporting(false)
@@ -502,9 +533,13 @@ export function ChartExporter({
       XLSX.writeFile(wb, `${safeTitle}_excel_${timestamp}.xlsx`)
       setExportProgress(100)
       onExport?.('excel', true)
+      toast.success('Excel generado y descargado.')
     } catch (error) {
       console.error('Error exportando Excel:', error)
       onExport?.('excel', false)
+      toast.error('No se pudo generar el Excel.', {
+        description: error instanceof Error ? error.message : undefined,
+      })
     } finally {
       setIsExporting(false)
       setTimeout(() => setExportProgress(0), 2000)
@@ -628,10 +663,18 @@ export function ChartExporter({
 
       setExportProgress(100)
       onExport?.('excel-charts', true)
+      if (options.includeCharts && zipEntries.length === 0) {
+        toast.warning('ZIP descargado, pero no se pudo capturar ningún gráfico — solo incluye el Excel.')
+      } else {
+        toast.success('ZIP con Excel y gráficos descargado.')
+      }
 
     } catch (error) {
       console.error('Error exportando Excel con gráficos:', error)
       onExport?.('excel-charts', false)
+      toast.error('No se pudo generar el ZIP con Excel y gráficos.', {
+        description: error instanceof Error ? error.message : undefined,
+      })
     } finally {
       setIsExporting(false)
       setTimeout(() => setExportProgress(0), 2000)

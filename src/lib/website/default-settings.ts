@@ -7,6 +7,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       phone: '',
       email: '',
       address: '',
+      mapsUrl: '',
       hours: { weekdays: '', saturday: '', sunday: '' },
       logoUrl: '',
       brandColor: 'blue',
@@ -18,6 +19,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       marketplacePublic: true
     },
     hero_content: {
+      enabled: true,
       badge: 'Servicio técnico especializado',
       title: 'Reparación profesional para tu equipo',
       subtitle: 'Diagnóstico claro, repuestos de calidad y seguimiento en línea.',
@@ -46,6 +48,17 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
         intervalSeconds: 5,
         maxItems: 8
       }
+    },
+    promotional_carousel: {
+      enabled: false,
+      autoplay: true,
+      intervalSeconds: 6,
+      slides: [],
+    },
+    services_section: {
+      badge: 'Lo que hacemos',
+      title: 'Nuestros servicios',
+      subtitle: 'Servicios publicados por la empresa para consultas y atención directa.',
     },
     services: [],
     testimonials: [],
@@ -98,6 +111,8 @@ export function applyWebsiteSettingsDefaults(
   const heroContent = (settings.hero_content || {}) as Partial<WebsiteSettings['hero_content']>
   const heroStats = (settings.hero_stats || {}) as Partial<WebsiteSettings['hero_stats']>
   const offersSection = (settings.offers_section || {}) as Partial<WebsiteSettings['offers_section']>
+  const promotionalCarousel = (settings.promotional_carousel || {}) as Partial<WebsiteSettings['promotional_carousel']>
+  const servicesSection = (settings.services_section || {}) as Partial<WebsiteSettings['services_section']>
   const maintenanceMode = (settings.maintenance_mode || {}) as Partial<WebsiteSettings['maintenance_mode']>
 
   return {
@@ -126,6 +141,17 @@ export function applyWebsiteSettingsDefaults(
         ...defaults.offers_section.carousel,
         ...(offersSection.carousel ?? {})
       }
+    },
+    promotional_carousel: {
+      ...defaults.promotional_carousel,
+      ...promotionalCarousel,
+      slides: Array.isArray(promotionalCarousel.slides)
+        ? promotionalCarousel.slides
+        : defaults.promotional_carousel.slides,
+    },
+    services_section: {
+      ...defaults.services_section,
+      ...servicesSection
     },
     services: Array.isArray(settings.services) ? settings.services : defaults.services,
     testimonials: Array.isArray(settings.testimonials) ? settings.testimonials : defaults.testimonials,

@@ -1,9 +1,12 @@
 import React from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   ArrowLeft,
+  ChevronRight,
+  Users,
   Edit,
   History,
   MessageSquare,
@@ -16,7 +19,10 @@ import {
   Copy,
   Link2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ShoppingBag,
+  Wrench,
+  Coins
 } from "lucide-react"
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -31,7 +37,15 @@ interface CustomerDetailHeaderProps {
   onBack: () => void
   onEdit: () => void
   onViewHistory: () => void
+  onOpenPayment?: () => void
   compact?: boolean
+  stats?: {
+    totalSpent?: number
+    totalPurchases?: number
+    availableCredit?: number
+    creditLimit?: number
+    pendingDebt?: number
+  }
 }
 
 export function CustomerDetailHeader({
@@ -39,8 +53,25 @@ export function CustomerDetailHeader({
   onBack,
   onEdit,
   onViewHistory,
+  onOpenPayment,
   compact: _compact,
+  stats,
 }: CustomerDetailHeaderProps) {
+
+  // Atajo de teclado ESC para volver rápidamente a la lista de clientes
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        const activeEl = document.activeElement
+        const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')
+        if (!isInput) {
+          onBack()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onBack])
 
   const getStatusBadge = (status?: string) => {
     const normalized = String(status || 'active').toLowerCase().trim()
@@ -139,9 +170,11 @@ export function CustomerDetailHeader({
         ['Dirección', customer.address || customer.city || '-'],
         ['Estado', customer.status === 'active' ? 'Activo' : customer.status || 'Activo'],
         ['Segmento', customer.segment === 'vip' ? 'VIP' : customer.segment === 'wholesale' ? 'Mayorista' : customer.segment === 'business' ? 'Empresa' : 'Regular'],
-        ['Total Gastado', formatCurrency(customer.lifetime_value || 0)],
-        ['Compras', `${customer.total_purchases || 0}`],
-        ['Crédito', formatCurrency(customer.credit_limit || 0)],
+        ['Total Gastado', formatCurrency(stats?.totalSpent ?? customer.lifetime_value ?? 0)],
+        ['Operaciones / Compras', `${stats?.totalPurchases ?? customer.total_purchases ?? 0}`],
+        ['Límite Crédito', formatCurrency(stats?.creditLimit ?? customer.credit_limit ?? 0)],
+        ['Crédito Disponible', formatCurrency(stats?.availableCredit ?? Math.max(0, (customer.credit_limit || 0) - (customer.pending_amount || 0)))],
+        ['Deuda Pendiente', formatCurrency(stats?.pendingDebt ?? customer.pending_amount ?? 0)],
       ],
       theme: 'grid',
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
@@ -154,21 +187,68 @@ export function CustomerDetailHeader({
 
   const initials = customer.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
 
+  const router = useRouter()
+
   return (
     <div className="space-y-4">
-      {/* Navigation Top Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onBack}
-          className="gap-1.5 rounded-xl border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Volver a Clientes
-        </Button>
-
+      {/* Top Bar: Navigation + Quick Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-2 bg-slate-50/80 dark:bg-slate-900/50 rounded-2xl border border-slate-200/80 dark:border-slate-800">
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onBack}
+            className="group gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 font-bold text-slate-800 shadow-xs hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800 transition-all"
+          >
+            <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-slate-100 text-slate-700 group-hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:group-hover:bg-slate-700">
+              <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
+            </div>
+            <span className="text-xs font-bold">Volver a Clientes</span>
+            <kbd className="hidden sm:inline-flex items-center h-4 px-1.5 text-[9px] font-mono font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 rounded border border-slate-300 dark:border-slate-700">
+              ESC
+            </kbd>
+          </Button>
+
+          <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 pl-2 border-l border-slate-200 dark:border-slate-800">
+            <Users className="h-3.5 w-3.5 text-slate-400" />
+            <span className="hover:underline cursor-pointer" onClick={onBack}>Clientes</span>
+            <ChevronRight className="h-3 w-3 text-slate-400" />
+            <span className="font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
+              {customer.name}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenPayment && (
+            <Button
+              size="sm"
+              onClick={onOpenPayment}
+              className="gap-1.5 rounded-xl border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 dark:border-purple-500/40 dark:bg-purple-500/15 dark:text-purple-300 font-semibold shadow-xs"
+            >
+              <Coins className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              <span>Cobrar / Abonar Deuda</span>
+            </Button>
+          )}
+
+          <Button
+            size="sm"
+            onClick={() => router.push(`/dashboard/pos?customerId=${customer.id}`)}
+            className="gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300 font-semibold"
+          >
+            <ShoppingBag className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Nueva Venta</span>
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => router.push(`/dashboard/repairs?new=true&customerId=${customer.id}&customerName=${encodeURIComponent(customer.name)}`)}
+            className="gap-1.5 rounded-xl border border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300 font-semibold"
+          >
+            <Wrench className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+            <span>Nueva Reparación</span>
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -192,7 +272,7 @@ export function CustomerDetailHeader({
           <Button
             size="sm"
             onClick={onEdit}
-            className="gap-1.5 rounded-xl bg-blue-600 font-semibold text-white hover:bg-blue-500"
+            className="gap-1.5 rounded-xl bg-blue-600 font-semibold text-white hover:bg-blue-500 shadow-xs"
           >
             <Edit className="h-4 w-4" />
             Editar

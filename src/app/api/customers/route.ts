@@ -9,6 +9,10 @@ const customerSchema = z.object({
   name: z.string().trim().min(1).max(200),
   email: z.string().trim().email().optional().or(z.literal('')).nullable(),
   phone: z.string().trim().max(50).optional().nullable(),
+  // Contacto de un tercero: el celular del cliente suele ser el equipo que dejo
+  // en el taller, asi que ahi no se lo puede ubicar.
+  alternate_phone: z.string().trim().max(50).optional().nullable(),
+  alternate_phone_label: z.string().trim().max(60).optional().nullable(),
   address: z.string().trim().max(500).optional().nullable(),
   city: z.string().trim().max(120).optional().nullable(),
   ruc: z.string().trim().max(50).optional().nullable(),
@@ -46,19 +50,30 @@ function normalizeCustomerPayload(payload: z.infer<typeof customerSchema>) {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-type CustomerBlocker = { id: string; name: string; credits: number; repairs: number }
+type CustomerBlocker = {
+  id: string
+  name: string
+  sales: number
+  credits: number
+  repairs: number
+  storeCreditMovements: number
+  afterSales: number
+}
 
 function describeBlockers(blocked: CustomerBlocker) {
   const parts: string[] = []
-  if (blocked.credits > 0) parts.push(`${blocked.credits} credito(s) con su historial de pagos`)
-  if (blocked.repairs > 0) parts.push(`${blocked.repairs} reparacion(es)`)
-  return parts.join(' y ')
+  if (blocked.sales > 0) parts.push(`${blocked.sales} venta(s)/factura(s)`)
+  if (blocked.credits > 0) parts.push(`${blocked.credits} crédito(s) y cuotas`)
+  if (blocked.repairs > 0) parts.push(`${blocked.repairs} reparación(es)`)
+  if (blocked.storeCreditMovements > 0) parts.push(`${blocked.storeCreditMovements} saldo/movimiento(s)`)
+  if (blocked.afterSales > 0) parts.push(`${blocked.afterSales} caso(s) de posventa`)
+  return parts.join(', ')
 }
 
 /**
- * Devuelve los clientes que tienen historial que se perderia (o que impide) el
- * borrado. Las consultas fallidas se tratan como "sin historial" para no
- * bloquear la operacion si alguna tabla no existe en la instalacion.
+ * Devuelve los clientes que tienen historial relacionado a la organización que se perdería
+ * (o que infringe la integridad contable). Bloquea la eliminación si existen ventas,
+ * reparaciones, créditos, movimientos de saldo o garantías.
  */
 async function findCustomersWithHistory(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -74,9 +89,13 @@ async function findCustomersWithHistory(
   const names = new Map((rows ?? []).map((row) => [String(row.id), String(row.name ?? 'Cliente')]))
   if (names.size === 0) return []
 
-  const [creditsResult, repairsResult] = await Promise.all([
+  const [salesResult, creditsResult, repairsResult, storeCreditResult, afterSalesResult] = await Promise.all([
+    supabase.from('sales').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
     supabase.from('customer_credits').select('customer_id').in('customer_id', ids),
-    supabase.from('repairs').select('customer_id').in('customer_id', ids),
+    supabase.from('repairs').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
+    // `customer_store_credit_movements` no existe: la tabla es `customer_store_credits`.
+    supabase.from('customer_store_credits').select('customer_id').in('customer_id', ids),
+    supabase.from('after_sales_cases').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
   ])
 
   const countBy = (rows: Array<{ customer_id?: unknown }> | null) => {
@@ -88,17 +107,23 @@ async function findCustomersWithHistory(
     return map
   }
 
+  const salesByCustomer = countBy(salesResult.error ? null : salesResult.data)
   const creditsByCustomer = countBy(creditsResult.error ? null : creditsResult.data)
   const repairsByCustomer = countBy(repairsResult.error ? null : repairsResult.data)
-
-  if (creditsResult.error) logger.warn('Could not check customer credits before delete', { error: creditsResult.error.message })
-  if (repairsResult.error) logger.warn('Could not check customer repairs before delete', { error: repairsResult.error.message })
+  const storeCreditByCustomer = countBy(storeCreditResult.error ? null : storeCreditResult.data)
+  const afterSalesByCustomer = countBy(afterSalesResult.error ? null : afterSalesResult.data)
 
   const blocked: CustomerBlocker[] = []
   for (const [id, name] of names) {
+    const sales = salesByCustomer.get(id) ?? 0
     const credits = creditsByCustomer.get(id) ?? 0
     const repairs = repairsByCustomer.get(id) ?? 0
-    if (credits > 0 || repairs > 0) blocked.push({ id, name, credits, repairs })
+    const storeCreditMovements = storeCreditByCustomer.get(id) ?? 0
+    const afterSales = afterSalesByCustomer.get(id) ?? 0
+
+    if (sales > 0 || credits > 0 || repairs > 0 || storeCreditMovements > 0 || afterSales > 0) {
+      blocked.push({ id, name, sales, credits, repairs, storeCreditMovements, afterSales })
+    }
   }
 
   return blocked
@@ -130,7 +155,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     if (idParam) query = query.eq('id', idParam)
 
     if (search) {
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,customer_code.ilike.%${search}%`)
+      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,customer_code.ilike.%${search}%,ruc.ilike.%${search}%`)
     }
 
     if (status && status !== 'all') query = query.eq('status', status)

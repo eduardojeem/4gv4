@@ -4,6 +4,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 import { logger } from '@/lib/logger'
+import { getCustomerWriteErrorResponse } from './customer-api-errors'
 
 const repairCustomerSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -12,6 +13,13 @@ const repairCustomerSchema = z.object({
   address: z.string().trim().max(500).optional().nullable(),
   city: z.string().trim().max(120).optional().nullable(),
   ruc: z.string().trim().max(50).optional().nullable(),
+  customer_type: z.string().trim().max(50).optional().nullable(),
+  is_wholesale: z.boolean().optional(),
+  // Contacto de un tercero: el celular del cliente suele ser el equipo que dejo
+  // en el taller, asi que ahi no se lo puede ubicar. Sin estos campos en el
+  // esquema, Zod los descartaba en silencio y el dato nunca llegaba al insert.
+  alternate_phone: z.string().trim().max(50).optional().nullable(),
+  alternate_phone_label: z.string().trim().max(60).optional().nullable(),
 })
 
 const repairCustomerUpdateSchema = repairCustomerSchema.partial().extend({
@@ -19,17 +27,83 @@ const repairCustomerUpdateSchema = repairCustomerSchema.partial().extend({
 })
 
 function normalizeCustomerPayload(payload: z.infer<typeof repairCustomerSchema>) {
+  const isWholesale = Boolean(payload.is_wholesale || payload.customer_type === 'wholesale' || payload.customer_type === 'mayorista')
+  const customerType = isWholesale ? 'wholesale' : (payload.customer_type || 'regular')
+  const { is_wholesale, alternate_phone, alternate_phone_label, ...rest } = payload
+  // Las columnas del contacto alternativo solo se mandan si hay algo que
+  // guardar. Asi un despliegue sin la migracion sigue creando clientes como
+  // siempre, y solo falla -con motivo- si alguien intenta usar el campo nuevo.
+  const alternateContact = alternate_phone
+    ? {
+        alternate_phone,
+        // Sin telefono la aclaracion de quien atiende no significa nada.
+        alternate_phone_label: alternate_phone_label || null,
+      }
+    : {}
   return {
-    ...payload,
+    ...rest,
+    ...alternateContact,
     email: payload.email || null,
     phone: payload.phone || '',
     address: payload.address || null,
     city: payload.city || null,
     ruc: payload.ruc || null,
-    customer_type: 'regular',
+    customer_type: customerType,
+    segment: isWholesale ? 'wholesale' : 'regular',
     status: 'active' as const,
     updated_at: new Date().toISOString(),
   }
+}
+
+function normalizeCustomerUpdatePayload(payload: z.infer<typeof repairCustomerUpdateSchema>) {
+  const { id, is_wholesale, alternate_phone, alternate_phone_label, ...rest } = payload
+  const isWholesale = is_wholesale !== undefined
+    ? is_wholesale
+    : payload.customer_type !== undefined
+      ? Boolean(payload.customer_type === 'wholesale' || payload.customer_type === 'mayorista')
+      : undefined
+
+  const customerType = isWholesale !== undefined
+    ? (isWholesale ? 'wholesale' : 'regular')
+    : payload.customer_type
+
+  const alternateContact: Record<string, string | null> = {}
+  if (alternate_phone !== undefined) {
+    alternateContact.alternate_phone = alternate_phone || null
+    if (alternate_phone_label !== undefined) {
+      alternateContact.alternate_phone_label = alternate_phone ? (alternate_phone_label || null) : null
+    }
+  }
+
+  const updates: Record<string, unknown> = {
+    ...rest,
+    ...alternateContact,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (customerType !== undefined) {
+    updates.customer_type = customerType
+  }
+  if (isWholesale !== undefined) {
+    updates.segment = isWholesale ? 'wholesale' : 'regular'
+  }
+  if (payload.email !== undefined) {
+    updates.email = payload.email || null
+  }
+  if (payload.phone !== undefined) {
+    updates.phone = payload.phone || ''
+  }
+  if (payload.address !== undefined) {
+    updates.address = payload.address || null
+  }
+  if (payload.city !== undefined) {
+    updates.city = payload.city || null
+  }
+  if (payload.ruc !== undefined) {
+    updates.ruc = payload.ruc || null
+  }
+
+  return { id, updates }
 }
 
 const readPermissions = ['repairs.orders.read', 'crm.customers.read'] as const
@@ -48,7 +122,7 @@ export const GET = withTenantAuth({ permission: [...readPermissions], module: 'r
     const supabase = await createClient()
     let query = supabase
       .from('customers')
-      .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')
+      .select('id, customer_code, name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at')
       .eq('organization_id', organization.id)
 
     if (term) {
@@ -57,6 +131,7 @@ export const GET = withTenantAuth({ permission: [...readPermissions], module: 'r
         `name.ilike.%${term}%`,
         `email.ilike.%${term}%`,
         `customer_code.ilike.%${term}%`,
+        `ruc.ilike.%${term}%`,
       ]
       // Buscar por teléfono solo si el término tiene dígitos: de lo
       // contrario `phone.ilike.%%` matchea todo y arruina el resto del filtro.
@@ -95,7 +170,7 @@ export const POST = withTenantAuth({ permission: [...writePermissions], module: 
         created_at: now,
         updated_at: now,
       })
-      .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')
+      .select('id, customer_code, name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at')
       .single()
 
     if (error) throw error
@@ -103,7 +178,8 @@ export const POST = withTenantAuth({ permission: [...writePermissions], module: 
     return NextResponse.json({ success: true, data }, { status: 201 })
   } catch (error) {
     logger.error('Repair customers API POST error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo crear el cliente.' }, { status: 500 })
+    const response = getCustomerWriteErrorResponse(error as { code?: string; message?: string })
+    return NextResponse.json(response.body, { status: response.status })
   }
 })
 
@@ -115,17 +191,14 @@ export const PUT = withTenantAuth({ permission: [...writePermissions], module: '
       return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
     }
 
-    const { id, ...updates } = validation.data
+    const { id, updates } = normalizeCustomerUpdatePayload(validation.data)
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('customers')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', id)
       .eq('organization_id', organization.id)
-      .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')
+      .select('id, customer_code, name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at')
       .single()
 
     if (error) throw error
@@ -133,6 +206,7 @@ export const PUT = withTenantAuth({ permission: [...writePermissions], module: '
     return NextResponse.json({ success: true, data })
   } catch (error) {
     logger.error('Repair customers API PUT error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo actualizar el cliente.' }, { status: 500 })
+    const response = getCustomerWriteErrorResponse(error as { code?: string; message?: string }, 'update')
+    return NextResponse.json(response.body, { status: response.status })
   }
 })

@@ -9,7 +9,7 @@ import {
   Edit, Trash2, Copy, Eye, Package,
   TrendingUp, TrendingDown, Tag, BarChart2,
   AlertTriangle, CheckCircle2, XCircle,
-  Globe, EyeOff
+  Globe, EyeOff, Wrench, Sparkles
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Product } from '@/types/products'
-import { getStockStatus } from '@/lib/products-dashboard-utils'
+import { getStockStatus, isServiceLikeProduct } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
@@ -51,6 +51,7 @@ export const ProductCard = React.memo(function ProductCard({
   const [localActive, setLocalActive] = useState(isPubliclyVisible)
   const [togglingActive, setTogglingActive] = useState(false)
   const canViewCost = useCanViewCost()
+  const isService = isServiceLikeProduct(product)
 
   React.useEffect(() => {
     setLocalActive(isPubliclyVisible)
@@ -85,7 +86,16 @@ export const ProductCard = React.memo(function ProductCard({
     }
   }
 
-  const statusConfig = stockStatusConfig[stockStatus]
+  const statusConfig = isService
+    ? {
+        label: 'Servicio',
+        bgClass: 'bg-gradient-to-r from-violet-600 to-purple-600',
+        pillBg: 'bg-purple-50 dark:bg-purple-950/40',
+        textClass: 'text-purple-700 dark:text-purple-400',
+        barClass: 'from-purple-500 to-violet-500',
+        icon: Wrench
+      }
+    : stockStatusConfig[stockStatus]
   const StatusIcon = statusConfig.icon
 
   // Margin calculation — solo admin/super_admin ve costo y margen
@@ -274,8 +284,19 @@ export const ProductCard = React.memo(function ProductCard({
 
           {/* Category + brand row */}
           <div className="flex items-center gap-1.5 flex-wrap min-h-[1.25rem]">
+            {isService ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-300 bg-purple-100/80 dark:bg-purple-950/70 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded-full">
+                <Wrench className="h-2.5 w-2.5" />
+                Servicio
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 px-2 py-0.5 rounded-full">
+                <Package className="h-2.5 w-2.5" />
+                Producto
+              </span>
+            )}
             {categoryLabel && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                 <Tag className="h-2.5 w-2.5" />
                 {categoryLabel}
               </span>
@@ -323,35 +344,47 @@ export const ProductCard = React.memo(function ProductCard({
             )}
           </div>
 
-          {/* Stock bar */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1 font-medium text-gray-500 dark:text-gray-400">
-                <BarChart2 className="h-3 w-3" />
-                Stock
+          {/* Stock bar or Service indicator */}
+          {isService ? (
+            <div className="rounded-xl border border-purple-200/80 dark:border-purple-800/60 bg-purple-50/60 dark:bg-purple-950/30 p-2.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 font-bold text-xs text-purple-700 dark:text-purple-300">
+                <Wrench className="h-3.5 w-3.5" />
+                Servicio Profesional
               </span>
-              <span className={cn(
-                'font-bold tabular-nums text-xs',
-                stockStatus === 'in_stock' && 'text-emerald-600 dark:text-emerald-400',
-                stockStatus === 'low_stock' && 'text-amber-600 dark:text-amber-400',
-                stockStatus === 'out_of_stock' && 'text-red-600 dark:text-red-400',
-              )}>
-                {Number(product.stock_quantity || 0)}
-                <span className="font-normal text-gray-400 dark:text-gray-500"> u</span>
-              </span>
+              <Badge variant="outline" className="text-[10px] font-bold bg-white dark:bg-slate-900 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 py-0 h-5">
+                Sin límite de stock
+              </Badge>
             </div>
-            <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className={cn('h-full rounded-full bg-gradient-to-r transition-all duration-700', statusConfig.barClass)}
-                style={{ width: `${stockFillPct}%` }}
-              />
+          ) : (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1 font-medium text-gray-500 dark:text-gray-400">
+                  <BarChart2 className="h-3 w-3" />
+                  Stock
+                </span>
+                <span className={cn(
+                  'font-bold tabular-nums text-xs',
+                  stockStatus === 'in_stock' && 'text-emerald-600 dark:text-emerald-400',
+                  stockStatus === 'low_stock' && 'text-amber-600 dark:text-amber-400',
+                  stockStatus === 'out_of_stock' && 'text-red-600 dark:text-red-400',
+                )}>
+                  {Number(product.stock_quantity || 0)}
+                  <span className="font-normal text-gray-400 dark:text-gray-500"> u</span>
+                </span>
+              </div>
+              <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full bg-gradient-to-r transition-all duration-700', statusConfig.barClass)}
+                  style={{ width: `${stockFillPct}%` }}
+                />
+              </div>
+              {minStock > 0 && (
+                <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                  Mínimo: {minStock} u
+                </p>
+              )}
             </div>
-            {minStock > 0 && (
-              <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                Mínimo: {minStock} u
-              </p>
-            )}
-          </div>
+          )}
 
           {/* Inactive badge */}
           {!product.is_active && (
@@ -360,7 +393,7 @@ export const ProductCard = React.memo(function ProductCard({
                 variant="outline"
                 className="text-[10px] bg-gray-50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 font-medium w-full justify-center py-1"
               >
-                ⏸ Producto Inactivo
+                ⏸ Inactivo
               </Badge>
             </div>
           )}
@@ -429,6 +462,7 @@ export const ProductCard = React.memo(function ProductCard({
     prevProps.product.name === nextProps.product.name &&
     prevProps.product.sale_price === nextProps.product.sale_price &&
     prevProps.product.stock_quantity === nextProps.product.stock_quantity &&
+    prevProps.product.unit_measure === nextProps.product.unit_measure &&
     prevProps.product.image === nextProps.product.image &&
     prevProps.product.is_active === nextProps.product.is_active &&
     prevProps.product.purchase_price === nextProps.product.purchase_price &&

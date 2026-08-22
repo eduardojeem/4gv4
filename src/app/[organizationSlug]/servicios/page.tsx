@@ -26,5 +26,5 @@ export default async function OrganizationServicesPage({ params }: Props) {
     notFound()
   }
 
-  return <ServicesPage />
+  return <ServicesPage organizationId={organization.id} organizationName={organization.name} />
 }

@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import { cn } from '@/lib/utils'
 
 const ACCENTS: Array<{
@@ -113,18 +114,13 @@ export function OffersSectionEditor() {
         description="Controla como aparece la seccion de ofertas en la portada y en su pagina publica"
       >
         <div className="space-y-8">
-          <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/50 bg-background/50 p-5 shadow-sm backdrop-blur-sm sm:p-6 transition-all hover:border-border">
-            <div className="flex items-center gap-4">
-              <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors", current.enabled ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground')}>
-                {current.enabled ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
-              </div>
-              <div>
-                <p className="text-sm font-bold">Mostrar sección de ofertas</p>
-                <p className="text-xs text-muted-foreground">Controla si los clientes pueden ver este bloque en el inicio.</p>
-              </div>
-            </div>
-            <Switch checked={current.enabled} onCheckedChange={(value) => patch('enabled', value)} />
-          </div>
+          <PublicVisibilityCard
+            title="Visualización de Sección de Ofertas"
+            badgeLabel="Rebajas del Catálogo"
+            description="Controla si este bloque de productos en oferta se muestra en la página de inicio y en la ruta /ofertas."
+            enabled={current.enabled}
+            onToggle={(value) => patch('enabled', value)}
+          />
 
           <div className="grid gap-6 sm:grid-cols-2">
             <div className="space-y-2">

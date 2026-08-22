@@ -1,53 +1,59 @@
 import Link from 'next/link'
-import { ArrowRight, Boxes, ExternalLink, ShieldCheck, ShoppingCart, Wrench } from 'lucide-react'
+import { ArrowRight, Boxes, ExternalLink, ShieldCheck, ShoppingCart, Wrench, Sparkles, CheckCircle2, CreditCard, Building2, Store } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { type PlatformBranding } from '@/lib/platform/branding'
 import { trustItems } from './saas-landing-data'
 
-const quickModules = [
-  { label: 'Vende', value: 'POS y caja', icon: ShoppingCart },
-  { label: 'Controla', value: 'Inventario', icon: Boxes },
-  { label: 'Atiende', value: 'Reparaciones', icon: Wrench },
-]
-
 export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
   return (
     <section className="relative overflow-hidden border-b border-slate-200 bg-slate-950 text-white dark:border-slate-800">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_60%_-10%,rgba(6,182,212,0.12),transparent)]" />
+      {/* Dynamic radial glow background */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_60%_-10%,rgba(6,182,212,0.18),transparent)] pointer-events-none" />
+      <div className="absolute top-1/4 -left-20 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 right-10 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="relative mx-auto grid min-h-[560px] max-w-7xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:px-8">
+      <div className="relative mx-auto grid min-h-[600px] max-w-7xl items-center gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
+        
+        {/* Left Column: Headline, Copy & CTAs */}
         <div className="max-w-3xl">
-          <Badge className="mb-5 border-white/15 bg-white/10 text-white hover:bg-white/10">
-            POS, inventario y reparaciones
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2 mb-6">
+            <Badge className="border-cyan-500/30 bg-cyan-950/60 text-cyan-300 gap-1.5 px-3 py-1 font-semibold text-xs shadow-xs">
+              <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+              SaaS Multiempresa Todo en Uno
+            </Badge>
+            <Badge variant="outline" className="border-white/15 bg-white/5 text-slate-300 text-xs px-2.5 py-0.5">
+              📦 Físicos + ⚙️ Servicios
+            </Badge>
+          </div>
 
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
-            Administra tu negocio sin complicarte.
+          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl text-white leading-tight">
+            Administrá tu negocio <span className="bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 bg-clip-text text-transparent">sin complicaciones</span>.
           </h1>
 
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-            Crea tu empresa, carga productos, vende en caja y atiende reparaciones desde un panel simple, seguro y separado para cada organizacion.
+          <p className="mt-6 max-w-2xl text-base sm:text-lg leading-relaxed text-slate-300">
+            Creá tu empresa en minutos, controlá tu inventario físico, gestioná servicios profesionales, vendé en caja diaria y atendé reparaciones técnicas desde un panel seguro y 100% aislado.
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button asChild size="lg" className="gap-2 bg-white text-slate-950 hover:bg-slate-100">
+          <div className="mt-8 flex flex-col gap-3.5 sm:flex-row">
+            <Button asChild size="lg" className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold shadow-lg shadow-cyan-500/25 transition-all text-sm rounded-xl h-12 px-6">
               <Link href={branding.primaryCtaHref}>
-                {branding.primaryCtaLabel}
+                {branding.primaryCtaLabel || 'Empezar Prueba Gratis'}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="gap-2 border-white/25 bg-white/5 text-white hover:bg-white/10 hover:text-white">
-              <Link href={branding.secondaryCtaHref}>
-                {branding.secondaryCtaLabel}
-                <ExternalLink className="h-4 w-4" />
+            <Button asChild size="lg" variant="outline" className="gap-2 border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white rounded-xl h-12 px-6 text-sm">
+              <Link href={branding.secondaryCtaHref || '/marketplace/empresas'}>
+                <Store className="h-4 w-4" />
+                {branding.secondaryCtaLabel || 'Explorar Empresas'}
               </Link>
             </Button>
           </div>
 
-          <div className="mt-8 grid gap-3 sm:grid-cols-3">
+          {/* Trust bullet items */}
+          <div className="mt-10 grid gap-3 sm:grid-cols-3 pt-6 border-t border-white/10">
             {trustItems.map((item) => (
-              <div key={item.label} className="flex items-center gap-2 text-sm text-slate-300">
+              <div key={item.label} className="flex items-center gap-2.5 text-xs text-slate-300">
                 <item.icon className="h-4 w-4 shrink-0 text-emerald-400" />
                 <span>{item.label}</span>
               </div>
@@ -55,32 +61,94 @@ export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/15 bg-white p-3 text-slate-950 shadow-2xl dark:bg-slate-900 dark:text-slate-50">
-          <div className="flex items-center justify-between border-b border-slate-200 px-2 pb-3 dark:border-slate-800">
-            <div>
-              <div className="text-sm font-semibold">Operacion diaria</div>
-              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Lo importante en una vista</div>
+        {/* Right Column: Live Operation Interactive Preview Card */}
+        <div className="rounded-3xl border border-white/15 bg-gradient-to-b from-slate-900/90 to-slate-950 p-5 text-slate-50 shadow-2xl backdrop-blur-xl relative">
+          
+          {/* Header of the mock panel */}
+          <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+              <div>
+                <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>Operación en Tiempo Real</span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/40 text-emerald-400 bg-emerald-950/40 font-semibold">
+                    En Vivo
+                  </Badge>
+                </div>
+                <div className="text-xs text-slate-400">Sucursal Central · Caja Activa</div>
+              </div>
             </div>
-            <Badge variant="outline" className="gap-1">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Seguro
-            </Badge>
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <Building2 className="h-4 w-4 text-cyan-400" />
+              <span>Multi-tenant</span>
+            </div>
           </div>
 
-          <div className="grid gap-3 py-3">
-            {quickModules.map((item) => (
-              <div key={item.value} className="flex items-center gap-4 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-50 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300">
-                  <item.icon className="h-5 w-5" />
+          {/* Key modules preview list */}
+          <div className="space-y-3">
+            {/* POS & Cash Module */}
+            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3.5 hover:bg-white/10 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-950/80 text-cyan-400 border border-cyan-500/30">
+                  <ShoppingCart className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-xs font-medium uppercase text-slate-500">{item.label}</div>
-                  <div className="mt-1 font-semibold">{item.value}</div>
+                  <div className="text-xs font-bold text-white">Punto de Venta (POS)</div>
+                  <div className="text-[11px] text-slate-400">Cobros mixtos, turnos y tickets</div>
                 </div>
               </div>
-            ))}
+              <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[10px]">
+                Caja y turnos
+              </Badge>
+            </div>
+
+            {/* Inventory: Products & Services */}
+            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3.5 hover:bg-white/10 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
+                  <Boxes className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white">Inventario Unificado</div>
+                  <div className="text-[11px] text-slate-400">📦 Productos físicos + ⚙️ Servicios</div>
+                </div>
+              </div>
+              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px]">
+                Multi-sucursal
+              </Badge>
+            </div>
+
+            {/* Repairs Module */}
+            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3.5 hover:bg-white/10 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-950/80 text-amber-400 border border-amber-500/30">
+                  <Wrench className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white">Taller & Reparaciones</div>
+                  <div className="text-[11px] text-slate-400">Órdenes con seguimiento público</div>
+                </div>
+              </div>
+              <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px]">
+                Seguimiento en línea
+              </Badge>
+            </div>
           </div>
+
+          {/* Bottom highlight bar */}
+          <div className="mt-4 pt-3.5 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <CreditCard className="h-3.5 w-3.5 text-slate-300" />
+              <span>Pagopar · Stripe · Bancard · Cupones</span>
+            </div>
+            <span className="text-emerald-400 font-semibold flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3" />
+              RLS Seguro
+            </span>
+          </div>
+
         </div>
+
       </div>
     </section>
   )

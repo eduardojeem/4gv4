@@ -9,14 +9,17 @@ import { ServicesManager } from '@/components/admin/website/ServicesManager'
 import { ProcessStepsEditor } from '@/components/admin/website/ProcessStepsEditor'
 import { CheckoutSettingsEditor } from '@/components/admin/website/CheckoutSettingsEditor'
 import { OffersSectionEditor } from '@/components/admin/website/OffersSectionEditor'
+import { PromotionalCarouselEditor } from '@/components/admin/website/PromotionalCarouselEditor'
 import { SetupGuide } from '@/components/admin/website/SetupGuide'
-import { Building2, Briefcase, Eye, Footprints, Globe, ShoppingCart, Sparkles, Tag } from 'lucide-react'
+import { WebsiteHowItWorksDialog } from '@/components/admin/website/WebsiteHowItWorksDialog'
+import { Building2, Briefcase, Eye, Footprints, GalleryHorizontalEnd, Globe, ShoppingCart, Sparkles, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
 const TABS = [
   { value: 'company',  label: 'Empresa',   icon: Building2   },
   { value: 'hero',     label: 'Hero',      icon: Sparkles    },
+  { value: 'carousel', label: 'Carrusel',  icon: GalleryHorizontalEnd },
   { value: 'offers',   label: 'Ofertas',   icon: Tag         },
   { value: 'services', label: 'Servicios', icon: Briefcase   },
   { value: 'process',  label: 'Proceso',   icon: Footprints  },
@@ -24,7 +27,7 @@ const TABS = [
 ]
 
 export default function WebsiteAdminPage() {
-  const [orgSlug, setOrgSlug] = useState('')
+  const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [tab, setTab] = useState('company')
   const dirtyRef = useRef(false)
 
@@ -58,7 +61,7 @@ export default function WebsiteAdminPage() {
       .then(r => r.json())
       .catch(() => null)
       .then((d: { organization?: { slug?: string } } | null) => {
-        if (d?.organization?.slug) setOrgSlug(d.organization.slug)
+        setOrgSlug(d?.organization?.slug || '')
       })
 
     const handleSlugUpdate = (e: Event) => {
@@ -71,24 +74,43 @@ export default function WebsiteAdminPage() {
 
   return (
    <WebsiteEditorDirtyContext.Provider value={{ setDirty }}>
-    <div className="space-y-6">
+    <div className="mx-auto max-w-[1500px] space-y-5 pb-8">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background shadow-sm">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40">
             <Globe className="h-5 w-5 text-muted-foreground" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">Sitio web</h1>
-            <p className="text-sm text-muted-foreground">Contenido y apariencia del portal publico</p>
+            <h1 className="text-xl font-semibold">Sitio web público</h1>
+            <p className="text-sm text-muted-foreground">Contenido, ventas y experiencia de tu tienda online</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={orgSlug ? `/${orgSlug}/inicio` : '/inicio'} target="_blank">
-            <Eye className="mr-2 h-4 w-4" />
-            Vista previa
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <WebsiteHowItWorksDialog
+            currentTab={tab}
+            orgSlug={orgSlug}
+            onNavigateToTab={handleTabChange}
+          />
+          {orgSlug ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/${orgSlug}/inicio`} target="_blank" rel="noreferrer">
+                <Eye className="mr-2 h-4 w-4" />
+                Vista previa
+              </Link>
+            </Button>
+          ) : orgSlug === null ? (
+            <Button variant="outline" size="sm" disabled aria-label="Cargando enlace de vista previa">
+              <Eye className="mr-2 h-4 w-4" />
+              Cargando vista previa
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled aria-label="Vista previa no disponible">
+              <Eye className="mr-2 h-4 w-4" />
+              Vista previa no disponible
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Setup Guide */}
@@ -96,16 +118,17 @@ export default function WebsiteAdminPage() {
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={handleTabChange} className="space-y-6">
-        <div className="-mb-px overflow-x-auto">
-          <TabsList className="inline-flex h-auto w-max min-w-full items-end gap-0 rounded-none border-b border-border bg-transparent p-0">
+        <div className="overflow-x-auto rounded-lg border bg-card p-1 [scrollbar-width:thin]">
+          <TabsList className="inline-flex h-auto w-max min-w-full items-center justify-start gap-1 bg-transparent p-0">
             {TABS.map(({ value, label, icon: Icon }) => (
               <TabsTrigger
                 key={value}
                 value={value}
-                className="relative -mb-px inline-flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                aria-label={label}
+                className="inline-flex min-w-[112px] flex-1 items-center justify-center gap-2 rounded-md border border-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                <span className="hidden sm:inline">{label}</span>
+                <span>{label}</span>
               </TabsTrigger>
             ))}
           </TabsList>
@@ -113,6 +136,7 @@ export default function WebsiteAdminPage() {
 
         <TabsContent value="company"  className="mt-0"><CompanyInfoForm /></TabsContent>
         <TabsContent value="hero"     className="mt-0"><HeroEditor /></TabsContent>
+        <TabsContent value="carousel" className="mt-0"><PromotionalCarouselEditor /></TabsContent>
         <TabsContent value="offers"   className="mt-0"><OffersSectionEditor /></TabsContent>
         <TabsContent value="services" className="mt-0"><ServicesManager /></TabsContent>
         <TabsContent value="process"  className="mt-0"><ProcessStepsEditor /></TabsContent>

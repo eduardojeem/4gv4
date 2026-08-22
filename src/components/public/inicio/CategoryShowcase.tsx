@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, Smartphone, Headphones, Laptop, Battery, Cpu, Shield, Package, Camera, Watch, Tablet, Cable } from 'lucide-react'
+import { ArrowRight, Smartphone, Headphones, Laptop, Battery, Cpu, Shield, Package, Camera, Watch, Tablet, Cable, HardDrive } from 'lucide-react'
 import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
@@ -19,13 +19,14 @@ const CATEGORY_PRESETS: Array<{
   { keywords: ['celular', 'telefono', 'phone', 'movil', 'iphone', 'samsung', 'android'], icon: Smartphone,   gradient: 'from-blue-500 to-indigo-600',    text: 'text-blue-600 dark:text-blue-400' },
   { keywords: ['accesorio', 'auricular', 'audifono', 'headphone', 'casco'],              icon: Headphones,   gradient: 'from-violet-500 to-purple-600',  text: 'text-violet-600 dark:text-violet-400' },
   { keywords: ['laptop', 'notebook', 'computadora', 'pc', 'computacion'],               icon: Laptop,       gradient: 'from-slate-500 to-gray-700',     text: 'text-slate-600 dark:text-slate-400' },
-  { keywords: ['bateria', 'carga', 'cargador', 'cable', 'usb'],                         icon: Battery,      gradient: 'from-emerald-500 to-teal-600',   text: 'text-emerald-600 dark:text-emerald-400' },
+  { keywords: ['cable', 'adaptador', 'hub', 'usb'],                                    icon: Cable,        gradient: 'from-indigo-500 to-blue-600',    text: 'text-indigo-600 dark:text-indigo-400' },
+  { keywords: ['bateria', 'carga', 'cargador'],                                        icon: Battery,      gradient: 'from-emerald-500 to-teal-600',   text: 'text-emerald-600 dark:text-emerald-400' },
+  { keywords: ['almacenamiento', 'memoria', 'pendrive', 'disco'],                       icon: HardDrive,    gradient: 'from-cyan-600 to-sky-700',       text: 'text-cyan-700 dark:text-cyan-300' },
   { keywords: ['repuesto', 'pantalla', 'display', 'vidrio', 'modulo'],                  icon: Cpu,          gradient: 'from-orange-500 to-amber-600',   text: 'text-orange-600 dark:text-orange-400' },
   { keywords: ['funda', 'case', 'protector', 'cover', 'estuche'],                       icon: Shield,       gradient: 'from-rose-500 to-pink-600',      text: 'text-rose-600 dark:text-rose-400' },
   { keywords: ['camara', 'foto', 'camera', 'lente'],                                    icon: Camera,       gradient: 'from-amber-500 to-yellow-500',   text: 'text-amber-600 dark:text-amber-400' },
   { keywords: ['smartwatch', 'reloj', 'watch', 'wearable'],                             icon: Watch,        gradient: 'from-cyan-500 to-sky-600',       text: 'text-cyan-600 dark:text-cyan-400' },
   { keywords: ['tablet', 'ipad'],                                                        icon: Tablet,       gradient: 'from-teal-500 to-emerald-600',   text: 'text-teal-600 dark:text-teal-400' },
-  { keywords: ['cable', 'adaptador', 'hub'],                                             icon: Cable,        gradient: 'from-indigo-500 to-blue-600',    text: 'text-indigo-600 dark:text-indigo-400' },
 ]
 
 const FALLBACK_PRESET = { icon: Package, gradient: 'from-gray-400 to-slate-500', text: 'text-gray-600 dark:text-gray-400' }
@@ -52,12 +53,12 @@ export function CategoryShowcase() {
 
   if (!mounted || isLoading) {
     return (
-      <section className="bg-muted/30 py-16 md:py-20">
+      <section className="border-t bg-background py-10 md:py-14">
         <div className="container">
-          <div className="mb-8 h-10 w-56 animate-pulse rounded-xl bg-muted" />
+          <div className="mb-6 h-9 w-56 animate-pulse rounded-md bg-muted" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-20 animate-pulse rounded-2xl bg-muted" />
+              <div key={i} className="h-40 animate-pulse rounded-lg bg-muted" />
             ))}
           </div>
         </div>
@@ -83,28 +84,28 @@ export function CategoryShowcase() {
   const hasMore = withProducts.length > items.length
 
   return (
-    <section className="bg-muted/30 py-16 md:py-20">
+    <section className="border-t bg-background py-10 md:py-14">
       <div className="container">
         {/* Header */}
-        <div className="mb-8 flex items-end justify-between gap-4">
+        <div className="mb-6 flex items-end justify-between gap-4 md:mb-8">
           <div>
             {/* Se evita `text-primary` para textos sobre fondo neutro: el color
                 de marca lo define cada tienda (esta usa #08080d) y en modo
                 oscuro queda ilegible. `foreground` sigue siempre al tema. */}
-            <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            <span className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
               <Package className="h-3.5 w-3.5" />
               Categorías
             </span>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-              Comprá por categoría
+            <h2 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
+              Encontrá lo que necesitás
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Explorá el catálogo por rubro y encontrá lo que buscás más rápido.
+              Accedé directamente a los productos de cada categoría.
             </p>
           </div>
           <Link
             href={`${tenantPrefix}/productos`}
-            className="hidden shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-card-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground sm:inline-flex"
+            className="hidden shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold text-card-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground sm:inline-flex"
           >
             Ver todo el catálogo
             <ArrowRight className="h-4 w-4" />
@@ -112,7 +113,7 @@ export function CategoryShowcase() {
         </div>
 
         {/* Grid */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-4">
           {items.map((category) => {
             const preset = getCategoryPreset(category.name)
             const Icon = preset.icon
@@ -122,30 +123,34 @@ export function CategoryShowcase() {
                 key={category.id}
                 href={`${tenantPrefix}/productos?category_id=${encodeURIComponent(category.id)}`}
                 aria-label={`Ver productos de ${category.name}${count ? ` (${count})` : ''}`}
-                className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-transparent hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
+                className="group relative flex min-h-40 flex-col overflow-hidden rounded-lg border border-border/70 bg-card p-4 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:min-h-44 sm:p-5"
               >
-                {/* Gradient bg on hover */}
-                <div className={cn('absolute inset-0 bg-gradient-to-br opacity-0 transition-opacity duration-300 group-hover:opacity-5', preset.gradient)} />
-
-                {/* Icon */}
-                <div className={cn('flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-md transition-transform duration-300 group-hover:scale-105 motion-reduce:transform-none', preset.gradient)}>
-                  <Icon className="h-6 w-6" />
+                <div className="flex items-start justify-between gap-3">
+                  <div className={cn('flex h-11 w-11 items-center justify-center rounded-md bg-gradient-to-br text-white shadow-sm sm:h-12 sm:w-12', preset.gradient)}>
+                    <Icon className="h-6 w-6" aria-hidden="true" />
+                  </div>
+                  {count > 0 && (
+                    <span className="rounded-full border bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground shadow-sm">
+                      {count}
+                    </span>
+                  )}
                 </div>
 
-                {/* Name + count */}
-                <div className="pr-6">
-                  <span className="line-clamp-2 text-sm font-bold leading-tight text-foreground">
+                <div className="mt-5 min-w-0">
+                  <span className="line-clamp-2 text-sm font-bold leading-snug text-foreground sm:text-base">
                     {category.name}
                   </span>
                   {count > 0 && (
-                    <span className="mt-1 block text-xs text-muted-foreground">
+                    <span className="mt-1 block text-xs text-muted-foreground sm:hidden">
                       {count} {count === 1 ? 'producto' : 'productos'}
                     </span>
                   )}
                 </div>
 
-                {/* Arrow */}
-                <ArrowRight className="absolute bottom-4 right-4 h-4 w-4 text-muted-foreground/40 transition-all duration-300 group-hover:translate-x-0.5 group-hover:text-foreground" />
+                <span className={cn('mt-auto flex items-center gap-1.5 pt-4 text-xs font-semibold', preset.text)}>
+                  Explorar
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                </span>
               </Link>
             )
           })}
@@ -155,7 +160,7 @@ export function CategoryShowcase() {
         <div className={cn('mt-6 text-center', !hasMore && 'sm:hidden')}>
           <Link
             href={`${tenantPrefix}/productos`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-semibold text-card-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-5 py-2.5 text-sm font-semibold text-card-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
           >
             {hasMore
               ? `Ver las ${withProducts.length} categorías`

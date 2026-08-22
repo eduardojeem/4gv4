@@ -68,6 +68,8 @@ export interface PublicRepair {
   completedAt?: string | null
   estimatedCost: number
   finalCost: number | null
+  paidAmount?: number | null
+  paymentStatus?: string | null
   warrantyMonths: number | null
   warrantyType: 'labor' | 'parts' | 'full' | null
   statusHistory?: Array<{

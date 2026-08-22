@@ -31,6 +31,9 @@ export type CustomerOrder = {
   shipping_cost: number
   discount_amount: number
   total: number
+  store_credit_reserved: number
+  store_credit_applied: number
+  amount_due: number
   notes: string | null
   created_at: string
   updated_at: string

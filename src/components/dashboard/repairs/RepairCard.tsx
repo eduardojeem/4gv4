@@ -11,13 +11,14 @@
 import React, { memo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Clock, User, Wrench, Zap, ImageIcon } from 'lucide-react'
+import { Clock, ShieldCheck, User, Wrench, Zap, ImageIcon } from 'lucide-react'
 import { Repair } from '@/types/repairs'
 import { statusConfig, priorityConfig } from '@/config/repair-constants'
 import { formatCurrency } from '@/lib/currency'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
+import { WarrantyBadge } from './WarrantyBadge'
 
 interface RepairCardProps {
   repair: Repair
@@ -37,8 +38,8 @@ const statusBorderColors: Record<string, string> = {
 
 export const RepairCard = memo<RepairCardProps>(
   function RepairCard({ repair, onClick, className }) {
-    const status = statusConfig[repair.status]
-    const priority = priorityConfig[repair.priority]
+    const status = statusConfig[repair.status] || statusConfig.recibido
+    const priority = priorityConfig[repair.priority] || priorityConfig.medium
     const borderColor = statusBorderColors[repair.status] || 'border-l-gray-300'
     const imageCount = Array.isArray(repair.images) ? repair.images.length : 0
     const ticketLabel = repair.ticketNumber || repair.id.slice(0, 8)
@@ -88,6 +89,19 @@ export const RepairCard = memo<RepairCardProps>(
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 #{ticketLabel}
               </p>
+              {/* Un retrabajo por garantia nacia de un caso de posventa y se
+                  veia igual que cualquier otra reparacion: sin esto lo unico
+                  que lo delataba era el prefijo en la descripcion. */}
+              {repair.parentRepairId && (
+                <Badge
+                  variant="outline"
+                  className="mt-1 h-5 gap-0.5 border-blue-200 bg-blue-50 px-1.5 py-0 text-[10px] font-medium text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"
+                  title="Retrabajo generado por un reclamo de garantía"
+                >
+                  <ShieldCheck className="h-3 w-3" />
+                  Garantía
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               {repair.urgency === 'urgent' && (
@@ -121,15 +135,20 @@ export const RepairCard = memo<RepairCardProps>(
             </div>
           </div>
 
-          {/* Footer: Status + Date + Cost */}
-          <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-slate-800">
-            <Badge
-              variant="outline"
-              className={cn('text-[10px] px-1.5 py-0 h-5 font-medium', status.color)}
-            >
-              {status.label}
-            </Badge>
-            <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500">
+          {/* Footer: Status + Date + Cost + Warranty */}
+          <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-slate-800 gap-1 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge
+                variant="outline"
+                className={cn('text-[10px] px-1.5 py-0 h-5 font-medium', status.color)}
+              >
+                {status.label}
+              </Badge>
+              {(repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0)) && (
+                <WarrantyBadge repair={repair} size="sm" showDaysRemaining />
+              )}
+            </div>
+            <div className="flex items-center gap-2.5 text-[11px] text-gray-400 dark:text-gray-500 shrink-0">
               {imageCount > 0 && (
                 <span className="flex items-center gap-0.5">
                   <ImageIcon className="h-3 w-3" />{imageCount}

@@ -27,6 +27,7 @@ interface ProductFiltersProps {
   brands?: string[]
   branches?: Array<{ id: string; name: string; city: string | null }>
   onCollapseChange?: (collapsed: boolean) => void
+  hideHeader?: boolean
 }
 
 export function ProductFilters({
@@ -35,6 +36,7 @@ export function ProductFilters({
   brands = [],
   branches = [],
   onCollapseChange,
+  hideHeader = false,
 }: ProductFiltersProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -117,7 +119,7 @@ export function ProductFilters({
   return (
     <div className={`space-y-6 ${isPending ? 'opacity-60 pointer-events-none' : ''}`}>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      {!hideHeader && <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-8 w-8 -ml-2 text-muted-foreground hover:text-foreground lg:flex hidden" title="Contraer panel lateral">
             <PanelLeftClose className="h-4 w-4" />
@@ -142,7 +144,7 @@ export function ProductFilters({
             Limpiar
           </Button>
         )}
-      </div>
+      </div>}
 
       {/* Collapsible content */}
       <div className={`space-y-6 transition-all duration-300 ease-in-out ${isFiltersCollapsed ? 'hidden opacity-0 h-0' : 'block opacity-100 h-auto'}`}>

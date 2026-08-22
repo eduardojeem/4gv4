@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -16,27 +16,40 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/lib/currency'
-import { CheckCircle2, PackageX, Wrench, Loader2, AlertTriangle, DollarSign, ExternalLink } from 'lucide-react'
+import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
+import { CheckCircle2, PackageX, Wrench, Loader2, AlertTriangle, DollarSign, ExternalLink, ArrowLeft, CreditCard } from 'lucide-react'
 import { Repair, RepairDeliveryOutcome } from '@/types/repairs'
+import { useCashRegister } from '@/hooks/useCashRegister'
+import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashRegisterDialog'
+import { toast } from 'sonner'
 import {
   PAYMENT_METHODS,
   CREDIT_FREQUENCIES,
   type QuickPayMethod,
   type CreditFrequency,
 } from './RepairPaymentDialog'
+import type { UnrepairedCloseoutRequest } from '@/lib/repairs/unrepaired-closeout'
+import {
+  isUnrepairedCloseoutDraftComplete,
+  UnrepairedCloseoutPanel,
+  type UnrepairedCloseoutDraft,
+} from './UnrepairedCloseoutPanel'
 
-export interface RepairDeliveryConfirmPayload {
-  outcome: RepairDeliveryOutcome
+export interface RepairedDeliveryConfirmPayload {
+  idempotencyKey: string
+  allowOutstandingBalance: boolean
+  outcome: 'repaired'
   note?: string
   payment?: {
     method: QuickPayMethod
     amount: number
+    idempotencyKey: string
     reference?: string
     interestRate?: number
     installments?: { count: number; frequency: CreditFrequency }
   }
 }
+export type RepairDeliveryConfirmPayload = RepairedDeliveryConfirmPayload | UnrepairedCloseoutRequest
 
 interface RepairDeliveryDialogProps {
   open: boolean
@@ -97,7 +110,10 @@ export function RepairDeliveryDialog({
   onConfirm,
   allowPayment = true,
 }: RepairDeliveryDialogProps) {
+  const cashRegister = useCashRegister()
+  const checkOpenSessionRef = useRef(cashRegister.checkOpenSession)
   const [selected, setSelected] = useState<RepairDeliveryOutcome | null>(null)
+  const [step, setStep] = useState<'outcome' | 'payment'>('outcome')
   const [note, setNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -109,14 +125,96 @@ export function RepairDeliveryDialog({
   const [amount, setAmount] = useState('')
   const [reference, setReference] = useState('')
   const [deliverUnpaid, setDeliverUnpaid] = useState(false)
-  const [installmentCount, setInstallmentCount] = useState('3')
+  const [installmentCount, setInstallmentCount] = useState('1')
   const [frequency, setFrequency] = useState<CreditFrequency>('monthly')
   const [interestRate, setInterestRate] = useState('0')
+  const [idempotencyKey, setIdempotencyKey] = useState('')
+  const [cashStatus, setCashStatus] = useState<'checking' | 'open' | 'closed'>('checking')
+  const [isOpeningRegister, setIsOpeningRegister] = useState(false)
+  const [openingAmount, setOpeningAmount] = useState('0')
+  const [openingNote, setOpeningNote] = useState('')
+  const [isOpening, setIsOpening] = useState(false)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
+  const [unrepairedDraft, setUnrepairedDraft] = useState<UnrepairedCloseoutDraft | null>(null)
 
   const totalDue = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
   const alreadyPaid = repair?.paidAmount ?? 0
   const balanceDue = Math.max(0, totalDue - alreadyPaid)
+  const priceDefined = repair
+    ? (repair.finalCost !== null && repair.finalCost !== undefined) || Number(repair.estimatedCost) > 0
+    : false
+  const fullyPaid = priceDefined && totalDue > 0 && balanceDue <= 0
+  const hasAdvance = alreadyPaid > 0 && !fullyPaid
   const isCredit = method === 'credit'
+
+  const [customerCreditLimit, setCustomerCreditLimit] = useState<number | null>(null)
+  const [isEnablingCredit, setIsEnablingCredit] = useState(false)
+  const [creditStatusLoaded, setCreditStatusLoaded] = useState(false)
+
+  useEffect(() => {
+    if (!open || !isCredit || !repair?.customer?.id) {
+      setCustomerCreditLimit(null)
+      setCreditStatusLoaded(false)
+      return
+    }
+    let active = true
+    setCreditStatusLoaded(false)
+    fetch(`/api/customers?search=${encodeURIComponent(repair.customer.phone || repair.customer.name || '')}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!active) return
+        const list = data?.data?.customers || data?.data || []
+        const matched = Array.isArray(list) ? list.find((c: { id?: string }) => c.id === repair.customer?.id) : null
+        if (matched) {
+          setCustomerCreditLimit(Number(matched.credit_limit) || 0)
+        } else {
+          setCustomerCreditLimit(0)
+        }
+        setCreditStatusLoaded(true)
+      })
+      .catch(() => {
+        if (active) setCreditStatusLoaded(true)
+      })
+    return () => { active = false }
+  }, [open, isCredit, repair?.customer?.id, repair?.customer?.name, repair?.customer?.phone])
+
+  const handleEnableCustomerCredit = async (limitAmount?: number) => {
+    if (!repair?.customer?.id) return
+    setIsEnablingCredit(true)
+    try {
+      const newLimit = limitAmount || Math.max(1000000, balanceDue)
+      const res = await fetch('/api/customers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: repair.customer.id,
+          credit_limit: newLimit,
+        }),
+      })
+      const data = await res.json()
+      if (data?.success) {
+        setCustomerCreditLimit(newLimit)
+        toast.success(`Línea de crédito habilitada: ${formatCurrency(newLimit)}`)
+      } else {
+        toast.error(data?.error || 'No se pudo habilitar el crédito')
+      }
+    } catch {
+      toast.error('Error de conexión al habilitar el crédito')
+    } finally {
+      setIsEnablingCredit(false)
+    }
+  }
+
+  useEffect(() => {
+    checkOpenSessionRef.current = cashRegister.checkOpenSession
+  }, [cashRegister.checkOpenSession])
+
+  const refreshCashStatus = useCallback(async () => {
+    setCashStatus('checking')
+    const session = await checkOpenSessionRef.current()
+    setCashStatus(session ? 'open' : 'closed')
+    return Boolean(session)
+  }, [])
 
   // Al elegir "reparado y funcionando" con saldo pendiente, se sugiere cobrar
   // el saldo completo. En los otros resultados el monto arranca vacío: el
@@ -127,9 +225,17 @@ export function RepairDeliveryDialog({
     }
   }, [allowPayment, selected, balanceDue])
 
+  useEffect(() => {
+    if (open) {
+      setIdempotencyKey(`repair-delivery-${crypto.randomUUID()}`)
+      void refreshCashStatus()
+    }
+  }, [open, repair?.id, refreshCashStatus])
+
   const handleClose = () => {
     if (isSubmitting) return
     setSelected(null)
+    setStep('outcome')
     setNote('')
     setMethod('cash')
     setAmount('')
@@ -138,37 +244,76 @@ export function RepairDeliveryDialog({
     setInstallmentCount('3')
     setFrequency('monthly')
     setInterestRate('0')
+    setIsOpeningRegister(false)
+    setOpeningAmount('0')
+    setOpeningNote('')
+    setSubmissionError(null)
+    setUnrepairedDraft(null)
     onOpenChange(false)
   }
 
+  const handleOpenRegister = async (initialAmount: number, openingReference: string) => {
+    setSubmissionError(null)
+    setIsOpening(true)
+    try {
+      const opened = await cashRegister.openRegister('principal', initialAmount, undefined, openingReference)
+      if (!opened) return
+      setIsOpeningRegister(false)
+      setOpeningAmount('0')
+      setOpeningNote('')
+      await refreshCashStatus()
+    } finally {
+      setIsOpening(false)
+    }
+  }
+
   const parsedAmount = parseFloat(amount) || 0
-  const wantsCharge = allowPayment && parsedAmount > 0
+  const wantsCharge = step === 'payment' && allowPayment && parsedAmount > 0
   // Guardrail: si queda saldo y no se va a cobrar nada, hay que confirmar a
   // propósito que se entrega igual (fiado). Antes esto pasaba en silencio.
   // No aplica donde no se ofrece cobro (allowPayment=false): ahí la entrega
   // sigue funcionando exactamente como antes de este cambio.
-  const needsUnpaidConfirm = allowPayment && balanceDue > 0 && !wantsCharge
+  const remainingAfterPayment = Math.max(0, balanceDue - parsedAmount)
+  const needsUnpaidConfirm = allowPayment && remainingAfterPayment > 0
   const selectedMethod = PAYMENT_METHODS.find(m => m.id === method)
+  const unrepairedNeedsRegister = unrepairedDraft?.settlement.kind === 'payment'
+    ? unrepairedDraft.settlement.method !== 'transfer'
+    : unrepairedDraft?.settlement.kind === 'refund' && unrepairedDraft.settlement.method === 'cash'
+  const requiresOpenRegister = selected === 'repaired' ? wantsCharge && !isCredit : Boolean(unrepairedNeedsRegister)
 
   const creditCount = Math.max(1, Math.floor(Number(installmentCount) || 0))
 
-  const canConfirm = !!selected && !isSubmitting &&
-    (!needsUnpaidConfirm || deliverUnpaid) &&
-    (!wantsCharge || (
-      (!selectedMethod?.requiresRef || reference.trim().length > 0) &&
-      (!isCredit || creditCount >= 1)
-    ))
+  const canConfirm = !!selected && !isSubmitting && (selected === 'repaired'
+    ? (!needsUnpaidConfirm || deliverUnpaid) &&
+      (!wantsCharge || ((!selectedMethod?.requiresRef || reference.trim().length > 0) && (!isCredit || creditCount >= 1)))
+    : !!unrepairedDraft && isUnrepairedCloseoutDraftComplete(repair!, unrepairedDraft)) &&
+    (!requiresOpenRegister || cashStatus === 'open')
 
   const handleConfirm = async () => {
     if (!repair || !selected) return
+    setSubmissionError(null)
     setIsSubmitting(true)
     try {
+      if (selected !== 'repaired') {
+        if (!unrepairedDraft) return
+        await onConfirm(repair.id, {
+          ...unrepairedDraft,
+          outcome: selected,
+          note: note.trim() || undefined,
+          idempotencyKey,
+        })
+        handleClose()
+        return
+      }
       const payload: RepairDeliveryConfirmPayload = {
+        idempotencyKey,
+        allowOutstandingBalance: !allowPayment || remainingAfterPayment > 0,
         outcome: selected,
         note: note.trim() || undefined,
       }
       if (wantsCharge) {
         payload.payment = {
+          idempotencyKey,
           method,
           amount: parsedAmount,
           reference: reference.trim() || undefined,
@@ -179,29 +324,53 @@ export function RepairDeliveryDialog({
       }
       await onConfirm(repair.id, payload)
       handleClose()
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'REPAIR_CASH_REGISTER_NOT_OPEN') {
+        setCashStatus('closed')
+      }
+      setSubmissionError(error instanceof Error ? error.message : 'No se pudo registrar la entrega')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const confirmLabel = useMemo(() => {
+    if (selected !== 'repaired' && unrepairedDraft) {
+      if (unrepairedDraft.settlement.kind === 'payment') return 'Cobrar y entregar'
+      if (unrepairedDraft.settlement.kind === 'refund') return 'Devolver y entregar'
+      if (unrepairedDraft.settlement.kind === 'store_credit') return 'Crear saldo a favor y entregar'
+      return 'Cerrar y entregar'
+    }
     if (isCredit && wantsCharge) return 'Registrar Crédito y Entregar'
     if (wantsCharge) return 'Cobrar y Entregar'
     return 'Confirmar Entrega'
-  }, [isCredit, wantsCharge])
+  }, [isCredit, selected, unrepairedDraft, wantsCharge])
+
+  const dialogTitle = step === 'payment' && selected !== 'repaired'
+    ? 'Cerrar reparación sin reparar'
+    : step === 'payment' && selected === 'repaired' && balanceDue > 0
+      ? 'Cobrar saldo y entregar'
+      : !priceDefined
+        ? 'Confirmar entrega con precio pendiente'
+        : fullyPaid
+          ? 'Confirmar entrega — equipo pagado'
+          : hasAdvance
+            ? 'Confirmar entrega — anticipo recibido'
+            : 'Confirmar Entrega'
 
   if (!repair) return null
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-            Confirmar Entrega
+      <DialogContent data-testid="repair-delivery-modal" className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-full max-sm:rounded-none sm:max-w-2xl">
+        <DialogHeader data-testid="repair-delivery-header" className="shrink-0 border-b px-3 py-2 pr-12 sm:px-6 sm:py-4 sm:pr-12">
+          <DialogTitle className="flex min-w-0 items-center gap-2 text-sm sm:text-lg">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+            <span className="truncate">{dialogTitle}</span>
           </DialogTitle>
           <DialogDescription asChild>
-            <div className="space-y-1 mt-1">
+            <div className="mt-1 space-y-1 max-sm:hidden">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="font-mono text-xs">
                   #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
@@ -217,8 +386,70 @@ export function RepairDeliveryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto px-1">
-          <div className="space-y-3">
+        <div data-testid="repair-delivery-body" className="flex-1 space-y-3 overflow-y-auto px-3 py-3 sm:px-6 sm:py-4">
+        <div className="grid grid-cols-2 gap-2" aria-label="Progreso de entrega">
+          <div className={cn(
+            'rounded-md border px-3 py-2 text-xs font-semibold',
+            step === 'outcome' ? 'border-primary bg-primary/5 text-primary' : 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
+          )}>
+            1. Resultado
+          </div>
+          <div className={cn(
+            'rounded-md border px-3 py-2 text-xs font-semibold',
+            step === 'payment' ? 'border-primary bg-primary/5 text-primary' : 'text-muted-foreground',
+          )}>
+            2. Cierre y entrega
+          </div>
+        </div>
+
+        <div
+          role="status"
+          className={cn(
+            'flex items-start gap-2 rounded-md border px-3 py-2.5 text-sm',
+            fullyPaid
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100'
+              : hasAdvance
+                ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100'
+                : 'border-border bg-muted/30 text-foreground',
+          )}
+        >
+          {fullyPaid ? (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+          ) : (
+            <DollarSign className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          )}
+          <div className="space-y-0.5">
+            {fullyPaid ? (
+              <>
+                <p className="font-semibold">Equipo pagado en su totalidad</p>
+                <p className="text-xs opacity-80">Podés entregarlo sin registrar otro cobro.</p>
+              </>
+            ) : !priceDefined && alreadyPaid > 0 ? (
+              <>
+                <p className="font-semibold">{`Anticipo recibido: ${formatCurrency(alreadyPaid)}`}</p>
+                <p className="text-xs opacity-80">El precio final todavía está pendiente; el saldo se calculará cuando lo definas.</p>
+              </>
+            ) : hasAdvance ? (
+              <>
+                <p className="font-semibold">{`Anticipo recibido: ${formatCurrency(alreadyPaid)}`}</p>
+                <p className="text-xs opacity-80">{`Saldo pendiente al entregar: ${formatCurrency(balanceDue)}`}</p>
+              </>
+            ) : !priceDefined ? (
+              <>
+                <p className="font-semibold">Precio final pendiente</p>
+                <p className="text-xs opacity-80">Definí el precio antes de entregar o confirmá el cierre según corresponda.</p>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold">Sin pagos registrados</p>
+                <p className="text-xs opacity-80">{`Saldo pendiente al entregar: ${formatCurrency(balanceDue)}`}</p>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4 py-1">
+          {step === 'outcome' && <div className="space-y-3" data-help-id="repair-delivery-resolution">
             <p className="text-sm font-medium">¿Cuál fue el resultado?</p>
             <div className="flex flex-col gap-2">
               {outcomes.map((o) => {
@@ -228,7 +459,22 @@ export function RepairDeliveryDialog({
                   <button
                     key={o.value}
                     type="button"
-                    onClick={() => setSelected(o.value)}
+                    onClick={() => {
+                      setSelected(o.value)
+                      if (o.value === 'repaired' && allowPayment && balanceDue > 0) {
+                        setAmount((current) => current || balanceDue.toString())
+                        setStep('payment')
+                      } else if (o.value !== 'repaired') {
+                        setAmount('')
+                        setDeliverUnpaid(false)
+                        setUnrepairedDraft({
+                          charge: { mode: 'none' },
+                          parts: [],
+                          settlement: alreadyPaid > 0 ? { kind: 'store_credit' } : { kind: 'none' },
+                        })
+                        setStep('payment')
+                      }
+                    }}
                     className={cn(
                       'flex items-start gap-3 rounded-lg border-2 p-3 text-left transition-all duration-150',
                       isSelected
@@ -249,10 +495,33 @@ export function RepairDeliveryDialog({
                 )
               })}
             </div>
-          </div>
+
+          </div>}
+
+          {step === 'payment' && selected !== null && selected !== 'repaired' && (
+            <UnrepairedCloseoutPanel
+              repair={repair}
+              value={unrepairedDraft}
+              onChange={setUnrepairedDraft}
+              disabled={isSubmitting}
+            />
+          )}
+
+          {step === 'payment' && selected !== 'repaired' && requiresOpenRegister && (
+            <div className={cn(
+              'flex items-center justify-between gap-3 rounded-md border px-3 py-2.5',
+              cashStatus === 'open' ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20' : 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20',
+            )}>
+              <span className="flex items-center gap-2 text-sm font-medium">
+                {cashStatus === 'open' ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-amber-600" />}
+                {cashStatus === 'open' ? 'Caja abierta' : 'Caja cerrada'}
+              </span>
+              {cashStatus === 'closed' && <Button type="button" size="sm" variant="outline" onClick={() => setIsOpeningRegister(true)}>Abrir caja</Button>}
+            </div>
+          )}
 
           {/* Cobro: solo aparece si hay algo pendiente y la pantalla lo permite. */}
-          {allowPayment && selected && balanceDue > 0 && (
+          {step === 'payment' && allowPayment && selected === 'repaired' && balanceDue > 0 && (
             <div className="space-y-3 rounded-lg border p-3 animate-in fade-in slide-in-from-top-1 duration-200">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium flex items-center gap-1.5">
@@ -264,27 +533,35 @@ export function RepairDeliveryDialog({
                 </span>
               </div>
 
+              <div className="grid grid-cols-3 gap-2 rounded-md bg-muted/40 p-2 text-xs">
+                <div>
+                  <span className="block text-muted-foreground">Total</span>
+                  <strong>{formatCurrency(totalDue)}</strong>
+                </div>
+                <div>
+                  <span className="block text-muted-foreground">Pagado</span>
+                  <strong>{formatCurrency(alreadyPaid)}</strong>
+                </div>
+                <div>
+                  <span className="block text-muted-foreground">Pendiente</span>
+                  <strong>{formatCurrency(balanceDue)}</strong>
+                </div>
+              </div>
+
               {selected === 'repaired' && (
-                alreadyPaid > 0 ? (
-                  <p className="rounded-md border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
-                    No se puede cobrar por POS: ya hay {formatCurrency(alreadyPaid)} registrados en esta
-                    reparación y el POS cobraría el total de nuevo. Cobrá el saldo acá abajo.
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!repair.customer?.id) return
-                      handleClose()
-                      window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
-                    }}
-                    disabled={!repair.customer?.id}
-                    className="flex w-full items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-left text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <span>Cobrar por POS: cuenta como venta del día</span>
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                  </button>
-                )
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!repair.customer?.id) return
+                    handleClose()
+                    window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
+                  }}
+                  disabled={!repair.customer?.id}
+                  className="flex w-full items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-left text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span>Cobrar por POS: cuenta como venta del día</span>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                </button>
               )}
 
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -293,7 +570,58 @@ export function RepairDeliveryDialog({
                 <span className="h-px flex-1 bg-border" />
               </div>
 
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className={cn(
+                'flex items-center justify-between gap-3 rounded-md border px-3 py-2.5',
+                cashStatus === 'open'
+                  ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                  : cashStatus === 'closed'
+                    ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20'
+                    : 'bg-muted/30',
+              )}>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  {cashStatus === 'open' ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                  ) : cashStatus === 'closed' ? (
+                    <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />
+                  ) : (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                  )}
+                  {cashStatus === 'open' ? 'Caja abierta' : cashStatus === 'closed' ? 'Caja cerrada' : 'Consultando caja'}
+                </div>
+                {cashStatus === 'closed' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSubmissionError(null)
+                      setIsOpeningRegister(true)
+                    }}
+                  >
+                    Abrir caja
+                  </Button>
+                )}
+              </div>
+              {cashStatus === 'closed' && (
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Abrí la caja para cobrar aquí. También podés registrar crédito o entregar y cobrar después.
+                </p>
+              )}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                onClick={() => {
+                  setAmount('')
+                  setDeliverUnpaid(false)
+                }}
+              >
+                <AlertTriangle className="h-4 w-4" />
+                Entregar y cobrar después
+              </Button>
+
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                 {PAYMENT_METHODS.map(m => {
                   const Icon = m.icon
                   const isSelected = method === m.id
@@ -320,15 +648,19 @@ export function RepairDeliveryDialog({
                 <Label htmlFor="delivery-pay-amount" className="text-xs">
                   {isCredit ? 'Monto a financiar' : 'Monto a cobrar'}
                 </Label>
-                <Input
-                  id="delivery-pay-amount"
-                  type="number"
-                  min={0}
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  placeholder="0"
-                  disabled={isSubmitting}
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₲</span>
+                  <Input
+                    id="delivery-pay-amount"
+                    type="text"
+                    inputMode="numeric"
+                    value={formatThousands(amount)}
+                    onChange={e => setAmount(parseThousands(e.target.value).toString())}
+                    placeholder={formatThousands(balanceDue)}
+                    className="pl-7 font-bold font-mono text-sm"
+                    disabled={isSubmitting}
+                  />
+                </div>
               </div>
 
               {isCredit && (
@@ -375,6 +707,66 @@ export function RepairDeliveryDialog({
                       </button>
                     ))}
                   </div>
+
+                  {creditStatusLoaded && customerCreditLimit !== null && customerCreditLimit <= 0 && (
+                    <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 space-y-2">
+                      <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                        <div>
+                          <p className="font-bold">Cliente sin crédito activo</p>
+                          <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                            {repair?.customer?.name || 'Este cliente'} no tiene una línea de crédito asignada (0 ₲).
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={isEnablingCredit}
+                          onClick={() => handleEnableCustomerCredit(Math.max(1000000, balanceDue))}
+                          className="h-7 px-2.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg gap-1.5 shadow-xs"
+                        >
+                          {isEnablingCredit ? <Loader2 className="h-3 w-3 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+                          Habilitar Crédito ({formatCurrency(Math.max(1000000, balanceDue))})
+                        </Button>
+                        <button
+                          type="button"
+                          disabled={isEnablingCredit}
+                          onClick={() => handleEnableCustomerCredit(500000)}
+                          className="text-[10px] px-2 py-1 rounded-lg border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 font-semibold text-amber-800 dark:text-amber-300"
+                        >
+                          ₲ 500.000
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isEnablingCredit}
+                          onClick={() => handleEnableCustomerCredit(2000000)}
+                          className="text-[10px] px-2 py-1 rounded-lg border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 font-semibold text-amber-800 dark:text-amber-300"
+                        >
+                          ₲ 2.000.000
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {creditStatusLoaded && customerCreditLimit !== null && customerCreditLimit > 0 && (
+                    <div className="flex items-center justify-between rounded-md bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-700 dark:text-emerald-300">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        Línea habilitada: {formatCurrency(customerCreditLimit)}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isEnablingCredit}
+                        onClick={() => handleEnableCustomerCredit(customerCreditLimit + Math.max(500000, balanceDue))}
+                        className="text-[10px] text-emerald-800 dark:text-emerald-200 underline font-semibold hover:opacity-80"
+                      >
+                        Aumentar límite
+                      </button>
+                    </div>
+                  )}
+
                   <p className="text-[11px] leading-snug text-muted-foreground">
                     Se registrará una deuda a crédito del cliente en vez de mover caja.
                   </p>
@@ -405,7 +797,7 @@ export function RepairDeliveryDialog({
                   />
                   <span className="flex items-start gap-1.5 text-amber-800 dark:text-amber-300">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    Entregar de todas formas sin cobrar el saldo de {formatCurrency(balanceDue)} (fiado / se cobra después).
+                    Entregar dejando un saldo pendiente de {formatCurrency(remainingAfterPayment)} (se cobrará después).
                   </span>
                 </label>
               )}
@@ -425,16 +817,31 @@ export function RepairDeliveryDialog({
               disabled={isSubmitting}
             />
           </div>
+
+          {submissionError && (
+            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300" role="alert">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{submissionError}</span>
+            </div>
+          )}
+        </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
-            Cancelar
-          </Button>
+        <DialogFooter data-testid="repair-delivery-actions" className="shrink-0 border-t px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:grid max-sm:grid-cols-2 sm:px-6 sm:py-4">
+          {step === 'payment' ? (
+            <Button variant="outline" onClick={() => setStep('outcome')} disabled={isSubmitting} className="min-h-11 sm:min-h-9">
+              <ArrowLeft className="h-4 w-4" />
+              Volver
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={handleClose} disabled={isSubmitting} className="min-h-11 sm:min-h-9">
+              Cancelar
+            </Button>
+          )}
           <Button
             onClick={handleConfirm}
             disabled={!canConfirm}
-            className="gap-2"
+            className="min-h-11 gap-2 sm:min-h-9"
           >
             {isSubmitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -446,5 +853,17 @@ export function RepairDeliveryDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <OpenCashRegisterDialog
+      open={isOpeningRegister}
+      onOpenChange={setIsOpeningRegister}
+      amount={openingAmount}
+      onAmountChange={setOpeningAmount}
+      note={openingNote}
+      onNoteChange={setOpeningNote}
+      registerName="Caja Principal"
+      isSubmitting={isOpening}
+      onSubmit={handleOpenRegister}
+    />
+    </>
   )
 }

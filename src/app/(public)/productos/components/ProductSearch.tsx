@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -13,18 +13,20 @@ export function ProductSearch() {
 
   const urlQuery = searchParams.get('query') || ''
   const [value, setValue] = useState(urlQuery)
-  const [lastPushed, setLastPushed] = useState(urlQuery)
+  // Ref: guarda el último valor que nosotros mismos empujamos a la URL.
+  // Al usar una ref en vez de estado no dispara re-renders adicionales y
+  // evita el update en componente desmontado que ocurría con rAF.
+  const lastPushedRef = useRef(urlQuery)
 
   // Sincronizar desde la URL solo cuando el cambio es externo (chip "quitar
   // búsqueda", back/forward) y no el eco de nuestro propio push — así no se
   // pisa lo que el usuario sigue tecleando durante la transición.
-  const [lastUrlQuery, setLastUrlQuery] = useState(urlQuery)
-  if (lastUrlQuery !== urlQuery) {
-    setLastUrlQuery(urlQuery)
-    if (urlQuery !== lastPushed) {
+  useEffect(() => {
+    if (urlQuery !== lastPushedRef.current) {
       setValue(urlQuery)
+      lastPushedRef.current = urlQuery
     }
-  }
+  }, [urlQuery])
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -38,7 +40,7 @@ export function ProductSearch() {
       }
       params.set('page', '1')
 
-      setLastPushed(value)
+      lastPushedRef.current = value
       startTransition(() => {
         router.push(`?${params.toString()}`, { scroll: false })
       })

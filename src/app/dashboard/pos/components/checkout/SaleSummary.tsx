@@ -48,19 +48,28 @@ export function SaleSummary({
   WHOLESALE_DISCOUNT_RATE,
   formatCurrency
 }: SaleSummaryProps) {
-  const { discount, paymentMethod, creditTerms, storeCreditApplied } = useCheckout()
-  const creditSummary = React.useMemo(() => buildPosCreditSummary(cartCalculations.total, creditTerms), [
-    cartCalculations.total,
-    creditTerms.count,
-    creditTerms.frequency,
-    creditTerms.interestRate,
-  ])
-  const isCreditSale = paymentMethod === 'credit'
-  const displayedTotal = isCreditSale ? creditSummary.financedTotal : cartCalculations.total
+  const { discount, paymentMethod, isMixedPayment, paymentSplit, creditTerms, storeCreditApplied } = useCheckout()
+  const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)
+  const mixedCreditPrincipal = React.useMemo(() => paymentSplit
+    .filter(split => split.method === 'credit')
+    .reduce((total, split) => total + split.amount, 0), [paymentSplit])
+  const immediatePayment = React.useMemo(() => paymentSplit
+    .filter(split => split.method !== 'credit')
+    .reduce((total, split) => total + split.amount, 0), [paymentSplit])
+  const isMixedCreditSale = isMixedPayment && mixedCreditPrincipal > 0
+  const isCreditSale = paymentMethod === 'credit' || isMixedCreditSale
+  const creditPrincipal = isMixedCreditSale ? mixedCreditPrincipal : amountDueAfterStoreCredit
+  const creditSummary = React.useMemo(
+    () => buildPosCreditSummary(creditPrincipal, creditTerms),
+    [creditPrincipal, creditTerms],
+  )
+  const displayedTotal = isCreditSale
+    ? cartCalculations.total + creditSummary.interestAmount
+    : cartCalculations.total
 
   return (
     <div className="space-y-4">
-      <h3 className="font-semibold mb-4">Resumen de la Venta</h3>
+      <h4 className="mb-4 text-sm font-semibold text-muted-foreground">Detalle del total</h4>
       
       {/* Items del carrito */}
       <div className="space-y-2 text-sm">
@@ -69,9 +78,9 @@ export function SaleSummary({
             ? (typeof item.wholesalePrice === 'number' ? item.wholesalePrice : (item.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
             : item.price
           return (
-            <div key={item.id} className="flex justify-between">
-              <span>{item.name} x{item.quantity}</span>
-              <span>{formatCurrency(appliedUnit * item.quantity)}</span>
+            <div key={item.id} className="flex items-start justify-between gap-3">
+              <span className="min-w-0 break-words">{item.name} <span className="text-muted-foreground">× {item.quantity}</span></span>
+              <span className="shrink-0 font-medium tabular-nums">{formatCurrency(appliedUnit * item.quantity)}</span>
             </div>
           )
         })}
@@ -130,13 +139,29 @@ export function SaleSummary({
         </div>
         {isCreditSale && (
           <>
+            {isMixedCreditSale && (
+              <div className="flex justify-between text-amber-700 dark:text-amber-300">
+                <span>Pago inmediato:</span>
+                <span>{formatCurrency(immediatePayment)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-blue-700 dark:text-blue-300">
+              <span>Capital financiado:</span>
+              <span>{formatCurrency(creditPrincipal)}</span>
+            </div>
             <div className="flex justify-between text-blue-700 dark:text-blue-300">
               <span>Interes credito ({creditTerms.interestRate}%):</span>
               <span>+{formatCurrency(creditSummary.interestAmount)}</span>
             </div>
             <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
-              {creditSummary.installmentCount} cuotas {creditTerms.frequency === 'monthly' ? 'mensuales' : creditTerms.frequency === 'biweekly' ? 'quincenales' : 'semanales'} de{' '}
-              <strong>{formatCurrency(creditSummary.installmentAmount)}</strong>
+              <div>
+                {creditSummary.installmentCount} cuotas {creditTerms.frequency === 'monthly' ? 'mensuales' : creditTerms.frequency === 'biweekly' ? 'quincenales' : 'semanales'} de{' '}
+                <strong>{formatCurrency(creditSummary.installmentAmount)}</strong>
+              </div>
+              <div className="mt-1 flex justify-between gap-3 border-t border-blue-200 pt-1 dark:border-blue-800">
+                <span>Primera cuota:</span>
+                <strong>{new Date(creditSummary.firstDueDate).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })}</strong>
+              </div>
             </div>
           </>
         )}
@@ -145,9 +170,9 @@ export function SaleSummary({
       <Separator />
 
       {/* Total */}
-      <div className="flex justify-between font-bold text-lg">
-        <span>{isCreditSale ? 'Total financiado:' : 'Total:'}</span>
-        <span className="text-primary">{formatCurrency(displayedTotal)}</span>
+      <div className="flex items-end justify-between gap-3 rounded-lg bg-primary/10 px-3 py-3">
+        <span>{isCreditSale ? 'Total final con financiación:' : 'Total:'}</span>
+        <span className="text-xl font-bold tabular-nums text-primary sm:text-2xl">{formatCurrency(displayedTotal)}</span>
       </div>
 
       {/* El saldo a favor no baja el total: baja lo que hay que cobrar. */}
@@ -158,9 +183,9 @@ export function SaleSummary({
             <span>- {formatCurrency(storeCreditApplied)}</span>
           </div>
           <div className="flex justify-between font-bold">
-            <span>A cobrar:</span>
+            <span>{isCreditSale ? 'A financiar:' : 'A cobrar:'}</span>
             <span className="text-primary">
-              {formatCurrency(Math.max(0, displayedTotal - storeCreditApplied))}
+              {formatCurrency(isCreditSale ? creditSummary.financedTotal : amountDueAfterStoreCredit)}
             </span>
           </div>
         </>

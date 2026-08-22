@@ -10,8 +10,10 @@ export interface Customer {
   name: string
   email: string
   phone: string
+  alternate_phone?: string | null
+  alternate_phone_label?: string | null
   ruc?: string
-  customer_type: "premium" | "empresa" | "regular"
+  customer_type: "premium" | "empresa" | "regular" | "wholesale"
   status: "active" | "inactive" | "suspended"
   total_purchases: number
   total_repairs: number
@@ -68,6 +70,8 @@ export interface CustomerFilters {
   purchases_min: number
   spent_min: number
   loyalty_points_min: number
+  has_debt?: boolean
+  has_credit_limit?: boolean
 }
 
 export interface CustomerState {
@@ -179,37 +183,63 @@ export function useCustomerState() {
     }
   })
 
-  // Load customers on mount
+  // Load customers on mount with progressive loading
   useEffect(() => {
+    let isMounted = true
+
     const loadCustomers = async () => {
       try {
-        setState(prev => ({ ...prev, loading: true, error: null }))
+        setState(prev => ({ ...prev, loading: prev.customers.length === 0, error: null }))
 
-        // Load all pages to keep local filtering aligned.
         const pageSize = 200
-        let currentPage = 1
-        let totalPages = 1
-        const allCustomers: Customer[] = []
+        const page1Response = await fetch(`/api/customers?page=1&limit=${pageSize}`)
+        const page1Result = await page1Response.json()
 
-        while (currentPage <= totalPages) {
-          const response = await fetch(`/api/customers?page=${currentPage}&limit=${pageSize}`)
-          const result = await response.json()
-
-          if (!response.ok || !result.success) {
-            throw new Error(result.error || 'Error al cargar clientes')
-          }
-
-          allCustomers.push(...(result.data || []).map(mapRawToCustomer))
-          totalPages = result.pagination?.totalPages || 1
-          currentPage += 1
+        if (!page1Response.ok || !page1Result.success) {
+          throw new Error(page1Result.error || 'Error al cargar clientes')
         }
 
+        const page1Customers: Customer[] = (page1Result.data || []).map(mapRawToCustomer)
+        const totalPages = page1Result.pagination?.totalPages || 1
+
+        if (!isMounted) return
+
+        // Render immediately with first batch so user sees list with zero delay
         setState(prev => ({
           ...prev,
-          customers: allCustomers,
+          customers: page1Customers,
           loading: false,
         }))
+
+        // If there are more pages, fetch in parallel in the background
+        if (totalPages > 1) {
+          const remainingPages = Array.from({ length: totalPages - 1 }, (_, index) => index + 2)
+          const remainingBatches = await Promise.allSettled(
+            remainingPages.map(async (page) => {
+              const res = await fetch(`/api/customers?page=${page}&limit=${pageSize}`)
+              const json = await res.json()
+              return (json.data || []).map(mapRawToCustomer) as Customer[]
+            })
+          )
+
+          if (!isMounted) return
+
+          const additionalCustomers: Customer[] = []
+          for (const batch of remainingBatches) {
+            if (batch.status === 'fulfilled') {
+              additionalCustomers.push(...batch.value)
+            }
+          }
+
+          if (additionalCustomers.length > 0) {
+            setState(prev => ({
+              ...prev,
+              customers: [...page1Customers, ...additionalCustomers],
+            }))
+          }
+        }
       } catch (error: unknown) {
+        if (!isMounted) return
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
         setState(prev => ({
           ...prev,
@@ -221,6 +251,10 @@ export function useCustomerState() {
     }
 
     loadCustomers()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   // Realtime subscription for automatic updates

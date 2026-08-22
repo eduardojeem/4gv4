@@ -160,3 +160,77 @@ export function renderPaymentReminderEmail(params: {
     footerNote: 'Si ya realizaste el pago, ignorá este mensaje.',
   })
 }
+
+// ---------------------------------------------------------------------------
+// 4. Ciclo de regularizacion por baja de plan
+// ---------------------------------------------------------------------------
+
+/**
+ * Aviso durante los 7 dias previos a la desactivacion.
+ *
+ * Se dice el numero exacto de productos en juego y los dias que quedan: un
+ * aviso generico no mueve a nadie a actuar.
+ */
+export function renderPlanGraceWarningEmail(params: {
+  companyName: string
+  activeProducts: number
+  productLimit: number
+  daysLeft: number
+  upgradeUrl: string
+  brand?: BrandInfo
+}) {
+  const { companyName, activeProducts, productLimit, daysLeft, upgradeUrl, brand } = params
+  const excess = Math.max(0, activeProducts - productLimit)
+  const dayLabel = daysLeft === 1 ? '1 día' : `${daysLeft} días`
+
+  return renderBrandedEmail({
+    title: 'Actualizá tu plan para mantener todos tus productos',
+    preview: `Te ${daysLeft === 1 ? 'queda' : 'quedan'} ${dayLabel} para regularizar tu suscripción.`,
+    intro: `Hola, tu cuenta "${companyName}" tiene ${activeProducts} productos activos y tu plan actual permite ${productLimit}.`,
+    bodyHtml: `
+      <p><strong>Tenés ${dayLabel} para actualizar tu plan y mantener todos tus productos activos.</strong></p>
+      <p>Si no regularizás tu suscripción dentro de este plazo, solo se mantendrán activos tus
+      ${productLimit} productos más vendidos. Los ${excess} restantes se desactivarán, pero
+      <strong>no se pierden</strong>: los recuperás en cuanto actualices el plan.</p>
+    `,
+    cta: { label: 'Actualizar mi plan', url: upgradeUrl },
+    brand: {
+      name: brand?.name || 'MiPOS',
+      color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
+      logoUrl: brand?.logoUrl,
+    },
+    footerNote: 'Tus ventas, reportes e historial no se ven afectados en ningún caso.',
+  })
+}
+
+/** Aviso durante los 30 dias posteriores a la desactivacion. */
+export function renderPlanDeactivatedEmail(params: {
+  companyName: string
+  deactivatedProducts: number
+  productLimit: number
+  daysLeft: number
+  upgradeUrl: string
+  brand?: BrandInfo
+}) {
+  const { companyName, deactivatedProducts, productLimit, daysLeft, upgradeUrl, brand } = params
+  const dayLabel = daysLeft === 1 ? '1 día' : `${daysLeft} días`
+
+  return renderBrandedEmail({
+    title: 'Tenés productos desactivados por el límite de tu plan',
+    preview: `Recuperá tus ${deactivatedProducts} productos actualizando el plan.`,
+    intro: `Hola, en "${companyName}" quedaron ${deactivatedProducts} productos desactivados porque tu plan permite ${productLimit} activos.`,
+    bodyHtml: `
+      <p>Podés recuperarlos en cualquier momento: <strong>al actualizar el plan se reactivan
+      automáticamente</strong>, tal como estaban.</p>
+      <p>Te ${daysLeft === 1 ? 'queda' : 'quedan'} <strong>${dayLabel}</strong> para hacerlo. Pasado ese plazo, los productos
+      desactivados se archivan y dejan de aparecer en tu catálogo.</p>
+    `,
+    cta: { label: 'Actualizar mi plan', url: upgradeUrl },
+    brand: {
+      name: brand?.name || 'MiPOS',
+      color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
+      logoUrl: brand?.logoUrl,
+    },
+    footerNote: 'Tu historial de ventas y tus reportes se conservan siempre.',
+  })
+}

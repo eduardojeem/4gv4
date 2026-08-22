@@ -17,6 +17,13 @@ export interface PlanRecord {
   modules: string[]
   is_active: boolean
   is_popular?: boolean
+  /**
+   * true cuando no se encontro el plan en la tabla `plans` y se sirvieron los
+   * limites del plan Free con el codigo de la organizacion. Sin esta marca la
+   * pantalla decia "Plan BASIC" mientras el sistema aplicaba 50 productos, y no
+   * habia forma de notarlo desde la interfaz.
+   */
+  limits_are_fallback?: boolean
 }
 
 export interface SubscriptionRecord {
@@ -140,7 +147,26 @@ function normalizePlan(row: Record<string, unknown> | null | undefined): PlanRec
     modules: Array.isArray(row.modules) ? row.modules.map(String) : [],
     is_active: row.is_active !== false,
     is_popular: row.is_popular === true,
+    limits_are_fallback: row.limits_are_fallback === true,
   }
+}
+
+/**
+ * Plan de respaldo cuando la fila no esta en la tabla `plans`.
+ *
+ * `DEFAULT_PLAN` lleva los limites de Free. Spreadearlo tal cual dejaba a una
+ * organizacion BASIC operando con 50 productos —el cupo de Free— mientras la
+ * pantalla mostraba su plan real, sin ninguna senal. El respaldo correcto son
+ * los defaults de SU plan, y queda marcado para poder avisarlo.
+ */
+export function buildFallbackPlan(planCode: string): PlanRecord {
+  const fallbackCode = normalizePlanCode(planCode)
+  return normalizePlan({
+    ...DEFAULT_PLAN,
+    code: planCode,
+    limits: DEFAULT_LIMITS[fallbackCode] ?? DEFAULT_LIMITS.FREE,
+    limits_are_fallback: true,
+  })
 }
 
 export function normalizePlanCode(value: unknown): PlanCode {
@@ -257,6 +283,27 @@ function mergeCommercialPlans(
   return merged
 }
 
+/**
+ * Productos que ocupan cupo.
+ *
+ * Lo archivado por el ciclo de baja de plan no cuenta: si contara, la
+ * organizacion quedaria trabada para siempre —archivar no liberaria espacio— y
+ * el ciclo no tendria sentido.
+ */
+async function countActiveProducts(organizationId: string) {
+  const supabase = createAdminSupabase()
+  const { count, error } = await supabase
+    .from('products')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .is('archived_by_plan_at', null)
+
+  if (error) {
+    throw new Error(`No se pudo contar products: ${error.message}`)
+  }
+  return count || 0
+}
+
 async function countRows(table: string, organizationId: string) {
   const supabase = createAdminSupabase()
   const { count, error } = await supabase
@@ -335,7 +382,7 @@ export async function getOrganizationUsage(organizationId: string): Promise<Orga
     countStaffMembers(organizationId),
     countRows('branches', organizationId),
     countCashRegisters(organizationId),
-    countRows('products', organizationId),
+    countActiveProducts(organizationId),
     countRows('categories', organizationId),
     countRows('repairs', organizationId),
     countServices(organizationId)
@@ -388,7 +435,106 @@ async function applyScheduledDowngradeIfDue(organizationId: string) {
     throw new Error(applyError?.message || 'No se pudo aplicar la cancelación programada.')
   }
 
+  await openProductGraceIfOverLimit(organizationId, 'FREE')
+
   return true
+}
+
+/**
+ * Abre la ventana de regularizacion si el catalogo activo supera el cupo del
+ * plan nuevo.
+ *
+ * Se llama al aplicar una baja: si no hay excedente la funcion cierra cualquier
+ * ciclo abierto, asi que tambien sirve para dar por regularizada a una
+ * organizacion que volvio a entrar en su cupo.
+ */
+export type ProductGraceStatus = {
+  stage: 'grace' | 'deactivated' | 'archived'
+  productLimit: number
+  activeProducts: number
+  excessProducts: number
+  daysLeft: number
+}
+
+/**
+ * Etapa del ciclo de regularizacion, para mostrarla en la pantalla de
+ * suscripcion. Devuelve null cuando no hay ciclo abierto.
+ */
+export async function getProductGraceStatus(
+  organizationId: string
+): Promise<ProductGraceStatus | null> {
+  const supabase = createAdminSupabase()
+  const { data, error } = await supabase
+    .from('plan_downgrade_grace')
+    .select('stage, product_limit, active_products_at_start, grace_ends_at, archive_deadline_at')
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[subscription] No se pudo leer el ciclo de regularizacion', { organizationId, error })
+    return null
+  }
+  if (!data || data.stage === 'resolved') return null
+
+  const stage = data.stage as ProductGraceStatus['stage']
+  const deadline = stage === 'grace' ? data.grace_ends_at : data.archive_deadline_at
+  const daysLeft = deadline
+    ? Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / 86_400_000))
+    : 0
+
+  const productLimit = Number(data.product_limit) || 0
+  const activeProducts = Number(data.active_products_at_start) || 0
+
+  return {
+    stage,
+    productLimit,
+    activeProducts,
+    excessProducts: Math.max(0, activeProducts - productLimit),
+    daysLeft,
+  }
+}
+
+export async function openProductGraceIfOverLimit(
+  organizationId: string,
+  planCode: string
+): Promise<void> {
+  const supabase = createAdminSupabase()
+  const plan = await getPlanLimits(normalizePlanCode(planCode))
+  const productLimit = getPlanLimit(plan, 'products')
+
+  if (productLimit === null) return // plan sin limite
+
+  const { error } = await supabase.rpc('open_plan_downgrade_grace', {
+    p_organization_id: organizationId,
+    p_plan_code: plan.code,
+    p_product_limit: productLimit,
+  })
+
+  if (error) {
+    // No se corta la baja por esto: el barrido periodico lo vuelve a evaluar.
+    console.error('[subscription] No se pudo abrir la ventana de regularizacion de productos', {
+      organizationId,
+      planCode,
+      error,
+    })
+  }
+}
+
+/**
+ * Da por regularizado el ciclo y reactiva lo que se habia apagado.
+ * Se invoca al subir de plan o al registrarse un pago.
+ */
+export async function resolveProductGrace(organizationId: string): Promise<number> {
+  const supabase = createAdminSupabase()
+  const { data, error } = await supabase.rpc('resolve_plan_downgrade_grace', {
+    p_organization_id: organizationId,
+  })
+
+  if (error) {
+    console.error('[subscription] No se pudo regularizar el ciclo de productos', { organizationId, error })
+    return 0
+  }
+  return Number(data) || 0
 }
 
 export async function getCurrentOrganizationSubscription(organizationId: string): Promise<OrganizationSubscriptionState> {
@@ -468,7 +614,17 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
   const subscription = subscriptionResult.data as SubscriptionRecord | null
   const organizationPlan = typeof organizationResult.data?.plan === 'string' ? organizationResult.data.plan : null
   const currentPlanCode = subscription?.plan || organizationPlan || plans[0]?.code || DEFAULT_PLAN.code
-  const currentPlan = plans.find((plan) => plan.code === currentPlanCode) || normalizePlan({ ...DEFAULT_PLAN, code: currentPlanCode })
+  const resolvedPlan = plans.find((plan) => plan.code === currentPlanCode)
+  if (!resolvedPlan) {
+    // No es un detalle menor: la organizacion queda operando con limites de Free
+    // aunque figure en otro plan.
+    console.error('[subscription] Plan no encontrado en la tabla `plans`; se aplican limites Free', {
+      organizationId,
+      currentPlanCode,
+      availablePlanCodes: plans.map((plan) => plan.code),
+    })
+  }
+  const currentPlan = resolvedPlan ?? buildFallbackPlan(currentPlanCode)
 
   return {
     subscription,

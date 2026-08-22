@@ -13,7 +13,10 @@ import { ProfileForm } from '@/components/profile/profile-form'
 import { ProfileQuickActions } from '@/components/profile/profile-quick-actions'
 import { ProfileActivity } from '@/components/profile/profile-activity'
 import { ProfileOrders, type ProfileOrder } from '@/components/profile/profile-orders'
+import { ProfileAccountSummary } from '@/components/profile/profile-account-summary'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
+import type { CustomerAccountSummary } from '@/lib/profile/customer-account-summary'
+import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreCredit'
 
 const profileSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -28,8 +31,21 @@ interface ProfileClientProps {
   initialData: ProfileData
   userId: string
   tenantPrefix: string
-  stats: { totalRepairs: number; activeRepairs: number; completedRepairs: number; totalOrders: number }
-  recentRepairs: Array<{ id: string; brand?: string; model?: string; device?: string; status: string; created_at: string; final_cost?: number }>
+  stats: { totalRepairs: number; activeRepairs: number; readyRepairs: number; deliveredRepairs: number; totalOrders: number }
+  accountSummary: CustomerAccountSummary
+  recentRepairs: Array<{
+    id: string
+    ticket_number?: string | null
+    brand?: string
+    model?: string
+    device?: string
+    status: string
+    created_at: string
+    final_cost?: number | null
+    estimated_cost?: number | null
+    paid_amount?: number | null
+    payment_status?: string | null
+  }>
   recentOrders: ProfileOrder[]
 }
 
@@ -38,6 +54,7 @@ export function ProfileClient({
   userId,
   tenantPrefix,
   stats,
+  accountSummary,
   recentRepairs,
   recentOrders
 }: ProfileClientProps) {
@@ -143,6 +160,17 @@ export function ProfileClient({
           <ProfileStats {...stats} />
         </div>
 
+        <div className="mb-8">
+          <ProfileAccountSummary summary={accountSummary} tenantPrefix={tenantPrefix} />
+        </div>
+
+        <div className="mb-8">
+          <PublicStoreCredit
+            authenticated
+            organizationSlug={tenantPrefix.replace(/^\//, '') || null}
+          />
+        </div>
+
         <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
           <div className="flex flex-col gap-6">
             <ProfileForm
@@ -160,7 +188,7 @@ export function ProfileClient({
             />
 
             <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={tenantPrefix} />
-            <ProfileOrders orders={recentOrders} tenantPrefix={tenantPrefix} />
+            <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={tenantPrefix} />
           </div>
 
           <div className="lg:sticky lg:top-24 lg:self-start">

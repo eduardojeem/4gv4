@@ -205,9 +205,10 @@ export default function TechnicianPanel() {
         }
 
         const createdRepairs = await Promise.all(
-          data.devices.map(async (device) => {
+          data.devices.map(async (device, deviceIndex) => {
             const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
             const payload: PersistRepairFormData = {
+              idempotencyKey: `${data.idempotencyKey || crypto.randomUUID()}-${deviceIndex}`,
               customer_id: data.existingCustomerId || '',
               device: `${device.brand} ${device.model}`.trim(),
               deviceType: device.deviceType,
@@ -309,6 +310,7 @@ export default function TechnicianPanel() {
         customerName: selectedRepair.customer.name,
         customerPhone: selectedRepair.customer.phone,
         customerEmail: selectedRepair.customer.email,
+        customerDocument: selectedRepair.customer.ruc || '',
         priority: selectedRepair.priority,
         urgency: selectedRepair.urgency === 'urgent' ? 'high' : 'medium',
         devices: [

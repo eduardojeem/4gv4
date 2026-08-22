@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS website_settings (
 );
 
 -- Insertar valores iniciales
+/*
 INSERT INTO website_settings (key, value) VALUES
 ('company_info', '{
   "phone": "+595123456789",
@@ -33,32 +34,7 @@ INSERT INTO website_settings (key, value) VALUES
   "subtitle": "Diagnóstico gratuito • Garantía de 6 meses • Técnicos certificados"
 }'::jsonb),
 
-('services', '[
-  {
-    "id": "screens",
-    "title": "Reparación de pantallas",
-    "description": "Reemplazo de pantallas rotas o dañadas con repuestos originales y garantía",
-    "icon": "wrench",
-    "color": "blue",
-    "benefits": ["Pantallas originales", "Instalación en 1 hora"]
-  },
-  {
-    "id": "battery",
-    "title": "Cambio de batería",
-    "description": "Baterías de alta calidad para extender la vida útil de tu celular",
-    "icon": "package",
-    "color": "green",
-    "benefits": ["Baterías certificadas", "Garantía de 6 meses"]
-  },
-  {
-    "id": "software",
-    "title": "Reparación de software",
-    "description": "Solución de problemas de sistema, actualizaciones y recuperación de datos",
-    "icon": "shield",
-    "color": "purple",
-    "benefits": ["Diagnóstico gratuito", "Recuperación de datos"]
-  }
-]'::jsonb),
+('services', '[]'::jsonb),
 
 ('testimonials', '[
   {
@@ -80,7 +56,8 @@ INSERT INTO website_settings (key, value) VALUES
     "comment": "Rápido y confiable. Mi iPhone quedó como nuevo después del cambio de batería. Excelente atención al cliente."
   }
 ]'::jsonb)
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT DO NOTHING;
+*/
 
 -- Habilitar RLS
 ALTER TABLE website_settings ENABLE ROW LEVEL SECURITY;

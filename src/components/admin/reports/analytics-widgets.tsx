@@ -118,10 +118,12 @@ export function MiniStat({
   label,
   value,
   tone = 'neutral',
+  hint,
 }: {
   label: string
   value: string
   tone?: Tone
+  hint?: string
 }) {
   return (
     <div className="rounded-lg border border-gray-200 px-4 py-3 dark:border-slate-800">
@@ -129,6 +131,9 @@ export function MiniStat({
       <p className={cn('mt-1 text-base font-semibold', toneTextMap[tone])}>
         {value}
       </p>
+      {hint ? (
+        <p className="mt-0.5 text-[11px] leading-tight text-gray-400 dark:text-gray-500">{hint}</p>
+      ) : null}
     </div>
   )
 }

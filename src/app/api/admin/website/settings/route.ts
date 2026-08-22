@@ -5,6 +5,8 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { WebsiteSettings } from '@/types/website-settings'
 import { applyWebsiteSettingsDefaults, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
+import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
+import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-settings'
 
 /**
  * GET /api/admin/website/settings
@@ -39,21 +41,24 @@ async function handler(
 
     const [
       { data: settings, error },
-      { data: orgSettings },
+      { data: orgSettings, error: orgSettingsError },
       { data: organization },
-      { data: branch },
+      { data: branch, error: branchError },
     ] = await Promise.all([
       settingsQuery,
-      userSupabase.from('organization_settings').select('display_name').maybeSingle(),
+      userSupabase.from('organization_settings').select('display_name').eq('organization_id', orgId).maybeSingle(),
       orgId
         ? adminSupabase.from('organizations').select('name, marketplace_public, slug').eq('id', orgId).maybeSingle()
         : Promise.resolve({ data: null }),
-      userSupabase.from('branches').select('phone, email, address, city').eq('is_default', true).maybeSingle(),
+      userSupabase.from('branches').select('phone, email, address, city').eq('organization_id', orgId).eq('is_default', true).maybeSingle(),
     ])
 
     if (error) {
       console.error('Failed to fetch website settings', { error: error.message })
       throw error
+    }
+    if (orgSettingsError || branchError) {
+      throw orgSettingsError || branchError
     }
 
     // Transformar array a objeto
@@ -100,6 +105,80 @@ async function handler(
 }
 
 export const GET = withAdminAuth(handler)
+
+async function updateHandler(
+  request: NextRequest,
+  context: AdminAuthContext
+) {
+  try {
+    const body = await request.json().catch(() => null)
+    const values = body?.values
+    if (!values || typeof values !== 'object' || Array.isArray(values)) {
+      return NextResponse.json({ success: false, error: 'Configuraciones invalidas' }, { status: 400 })
+    }
+
+    const entries = Object.entries(values)
+    if (entries.length === 0 || entries.length > 10) {
+      return NextResponse.json({ success: false, error: 'Envia entre 1 y 10 configuraciones' }, { status: 400 })
+    }
+
+    const orgId = await resolveWebsiteAdminOrganizationId(context)
+    if (!orgId) {
+      return NextResponse.json({ success: false, error: 'No se encontro una organizacion activa' }, { status: 403 })
+    }
+
+    const validatedEntries: Array<{ key: string; value: unknown }> = []
+    for (const [key, rawValue] of entries) {
+      if (!isWebsiteSettingKey(key) || rawValue === undefined) {
+        return NextResponse.json({ success: false, error: `Configuracion no permitida: ${key}` }, { status: 400 })
+      }
+
+      const validation = validateSetting(key, sanitizeWebsiteSettings(rawValue))
+      if (!validation.success) {
+        return NextResponse.json({ success: false, error: validation.error, key }, { status: 400 })
+      }
+      validatedEntries.push({ key, value: validation.data })
+    }
+
+    const adminSupabase = createAdminSupabase()
+    const now = new Date().toISOString()
+    const { data: persistedRows, error: updateError } = await adminSupabase
+      .from('website_settings')
+      .upsert(
+        validatedEntries.map(({ key, value }) => ({
+          organization_id: orgId,
+          key,
+          value,
+          updated_by: context.user.id,
+          updated_at: now,
+        })),
+        { onConflict: 'organization_id,key' }
+      )
+      .select('key, value')
+
+    if (updateError) throw updateError
+
+    const data = Object.fromEntries((persistedRows || []).map((row) => [row.key, row.value]))
+    const userSupabase = await createClient()
+    await userSupabase.from('audit_log').insert({
+      organization_id: orgId,
+      user_id: context.user.id,
+      action: 'update_website_settings_batch',
+      resource: 'website_settings',
+      new_values: { organization_id: orgId, keys: validatedEntries.map(({ key }) => key) },
+    })
+
+    return NextResponse.json({ success: true, data })
+  } catch (error) {
+    console.error('Website settings batch update error', { error })
+    return NextResponse.json(
+      { success: false, error: 'No se pudieron guardar las configuraciones' },
+      { status: 500 }
+    )
+  }
+}
+
+export const PUT = withAdminAuth(updateHandler)
 
 /**
  * POST /api/admin/website/settings

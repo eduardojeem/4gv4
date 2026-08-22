@@ -51,6 +51,8 @@ export const POST = withTenantAuth(
       }
 
       const supabase = await createClient()
+      let movementData: unknown = null
+
       const { data, error } = await supabase.rpc('record_cash_movement_atomic', {
         p_organization_id: organization.id,
         p_branch_id: branch.branchId,
@@ -60,15 +62,68 @@ export const POST = withTenantAuth(
         p_reason: reason,
       })
 
-      if (error) {
+      if (!error && data) {
+        movementData = data
+      } else if (error) {
         const sessionClosed = error.message.includes('OPEN_CASH_SESSION_NOT_FOUND')
-        return NextResponse.json(
-          { success: false, error: sessionClosed ? 'La caja ya no esta abierta.' : error.message },
-          { status: sessionClosed ? 409 : 400 }
-        )
+        if (sessionClosed) {
+          return NextResponse.json({ success: false, error: 'La caja ya no está abierta.' }, { status: 409 })
+        }
+
+        // Si el error es de casteo de enum 'cash_movement_type' o la función RPC no existe
+        const spanishType = type === 'cash_in' ? 'ingreso' : 'egreso'
+        
+        let insertRes = await supabase
+          .from('cash_movements')
+          .insert({
+            session_id: sessionId,
+            type: type,
+            amount: amount,
+            reason: reason,
+            created_by: user.id,
+            created_at: new Date().toISOString(),
+            organization_id: organization.id,
+            branch_id: branch.branchId
+          })
+          .select('*')
+          .single()
+
+        if (insertRes.error && (insertRes.error.message.includes('cash_movement_type') || insertRes.error.message.includes('invalid input value for enum'))) {
+          insertRes = await supabase
+            .from('cash_movements')
+            .insert({
+              session_id: sessionId,
+              type: spanishType,
+              amount: amount,
+              reason: reason,
+              created_by: user.id,
+              created_at: new Date().toISOString(),
+              organization_id: organization.id,
+              branch_id: branch.branchId
+            })
+            .select('*')
+            .single()
+        }
+
+        if (insertRes.error) {
+          console.error('Error inserting cash movement:', insertRes.error)
+          return NextResponse.json(
+            { success: false, error: insertRes.error.message || error.message },
+            { status: 400 }
+          )
+        }
+
+        // Actualizar actividad de la sesión
+        await supabase
+          .from('cash_closures')
+          .update({ last_activity_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq('id', sessionId)
+          .eq('organization_id', organization.id)
+
+        movementData = insertRes.data
       }
 
-      return NextResponse.json({ success: true, data })
+      return NextResponse.json({ success: true, data: movementData })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo registrar el movimiento.'
       return NextResponse.json({ success: false, error: message }, { status: 400 })

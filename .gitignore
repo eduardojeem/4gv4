@@ -107,6 +107,7 @@ Thumbs.db
 # IDE files
 .vscode/
 .idea/
+.claude/settings.local.json
 *.swp
 *.swo
 *~
@@ -182,3 +183,7 @@ next.config.*.ts
 public/sw.js
 public/workbox-*.js
 public/worker-*.js
+
+# Superpowers visual brainstorming sessions
+.superpowers/
+.worktrees/

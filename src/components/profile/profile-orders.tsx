@@ -18,11 +18,15 @@ export interface ProfileOrder {
   customer_address: string | null
   estimated_delivery_date: string | null
   total: number
+  store_credit_reserved?: number
+  store_credit_applied?: number
+  amount_due?: number
   created_at: string
 }
 
 interface ProfileOrdersProps {
   orders: ProfileOrder[]
+  totalCount?: number
   tenantPrefix?: string
 }
 
@@ -46,7 +50,7 @@ function isDeliveryOrder(value: string) {
   return normalizeStatus(value) === 'DELIVERY'
 }
 
-export function ProfileOrders({ orders, tenantPrefix = '' }: ProfileOrdersProps) {
+export function ProfileOrders({ orders, totalCount = orders.length, tenantPrefix = '' }: ProfileOrdersProps) {
   const trackHref = tenantPrefix ? `${tenantPrefix}/track` : '/track'
 
   return (
@@ -58,7 +62,7 @@ export function ProfileOrders({ orders, tenantPrefix = '' }: ProfileOrdersProps)
         </div>
         {orders.length > 0 && (
           <Badge variant="outline" className="text-[10px]">
-            {orders.length}
+            {totalCount}
           </Badge>
         )}
       </div>
@@ -98,6 +102,9 @@ export function ProfileOrders({ orders, tenantPrefix = '' }: ProfileOrdersProps)
                       <Clock className="h-3 w-3" /> {formatDate(order.created_at)}
                     </span>
                     <span>{formatMoney(order.total)}</span>
+                    {(order.store_credit_reserved ?? 0) > 0 && <span className="font-semibold text-amber-700 dark:text-amber-300">{formatMoney(order.store_credit_reserved ?? 0)} reservado</span>}
+                    {(order.store_credit_applied ?? 0) > 0 && <span className="font-semibold text-emerald-700 dark:text-emerald-300">{formatMoney(order.store_credit_applied ?? 0)} aplicado</span>}
+                    {typeof order.amount_due === 'number' && order.amount_due > 0 && <span className="font-semibold text-rose-700 dark:text-rose-300">Pendiente {formatMoney(order.amount_due)}</span>}
                     <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', paymentInfo.className)}>
                       {paymentInfo.label}
                     </span>

@@ -38,6 +38,7 @@ export interface SystemSettingsRow {
   retention_days: number
   updated_at: string
   updated_by: string | null
+  default_installment_rates?: Record<string, number>
 }
 
 // Shared settings interface used in the application
@@ -53,6 +54,8 @@ export interface SharedSettings {
   city: string
   currency: string
   taxRate: number
+  repairMaxDiscountPercent: number
+  repairLaborTaxRate: 0 | 5 | 10
 
   // Appearance
   theme: string
@@ -81,6 +84,9 @@ export interface SharedSettings {
 
   // Admin
   maintenanceMode: boolean
+
+  // Defaults
+  defaultInstallmentRates: Record<string, number>
 }
 
 export type SharedSettingsSource = 'remote' | 'default'
@@ -99,6 +105,8 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   city: 'Asunción',
   currency: 'PYG',
   taxRate: 10,
+  repairMaxDiscountPercent: 20,
+  repairLaborTaxRate: 10,
   theme: 'system',
   primaryColor: DEFAULT_SYSTEM_COLOR_SCHEME,
   sessionTimeout: 60,
@@ -116,7 +124,8 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   maxLoginAttempts: 3,
   passwordMinLength: 8,
   requireTwoFactor: false,
-  maintenanceMode: false
+  maintenanceMode: false,
+  defaultInstallmentRates: {}
 }
 
 // ============================================================================
@@ -134,6 +143,8 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
     city: data.city ?? DEFAULT_SHARED_SETTINGS.city,
     currency: data.currency || DEFAULT_SHARED_SETTINGS.currency,
     taxRate: data.tax_rate === null || data.tax_rate === undefined ? DEFAULT_SHARED_SETTINGS.taxRate : Number(data.tax_rate),
+    repairMaxDiscountPercent: Number((data as { repair_max_discount_percent?: number }).repair_max_discount_percent ?? DEFAULT_SHARED_SETTINGS.repairMaxDiscountPercent),
+    repairLaborTaxRate: ((data as { repair_labor_tax_rate?: 0 | 5 | 10 }).repair_labor_tax_rate ?? DEFAULT_SHARED_SETTINGS.repairLaborTaxRate),
     theme: data.theme || DEFAULT_SHARED_SETTINGS.theme,
     primaryColor: data.primary_color || DEFAULT_SHARED_SETTINGS.primaryColor,
     sessionTimeout: data.session_timeout ?? DEFAULT_SHARED_SETTINGS.sessionTimeout,
@@ -151,7 +162,8 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
     maxLoginAttempts: data.max_login_attempts ?? DEFAULT_SHARED_SETTINGS.maxLoginAttempts,
     passwordMinLength: data.password_min_length ?? DEFAULT_SHARED_SETTINGS.passwordMinLength,
     requireTwoFactor: data.require_two_factor ?? DEFAULT_SHARED_SETTINGS.requireTwoFactor,
-    maintenanceMode: data.maintenance_mode ?? DEFAULT_SHARED_SETTINGS.maintenanceMode
+    maintenanceMode: data.maintenance_mode ?? DEFAULT_SHARED_SETTINGS.maintenanceMode,
+    defaultInstallmentRates: data.default_installment_rates ?? DEFAULT_SHARED_SETTINGS.defaultInstallmentRates
   }
 }
 

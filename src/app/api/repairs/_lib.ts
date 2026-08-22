@@ -7,17 +7,21 @@ import { roleHasPermission, type Permission } from '@/lib/saas/permissions'
 
 export const FULL_REPAIR_SELECT = `
   *,
-  customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email),
+  customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email, customer_type),
   technician:profiles!technician_id(id, full_name),
   images:repair_images(id, image_url, description),
   parts:repair_parts(*),
-  notes:repair_notes(*)
+  notes:repair_notes(*),
+  payments:repair_payments(*),
+  closeout:repair_closeouts(*),
+  currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
 `
 
 export type RepairRouteContext = {
   supabase: ReturnType<typeof createAdminSupabase>
   userId: string
   role: string
+  organizationRole: string
   organizationId: string
   branchId: string
 }
@@ -81,6 +85,7 @@ export async function resolveRepairRouteContext(
     supabase: createAdminSupabase(),
     userId: staffAuth.user.id,
     role: staffAuth.role,
+    organizationRole: organization.role,
     organizationId: organization.id,
     branchId: branchScope.branchId,
   }

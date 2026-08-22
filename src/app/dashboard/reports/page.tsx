@@ -30,10 +30,18 @@ import {
   Package,
   Calendar as CalendarIcon,
   Download,
-  Filter
+  Filter,
+  Loader2,
+  AlertCircle,
+  BarChart3,
+  Wrench,
+  Clock,
+  CheckCircle2
 } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { toast } from 'sonner'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { Input } from '@/components/ui/input'
 import { chartColors } from '@/utils/chart-utils'
@@ -451,12 +459,17 @@ export default function ReportsPage() {
         let totalCost = 0
         let totalLabor = 0
         let totalParts = 0
+        let costedCount = 0
         let tatSumDays = 0
         let tatCount = 0
 
         safeRepairs.forEach((r: any) => {
-          const baseDate = r.received_at || r.created_at
-          const dateKey = baseDate ? toLocalDateKey(baseDate) : null
+          // Se agrupa por created_at, el mismo campo que filtra la consulta
+          // de arriba (gte/lte dateRange). Antes se agrupaba por
+          // received_at cuando existía, y como esa fecha puede caer fuera
+          // del rango elegido, el gráfico de tendencia mostraba barras en
+          // fechas que el usuario nunca seleccionó.
+          const dateKey = r.created_at ? toLocalDateKey(r.created_at) : null
           if (dateKey) trendMap[dateKey] = (trendMap[dateKey] || 0) + 1
 
           const st = r.status || 'desconocido'
@@ -468,6 +481,11 @@ export default function ReportsPage() {
           totalCost += fc
           totalLabor += lc
           totalParts += pc
+          // Solo cuenta para el promedio de costo si ya tiene costo cargado:
+          // si no, dividir por el total de reparaciones (incluidas las que
+          // todavía están en diagnóstico/reparación, sin cotizar) hundía el
+          // promedio artificialmente.
+          if (fc > 0 || lc > 0 || pc > 0) costedCount += 1
 
           if (r.status === 'entregado' && r.received_at && r.completed_at) {
             completed += 1
@@ -497,9 +515,9 @@ export default function ReportsPage() {
 
         const totalRepairs = safeRepairs.length
         const completionRate = totalRepairs > 0 ? (completed / totalRepairs) * 100 : 0
-        const avgCost = totalRepairs > 0 ? totalCost / totalRepairs : 0
-        const avgLabor = totalRepairs > 0 ? totalLabor / totalRepairs : 0
-        const avgParts = totalRepairs > 0 ? totalParts / totalRepairs : 0
+        const avgCost = costedCount > 0 ? totalCost / costedCount : 0
+        const avgLabor = costedCount > 0 ? totalLabor / costedCount : 0
+        const avgParts = costedCount > 0 ? totalParts / costedCount : 0
         const avgTATDays = tatCount > 0 ? tatSumDays / tatCount : 0
         setRepairsMetrics({ total: totalRepairs, completionRate, avgCost, avgTATDays, avgLabor, avgParts })
 
@@ -510,6 +528,15 @@ export default function ReportsPage() {
         let overallProfit = 0
 
         safeSaleItems.forEach((item: any) => {
+          // safeSaleItems se trae con el rango ampliado (unión con
+          // categoryDateRange, que tiene su propio selector de fecha
+          // independiente) para que el gráfico de categorías pueda cubrir
+          // su propia ventana. Acá hay que volver a acotar al dateRange
+          // principal: si no, "Top Productos" y "Ganancia Estimada" traían
+          // ventas de fuera del período que el usuario eligió arriba.
+          const itemCreated = item?.sale?.created_at ? new Date(item.sale.created_at) : null
+          if (!itemCreated || itemCreated < dateRange.from || itemCreated > dateRange.to) return
+
           const pid = item.product_id || item.product?.id
           const productName = item.product?.name || 'Desconocido'
           const categoryName = item.product?.category?.name || 'Sin categoría'
@@ -605,6 +632,7 @@ export default function ReportsPage() {
   const formatDelta = (value: number | null) => value === null ? 'N/A' : `${value > 0 ? '+' : ''}${value.toFixed(1)}%`
 
   const exportReport = (type: string) => {
+    try {
     const BOM = '\uFEFF'
     if (type === 'ventas') {
       const headers = ['Fecha','Ventas','Órdenes','Clientes']
@@ -616,6 +644,11 @@ export default function ReportsPage() {
       a.href = url
       a.download = `reporte-ventas-${new Date().toISOString().slice(0,10)}.csv`
       a.click(); window.URL.revokeObjectURL(url)
+      if (rows.length === 0) {
+        toast.warning('CSV descargado, pero no hay ventas en el período seleccionado.')
+      } else {
+        toast.success(`CSV de ventas descargado (${rows.length} fila${rows.length === 1 ? '' : 's'}).`)
+      }
     } else if (type === 'reparaciones') {
       const headers = ['Fecha','Cantidad']
       const rows = repairsTrend.map(d => [d.date, d.count])
@@ -626,6 +659,17 @@ export default function ReportsPage() {
       a.href = url
       a.download = `reporte-reparaciones-${new Date().toISOString().slice(0,10)}.csv`
       a.click(); window.URL.revokeObjectURL(url)
+      if (rows.length === 0) {
+        toast.warning('CSV descargado, pero no hay reparaciones en el período seleccionado.')
+      } else {
+        toast.success(`CSV de reparaciones descargado (${rows.length} fila${rows.length === 1 ? '' : 's'}).`)
+      }
+    }
+    } catch (error) {
+      logger.error('Error exporting CSV report', { type, error })
+      toast.error('No se pudo generar el CSV.', {
+        description: error instanceof Error ? error.message : undefined,
+      })
     }
   }
 
@@ -637,19 +681,42 @@ export default function ReportsPage() {
   const selectedProductQtyColor = chartColors.success[1] || chartColors.success[0]
   const categoriesBarColor = chartColors.info[0]
 
+  // `loading` se seteaba pero nunca se leía: la página siempre pintaba KPIs
+  // en cero y gráficos vacíos mientras cargaba, en vez de mostrar que algo
+  // estaba pasando. Se distingue la carga inicial (todavía no hay nada que
+  // mostrar → skeleton completo) de un refetch por cambio de filtro (ya hay
+  // datos → se dejan visibles con un indicador chico, sin parpadeo de página).
+  const hasAnyData = salesData.length > 0 || productData.length > 0 || repairsMetrics.total > 0
+  const isInitialLoading = loading && !hasAnyData && !errorMsg
+  const isRefetching = loading && hasAnyData
+
   return (
     <div className="container mx-auto p-4 space-y-6">
       {errorMsg && (
-        <div className="p-3 border rounded text-red-600 bg-red-50">{errorMsg}</div>
+        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold">No se pudieron cargar los reportes</p>
+            <p className="mt-0.5 text-sm text-red-700 dark:text-red-400">{errorMsg}</p>
+          </div>
+        </div>
       )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Reportes y Analytics</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Reportes y Analytics</h1>
+            {isRefetching && (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Actualizando…
+              </span>
+            )}
+          </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Análisis detallado de ventas y rendimiento
           </p>
         </div>
-        
+
         <div className="flex gap-2">
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-32">
@@ -662,7 +729,7 @@ export default function ReportsPage() {
               <SelectItem value="1y">1 año</SelectItem>
             </SelectContent>
           </Select>
-          
+
           {canExport ? (
             <ChartExporter
               title={`Reporte de Gestión - ${reportBrand}`}
@@ -689,6 +756,10 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      {isInitialLoading ? (
+        <ReportsSkeleton />
+      ) : (
+      <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="border-l-4 border-l-emerald-500 shadow-sm">
           <CardContent className="p-4">
@@ -811,15 +882,18 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               <div ref={salesChartRef}>
+              {salesData.length === 0 ? (
+                <ChartEmptyState message="No hay ventas registradas en el período seleccionado." />
+              ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={salesData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis 
-                    dataKey="date" 
+                  <XAxis
+                    dataKey="date"
                     tickFormatter={(value) => format(new Date(value), 'dd/MM', { locale: es })}
                   />
                   <YAxis tickFormatter={formatPrice} />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value: number) => [formatFullPrice(value), 'Ventas']}
                     labelFormatter={(value) => format(new Date(value), 'dd MMMM yyyy', { locale: es })}
                     contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--popover-foreground))' }}
@@ -835,6 +909,7 @@ export default function ReportsPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+              )}
               </div>
             </CardContent>
           </Card>
@@ -847,12 +922,15 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               <div ref={repairsChartRef}>
+              {repairsTrend.length === 0 ? (
+                <ChartEmptyState message="No hay reparaciones registradas en el período seleccionado." />
+              ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={repairsTrend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="date" tickFormatter={(value) => format(new Date(value), 'dd/MM', { locale: es })} />
                   <YAxis />
-                  <Tooltip labelFormatter={(value) => format(new Date(value), 'dd MMMM yyyy', { locale: es })} 
+                  <Tooltip labelFormatter={(value) => format(new Date(value), 'dd MMMM yyyy', { locale: es })}
                     contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--popover-foreground))' }}
                     itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
                     cursor={{ fill: '#f1f5f9' }}
@@ -866,6 +944,7 @@ export default function ReportsPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+              )}
               </div>
             </CardContent>
           </Card>
@@ -894,12 +973,24 @@ export default function ReportsPage() {
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Reparaciones</p><p className="text-xl font-bold">{repairsMetrics.total}</p></div></CardContent></Card>
-            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Finalización</p><p className="text-xl font-bold">{repairsMetrics.completionRate.toFixed(0)}%</p></div></CardContent></Card>
-            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Ticket Promedio</p><p className="text-xl font-bold">{formatFullPrice(Math.round(repairsMetrics.avgCost))}</p></div></CardContent></Card>
-            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Mano de Obra</p><p className="text-xl font-bold text-blue-600">{formatFullPrice(Math.round(repairsMetrics.avgLabor))}</p></div></CardContent></Card>
-            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Repuestos</p><p className="text-xl font-bold text-amber-600">{formatFullPrice(Math.round(repairsMetrics.avgParts))}</p></div></CardContent></Card>
-            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Tiempo (TAT)</p><p className="text-xl font-bold">{repairsMetrics.avgTATDays.toFixed(1)} días</p></div></CardContent></Card>
+            {[
+              { label: 'Reparaciones', value: String(repairsMetrics.total), icon: Wrench, border: 'border-l-slate-400', iconColor: 'text-slate-500' },
+              { label: 'Finalización', value: `${repairsMetrics.completionRate.toFixed(0)}%`, icon: CheckCircle2, border: 'border-l-emerald-500', iconColor: 'text-emerald-500' },
+              { label: 'Ticket Promedio', value: formatFullPrice(Math.round(repairsMetrics.avgCost)), icon: DollarSign, border: 'border-l-violet-500', iconColor: 'text-violet-500' },
+              { label: 'Mano de Obra', value: formatFullPrice(Math.round(repairsMetrics.avgLabor)), icon: DollarSign, border: 'border-l-blue-500', iconColor: 'text-blue-500' },
+              { label: 'Repuestos', value: formatFullPrice(Math.round(repairsMetrics.avgParts)), icon: Package, border: 'border-l-amber-500', iconColor: 'text-amber-500' },
+              { label: 'Tiempo (TAT)', value: `${repairsMetrics.avgTATDays.toFixed(1)} días`, icon: Clock, border: 'border-l-cyan-500', iconColor: 'text-cyan-500' },
+            ].map(({ label, value, icon: Icon, border, iconColor }) => (
+              <Card key={label} className={`border-l-4 ${border} shadow-sm`}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+                    <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
+                  </div>
+                  <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-50">{value}</p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
           <div className="flex justify-end">
@@ -1075,7 +1166,13 @@ export default function ReportsPage() {
                   <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                     {retentionRate.toFixed(0)}%
                   </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Tasa de Retención</p>
+                  {/* No es retención real (eso compararía contra un período
+                      anterior): es qué % de los clientes que compraron en
+                      ESTE período volvieron a comprar más de una vez dentro
+                      del mismo período. El nombre anterior ("Tasa de
+                      Retención") prometía algo distinto de lo que calcula. */}
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Compradores Recurrentes</p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500">2+ compras en el período</p>
                 </div>
                 <div className="rounded-lg border border-gray-200 p-4 text-center dark:border-slate-800">
                   <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">
@@ -1088,6 +1185,54 @@ export default function ReportsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      </>
+      )}
+    </div>
+  )
+}
+
+// Estado vacío para un gráfico sin datos en el rango elegido — antes
+// Recharts simplemente pintaba los ejes sin ninguna línea/barra, que se ve
+// como un gráfico roto en vez de "no hay datos en este período".
+function ChartEmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-center">
+      <BarChart3 className="h-10 w-10 text-muted-foreground/40" />
+      <p className="text-sm text-muted-foreground">{message}</p>
+    </div>
+  )
+}
+
+// Skeleton de carga inicial: antes `loading` se guardaba pero nunca se
+// leía, así que la primera carga mostraba KPIs en cero y gráficos vacíos
+// en vez de algo que comunique "esto está cargando". Solo se usa mientras
+// no hay ningún dato todavía — un refetch por cambio de filtro deja lo
+// anterior visible (ver isRefetching) en vez de tapar todo con esto.
+function ReportsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Card key={i} className="border-l-4 border-l-muted shadow-sm">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-5 w-5 rounded-full" />
+              </div>
+              <Skeleton className="h-7 w-28" />
+              <Skeleton className="h-3 w-24" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-40" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-[300px] w-full" />
+        </CardContent>
+      </Card>
     </div>
   )
 }

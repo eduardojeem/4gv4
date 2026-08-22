@@ -1,4 +1,4 @@
-interface CartItem {
+export interface CartItem {
   id: string
   name: string
   sku: string
@@ -8,15 +8,21 @@ interface CartItem {
   isService?: boolean
 }
 
-interface PaymentSplit {
+export interface PaymentSplit {
   id: string
-  method: 'cash' | 'card' | 'transfer' | 'credit'
+  method: 'cash' | 'card' | 'transfer' | 'credit' | 'store_credit'
   amount: number
   reference?: string
   cardLast4?: string
 }
 
-interface ReceiptData {
+export interface ReceiptData {
+  /**
+   * Marca el ticket como reimpresion de una venta ya emitida. Se imprime
+   * visible para que una copia no se confunda con el original en una revision
+   * contable: el numero y la fecha son los de la venta original, no los de hoy.
+   */
+  isReprint?: boolean
   receiptNumber: string
   date: string
   time: string
@@ -45,6 +51,7 @@ interface ReceiptData {
     installmentAmount: number
     frequency: string
     interestRate: number
+    firstDueDate: string
   }
 }
 
@@ -130,12 +137,34 @@ export const createReceiptData = (
   }
 }
 
+/** Absolutiza rutas relativas para que carguen en la ventana de impresion. */
+const toAbsoluteAssetUrl = (url: string | undefined): string | undefined => {
+  if (!url) return undefined
+  const trimmed = url.trim()
+  if (!trimmed) return undefined
+  if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed
+  if (typeof window === 'undefined') return trimmed
+  try {
+    return new URL(trimmed, window.location.origin).toString()
+  } catch {
+    return trimmed
+  }
+}
+
 export interface CompanyInfo {
   name: string
   address: string
   phone: string
   email: string
   ruc?: string
+  /**
+   * Logo de la organizacion. Sin esto el ticket cae al monograma de dos letras:
+   * el tipo no lo declaraba y la plantilla nunca lo dibujaba, asi que el logo
+   * no se imprimia nunca aunque estuviera configurado.
+   */
+  logoUrl?: string
+  /** Los termicos rinden mejor el logo en blanco y negro que en color. */
+  monochromeLogo?: boolean
 }
 
 const sanitizeUnsupportedColorFunctions = (raw: string): string => {
@@ -157,6 +186,43 @@ const sanitizeCloneStylesForHtml2Canvas = (clonedDoc: Document): void => {
 }
 
 // Imprimir ticket - Captura el contenido del modal directamente
+/**
+ * Imprime cuando la ventana termino de cargar, no a ciegas.
+ *
+ * Antes se disparaba `print()` con un setTimeout fijo: si el logo tardaba mas
+ * que ese plazo, el ticket salia sin logo. Ahora se espera al evento `load` —que
+ * ya incluye las imagenes— con el timeout como red de seguridad por si la
+ * imagen nunca resuelve.
+ */
+const printWhenReady = (printWindow: Window, fallbackDelay = 1500): void => {
+  let printed = false
+
+  const runPrint = () => {
+    if (printed) return
+    printed = true
+    try {
+      printWindow.focus()
+      printWindow.print()
+    } catch (error) {
+      console.error('Error printing:', error)
+      printWindow.close()
+    }
+  }
+
+  try {
+    if (printWindow.document.readyState === 'complete') {
+      // Ya cargo: un respiro minimo para que el layout se estabilice.
+      setTimeout(runPrint, 150)
+    } else {
+      printWindow.addEventListener('load', () => setTimeout(runPrint, 150))
+    }
+  } catch {
+    // Si no se puede escuchar el evento, queda el plazo de seguridad.
+  }
+
+  setTimeout(runPrint, fallbackDelay)
+}
+
 export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
   // Intentar capturar el contenido del modal primero
   const receiptElement = document.getElementById('receipt-content')
@@ -236,15 +302,7 @@ export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo
     printWindow.document.write(printContent)
     printWindow.document.close()
 
-    setTimeout(() => {
-      try {
-        printWindow.focus()
-        printWindow.print()
-      } catch (error) {
-        console.error('Error printing:', error)
-        printWindow.close()
-      }
-    }, 500)
+    printWhenReady(printWindow)
   } else {
     // Fallback: usar el HTML generado si no existe el modal
     printReceiptFallback(receiptData, companyInfo)
@@ -264,28 +322,32 @@ const printReceiptFallback = (receiptData: ReceiptData, companyInfo?: CompanyInf
   printWindow.document.write(printContent)
   printWindow.document.close()
   
-  setTimeout(() => {
-    try {
-      printWindow.focus()
-      printWindow.print()
-    } catch (error) {
-      console.error('Error printing:', error)
-      printWindow.close()
-    }
-  }, 250)
+  printWhenReady(printWindow)
 }
 
 // Generar HTML para impresión con diseño mejorado
-const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo): string => {
+export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo): string => {
   
   const company = companyInfo || config.company
+
+  // El config global lo llama `logo` y CompanyInfo `logoUrl`: se acepta
+  // cualquiera de los dos para que el ticket no dependa de cual llego.
+  const rawLogoUrl =
+    ('logoUrl' in company ? company.logoUrl : undefined)
+    ?? ('logo' in company ? company.logo : undefined)
+    ?? undefined
+  // La ventana de impresion es `about:blank`, asi que una ruta relativa como
+  // `/uploads/logo.png` no resuelve contra nada y la imagen sale rota.
+  const companyLogoUrl = toAbsoluteAssetUrl(rawLogoUrl)
+  const monochromeLogo = 'monochromeLogo' in company ? company.monochromeLogo : false
 
   const getPaymentMethodLabel = (method: string) => {
     const labels = {
       cash: '💵 Efectivo',
       card: '💳 Tarjeta',
       transfer: '🏦 Transferencia',
-      credit: '📝 Crédito'
+      credit: '📝 Crédito',
+      store_credit: '💰 Saldo a favor'
     }
     return labels[method as keyof typeof labels] || method
   }
@@ -305,6 +367,12 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           body {
             margin: 0;
             padding: 5mm;
+          }
+          /* Sin esto el navegador descarta fondos e imagenes al imprimir: es
+             la razon por la que ni el logo ni el circulo del monograma salian. */
+          body, .logo, .logo-img, .ticket-number {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
         
@@ -331,6 +399,15 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           padding-top: 12px;
         }
         
+        .logo-img {
+          display: block;
+          margin: 0 auto 8px auto;
+          max-height: 52px;
+          max-width: 180px;
+          object-fit: contain;
+          image-rendering: -webkit-optimize-contrast;
+        }
+
         .logo {
           width: 50px;
           height: 50px;
@@ -602,7 +679,9 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
     <body>
       <!-- Encabezado -->
       <div class="header">
-        <div class="logo">${company.name ? company.name.substring(0, 2).toUpperCase() : 'Mi'}</div>
+        ${companyLogoUrl
+          ? `<img src="${companyLogoUrl}" class="logo-img" alt="${company.name}"${monochromeLogo ? ' style="filter: grayscale(100%) contrast(240%);"' : ''} />`
+          : `<div class="logo">${company.name ? company.name.substring(0, 2).toUpperCase() : 'Mi'}</div>`}
         <h1>${company.name}</h1>
         <div class="subtitle">Reparación y Service</div>
         ${'ruc' in company && company.ruc ? `<p style="font-weight: bold; font-size: 10px;">RUC: ${company.ruc}</p>` : ''}
@@ -611,6 +690,12 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
         ${company.email ? `<p>📧 ${company.email}</p>` : ''}
       </div>
       
+      ${receiptData.isReprint ? `
+      <div style="margin: 6px 0; padding: 4px; border: 2px dashed #000; text-align: center; font-weight: bold; letter-spacing: 2px; font-size: 12px;">
+        REIMPRESIÓN
+      </div>
+      ` : ''}
+
       <!-- Número de ticket -->
       <div class="ticket-number">
         <span class="label">Ticket N°</span>
@@ -784,7 +869,10 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           Solicite su factura con timbrado vigente si la necesita.
         </div>
         <div class="id">ID: ${receiptData.receiptNumber}</div>
-        <div class="id">Generado: ${new Date().toLocaleString('es-PY')}</div>
+        ${receiptData.isReprint
+          ? `<div class="id"><strong>REIMPRESIÓN</strong> del ${receiptData.date} ${receiptData.time}</div>
+             <div class="id">Reimpreso: ${new Date().toLocaleString('es-PY')}</div>`
+          : `<div class="id">Generado: ${new Date().toLocaleString('es-PY')}</div>`}
       </div>
     </body>
     </html>

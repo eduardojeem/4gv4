@@ -68,7 +68,7 @@ export function useRepairs() {
                   notify_customer,
                   notify_technician,
                   notify_manager,
-                  customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email),
+                  customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email, ruc, customer_type, alternate_phone, alternate_phone_label),
                   technician:profiles!technician_id(id, full_name, email)
                 `)
                 .order('created_at', { ascending: false })

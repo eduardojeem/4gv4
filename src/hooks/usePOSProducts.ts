@@ -31,6 +31,8 @@ interface CartItem {
   stock: number
   subtotal: number
   discount_amount?: number
+  installmentsEnabled?: boolean
+  installmentsPlans?: Array<{ count: number; rate: number }>
 }
 
 interface StockMovement {
@@ -61,6 +63,7 @@ interface SaleData {
   repair_ids?: string[]
   mark_repairs_delivered?: boolean
   delivery_outcome?: string
+  store_credit_amount?: number
 }
 
 // ============================================================================
@@ -284,7 +287,9 @@ export function usePOSProducts() {
           price: product.sale_price || 0,
           quantity,
           stock: product.stock_quantity || 0,
-          subtotal: quantity * (product.sale_price || 0)
+          subtotal: quantity * (product.sale_price || 0),
+          installmentsEnabled: Boolean(product.installments_enabled),
+          installmentsPlans: Array.isArray(product.installments_plans) ? product.installments_plans : [],
         }
         return [...prevCart, newItem]
       }
@@ -364,6 +369,7 @@ export function usePOSProducts() {
         credit: saleData.credit || null,
         markRepairsDelivered: saleData.mark_repairs_delivered === true,
         deliveryOutcome: saleData.delivery_outcome || null,
+        storeCreditAmount: saleData.store_credit_amount || 0,
       })
       if (pendingSaleAttempt.current?.signature !== signature) {
         pendingSaleAttempt.current = { signature, idempotencyKey: crypto.randomUUID() }
@@ -384,6 +390,7 @@ export function usePOSProducts() {
         p_repair_ids: saleData.repair_ids || [],
         p_mark_repairs_delivered: saleData.mark_repairs_delivered === true,
         p_delivery_outcome: saleData.delivery_outcome || null,
+        p_store_credit_amount: saleData.store_credit_amount || 0,
       }
 
       const response = await fetch('/api/pos/process-sale', {

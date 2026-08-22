@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Info, LayoutDashboard, Link2, Loader2, User } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CreditCard, Eye, EyeOff, Info, LayoutDashboard, Link2, Loader2, LockKeyhole, ReceiptText, ShieldCheck, ShoppingBag, User, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,6 +21,7 @@ export default function TenantCustomerLoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
   const [linking, setLinking] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
   const [canLinkCustomer, setCanLinkCustomer] = useState(false)
@@ -38,7 +39,7 @@ export default function TenantCustomerLoginPage() {
     return `/${organizationSlug}/mis-reparaciones`
   }, [organizationSlug, searchParams])
 
-  async function validateCustomerScope({ redirectIfValid = true } = {}) {
+  const validateCustomerScope = useCallback(async ({ redirectIfValid = true } = {}) => {
     const scopeResponse = await fetch(`/api/public/customer-scope?slug=${encodeURIComponent(organizationSlug)}`, {
       cache: 'no-store',
     })
@@ -78,7 +79,7 @@ export default function TenantCustomerLoginPage() {
         : scopeResult.error || 'Esta cuenta no esta registrada como cliente de esta empresa.'
     )
     return false
-  }
+  }, [nextHref, organizationSlug, router])
 
   useEffect(() => {
     let active = true
@@ -111,7 +112,7 @@ export default function TenantCustomerLoginPage() {
     return () => {
       active = false
     }
-  }, [supabase, organizationSlug, nextHref])
+  }, [supabase, validateCustomerScope])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -184,36 +185,101 @@ export default function TenantCustomerLoginPage() {
     toast.info('Sesion cerrada. Ingresa con la cuenta cliente.')
   }
 
+  async function handleResetPassword() {
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      toast.error('Ingresá tu correo para recuperar la contraseña.')
+      return
+    }
+
+    try {
+      setResetLoading(true)
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      })
+      if (resetError) throw resetError
+      toast.success('Te enviamos un enlace para restablecer tu contraseña.')
+    } catch {
+      toast.error('No se pudo enviar el enlace de recuperación.')
+    } finally {
+      setResetLoading(false)
+    }
+  }
+
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-md items-center px-4 py-10">
-      <Card className="w-full">
+    <div className="mx-auto grid min-h-[calc(100vh-8rem)] w-full max-w-5xl items-center gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(380px,440px)] lg:py-12">
+      <section className="order-2 px-1 py-4 lg:order-1 lg:px-6" aria-labelledby="customer-access-benefits">
+        <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+        </div>
+        <p className="mt-5 text-sm font-semibold text-primary">Área privada de clientes</p>
+        <h1 id="customer-access-benefits" className="mt-2 max-w-lg pr-12 text-3xl font-bold leading-tight text-foreground sm:pr-0 sm:text-4xl">
+          Todo lo relacionado con tus equipos y pagos, en un solo lugar
+        </h1>
+        <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
+          La información corresponde únicamente a esta tienda y a los registros vinculados con tu cuenta.
+        </p>
+        <div className="mt-8 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+          {[
+            { icon: Wrench, title: 'Reparaciones', text: 'Estado técnico y equipos listos.' },
+            { icon: ReceiptText, title: 'Pagos y deudas', text: 'Montos pagados y pendientes.' },
+            { icon: CreditCard, title: 'Créditos', text: 'Cuotas, vencimientos y saldo.' },
+            { icon: ShoppingBag, title: 'Pedidos', text: 'Compras, retiro y delivery.' },
+          ].map(({ icon: Icon, title, text }) => (
+            <div key={title} className="flex min-h-28 gap-3 bg-background p-4">
+              <Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">{title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <Card className="order-1 w-full rounded-lg shadow-lg lg:order-2">
         <CardHeader>
           <Link href={`/${organizationSlug}/inicio`} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" />
             Volver a la tienda
           </Link>
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <User className="h-5 w-5" />
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <LockKeyhole className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+              Acceso seguro
+            </div>
           </div>
-          <CardTitle className="text-2xl">Login de cliente</CardTitle>
+          <CardTitle className="text-2xl">Ingresar como cliente</CardTitle>
           <CardDescription>
-            Accede solo como cliente de esta empresa para ver tus reparaciones y pedidos.
+            Usá el correo y la contraseña con los que te registraste en esta tienda.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {checkingSession && (
             <div className="mb-4 flex items-center gap-3 rounded-xl border bg-muted/40 p-4 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Validando si esta cuenta es cliente de la empresa...
+              Verificando tu acceso en esta tienda...
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Correo electronico</Label>
-              <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={loading} />
+              <Label htmlFor="email">Correo electrónico</Label>
+              <Input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={loading} placeholder="nombre@correo.com" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Contrasena</Label>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="password">Contraseña</Label>
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  disabled={resetLoading || loading}
+                  className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
+                >
+                  {resetLoading ? 'Enviando...' : '¿Olvidaste tu contraseña?'}
+                </button>
+              </div>
               <div className="relative">
                 <Input
                   id="password"
@@ -222,13 +288,14 @@ export default function TenantCustomerLoginPage() {
                   onChange={(event) => setPassword(event.target.value)}
                   required
                   disabled={loading}
+                  autoComplete="current-password"
                   className="pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((value) => !value)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground"
-                  aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -329,10 +396,10 @@ export default function TenantCustomerLoginPage() {
             )}
             <Button type="submit" className="w-full" disabled={loading || checkingSession}>
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
-              Iniciar sesion
+              Iniciar sesión
             </Button>
             <p className="text-center text-sm text-muted-foreground">
-              No tenes cuenta?{' '}
+              ¿No tenés cuenta?{' '}
               <Link href={`/${organizationSlug}/cliente/registro`} className="font-semibold text-primary hover:underline">
                 Registrate como cliente
               </Link>

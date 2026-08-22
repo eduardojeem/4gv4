@@ -98,6 +98,12 @@ function MiniSparkline({ data, color = '#6366f1' }: { data: number[]; color?: st
 
 type Tone = 'indigo' | 'emerald' | 'violet' | 'amber' | 'red' | 'cyan'
 
+interface KpiBreakdownItem {
+  label: string
+  count: number | string
+  icon?: LucideIcon
+}
+
 interface KpiStat {
   title: string
   value: string | number
@@ -107,6 +113,7 @@ interface KpiStat {
   href: string
   trend?: number[]
   badge?: string
+  breakdown?: KpiBreakdownItem[]
 }
 
 const toneClasses: Record<Tone, { wrap: string; iconBg: string; sparkColor: string }> = {
@@ -159,6 +166,20 @@ function KpiCard({ stat, loading }: { stat: KpiStat; loading: boolean }) {
         {stat.trend && stat.trend.length > 1 && (
           <div className="mt-3 flex justify-end">
             <MiniSparkline data={stat.trend} color={t.sparkColor} />
+          </div>
+        )}
+        {stat.breakdown && stat.breakdown.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+            {stat.breakdown.map((item, idx) => (
+              <span
+                key={idx}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-white/70 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-700/70 shadow-2xs"
+              >
+                {item.icon && <item.icon className="h-3 w-3 text-slate-500 dark:text-slate-400" />}
+                <strong className="font-bold text-slate-900 dark:text-slate-100">{item.count}</strong>
+                <span className="text-slate-500 dark:text-slate-400">{item.label}</span>
+              </span>
+            ))}
           </div>
         )}
         <ArrowUpRight className="absolute right-3 top-3 h-3.5 w-3.5 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
@@ -278,8 +299,8 @@ export default function DashboardPage() {
         { data: salesToday },
         { count: activeOrdersCount },
         { data: customersWeek },
-        { count: totalProductsCount },
-        { data: productsStock },
+        { data: productsData },
+        { data: categoriesData },
         { count: repairsActiveCount },
         { data: salesWeek },
         { data: repairsTodayData },
@@ -299,8 +320,8 @@ export default function DashboardPage() {
           selectedBranchId,
         ),
         supabase.from('customers').select('created_at').gte('created_at', startOfWeek.toISOString()),
-        supabase.from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
-        supabase.from('products').select('stock_quantity, min_stock').eq('is_active', true),
+        supabase.from('products').select('id, stock_quantity, min_stock, unit_measure, category_id').eq('is_active', true),
+        supabase.from('categories').select('id, name').eq('is_active', true),
         withBranchFilter(
           // Fuente única de "en proceso": incluye pausado y excluye listo
           // (listo = reparación terminada, esperando retiro).
@@ -370,11 +391,39 @@ export default function DashboardPage() {
       const activeOrders = activeOrdersCount || 0
       const customerRows = (customersWeek || []) as unknown as Array<{ created_at: string }>
       const newCustomers = customerRows.length
-      const totalProducts = totalProductsCount || 0
+
+      // Diferenciación de Productos físicos vs Servicios
+      type ProductRow = { id: string; stock_quantity?: number | null; min_stock?: number | null; unit_measure?: string | null; category_id?: string | null }
+      type CategoryRow = { id: string; name: string }
+
+      const productRows = (productsData || []) as unknown as ProductRow[]
+      const categoryList = (categoriesData || []) as unknown as CategoryRow[]
+
+      const serviceCategoryIds = new Set(
+        categoryList
+          .filter(c => (c.name || '').toLowerCase().includes('servicio'))
+          .map(c => c.id)
+      )
+
+      const servicesList = productRows.filter(p => {
+        const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
+        const isServiceCat = Boolean(p.category_id && serviceCategoryIds.has(p.category_id))
+        return isServiceUnit || isServiceCat
+      })
+      const servicesCount = servicesList.length
+
+      const physicalProducts = productRows.filter(p => {
+        const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
+        const isServiceCat = Boolean(p.category_id && serviceCategoryIds.has(p.category_id))
+        return !isServiceUnit && !isServiceCat
+      })
+      const physicalProductsCount = physicalProducts.length
+      const totalCatalogCount = productRows.length
+
       const repairsActive = repairsActiveCount || 0
 
-      // Incluye agotados (stock 0): también requieren reposición.
-      const lowStockCount = (productsStock || []).filter(p => {
+      // Stock bajo aplica exclusivamente a productos físicos con control de inventario
+      const lowStockCount = physicalProducts.filter(p => {
         const sq = Number(p.stock_quantity ?? 0)
         const ms = Number(p.min_stock ?? 5)
         return sq <= ms
@@ -423,10 +472,14 @@ export default function DashboardPage() {
           trend: customerTrend,
         },
         {
-          title: 'Productos',
-          value: String(totalProducts),
-          subtitle: 'en catálogo activo',
+          title: 'Catálogo / Inventario',
+          value: String(totalCatalogCount),
+          subtitle: `${physicalProductsCount} productos · ${servicesCount} servicios`,
           icon: Package, tone: 'cyan', href: '/dashboard/products',
+          breakdown: [
+            { label: 'Productos', count: physicalProductsCount, icon: Package },
+            { label: 'Servicios', count: servicesCount, icon: Wrench },
+          ],
         },
         {
           title: 'Stock bajo',

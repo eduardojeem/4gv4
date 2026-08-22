@@ -17,6 +17,7 @@ type RouteBody = {
   p_repair_ids?: unknown
   p_mark_repairs_delivered?: unknown
   p_delivery_outcome?: unknown
+  p_store_credit_amount?: unknown
 }
 
 type NormalizedItem = {
@@ -65,8 +66,8 @@ function normalizeItems(value: unknown): NormalizedItem[] | null {
   return items
 }
 
-export function normalizePayments(value: unknown): NormalizedPayment[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 10) return null
+export function normalizePayments(value: unknown, allowEmpty = false): NormalizedPayment[] | null {
+  if (!Array.isArray(value) || (!allowEmpty && value.length === 0) || value.length > 10) return null
 
   const payments: NormalizedPayment[] = []
   for (const entry of value) {
@@ -146,28 +147,96 @@ async function getTaxRate(
   return Math.min(100, Math.max(0, tenantTaxRate ?? globalTaxRate ?? (config.taxRate * 100)))
 }
 
-function errorResponse(error: { message?: string } | null) {
-  const message = error?.message || 'No se pudo completar la venta.'
+function errorResponse(error: { message?: string; details?: string; hint?: string; code?: string } | null) {
+  const rawMessage = error?.message || ''
+  const details = error?.details || ''
+  const hint = error?.hint || ''
+  const fullText = `${rawMessage} ${details} ${hint}`.trim()
+
+  if (!fullText) {
+    return NextResponse.json({ success: false, error: 'No se pudo completar la venta. Verifique los datos de la transacción.' }, { status: 500 })
+  }
+
+  // Errores con parámetros dinámicos (stock, inventario, pagos)
+  if (fullText.includes('INSUFFICIENT_STOCK')) {
+    const parts = fullText.split('|')
+    const available = parts[2] ? parts[2].trim() : null
+    const errorMsg = available !== null 
+      ? `Stock insuficiente en la sucursal para uno de los productos (Disponible: ${available} un.).`
+      : 'Stock insuficiente para uno de los productos en esta sucursal.'
+    return NextResponse.json({ success: false, error: errorMsg }, { status: 409 })
+  }
+
+  if (fullText.includes('BRANCH_INVENTORY_NOT_CONFIGURED')) {
+    return NextResponse.json({ success: false, error: 'Uno de los productos no tiene inventario configurado en esta sucursal.' }, { status: 409 })
+  }
+
+  if (fullText.includes('PAYMENT_TOTAL_MISMATCH')) {
+    const parts = fullText.split('|')
+    const expected = parts[1] ? parts[1].trim() : null
+    const received = parts[2] ? parts[2].trim() : null
+    const errorMsg = expected && received
+      ? `Los pagos ingresados (${received}) no coinciden con el total recalculado (${expected}).`
+      : 'Los pagos ingresados no coinciden con el total de la venta.'
+    return NextResponse.json({ success: false, error: errorMsg }, { status: 409 })
+  }
+
+  if (fullText.includes('STORE_CREDIT_EXCEEDS_BALANCE')) {
+    const parts = fullText.split('|')
+    const available = parts[1] ? parts[1].trim() : null
+    const errorMsg = available
+      ? `El saldo a favor supera el disponible del cliente (Disponible: ${available}).`
+      : 'El saldo a favor supera el disponible del cliente.'
+    return NextResponse.json({ success: false, error: errorMsg }, { status: 409 })
+  }
+
   const mappings: Array<[string, string, number]> = [
-    ['POS_PERMISSION_DENIED', 'No tenes permisos para procesar ventas.', 403],
-    ['INVALID_POS_BRANCH', 'La sucursal seleccionada no esta disponible.', 400],
-    ['CASH_REGISTER_NOT_OPEN', 'La caja seleccionada ya no esta abierta.', 409],
+    ['POS_PERMISSION_DENIED', 'No tenés permisos para procesar ventas en esta sucursal.', 403],
+    ['INVALID_POS_BRANCH', 'La sucursal seleccionada no está disponible o está inactiva.', 400],
+    ['CASH_REGISTER_NOT_OPEN', 'La caja registradora está cerrada o la sesión expiró. Abrí la caja para continuar.', 409],
     ['IDEMPOTENCY_KEY_REQUIRED', 'No se pudo identificar de forma segura el intento de venta.', 400],
-    ['CUSTOMER_NOT_IN_ORGANIZATION', 'El cliente seleccionado no pertenece a esta organizacion.', 400],
-    ['BRANCH_INVENTORY_NOT_CONFIGURED', 'El producto no tiene inventario configurado en esta sucursal.', 409],
-    ['INSUFFICIENT_STOCK', 'El stock cambio antes de confirmar la venta. Actualiza el carrito.', 409],
-    ['PAYMENT_TOTAL_MISMATCH', 'Los pagos no coinciden con el total recalculado de la venta.', 409],
-    ['TRANSFER_REFERENCE_REQUIRED', 'La transferencia necesita una referencia.', 400],
-    ['CREDIT_CUSTOMER_REQUIRED', 'Selecciona un cliente para usar credito.', 400],
-    ['CREDIT_LIMIT_EXCEEDED', 'El cliente no tiene credito disponible suficiente.', 409],
-    ['REPAIR_NOT_IN_POS_SCOPE', 'Una reparacion no pertenece a la sucursal activa.', 400],
-    ['REPAIR_ALREADY_PAID', 'Una de las reparaciones seleccionadas ya fue pagada.', 409],
+    ['CUSTOMER_NOT_IN_ORGANIZATION', 'El cliente seleccionado no pertenece a esta organización.', 400],
+    ['TRANSFER_REFERENCE_REQUIRED', 'La transferencia bancaria requiere un número de referencia o comprobante.', 400],
+    ['INVALID_CARD_REFERENCE', 'La tarjeta requiere los 4 dígitos finales válidos.', 400],
+    ['INVALID_POS_PAYMENT', 'El método o monto de pago no es válido.', 400],
+    ['PAYMENTS_REQUIRED', 'Debés ingresar al menos una forma de pago para confirmar.', 400],
+    ['INVALID_ORDER_QUANTITY', 'La cantidad de productos debe ser mayor a 0.', 400],
+    ['PRODUCT_NOT_IN_ORGANIZATION', 'Uno de los productos no pertenece a esta organización.', 400],
+    ['POS_TOTAL_MUST_BE_POSITIVE', 'El total de la venta debe ser mayor a 0.', 400],
+    ['CREDIT_CUSTOMER_REQUIRED', 'Seleccioná un cliente para registrar una venta a crédito.', 400],
+    ['CREDIT_LIMIT_EXCEEDED', 'El cliente no tiene límite de crédito suficiente disponible.', 409],
+    ['STORE_CREDIT_CUSTOMER_REQUIRED', 'Seleccioná un cliente para utilizar saldo a favor.', 400],
+    ['STORE_CREDIT_EXCEEDS_SALE_TOTAL', 'El saldo a favor no puede superar el total de la venta.', 400],
+    ['STORE_CREDIT_SALE_CUSTOMER_MISMATCH', 'El saldo a favor no pertenece al cliente seleccionado.', 409],
+    ['REPAIR_NOT_IN_POS_SCOPE', 'Una de las reparaciones no pertenece a la sucursal activa.', 400],
+    ['REPAIR_ALREADY_PAID', 'Una de las reparaciones seleccionadas ya fue cobrada previamente.', 409],
+    // Sin estos dos la venta fallaba con un 500 y el codigo crudo en pantalla,
+    // cuando en realidad son situaciones previsibles del mostrador.
+    ['REPAIR_DELIVERY_INVALID_STATE', 'Solo se puede entregar una reparación que esté en estado "Listo para entrega". Cobrala sin marcar la entrega, o cambiá el estado primero.', 422],
+    ['REPAIR_ALREADY_DELIVERED', 'Una de las reparaciones seleccionadas ya fue entregada.', 409],
+    ['INVALID_ATOMIC_SALE_RESPONSE', 'Error en el servidor al generar el comprobante de venta.', 500],
   ]
-  const match = mappings.find(([code]) => message.includes(code))
+
+  const match = mappings.find(([code]) => fullText.includes(code))
   if (match) return NextResponse.json({ success: false, error: match[1] }, { status: match[2] })
 
-  console.error('[pos/process-sale] Atomic sale failed:', { message })
-  return NextResponse.json({ success: false, error: 'No se pudo completar la venta.' }, { status: 500 })
+  console.error('[pos/process-sale] Atomic sale failed:', { rawMessage, details, hint, code: error?.code })
+
+  // Un codigo sin traducir no le dice nada a quien esta en el mostrador. Se
+  // separa el codigo tecnico del mensaje: la persona entiende que hacer y el
+  // codigo queda disponible para reportarlo.
+  const bareCode = rawMessage?.trim().match(/^[A-Z][A-Z0-9_]{4,}$/)?.[0] ?? null
+  const fallbackError = bareCode
+    ? `La venta no se pudo registrar por una validación del sistema (${bareCode}). No se cobró nada. Revisá el estado de las reparaciones y del cliente, o pasá este código a soporte.`
+    : rawMessage
+      ? `No se pudo registrar la venta: ${rawMessage}`
+      : 'No se pudo completar la venta. Verificá los datos de la transacción.'
+
+  return NextResponse.json({ 
+    success: false, 
+    code: bareCode,
+    error: fallbackError 
+  }, { status: 500 })
 }
 
 export const POST = withTenantAuth(
@@ -182,7 +251,8 @@ export const POST = withTenantAuth(
 
     const saleData = body.p_sale_data ?? {}
     const items = normalizeItems(body.p_items)
-    const payments = normalizePayments(body.p_payments)
+    const requestedStoreCreditAmount = finiteNumber(body.p_store_credit_amount ?? 0)
+    const payments = normalizePayments(body.p_payments, requestedStoreCreditAmount !== null && requestedStoreCreditAmount > 0)
     const repairIds = normalizeUuidArray(body.p_repair_ids)
     const sessionId = typeof body.p_session_id === 'string' ? body.p_session_id.trim() : ''
     const customerId = typeof saleData.customer_id === 'string' && saleData.customer_id.trim()
@@ -192,6 +262,7 @@ export const POST = withTenantAuth(
     const priceMode = body.p_price_mode === 'wholesale' ? 'wholesale' : 'retail'
     const orderDiscountRate = finiteNumber(body.p_order_discount_rate ?? 0)
     const credit = normalizeCredit(body.p_credit)
+    const storeCreditAmount = requestedStoreCreditAmount
 
     if (!items || !payments || !repairIds) {
       return NextResponse.json({ success: false, error: 'Los items, pagos o reparaciones no son validos.' }, { status: 400 })
@@ -210,6 +281,12 @@ export const POST = withTenantAuth(
     }
     if (orderDiscountRate === null || orderDiscountRate < 0 || orderDiscountRate > 100) {
       return NextResponse.json({ success: false, error: 'El descuento general no es valido.' }, { status: 400 })
+    }
+    if (storeCreditAmount === null || storeCreditAmount < 0) {
+      return NextResponse.json({ success: false, error: 'El saldo a favor aplicado no es valido.' }, { status: 400 })
+    }
+    if (storeCreditAmount > 0 && !customerId) {
+      return NextResponse.json({ success: false, error: 'Selecciona un cliente para usar saldo a favor.' }, { status: 400 })
     }
 
     let branchScope
@@ -232,7 +309,8 @@ export const POST = withTenantAuth(
     const supabase = createAdminSupabase()
     const taxRate = await getTaxRate(supabase, organization.id)
     const code = `POS-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
-    const { data, error } = await supabase.rpc('process_pos_sale_atomic_v3', {
+    
+    let rpcResponse = await supabase.rpc('process_pos_sale_atomic_v4', {
       p_organization_id: organization.id,
       p_branch_id: branchScope.branchId,
       p_actor_id: user.id,
@@ -251,7 +329,34 @@ export const POST = withTenantAuth(
       p_repair_ids: repairIds,
       p_mark_repairs_delivered: body.p_mark_repairs_delivered === true,
       p_delivery_outcome: typeof body.p_delivery_outcome === 'string' ? body.p_delivery_outcome.slice(0, 120) : null,
+      p_store_credit_amount: storeCreditAmount,
     })
+
+    // Fallback a v3 si v4 aún no está cargada en la base de datos y no se utilizó saldo a favor
+    if (storeCreditAmount <= 0 && rpcResponse.error && (rpcResponse.error.message?.includes('process_pos_sale_atomic_v4') || rpcResponse.error.code === '42883')) {
+      rpcResponse = await supabase.rpc('process_pos_sale_atomic_v3', {
+        p_organization_id: organization.id,
+        p_branch_id: branchScope.branchId,
+        p_actor_id: user.id,
+        p_session_id: sessionId,
+        p_idempotency_key: idempotencyKey,
+        p_code: code,
+        p_customer_id: customerId,
+        p_items: items,
+        p_payments: payments,
+        p_price_mode: priceMode,
+        p_order_discount_rate: orderDiscountRate,
+        p_notes: typeof saleData.notes === 'string' ? saleData.notes.slice(0, 2000) : null,
+        p_tax_rate: taxRate,
+        p_prices_include_tax: config.pricesIncludeTax,
+        p_credit: credit,
+        p_repair_ids: repairIds,
+        p_mark_repairs_delivered: body.p_mark_repairs_delivered === true,
+        p_delivery_outcome: typeof body.p_delivery_outcome === 'string' ? body.p_delivery_outcome.slice(0, 120) : null,
+      })
+    }
+
+    const { data, error } = rpcResponse
 
     if (error || !data) return errorResponse(error)
 

@@ -22,6 +22,8 @@ interface RepairCustomerRow {
     name?: string | null
     email?: string | null
     phone?: string | null
+    alternate_phone?: string | null
+    alternate_phone_label?: string | null
     address?: string | null
     city?: string | null
     ruc?: string | null
@@ -43,6 +45,8 @@ function mapCustomerRow(row: RepairCustomerRow): Customer {
         name: row.name || '',
         email: row.email || '',
         phone: row.phone || '',
+        alternate_phone: row.alternate_phone || null,
+        alternate_phone_label: row.alternate_phone_label || null,
         ruc: row.ruc || '',
         customer_type: (row.customer_type as Customer['customer_type']) || 'regular',
         status: (row.status as Customer['status']) || 'active',
@@ -79,7 +83,7 @@ function mapCustomerRow(row: RepairCustomerRow): Customer {
 
 interface CustomerSelectorProps {
     value?: string
-    initialCustomer?: Pick<Customer, 'id' | 'name' | 'phone' | 'email'>
+    initialCustomer?: Pick<Customer, 'id' | 'name' | 'phone' | 'email'> & { ruc?: string; customer_type?: string }
     onChange: (customerId: string, customerData?: Customer) => void
     error?: string
     disabled?: boolean
@@ -125,8 +129,6 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
     }, [refreshCustomers, debouncedSearch])
 
     const selectedCustomer = useMemo(() => {
-        const fromList = customers.find(c => c.id === value)
-        if (fromList) return fromList
         if (optimisticCustomer?.id === value) return optimisticCustomer
         if (initialCustomer?.id === value) {
             return mapCustomerRow({
@@ -134,10 +136,13 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                 name: initialCustomer.name,
                 email: initialCustomer.email,
                 phone: initialCustomer.phone,
-                customer_type: 'regular',
+                ruc: initialCustomer.ruc || null,
+                customer_type: initialCustomer.customer_type || 'regular',
                 status: 'active',
             })
         }
+        const fromList = customers.find(c => c.id === value)
+        if (fromList) return fromList
     }, [customers, initialCustomer, optimisticCustomer, value])
 
     // `customers` ya viene filtrado del servidor (ver refreshCustomers):
@@ -216,6 +221,11 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                             • {selectedCustomer.phone}
                                         </span>
                                     )}
+                                    {selectedCustomer.ruc && (
+                                        <span className="text-muted-foreground text-xs">
+                                            • RUC: {selectedCustomer.ruc}
+                                        </span>
+                                    )}
                                 </div>
                             ) : (
                                 <span className="flex items-center gap-2">
@@ -247,46 +257,31 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                     Actualizar
                                 </Button>
                                 <Button
-                                    variant="ghost"
+                                    variant="default"
                                     size="sm"
                                     onClick={handleCreateNew}
                                     disabled={disabled}
                                     className="h-8"
                                 >
-                                    <Plus className="h-3 w-3 mr-2" />
+                                    <Plus className="h-3 w-3 mr-1" />
                                     Nuevo
                                 </Button>
                             </div>
                         </div>
-                        <div>
-                            <div className="border-b px-3 py-2">
-                                <Input
-                                    placeholder="Buscar por nombre, teléfono o email..."
-                                    value={searchValue}
-                                    onChange={(event) => setSearchValue(event.target.value)}
-                                    autoComplete="off"
-                                    className="h-9 border-0 px-0 shadow-none focus-visible:ring-0"
-                                />
-                            </div>
-                            <div className="max-h-[300px] overflow-y-auto overflow-x-hidden p-1">
-                                {!isLoading && filteredCustomers.length === 0 && recentCustomers.length === 0 && (
-                                    <div className="text-center py-6">
-                                        <p className="text-sm text-muted-foreground mb-3">
-                                            No se encontró ningún cliente
-                                        </p>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            onPointerDown={(event) => {
-                                                event.preventDefault()
-                                                handleCreateNew()
-                                            }}
-                                            className="gap-2"
-                                        >
-                                            <Plus className="h-4 w-4" />
-                                            Crear nuevo cliente
-                                        </Button>
+                        <div className="border-t p-2">
+                            <Input
+                                placeholder="Buscar por nombre, teléfono, RUC o código..."
+                                value={searchValue}
+                                onChange={(e) => setSearchValue(e.target.value)}
+                                className="h-8 text-sm"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto">
+                            <div className="p-1">
+                                {customers.length === 0 && !isLoading && (
+                                    <div className="text-center py-6 text-sm text-muted-foreground">
+                                        No se encontraron clientes
                                     </div>
                                 )}
                                 <div>
@@ -296,10 +291,10 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                             event.preventDefault()
                                             handleCreateNew()
                                         }}
-                                        className="relative flex w-full cursor-pointer select-none items-center rounded-sm bg-muted/50 px-2 py-1.5 text-left text-sm font-medium outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                                        className="relative flex w-full cursor-pointer select-none items-center rounded-lg bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800/60 px-2.5 py-2 text-left text-xs font-bold outline-none hover:bg-cyan-100 dark:hover:bg-cyan-900/50 mb-1"
                                     >
-                                        <Plus className="mr-2 h-4 w-4" />
-                                        Crear nuevo cliente
+                                        <Plus className="mr-2 h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                                        + Registrar nuevo cliente
                                     </button>
                                 </div>
                                 {!debouncedSearch && recentCustomers.length > 0 && (
@@ -326,8 +321,9 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                                     <div className="font-medium truncate">
                                                         {customer.name || 'Cliente sin nombre'}
                                                     </div>
-                                                    <div className="text-xs text-muted-foreground flex gap-2">
+                                                    <div className="text-xs text-muted-foreground flex gap-2 flex-wrap">
                                                         {customer.phone && <span>{customer.phone}</span>}
+                                                        {customer.ruc && <span>• RUC: {customer.ruc}</span>}
                                                         {customer.email && <span>• {customer.email}</span>}
                                                     </div>
                                                 </div>
@@ -358,8 +354,9 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                                 <div className="font-medium truncate">
                                                     {customer.name || 'Cliente sin nombre'}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground flex gap-2">
+                                                <div className="text-xs text-muted-foreground flex gap-2 flex-wrap">
                                                     {customer.phone && <span>{customer.phone}</span>}
+                                                    {customer.ruc && <span>• RUC: {customer.ruc}</span>}
                                                     {customer.email && <span>• {customer.email}</span>}
                                                 </div>
                                             </div>

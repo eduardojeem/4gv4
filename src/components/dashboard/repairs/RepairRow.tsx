@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle, PackageCheck } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle, PackageCheck, DollarSign, Shield } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
@@ -52,6 +52,8 @@ interface RepairRowProps {
   onView?: (repair: Repair) => void
   onDelete?: (id: string) => void
   onDeliver?: (repair: Repair) => void
+  onQuickPay?: (repair: Repair) => void
+  onClaimWarranty?: (repair: Repair) => void
   companyInfo?: RepairPrintCompanyInfo
 }
 
@@ -63,9 +65,9 @@ const DEFAULT_COMPANY_INFO: RepairPrintCompanyInfo = {
 }
 
 export const RepairRow = memo<RepairRowProps>(
-  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver, companyInfo }) {
-    const StatusIcon = statusConfig[repair.status].icon
-    const priority = priorityConfig[repair.priority]
+  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver, onQuickPay, onClaimWarranty, companyInfo }) {
+    const StatusIcon = statusConfig[repair.status]?.icon || Clock
+    const priority = priorityConfig[repair.priority] || priorityConfig.medium
     const { notifyRepairStatus, notifyRepairReady, sendPaymentReminder } = useWhatsApp()
     const resolvedCompanyInfo = companyInfo || DEFAULT_COMPANY_INFO
     const customerDetails = repair.customer as RepairCustomerDetails
@@ -210,7 +212,7 @@ export const RepairRow = memo<RepairRowProps>(
         </TableCell>
 
         <TableCell className="hidden xl:table-cell">
-          {repair.warrantyMonths && repair.warrantyMonths > 0 ? (
+          {repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0) ? (
             <WarrantyBadge repair={repair} showDaysRemaining />
           ) : (
             <span className="text-xs text-muted-foreground dark:text-muted-foreground/70">Sin garantía</span>
@@ -349,8 +351,17 @@ export const RepairRow = memo<RepairRowProps>(
                   Recordatorio de Pago
                 </DropdownMenuItem>
               )}
+              {pendingAmount > 0 && onQuickPay && repair.status !== 'cancelado' && (
+                <DropdownMenuItem
+                  onClick={() => onQuickPay(repair)}
+                  className="text-emerald-600 dark:text-emerald-400"
+                >
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  {repair.status === 'entregado' ? 'Cobrar saldo' : 'Cobrar aquí'}
+                </DropdownMenuItem>
+              )}
               {/* Quick delivery action */}
-              {repair.status !== 'entregado' && repair.status !== 'cancelado' && onDeliver && (
+              {repair.status === 'listo' && onDeliver && (
                 <>
                   <DropdownMenuSeparator className="dark:bg-muted/50" />
                   <DropdownMenuItem
@@ -362,13 +373,25 @@ export const RepairRow = memo<RepairRowProps>(
                   </DropdownMenuItem>
                 </>
               )}
+              {(repair.status === 'entregado' || repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0)) && (
+                <>
+                  <DropdownMenuSeparator className="dark:bg-muted/50" />
+                  <DropdownMenuItem
+                    onClick={() => onClaimWarranty ? onClaimWarranty(repair) : onView?.(repair)}
+                    className="text-amber-700 dark:text-amber-400 font-semibold focus:text-amber-800 dark:focus:text-amber-300 focus:bg-amber-50 dark:focus:bg-amber-950/40 cursor-pointer"
+                  >
+                    <Shield className="mr-2 h-4 w-4 text-amber-600" />
+                    Procesar Garantía
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator className="dark:bg-muted/50" />
               <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">
                 Cambiar estado
               </DropdownMenuLabel>
               {Object.entries(statusConfig).map(([key, config]) => {
                 const Icon = config.icon
-                if (key === repair.status) return null
+                if (key === repair.status || key === 'entregado') return null
                 return (
                   <DropdownMenuItem
                     key={key}

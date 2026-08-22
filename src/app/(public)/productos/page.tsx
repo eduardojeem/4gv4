@@ -17,7 +17,7 @@ import {
   PaginationLinks,
 } from './components'
 import { Search } from 'lucide-react'
-import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
+import { PRODUCTS_MAX_PRICE, PRODUCTS_PER_PAGE } from '@/lib/constants/products'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 
 // La página es dinámica de facto: getPublicProducts llama headers() para
@@ -30,7 +30,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const settings = await fetchWebsiteSettings()
   const name = settings?.company_info?.name || 'Tienda'
   return {
-    title: 'Catálogo de Productos',
+    title: `Catálogo de Productos | ${name}`,
     description: `Explorá el catálogo de ${name}. Celulares, repuestos y accesorios con las mejores marcas y precios.`,
     openGraph: {
       title: `Catálogo de Productos | ${name}`,
@@ -55,7 +55,9 @@ export default async function ProductsPage(props: {
   const brand = searchParams.brand as string || ''
   const branchId = searchParams.branch_id as string || ''
   const minPrice = Math.max(0, Number(searchParams.min_price) || 0)
-  const maxPrice = Math.max(0, Number(searchParams.max_price) || MAX_PRICE)
+  // #4 — max_price negativo o cero produce un rango vacío. Se trata como "sin límite".
+  const rawMaxPrice = Number(searchParams.max_price)
+  const maxPrice = Number.isFinite(rawMaxPrice) && rawMaxPrice > 0 ? rawMaxPrice : MAX_PRICE
   const inStock = searchParams.in_stock === 'true'
   const sort = searchParams.sort as string || 'name'
 
@@ -74,14 +76,14 @@ export default async function ProductsPage(props: {
       inStock,
       sort,
       page,
-      perPage: 16,
+      perPage: PRODUCTS_PER_PAGE,
       isWholesale,
     }),
-    getPublicCategories(),
+    getPublicCategories(isWholesale),
     getPublicBranches(),
   ])
 
-  const { products, total, totalPages, brands, priceRange } = productsData
+  const { products, total, totalPages, brands, priceRange, branchFilterUnavailable } = productsData
   const selectedBranchName = branchId ? branches.find((b) => b.id === branchId)?.name : undefined
 
   // When browsing all branches, resolve which branches each product has stock in
@@ -117,7 +119,7 @@ export default async function ProductsPage(props: {
       {/* Breadcrumb + title bar */}
       <div className="border-b border-border/40 bg-muted/20">
         <div className="container py-6">
-          <Breadcrumbs items={[{ label: 'Productos' }]} />
+          <Breadcrumbs homeHref={prefixPublicTenantPath(tenantPrefix, '/inicio')} items={[{ label: 'Productos' }]} />
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground lg:text-3xl text-balance">
@@ -148,9 +150,9 @@ export default async function ProductsPage(props: {
       <div className="container py-6 lg:py-8">
         <div className="flex gap-6 xl:gap-8">
           {/* Sidebar filters - Desktop */}
-          <aside className="hidden lg:block shrink-0 h-fit sticky top-24">
+          <aside className="hidden lg:block shrink-0 h-fit sticky top-[108px]">
              {/* The width is now controlled by the content within the ProductFilters component when it collapses/expands */}
-             <div className="max-h-[calc(100vh-7rem)] overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm transition-all duration-300">
+             <div className="max-h-[calc(100vh-7.5rem)] overflow-hidden rounded-lg border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm transition-all duration-300">
                <div className="max-h-[calc(100vh-7rem)] overflow-y-auto overscroll-contain p-4 pr-3 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
                  <Suspense fallback={<div className="h-96 w-64 bg-muted animate-pulse rounded-lg" />}>
                    <ProductFilters
@@ -167,7 +169,7 @@ export default async function ProductsPage(props: {
           {/* Products area */}
           <div className="flex-1 min-w-0">
             {/* Toolbar row */}
-            <div className="sticky top-16 z-30 mb-5 border-y border-border/60 bg-background/90 px-3 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/75 sm:rounded-2xl sm:border sm:bg-card/70 sm:p-4 lg:static lg:bg-card/60">
+            <div className="sticky top-[74px] z-30 mb-5 border-y border-border/60 bg-background/95 px-3 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/80 sm:rounded-lg sm:border sm:bg-card/70 sm:p-4 lg:static lg:bg-card/60">
               <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                 {/* Mobile filter trigger */}
                 <MobileFilters
@@ -188,13 +190,20 @@ export default async function ProductsPage(props: {
               </div>
               <div className="mt-3">
                 <Suspense>
-                  <FilterBadges categories={categories} />
+                  <FilterBadges categories={categories} branches={branches} />
                 </Suspense>
               </div>
             </div>
 
             {/* Product grid */}
-            {products.length === 0 ? (
+            {branchFilterUnavailable ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-5 py-8 text-center dark:border-amber-900/60 dark:bg-amber-950/30" role="alert">
+                <h2 className="font-semibold text-amber-950 dark:text-amber-100">No pudimos consultar esta sucursal</h2>
+                <p className="mt-1 text-sm text-amber-800 dark:text-amber-200/80">
+                  Quitá el filtro de sucursal o intentá nuevamente en unos minutos.
+                </p>
+              </div>
+            ) : products.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-center">
                 <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
                   <Search className="h-7 w-7 text-muted-foreground" />
@@ -216,12 +225,12 @@ export default async function ProductsPage(props: {
                 )}
               </div>
             ) : (
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {products.map((product, index) => (
                   <ProductCard
                     key={product.id}
                     product={product}
-                    priority={index < 4}
+                    priority={index < 2}
                     isWholesale={isWholesale}
                     branchName={selectedBranchName}
                     productBranches={productBranchMap[product.id]}

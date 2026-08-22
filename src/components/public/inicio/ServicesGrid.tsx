@@ -43,21 +43,27 @@ export function ServicesGrid({ services }: ServicesGridProps) {
       <div className="container">
         {/* Header */}
         <div className="mx-auto max-w-2xl text-center">
-          <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-primary">
-            <Wrench className="h-3.5 w-3.5" />
-            Lo que hacemos
-          </span>
-          <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Nuestros servicios
-          </h2>
-          <p className="mt-3 text-muted-foreground">
-            Servicios publicados por la empresa para consultas y atención directa.
-          </p>
+          {settings?.services_section?.badge && (
+            <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-primary">
+              <Wrench className="h-3.5 w-3.5" />
+              {settings.services_section.badge}
+            </span>
+          )}
+          {settings?.services_section?.title && (
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
+              {settings.services_section.title}
+            </h2>
+          )}
+          {settings?.services_section?.subtitle && (
+            <p className="mt-3 text-muted-foreground">
+              {settings.services_section.subtitle}
+            </p>
+          )}
         </div>
 
         {/* Grid */}
         <div className="mx-auto mt-12 grid max-w-5xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {services.map((service, index) => {
+          {services.map((service) => {
             const IconComponent = iconMap[service.icon] || Wrench
             const cardGradient = CARD_BG[service.color] || CARD_BG.blue
             const rawCtaHref   = service.ctaUrl?.trim()

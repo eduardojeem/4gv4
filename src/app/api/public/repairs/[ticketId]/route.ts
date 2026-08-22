@@ -25,8 +25,9 @@ export async function GET(
     const searchParams = request.nextUrl.searchParams
     const verifyHash = searchParams.get('verify')
     const organizationSlug = searchParams.get('org')?.trim() || null
+    const admin = createAdminSupabase()
     const organization = organizationSlug
-      ? await resolvePublicOrganizationBySlug(organizationSlug, createAdminSupabase())
+      ? await resolvePublicOrganizationBySlug(organizationSlug, admin)
       : null
     if (organizationSlug && !organization) {
       return NextResponse.json(
@@ -56,14 +57,22 @@ export async function GET(
     let customerIdForUser: string | null = null
 
     if (user && organization) {
-      const { data: customerData } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('profile_id', user.id)
-        .eq('organization_id', organization.id)
-        .maybeSingle()
+      const [{ data: customerData }, { data: membership }] = await Promise.all([
+        admin
+          .from('customers')
+          .select('id')
+          .eq('profile_id', user.id)
+          .eq('organization_id', organization.id)
+          .maybeSingle(),
+        admin
+          .from('organization_members')
+          .select('status')
+          .eq('user_id', user.id)
+          .eq('organization_id', organization.id)
+          .maybeSingle(),
+      ])
 
-      customerIdForUser = customerData?.id ?? null
+      customerIdForUser = membership?.status === 'active' ? customerData?.id ?? null : null
     }
 
     // 2. If not authenticated via token, QR hash, or tenant customer session, reject
@@ -79,7 +88,7 @@ export async function GET(
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticketId)
 
     // Fetch repair data with specific fields only
-    let repairQuery = supabase
+    let repairQuery = admin
       .from('repairs')
       .select(`
         id,
@@ -93,6 +102,8 @@ export async function GET(
         created_at,
         estimated_cost,
         final_cost,
+        paid_amount,
+        payment_status,
         warranty_months,
         warranty_type,
         estimated_completion,
@@ -151,10 +162,10 @@ export async function GET(
     // Fetch related data in parallel
     const [technicianResult, customerResult, statusHistoryResult] = await Promise.all([
       repair.technician_id 
-        ? supabase.from('profiles').select('full_name').eq('id', repair.technician_id).single()
+        ? admin.from('profiles').select('full_name').eq('id', repair.technician_id).single()
         : Promise.resolve({ data: null, error: null }),
-      supabase.from('customers').select('name, phone').eq('id', repair.customer_id).single(),
-      supabase
+      admin.from('customers').select('name, phone').eq('id', repair.customer_id).single(),
+      admin
         .from('repair_status_history')
         .select('status, note, created_at')
         .eq('repair_id', repair.id)
@@ -194,6 +205,8 @@ export async function GET(
       completedAt: repair.completed_at || null,
       estimatedCost: repair.estimated_cost || 0,
       finalCost: repair.final_cost,
+      paidAmount: repair.paid_amount,
+      paymentStatus: repair.payment_status,
       warrantyMonths: repair.warranty_months,
       warrantyType: repair.warranty_type,
       statusHistory: statusHistoryResult.data || [],

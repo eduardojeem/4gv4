@@ -4,9 +4,12 @@ import { SaaSBusinessPageContent } from '@/components/saas/landing/saas-business
 import { SaaSCTASection } from '@/components/saas/landing/saas-cta-section'
 import { getPlatformBranding } from '@/lib/platform/branding'
 
-export const metadata: Metadata = {
-  title: 'Soluciones por tipo de negocio: tiendas, servicios técnicos y delivery',
-  description: 'Plataforma multiempresa para POS, inventario, reparaciones, catálogo público, pedidos y delivery. Adaptada al flujo real de cada negocio.',
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await getPlatformBranding()
+  return {
+    title: `Soluciones por Tipo de Negocio | ${branding.platformName}`,
+    description: 'Plataforma multiempresa para POS, inventario físico y de servicios, reparaciones técnicas, catálogo público y delivery.',
+  }
 }
 
 export default async function SaaSBusinessPage() {

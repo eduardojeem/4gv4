@@ -588,28 +588,28 @@ export const THERMAL_CONFIGS: Record<string, ThermalPrinterConfig> = {
         width: 24,         // Reducido para letras más grandes
         paperSize: '48mm',
         escCommands: true,
-        qrCode: true,
+        qrCode: false,
         logo: true
     },
     '48mm-small': {
         width: 32,         // Versión con letras más pequeñas
         paperSize: '48mm',
         escCommands: true,
-        qrCode: true,
+        qrCode: false,
         logo: true
     },
     '58mm': {
         width: 32,         // Letras grandes para 58mm
         paperSize: '58mm', 
         escCommands: true,
-        qrCode: true,
+        qrCode: false,
         logo: true
     },
     '80mm': {
         width: 40,         // Letras grandes para 80mm
         paperSize: '80mm',
         escCommands: true,
-        qrCode: true,
+        qrCode: false,
         logo: true
     }
 }

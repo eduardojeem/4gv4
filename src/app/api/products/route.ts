@@ -11,6 +11,12 @@ import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBran
 import { canCreateResource } from '@/lib/saas/subscription-service'
 
 // GET /api/products - Get products with variants
+/**
+ * Cuantas filas se barren cuando el filtro de stock obliga a resolver en
+ * memoria. Generoso para cubrir catalogos grandes sin traer la tabla entera.
+ */
+const IN_MEMORY_STOCK_FILTER_CAP = 5000
+
 export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (request, { user, organization }) => {
   try {
     const { searchParams } = new URL(request.url)
@@ -82,6 +88,9 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
         supplier:suppliers(id, name, contact_name, phone, address)
       `, { count: 'exact' })
       .eq('organization_id', organization.id)
+      // Lo archivado por el ciclo de baja de plan sale del catalogo operativo:
+      // la fila se conserva para no romper el historico de ventas.
+      .is('archived_by_plan_at', null)
     
     // Apply filters
     if (query) {
@@ -143,13 +152,32 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     queryBuilder = queryBuilder.order(sortColumn, { ascending: sortAscending })
     if (!needsInMemoryPagination) {
       queryBuilder = queryBuilder.range(from, to)
+    } else {
+      // Los filtros de stock se resuelven en memoria: con sucursal activa el
+      // stock sale del inventario por sucursal, y "stock bajo" compara contra
+      // `min_stock`, que PostgREST no puede filtrar columna contra columna.
+      //
+      // Sin un tope explicito la consulta quedaba sujeta al limite implicito de
+      // PostgREST (1000 filas): los productos que caian fuera desaparecian del
+      // listado Y del total, sin ninguna senal. Ahora el tope es propio y, si se
+      // alcanza, se avisa en la respuesta.
+      queryBuilder = queryBuilder.range(0, IN_MEMORY_STOCK_FILTER_CAP)
     }
 
     const { data: products, error, count } = await queryBuilder
     
     if (error) {
-      logger.error('Failed to fetch products', { error: error.message, code: error.code })
-      throw error
+      logger.error('Failed to fetch products', { error: error.message, code: error.code, details: error.details, hint: error.hint })
+      // Se distingue del catch general: asi el cliente sabe que fallo la lectura
+      // del catalogo y no otra parte del pedido.
+      return NextResponse.json(
+        {
+          success: false,
+          code: error.code ?? 'PRODUCTS_QUERY_FAILED',
+          error: 'No se pudo leer el catálogo de productos.',
+        },
+        { status: 500 }
+      )
     }
     
     const baseProducts = (products || []) as Array<Record<string, unknown> & { id: string; stock_quantity?: number | null }>
@@ -187,6 +215,8 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       ? stockFilteredProducts.slice(from, to + 1)
       : stockFilteredProducts
     const filteredTotal = needsInMemoryPagination ? stockFilteredProducts.length : (count || 0)
+    // Se alcanzo el tope del barrido: lo listado y el total son parciales.
+    const truncated = needsInMemoryPagination && baseProducts.length > IN_MEMORY_STOCK_FILTER_CAP
 
     // Ocultar el costo (purchase_price) a quien no sea admin/super_admin ni
     // tenga el permiso específico products.read_cost.
@@ -211,13 +241,24 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
         products: visibleProducts,
         total: filteredTotal,
         page,
-        per_page: perPage
+        per_page: perPage,
+        // Cuando es true el listado y el total son parciales: el filtro de stock
+        // barrio hasta el tope y quedaron productos sin evaluar.
+        truncated,
+        scan_cap: truncated ? IN_MEMORY_STOCK_FILTER_CAP : undefined,
       }
     })
   } catch (error) {
-    logger.error('Products API error', { error })
+    // "Failed to fetch products" no le decia nada a nadie y tapaba la causa:
+    // se registra el detalle y se devuelve algo accionable.
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error('Products API error', { error, message })
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch products' },
+      {
+        success: false,
+        code: 'PRODUCTS_UNEXPECTED_ERROR',
+        error: `No se pudieron cargar los productos: ${message}`,
+      },
       { status: 500 }
     )
   }

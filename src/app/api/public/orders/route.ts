@@ -7,6 +7,8 @@ import { generateOrderNumber, normalizeOrder } from '@/lib/orders/helpers'
 import { resolvePublicStorefrontOrganization } from '@/lib/saas/public-tenant'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { applyAutomaticPromotionToProduct, evaluatePublicCoupon, mapPublicPromotion, type PublicPromotion } from '@/lib/public-promotions'
+import { resolveWholesaleStatus } from '@/lib/api/products-server'
+import { resolvePublicUnitPrice } from '@/lib/orders/public-pricing'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
 import type { CheckoutSettings } from '@/types/website-settings'
@@ -28,6 +30,7 @@ const publicOrderSchema = z.object({
   fulfillmentType: z.enum(['PICKUP', 'DELIVERY']).default('PICKUP'),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'DIGITAL_WALLET']).default('CASH'),
   shippingCost: z.number().min(0).max(9_999_999).default(0),
+  storeCreditAmount: z.number().finite().min(0).max(9_999_999).default(0),
   deliveryZoneId: z.string().max(100).optional().nullable(),
   notes: z.string().trim().max(1000).optional().nullable(),
   promotionCode: z.string().trim().max(80).optional().nullable(),
@@ -93,11 +96,29 @@ export async function POST(request: NextRequest) {
       quantity,
     }))
     const productIds = requestedItems.map((item) => item.productId)
+
+    // El catálogo le muestra al mayorista su propio precio y los productos de
+    // visibilidad mayorista. El checkout tiene que resolver lo mismo o cobra de
+    // más y deja pedir productos que el cliente no debería ver.
+    const authSupabase = await createClient()
+    const { data: { user: storefrontUser } } = await authSupabase.auth.getUser()
+    const { isWholesale } = await resolveWholesaleStatus({
+      supabase: authSupabase,
+      user: storefrontUser ?? null,
+      organizationId: organization.id,
+    })
+
+    // Nunca se selecciona wholesale_price para un cliente minorista.
+    const productSelect = isWholesale
+      ? 'id, name, sku, category_id, sale_price, wholesale_price, has_offer, offer_price, stock_quantity, is_active'
+      : 'id, name, sku, category_id, sale_price, has_offer, offer_price, stock_quantity, is_active'
+
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, name, sku, category_id, sale_price, has_offer, offer_price, stock_quantity, is_active')
+      .select(productSelect as '*')
       .eq('organization_id', organization.id)
       .eq('is_active', true)
+      .in('visibility', isWholesale ? ['public', 'wholesale'] : ['public'])
       .in('id', productIds)
 
     if (productsError) throw productsError
@@ -147,7 +168,13 @@ export async function POST(request: NextRequest) {
         has_offer: Boolean(product.has_offer),
         offer_price: product.offer_price == null ? null : Number(product.offer_price),
       }, automaticPromotions)
-      const unitPrice = priced.has_offer && priced.offer_price ? priced.offer_price : priced.sale_price
+      const unitPrice = resolvePublicUnitPrice({
+        isWholesale,
+        wholesalePrice: product.wholesale_price == null ? null : Number(product.wholesale_price),
+        salePrice: priced.sale_price,
+        hasOffer: Boolean(priced.has_offer),
+        offerPrice: priced.offer_price ?? null,
+      })
 
       return {
         product_id: item.productId,
@@ -211,6 +238,14 @@ export async function POST(request: NextRequest) {
     const authClient = await createClient()
     const { data: { user: buyer } } = await authClient.auth.getUser()
 
+    if (input.storeCreditAmount > 0 && !buyer) {
+      return NextResponse.json({
+        success: false,
+        code: 'STORE_CREDIT_PROFILE_REQUIRED',
+        error: 'Iniciá sesión para usar tu saldo a favor.',
+      }, { status: 401 })
+    }
+
     if (normalizedEmail || normalizedPhone) {
       let customerQuery = supabase
         .from('customers')
@@ -233,7 +268,7 @@ export async function POST(request: NextRequest) {
     const total = Math.max(0, subtotal + shippingCost - discountAmount)
 
     const { data: atomicResult, error: atomicError } = await supabase.rpc(
-      'create_public_order_with_customer_account_atomic',
+      'create_public_order_with_store_credit_atomic',
       {
         p_organization_id: organization.id,
         p_customer_id: customerId,
@@ -263,6 +298,7 @@ export async function POST(request: NextRequest) {
         p_profile_phone: buyer
           ? String(buyer.user_metadata?.phone || buyer.phone || normalizedPhone).trim()
           : normalizedPhone,
+        p_store_credit_amount: input.storeCreditAmount,
       }
     )
 
@@ -306,6 +342,27 @@ export async function POST(request: NextRequest) {
         success: false,
         error: 'El código promocional alcanzó su límite de usos.',
       }, { status: 409 })
+    }
+    if (message.includes('STORE_CREDIT_EXCEEDS_AVAILABLE')) {
+      return NextResponse.json({
+        success: false,
+        code: 'STORE_CREDIT_EXCEEDS_AVAILABLE',
+        error: 'El saldo solicitado supera tu saldo disponible. Actualizá el importe e intentá nuevamente.',
+      }, { status: 409 })
+    }
+    if (message.includes('STORE_CREDIT_PROFILE_REQUIRED')) {
+      return NextResponse.json({
+        success: false,
+        code: 'STORE_CREDIT_PROFILE_REQUIRED',
+        error: 'Iniciá sesión con la cuenta vinculada al cliente para usar el saldo a favor.',
+      }, { status: 401 })
+    }
+    if (message.includes('STORE_CREDIT_EXCEEDS_ORDER_TOTAL')) {
+      return NextResponse.json({
+        success: false,
+        code: 'STORE_CREDIT_EXCEEDS_ORDER_TOTAL',
+        error: 'El saldo a utilizar no puede superar el total del pedido.',
+      }, { status: 422 })
     }
 
     logger.error('Public order creation error', { error })

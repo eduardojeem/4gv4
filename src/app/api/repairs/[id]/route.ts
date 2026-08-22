@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveWarrantyExpiration } from '@/lib/warranty-utils'
+import { parseRepairPartsInput } from '@/lib/repairs/create-repair-input'
+import {
+  RepairPartsStockError,
+  deleteRepairWithInventory,
+  replaceRepairPartsWithInventory,
+} from '@/lib/repairs/replace-parts'
+import { RepairPricingWriteError, resolveRepairPricingWrite } from '@/lib/repairs/pricing-write'
+import type { RepairPricingMode } from '@/lib/repairs/pricing'
 import {
   assertRepairExists,
   fetchRepairById,
@@ -12,6 +20,7 @@ type RouteParams = { params: Promise<{ id: string }> }
 type RepairPartInput = {
   name?: unknown
   cost?: unknown
+  internalCost?: unknown
   quantity?: unknown
   supplier?: unknown
   partNumber?: unknown
@@ -40,6 +49,9 @@ const REPAIR_FIELD_MAP: Record<string, string> = {
   estimatedCost: 'estimated_cost',
   laborCost: 'labor_cost',
   finalCost: 'final_cost',
+  pricingMode: 'pricing_mode',
+  discountAmount: 'discount_amount',
+  priceOverrideReason: 'price_override_reason',
   warrantyMonths: 'warranty_months',
   warrantyType: 'warranty_type',
   warrantyNotes: 'warranty_notes',
@@ -74,11 +86,11 @@ function buildRepairUpdate(
   return updateData
 }
 
-function normalizeParts(parts: RepairPartInput[], repairId: string) {
+function normalizeParts(parts: RepairPartInput[]) {
   return parts.map((part) => ({
-    repair_id: repairId,
     part_name: String(part.name || '').trim(),
-    unit_cost: Number(part.cost || 0),
+    unit_price: Number(part.cost || 0),
+    unit_cost: part.internalCost === undefined ? undefined : Number(part.internalCost),
     quantity: Number(part.quantity || 1),
     supplier: typeof part.supplier === 'string' && part.supplier.trim() ? part.supplier.trim() : null,
     part_number: typeof part.partNumber === 'string' && part.partNumber.trim() ? part.partNumber.trim() : null,
@@ -124,13 +136,15 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
     const { id } = await context.params
 
     // Verificar que la reparación no está en estado terminal
-    const { data: current } = await ctx.supabase
+    const { data: current, error: currentError } = await ctx.supabase
       .from('repairs')
-      .select('id, status, delivered_at, completed_at')
+      .select('id, status, delivered_at, completed_at, labor_cost, final_cost, estimated_cost, paid_amount, pricing_mode, discount_amount, price_override_reason')
       .eq('id', id)
       .eq('organization_id', ctx.organizationId)
       .eq('branch_id', ctx.branchId)
       .maybeSingle()
+
+    if (currentError) throw currentError
 
     if (!current) {
       return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
@@ -145,10 +159,91 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
 
     const body = await request.json().catch(() => ({})) as Record<string, unknown>
     const { parts, notes, images, ...repairPayload } = body
+    const parsedParts = Array.isArray(parts)
+      ? parseRepairPartsInput(normalizeParts(parts as RepairPartInput[]))
+      : null
+
+    if (parsedParts && !parsedParts.success) {
+      return NextResponse.json(
+        { error: 'Revisa los repuestos, precios y cantidades antes de guardar.' },
+        { status: 400 }
+      )
+    }
+
+
+    const existingPartsResult = parsedParts?.success
+      ? null
+      : await ctx.supabase
+          .from('repair_parts')
+          .select('unit_price, unit_cost, quantity')
+          .eq('repair_id', id)
+    if (existingPartsResult?.error) throw existingPartsResult.error
+    let pricingParts = parsedParts?.success ? parsedParts.data : (existingPartsResult?.data ?? [])
+    if (parsedParts?.success) {
+      const productIds = [...new Set(parsedParts.data.flatMap((part) => part.product_id ? [part.product_id] : []))]
+      if (productIds.length > 0) {
+        const { data: products, error: productsError } = await ctx.supabase
+          .from('products')
+          .select('id, purchase_price')
+          .eq('organization_id', ctx.organizationId)
+          .in('id', productIds)
+        if (productsError) throw productsError
+        const purchaseCosts = new Map((products ?? []).map((product) => [product.id, Number(product.purchase_price) || 0]))
+        if (productIds.some((productId) => !purchaseCosts.has(productId))) {
+          return NextResponse.json({ error: 'Uno de los repuestos no pertenece a la organizacion.' }, { status: 400 })
+        }
+        pricingParts = parsedParts.data.map((part) => ({
+          ...part,
+          unit_cost: part.product_id ? purchaseCosts.get(part.product_id) ?? 0 : part.unit_cost,
+        }))
+      }
+    }
+    const { data: organizationSettings } = await ctx.supabase
+      .from('organization_settings')
+      .select('currency')
+      .eq('organization_id', ctx.organizationId)
+      .maybeSingle()
+
+    const requestedMode = (repairPayload.pricingMode ?? current.pricing_mode ?? 'automatic') as RepairPricingMode
+    const resolvedPricing = resolveRepairPricingWrite({
+      mode: requestedMode,
+      currency: organizationSettings?.currency || 'PYG',
+      estimatedCost: Number(repairPayload.estimatedCost ?? current.estimated_cost ?? 0),
+      laborCost: Number(repairPayload.laborCost ?? current.labor_cost ?? 0),
+      finalCost: repairPayload.finalCost === undefined
+        ? (current.final_cost === null ? null : Number(current.final_cost))
+        : (repairPayload.finalCost === null ? null : Number(repairPayload.finalCost)),
+      discountAmount: Number(repairPayload.discountAmount ?? current.discount_amount ?? 0),
+      paidAmount: Number(current.paid_amount ?? 0),
+      parts: pricingParts,
+      role: ctx.organizationRole,
+      overrideReason: String(repairPayload.priceOverrideReason ?? current.price_override_reason ?? ''),
+    })
+
     const updateData = buildRepairUpdate(repairPayload, {
       deliveredAt: current.delivered_at as string | null,
       completedAt: current.completed_at as string | null,
     })
+    updateData.estimated_cost = resolvedPricing.estimatedCost
+    updateData.labor_cost = resolvedPricing.laborCost
+    updateData.final_cost = resolvedPricing.finalCost
+    updateData.pricing_mode = resolvedPricing.pricingMode
+    updateData.discount_amount = resolvedPricing.discountAmount
+    updateData.price_override_reason = resolvedPricing.overrideReason
+    updateData.pricing_updated_by = ctx.userId
+    updateData.pricing_updated_at = new Date().toISOString()
+    updateData.updated_at = new Date().toISOString()
+
+    if (Array.isArray(parts)) {
+      delete updateData.estimated_cost
+      delete updateData.labor_cost
+      delete updateData.final_cost
+      delete updateData.pricing_mode
+      delete updateData.discount_amount
+      delete updateData.price_override_reason
+      delete updateData.pricing_updated_by
+      delete updateData.pricing_updated_at
+    }
 
     if (Object.keys(updateData).length > 0) {
       const { data, error } = await ctx.supabase
@@ -168,22 +263,6 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
       const exists = await assertRepairExists(ctx, id)
       if (!exists) {
         return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
-      }
-    }
-
-    if (Array.isArray(parts)) {
-      const { error: deletePartsError } = await ctx.supabase
-        .from('repair_parts')
-        .delete()
-        .eq('repair_id', id)
-      if (deletePartsError) throw deletePartsError
-
-      const partsToInsert = normalizeParts(parts as RepairPartInput[], id)
-      if (partsToInsert.length > 0) {
-        const { error: insertPartsError } = await ctx.supabase
-          .from('repair_parts')
-          .insert(partsToInsert)
-        if (insertPartsError) throw insertPartsError
       }
     }
 
@@ -219,6 +298,28 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
       }
     }
 
+    // Keep inventory last so a notes/images failure cannot leave stock and
+    // repair parts changed while the request reports an error.
+    if (Array.isArray(parts)) {
+      await replaceRepairPartsWithInventory({
+        supabase: ctx.supabase,
+        repairId: id,
+        organizationId: ctx.organizationId,
+        branchId: ctx.branchId,
+        actorId: ctx.userId,
+        parts: parsedParts?.success ? parsedParts.data : [],
+        pricing: {
+          laborCost: resolvedPricing.laborCost,
+          finalCost: resolvedPricing.finalCost,
+          estimatedCost: resolvedPricing.estimatedCost,
+          mode: resolvedPricing.pricingMode,
+          discountAmount: resolvedPricing.discountAmount,
+          overrideReason: resolvedPricing.overrideReason,
+          updatedBy: ctx.userId,
+        },
+      })
+    }
+
     const { data: repair, error: fetchError } = await fetchRepairById(ctx, id)
     if (fetchError) throw fetchError
     if (!repair) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
@@ -226,7 +327,23 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
     return NextResponse.json({ repair })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error interno del servidor'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: message,
+        code: error instanceof RepairPartsStockError
+          ? 'REPAIR_STOCK_CHANGED'
+          : error instanceof RepairPricingWriteError
+            ? error.code
+            : undefined,
+      },
+      {
+        status: error instanceof RepairPartsStockError
+          ? 409
+          : error instanceof RepairPricingWriteError
+            ? error.status
+            : 500,
+      }
+    )
   }
 }
 
@@ -257,17 +374,14 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
       )
     }
 
-    const { data, error } = await ctx.supabase
-      .from('repairs')
-      .delete()
-      .eq('id', id)
-      .eq('organization_id', ctx.organizationId)
-      .eq('branch_id', ctx.branchId)
-      .select('id')
-      .maybeSingle()
-
-    if (error) throw error
-    if (!data) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
+    const deleted = await deleteRepairWithInventory({
+      supabase: ctx.supabase,
+      repairId: id,
+      organizationId: ctx.organizationId,
+      branchId: ctx.branchId,
+      actorId: ctx.userId,
+    })
+    if (!deleted) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
 
     return NextResponse.json({ success: true })
   } catch (error) {

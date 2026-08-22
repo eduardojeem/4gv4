@@ -7,11 +7,17 @@ import React, { useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CreditCard, Users, Clock, AlertCircle, Trash2 } from 'lucide-react'
+import { CreditCard, Users, Clock, AlertCircle, Trash2, Sparkles, Loader2 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useCheckout } from '../../contexts/CheckoutContext'
+import { usePOSCustomer } from '../../contexts/POSCustomerContext'
+import { useCreditSystem } from '@/hooks/use-credit-system'
+import { toast } from 'sonner'
 import { CreditStatusPanel } from './CreditStatusPanel'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { formatThousands, parseThousands } from '@/lib/currency'
+import { ProductCreditPlanPicker } from './ProductCreditPlanPicker'
+import { buildProductCreditPayments, getProductCreditAllocation, type CartProductCreditPlan } from '../../lib/cart-credit-plans'
 
 /**
  * Genera sugerencias inteligentes de billetes basadas en el monto total
@@ -59,6 +65,7 @@ interface PaymentMethodsProps {
   
   formatCurrency: (amount: number) => string
   currency: string
+  productCreditPlans?: CartProductCreditPlan[]
 }
 
 export function PaymentMethods({
@@ -67,6 +74,7 @@ export function PaymentMethods({
   creditSummary,
   formatCurrency,
   currency,
+  productCreditPlans = [],
 }: PaymentMethodsProps) {
   
   const {
@@ -95,8 +103,50 @@ export function PaymentMethods({
     addPaymentSplit,
     removePaymentSplit,
     creditTerms,
-    setCreditTerms
+    setCreditTerms,
+    creditPlanSuggestion,
+    applyProductCreditSuggestion,
   } = useCheckout()
+
+  const { activeCustomer, refreshCustomers } = usePOSCustomer()
+  const { loadCreditData } = useCreditSystem()
+  const [isEnablingCredit, setIsEnablingCredit] = React.useState(false)
+  const [customCreditLimit, setCustomCreditLimit] = React.useState('')
+  const [showCustomLimitInput, setShowCustomLimitInput] = React.useState(false)
+
+  const handleEnableCredit = async (amount: number) => {
+    if (!activeCustomer?.id) {
+      toast.error('Selecciona un cliente primero para habilitar crédito')
+      return
+    }
+    setIsEnablingCredit(true)
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: activeCustomer.id,
+          credit_limit: amount,
+        }),
+      })
+      const data = await res.json()
+      if (data?.success) {
+        toast.success(`Línea de crédito activada: ${formatCurrency(amount)}`)
+        await Promise.all([
+          refreshCustomers(),
+          loadCreditData(activeCustomer.id)
+        ])
+        setShowCustomLimitInput(false)
+        setCustomCreditLimit('')
+      } else {
+        toast.error(data?.error || 'No se pudo actualizar el límite de crédito')
+      }
+    } catch {
+      toast.error('Error de conexión al habilitar el crédito')
+    } finally {
+      setIsEnablingCredit(false)
+    }
+  }
 
   // Estado local para el input de efectivo para permitir borrarlo fácilmente (evita que el 0 se quede "pegado")
   const [localCashInput, setLocalCashInput] = React.useState(cashReceived === 0 ? '' : cashReceived.toString())
@@ -147,12 +197,6 @@ export function PaymentMethods({
     { id: 'transfer', label: 'Transferencia', icon: Users, color: 'text-muted-foreground' },
     { id: 'credit', label: 'Crédito', icon: Clock, color: 'text-muted-foreground' }
   ]
-  const creditPlan = React.useMemo(() => buildCreditInstallmentPlan({
-    principalAmount: cartTotal,
-    interestRate: creditTerms.interestRate,
-    installmentCount: creditTerms.count,
-    frequency: creditTerms.frequency,
-  }), [cartTotal, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
   const existingCreditPrincipal = React.useMemo(
     () => paymentSplit
       .filter(split => split.method === 'credit')
@@ -168,12 +212,29 @@ export function PaymentMethods({
   const canUseMixedCredit = Boolean(
     creditSummary && creditSummary.availableCredit >= creditSplitPlan.financedTotal
   )
+  const handleProductPlanSelect = React.useCallback((plan: CartProductCreditPlan) => {
+    applyProductCreditSuggestion(plan)
+    const allocation = getProductCreditAllocation(plan, cartTotal)
+
+    if (allocation.dueNow <= 0) return
+
+    setPaymentSplit(buildProductCreditPayments(plan, cartTotal, () => crypto.randomUUID()))
+    setIsMixedPayment(true)
+    setPaymentMethod('')
+    setSplitAmount(0)
+    toast.info('Venta separada automáticamente', {
+      description: `${formatCurrency(allocation.financedPrincipal)} a crédito y ${formatCurrency(allocation.dueNow)} para pagar ahora.`,
+    })
+  }, [applyProductCreditSuggestion, cartTotal, formatCurrency, setIsMixedPayment, setPaymentMethod, setPaymentSplit, setSplitAmount])
 
   return (
     <div className="space-y-4">
       {/* Toggle entre pago simple y mixto */}
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">Método de Pago</h3>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold">¿Cómo paga el cliente?</h4>
+          <p className="text-xs text-muted-foreground">Seleccioná una opción para continuar.</p>
+        </div>
         <Button
           variant="outline"
           size="sm"
@@ -184,7 +245,7 @@ export function PaymentMethods({
             setSplitAmount(0)
             if (!nextMixed) setPaymentSplit([])
           }}
-          className="text-xs"
+          className="shrink-0 text-xs"
         >
           {isMixedPayment ? 'Pago Simple' : 'Pago Mixto'}
         </Button>
@@ -193,25 +254,29 @@ export function PaymentMethods({
       {!isMixedPayment ? (
         // Pago simple
         <div className="space-y-2">
-          {paymentMethods.map(method => (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {paymentMethods.map(method => (
             <Button
               key={method.id}
               variant={paymentMethod === method.id ? "default" : "outline"}
-              className={`w-full justify-start transition-all ${
+              aria-pressed={paymentMethod === method.id}
+              className={`h-auto min-h-16 w-full flex-col items-start justify-center gap-1 px-3 py-2 text-left transition-all ${
                 method.id === 'credit' && !canUseCredit 
                   ? 'opacity-70' // Visualmente distinto pero interactivo
                   : paymentMethod === method.id 
-                  ? 'ring-2 ring-primary ring-offset-2' 
+                  ? 'ring-2 ring-primary ring-offset-1'
                   : 'hover:bg-accent'
               }`}
               onClick={() => setPaymentMethod(method.id)}
               // Permitimos seleccionar crédito incluso si no es válido para mostrar la advertencia
               // disabled={method.id === 'credit' && !canUseCredit}
             >
-              <method.icon className={`h-4 w-4 mr-2 ${method.color}`} />
-              <span className="flex-1 text-left">{method.label}</span>
+              <span className="flex w-full items-center gap-2">
+                <method.icon className={`h-4 w-4 ${method.color}`} aria-hidden="true" />
+                <span className="font-semibold">{method.label}</span>
+              </span>
               {method.id === 'credit' && (
-                <div className="ml-auto flex flex-col items-end">
+                <div className="flex min-h-4 w-full flex-col items-start">
                   {creditSummary && (creditSummary.availableCredit + creditSummary.usedCredit) > 0 ? (
                     // Cliente con crédito configurado
                     <>
@@ -238,68 +303,165 @@ export function PaymentMethods({
                 </div>
               )}
             </Button>
-          ))}
+            ))}
+          </div>
           
           {/* Información adicional para venta a crédito */}
+          {paymentMethod === 'credit' && (
+            <ProductCreditPlanPicker
+              cartTotal={cartTotal}
+              plans={productCreditPlans}
+              selectedPlan={creditPlanSuggestion}
+              onSelect={handleProductPlanSelect}
+              formatCurrency={formatCurrency}
+            />
+          )}
+
           {paymentMethod === 'credit' && canUseCredit && creditSummary && (
             <CreditStatusPanel
               cartTotal={cartTotal}
               creditSummary={creditSummary}
               terms={creditTerms}
+              suggestion={creditPlanSuggestion}
               onTermsChange={setCreditTerms}
               formatCurrency={formatCurrency}
             />
           )}
           
-          {/* Advertencia si no tiene crédito suficiente */}
+          {/* Advertencia y opciones para habilitar crédito si no tiene crédito suficiente */}
           {paymentMethod === 'credit' && !canUseCredit && (
-            <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  {!creditSummary || (creditSummary.availableCredit + creditSummary.usedCredit) === 0 ? (
-                    // Cliente sin límite de crédito configurado
-                    <>
-                      <p className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
-                        Crédito no habilitado
+            <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-3">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div className="flex-1 space-y-1">
+                  {!activeCustomer ? (
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                        Cliente no seleccionado
                       </p>
-                      <p className="text-xs text-red-700 dark:text-red-300">
-                        Este cliente no tiene un límite de crédito asignado. Configure el límite de crédito en la ficha del cliente para habilitar ventas a crédito.
+                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                        Debes seleccionar un cliente en el panel para procesar ventas a crédito.
                       </p>
-                    </>
+                    </div>
+                  ) : (!creditSummary || (creditSummary.availableCredit + creditSummary.usedCredit) === 0) ? (
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                        Crédito no habilitado para {activeCustomer.name}
+                      </p>
+                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                        El cliente no tiene un límite de crédito activo (₲ 0). Puedes asignarle una línea de crédito con 1 clic para continuar:
+                      </p>
+                    </div>
                   ) : (
-                    // Cliente con crédito insuficiente
-                    <>
-                      <p className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
-                        Cliente con crédito insuficiente
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                        Crédito insuficiente para esta venta
                       </p>
-                      <p className="text-xs text-red-700 dark:text-red-300 mb-2">
-                        El cliente no tiene suficiente crédito disponible para esta venta.
+                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                        Disponible: <strong className="text-emerald-700 dark:text-emerald-400 font-mono">{formatCurrency(creditSummary.availableCredit)}</strong> · Requerido: <strong className="font-mono">{formatCurrency(cartTotal)}</strong>
                       </p>
-                      <div className="space-y-1 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-red-600 dark:text-red-400">Total financiado:</span>
-                          <span className="font-semibold text-red-800 dark:text-red-200">{formatCurrency(creditPlan.financedTotal)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-red-600 dark:text-red-400">Crédito disponible:</span>
-                          <span className="font-semibold text-red-800 dark:text-red-200">{formatCurrency(creditSummary.availableCredit)}</span>
-                        </div>
-                        <div className="flex justify-between border-t border-red-300 dark:border-red-700 pt-1 mt-1">
-                          <span className="text-red-700 dark:text-red-300 font-medium">Faltante:</span>
-                          <span className="font-bold text-red-900 dark:text-red-100">{formatCurrency(creditPlan.financedTotal - creditSummary.availableCredit)}</span>
-                        </div>
-                      </div>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
+
+              {activeCustomer && (
+                <div className="pt-2 border-t border-amber-500/20 space-y-2">
+                  <span className="text-xs font-semibold text-amber-900 dark:text-amber-200 block">
+                    Opciones rápidas para habilitar crédito:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isEnablingCredit}
+                      onClick={() => handleEnableCredit(Math.max(1000000, cartTotal))}
+                      className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    >
+                      {isEnablingCredit ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Habilitar {formatCurrency(Math.max(1000000, cartTotal))}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isEnablingCredit}
+                      onClick={() => handleEnableCredit(2000000)}
+                      className="h-8 text-xs bg-card border-amber-300 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950/40"
+                    >
+                      Límite ₲ 2.000.000
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isEnablingCredit}
+                      onClick={() => handleEnableCredit(5000000)}
+                      className="h-8 text-xs bg-card border-amber-300 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950/40"
+                    >
+                      Límite ₲ 5.000.000
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowCustomLimitInput(!showCustomLimitInput)}
+                      className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      {showCustomLimitInput ? 'Cancelar' : 'Otro monto...'}
+                    </Button>
+                  </div>
+
+                  {showCustomLimitInput && (
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-amber-500/20">
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₲</span>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Ingresar nuevo límite"
+                          value={formatThousands(customCreditLimit)}
+                          onChange={(e) => {
+                            const raw = parseThousands(e.target.value)
+                            setCustomCreditLimit(raw > 0 ? String(raw) : (e.target.value === '' ? '' : '0'))
+                          }}
+                          className="h-8 pl-6 text-xs font-mono font-bold"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isEnablingCredit || !customCreditLimit || Number(customCreditLimit) <= 0}
+                        onClick={() => handleEnableCredit(Number(customCreditLimit))}
+                        className="h-8 px-3 text-xs bg-primary"
+                      >
+                        {isEnablingCredit ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        Guardar Límite
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
       ) : (
         // Pago mixto
         <div className="space-y-4">
+          <ProductCreditPlanPicker
+            cartTotal={cartTotal}
+            plans={productCreditPlans}
+            selectedPlan={creditPlanSuggestion}
+            onSelect={handleProductPlanSelect}
+            formatCurrency={formatCurrency}
+          />
           <div className="bg-muted rounded-lg p-3">
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm font-medium">Total a pagar:</span>
@@ -381,26 +543,44 @@ export function PaymentMethods({
       {paymentMethod === 'cash' && !isMixedPayment && (
         <div className="mt-4">
           <label className="text-sm font-medium mb-2 block">Efectivo recibido</label>
-          <Input
-            type="number"
-            value={localCashInput}
-            onChange={(e) => {
-              const val = e.target.value
-              setLocalCashInput(val)
-              setCashReceived(val === '' ? 0 : Number(val))
-            }}
-            onFocus={(e) => e.target.select()}
-            placeholder="0"
-          />
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">₲</span>
+            <Input
+              type="text"
+              inputMode="numeric"
+              value={formatThousands(localCashInput)}
+              onChange={(e) => {
+                const raw = parseThousands(e.target.value)
+                setLocalCashInput(raw > 0 ? String(raw) : (e.target.value === '' ? '' : '0'))
+                setCashReceived(raw)
+              }}
+              onFocus={(e) => e.target.select()}
+              placeholder="0"
+              className="pl-7 font-bold font-mono text-base"
+            />
+          </div>
           
-          {/* Sugerencias inteligentes */}
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          {/* Sugerencias rápidas de billetes y montos exactos */}
+          <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+              onClick={() => {
+                setLocalCashInput(cartTotal.toString())
+                setCashReceived(cartTotal)
+              }}
+            >
+              Monto Exacto ({formatCurrency(cartTotal)})
+            </Button>
             {getSmartSuggestions(cartTotal, currency).map((suggestion) => (
               <Button
                 key={suggestion}
+                type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 px-2 text-[10px] bg-background/50 hover:bg-primary hover:text-primary-foreground transition-all duration-200 border-dashed"
+                className="h-7 px-2 text-xs bg-card hover:bg-primary hover:text-primary-foreground transition-all duration-150 border-border/70 font-medium"
                 onClick={() => {
                   setLocalCashInput(suggestion.toString())
                   setCashReceived(suggestion)
@@ -409,17 +589,46 @@ export function PaymentMethods({
                 {formatCurrency(suggestion)}
               </Button>
             ))}
+            {localCashInput !== '' && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                onClick={() => {
+                  setLocalCashInput('')
+                  setCashReceived(0)
+                }}
+              >
+                Limpiar
+              </Button>
+            )}
           </div>
 
+          {/* Indicador de Restante / Falta Cobrar */}
           {cashRemaining > 0 && (
-            <p className="text-sm text-destructive mt-2">
-              Restante: {formatCurrency(cashRemaining)}
-            </p>
+            <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 flex items-center justify-between text-xs">
+              <span className="font-semibold">Falta cobrar:</span>
+              <span className="font-bold text-sm tabular-nums">{formatCurrency(cashRemaining)}</span>
+            </div>
           )}
+
+          {/* Indicador GIGANTE de Vuelto / Cambio a Entregar */}
           {cashChange > 0 && (
-            <p className="text-sm text-primary mt-1">
-              Cambio: {formatCurrency(cashChange)}
-            </p>
+            <div className="mt-3 p-3.5 rounded-xl bg-emerald-500/15 border-2 border-emerald-500/40 text-emerald-900 dark:text-emerald-200 flex items-center justify-between shadow-sm animate-in fade-in-50 duration-200">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                  💵 Vuelto a Entregar
+                </p>
+                <p className="text-2xl font-black tabular-nums text-emerald-600 dark:text-emerald-300">
+                  {formatCurrency(cashChange)}
+                </p>
+              </div>
+              <div className="text-right text-xs text-muted-foreground">
+                <p>Cobrado: <strong className="text-foreground">{formatCurrency(cashReceived)}</strong></p>
+                <p>Total ticket: <strong className="text-foreground">{formatCurrency(cartTotal)}</strong></p>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -450,19 +659,22 @@ export function PaymentMethods({
         <div className="mt-4 space-y-3">
           <div>
             <label className="text-sm font-medium mb-2 block">Monto a pagar con {paymentMethod}</label>
-            <Input
-              type="number"
-              placeholder={`Máximo: ${formatCurrency(getRemainingAmount())}`}
-              min={0}
-              max={getRemainingAmount()}
-              value={localSplitInput}
-              onChange={(e) => {
-                const val = e.target.value
-                setLocalSplitInput(val)
-                setSplitAmount(val === '' ? 0 : Number(val))
-              }}
-              onFocus={(e) => e.target.select()}
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">₲</span>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder={`Máximo: ${formatCurrency(getRemainingAmount())}`}
+                value={formatThousands(localSplitInput)}
+                onChange={(e) => {
+                  const raw = parseThousands(e.target.value)
+                  setLocalSplitInput(raw > 0 ? String(raw) : (e.target.value === '' ? '' : '0'))
+                  setSplitAmount(raw)
+                }}
+                onFocus={(e) => e.target.select()}
+                className="pl-7 font-bold font-mono"
+              />
+            </div>
           </div>
 
           {getRemainingAmount() > 0.01 && (
@@ -485,6 +697,7 @@ export function PaymentMethods({
               cartTotal={splitAmount}
               creditSummary={creditSummary}
               terms={creditTerms}
+              suggestion={creditPlanSuggestion}
               onTermsChange={setCreditTerms}
               formatCurrency={formatCurrency}
             />

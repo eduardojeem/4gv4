@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { DateRange } from 'react-day-picker'
-import { AlertTriangle, Loader2, RefreshCw, Info } from 'lucide-react'
+import { AlertTriangle, Loader2, RefreshCw, Info, Shield, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuth } from '@/contexts/auth-context'
 import { usePosStats } from './hooks/usePosStats'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/currency'
@@ -22,6 +24,9 @@ import { RepairPosStatsCards } from './components/RepairPosStatsCards'
 import { ProfitStatsCards } from './components/ProfitStatsCards'
 
 export default function POSDashboard() {
+  const { user, isAdmin, loading: authLoading } = useAuth()
+  const canAccess = Boolean(isAdmin || user?.role === 'admin' || user?.role === 'super_admin')
+
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: new Date(),
     to: new Date(),
@@ -76,6 +81,39 @@ export default function POSDashboard() {
     toast.success('Datos actualizados')
   }
 
+  if (authLoading) {
+    return (
+      <div className="mx-auto flex max-w-[1480px] flex-col items-center justify-center gap-3 py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+        <p className="text-sm text-slate-500">Verificando permisos de acceso...</p>
+      </div>
+    )
+  }
+
+  if (!canAccess) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] p-6">
+        <div className="max-w-md w-full text-center space-y-4 bg-card p-8 rounded-2xl border border-border shadow-lg">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+            <Shield className="h-8 w-8 text-rose-600 dark:text-rose-400" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold text-foreground">Acceso Restringido</h1>
+            <p className="text-xs text-muted-foreground">
+              Esta sección contiene métricas financieras confidenciales y está reservada exclusivamente para administradores y gerencia.
+            </p>
+          </div>
+          <Button asChild className="gap-2 text-xs font-semibold rounded-xl mt-2" size="sm">
+            <Link href="/dashboard/pos">
+              <ArrowLeft className="h-4 w-4" />
+              Volver al Punto de Venta
+            </Link>
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   if (loading && !stats.totalTransactions && !stats.repairStats.deliveredCount) {
     return (
       <div className="mx-auto flex max-w-[1480px] flex-col items-center justify-center gap-3 py-24">
@@ -116,61 +154,7 @@ export default function POSDashboard() {
         />
       </div>
 
-      {/* Guía de funcionamiento del Dashboard POS */}
-      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-        <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Dashboard del POS y Taller?
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-            </div>
-          </summary>
-          <CardContent className="pt-0 pb-5 text-xs">
-            <div className="grid gap-4 sm:grid-cols-4">
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                  Filtro por Rango Fechas
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Usa los atajos (Hoy, 7 días, Este mes) o el calendario para filtrar ventas, créditos y reparaciones.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
 
-                  Filtro por Módulo
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Usa los botones superiores para conmutar entre Vista General, Solo Ventas, Solo Reparaciones del Taller o Análisis de Ganancias.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                  Métricas de Taller
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Monitorea el total presupuestado de reparaciones ingresadas, recaudación por reparaciones entregadas y equipos en taller.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">4</Badge>
-                  Ganancias y Márgenes
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Calcula la ganancia bruta considerando costo de mercadería vendida (CMV) y recaudación total del taller.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </details>
-      </Card>
 
       {/* Refresh footer */}
       <div className="flex justify-end -mt-2">

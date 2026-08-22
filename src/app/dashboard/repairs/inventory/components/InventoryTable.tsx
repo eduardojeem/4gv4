@@ -56,6 +56,7 @@ import { useInventory } from '../context/InventoryContext'
 
 interface InventoryTableProps {
   products: Product[]
+  totalCatalogCount?: number
   onEdit?: (product: Product) => void
   onDelete?: (product: Product) => void
   onViewDetail?: (product: Product) => void
@@ -135,25 +136,13 @@ const InventoryRow = memo(({
         </Badge>
       </TableCell>
 
-      {/* Control de Stock Ajustable In-Line */}
-      <TableCell className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+      {/* Stock en Depósito */}
+      <TableCell className="py-3.5 px-4">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              disabled={stock <= 0}
-              onClick={() => onStockAdjust(product, -1)}
-              className="h-6 w-6 rounded-md hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/50 border-slate-200 dark:border-slate-700 transition-all shrink-0"
-              title="Disminuir stock en 1"
-            >
-              <Minus className="h-3 w-3" />
-            </Button>
-
             <span
               className={cn(
-                'font-bold text-sm min-w-[28px] text-center px-1 py-0.5 rounded-md transition-colors',
+                'font-extrabold text-sm px-2 py-0.5 rounded-md transition-colors font-mono',
                 isOutOfStock
                   ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40'
                   : isLowStock
@@ -161,19 +150,21 @@ const InventoryRow = memo(({
                   : 'text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-800/80'
               )}
             >
-              {stock}
+              {stock} u.
             </span>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => onStockAdjust(product, 1)}
-              className="h-6 w-6 rounded-md hover:bg-emerald-100 hover:text-emerald-600 dark:hover:bg-emerald-950/50 border-slate-200 dark:border-slate-700 transition-all shrink-0"
-              title="Aumentar stock en 1"
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
+            {isOutOfStock ? (
+              <Badge variant="destructive" className="text-[10px] font-bold px-1.5 py-0 h-4.5 rounded-md">
+                AGOTADO
+              </Badge>
+            ) : isLowStock ? (
+              <Badge className="text-[10px] font-bold px-1.5 py-0 h-4.5 rounded-md bg-amber-500 text-white hover:bg-amber-600 gap-1">
+                <AlertTriangle className="h-2.5 w-2.5" /> BAJO
+              </Badge>
+            ) : (
+              <Badge className="text-[10px] font-medium px-1.5 py-0 h-4.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                OK
+              </Badge>
+            )}
           </div>
 
           {/* Micro Barra de Nivel de Stock */}
@@ -182,12 +173,12 @@ const InventoryRow = memo(({
               className={cn(
                 'h-full transition-all duration-300 rounded-full',
                 isOutOfStock
-                  ? 'w-0'
+                  ? 'bg-red-500 w-full opacity-40'
                   : isLowStock
                   ? 'bg-amber-500'
                   : 'bg-emerald-500'
               )}
-              style={{ width: `${stockRatioPercent}%` }}
+              style={{ width: isOutOfStock ? '100%' : `${stockRatioPercent}%` }}
             />
           </div>
         </div>
@@ -196,61 +187,94 @@ const InventoryRow = memo(({
       {/* Precio de Venta y Margen de Ganancia */}
       <TableCell className="py-3.5 px-4">
         <div className="flex flex-col">
-          <span className="font-bold text-sm text-blue-600 dark:text-blue-400">
+          <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100 font-mono">
             {formatPrice(salePrice)}
           </span>
-          {profitMarginPercent !== null && (
-            <div className="flex items-center gap-1 mt-0.5">
-              <TrendingUp className="h-3 w-3 text-emerald-500" />
-              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                {profitMarginPercent}% margen
-              </span>
-            </div>
+          {costPrice > 0 && (
+            <span className="text-[11px] text-muted-foreground font-mono">
+              Costo: {formatPrice(costPrice)}
+            </span>
           )}
         </div>
       </TableCell>
 
-      {/* Estado del Repuesto */}
-      <TableCell className="py-3.5 px-4 text-right">
-        {isOutOfStock ? (
-          <Badge variant="destructive" className="bg-red-500 hover:bg-red-600 font-semibold px-2.5 py-0.5 rounded-full shadow-sm">
-            <ShieldAlert className="h-3 w-3 mr-1" />
-            Agotado
-          </Badge>
-        ) : isLowStock ? (
-          <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-semibold px-2.5 py-0.5 rounded-full shadow-sm">
-            <AlertTriangle className="h-3 w-3 mr-1" />
-            Bajo Stock ({stock}/{minStock})
-          </Badge>
+      {/* Margen de Ganancia */}
+      <TableCell className="py-3.5 px-4">
+        {profitMarginPercent !== null ? (
+          <div className="flex flex-col gap-0.5">
+            <Badge
+              variant="outline"
+              className={cn(
+                'font-bold text-[11px] px-2 py-0.5 rounded-md border w-fit gap-1',
+                profitMarginPercent >= 40
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  : profitMarginPercent >= 20
+                  ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+              )}
+            >
+              <TrendingUp className="h-3 w-3" />
+              {profitMarginPercent}%
+            </Badge>
+            <span className="text-[10px] text-slate-500 font-mono">
+              +{formatPrice(salePrice - costPrice)}
+            </span>
+          </div>
         ) : (
-          <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-2.5 py-0.5 rounded-full shadow-sm">
-            ✓ En Stock
-          </Badge>
+          <span className="text-xs text-muted-foreground">-</span>
         )}
+      </TableCell>
+
+      {/* Ajuste Rápido de Stock (+1 / -1) */}
+      <TableCell className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 rounded-lg text-slate-600 hover:text-red-600 hover:bg-red-50 hover:border-red-200 dark:text-slate-400 dark:hover:bg-red-950/30 transition-colors"
+            disabled={stock <= 0}
+            onClick={() => onStockAdjust(product, -1)}
+            title="Reducir 1 unidad"
+          >
+            <Minus className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 rounded-lg text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 dark:text-slate-400 dark:hover:bg-emerald-950/30 transition-colors"
+            onClick={() => onStockAdjust(product, 1)}
+            title="Aumentar 1 unidad"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </TableCell>
 
       {/* Acciones */}
       <TableCell className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-slate-200/60 dark:hover:bg-slate-800/80 rounded-lg">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuLabel className="text-xs text-muted-foreground">Opciones</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => onViewDetail?.(product)} className="cursor-pointer text-xs">
-              <Eye className="mr-2 h-3.5 w-3.5 text-emerald-500" /> Ver Detalle
+          <DropdownMenuContent align="end" className="w-48 rounded-xl shadow-lg border-slate-200 dark:border-slate-800">
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Acciones de Repuesto</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onViewDetail?.(product)} className="cursor-pointer gap-2 text-xs">
+              <Eye className="h-3.5 w-3.5 text-blue-600" /> Ver Ficha Técnica
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onEdit?.(product)} className="cursor-pointer text-xs">
-              <Pencil className="mr-2 h-3.5 w-3.5 text-blue-500" /> Editar
+            <DropdownMenuItem onClick={() => onEdit?.(product)} className="cursor-pointer gap-2 text-xs">
+              <Pencil className="h-3.5 w-3.5 text-amber-600" /> Editar Información
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => onDelete?.(product)}
-              className="text-red-600 dark:text-red-400 cursor-pointer text-xs focus:bg-red-50 dark:focus:bg-red-950/30"
+              className="cursor-pointer gap-2 text-xs text-red-600 dark:text-red-400 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/30"
             >
-              <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar
+              <Trash2 className="h-3.5 w-3.5" /> Eliminar Repuesto
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -266,6 +290,7 @@ InventoryRow.displayName = 'InventoryRow'
  */
 export function InventoryTable({
   products,
+  totalCatalogCount,
   onEdit,
   onDelete,
   onViewDetail,
@@ -276,7 +301,7 @@ export function InventoryTable({
   const [sortColumn, setSortColumn] = useState<SortColumn>('name')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [currentPage, setCurrentPage] = useState<number>(1)
-  const pageSize = 12
+  const [pageSize, setPageSize] = useState<number>(12)
 
   // Manejador de ordenamiento al hacer clic en columnas
   const handleSort = (column: SortColumn) => {
@@ -325,10 +350,15 @@ export function InventoryTable({
 
   // Paginación de la tabla
   const totalPages = Math.ceil(sortedProducts.length / pageSize) || 1
+  const effectivePage = Math.min(Math.max(1, currentPage), totalPages)
+
   const paginatedProducts = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
+    const start = (effectivePage - 1) * pageSize
     return sortedProducts.slice(start, start + pageSize)
-  }, [sortedProducts, currentPage, pageSize])
+  }, [sortedProducts, effectivePage, pageSize])
+
+  const startItem = sortedProducts.length === 0 ? 0 : (effectivePage - 1) * pageSize + 1
+  const endItem = Math.min(effectivePage * pageSize, sortedProducts.length)
 
   // Resumen financiero del inventario filtrado
   const totalValuation = useMemo(() => {
@@ -371,20 +401,53 @@ export function InventoryTable({
 
   return (
     <div className="space-y-3">
-      {/* Barra de Resumen e Indicador de Valoración */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 py-1 text-xs text-slate-600 dark:text-slate-400">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-900 dark:text-slate-100">
-            {products.length} {products.length === 1 ? 'repuesto' : 'repuestos'}
-          </span>
-          <span>•</span>
-          <span>
-            Valorizado en: <strong className="text-emerald-600 dark:text-emerald-400">{formatPrice(totalValuation)}</strong>
+      {/* Barra de Resumen, Conteo y Valoración */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-1 py-1.5 text-xs text-slate-600 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-900/40 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary" className="font-bold text-xs bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
+            Mostrando {startItem}–{endItem} de {products.length} repuestos
+          </Badge>
+
+          {typeof totalCatalogCount === 'number' && totalCatalogCount !== products.length && (
+            <Badge variant="outline" className="text-xs text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700">
+              Total catálogo: {totalCatalogCount}
+            </Badge>
+          )}
+
+          <Badge variant="outline" className="text-xs font-semibold bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
+            👁️ {paginatedProducts.length} a la vista
+          </Badge>
+
+          <span className="hidden md:inline text-slate-300 dark:text-slate-700">|</span>
+
+          <span className="hidden md:inline">
+            Valorizado en: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{formatPrice(totalValuation)}</strong>
           </span>
         </div>
-        <div className="text-[11px] text-muted-foreground flex items-center gap-1">
-          <SlidersHorizontal className="h-3 w-3" />
-          Usa los botones <strong>+ / -</strong> para ajustar el stock al instante
+
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground whitespace-nowrap">Por pág:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setCurrentPage(1)
+              }}
+              className="h-7 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-semibold focus:ring-1 focus:ring-blue-500"
+            >
+              <option value={10}>10</option>
+              <option value={12}>12</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          <div className="text-[11px] text-muted-foreground hidden lg:flex items-center gap-1">
+            <SlidersHorizontal className="h-3 w-3" />
+            Stock: <strong>+ / -</strong>
+          </div>
         </div>
       </div>
 
@@ -393,75 +456,38 @@ export function InventoryTable({
         <Table>
           <TableHeader className="bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800">
             <TableRow>
-              {/* Columna Nombre */}
-              <TableHead
-                className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold text-slate-900 dark:text-slate-100 text-xs py-3"
-                onClick={() => handleSort('name')}
-              >
+              <TableHead className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold text-slate-900 dark:text-slate-100 text-xs py-3" onClick={() => handleSort('name')}>
                 <div className="flex items-center gap-1.5">
                   Repuesto
-                  {sortColumn === 'name' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-blue-600" /> : <ArrowDown className="h-3.5 w-3.5 text-blue-600" />
-                  ) : (
-                    <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />
-                  )}
+                  {sortColumn === 'name' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-blue-600" /> : <ArrowDown className="h-3.5 w-3.5 text-blue-600" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />}
                 </div>
               </TableHead>
-
-              {/* Columna Categoría */}
-              <TableHead
-                className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold text-slate-900 dark:text-slate-100 text-xs py-3"
-                onClick={() => handleSort('category')}
-              >
+              <TableHead className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold text-slate-900 dark:text-slate-100 text-xs py-3" onClick={() => handleSort('category')}>
                 <div className="flex items-center gap-1.5">
                   Categoría
-                  {sortColumn === 'category' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-blue-600" /> : <ArrowDown className="h-3.5 w-3.5 text-blue-600" />
-                  ) : (
-                    <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />
-                  )}
+                  {sortColumn === 'category' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-blue-600" /> : <ArrowDown className="h-3.5 w-3.5 text-blue-600" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />}
                 </div>
               </TableHead>
-
-              {/* Columna Stock */}
-              <TableHead
-                className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold text-slate-900 dark:text-slate-100 text-xs py-3"
-                onClick={() => handleSort('stock')}
-              >
+              <TableHead className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold text-slate-900 dark:text-slate-100 text-xs py-3" onClick={() => handleSort('stock')}>
                 <div className="flex items-center gap-1.5">
                   Stock Disponible
-                  {sortColumn === 'stock' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-blue-600" /> : <ArrowDown className="h-3.5 w-3.5 text-blue-600" />
-                  ) : (
-                    <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />
-                  )}
+                  {sortColumn === 'stock' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-blue-600" /> : <ArrowDown className="h-3.5 w-3.5 text-blue-600" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />}
                 </div>
               </TableHead>
-
-              {/* Columna Precio */}
-              <TableHead
-                className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold text-slate-900 dark:text-slate-100 text-xs py-3"
-                onClick={() => handleSort('price')}
-              >
+              <TableHead className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold text-slate-900 dark:text-slate-100 text-xs py-3" onClick={() => handleSort('price')}>
                 <div className="flex items-center gap-1.5">
                   Precio Venta
-                  {sortColumn === 'price' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-blue-600" /> : <ArrowDown className="h-3.5 w-3.5 text-blue-600" />
-                  ) : (
-                    <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />
-                  )}
+                  {sortColumn === 'price' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-blue-600" /> : <ArrowDown className="h-3.5 w-3.5 text-blue-600" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />}
                 </div>
               </TableHead>
-
-              {/* Columna Estado */}
-              <TableHead className="text-right font-bold text-slate-900 dark:text-slate-100 text-xs py-3">
-                Estado
+              <TableHead className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold text-slate-900 dark:text-slate-100 text-xs py-3" onClick={() => handleSort('margin')}>
+                <div className="flex items-center gap-1.5">
+                  Margen Estimado
+                  {sortColumn === 'margin' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-blue-600" /> : <ArrowDown className="h-3.5 w-3.5 text-blue-600" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />}
+                </div>
               </TableHead>
-
-              {/* Columna Acciones */}
-              <TableHead className="text-right font-bold text-slate-900 dark:text-slate-100 text-xs py-3">
-                Acciones
-              </TableHead>
+              <TableHead className="font-bold text-slate-900 dark:text-slate-100 text-xs py-3">Ajuste Stock</TableHead>
+              <TableHead className="text-right font-bold text-slate-900 dark:text-slate-100 text-xs py-3">Acciones</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -481,33 +507,37 @@ export function InventoryTable({
       </div>
 
       {/* Paginador */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-2 px-1">
-          <span className="text-xs text-muted-foreground">
-            Página {currentPage} de {totalPages} ({products.length} repuestos en total)
-          </span>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 px-1">
+        <span className="text-xs text-muted-foreground">
+          Página {effectivePage} de {totalPages} · Mostrando <strong>{paginatedProducts.length}</strong> de <strong>{products.length}</strong> repuestos filtrados
+          {typeof totalCatalogCount === 'number' && totalCatalogCount !== products.length && ` (${totalCatalogCount} en catálogo)`}
+        </span>
+        {totalPages > 1 && (
           <div className="flex items-center gap-1.5">
             <Button
               variant="outline"
               size="sm"
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage(p => p - 1)}
+              disabled={effectivePage <= 1}
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               className="h-8 text-xs rounded-xl"
             >
               <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
             </Button>
+            <span className="text-xs px-2 font-mono font-bold text-slate-700 dark:text-slate-300">
+              {effectivePage} / {totalPages}
+            </span>
             <Button
               variant="outline"
               size="sm"
-              disabled={currentPage >= totalPages}
-              onClick={() => setCurrentPage(p => p + 1)}
+              disabled={effectivePage >= totalPages}
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               className="h-8 text-xs rounded-xl"
             >
               Siguiente <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

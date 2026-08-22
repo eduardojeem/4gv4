@@ -14,9 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Info, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useCashRegisterContext } from '../contexts/CashRegisterContext'
 import { CashCountModal } from '../components/CashCountModal'
 import { useAuth } from '@/contexts/auth-context'
@@ -29,6 +27,7 @@ import { CashRegisterHistory } from './components/CashRegisterHistory'
 import { CashRegisterAudit } from './components/CashRegisterAudit'
 import { ElectronicPaymentsPanel } from './components/ElectronicPaymentsPanel'
 import { OpenCashRegisterDialog } from '../components/OpenCashRegisterDialog'
+import { POSCashMovementDialog } from '../components/POSCashMovementDialog'
 
 export default function CashRegisterPage() {
   const router = useRouter()
@@ -168,51 +167,6 @@ export default function CashRegisterPage() {
     <div className="flex flex-col h-full p-4 md:p-6 space-y-6">
       <CashRegisterHeader />
 
-      {/* Guía de funcionamiento de caja */}
-      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-        <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Caja?
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-            </div>
-          </summary>
-          <CardContent className="pt-0 pb-5 text-xs">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                  Apertura y Cierre
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Inicia tu turno ingresando el monto físico inicial en caja. Al finalizar, realiza el conteo del efectivo en caja y regístralo para conciliar las transacciones del día.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                  Entradas y Salidas
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Registra movimientos manuales de dinero para gastos menores o retiros de efectivo (salidas), así como aportes adicionales de caja (entradas) justificando su origen.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                  Arqueo de Caja
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Realiza arqueos rápidos contando los billetes y monedas por denominación. El sistema comparará el monto físico con el saldo teórico y reportará cualquier sobrante o faltante.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </details>
-      </Card>
 
       {isAdmin && (
         <div className="flex justify-end">
@@ -425,85 +379,13 @@ export default function CashRegisterPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isMovementDialogOpen} onOpenChange={setIsMovementDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}</DialogTitle>
-            <DialogDescription>
-              {movementType === 'in'
-                ? 'Ingrese el monto a agregar a la caja.'
-                : 'Ingrese el monto a retirar de la caja.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="mov-amount">Monto</Label>
-              <Input
-                id="mov-amount"
-                type="number"
-                inputMode="decimal"
-                value={movementAmount}
-                onChange={(e) => setMovementAmount(e.target.value)}
-                autoFocus
-                placeholder="0"
-              />
-              <div className="flex flex-wrap gap-2 mt-1">
-                {[5000, 10000, 20000, 50000, 100000].map((amount) => (
-                  <Button
-                    key={amount}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setMovementAmount(amount.toString())}
-                  >
-                    {new Intl.NumberFormat('es-PY').format(amount)}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="mov-note">Motivo / Nota</Label>
-              <Input
-                id="mov-note"
-                value={movementNote}
-                onChange={(e) => setMovementNote(e.target.value)}
-                placeholder={movementType === 'in' ? 'Ej. Cambio inicial' : 'Ej. Pago a proveedor'}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsMovementDialogOpen(false)}>Cancelar</Button>
-            <Button
-              variant={movementType === 'out' ? 'destructive' : 'default'}
-              disabled={parsedMovementAmount <= 0 || isSubmitting}
-              onClick={async () => {
-                if (parsedMovementAmount <= 0) return
-                setIsSubmitting(true)
-                try {
-                  const saved = await addMovement(
-                    movementType === 'in' ? 'cash_in' : 'cash_out',
-                    parsedMovementAmount,
-                    movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso')
-                  )
-                  if (saved) {
-                    setIsMovementDialogOpen(false)
-                    setMovementAmount('')
-                    setMovementNote('')
-                  }
-                } finally {
-                  setIsSubmitting(false)
-                }
-              }}
-            >
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isSubmitting
-                ? 'Guardando...'
-                : movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <POSCashMovementDialog
+        open={isMovementDialogOpen}
+        onOpenChange={setIsMovementDialogOpen}
+        onAddMovement={addMovement}
+        initialType={movementType}
+        currentBalance={getCurrentRegister?.balance || 0}
+      />
 
       <CashCountModal
         isOpen={isCashCountModalOpen}

@@ -5,3 +5,6 @@
 
 /** Upper bound for the price filter slider. Treated as "no max" when selected. */
 export const PRODUCTS_MAX_PRICE = 50_000_000
+
+/** Number of products shown per page in the public catalogue. */
+export const PRODUCTS_PER_PAGE = 16

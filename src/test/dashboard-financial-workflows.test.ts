@@ -27,6 +27,10 @@ const cashMovementEnumCastMigration = readFileSync(
   resolve(workspace, 'supabase/migrations/20260802193000_fix_cash_movement_enum_cast.sql'),
   'utf8'
 )
+const repairBalanceDueMigration = readFileSync(
+  resolve(workspace, 'supabase/migrations/20260805090000_charge_repair_balance_due.sql'),
+  'utf8'
+)
 
 describe('dashboard financial workflow contracts', () => {
   it.each([
@@ -69,7 +73,7 @@ describe('dashboard financial workflow contracts', () => {
       'utf8'
     )
 
-    expect(posRoute).toContain("'process_pos_sale_atomic_v3'")
+    expect(posRoute).toContain("'process_pos_sale_atomic_v4'")
     expect(ordersRoute).toContain("'create_dashboard_order_atomic'")
   })
 
@@ -92,7 +96,7 @@ describe('dashboard financial workflow contracts', () => {
     )
 
     expect(posRoute).toContain("permission: 'pos.sales.create'")
-    expect(posRoute).toContain("'process_pos_sale_atomic_v3'")
+    expect(posRoute).toContain("'process_pos_sale_atomic_v4'")
     expect(posPage).not.toContain('await persistSaleToSupabase(')
     expect(posPage).not.toContain('syncSaleWithCashRegister(')
     expect(posPage).not.toContain(".from('sales').insert")
@@ -215,19 +219,54 @@ describe('dashboard financial workflow contracts', () => {
     expect(cashHook).not.toContain("const fallback = [{ id: 'principal'")
   })
 
+  it('resolves the principal register alias inside the shared hook before opening cash', () => {
+    const cashHook = readFileSync(resolve(workspace, 'src/hooks/useCashRegister.ts'), 'utf8')
+
+    expect(cashHook).toContain("normalizedRegisterId === 'principal'")
+    expect(cashHook).toContain('await loadRegisters()')
+    expect(cashHook).toContain("fetch('/api/pos/cash-registers'")
+    expect(cashHook).toContain("name: 'Caja Principal'")
+  })
+
+  it('routes a repair without price from payment to the existing edit flow', () => {
+    const repairsPage = readFileSync(resolve(workspace, 'src/app/dashboard/repairs/page.tsx'), 'utf8')
+
+    expect(repairsPage).toContain('onDefinePrice={(repair) => {')
+    expect(repairsPage).toContain('setPayTarget(null)')
+    expect(repairsPage).toContain('setSelectedRepair(repair)')
+    expect(repairsPage).toContain("setDialogMode('edit')")
+    expect(repairsPage).toContain('setIsDialogOpen(true)')
+  })
+
+  it('feeds a selected service price into the new-repair calculator', () => {
+    const repairForm = readFileSync(resolve(workspace, 'src/components/dashboard/repair-form-dialog-v2.tsx'), 'utf8')
+
+    expect(repairForm).toContain('resolveServicePricingSelection({')
+    expect(repairForm).toContain('deviceCount: fields.length')
+    expect(repairForm).toContain("setValue('laborCost', selection.laborCost")
+    expect(repairForm).toContain("setValue('finalCost', selection.finalCost")
+    expect(repairForm).toContain("setValue('pricingMode', selection.pricingMode")
+    expect(repairForm).toContain('setCalculationMode(selection.pricingMode)')
+  })
+
   it('commits payment metadata and paid-repair protection in the POS transaction', () => {
     const route = readFileSync(resolve(workspace, 'src/app/api/pos/process-sale/route.ts'), 'utf8')
     const atomicCheckoutMigration = readFileSync(
       resolve(workspace, 'supabase/migrations/20260802133000_finalize_pos_checkout_atomic.sql'),
       'utf8'
     )
+    const atomicStoreCreditMigration = readFileSync(
+      resolve(workspace, 'supabase/migrations/20260816153000_atomic_pos_store_credit.sql'),
+      'utf8'
+    )
 
-    expect(route).toContain("'process_pos_sale_atomic_v3'")
+    expect(route).toContain("'process_pos_sale_atomic_v4'")
     expect(route).not.toContain("supabase.rpc('apply_pos_payment_metadata_atomic'")
     expect(atomicCheckoutMigration).toContain('function public.process_pos_sale_atomic_v3')
     expect(atomicCheckoutMigration).toContain('REPAIR_ALREADY_PAID')
     expect(atomicCheckoutMigration).toContain('for update')
     expect(atomicCheckoutMigration).toContain('apply_pos_payment_metadata_atomic')
+    expect(atomicStoreCreditMigration).toContain('process_pos_sale_atomic_v3(')
   })
 
   it('connects checkout discount and paid-repair filtering to persisted fields', () => {
@@ -241,5 +280,47 @@ describe('dashboard financial workflow contracts', () => {
     expect(posPage).toContain('onDiscountChange={setGeneralDiscount}')
     expect(posPage).toContain('payment_status')
     expect(checkout).toContain("repair.payment_status !== 'pagado'")
+  })
+
+  it('charges a linked repair its outstanding balance, not its gross cost', () => {
+    // Regression test: linking a repair that already has a deposit
+    // (repairs.paid_amount, collected via the repairs screen's "Cobrar
+    // Aquí" flow) used to bill the full final_cost/estimated_cost again in
+    // both the client total and the RPC's independently recomputed total —
+    // a real double charge. Both sides must now price it as the balance due.
+    const posPage = readFileSync(resolve(workspace, 'src/app/dashboard/pos/page.tsx'), 'utf8')
+    const checkout = readFileSync(
+      resolve(workspace, 'src/app/dashboard/pos/components/CheckoutModal.tsx'),
+      'utf8'
+    )
+    const repairCharge = readFileSync(
+      resolve(workspace, 'src/app/dashboard/pos/lib/repair-charge.ts'),
+      'utf8'
+    )
+
+    // Client: neither the unified cart totals nor the linked-repair cart
+    // item may price a repair from its gross cost alone anymore.
+    expect(posPage).not.toContain('repair.final_cost || repair.estimated_cost || 0')
+    expect(posPage).toContain('getRepairBalanceDue(repair)')
+    expect(checkout).toContain('getRepairBalanceDue(repair)')
+    expect(repairCharge).toContain('Math.max(0,')
+
+    // Server: repairs_subtotal (v2) subtracts paid_amount, and the
+    // REPAIR_ALREADY_PAID guard (v3) also catches a balance that's already
+    // fully covered, even without an explicit 'pagado' status.
+    expect(repairBalanceDueMigration).toContain('function public.process_pos_sale_atomic_v2')
+    expect(repairBalanceDueMigration).toContain('function public.process_pos_sale_atomic_v3')
+    expect(repairBalanceDueMigration).toContain(
+      'greatest(0, coalesce(repair.final_cost, repair.estimated_cost, 0) - coalesce(repair.paid_amount, 0))'
+    )
+    expect(repairBalanceDueMigration).toContain('REPAIR_ALREADY_PAID')
+    expect(repairBalanceDueMigration).toContain(
+      "coalesce(repair.final_cost, repair.estimated_cost, 0) - coalesce(repair.paid_amount, 0) <= 0"
+    )
+
+    // A 'parcial' repair is deliberately NOT added to the paid-blocklist:
+    // it should work end-to-end, charging only the remainder.
+    expect(repairBalanceDueMigration).toContain("in ('pagado', 'paid')")
+    expect(repairBalanceDueMigration).not.toContain("in ('pagado', 'paid', 'parcial')")
   })
 })

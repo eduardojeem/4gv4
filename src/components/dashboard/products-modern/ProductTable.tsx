@@ -1,11 +1,17 @@
 /**
- * ProductTable Component - Modern Edition
- * Enhanced table view for products with premium aesthetics and improved UX
+ * ProductTable Component - Premium Edition
+ * Redesigned with modern aesthetics, better information density and premium UX
  */
 
 import React from 'react'
 import Image from 'next/image'
-import { ArrowUpDown, ArrowUp, ArrowDown, Edit, Trash2, Copy, Eye, Package, TrendingUp, AlertTriangle, XCircle, Sparkles, Globe, EyeOff } from 'lucide-react'
+import {
+  ArrowUpDown, ArrowUp, ArrowDown,
+  Edit, Trash2, Copy, Eye, Package,
+  TrendingUp, AlertTriangle, XCircle,
+  Sparkles, Globe, EyeOff, MoreHorizontal,
+  Wrench,
+} from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -16,11 +22,17 @@ import {
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Product } from '@/types/products'
 import { SortConfig } from '@/types/products-dashboard'
-import { getStockStatus } from '@/lib/products-dashboard-utils'
+import { getStockStatus, isServiceLikeProduct } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 
@@ -41,6 +53,94 @@ export interface ProductTableProps {
   viewMode?: 'table' | 'compact'
 }
 
+const STOCK_CONFIG = {
+  in_stock: {
+    label: 'En stock',
+    dot: 'bg-emerald-500',
+    badge: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60',
+    bar: 'bg-emerald-500',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    icon: TrendingUp,
+  },
+  low_stock: {
+    label: 'Bajo stock',
+    dot: 'bg-amber-500',
+    badge: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60',
+    bar: 'bg-amber-500',
+    text: 'text-amber-600 dark:text-amber-400',
+    icon: AlertTriangle,
+  },
+  out_of_stock: {
+    label: 'Agotado',
+    dot: 'bg-red-500',
+    badge: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800/60',
+    bar: 'bg-red-500',
+    text: 'text-red-600 dark:text-red-400',
+    icon: XCircle,
+  },
+}
+
+function SortButton({
+  label,
+  field,
+  sortConfig,
+  onSort,
+  className,
+}: {
+  label: string
+  field: SortConfig['field']
+  sortConfig: SortConfig
+  onSort: (field: SortConfig['field']) => void
+  className?: string
+}) {
+  const active = sortConfig.field === field
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(field)}
+      className={cn(
+        'flex items-center gap-1 text-xs font-semibold uppercase tracking-wider transition-colors select-none',
+        active
+          ? 'text-primary'
+          : 'text-muted-foreground hover:text-foreground',
+        className,
+      )}
+    >
+      {label}
+      {active ? (
+        sortConfig.direction === 'asc'
+          ? <ArrowUp className="h-3 w-3" />
+          : <ArrowDown className="h-3 w-3" />
+      ) : (
+        <ArrowUpDown className="h-3 w-3 opacity-40" />
+      )}
+    </button>
+  )
+}
+
+function SkeletonRow({ compact }: { compact: boolean }) {
+  return (
+    <TableRow className="border-border/40">
+      <TableCell className="py-3 pl-4"><div className="h-4 w-4 rounded bg-muted animate-pulse" /></TableCell>
+      <TableCell className="py-3"><div className={cn('rounded-xl bg-muted animate-pulse', compact ? 'h-8 w-8' : 'h-12 w-12')} /></TableCell>
+      <TableCell className="py-3">
+        <div className="space-y-2">
+          <div className="h-3.5 w-36 rounded bg-muted animate-pulse" />
+          <div className="h-3 w-20 rounded bg-muted/60 animate-pulse" />
+        </div>
+      </TableCell>
+      <TableCell className="py-3"><div className="h-5 w-16 rounded-md bg-muted animate-pulse" /></TableCell>
+      <TableCell className="py-3"><div className="h-5 w-20 rounded-full bg-muted animate-pulse" /></TableCell>
+      <TableCell className="py-3"><div className="h-5 w-20 rounded-full bg-muted animate-pulse" /></TableCell>
+      <TableCell className="py-3 text-right"><div className="h-3.5 w-10 rounded bg-muted animate-pulse ml-auto" /></TableCell>
+      <TableCell className="py-3 text-right"><div className="h-3.5 w-16 rounded bg-muted animate-pulse ml-auto" /></TableCell>
+      <TableCell className="py-3"><div className="h-5 w-20 rounded-full bg-muted animate-pulse" /></TableCell>
+      <TableCell className="py-3"><div className="h-5 w-9 rounded-full bg-muted animate-pulse mx-auto" /></TableCell>
+      <TableCell className="py-3 pr-4"><div className="h-7 w-7 rounded-lg bg-muted animate-pulse ml-auto" /></TableCell>
+    </TableRow>
+  )
+}
+
 export function ProductTable({
   products,
   selectedProductIds,
@@ -55,460 +155,380 @@ export function ProductTable({
   onToggleActive,
   loading = false,
   className,
-  viewMode = 'table'
+  viewMode = 'table',
 }: ProductTableProps) {
   const isCompact = viewMode === 'compact'
   const allSelected = products.length > 0 && products.every(p => selectedProductIds.includes(p.id))
   const someSelected = products.some(p => selectedProductIds.includes(p.id)) && !allSelected
 
-  const getSortIcon = (field: SortConfig['field']) => {
-    if (sortConfig.field !== field) {
-      return <ArrowUpDown className="h-4 w-4 opacity-50" />
-    }
-    return sortConfig.direction === 'asc' ? (
-      <ArrowUp className="h-4 w-4 text-blue-600" />
-    ) : (
-      <ArrowDown className="h-4 w-4 text-blue-600" />
-    )
-  }
-
-  const stockStatusConfig = {
-    in_stock: {
-      label: 'En Stock',
-      bgClass: 'bg-gradient-to-r from-emerald-500 to-teal-500',
-      lightBg: 'bg-emerald-50 dark:bg-emerald-950/30',
-      textClass: 'text-emerald-700 dark:text-emerald-400',
-      borderClass: 'border-emerald-200 dark:border-emerald-900',
-      icon: TrendingUp
-    },
-    low_stock: {
-      label: 'Bajo Stock',
-      bgClass: 'bg-gradient-to-r from-amber-500 to-orange-500',
-      lightBg: 'bg-amber-50 dark:bg-amber-950/30',
-      textClass: 'text-amber-700 dark:text-amber-400',
-      borderClass: 'border-amber-200 dark:border-amber-900',
-      icon: AlertTriangle
-    },
-    out_of_stock: {
-      label: 'Agotado',
-      bgClass: 'bg-gradient-to-r from-red-500 to-rose-500',
-      lightBg: 'bg-red-50 dark:bg-red-950/30',
-      textClass: 'text-red-700 dark:text-red-400',
-      borderClass: 'border-red-200 dark:border-red-900',
-      icon: XCircle
-    }
-  }
-
-  if (loading) {
+  if (products.length === 0 && !loading) {
     return (
-      <div className="rounded-[24px] border border-slate-200/50 bg-white/70 dark:bg-slate-950/60 backdrop-blur-md overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-gradient-to-r from-slate-50/50 via-white/30 to-slate-50/50 dark:from-slate-900/40 dark:via-slate-950/20 dark:to-slate-900/40 border-b border-slate-200/40 dark:border-slate-800/40">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-12"><div className="h-4 w-4 rounded bg-slate-200 dark:bg-slate-850 animate-pulse" /></TableHead>
-                <TableHead className="w-20">Imagen</TableHead>
-                <TableHead>Nombre</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead>Categoría</TableHead>
-                <TableHead className="text-right">Inventario</TableHead>
-                <TableHead className="text-right">Precio</TableHead>
-                <TableHead>Estado</TableHead>
-                {onToggleActive && <TableHead className="text-center">Público</TableHead>}
-                <TableHead className="text-right w-40">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i} className="border-b border-slate-100 dark:border-slate-800/40">
-                  <TableCell><div className="h-4 w-4 rounded bg-slate-150 dark:bg-slate-800 animate-pulse" /></TableCell>
-                  <TableCell>
-                    <div className="h-10 w-10 rounded-lg bg-slate-150 dark:bg-slate-800 animate-pulse" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1.5">
-                      <div className="h-4 w-32 rounded bg-slate-150 dark:bg-slate-800 animate-pulse" />
-                      <div className="h-3 w-20 rounded bg-slate-100 dark:bg-slate-850 animate-pulse" />
-                    </div>
-                  </TableCell>
-                  <TableCell><div className="h-6 w-16 rounded-full bg-slate-150 dark:bg-slate-800 animate-pulse" /></TableCell>
-                  <TableCell><div className="h-6 w-20 rounded-full bg-slate-100 dark:bg-slate-850 animate-pulse" /></TableCell>
-                  <TableCell className="text-right"><div className="h-4 w-12 rounded bg-slate-150 dark:bg-slate-800 animate-pulse ml-auto" /></TableCell>
-                  <TableCell className="text-right"><div className="h-4 w-16 rounded bg-slate-150 dark:bg-slate-800 animate-pulse ml-auto" /></TableCell>
-                  <TableCell><div className="h-6 w-20 rounded-full bg-slate-100 dark:bg-slate-850 animate-pulse" /></TableCell>
-                  {onToggleActive && (
-                    <TableCell><div className="h-5 w-9 rounded-full bg-slate-150 dark:bg-slate-800 animate-pulse mx-auto" /></TableCell>
-                  )}
-                  <TableCell>
-                    <div className="flex gap-1.5 justify-end">
-                      <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-850 animate-pulse" />
-                      <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-850 animate-pulse" />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+      <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed border-border/50 rounded-2xl bg-muted/20">
+        <div className="relative mb-5">
+          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-muted">
+            <Package className="h-10 w-10 text-muted-foreground/50" />
+          </div>
+          <Sparkles className="h-6 w-6 text-primary/60 absolute -top-1.5 -right-1.5 animate-pulse" />
         </div>
-      </div>
-    )
-  }
-
-  if (products.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl bg-gradient-to-br from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
-        <div className="relative mb-6">
-          <Package className="w-24 h-24 text-gray-300 dark:text-gray-600" />
-          <Sparkles className="h-8 w-8 text-purple-400 absolute -top-2 -right-2 animate-pulse" />
-        </div>
-        <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-          No se encontraron productos
-        </h3>
-        <p className="text-gray-600 dark:text-gray-400 max-w-md mb-6">
-          No hay productos que coincidan con los filtros aplicados. Intenta ajustar tus criterios de búsqueda.
+        <h3 className="text-lg font-bold text-foreground mb-1">No se encontraron productos</h3>
+        <p className="text-sm text-muted-foreground max-w-xs">
+          No hay productos que coincidan con los filtros aplicados.
         </p>
       </div>
     )
   }
 
   return (
-    <div className={cn('rounded-[24px] border border-slate-200/50 bg-white/70 backdrop-blur-md dark:bg-slate-950/60 overflow-hidden shadow-sm', className)}>
+    <div className={cn(
+      'overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm',
+      className,
+    )}>
       <div className="overflow-x-auto" role="region" aria-label="Tabla de productos" tabIndex={0}>
         <Table>
-          <TableHeader className="bg-gradient-to-r from-slate-50/50 via-white/30 to-slate-50/50 dark:from-slate-900/40 dark:via-slate-950/20 dark:to-slate-900/40 sticky top-0 z-10 border-b border-slate-200/40 dark:border-slate-800/40">
-            <TableRow className="hover:bg-transparent">
-              {/* Select All Checkbox */}
-              <TableHead className={cn("w-12", isCompact && "h-8 py-1")}>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40 border-border/60">
+              <TableHead className="w-10 pl-4 pr-2">
                 <Checkbox
                   checked={allSelected ? true : (someSelected ? 'indeterminate' : false)}
                   onCheckedChange={onSelectAll}
-                  aria-label={allSelected ? 'Deseleccionar todos los productos' : 'Seleccionar todos los productos'}
-                  className="border-gray-400 dark:border-gray-500"
+                  aria-label="Seleccionar todos"
+                  className="border-muted-foreground/40"
                 />
               </TableHead>
 
-              {/* Image */}
-              <TableHead className={cn("w-20 font-semibold text-gray-700 dark:text-gray-300", isCompact && "h-8 py-1 w-12")}>Imagen</TableHead>
+              <TableHead className={cn('w-16', isCompact && 'w-10')} />
 
-              {/* Name - Sortable */}
-              <TableHead className={cn(isCompact && "h-8 py-1")}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn("-ml-3 h-9 font-semibold text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors", isCompact && "h-7 text-xs")}
-                  onClick={() => onSort('name')}
-                  aria-label={`Ordenar por nombre ${sortConfig.field === 'name' ? (sortConfig.direction === 'asc' ? 'descendente' : 'ascendente') : ''}`}
-                >
-                  Nombre
-                  {getSortIcon('name')}
-                </Button>
+              <TableHead className="min-w-[180px]">
+                <SortButton label="Producto" field="name" sortConfig={sortConfig} onSort={onSort} />
               </TableHead>
 
-              {/* SKU - Sortable */}
-              <TableHead className={cn(isCompact && "h-8 py-1")}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn("-ml-3 h-9 font-semibold text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors", isCompact && "h-7 text-xs")}
-                  onClick={() => onSort('sku')}
-                  aria-label={`Ordenar por SKU ${sortConfig.field === 'sku' ? (sortConfig.direction === 'asc' ? 'descendente' : 'ascendente') : ''}`}
-                >
-                  SKU
-                  {getSortIcon('sku')}
-                </Button>
+              <TableHead className="w-32">
+                <SortButton label="SKU" field="sku" sortConfig={sortConfig} onSort={onSort} />
               </TableHead>
 
-              {/* Category */}
-              <TableHead className={cn("font-semibold text-gray-700 dark:text-gray-300", isCompact && "h-8 py-1 text-xs")}>Categoría</TableHead>
-
-              {/* Stock - Sortable */}
-              <TableHead className={cn("text-right", isCompact && "h-8 py-1")}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn("-ml-3 h-9 font-semibold text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors", isCompact && "h-7 text-xs")}
-                  onClick={() => onSort('stock_quantity')}
-                >
-                  Inventario
-                  {getSortIcon('stock_quantity')}
-                </Button>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Categoría
               </TableHead>
 
-              {/* Price - Sortable */}
-              <TableHead className={cn("text-right", isCompact && "h-8 py-1")}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn("-ml-3 h-9 font-semibold text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors", isCompact && "h-7 text-xs")}
-                  onClick={() => onSort('sale_price')}
-                >
-                  Precio
-                  {getSortIcon('sale_price')}
-                </Button>
+              <TableHead className="text-right">
+                <div className="flex justify-end">
+                  <SortButton label="Stock" field="stock_quantity" sortConfig={sortConfig} onSort={onSort} />
+                </div>
               </TableHead>
 
-              {/* Status */}
-              <TableHead className={cn("font-semibold text-gray-700 dark:text-gray-300", isCompact && "h-8 py-1 text-xs")}>Estado</TableHead>
+              <TableHead className="text-right">
+                <div className="flex justify-end">
+                  <SortButton label="Precio" field="sale_price" sortConfig={sortConfig} onSort={onSort} />
+                </div>
+              </TableHead>
 
-              {/* Public visibility */}
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Estado
+              </TableHead>
+
               {onToggleActive && (
-                <TableHead className={cn("font-semibold text-gray-700 dark:text-gray-300 text-center", isCompact && "h-8 py-1 text-xs")}>Público</TableHead>
+                <TableHead className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Público
+                </TableHead>
               )}
 
-              {/* Actions */}
-              <TableHead className={cn("text-right w-40 font-semibold text-gray-700 dark:text-gray-300", isCompact && "h-8 py-1 text-xs")}>Acciones</TableHead>
+              <TableHead className="w-12 pr-4" />
             </TableRow>
           </TableHeader>
 
           <TableBody>
-            {products.map((product) => {
-              const isSelected = selectedProductIds.includes(product.id)
-              const stockStatus = getStockStatus(product)
-              const statusConfig = stockStatusConfig[stockStatus]
-              const StatusIcon = statusConfig.icon
-              const stockPercentage = Math.min(100, (product.stock_quantity / Math.max((product.min_stock || 0) * 3, 1)) * 100)
+            {loading
+              ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} compact={isCompact} />)
+              : products.map((product) => {
+                  const isService = isServiceLikeProduct(product)
+                  const isSelected = selectedProductIds.includes(product.id)
+                  const stockStatus = getStockStatus(product)
+                  const cfg = STOCK_CONFIG[stockStatus]
+                  const stockPct = Math.min(
+                    100,
+                    (product.stock_quantity / Math.max((product.min_stock || 0) * 3, 1)) * 100,
+                  )
 
-              // Resolve image from images[] array or legacy image field
-              const imageUrl: string | undefined =
-                ((product as any).images as string[] | null | undefined)?.[0] ||
-                product.image ||
-                (product as any).image_url ||
-                undefined
-              const isValidImage = imageUrl && (imageUrl.startsWith('data:image') || imageUrl.startsWith('/') || imageUrl.startsWith('http'))
+                  const productImages = Array.isArray(product.images)
+                    ? product.images.filter((value): value is string => typeof value === 'string')
+                    : []
+                  const imageUrl = productImages[0] || product.image || product.image_url || undefined
+                  const hasImage = imageUrl && (
+                    imageUrl.startsWith('data:image') ||
+                    imageUrl.startsWith('/') ||
+                    imageUrl.startsWith('http')
+                  )
 
-              return (
-                <TableRow
-                  key={product.id}
-                  className={cn(
-                    'transition-all duration-200 border-b border-gray-100 dark:border-gray-700',
-                    'hover:bg-gradient-to-r hover:from-blue-50/30 hover:via-transparent hover:to-transparent dark:hover:from-blue-900/10',
-                    'hover:shadow-sm',
-                    isSelected && 'bg-blue-50/50 dark:bg-blue-900/20 ring-2 ring-blue-500/20 dark:ring-blue-400/20 ring-inset'
-                  )}
-                  onClick={() => onViewDetails(product)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      onViewDetails(product)
-                    }
-                  }}
-                >
-                  {/* Checkbox */}
-                  <TableCell className={cn(isCompact && "py-1")}>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => onSelect(product.id)}
-                        className="border-gray-400 dark:border-gray-500"
-                      />
-                    </div>
-                  </TableCell>
+                  const isVisible = product.is_active && product.visibility !== 'hidden'
+                  const isWholesale = product.visibility === 'wholesale'
 
-                  {/* Image */}
-                  <TableCell className={cn(isCompact && "py-1")}>
-                    <div className={cn(
-                      "relative rounded-lg overflow-hidden bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100 dark:from-gray-800 dark:via-gray-900 dark:to-gray-800 shadow-sm group-hover:shadow-md transition-shadow",
-                      isCompact ? "w-8 h-8" : "w-14 h-14"
-                    )}>
-                      {isValidImage ? (
-                        <Image
-                          src={imageUrl!}
-                          alt={product.name}
-                          fill
-                          sizes="56px"
-                          className="object-cover transition-transform duration-200 hover:scale-110"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Package className={cn("text-gray-300 dark:text-gray-600", isCompact ? "h-4 w-4" : "h-7 w-7")} />
-                        </div>
+                  return (
+                    <TableRow
+                      key={product.id}
+                      onClick={() => onViewDetails(product)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onViewDetails(product)
+                        }
+                      }}
+                      className={cn(
+                        'group cursor-pointer border-border/40 transition-colors',
+                        'hover:bg-muted/30',
+                        isSelected && 'bg-primary/5 hover:bg-primary/8',
                       )}
-                    </div>
-                  </TableCell>
-
-                  {/* Name */}
-                  <TableCell className={cn(isCompact && "py-1")}>
-                    <div className="max-w-xs">
-                      <p className={cn(
-                        "font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors",
-                        isCompact ? "text-sm" : ""
-                      )}>
-                        {product.name}
-                      </p>
-                      {!isCompact && product.brand && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{product.brand}</p>
-                      )}
-                    </div>
-                  </TableCell>
-
-                  {/* SKU */}
-                  <TableCell className={cn(isCompact && "py-1")}>
-                    <Badge variant="outline" className={cn(
-                      "font-mono text-xs bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/50 dark:text-slate-300 dark:border-slate-800",
-                      isCompact ? "px-1.5 py-0.5" : "px-2.5 py-1"
-                    )}>
-                      {product.sku}
-                    </Badge>
-                  </TableCell>
-
-                  {/* Category */}
-                  <TableCell className={cn(isCompact && "py-1")}>
-                    {product.category?.name ? (
-                      <Badge variant="secondary" className={cn(
-                        "text-xs font-medium bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border border-blue-100 dark:from-blue-950/30 dark:to-indigo-950/30 dark:text-blue-300 dark:border-blue-900/50",
-                        isCompact ? "px-1.5 py-0.5" : "px-2.5 py-1"
-                      )}>
-                        {product.category.name}
-                      </Badge>
-                    ) : (
-                      <span className="text-gray-400 dark:text-gray-500 text-sm">Sin categoría</span>
-                    )}
-                  </TableCell>
-
-                  {/* Stock with Progress Bar */}
-                  <TableCell className={cn("text-right", isCompact && "py-1")}>
-                    <div className="flex flex-col items-end gap-1.5">
-                      <div className="flex items-baseline gap-1">
-                        <span className={cn(
-                          "font-bold tabular-nums",
-                          isCompact ? "text-xs" : "text-sm",
-                          stockStatus === 'in_stock' && "text-emerald-600 dark:text-emerald-400",
-                          stockStatus === 'low_stock' && "text-amber-600 dark:text-amber-400",
-                          stockStatus === 'out_of_stock' && "text-red-600 dark:text-red-400"
-                        )}>
-                          {product.stock_quantity}
-                        </span>
-                        {!isCompact && <span className="text-xs text-gray-400 dark:text-gray-500">/ {product.min_stock}</span>}
-                      </div>
-
-                      {/* Mini Progress Bar */}
-                      {!isCompact && (
-                        <div className="w-16 h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div
-                            className={cn(
-                              "h-full rounded-full transition-all duration-300",
-                              statusConfig.bgClass
-                            )}
-                            style={{ width: `${stockPercentage}%` }}
+                    >
+                      {/* Checkbox */}
+                      <TableCell className={cn('pl-4 pr-2', isCompact ? 'py-2' : 'py-3.5')}>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => onSelect(product.id)}
+                            aria-label={`Seleccionar ${product.name}`}
+                            className="border-muted-foreground/40"
                           />
                         </div>
-                      )}
-                    </div>
-                  </TableCell>
+                      </TableCell>
 
-                  {/* Price */}
-                  <TableCell className={cn("text-right", isCompact && "py-1")}>
-                    <span className={cn(
-                      "font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-200 dark:to-white bg-clip-text text-transparent",
-                      isCompact ? "text-sm" : "text-base"
-                    )}>
-                      {formatCurrency(product.sale_price)}
-                    </span>
-                  </TableCell>
-
-                  {/* Status */}
-                  <TableCell className={cn(isCompact && "py-1")}>
-                    <div className="flex flex-col gap-1.5">
-                      <div
-                        className={cn(
-                          'inline-flex items-center gap-1.5 rounded-full font-bold text-white w-fit',
-                          statusConfig.bgClass,
-                          isCompact ? "px-1.5 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs"
-                        )}
-                      >
-                        <StatusIcon className={cn(isCompact ? "h-2.5 w-2.5" : "h-3 w-3")} />
-                        {statusConfig.label}
-                      </div>
-                    </div>
-                  </TableCell>
-
-                  {/* Public visibility toggle */}
-                  {onToggleActive && (
-                    <TableCell className={cn("text-center", isCompact && "py-1")} onClick={(e) => e.stopPropagation()}>
-                      <div className="flex flex-col items-center gap-1">
-                        <Switch
-                          checked={product.is_active && (product as any).visibility !== 'hidden'}
-                          onCheckedChange={(checked) => onToggleActive(product, checked)}
-                          aria-label={product.is_active && (product as any).visibility !== 'hidden' ? 'Ocultar del catálogo' : 'Publicar en catálogo'}
-                          className="data-[state=checked]:bg-emerald-500"
-                        />
-                        <span className={cn(
-                          "flex items-center gap-0.5 font-bold",
-                          isCompact ? "text-[9px]" : "text-[10px]",
-                          (product.is_active && (product as any).visibility !== 'hidden') ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"
+                      {/* Image */}
+                      <TableCell className={cn(isCompact ? 'py-2' : 'py-3.5')}>
+                        <div className={cn(
+                          'relative shrink-0 overflow-hidden rounded-xl bg-muted border border-border/40',
+                          'transition-transform duration-200 group-hover:scale-105',
+                          isCompact ? 'h-8 w-8 rounded-lg' : 'h-11 w-11',
                         )}>
-                          {!product.is_active ? (
-                            <><EyeOff className="h-2.5 w-2.5" /> Inactivo</>
-                          ) : (product as any).visibility === 'hidden' ? (
-                            <><EyeOff className="h-2.5 w-2.5" /> Oculto</>
-                          ) : (product as any).visibility === 'wholesale' ? (
-                            <><Globe className="h-2.5 w-2.5 text-blue-500" /> Mayorista</>
+                          {hasImage ? (
+                            <Image
+                              src={imageUrl!}
+                              alt={product.name}
+                              fill
+                              sizes={isCompact ? '32px' : '44px'}
+                              className="object-cover"
+                            />
                           ) : (
-                            <><Globe className="h-2.5 w-2.5" /> Visible</>
+                            <div className="flex h-full w-full items-center justify-center">
+                              {isService ? (
+                                <Wrench className={cn('text-purple-500/60', isCompact ? 'h-4 w-4' : 'h-5 w-5')} />
+                              ) : (
+                                <Package className={cn('text-muted-foreground/40', isCompact ? 'h-4 w-4' : 'h-5 w-5')} />
+                              )}
+                            </div>
                           )}
-                        </span>
-                      </div>
-                    </TableCell>
-                  )}
+                        </div>
+                      </TableCell>
 
-                  {/* Actions */}
-                  <TableCell className={cn(isCompact && "py-1")}>
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn(
-                          "hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-blue-900/30 dark:hover:text-blue-400 transition-colors",
-                          isCompact ? "h-6 w-6" : "h-8 w-8"
+                      {/* Name */}
+                      <TableCell className={cn(isCompact ? 'py-2' : 'py-3.5')}>
+                        <div className="max-w-[220px]">
+                          <p className={cn(
+                            'font-semibold text-foreground truncate leading-tight group-hover:text-primary transition-colors',
+                            isCompact ? 'text-xs' : 'text-sm',
+                          )}>
+                            {product.name}
+                          </p>
+                          {!isCompact && product.brand && (
+                            <p className="mt-0.5 text-xs text-muted-foreground/70 truncate">{product.brand}</p>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      {/* SKU */}
+                      <TableCell className={cn(isCompact ? 'py-2' : 'py-3.5')}>
+                        <span className={cn(
+                          'inline-flex items-center rounded-md border bg-muted/60 font-mono text-muted-foreground',
+                          isCompact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs',
+                        )}>
+                          {product.sku}
+                        </span>
+                      </TableCell>
+
+                      {/* Tipo (Producto vs Servicio) */}
+                      <TableCell className={cn(isCompact ? 'py-2' : 'py-3.5')}>
+                        {isService ? (
+                          <span className={cn(
+                            'inline-flex items-center gap-1 rounded-full border font-bold',
+                            'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/60',
+                            isCompact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-0.5 text-xs'
+                          )}>
+                            <Wrench className="h-2.5 w-2.5" />
+                            Servicio
+                          </span>
+                        ) : (
+                          <span className={cn(
+                            'inline-flex items-center gap-1 rounded-full border font-medium',
+                            'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/60',
+                            isCompact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-0.5 text-xs'
+                          )}>
+                            <Package className="h-2.5 w-2.5" />
+                            Producto
+                          </span>
                         )}
-                        onClick={(e) => { e.stopPropagation(); onViewDetails(product) }}
-                        title="Ver detalles"
-                      >
-                        <Eye className={cn(isCompact ? "h-3 w-3" : "h-4 w-4")} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn(
-                          "hover:bg-green-100 hover:text-green-600 dark:hover:bg-green-900/30 dark:hover:text-green-400 transition-colors",
-                          isCompact ? "h-6 w-6" : "h-8 w-8"
+                      </TableCell>
+
+                      {/* Category */}
+                      <TableCell className={cn(isCompact ? 'py-2' : 'py-3.5')}>
+                        {product.category?.name ? (
+                          <span className={cn(
+                            'inline-flex items-center rounded-full border bg-primary/5 text-primary border-primary/20 font-medium',
+                            isCompact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs',
+                          )}>
+                            {product.category.name}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/40">—</span>
                         )}
-                        onClick={(e) => { e.stopPropagation(); onEdit(product) }}
-                        title="Editar"
-                      >
-                        <Edit className={cn(isCompact ? "h-3 w-3" : "h-4 w-4")} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn(
-                          "hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-900/30 dark:hover:text-purple-400 transition-colors",
-                          isCompact ? "h-6 w-6" : "h-8 w-8"
+                      </TableCell>
+
+                      {/* Stock */}
+                      <TableCell className={cn('text-right', isCompact ? 'py-2' : 'py-3.5')}>
+                        {isService ? (
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                              Sin límite
+                            </span>
+                            <span className="text-[10px] text-muted-foreground/60">Servicio</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-end gap-1.5">
+                            <div className="flex items-baseline gap-1">
+                              <span className={cn(
+                                'font-bold tabular-nums leading-none',
+                                isCompact ? 'text-xs' : 'text-sm',
+                                cfg.text,
+                              )}>
+                                {product.stock_quantity}
+                              </span>
+                              {!isCompact && product.min_stock != null && (
+                                <span className="text-[10px] text-muted-foreground/50">/ {product.min_stock}</span>
+                              )}
+                            </div>
+                            {!isCompact && (
+                              <div className="h-1 w-14 overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className={cn('h-full rounded-full transition-all duration-500', cfg.bar)}
+                                  style={{ width: `${stockPct}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
                         )}
-                        onClick={(e) => { e.stopPropagation(); onDuplicate(product) }}
-                        title="Duplicar"
-                      >
-                        <Copy className={cn(isCompact ? "h-3 w-3" : "h-4 w-4")} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn(
-                          "hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors",
-                          isCompact ? "h-6 w-6" : "h-8 w-8"
+                      </TableCell>
+
+                      {/* Price */}
+                      <TableCell className={cn('text-right', isCompact ? 'py-2' : 'py-3.5')}>
+                        <span className={cn(
+                          'font-bold tabular-nums text-foreground',
+                          isCompact ? 'text-xs' : 'text-sm',
+                        )}>
+                          {formatCurrency(product.sale_price)}
+                        </span>
+                      </TableCell>
+
+                      {/* Status badge */}
+                      <TableCell className={cn(isCompact ? 'py-2' : 'py-3.5')}>
+                        {isService ? (
+                          <span className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full border font-medium',
+                            isCompact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs',
+                            product.is_active
+                              ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/60'
+                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                          )}>
+                            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', product.is_active ? 'bg-purple-500' : 'bg-slate-400')} />
+                            {product.is_active ? 'Activo' : 'Inactivo'}
+                          </span>
+                        ) : (
+                          <span className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full border font-medium',
+                            isCompact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs',
+                            cfg.badge,
+                          )}>
+                            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', cfg.dot)} />
+                            {cfg.label}
+                          </span>
                         )}
-                        onClick={(e) => { e.stopPropagation(); onDelete(product) }}
-                        title="Eliminar"
-                      >
-                        <Trash2 className={cn(isCompact ? "h-3 w-3" : "h-4 w-4")} />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
+                      </TableCell>
+
+                      {/* Visibility toggle */}
+                      {onToggleActive && (
+                        <TableCell
+                          className={cn('text-center', isCompact ? 'py-2' : 'py-3.5')}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <Switch
+                              checked={isVisible}
+                              onCheckedChange={(checked) => onToggleActive(product, checked)}
+                              aria-label={isVisible ? 'Ocultar del catálogo' : 'Publicar en catálogo'}
+                              className="data-[state=checked]:bg-emerald-500 scale-90"
+                            />
+                            <span className={cn(
+                              'flex items-center gap-0.5 font-semibold leading-none',
+                              isCompact ? 'text-[9px]' : 'text-[10px]',
+                              isVisible ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/60',
+                            )}>
+                              {!product.is_active ? (
+                                <><EyeOff className="h-2.5 w-2.5" />Inactivo</>
+                              ) : product.visibility === 'hidden' ? (
+                                <><EyeOff className="h-2.5 w-2.5" />Oculto</>
+                              ) : isWholesale ? (
+                                <><Globe className="h-2.5 w-2.5 text-blue-500" />Mayorista</>
+                              ) : (
+                                <><Globe className="h-2.5 w-2.5" />Visible</>
+                              )}
+                            </span>
+                          </div>
+                        </TableCell>
+                      )}
+
+                      {/* Actions dropdown */}
+                      <TableCell className={cn('pr-4 text-right', isCompact ? 'py-2' : 'py-3.5')}>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  'opacity-0 group-hover:opacity-100 transition-opacity data-[state=open]:opacity-100',
+                                  'hover:bg-muted rounded-lg',
+                                  isCompact ? 'h-6 w-6' : 'h-8 w-8',
+                                )}
+                                aria-label="Acciones del producto"
+                              >
+                                <MoreHorizontal className={cn(isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem onClick={() => onViewDetails(product)} className="gap-2 cursor-pointer">
+                                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                                Ver detalles
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onEdit(product)} className="gap-2 cursor-pointer">
+                                <Edit className="h-3.5 w-3.5 text-muted-foreground" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onDuplicate(product)} className="gap-2 cursor-pointer">
+                                <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                                Duplicar
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => onDelete(product)}
+                                className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Eliminar
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
           </TableBody>
         </Table>
       </div>

@@ -18,8 +18,14 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 import { CustomerCreditInfo } from './CustomerCreditInfo'
+import { StoreCreditCard } from './StoreCreditCard'
+import { CustomerGlobalPaymentModal } from './CustomerGlobalPaymentModal'
+import { SaleDetailsModal } from '@/app/dashboard/pos/components/SaleDetailsModal'
+import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import {
+  ArrowLeft,
   FileText,
   User,
   History,
@@ -42,11 +48,18 @@ import {
   Building,
   Star,
   Edit,
-  Wrench
+  Wrench,
+  Wallet,
+  Hash,
+  Info,
+  Eye,
+  Coins,
+  Receipt
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerData, useCustomerPurchases, prefetchCustomerPurchases } from '@/hooks/useCustomerData'
 import { useCustomerRepairs } from '@/hooks/useCustomerRepairs'
+import { useCustomerCredits } from '@/hooks/use-customer-credits'
 import { useAuthorizedPersons, prefetchAuthorizedPersons } from '@/hooks/useAuthorizedPersons'
 import { createClient } from '@/lib/supabase/client'
 import { CustomerDetailHeader } from './CustomerDetailHeader'
@@ -67,10 +80,16 @@ function SalesHistoryList({
   customerId,
   limit,
   onShowAll,
+  onViewSale,
+  onViewRepair,
+  onOpenPayment,
 }: {
   customerId: string
   limit?: number
   onShowAll?: () => void
+  onViewSale?: (saleId: string) => void
+  onViewRepair?: (repair: any) => void
+  onOpenPayment?: () => void
 }) {
   const { data: sales, isLoading: salesLoading } = useCustomerPurchases(customerId)
   const { repairs, loading: repairsLoading, fetchRepairs } = useCustomerRepairs()
@@ -84,18 +103,26 @@ function SalesHistoryList({
   const combinedActivities = React.useMemo(() => {
     const items: Array<{
       id: string
+      rawId?: string
+      rawRepair?: any
       type: 'sale' | 'repair'
       date: string
       title: string
       description: string
       amount: number
       status: string
+      ticketNumber?: string
+      isDelivered?: boolean
+      isPaid?: boolean
+      isPartialPaid?: boolean
+      paidAmount?: number
     }> = []
 
     if (Array.isArray(sales)) {
       sales.forEach((sale: any) => {
         items.push({
           id: `sale-${sale.id}`,
+          rawId: sale.id,
           type: 'sale',
           date: sale.created_at || sale.date || new Date().toISOString(),
           title: `Venta #${sale.id.toString().slice(-6)}`,
@@ -116,6 +143,7 @@ function SalesHistoryList({
 
         items.push({
           id: `repair-${repair.id}`,
+          rawRepair: repair,
           type: 'repair',
           date: repair.created_at || new Date().toISOString(),
           title: `Reparación: ${repair.device_brand || ''} ${repair.device_model || ''}`.trim(),
@@ -127,7 +155,7 @@ function SalesHistoryList({
           isPaid,
           isPartialPaid,
           paidAmount: repair.paid_amount,
-        } as any)
+        })
       })
     }
 
@@ -198,113 +226,197 @@ function SalesHistoryList({
       </div>
 
       <div className="space-y-3">
-        {visibleActivities.map((activity: any, index: number) => (
-          <motion.div 
-            key={activity.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-900/40 rounded-xl hover:shadow-sm transition-all duration-200 border border-gray-200/50 dark:border-gray-800/50 gap-4"
-          >
-            <div className="flex items-start gap-4 min-w-0">
-              <div className={`p-2.5 rounded-xl text-white shadow-sm flex-shrink-0 bg-gradient-to-br ${
-                activity.type === 'sale' 
-                  ? 'from-blue-500 to-indigo-600' 
-                  : 'from-amber-500 to-orange-600'
-              }`}>
+        {visibleActivities.map((activity: any, index: number) => {
+          const handleCardClick = () => {
+            if (activity.type === 'sale' && activity.rawId && onViewSale) {
+              onViewSale(activity.rawId)
+            } else if (activity.type === 'repair' && activity.rawRepair && onViewRepair) {
+              onViewRepair(activity.rawRepair)
+            }
+          }
+
+          return (
+            <motion.div 
+              key={activity.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white dark:bg-slate-900/60 rounded-xl hover:shadow-md transition-all duration-200 border border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700/60 gap-4 group"
+            >
+              <div 
+                className="flex items-start gap-4 min-w-0 flex-1 cursor-pointer"
+                onClick={handleCardClick}
+              >
+                <div className={`p-2.5 rounded-xl text-white shadow-sm flex-shrink-0 bg-gradient-to-br transition-transform group-hover:scale-105 ${
+                  activity.type === 'sale' 
+                    ? 'from-blue-500 to-indigo-600' 
+                    : 'from-amber-500 to-orange-600'
+                }`}>
+                  {activity.type === 'sale' ? (
+                    <CreditCard className="h-4.5 w-4.5" />
+                  ) : (
+                    <Wrench className="h-4.5 w-4.5" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-bold text-sm text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
+                      {activity.title}
+                    </p>
+                    {activity.ticketNumber && (
+                      <Badge variant="outline" className="font-mono text-[10px] px-1.5 h-4">
+                        #{activity.ticketNumber}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                    {activity.description}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1.5 text-[10px] text-gray-400">
+                    <Calendar className="h-3 w-3" />
+                    <span>
+                      {new Date(activity.date).toLocaleDateString('es-ES', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-center gap-1.5 flex-shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
+                <p className="font-bold tabular-nums text-base text-foreground font-mono">
+                  {formatCurrency(activity.amount)}
+                </p>
                 {activity.type === 'sale' ? (
-                  <CreditCard className="h-4.5 w-4.5" />
+                  <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                    <Badge 
+                      variant={activity.status === 'paid' ? 'default' : 'secondary'}
+                      className={activity.status === 'paid' 
+                        ? 'bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-300 border-0 text-[10px] px-2 py-0.5' 
+                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300 border-0 text-[10px] px-2 py-0.5'
+                      }
+                    >
+                      <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                      {activity.status === 'paid' ? 'Venta Pagada' : 'Pendiente'}
+                    </Badge>
+
+                    {activity.rawId && onViewSale && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onViewSale(activity.rawId!)
+                        }}
+                        className="h-6 px-2 text-[10.5px] font-semibold text-blue-700 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/80 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300"
+                      >
+                        <Receipt className="h-3 w-3 mr-1 text-blue-600 dark:text-blue-400" />
+                        Ver Ticket
+                      </Button>
+                    )}
+
+                    {activity.status !== 'paid' && onOpenPayment && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onOpenPayment()
+                        }}
+                        className="h-6 px-2 text-[10.5px] font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-300 dark:bg-purple-950/40 dark:border-purple-800 dark:text-purple-300"
+                      >
+                        <Coins className="h-3 w-3 mr-1 text-purple-600 dark:text-purple-400" />
+                        Abonar
+                      </Button>
+                    )}
+                  </div>
                 ) : (
-                  <Wrench className="h-4.5 w-4.5" />
+                  <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                    {/* Badge 1: Estado de Reparación */}
+                    <Badge 
+                      className={`${getRepairStatusBadgeStyles(activity.status)} border-0 text-[10px] px-2 py-0.5`}
+                    >
+                      <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                      {getRepairStatusLabel(activity.status)}
+                    </Badge>
+
+                    {/* Badge 2: Retiro / Entrega */}
+                    {activity.isDelivered ? (
+                      <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-0 text-[10px] px-2 py-0.5">
+                        📦 Retirado
+                      </Badge>
+                    ) : activity.status === 'listo' ? (
+                      <Badge className="bg-emerald-500 text-white border-0 text-[10px] px-2 py-0.5 animate-pulse font-semibold">
+                        🏬 Listo p/ Retiro
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-0 text-[10px] px-2 py-0.5">
+                        🛠 En Taller
+                      </Badge>
+                    )}
+
+                    {/* Badge 3: Estado de Pago */}
+                    {activity.isPaid ? (
+                      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-0 text-[10px] px-2 py-0.5">
+                        💳 Pagado
+                      </Badge>
+                    ) : activity.isPartialPaid ? (
+                      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-0 text-[10px] px-2 py-0.5">
+                        ⚡ Parcial
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300 border-0 text-[10px] px-2 py-0.5">
+                        ⏳ Deuda Pendiente
+                      </Badge>
+                    )}
+
+                    {activity.rawRepair && onViewRepair && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onViewRepair(activity.rawRepair)
+                        }}
+                        className="h-6 px-2 text-[10.5px] font-semibold text-amber-800 bg-amber-50/80 hover:bg-amber-100 border border-amber-200/80 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300"
+                      >
+                        <Eye className="h-3 w-3 mr-1 text-amber-600 dark:text-amber-400" />
+                        Ver Ficha
+                      </Button>
+                    )}
+
+                    {(!activity.isPaid || activity.isPartialPaid) && onOpenPayment && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onOpenPayment()
+                        }}
+                        className={cn(
+                          "h-6 px-2 text-[10.5px] font-semibold",
+                          !activity.isDelivered && activity.status !== 'listo'
+                            ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200"
+                            : "bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100 dark:bg-purple-950/40 dark:border-purple-800 dark:text-purple-300"
+                        )}
+                      >
+                        <Coins className="h-3 w-3 mr-1" />
+                        {!activity.isDelivered && activity.status !== 'listo' ? 'Dar Adelanto' : 'Pagar Saldo'}
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold text-gray-900 dark:text-white truncate">
-                    {activity.title}
-                  </p>
-                  {activity.ticketNumber && (
-                    <Badge variant="outline" className="font-mono text-[10px] px-1.5 h-4">
-                      #{activity.ticketNumber}
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                  {activity.description}
-                </p>
-                <div className="flex items-center gap-2 mt-1.5 text-[10px] text-gray-400">
-                  <Calendar className="h-3 w-3" />
-                  <span>
-                    {new Date(activity.date).toLocaleDateString('es-ES', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-center gap-1.5 flex-shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
-              <p className="font-bold tabular-nums text-base text-foreground">
-                {formatCurrency(activity.amount)}
-              </p>
-              {activity.type === 'sale' ? (
-                <Badge 
-                  variant={activity.status === 'paid' ? 'default' : 'secondary'}
-                  className={activity.status === 'paid' 
-                    ? 'bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-300 border-0 text-[10px] px-2 py-0.5' 
-                    : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300 border-0 text-[10px] px-2 py-0.5'
-                  }
-                >
-                  <CheckCircle className="h-2.5 w-2.5 mr-1" />
-                  {activity.status === 'paid' ? 'Venta Pagada' : 'Pendiente'}
-                </Badge>
-              ) : (
-                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
-                  {/* Badge 1: Estado de Reparación */}
-                  <Badge 
-                    className={`${getRepairStatusBadgeStyles(activity.status)} border-0 text-[10px] px-2 py-0.5`}
-                  >
-                    <CheckCircle className="h-2.5 w-2.5 mr-1" />
-                    {getRepairStatusLabel(activity.status)}
-                  </Badge>
-
-                  {/* Badge 2: Retiro / Entrega */}
-                  {activity.isDelivered ? (
-                    <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-0 text-[10px] px-2 py-0.5">
-                      📦 Retirado
-                    </Badge>
-                  ) : activity.status === 'listo' ? (
-                    <Badge className="bg-emerald-500 text-white border-0 text-[10px] px-2 py-0.5 animate-pulse font-semibold">
-                      🏬 Listo p/ Retiro
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-0 text-[10px] px-2 py-0.5">
-                      🛠 En Taller
-                    </Badge>
-                  )}
-
-                  {/* Badge 3: Estado de Pago */}
-                  {activity.isPaid ? (
-                    <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-0 text-[10px] px-2 py-0.5">
-                      💳 Pagado
-                    </Badge>
-                  ) : activity.isPartialPaid ? (
-                    <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-0 text-[10px] px-2 py-0.5">
-                      ⚡ Parcial
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300 border-0 text-[10px] px-2 py-0.5">
-                      ⏳ Deuda Pendiente
-                    </Badge>
-                  )}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          )
+        })}
       </div>
 
       {hiddenCount > 0 && onShowAll && (
@@ -319,14 +431,249 @@ function SalesHistoryList({
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Saldo a Favor Panel (always visible in Overview right column)
+// ─────────────────────────────────────────────────────────────────────────────
+interface StoreCreditMovement {
+  id: string
+  amount: number
+  reason: string
+  source_type: 'after_sales' | 'sale' | 'repair' | 'manual'
+  source_id: string | null
+  created_at: string
+}
+
+function CustomerStoreCreditPanel({ customerId }: { customerId?: string | null }) {
+  const [balance, setBalance] = React.useState(0)
+  const [movements, setMovements] = React.useState<StoreCreditMovement[]>([])
+  const [loading, setLoading] = React.useState(Boolean(customerId))
+  const [error, setError] = React.useState<string | null>(null)
+  const [expanded, setExpanded] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!customerId) return
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const resp = await fetch(`/api/customers/${customerId}/store-credit?page=1&pageSize=20`)
+        if (!resp.ok) throw new Error('Error al cargar saldo a favor')
+        const payload = await resp.json().catch(() => null)
+        if (!payload?.success) throw new Error(payload?.error || 'Error al cargar saldo a favor')
+        if (cancelled) return
+        setBalance(Number(payload.data?.balance || 0))
+        setMovements(payload.data?.movements ?? [])
+      } catch {
+        if (!cancelled) setError('No se pudo cargar el saldo a favor.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [customerId])
+
+  if (!customerId) return null
+
+  const sourceLabel = (s: StoreCreditMovement['source_type']) =>
+    ({ after_sales: 'Posventa', sale: 'Venta', repair: 'Reparación', manual: 'Ajuste manual' }[s] || 'Movimiento')
+
+  return (
+    <Card className={`border-0 shadow-lg overflow-hidden ${balance > 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200/60 dark:border-emerald-500/20' : 'bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-800/30 dark:to-gray-800/30'}`}>
+      {/* Decorative glow */}
+      {balance > 0 && (
+        <div className="pointer-events-none absolute -top-8 -right-8 h-24 w-24 rounded-full bg-emerald-400/20 blur-2xl" />
+      )}
+      <CardHeader className="pb-2">
+        <CardTitle className={`flex items-center justify-between text-base ${balance > 0 ? 'text-emerald-800 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-400'}`}>
+          <div className="flex items-center gap-2">
+            <Wallet className={`h-5 w-5 ${balance > 0 ? 'text-emerald-600' : 'text-gray-400'}`} />
+            Saldo a Favor
+          </div>
+          {balance > 0 && (
+            <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-800/40 dark:text-emerald-300 border-0 font-semibold">
+              ✓ Disponible
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="flex items-center gap-3 py-2">
+            <div className="animate-spin h-4 w-4 rounded-full border-b-2 border-emerald-600" />
+            <span className="text-sm text-gray-500">Cargando saldo…</span>
+          </div>
+        ) : error ? (
+          <div className="flex items-center gap-2 text-sm text-rose-600">
+            <AlertCircle className="h-4 w-4" />
+            <span>{error}</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-end justify-between">
+              <div>
+                <p className={`text-3xl font-bold tabular-nums tracking-tight ${balance > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-400 dark:text-gray-600'}`}>
+                  {formatCurrency(balance)}
+                </p>
+                <p className={`text-xs mt-1 ${balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                  {balance > 0 ? '💡 Disponible para aplicar en próxima compra o reparación' : 'Sin saldo acumulado aún'}
+                </p>
+              </div>
+              <div className={`h-12 w-12 rounded-2xl flex items-center justify-center ${balance > 0 ? 'bg-emerald-100 dark:bg-emerald-800/40' : 'bg-gray-100 dark:bg-gray-700/40'}`}>
+                <Wallet className={`h-6 w-6 ${balance > 0 ? 'text-emerald-600' : 'text-gray-400'}`} />
+              </div>
+            </div>
+
+            {movements.length > 0 && (
+              <>
+                <Separator className={balance > 0 ? 'border-emerald-200/70 dark:border-emerald-800/50' : ''} />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={`h-8 px-0 text-xs font-semibold ${balance > 0 ? 'text-emerald-700 hover:bg-transparent dark:text-emerald-400' : 'text-gray-500 hover:bg-transparent'}`}
+                  onClick={() => setExpanded(v => !v)}
+                >
+                  {expanded ? '▲ Ocultar movimientos' : `▼ Ver ${movements.length} movimiento${movements.length !== 1 ? 's' : ''}`}
+                </Button>
+                {expanded && (
+                  <ul className="divide-y divide-gray-200/70 dark:divide-white/5 rounded-xl border border-gray-200/70 dark:border-white/5 bg-white/70 dark:bg-black/20 overflow-hidden">
+                    {movements.map(m => (
+                      <li key={m.id} className="flex items-start justify-between gap-3 p-3 text-sm">
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900 dark:text-white truncate">{m.reason}</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            {sourceLabel(m.source_type)} · {new Date(m.created_at).toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                        </div>
+                        <span className={`shrink-0 font-bold tabular-nums text-sm ${m.amount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {m.amount >= 0 ? '+' : '-'}{formatCurrency(Math.abs(Number(m.amount)))}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+
+            {movements.length === 0 && balance === 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-gray-100/70 dark:bg-white/5">
+                <Info className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  El saldo a favor se genera automáticamente por devoluciones, créditos o ajustes manuales. Cuando el cliente acumule saldo, aparecerá aquí y podrá aplicarlo en futuras compras.
+                </p>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compact }: CustomerDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
-  const { data: freshData } = useCustomerData(customer.id)
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
+  const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null)
+  const [selectedRepair, setSelectedRepair] = useState<any | null>(null)
+  const { data: freshData, error: customerError, mutate: refreshCustomer } = useCustomerData(customer.id)
 
   // Use fresh data if available, otherwise fallback to prop
   const currentCustomer = freshData ? { ...customer, ...freshData } : customer
+
+  const { data: sales } = useCustomerPurchases(currentCustomer.id)
+  const { repairs, fetchRepairs } = useCustomerRepairs()
+  const { creditSummary } = useCustomerCredits(currentCustomer.id, currentCustomer)
+
+  React.useEffect(() => {
+    fetchRepairs(currentCustomer.id)
+  }, [currentCustomer.id, fetchRepairs])
+
+  const salesList = React.useMemo(() => (Array.isArray(sales) ? sales : []), [sales])
+  const repairsList = React.useMemo(() => (Array.isArray(repairs) ? repairs : []), [repairs])
+
+  const stats = React.useMemo(() => {
+    const salesSum = salesList.reduce((sum: number, s: any) => sum + Number(s.total || s.total_amount || 0), 0)
+    const repairsSum = repairsList.reduce((sum: number, r: any) => {
+      const cost = Number(r.final_cost ?? r.estimated_cost ?? 0)
+      const paid = Number(r.paid_amount ?? 0)
+      return sum + (paid > 0 ? paid : (r.status?.toLowerCase() === 'entregado' ? cost : 0))
+    }, 0)
+
+    const totalSpent = (salesSum + repairsSum) > 0
+      ? (salesSum + repairsSum)
+      : Number((currentCustomer as any).total_spent_this_year ?? currentCustomer.lifetime_value ?? 0)
+
+    const totalPurchases = (salesList.length + repairsList.length) > 0
+      ? (salesList.length + repairsList.length)
+      : Number(currentCustomer.total_purchases ?? 0)
+
+    const averageTicket = totalPurchases > 0 ? Math.round(totalSpent / totalPurchases) : 0
+
+    const allDates = [
+      ...salesList.map((s: any) => s.created_at || s.date),
+      ...repairsList.map((r: any) => r.created_at),
+      currentCustomer.last_visit,
+      currentCustomer.last_activity,
+    ].filter(Boolean) as string[]
+
+    const lastVisit = allDates.length > 0
+      ? allDates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
+      : null
+
+    const creditLimit = creditSummary?.credit_limit ?? currentCustomer.credit_limit ?? 0
+    const pendingDebt = creditSummary?.total_pending ?? (currentCustomer as any).credit_outstanding ?? (currentCustomer as any).pending_amount ?? 0
+    const availableCredit = creditSummary?.available_credit ?? Math.max(0, creditLimit - pendingDebt)
+    const storeBalance = creditSummary?.store_balance ?? 0
+
+    return {
+      totalSpent,
+      salesTotal: salesSum,
+      repairsTotal: repairsSum,
+      totalPurchases,
+      salesCount: salesList.length,
+      repairsCount: repairsList.length,
+      lastVisit,
+      averageTicket,
+      pendingDebt,
+      availableCredit,
+      creditLimit,
+      storeBalance,
+    }
+  }, [salesList, repairsList, currentCustomer, creditSummary])
+
+  // Si la recarga falla se seguian mostrando los datos que traia la lista, sin
+  // ninguna senal: el credito y el saldo podian estar viejos y nadie lo sabia.
+  const isStale = Boolean(customerError) && !freshData
   const [resolvedProfileId, setResolvedProfileId] = useState<string | null>((currentCustomer as Customer & { profile_id?: string }).profile_id ?? null)
   const resolvedEmail = (freshData?.email ?? (customer as Customer & { email?: string }).email) as string | undefined
+
+  const normalizedRepair = React.useMemo(() => {
+    if (!selectedRepair) return null
+    return {
+      ...selectedRepair,
+      ticketNumber: selectedRepair.ticketNumber || selectedRepair.ticket_number,
+      device: selectedRepair.device || `${selectedRepair.device_brand || ''} ${selectedRepair.device_model || ''}`.trim() || 'Dispositivo',
+      deviceType: selectedRepair.deviceType || selectedRepair.device_type || 'smartphone',
+      brand: selectedRepair.brand || selectedRepair.device_brand || '',
+      model: selectedRepair.model || selectedRepair.device_model || '',
+      serialNumber: selectedRepair.serialNumber || selectedRepair.serial_number || selectedRepair.imei || '',
+      problem: selectedRepair.problem || selectedRepair.problem_description || 'Sin descripción',
+      priority: selectedRepair.priority || 'medium',
+      urgency: selectedRepair.urgency || 'normal',
+      status: selectedRepair.status || 'recibido',
+      createdAt: selectedRepair.createdAt || selectedRepair.created_at || new Date().toISOString(),
+      finalCost: selectedRepair.finalCost ?? selectedRepair.final_cost ?? selectedRepair.estimatedCost ?? selectedRepair.estimated_cost ?? 0,
+      customer: selectedRepair.customer || {
+        id: currentCustomer.id,
+        name: currentCustomer.name,
+        customerCode: currentCustomer.customerCode || '',
+        phone: currentCustomer.phone || '',
+        email: currentCustomer.email || '',
+      }
+    }
+  }, [selectedRepair, currentCustomer])
 
   React.useEffect(() => {
     const fetchProfileId = async () => {
@@ -370,8 +717,6 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
     }
   }
 
-
-
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-10">
       {/* 1. Header Section */}
@@ -380,7 +725,9 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
         onBack={onBack}
         onEdit={() => onEdit(currentCustomer)}
         onViewHistory={() => onViewHistory(currentCustomer)}
+        onOpenPayment={() => setIsPaymentModalOpen(true)}
         compact={compact}
+        stats={stats}
       />
 
       {/* 2. Key Metrics Section */}
@@ -389,7 +736,10 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <CustomerDetailMetrics customer={currentCustomer} />
+        <CustomerDetailMetrics
+          customer={currentCustomer}
+          stats={stats}
+        />
       </motion.div>
 
       {/* 2.5. Account Link Section */}
@@ -402,6 +752,21 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
       />
 
       {/* 3. Main Content Tabs */}
+      {isStale && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30"
+        >
+          <div className="text-amber-900 dark:text-amber-200">
+            <p className="font-semibold">Estos datos pueden estar desactualizados</p>
+            <p className="text-xs">No pudimos traer la ficha más reciente del cliente.</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void refreshCustomer()}>
+            Reintentar
+          </Button>
+        </div>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <div className="border-b border-gray-200 dark:border-gray-800">
           <TabsList className="h-12 bg-transparent p-0 gap-6">
@@ -447,7 +812,6 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
             </TabsTrigger>
           </TabsList>
         </div>
-
         {/* Tab Content: Overview */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -461,88 +825,130 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6 p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Nombre Completo</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.name}</p>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.name)}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Nombre */}
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Nombre Completo</span>
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                        <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        <p className="font-semibold flex-1 text-gray-900 dark:text-white">{currentCustomer.name}</p>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.name)}>
                           <Copy className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Email</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.email || "No registrado"}</p>
+
+                    {/* Email */}
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Email</span>
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                        <ExternalLink className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        <p className="font-medium flex-1 text-sm truncate">{currentCustomer.email || "No registrado"}</p>
                         {currentCustomer.email && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.email)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.email)}>
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`mailto:${encodeURIComponent(currentCustomer.email)}`)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => window.open(`mailto:${encodeURIComponent(currentCustomer.email)}`)}>
                               <ExternalLink className="h-3 w-3" />
                             </Button>
                           </>
                         )}
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Teléfono</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.phone || "No registrado"}</p>
+
+                    {/* Teléfono */}
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Teléfono</span>
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                        <PhoneCall className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        <p className="font-medium flex-1 font-mono text-sm">{currentCustomer.phone || "No registrado"}</p>
                         {currentCustomer.phone && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.phone)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.phone)}>
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`tel:${encodeURIComponent(currentCustomer.phone)}`)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => window.open(`tel:${encodeURIComponent(currentCustomer.phone)}`)}>
                               <PhoneCall className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`https://wa.me/${currentCustomer.phone?.replace(/[^\d]/g, '')}`)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => window.open(`https://wa.me/${currentCustomer.phone?.replace(/[^\d]/g, '')}`)}>
                               <MessageSquare className="h-3 w-3" />
                             </Button>
                           </>
                         )}
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Dirección</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.address || currentCustomer.city || "No registrada"}</p>
+
+                    {/* Dirección */}
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Dirección</span>
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                        <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        <p className="font-medium flex-1 text-sm">{currentCustomer.address || currentCustomer.city || "No registrada"}</p>
                         {(currentCustomer.address || currentCustomer.city) && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.address || currentCustomer.city)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.address || currentCustomer.city)}>
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(currentCustomer.address || currentCustomer.city)}`, '_blank')}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(currentCustomer.address || currentCustomer.city)}`, '_blank')}>
                               <MapPin className="h-3 w-3" />
                             </Button>
                           </>
                         )}
                       </div>
                     </div>
+
+                    {/* RUC / CI */}
+                    {currentCustomer.ruc && (
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">RUC / CI</span>
+                        <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                          <Hash className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <p className="font-semibold flex-1 font-mono text-sm">{currentCustomer.ruc}</p>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.ruc ?? '')}>
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Código de cliente */}
+                    {currentCustomer.customerCode && (
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Código</span>
+                        <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                          <Hash className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <p className="font-semibold flex-1 font-mono text-sm">{currentCustomer.customerCode}</p>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.customerCode)}>
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <Separator />
 
+                  {/* Dates & Status row */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <label className="text-sm font-medium text-blue-700 dark:text-blue-300">Fecha de Registro</label>
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Registro</label>
                       <div className="flex items-center gap-2 mt-2">
                         <Calendar className="h-4 w-4 text-blue-500" />
-                        <p className="font-semibold text-blue-900 dark:text-blue-100">{formatDate(currentCustomer.registration_date)}</p>
+                        <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm">{formatDate(currentCustomer.registration_date)}</p>
                       </div>
                     </div>
-                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <label className="text-sm font-medium text-green-700 dark:text-green-300">Última Actividad</label>
+                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-green-600 dark:text-green-400">Última Actividad</label>
                       <div className="flex items-center gap-2 mt-2">
                         <Clock className="h-4 w-4 text-green-500" />
-                        <p className="font-semibold text-green-900 dark:text-green-100">{formatDate(currentCustomer.last_visit || currentCustomer.last_activity)}</p>
+                        <p className="font-semibold text-green-900 dark:text-green-100 text-sm">
+                          {stats.lastVisit ? formatDate(stats.lastVisit) : formatDate(currentCustomer.last_visit || currentCustomer.last_activity)}
+                        </p>
                       </div>
                     </div>
-                    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                      <label className="text-sm font-medium text-purple-700 dark:text-purple-300">Estado</label>
+                    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-purple-600 dark:text-purple-400">Estado</label>
                       <div className="flex items-center gap-2 mt-2">
                         <CheckCircle className="h-4 w-4 text-purple-500" />
                         <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200">
@@ -551,6 +957,49 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                       </div>
                     </div>
                   </div>
+
+                  {/* Línea de crédito barra */}
+                  {stats.creditLimit > 0 && (
+                    <>
+                      <Separator />
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                            <CreditCard className="h-4 w-4 text-purple-500" />
+                            Línea de Crédito Autorizada
+                          </label>
+                          {stats.pendingDebt > 0 && (
+                            <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">
+                              Debe {formatCurrency(stats.pendingDebt)}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-sm mb-1.5">
+                          <span className="text-gray-500 text-xs">Utilizado (Deuda)</span>
+                          <span className="font-semibold text-sm">
+                            {formatCurrency(stats.pendingDebt)}
+                            <span className="text-gray-400 font-normal"> / {formatCurrency(stats.creditLimit)}</span>
+                          </span>
+                        </div>
+                        <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              (stats.pendingDebt / (stats.creditLimit || 1)) > 0.8
+                                ? 'bg-gradient-to-r from-red-500 to-rose-600'
+                                : (stats.pendingDebt / (stats.creditLimit || 1)) > 0.5
+                                ? 'bg-gradient-to-r from-amber-500 to-orange-500'
+                                : 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                            }`}
+                            style={{ width: `${Math.min(100, (stats.pendingDebt / (stats.creditLimit || 1)) * 100)}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
+                          <span>Disponible: <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(stats.availableCredit)}</span></span>
+                          <span className="font-medium">{Math.round((stats.pendingDebt / (stats.creditLimit || 1)) * 100)}% utilizado</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
@@ -567,13 +1016,20 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                     customerId={currentCustomer.id}
                     limit={5}
                     onShowAll={() => setActiveTab('history')}
+                    onViewSale={(saleId) => setSelectedSaleId(saleId)}
+                    onViewRepair={(repair) => setSelectedRepair(repair)}
+                    onOpenPayment={() => setIsPaymentModalOpen(true)}
                   />
                 </CardContent>
               </Card>
             </div>
 
-            {/* Right Column: Quick Stats & Notes Preview */}
+            {/* Right Column: Saldo a Favor + Quick Stats + Notes */}
             <div className="space-y-6">
+
+              {/* ─── SALDO A FAVOR (siempre visible) ─── */}
+              <CustomerStoreCreditPanel customerId={currentCustomer.id} />
+
               <Card className="border-0 shadow-lg">
                 <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-t-lg">
                   <CardTitle className="flex items-center gap-2">
@@ -707,6 +1163,8 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
             customer={currentCustomer} 
             compact={compact}
             showActions={true}
+            onOpenPayment={() => setIsPaymentModalOpen(true)}
+            onEditCustomer={() => onEdit(currentCustomer)}
           />
         </TabsContent>
 
@@ -717,7 +1175,12 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
               <CardTitle>Historial de Actividad</CardTitle>
             </CardHeader>
             <CardContent>
-              <SalesHistoryList customerId={currentCustomer.id} />
+              <SalesHistoryList
+                customerId={currentCustomer.id}
+                onViewSale={(saleId) => setSelectedSaleId(saleId)}
+                onViewRepair={(repair) => setSelectedRepair(repair)}
+                onOpenPayment={() => setIsPaymentModalOpen(true)}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -828,6 +1291,47 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Footer Navigation Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-[#0d1117] border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center gap-2.5 text-xs text-slate-500">
+          <div className="h-2 w-2 rounded-full bg-blue-500" />
+          <span>Ficha de Cliente: <strong className="text-slate-800 dark:text-white font-semibold">{currentCustomer.name}</strong></span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onBack}
+          className="group w-full sm:w-auto gap-2 rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100 font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+          Volver a la lista de Clientes
+        </Button>
+      </div>
+
+      {/* Modal de Cobro / Abono Unificado */}
+      <CustomerGlobalPaymentModal
+        open={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        customer={currentCustomer}
+        onSuccess={() => {
+          setIsPaymentModalOpen(false)
+        }}
+      />
+
+      {/* Modal de Detalle de Venta */}
+      <SaleDetailsModal
+        isOpen={Boolean(selectedSaleId)}
+        onClose={() => setSelectedSaleId(null)}
+        saleId={selectedSaleId}
+      />
+
+      {/* Modal de Detalle de Reparación */}
+      <RepairDetailDialog
+        open={Boolean(selectedRepair)}
+        onClose={() => setSelectedRepair(null)}
+        repair={normalizedRepair}
+      />
     </div>
   )
 }

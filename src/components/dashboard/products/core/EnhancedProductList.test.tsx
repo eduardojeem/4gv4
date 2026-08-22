@@ -2,10 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { EnhancedProductList } from './EnhancedProductList'
+import { useProductManagement, useProductFiltering } from '@/hooks/products'
 
-// Mock de los hooks compuestos
-vi.mock('../../../../hooks/products/useProductManagement', () => ({
-  useProductManagement: () => ({
+// Los valores base viven en vi.hoisted para que las factories de vi.mock —que
+// se izan por encima de los imports— puedan leerlos, y para que cada test arme
+// sus variantes con spread sin volver a escribir el objeto entero.
+const { baseManagement, baseFiltering } = vi.hoisted(() => ({
+  baseManagement: {
     products: [
       {
         id: '1',
@@ -30,9 +33,9 @@ vi.mock('../../../../hooks/products/useProductManagement', () => ({
         created_at: '2024-02-10T14:30:00Z'
       }
     ],
-    selectedProducts: [],
+    selectedProducts: [] as unknown[],
     loading: false,
-    error: null,
+    error: null as string | null,
     totalCount: 2,
     selectProduct: vi.fn(),
     selectAllProducts: vi.fn(),
@@ -47,11 +50,8 @@ vi.mock('../../../../hooks/products/useProductManagement', () => ({
     bulkUpdate: vi.fn(),
     sortConfig: { field: 'name', direction: 'asc' },
     pagination: { page: 1, limit: 10 }
-  })
-}))
-
-vi.mock('../../../../hooks/products/useProductFiltering', () => ({
-  useProductFiltering: () => ({
+  },
+  baseFiltering: {
     filteredProducts: [
       {
         id: '1',
@@ -75,7 +75,14 @@ vi.mock('../../../../hooks/products/useProductFiltering', () => ({
     clearAllFilters: vi.fn(),
     applyFilterPreset: vi.fn(),
     filterStats: { total: 2, filtered: 1 }
-  })
+  }
+}))
+
+// El componente importa los hooks desde el barrel '@/hooks/products', no desde
+// los módulos sueltos: mockear las rutas individuales no lo intercepta.
+vi.mock('@/hooks/products', () => ({
+  useProductManagement: vi.fn(() => baseManagement),
+  useProductFiltering: vi.fn(() => baseFiltering)
 }))
 
 // Mock de componentes UI
@@ -127,6 +134,11 @@ describe('EnhancedProductList', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // clearAllMocks borra las llamadas pero conserva los mockReturnValue, así
+    // que hay que devolver ambos hooks a su valor base o el override de un test
+    // se filtra al siguiente.
+    vi.mocked(useProductManagement).mockReturnValue(baseManagement)
+    vi.mocked(useProductFiltering).mockReturnValue(baseFiltering)
   })
 
   it('should render product list correctly', () => {
@@ -139,8 +151,8 @@ describe('EnhancedProductList', () => {
 
   it('should display loading state', () => {
     // Mock loading state
-    vi.mocked(require('../../../../hooks/products/useProductManagement').useProductManagement).mockReturnValue({
-      ...require('../../../../hooks/products/useProductManagement').useProductManagement(),
+    vi.mocked(useProductManagement).mockReturnValue({
+      ...baseManagement,
       loading: true
     })
 
@@ -151,8 +163,8 @@ describe('EnhancedProductList', () => {
 
   it('should display error state', () => {
     // Mock error state
-    vi.mocked(require('../../../../hooks/products/useProductManagement').useProductManagement).mockReturnValue({
-      ...require('../../../../hooks/products/useProductManagement').useProductManagement(),
+    vi.mocked(useProductManagement).mockReturnValue({
+      ...baseManagement,
       error: 'Failed to load products'
     })
 
@@ -164,13 +176,13 @@ describe('EnhancedProductList', () => {
 
   it('should display empty state when no products', () => {
     // Mock empty products
-    vi.mocked(require('../../../../hooks/products/useProductManagement').useProductManagement).mockReturnValue({
-      ...require('../../../../hooks/products/useProductManagement').useProductManagement(),
+    vi.mocked(useProductManagement).mockReturnValue({
+      ...baseManagement,
       products: []
     })
 
-    vi.mocked(require('../../../../hooks/products/useProductFiltering').useProductFiltering).mockReturnValue({
-      ...require('../../../../hooks/products/useProductFiltering').useProductFiltering(),
+    vi.mocked(useProductFiltering).mockReturnValue({
+      ...baseFiltering,
       filteredProducts: []
     })
 
@@ -183,8 +195,8 @@ describe('EnhancedProductList', () => {
     const user = userEvent.setup()
     const mockSelectProduct = vi.fn()
 
-    vi.mocked(require('../../../../hooks/products/useProductManagement').useProductManagement).mockReturnValue({
-      ...require('../../../../hooks/products/useProductManagement').useProductManagement(),
+    vi.mocked(useProductManagement).mockReturnValue({
+      ...baseManagement,
       selectProduct: mockSelectProduct
     })
 
@@ -200,8 +212,8 @@ describe('EnhancedProductList', () => {
     const user = userEvent.setup()
     const mockSelectAllProducts = vi.fn()
 
-    vi.mocked(require('../../../../hooks/products/useProductManagement').useProductManagement).mockReturnValue({
-      ...require('../../../../hooks/products/useProductManagement').useProductManagement(),
+    vi.mocked(useProductManagement).mockReturnValue({
+      ...baseManagement,
       selectAllProducts: mockSelectAllProducts
     })
 
@@ -217,8 +229,8 @@ describe('EnhancedProductList', () => {
     const user = userEvent.setup()
     const mockSetSortConfig = vi.fn()
 
-    vi.mocked(require('../../../../hooks/products/useProductManagement').useProductManagement).mockReturnValue({
-      ...require('../../../../hooks/products/useProductManagement').useProductManagement(),
+    vi.mocked(useProductManagement).mockReturnValue({
+      ...baseManagement,
       setSortConfig: mockSetSortConfig
     })
 
@@ -285,8 +297,8 @@ describe('EnhancedProductList', () => {
     const user = userEvent.setup()
     const mockSetPagination = vi.fn()
 
-    vi.mocked(require('../../../../hooks/products/useProductManagement').useProductManagement).mockReturnValue({
-      ...require('../../../../hooks/products/useProductManagement').useProductManagement(),
+    vi.mocked(useProductManagement).mockReturnValue({
+      ...baseManagement,
       setPagination: mockSetPagination,
       totalCount: 25 // More than one page
     })
@@ -307,8 +319,8 @@ describe('EnhancedProductList', () => {
     const user = userEvent.setup()
     const mockBulkDelete = vi.fn()
 
-    vi.mocked(require('../../../../hooks/products/useProductManagement').useProductManagement).mockReturnValue({
-      ...require('../../../../hooks/products/useProductManagement').useProductManagement(),
+    vi.mocked(useProductManagement).mockReturnValue({
+      ...baseManagement,
       selectedProducts: ['1', '2'],
       bulkDelete: mockBulkDelete
     })
@@ -367,8 +379,8 @@ describe('EnhancedProductList', () => {
     const user = userEvent.setup()
     const mockUpdateFilter = vi.fn()
 
-    vi.mocked(require('../../../../hooks/products/useProductFiltering').useProductFiltering).mockReturnValue({
-      ...require('../../../../hooks/products/useProductFiltering').useProductFiltering(),
+    vi.mocked(useProductFiltering).mockReturnValue({
+      ...baseFiltering,
       updateFilter: mockUpdateFilter
     })
 

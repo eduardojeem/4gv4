@@ -1,4 +1,5 @@
 import { LucideIcon } from 'lucide-react'
+import type { RepairLineType } from '@/lib/repairs/line-types'
 
 /**
  * Estado de la reparación (alineado con la base de datos)
@@ -25,6 +26,8 @@ export type DbRepairStatus = RepairStatus
 export type RepairPriority = 'low' | 'medium' | 'high'
 export type RepairUrgency = 'normal' | 'urgent'
 export type RepairDeliveryOutcome = 'repaired' | 'unrepairable' | 'withdrawn'
+export type RepairPricingMode = 'automatic' | 'budget' | 'manual'
+export type RepairPaymentStatus = 'pendiente' | 'parcial' | 'pagado'
 export type DeviceType = 'smartphone' | 'tablet' | 'laptop' | 'desktop' | 'accessory' | 'other'
 
 export interface Customer {
@@ -33,6 +36,11 @@ export interface Customer {
   name: string
   phone: string
   email: string
+  ruc?: string
+  alternate_phone?: string | null
+  alternate_phone_label?: string | null
+  customer_type?: string
+  is_wholesale?: boolean
 }
 
 export interface Technician {
@@ -50,21 +58,103 @@ export interface RepairNote {
 
 export interface RepairPart {
   id: number
+  databaseId?: string
   name: string
   cost: number
+  internalCost?: number
   quantity: number
+  stockAvailable?: number | null
   supplier: string
   partNumber: string
   /** Producto de inventario del que salió este repuesto. Sin esto no hay
    *  forma de descontar stock ni de saber qué repuestos vinieron del
    *  inventario vs. de un proveedor externo. */
   productId?: string | null
+  discountAmount?: number
+  taxRate?: 0 | 5 | 10
+  lineType?: RepairLineType
+}
+
+export interface RepairTaxBreakdown {
+  rate: 0 | 5 | 10
+  grossAmount: number
+  taxableBase: number
+  taxAmount: number
+}
+
+export interface RepairCostSummary {
+  revisionId?: string | null
+  revisionNumber?: number | null
+  laborAmount: number
+  partsSubtotal: number
+  servicesSubtotal?: number
+  chargedPartsSubtotal?: number
+  includedMaterialsInternalCost?: number
+  partsInternalCost: number
+  additionalCharges: number
+  deductions: number
+  discountAmount: number
+  subtotalBeforeDiscount: number
+  finalTotal: number
+  paidAmount: number
+  balance: number
+  taxBreakdown: RepairTaxBreakdown[]
+}
+
+export interface RepairCostRevision {
+  id: string
+  revisionNumber: number
+  actorId?: string | null
+  actorRole: string
+  reason?: string | null
+  previousSnapshot?: Record<string, unknown> | null
+  summary: RepairCostSummary
+  createdAt: string
+}
+
+export interface RepairPartResolution {
+  repairPartId: string
+  productId?: string | null
+  name: string
+  quantity: number
+  unitPrice: number
+  disposition: 'consumed' | 'restocked'
+}
+
+export interface RepairCloseout {
+  id: string
+  outcome: 'withdrawn' | 'unrepairable'
+  chargeMode: 'none' | 'labor' | 'labor_and_consumed_parts' | 'exceptional'
+  laborCharge: number
+  consumedPartsCharge: number
+  finalCharge: number
+  paidBefore: number
+  settlementKind: 'none' | 'payment' | 'outstanding' | 'refund' | 'store_credit'
+  settlementAmount: number
+  settlementMethod?: 'cash' | 'card' | 'transfer' | null
+  settlementReference?: string | null
+  reason?: string | null
+  note?: string | null
+  createdBy?: string | null
+  createdAt: string
+  parts: RepairPartResolution[]
 }
 
 export interface RepairImage {
   id: string
   url: string
   description?: string
+}
+
+export interface RepairPayment {
+  id: string
+  amount: number
+  method: 'cash' | 'card' | 'transfer' | 'credit' | 'mixed'
+  reference?: string | null
+  notes?: string | null
+  source: 'repairs' | 'delivery' | 'pos' | 'migration'
+  createdAt: string
+  createdBy?: string | null
 }
 
 export interface RepairNotifications {
@@ -76,11 +166,19 @@ export interface RepairNotifications {
 export interface Repair {
   id: string
   ticketNumber?: string
+  /**
+   * Reparacion original si esta nacio como retrabajo por garantia desde un
+   * caso de posventa. Sin esto un retrabajo se veia igual que cualquier otra
+   * reparacion en la lista.
+   */
+  parentRepairId?: string | null
   customer: Customer
   device: string
   deviceType: DeviceType
   brand: string
   model: string
+  serialNumber?: string
+  imei?: string
   issue: string
   description: string
   accessType?: 'none' | 'pin' | 'password' | 'pattern' | 'biometric' | 'other'
@@ -92,6 +190,13 @@ export interface Repair {
   estimatedCost: number
   finalCost: number | null
   laborCost: number
+  pricingMode?: RepairPricingMode
+  discountAmount?: number
+  priceOverrideReason?: string
+  pricingUpdatedAt?: string | null
+  additionalCharges?: number
+  deductions?: number
+  costSummary?: RepairCostSummary | null
   estimatedDuration?: number  // Duración estimada en minutos
   technician: Technician | null
   location: string
@@ -105,8 +210,10 @@ export interface Repair {
   createdAt: string
   estimatedCompletion: string | null
   completedAt: string | null
-  paymentStatus?: 'pendiente' | 'parcial' | 'pagado'
+  paymentStatus?: RepairPaymentStatus
   paidAmount?: number
+  payments?: RepairPayment[]
+  closeout?: RepairCloseout | null
   lastUpdate: string
   progress: number
   customerRating: number | null

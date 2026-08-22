@@ -26,6 +26,7 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { cn } from '@/lib/utils'
 import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreCredit'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type FulfillmentType = 'PICKUP' | 'DELIVERY'
@@ -149,6 +150,7 @@ export function CartPageClient({
   const [promotionCode, setPromotionCode] = useState('')
   const [validatingPromotion, setValidatingPromotion] = useState(false)
   const [appliedPromotion, setAppliedPromotion] = useState<{ code: string; name: string; discountAmount: number } | null>(null)
+  const [storeCreditAmount, setStoreCreditAmount] = useState(0)
 
   // ── UI state ─────────────────────────────────────────────────────────────
   const [loading,             setLoading]             = useState(false)
@@ -199,6 +201,11 @@ export function CartPageClient({
 
   // ── Derived totals ────────────────────────────────────────────────────────
   const total = Math.max(0, subtotal + shippingCost - (appliedPromotion?.discountAmount ?? 0))
+  const totalAfterStoreCredit = Math.max(0, total - storeCreditAmount)
+
+  useEffect(() => {
+    setStoreCreditAmount((current) => Math.min(current, total))
+  }, [total])
 
   useEffect(() => {
     setAppliedPromotion(null)
@@ -301,6 +308,7 @@ export function CartPageClient({
           deliveryZoneId: fulfillmentType === 'DELIVERY' ? selectedDeliveryZone?.id ?? null : null,
           notes: notesParts.join(' · ') || null,
           promotionCode: appliedPromotion?.code ?? null,
+          storeCreditAmount,
         }),
       })
 
@@ -786,6 +794,14 @@ export function CartPageClient({
                 )}
               </div>
 
+              <PublicStoreCredit
+                authenticated={Boolean(user)}
+                organizationSlug={organizationSlug}
+                orderTotal={total}
+                amount={storeCreditAmount}
+                onAmountChange={setStoreCreditAmount}
+              />
+
               {/* ── Payment ── */}
               <div className="space-y-3 rounded-2xl border p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
@@ -952,11 +968,18 @@ export function CartPageClient({
                   </div>
                 )}
 
+                {storeCreditAmount > 0 && (
+                  <div className="flex justify-between font-semibold text-emerald-600 dark:text-emerald-400">
+                    <span>Saldo a favor reservado</span>
+                    <span className="tabular-nums">-{formatMoney(storeCreditAmount)}</span>
+                  </div>
+                )}
+
                 <Separator />
 
                 <div className="flex justify-between font-bold text-base">
                   <span>Total</span>
-                  <span className="text-primary tabular-nums">{formatMoney(total)}</span>
+                  <span className="text-primary tabular-nums">{formatMoney(totalAfterStoreCredit)}</span>
                 </div>
               </div>
 

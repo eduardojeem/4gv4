@@ -13,14 +13,20 @@ export type PosCreditSummary = {
   installmentCount: number
   installmentAmount: number
   frequency: CreditFrequency
+  firstDueDate: string
 }
 
-export function buildPosCreditSummary(baseTotal: number, terms: PosCreditTerms): PosCreditSummary {
+export function buildPosCreditSummary(
+  baseTotal: number,
+  terms: PosCreditTerms,
+  options: { now?: Date } = {},
+): PosCreditSummary {
   const plan = buildCreditInstallmentPlan({
     principalAmount: baseTotal,
     interestRate: terms.interestRate,
     installmentCount: terms.count,
     frequency: terms.frequency,
+    now: options.now,
   })
 
   return {
@@ -30,5 +36,6 @@ export function buildPosCreditSummary(baseTotal: number, terms: PosCreditTerms):
     installmentCount: plan.installmentCount,
     installmentAmount: plan.installments[0]?.amount ?? 0,
     frequency: plan.frequency,
+    firstDueDate: plan.installments[0].dueDate.toISOString(),
   }
 }

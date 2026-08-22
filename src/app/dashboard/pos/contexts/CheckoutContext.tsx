@@ -6,6 +6,14 @@ import type { CreditTerms } from '../components/checkout/CreditStatusPanel'
 
 const DEFAULT_CREDIT_TERMS: CreditTerms = { count: 1, frequency: 'monthly', interestRate: 0 }
 
+export type CreditPlanSuggestion = {
+  productId: string
+  productName: string
+  count: number
+  interestRate: number
+  frequency: 'monthly'
+}
+
 interface CheckoutContextType {
   // Modal State
   isCheckoutOpen: boolean
@@ -53,6 +61,8 @@ interface CheckoutContextType {
   // Términos de la venta a crédito (cuotas / frecuencia / interés)
   creditTerms: CreditTerms
   setCreditTerms: (terms: CreditTerms) => void
+  creditPlanSuggestion: CreditPlanSuggestion | null
+  applyProductCreditSuggestion: (suggestion: CreditPlanSuggestion) => void
 
   // Split Payments
   paymentSplit: PaymentSplit[]
@@ -86,6 +96,16 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   const [discount, setDiscount] = useState<number>(0)
   const [storeCreditApplied, setStoreCreditApplied] = useState<number>(0)
   const [creditTerms, setCreditTerms] = useState<CreditTerms>(DEFAULT_CREDIT_TERMS)
+  const [creditPlanSuggestion, setCreditPlanSuggestion] = useState<CreditPlanSuggestion | null>(null)
+
+  const applyProductCreditSuggestion = useCallback((suggestion: CreditPlanSuggestion) => {
+    setCreditPlanSuggestion(suggestion)
+    setCreditTerms({
+      count: suggestion.count,
+      interestRate: suggestion.interestRate,
+      frequency: suggestion.frequency,
+    })
+  }, [])
 
   const [paymentSplit, setPaymentSplit] = useState<PaymentSplit[]>([])
 
@@ -127,6 +147,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     setDiscount(0)
     setStoreCreditApplied(0)
     setCreditTerms(DEFAULT_CREDIT_TERMS)
+    setCreditPlanSuggestion(null)
     setPaymentSplit([])
   }, [])
 
@@ -166,6 +187,8 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
       setStoreCreditApplied,
       creditTerms,
       setCreditTerms,
+      creditPlanSuggestion,
+      applyProductCreditSuggestion,
       paymentSplit,
       setPaymentSplit,
       addPaymentSplit,

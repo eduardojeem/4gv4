@@ -3,6 +3,7 @@ import React from 'react'
 import { Clock, AlertCircle, Calendar } from 'lucide-react'
 import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import type { CreditPlanSuggestion } from '../../contexts/CheckoutContext'
 
 export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
 
@@ -21,6 +22,7 @@ interface CreditStatusPanelProps {
   terms: CreditTerms
   onTermsChange: (terms: CreditTerms) => void
   formatCurrency?: (amount: number) => string
+  suggestion?: CreditPlanSuggestion | null
 }
 
 export function CreditStatusPanel({
@@ -28,7 +30,8 @@ export function CreditStatusPanel({
   creditSummary,
   terms,
   onTermsChange,
-  formatCurrency = defaultFormatCurrency
+  formatCurrency = defaultFormatCurrency,
+  suggestion = null,
 }: CreditStatusPanelProps) {
   const installmentCount = Math.max(1, terms.count || 1)
   const creditPlan = React.useMemo(() => buildCreditInstallmentPlan({
@@ -44,6 +47,11 @@ export function CreditStatusPanel({
   const remainingCredit = Math.max(0, creditSummary.availableCredit - creditPlan.financedTotal)
   const utilizationPercentage = totalCredit > 0 ? (newBalance / totalCredit) * 100 : 0
   const isNearLimit = utilizationPercentage > 80
+  const suggestionWasAdjusted = Boolean(suggestion && (
+    suggestion.count !== terms.count
+    || suggestion.interestRate !== terms.interestRate
+    || suggestion.frequency !== terms.frequency
+  ))
 
   return (
     <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg shadow-sm">
@@ -53,6 +61,19 @@ export function CreditStatusPanel({
         </div>
         <span className="font-semibold text-base">Venta a Crédito</span>
       </div>
+      {suggestion && (
+        <div className="mb-3 rounded-md border border-blue-300/60 bg-white/60 p-2 text-xs text-blue-900 dark:border-blue-700 dark:bg-slate-950/30 dark:text-blue-100">
+          <p className="font-semibold">Plan sugerido por {suggestion.productName}</p>
+          <p className="mt-0.5 text-[11px] text-blue-700 dark:text-blue-300">
+            Estas condiciones se aplican al total financiado del ticket.
+          </p>
+          {suggestionWasAdjusted && (
+            <p className="mt-1 font-medium text-amber-700 dark:text-amber-300">
+              Condiciones ajustadas manualmente
+            </p>
+          )}
+        </div>
+      )}
       
       <div className="space-y-2.5">
         {/* Total de la venta */}

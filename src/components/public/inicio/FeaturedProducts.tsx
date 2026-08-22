@@ -1,5 +1,6 @@
 'use client'
 
+import { useSyncExternalStore } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -35,15 +36,22 @@ export function FeaturedProducts() {
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )
 
+  const isMounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  )
+
   const products = data ?? []
+  const effectiveIsLoading = !isMounted || isLoading
 
   // Nothing to sell yet → don't render an empty section.
-  if (!isLoading && (error || products.length === 0)) return null
+  if (!effectiveIsLoading && (error || products.length === 0)) return null
 
   return (
-    <section id="productos" className="bg-background py-16 md:py-20">
+    <section id="productos" className="bg-background py-12 md:py-16">
       <div className="container">
-        <div className="mb-8 flex items-end justify-between gap-4">
+        <div className="mb-7 flex items-end justify-between gap-4">
           <div>
             <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
               <Package className="h-3.5 w-3.5" />
@@ -64,16 +72,16 @@ export function FeaturedProducts() {
           </Button>
         </div>
 
-        {isLoading ? (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+        {effectiveIsLoading ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="aspect-[3/4] animate-pulse rounded-2xl border border-border/60 bg-muted/40" />
+              <div key={i} className="aspect-[4/5] animate-pulse rounded-lg border border-border/60 bg-muted/40" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {products.map((product, index) => (
-              <ProductCard key={product.id} product={product} priority={index < 4} />
+              <ProductCard key={product.id} product={product} priority={index < 2} />
             ))}
           </div>
         )}

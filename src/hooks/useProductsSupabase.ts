@@ -35,6 +35,8 @@ interface PaginationOptions {
 
 interface DashboardStats {
   totalProducts: number
+  physicalProductsCount?: number
+  servicesCount?: number
   activeProducts: number
   totalStockValue: number
   totalCostValue: number
@@ -66,6 +68,9 @@ interface ProductsListApiPayload {
     total?: number
     page?: number
     per_page?: number
+    /** El filtro de stock barrio hasta el tope: el listado y el total son parciales. */
+    truncated?: boolean
+    scan_cap?: number
   }
   error?: string
   message?: string
@@ -76,6 +81,12 @@ interface CategoryApiPayload {
   data?: Category
   error?: string
   message?: string
+}
+
+type ProductOperationResult<T = unknown> = {
+  success: boolean
+  data?: T
+  error?: string
 }
 
 function getProductApiError(payload: ProductApiPayload | null, fallback: string) {
@@ -104,6 +115,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [totalCount, setTotalCount] = useState(0)
+  // Marca que el resultado quedo incompleto por el tope del barrido de stock.
+  const [resultTruncated, setResultTruncated] = useState(false)
 
   // Estados para filtros, ordenamiento y paginación
   const [filters, setFilters] = useState<ProductFilters>({
@@ -119,8 +132,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   })
   const [pagination, setPagination] = useState<PaginationOptions>({
     page: 1,
-    // 0 = sin límite (traer todos los registros que coincidan con filtros)
-    limit: 0
+    limit: 20
   })
 
   const supabase = createClient()
@@ -148,7 +160,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       // Obtener productos para calcular estadísticas
       const { data: products, error: productsError } = await supabase
         .from('products')
-        .select('id, sku, name, purchase_price, sale_price, stock_quantity, min_stock, is_active')
+        .select('id, sku, name, purchase_price, sale_price, stock_quantity, min_stock, is_active, unit_measure, category:categories(name)')
 
       if (productsError) throw productsError
 
@@ -176,16 +188,20 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       // Calcular estadísticas
       const productList = await applySelectedBranchStock((products || []) as unknown as Product[])
       const totalProducts = productList?.length || 0
+      const servicesCount = productList?.filter(isServiceLikeProduct)?.length || 0
+      const physicalProductsCount = Math.max(0, totalProducts - servicesCount)
       const activeProducts = productList?.filter(p => p.is_active)?.length || 0
-      const totalStockValue = productList?.reduce((sum, p) => sum + ((p.sale_price || 0) * (p.stock_quantity || 0)), 0) || 0
-      const totalCostValue = productList?.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.stock_quantity || 0)), 0) || 0
+      const totalStockValue = productList?.filter(p => !isServiceLikeProduct(p))?.reduce((sum, p) => sum + ((p.sale_price || 0) * (p.stock_quantity || 0)), 0) || 0
+      const totalCostValue = productList?.filter(p => !isServiceLikeProduct(p))?.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.stock_quantity || 0)), 0) || 0
       const totalMargin = totalStockValue - totalCostValue
       const avgMarginPercentage = totalCostValue > 0 ? (totalMargin / totalCostValue) * 100 : 0
-      const lowStockCount = productList?.filter(isLowStock)?.length || 0
-      const outOfStockCount = productList?.filter(isOutOfStock)?.length || 0
+      const lowStockCount = productList?.filter(p => !isServiceLikeProduct(p) && isLowStock(p))?.length || 0
+      const outOfStockCount = productList?.filter(p => !isServiceLikeProduct(p) && isOutOfStock(p))?.length || 0
 
       setDashboardStats({
         totalProducts,
+        physicalProductsCount,
+        servicesCount,
         activeProducts,
         totalStockValue,
         totalCostValue,
@@ -226,7 +242,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       const params = new URLSearchParams({
         page: String(Math.max(1, activePagination.page)),
-        per_page: String(activePagination.limit > 0 ? activePagination.limit : 50),
+        per_page: String(activePagination.limit > 0 ? activePagination.limit : 20),
         sort: activeSort.field,
         direction: activeSort.direction,
         stock_status: activeFilters.stockStatus || 'all',
@@ -253,6 +269,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       setProducts(payload.data.products)
       setTotalCount(Number(payload.data.total || 0))
+      setResultTruncated(payload.data.truncated === true)
     } catch (err) {
       console.error('Error fetching products:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -573,7 +590,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     reason?: string,
     referenceId?: string,
     referenceType?: string
-  ) => {
+  ): Promise<ProductOperationResult> => {
     try {
       let data = null
       let error = null as { message?: string } | null
@@ -623,8 +640,12 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       ])
 
       return { success: true, data }
-    } catch (err: any) {
-      const errorMsg = err?.message || err?.details || JSON.stringify(err)
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err !== null && 'details' in err
+          ? String(err.details)
+          : JSON.stringify(err)
       console.error('Error updating stock:', errorMsg, err)
       return { 
         success: false, 
@@ -848,148 +869,6 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     }
   }, [fetchAlerts])
 
-  // Función para exportar productos a CSV
-  const exportToCSV = useCallback(async (filters: ProductFilters = {}) => {
-    try {
-      let query = supabase
-        .from('products')
-        .select(`
-          *,
-          category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, phone, address)
-        `)
-
-      // Aplicar los mismos filtros que en fetchProducts
-      if (filters.search) {
-        query = query.or(`name.ilike.%${filters.search}%,sku.ilike.%${filters.search}%,brand.ilike.%${filters.search}%`)
-      }
-
-      if (filters.category) {
-        query = query.eq('category_id', filters.category)
-      }
-
-      if (filters.supplier) {
-        query = query.eq('supplier_id', filters.supplier)
-      }
-
-      if (filters.brand) {
-        query = query.ilike('brand', filters.brand)
-      }
-
-      if (filters.isActive !== undefined) {
-        query = query.eq('is_active', filters.isActive)
-      }
-
-      if (filters.priceMin !== undefined) {
-        query = query.filter('sale_price', 'gte', filters.priceMin)
-      }
-
-      if (filters.priceMax !== undefined) {
-        query = query.filter('sale_price', 'lte', filters.priceMax)
-      }
-
-      if (filters.stockStatus && filters.stockStatus !== 'all') {
-        if (filters.stockStatus === 'in_stock' && !selectedBranchId) {
-          query = query.filter('stock_quantity', 'gt', 0)
-        } else if (filters.stockStatus === 'low_stock' && !selectedBranchId) {
-          query = query.filter('stock_quantity', 'gt', 0)
-        } else if (filters.stockStatus === 'out_of_stock' && !selectedBranchId) {
-          query = query.filter('stock_quantity', 'eq', 0)
-        }
-      }
-
-      const { data, error } = await query
-
-      if (error) throw error
-
-      // Convertir a CSV
-      if (!data || data.length === 0) {
-        return { success: false, error: 'No hay datos para exportar' }
-      }
-
-      const headers = [
-        'SKU', 'Nombre', 'Descripción', 'Categoría', 'Marca', 'Proveedor',
-        'Precio Compra', 'Precio Venta', 'Precio Mayorista', 'Stock', 'Stock Mínimo',
-        'Unidad', 'Estado', 'Margen %', 'Valor Stock', 'Estado Stock'
-      ]
-
-      type CSVProduct = {
-        id: string
-        sku: string
-        name: string
-        description?: string | null
-        brand?: string | null
-        purchase_price: number | null
-        sale_price: number | null
-        wholesale_price?: number | null
-        stock_quantity: number | null
-        min_stock: number | null
-        unit_measure: string
-        is_active: boolean
-        category?: { name?: string } | null
-        supplier?: { name?: string } | null
-      }
-
-      const baseItems = await applySelectedBranchStock(data as unknown as CSVProduct[])
-      let items = baseItems
-
-      if (filters.stockStatus === 'low_stock') {
-        items = baseItems.filter(isLowStock)
-      } else if (filters.stockStatus === 'in_stock') {
-        items = baseItems.filter(p => !isOutOfStock(p))
-      } else if (filters.stockStatus === 'out_of_stock') {
-        items = baseItems.filter(isOutOfStock)
-      }
-
-      const csvContent = [
-        headers.join(','),
-        ...items.map(p => {
-          const margin = (Number(p.sale_price || 0) - Number(p.purchase_price || 0))
-          const marginPct = p.purchase_price ? (margin / Number(p.purchase_price)) * 100 : 0
-          const stockValue = Number(p.sale_price || 0) * Number(p.stock_quantity || 0)
-          const stockStatus = isOutOfStock(p) ? 'Sin Stock' : (isLowStock(p) ? 'Stock Bajo' : 'En Stock')
-          return [
-            p.sku,
-            `"${p.name}"`,
-            `"${p.description || ''}"`,
-            `"${p.category?.name || ''}"`,
-            `"${p.brand || ''}"`,
-            `"${p.supplier?.name || ''}"`,
-            p.purchase_price,
-            p.sale_price,
-            p.wholesale_price || '',
-            p.stock_quantity,
-            p.min_stock,
-            p.unit_measure,
-            p.is_active ? 'Activo' : 'Inactivo',
-            marginPct.toFixed(2),
-            stockValue.toFixed(2),
-            stockStatus
-          ].join(',')
-        })
-      ].join('\n')
-
-      // Crear y descargar archivo
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-      const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.setAttribute('href', url)
-      link.setAttribute('download', `productos_${new Date().toISOString().split('T')[0]}.csv`)
-      link.style.visibility = 'hidden'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      return { success: true }
-    } catch (err) {
-      console.error('Error exporting to CSV:', err)
-      return { 
-        success: false, 
-        error: err instanceof Error ? err.message : 'Error desconocido' 
-      }
-    }
-  }, [applySelectedBranchStock, selectedBranchId, supabase])
-
   const exportInventoryCSV = useCallback(async (filters: ProductFilters = {}) => {
     try {
       let query = supabase
@@ -1060,12 +939,6 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         return /[;"\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str
       }
       const formatNumber = (value: number | null | undefined) => Number(value || 0).toFixed(2)
-      const headers = [
-        'SKU', 'Nombre', 'Descripción', 'Categoría', 'Marca', 'Proveedor',
-        'Precio Compra', 'Precio Venta', 'Precio Mayorista', 'Stock', 'Stock Mínimo',
-        'Stock Máximo', 'Unidad', 'Código Barras', 'Ubicación', 'Activo', 'Destacado',
-        'Margen %', 'Valor Stock', 'Estado Stock', 'ID'
-      ]
       const rows = items.map(product => {
         const margin = Number(product.sale_price || 0) - Number(product.purchase_price || 0)
         const marginPct = product.purchase_price ? (margin / Number(product.purchase_price)) * 100 : 0
@@ -1329,6 +1202,22 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     fetchProducts()
   }, [enabled, filters, sort, pagination, fetchProducts])
 
+  // Escuchar eventos de actualización global para sincronizar con /dashboard/repairs/inventory y /dashboard/products
+  useEffect(() => {
+    const handleSync = () => {
+      fetchProducts().catch(err => console.error('Error auto-syncing products:', err))
+      fetchDashboardStats().catch(err => console.error('Error auto-syncing stats:', err))
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('product-updated', handleSync)
+      window.addEventListener('inventory-updated', handleSync)
+      return () => {
+        window.removeEventListener('product-updated', handleSync)
+        window.removeEventListener('inventory-updated', handleSync)
+      }
+    }
+  }, [fetchProducts, fetchDashboardStats])
+
   // Memoizar valores calculados
   const memoizedValues = useMemo(() => ({
     products,
@@ -1340,6 +1229,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     loading,
     error,
     totalCount,
+    resultTruncated,
     pagination: {
       totalPages: Math.max(1, Math.ceil(totalCount / Math.max(1, pagination.limit))),
       hasNextPage: pagination.page < Math.max(1, Math.ceil(totalCount / Math.max(1, pagination.limit))),

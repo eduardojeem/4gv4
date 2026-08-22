@@ -8,8 +8,10 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { headers } from 'next/headers'
 import { getTenantSlugFromHost } from '@/lib/saas/tenant'
 import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
+import { buildVisibleCategoryTree, resolveEffectiveProductStock } from '@/lib/public/catalog'
 
-import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
+import { PRODUCTS_MAX_PRICE, PRODUCTS_PER_PAGE } from '@/lib/constants/products'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -73,6 +75,7 @@ export type ProductsResponse = {
   brands: string[]
   priceRange: { min: number; max: number }
   isWholesale: boolean
+  branchFilterUnavailable?: boolean
 }
 
 const MAX_PRICE = PRODUCTS_MAX_PRICE
@@ -134,20 +137,36 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   const {
     query: rawQuery = '',
     categoryId,
-    brand,
+    brand: rawBrand,
     branchId,
     minPrice = 0,
     maxPrice = MAX_PRICE,
     inStock = false,
-    sort = 'name',
+    sort: rawSort = 'name',
     page: rawPage = 1,
-    perPage = 20,
+    perPage = PRODUCTS_PER_PAGE,
   } = filters
 
   // Defensa ante callers que pasen page inválido (p.ej. de la URL): un page
   // negativo genera un range PostgREST inválido y explota el render.
   const page = Math.max(1, Math.floor(rawPage) || 1)
   const query = sanitizeSearch(rawQuery)
+
+  // #2 — Sanitizar brand igual que query para prevenir inyección PostgREST.
+  const brand = sanitizeSearch(rawBrand ?? '')
+
+  // #4 — max_price negativo o cero produce un rango [0,0] vacío sin aviso.
+  // Se trata cualquier valor <= 0 o no-finito como "sin límite superior".
+  const rawMaxPrice = maxPrice
+  const effectiveMaxPrice =
+    Number.isFinite(rawMaxPrice) && rawMaxPrice > 0 ? rawMaxPrice : MAX_PRICE
+
+  // #8 — Validar sort contra lista permitida; valores desconocidos caen a 'name'.
+  const ALLOWED_SORTS = ['name', 'price_asc', 'price_desc', 'newest'] as const
+  type AllowedSort = typeof ALLOWED_SORTS[number]
+  const sort: AllowedSort = (ALLOWED_SORTS as readonly string[]).includes(rawSort)
+    ? (rawSort as AllowedSort)
+    : 'name'
 
   if (!organization) {
     return {
@@ -184,6 +203,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     barcode: string | null
     category: { id: string; name: string } | { id: string; name: string }[] | null
     brand_details: { name: string } | null
+    branch_stock?: Array<{ stock_quantity: number | null }> | { stock_quantity: number | null } | null
   }
 
   // Resolve wholesale status — use caller-supplied value if available to avoid re-querying.
@@ -192,6 +212,16 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     const result = await resolveWholesaleStatus({ organizationId: organization.id })
     isWholesale = result.isWholesale
   }
+
+  const { data: automaticPromotionRows } = await supabase
+    .from('promotions')
+    .select('*')
+    .eq('organization_id', organization.id)
+    .eq('public_mode', 'automatic')
+    .eq('is_active', true)
+  const automaticPromotions = (automaticPromotionRows ?? []).map((row) =>
+    mapPublicPromotion(row as Record<string, unknown>)
+  )
 
   // Filtro por sucursal: se resuelve ANTES de armar el select porque, cuando
   // aplica, se filtra con un join !inner sobre branch_inventory (escalable: no
@@ -269,7 +299,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buildQuery = (withBranchJoin: boolean): any => {
     const selectFields = withBranchJoin
-      ? `${baseSelectFields}, branch_inventory!inner(branch_id, stock_quantity)`
+      ? `${baseSelectFields}, branch_stock:branch_inventory!inner(branch_id, stock_quantity)`
       : baseSelectFields
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -280,7 +310,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       .eq('is_active', true)
 
     if (withBranchJoin) {
-      q = q.eq('branch_inventory.branch_id', branchId).gt('branch_inventory.stock_quantity', 0)
+      q = q.eq('branch_stock.branch_id', branchId).gt('branch_stock.stock_quantity', 0)
     }
 
     // Visibilidad: mayorista ve 'public' y 'wholesale'; retail solo 'public'.
@@ -305,8 +335,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       }
     }
 
-    if (minPrice > 0 || maxPrice < MAX_PRICE) {
-      q = q.gte(priceCol, minPrice).lte(priceCol, maxPrice)
+    if (minPrice > 0 || effectiveMaxPrice < MAX_PRICE) {
+      q = q.gte(priceCol, minPrice).lte(priceCol, effectiveMaxPrice)
     }
 
     if (inStock) q = q.gt('stock_quantity', 0)
@@ -328,13 +358,15 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   const to = from + perPage - 1
 
   let { data: products, error, count } = await buildQuery(useBranchJoin).range(from, to)
+  let branchFilterUnavailable = false
 
-  // Si el join a branch_inventory falla (p.ej. la tabla no existe en este
-  // deployment), se reintenta sin el filtro de sucursal: mejor mostrar el
-  // catálogo completo que romper la página.
+  // Do not fall back to global stock while a branch filter is active.
   if (error && useBranchJoin) {
-    console.warn('[getPublicProducts] Branch join failed, retrying without it:', error.message)
-    ;({ data: products, error, count } = await buildQuery(false).range(from, to))
+    console.warn('[getPublicProducts] Branch inventory unavailable:', error.message)
+    products = []
+    count = 0
+    error = null
+    branchFilterUnavailable = true
   }
 
   if (error) {
@@ -345,6 +377,14 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   const publicProducts: PublicProduct[] = ((products as unknown as DBProduct[]) || []).map((p) => {
     const category = Array.isArray(p.category) ? p.category[0] : p.category
     const cat = category as { id: string; name: string } | null
+    const stockQuantity = resolveEffectiveProductStock(p.stock_quantity, p.branch_stock, useBranchJoin)
+    const priced = applyAutomaticPromotionToProduct({
+      id: p.id,
+      category_id: cat?.id ?? null,
+      sale_price: Number(p.sale_price ?? 0),
+      has_offer: p.has_offer,
+      offer_price: p.offer_price,
+    }, automaticPromotions)
     return {
       id: p.id as string,
       name: p.name as string,
@@ -354,13 +394,14 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       category: cat ? { id: cat.id, name: cat.name } : undefined,
       sale_price: p.sale_price as number,
       wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-      has_offer: (p.has_offer as boolean) || false,
-      offer_price: (p.offer_price as number | null) ?? null,
+      has_offer: priced.has_offer,
+      offer_price: priced.offer_price,
+      promotion_name: priced.promotion_name,
       installments_enabled: (p.installments_enabled as boolean) || false,
       installments_public: (p.installments_public as boolean) ?? true,
       installments_plans: Array.isArray(p.installments_plans) ? p.installments_plans : [],
-      stock_quantity: (p.stock_quantity as number) ?? 0,
-      in_stock: ((p.stock_quantity as number) ?? 0) > 0,
+      stock_quantity: stockQuantity,
+      in_stock: stockQuantity > 0,
       is_active: p.is_active as boolean,
       featured: (p.featured as boolean) || false,
       image: Array.isArray(p.images)
@@ -386,6 +427,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     brands,
     priceRange: { min: metaMinPrice, max: metaMaxPrice },
     isWholesale,
+    branchFilterUnavailable,
   }
 }
 
@@ -399,7 +441,7 @@ interface CategoryWithSub extends DBCategory {
   subcategories: CategoryWithSub[]
 }
 
-export async function getPublicCategories(): Promise<CategoryWithSub[]> {
+export async function getPublicCategories(isWholesale = false): Promise<CategoryWithSub[]> {
   const supabase = createAdminSupabase() as SupabaseClient
   const organization = await resolveServerPublicOrganization(supabase)
 
@@ -415,25 +457,22 @@ export async function getPublicCategories(): Promise<CategoryWithSub[]> {
   
   const categories = (data as DBCategory[]) || []
   
-  // Organizar categorías en jerarquía
-  const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, subcategories: [] } as CategoryWithSub]))
-  const rootCategories: CategoryWithSub[] = []
-  
-  categoryMap.forEach(category => {
-    if (category.parent_id) {
-      const parent = categoryMap.get(category.parent_id)
-      if (parent) {
-        parent.subcategories.push(category)
-      } else {
-        // Si el padre no existe, tratarla como raíz
-        rootCategories.push(category)
-      }
-    } else {
-      rootCategories.push(category)
-    }
-  })
-  
-  return rootCategories
+  let productCategoriesQuery = supabase
+    .from('products')
+    .select('category_id')
+    .eq('organization_id', organization.id)
+    .eq('is_active', true)
+    .not('category_id', 'is', null)
+
+  productCategoriesQuery = isWholesale
+    ? productCategoriesQuery.in('visibility', ['public', 'wholesale'])
+    : productCategoriesQuery.eq('visibility', 'public')
+
+  const { data: productCategoryRows } = await productCategoriesQuery
+  return buildVisibleCategoryTree(
+    categories,
+    (productCategoryRows ?? []).map((row) => row.category_id),
+  )
 }
 
 export async function getPublicProduct(id: string, isWholesaleOverride?: boolean) {
@@ -484,6 +523,19 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
   const p = data as unknown as { id: string; name: string; sku: string; description: string; brand: string; sale_price: number; wholesale_price?: number; has_offer?: boolean; offer_price?: number | null; installments_enabled?: boolean; installments_public?: boolean; installments_plans?: { count: number; rate: number }[] | null; stock_quantity: number; is_active: boolean; featured: boolean; image_url: string | null; images: string[] | null; unit_measure: string | null; barcode: string | null; category: { id: string; name: string } | { id: string; name: string }[] | null; brand_details: { name: string }[] | null }
   const category = Array.isArray(p.category) ? p.category[0] : p.category
   const cat = category as { id: string; name: string } | null
+  const { data: automaticPromotionRows } = await supabase
+    .from('promotions')
+    .select('*')
+    .eq('organization_id', organization.id)
+    .eq('public_mode', 'automatic')
+    .eq('is_active', true)
+  const priced = applyAutomaticPromotionToProduct({
+    id: p.id,
+    category_id: cat?.id ?? null,
+    sale_price: Number(p.sale_price ?? 0),
+    has_offer: p.has_offer,
+    offer_price: p.offer_price,
+  }, (automaticPromotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>)))
 
   const product: PublicProduct = {
     id: p.id,
@@ -494,8 +546,9 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     category: cat ? { id: cat.id, name: cat.name } : undefined,
     sale_price: p.sale_price,
     wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-    has_offer: p.has_offer || false,
-    offer_price: p.offer_price ?? null,
+    has_offer: priced.has_offer,
+    offer_price: priced.offer_price,
+    promotion_name: priced.promotion_name,
     installments_enabled: p.installments_enabled || false,
     installments_public: p.installments_public ?? true,
     installments_plans: Array.isArray(p.installments_plans) ? p.installments_plans : [],

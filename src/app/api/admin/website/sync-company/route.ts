@@ -42,7 +42,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
   }
 
   const [
-    { data: defaultBranch },
+    { data: defaultBranch, error: defaultBranchError },
     { data: currentOrganization, error: currentOrganizationError },
   ] = await Promise.all([
     admin
@@ -58,7 +58,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       .maybeSingle(),
   ])
 
-  if (currentOrganizationError) {
+  if (currentOrganizationError || defaultBranchError) {
     return NextResponse.json({ error: 'Error al cargar la organizacion actual' }, { status: 500 })
   }
 
@@ -105,7 +105,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ error: 'Error al actualizar la organizacion' }, { status: 500 })
   }
 
-  const [{ error: settingError }] = await Promise.all([
+  const [settingResult, organizationSettingsResult, branchResult] = await Promise.all([
     admin
       .from('website_settings')
       .upsert(
@@ -120,8 +120,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       ),
     admin
       .from('organization_settings')
-      .update({ display_name: name })
-      .eq('organization_id', orgId),
+      .upsert({ organization_id: orgId, display_name: name }, { onConflict: 'organization_id' }),
     defaultBranch?.id
       ? admin
           .from('branches')
@@ -131,11 +130,17 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
             email: email || null,
           })
           .eq('id', defaultBranch.id)
-      : Promise.resolve(),
+      : Promise.resolve({ error: null }),
   ])
 
-  if (settingError) {
-    return NextResponse.json({ error: 'Error al guardar la configuracion del sitio' }, { status: 500 })
+  const relatedWriteError = settingResult.error || organizationSettingsResult.error || branchResult?.error
+  if (relatedWriteError) {
+    console.error('Could not synchronize all company records', {
+      organizationId: orgId,
+      code: relatedWriteError.code,
+      message: relatedWriteError.message,
+    })
+    return NextResponse.json({ error: 'No se pudieron sincronizar todos los datos de la empresa' }, { status: 500 })
   }
 
   if (currentSlug && currentSlug !== canonicalSlug) {

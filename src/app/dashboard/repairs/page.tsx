@@ -8,9 +8,8 @@ import { logger } from '@/lib/logger'
 
 // Icons
 import {
-  Users, BarChart3, MessageSquare, Package, RefreshCw, ChevronLeft, ChevronRight, Info
+  Users, BarChart3, MessageSquare, Package, RefreshCw, ChevronLeft, ChevronRight
 } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
 
 // UI Components
 import { Button } from '@/components/ui/button'
@@ -41,15 +40,24 @@ import { RepairEmptyState } from '@/components/dashboard/repairs/RepairEmptyStat
 import { RepairDeleteDialog } from '@/components/dashboard/repairs/RepairDeleteDialog'
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import { RepairSuccessDialog } from '@/components/dashboard/repairs/RepairSuccessDialog'
+import { RepairReceiptSettingsDialog } from '@/components/dashboard/repairs/RepairReceiptSettingsDialog'
 import { RepairCardsView } from '@/components/dashboard/repairs/RepairCardsView'
 import { RepairDeliveryDialog, type RepairDeliveryConfirmPayload } from '@/components/dashboard/repairs/RepairDeliveryDialog'
 import { RepairPaymentDialog, type RepairPaymentResult } from '@/components/dashboard/repairs/RepairPaymentDialog'
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
+import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
+import { getWarrantyStatus, formatWarrantyExpiration } from '@/lib/warranty-utils'
+import type { WarrantyFilterType } from '@/hooks/use-repair-filters'
 import type { RepairFormData } from '@/schemas'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
 import { RepairPrintPayload } from '@/lib/repair-receipt'
 import { deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
+import {
+  RepairHelpActionsProvider,
+  type RepairHelpActionExecutor,
+} from '@/components/help/repair-help-actions'
+import { resolveRepairHelpAction } from './repair-help-action-resolver'
 
 // Types
 import { Repair } from '@/types/repairs'
@@ -80,7 +88,6 @@ function RepairsPageContent() {
     repairs,
     isLoading,
     updateStatus,
-    deliverRepair,
     createRepair,
     updateRepair,
     deleteRepair,
@@ -90,6 +97,19 @@ function RepairsPageContent() {
   const { technicians } = useTechnicians()
   const { settings: sharedSettings } = useSharedSettings()
   const { selectedBranchId, selectedBranch } = useBranch()
+  const repairListCompanyInfo = useMemo(() => ({
+    name: sharedSettings.companyName,
+    phone: sharedSettings.companyPhone,
+    address: sharedSettings.companyAddress,
+    email: sharedSettings.companyEmail,
+    logo: sharedSettings.companyLogo || undefined
+  }), [
+    sharedSettings.companyAddress,
+    sharedSettings.companyEmail,
+    sharedSettings.companyLogo,
+    sharedSettings.companyName,
+    sharedSettings.companyPhone
+  ])
 
   // New unified filter hook
   const {
@@ -101,6 +121,8 @@ function RepairsPageContent() {
     setPriorityFilter,
     technicianFilter,
     setTechnicianFilter,
+    warrantyFilter,
+    setWarrantyFilter,
     dateRange,
     setDateRange,
     filteredRepairs
@@ -116,11 +138,13 @@ function RepairsPageContent() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
   const [payTarget, setPayTarget] = useState<Repair | null>(null)
+  const [warrantyClaimTarget, setWarrantyClaimTarget] = useState<Repair | null>(null)
   const [pageSize] = useState<number>(25)
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [searchOpen, setSearchOpen] = useState(false)
   const [successDialogData, setSuccessDialogData] = useState<RepairPrintPayload | null>(null)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+  const [showReceiptSettingsDialog, setShowReceiptSettingsDialog] = useState(false)
   const [quickAccessOpen, setQuickAccessOpen] = useState(false)
   const [statsOpen, setStatsOpen] = useState(false)
   const searchParams = useSearchParams()
@@ -239,10 +263,21 @@ function RepairsPageContent() {
     }
   }, [repairs])
 
+  const warrantyCounts = useMemo(() => {
+    let inWarranty = 0
+    let expiring = 0
+    for (const r of repairs) {
+      const ws = getWarrantyStatus(r.warrantyExpiresAt)
+      if (ws === 'active' || ws === 'expiring') inWarranty++
+      if (ws === 'expiring') expiring++
+    }
+    return { inWarranty, expiring }
+  }, [repairs])
+
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, priorityFilter, technicianFilter, dateRange])
+  }, [searchTerm, statusFilter, priorityFilter, technicianFilter, warrantyFilter, dateRange])
 
   // Optimized callbacks with proper dependencies
   const handleCalendarSelect = useCallback((d?: Date) => {
@@ -292,16 +327,31 @@ function RepairsPageContent() {
         },
         body: JSON.stringify(result),
       })
-      const payload = await response.json().catch(() => null) as { error?: string } | null
+      const payload = await response.json().catch(() => null) as {
+        error?: string
+        code?: string
+        currentTotal?: number
+        currentPaid?: number
+        currentBalance?: number
+      } | null
       if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudo registrar el pago')
+        throw Object.assign(new Error(payload?.error || 'No se pudo registrar el pago'), {
+          code: payload?.code,
+          currentTotal: payload?.currentTotal,
+          currentPaid: payload?.currentPaid,
+          currentBalance: payload?.currentBalance,
+        })
       }
 
       await refreshRepairs()
-      const baseMsg = result.method === 'credit' ? 'Crédito registrado' : 'Pago registrado'
-      toast.success(result.markDelivered ? `${baseMsg} y equipo entregado` : `${baseMsg} exitosamente`)
+      const baseMsg = result.purpose === 'deposit'
+        ? 'Anticipo registrado'
+        : result.method === 'credit' ? 'Crédito registrado' : 'Pago registrado'
+      toast.success(`${baseMsg} exitosamente`)
     } catch (err) {
-      logger.error('Error registering payment', { error: err })
+      const code = (err as { code?: string } | null)?.code
+      const isBalanceRefresh = code === 'REPAIR_HAS_NO_BALANCE' || code === 'REPAIR_PAYMENT_EXCEEDS_BALANCE' || code === 'REPAIR_CREDIT_MUST_COVER_BALANCE'
+      if (!isBalanceRefresh) logger.error('Error registering payment', { error: err })
       // Mostrar el motivo real (ej. "No hay caja abierta...") en vez de un
       // genérico: si no, el guardrail nuevo del backend queda invisible y
       // el cajero no sabe por qué se rechazó el cobro.
@@ -328,14 +378,17 @@ function RepairsPageContent() {
         }
 
         // Handle multiple devices - create one repair per device
-        const promises = data.devices.map(async (d) => {
+        const promises = data.devices.map(async (d, deviceIndex) => {
           const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
           const payload: PersistRepairFormData = {
+            idempotencyKey: `${data.idempotencyKey || crypto.randomUUID()}-${deviceIndex}`,
             customer_id: data.existingCustomerId || '',
             device: `${d.brand} ${d.model}`.trim(),
             deviceType: d.deviceType,
             brand: d.brand,
             model: d.model,
+            serial_number: d.serialNumber || undefined,
+            serialNumber: d.serialNumber || undefined,
             issue: d.issue,
             description: d.description || '',
             accessType: d.accessType || 'none',
@@ -346,6 +399,9 @@ function RepairsPageContent() {
             estimated_cost: d.estimatedCost || 0,
             laborCost: data.laborCost || 0,
             finalCost: data.finalCost,
+            pricingMode: data.pricingMode,
+            discountAmount: data.discountAmount,
+            priceOverrideReason: data.priceOverrideReason,
             warrantyMonths: data.warrantyMonths,
             warrantyType: data.warrantyType,
             warrantyNotes: data.warrantyNotes,
@@ -365,6 +421,8 @@ function RepairsPageContent() {
           if (created && data.devices.length === 1 && (data.depositAmount ?? 0) > 0 && data.depositMethod) {
             try {
               await handleQuickPayConfirm(created.id, {
+                idempotencyKey: `repair-deposit-${crypto.randomUUID()}`,
+                purpose: 'deposit',
                 method: data.depositMethod,
                 amount: data.depositAmount!,
                 reference: data.depositReference || undefined,
@@ -398,7 +456,6 @@ function RepairsPageContent() {
 
         if (failedCount > 0) {
           toast.warning(`Se crearon ${validRepairs.length} de ${createdRepairs.length} reparaciones. Revisá el listado antes de reintentar.`)
-          return true
         }
 
         if (validRepairs.length > 0) {
@@ -465,10 +522,17 @@ function RepairsPageContent() {
                 typeLabel: deviceTypeConfig[deviceFormData.deviceType]?.label || deviceFormData.deviceType,
                 brand: deviceFormData.brand,
                 model: deviceFormData.model,
+                serialNumber: deviceFormData.serialNumber,
+                imei: (deviceFormData as any).imei || deviceFormData.serialNumber,
+                accessType: deviceFormData.accessType,
+                accessPassword: deviceFormData.accessPassword,
+                accessories: (deviceFormData as any).accessories,
                 issue: deviceFormData.issue,
                 description: deviceFormData.description,
                 technician: techName,
                 estimatedCost: deviceFormData.estimatedCost,
+                finalCost: createdRepair.finalCost,
+                paidAmount: createdRepair.paidAmount,
                 ticketNumber: createdRepair.ticketNumber || createdRepair.id
               }
             }).filter((device): device is NonNullable<typeof device> => device !== null)
@@ -487,9 +551,12 @@ function RepairsPageContent() {
           parts?: RepairFormData['parts']
           notes?: RepairFormData['notes']
           images?: string[]
+          serial_number?: string | null
         } = {
           brand: d.brand,
           model: d.model,
+          serialNumber: d.serialNumber || undefined,
+          serial_number: d.serialNumber || undefined,
           deviceType: d.deviceType,
           issue: d.issue,
           description: d.description,
@@ -500,6 +567,9 @@ function RepairsPageContent() {
           estimatedCost: d.estimatedCost,
           laborCost: data.laborCost || 0,
           finalCost: data.finalCost,
+          pricingMode: data.pricingMode,
+          discountAmount: data.discountAmount,
+          priceOverrideReason: data.priceOverrideReason,
           warrantyMonths: data.warrantyMonths,
           warrantyType: data.warrantyType,
           warrantyNotes: data.warrantyNotes,
@@ -518,7 +588,7 @@ function RepairsPageContent() {
       return false
     }
     return false
-  }, [dialogMode, selectedRepair, createRepair, updateRepair, technicianOptions, handleQuickPayConfirm])
+  }, [dialogMode, selectedRepair, createRepair, updateRepair, technicianOptions, handleQuickPayConfirm, repairListCompanyInfo])
 
   const handleGlobalSearch = useCallback(({ query }: { query: string }) => {
     if (!query || query.length < 2) return []
@@ -574,10 +644,14 @@ function RepairsPageContent() {
         customerName: selectedRepair.customer.name,
         customerPhone: selectedRepair.customer.phone,
         customerEmail: selectedRepair.customer.email,
+        customerDocument: selectedRepair.customer.ruc || '',
         priority: selectedRepair.priority,
         urgency: selectedRepair.urgency === 'urgent' ? 'high' : 'medium',
         laborCost: selectedRepair.laborCost || 0,
         finalCost: selectedRepair.finalCost,
+        pricingMode: selectedRepair.pricingMode,
+        discountAmount: selectedRepair.discountAmount,
+        priceOverrideReason: selectedRepair.priceOverrideReason || '',
         warrantyMonths: selectedRepair.warrantyMonths ?? 3,
         warrantyType: selectedRepair.warrantyType || 'full',
         warrantyNotes: selectedRepair.warrantyNotes || '',
@@ -585,6 +659,7 @@ function RepairsPageContent() {
           deviceType: selectedRepair.deviceType,
           brand: selectedRepair.brand,
           model: selectedRepair.model,
+          serialNumber: selectedRepair.serialNumber || selectedRepair.imei || '',
           issue: selectedRepair.issue,
           description: selectedRepair.description,
           accessType: selectedRepair.accessType || 'none',
@@ -622,32 +697,36 @@ function RepairsPageContent() {
   // Quick access navigation items
   const quickAccessSections = [
     {
-      title: 'Técnicos',
-      description: 'Asigna trabajos, revisa carga de tareas y entra al detalle de cada tecnico.',
+      title: 'Equipo Técnico',
+      description: 'Asigna trabajos, revisa la carga de tareas y entra al detalle de cada técnico.',
       icon: Users,
       path: '/dashboard/repairs/technicians',
-      color: 'sky' as const
+      color: 'sky' as const,
+      badge: 'Taller'
     },
     {
-      title: 'Analíticas',
-      description: 'Mide tiempos, volumen de reparaciones, estados y rendimiento del servicio.',
+      title: 'Analíticas y Tiempos',
+      description: 'Mide tiempos de entrega, volumen de reparaciones y rendimiento financiero.',
       icon: BarChart3,
       path: '/dashboard/repairs/analytics',
-      color: 'indigo' as const
+      color: 'indigo' as const,
+      badge: 'Reportes'
     },
     {
       title: 'Comunicaciones',
-      description: 'Gestiona avisos al cliente, mensajes de seguimiento y notificaciones.',
+      description: 'Gestiona avisos por WhatsApp, mensajes automáticos y notificaciones a clientes.',
       icon: MessageSquare,
       path: '/dashboard/repairs/communications',
-      color: 'teal' as const
+      color: 'teal' as const,
+      badge: 'WhatsApp'
     },
     {
-      title: 'Inventario',
-      description: 'Consulta repuestos, servicios y movimientos usados por el taller.',
+      title: 'Inventario de Repuestos',
+      description: 'Consulta stock en bodega, repuestos críticos y movimientos del taller.',
       icon: Package,
       path: '/dashboard/repairs/inventory',
-      color: 'amber' as const
+      color: 'amber' as const,
+      badge: 'Stock'
     }
   ]
 
@@ -661,19 +740,6 @@ function RepairsPageContent() {
     })
   }, [uiFiltered, calendarDate])
 
-  const repairListCompanyInfo = useMemo(() => ({
-    name: sharedSettings.companyName,
-    phone: sharedSettings.companyPhone,
-    address: sharedSettings.companyAddress,
-    email: sharedSettings.companyEmail,
-    logo: sharedSettings.companyLogo || undefined
-  }), [
-    sharedSettings.companyAddress,
-    sharedSettings.companyEmail,
-    sharedSettings.companyLogo,
-    sharedSettings.companyName,
-    sharedSettings.companyPhone
-  ])
   const hasActiveFilters = !!(
     searchTerm ||
     statusFilter !== 'all' ||
@@ -687,11 +753,57 @@ function RepairsPageContent() {
     ? repairs.find((r) => r.id === detailRepair.id) || detailRepair
     : null
 
+  const executeRepairHelpAction = useCallback<RepairHelpActionExecutor>((actionId) => {
+    const target = activeDetailRepair ?? payTarget ?? deliverTarget ?? selectedRepair ?? null
+    const total = target ? Math.max(0, target.finalCost ?? target.estimatedCost ?? 0) : 0
+    const balance = target ? Math.max(0, total - (target.paidAmount ?? 0)) : 0
+    const decision = resolveRepairHelpAction(actionId, {
+      hasSelectedRepair: Boolean(target),
+      balance,
+      hasPrice: total > 0,
+      canDeliver: target?.status === 'listo',
+    })
+
+    if (!decision.command) {
+      return {
+        status: 'unavailable',
+        message: decision.message ?? 'Esta acción no está disponible en este momento.',
+      }
+    }
+
+    if (decision.command === 'new') {
+      setIsDetailOpen(false)
+      setPayTarget(null)
+      setDeliverTarget(null)
+      handleNewRepair()
+      return { status: 'completed' }
+    }
+
+    if (!target) {
+      return { status: 'unavailable', message: 'Elegí una reparación primero.' }
+    }
+
+    if (decision.command === 'detail') {
+      setDetailRepair(target)
+      setIsDetailOpen(true)
+    } else if (decision.command === 'payment') {
+      setIsDetailOpen(false)
+      setPayTarget(target)
+    } else if (decision.command === 'delivery') {
+      setIsDetailOpen(false)
+      setDeliverTarget(target)
+    }
+
+    return { status: 'completed' }
+  }, [activeDetailRepair, deliverTarget, handleNewRepair, payTarget, selectedRepair])
+
   return (
+    <RepairHelpActionsProvider execute={executeRepairHelpAction}>
     <div className="flex flex-col gap-4 bg-slate-50 p-4 sm:p-5 lg:p-6 dark:bg-slate-950">
       <RepairHeader
         onRefresh={refreshRepairs}
         onNewRepair={handleNewRepair}
+        onOpenReceiptSettings={() => setShowReceiptSettingsDialog(true)}
         isLoading={isLoading}
         totalRepairs={repairs.length}
         activeRepairs={repairPulse.activeRepairs}
@@ -738,6 +850,14 @@ function RepairsPageContent() {
 
 
       <div className="flex flex-col gap-4">
+        <RepairOperationsOverview
+          repairs={repairs}
+          filteredCount={uiFiltered.length}
+          selectedBranchName={selectedBranch?.name}
+          statusFilter={statusFilter}
+          onStatusFilterSelect={setStatusFilter}
+        />
+
         <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-4 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/70">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
@@ -748,6 +868,9 @@ function RepairsPageContent() {
                 setStatusFilter={setStatusFilter}
                 priorityFilter={priorityFilter}
                 setPriorityFilter={(p) => setPriorityFilter(p as 'low' | 'medium' | 'high' | 'all')}
+                warrantyFilter={warrantyFilter}
+                setWarrantyFilter={setWarrantyFilter}
+                warrantyCounts={warrantyCounts}
                 technicians={technicians}
                 technicianFilter={technicianFilter}
                 setTechnicianFilter={setTechnicianFilter}
@@ -775,7 +898,7 @@ function RepairsPageContent() {
           </div>
         </div>
 
-        {!isLoading && uiFiltered.length > 0 && (
+        {uiFiltered.length > 0 && (
           <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800/70 dark:bg-slate-950/60">
             <div className="space-y-1">
               <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -816,7 +939,7 @@ function RepairsPageContent() {
           </div>
         )}
 
-        {isLoading ? (
+        {isLoading && repairs.length === 0 ? (
           <div className="flex items-center justify-center rounded-[28px] border border-slate-200/80 bg-white/80 py-14 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/60">
             <div className="text-center">
               <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-2" />
@@ -832,6 +955,7 @@ function RepairsPageContent() {
               setStatusFilter('all')
               setPriorityFilter('all')
               setTechnicianFilter('all')
+              setWarrantyFilter('all')
               setDateRange(undefined)
             }}
           />
@@ -843,6 +967,8 @@ function RepairsPageContent() {
             onView={handleViewRepair}
             onDelete={handleDeleteClick}
             onDeliver={setDeliverTarget}
+            onQuickPay={setPayTarget}
+            onClaimWarranty={(r) => setWarrantyClaimTarget(r)}
             isLoading={false}
             companyInfo={repairListCompanyInfo}
           />
@@ -853,6 +979,8 @@ function RepairsPageContent() {
             onEdit={handleEditRepair}
             onDelete={handleDeleteClick}
             onDeliver={setDeliverTarget}
+            onQuickPay={setPayTarget}
+            onClaimWarranty={(r) => setWarrantyClaimTarget(r)}
           />
         ) : viewMode === 'kanban' ? (
           <div className="h-[calc(100vh-300px)] min-h-[500px]">
@@ -887,14 +1015,6 @@ function RepairsPageContent() {
             </div>
           </div>
         )}
-
-        <RepairOperationsOverview
-          repairs={repairs}
-          filteredCount={uiFiltered.length}
-          selectedBranchName={selectedBranch?.name}
-          statusFilter={statusFilter}
-          onStatusFilterSelect={setStatusFilter}
-        />
 
         <QuickAccessNav sections={quickAccessSections} />
       </div>
@@ -961,6 +1081,7 @@ function RepairsPageContent() {
         }}
         onDeliver={(repair) => setDeliverTarget(repair)}
         onQuickPay={(repair) => setPayTarget(repair)}
+        onCostSaved={refreshRepairs}
         onStatusChange={updateStatus}
       />
 
@@ -979,22 +1100,25 @@ function RepairsPageContent() {
         repair={deliverTarget}
         onOpenChange={(open) => !open && setDeliverTarget(null)}
         onConfirm={async (id, payload: RepairDeliveryConfirmPayload) => {
-          if (payload.payment && payload.payment.amount > 0) {
-            // Cobra y entrega en un solo paso, reusando el mismo endpoint de
-            // pago que "Cobrar Aquí" (soporta markDelivered + outcome).
-            await handleQuickPayConfirm(id, {
-              method: payload.payment.method,
-              amount: payload.payment.amount,
-              reference: payload.payment.reference,
-              interestRate: payload.payment.interestRate,
-              installments: payload.payment.installments,
-              markDelivered: true,
-              outcome: payload.outcome,
-              note: payload.note,
+          const response = await fetch(`/api/repairs/${id}/delivery`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...branchHeaders(selectedBranchId),
+            },
+            body: JSON.stringify(payload),
+          })
+          const result = await response.json().catch(() => null) as { error?: string; code?: string } | null
+          if (!response.ok) {
+            throw Object.assign(new Error(result?.error || 'No se pudo registrar la entrega'), {
+              code: result?.code,
             })
-          } else {
-            await deliverRepair(id, payload.outcome, payload.note)
           }
+          await refreshRepairs()
+          const collected = payload.outcome === 'repaired'
+            ? Boolean(payload.payment)
+            : payload.settlement.kind === 'payment'
+          toast.success(collected ? 'Pago y entrega registrados' : 'Entrega registrada')
         }}
       />
 
@@ -1003,8 +1127,42 @@ function RepairsPageContent() {
         repair={payTarget}
         onOpenChange={(open) => !open && setPayTarget(null)}
         onConfirm={handleQuickPayConfirm}
+        onDefinePrice={(repair) => {
+          setPayTarget(null)
+          setSelectedRepair(repair)
+          setDialogMode('edit')
+          setIsDialogOpen(true)
+        }}
+      />
+
+      {warrantyClaimTarget && (
+        <CreateAfterSalesCaseDialog
+          open={!!warrantyClaimTarget}
+          onOpenChange={(open) => !open && setWarrantyClaimTarget(null)}
+          sourceType="repair"
+          repairId={warrantyClaimTarget.id}
+          customerId={warrantyClaimTarget.customer?.id}
+          reference={warrantyClaimTarget.ticketNumber || warrantyClaimTarget.id.slice(0, 8)}
+          subject={[warrantyClaimTarget.brand, warrantyClaimTarget.model].filter(Boolean).join(' ') || warrantyClaimTarget.device}
+          customerName={warrantyClaimTarget.customer?.name}
+          allowedRequestTypes={['repair_warranty']}
+          warrantyExpired={getWarrantyStatus(warrantyClaimTarget.warrantyExpiresAt) === 'expired'}
+          warrantyExpiresLabel={
+            warrantyClaimTarget.warrantyExpiresAt ? formatWarrantyExpiration(warrantyClaimTarget.warrantyExpiresAt) : null
+          }
+          onCreated={() => {
+            setWarrantyClaimTarget(null)
+            toast.success('Caso de garantía creado exitosamente')
+          }}
+        />
+      )}
+
+      <RepairReceiptSettingsDialog
+        open={showReceiptSettingsDialog}
+        onOpenChange={setShowReceiptSettingsDialog}
       />
     </div>
+    </RepairHelpActionsProvider>
   )
 }
 

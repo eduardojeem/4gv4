@@ -7,7 +7,8 @@ import { Product, ProductFilters as BaseProductFilters, ProductAlert, Category, 
 
 // Extended filter interface for dashboard
 export interface DashboardFilters extends BaseProductFilters {
-  quick_filter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | null
+  quick_filter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | null
+  item_type?: 'all' | 'products' | 'services'
 }
 
 // Sort configuration
@@ -19,9 +20,14 @@ export interface SortConfig {
 // View modes
 export type ViewMode = 'grid' | 'table' | 'compact'
 
+// Group by modes for section breakdown
+export type GroupByMode = 'none' | 'type' | 'category'
+
 // Dashboard metrics
 export interface DashboardMetrics {
   total_products: number
+  physical_products_count?: number
+  services_count?: number
   low_stock_count: number
   out_of_stock_count: number
   inventory_value: number

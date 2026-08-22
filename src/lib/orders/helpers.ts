@@ -36,6 +36,10 @@ export function normalizeOrderItem(item: RawOrderItem): CustomerOrderItem {
 
 export function normalizeOrder(order: RawOrder): CustomerOrder {
   const items = order.order_items ?? order.customer_order_items ?? []
+  const total = toNumber(order.total)
+  const storeCreditReserved = toNumber(order.store_credit_reserved)
+  const storeCreditApplied = toNumber(order.store_credit_applied)
+  const paymentStatus = normalizePaymentStatus(order.payment_status)
 
   return {
     id: String(order.id ?? ''),
@@ -43,7 +47,7 @@ export function normalizeOrder(order: RawOrder): CustomerOrder {
     customer_id: order.customer_id ? String(order.customer_id) : null,
     order_number: String(order.order_number ?? ''),
     status: normalizeOrderStatus(order.status),
-    payment_status: normalizePaymentStatus(order.payment_status),
+    payment_status: paymentStatus,
     payment_method: String(order.payment_method ?? 'CASH').toUpperCase() as CustomerOrder['payment_method'],
     fulfillment_type: String(order.fulfillment_type ?? 'PICKUP').toUpperCase() as CustomerOrder['fulfillment_type'],
     customer_name: String(order.customer_name ?? ''),
@@ -54,7 +58,12 @@ export function normalizeOrder(order: RawOrder): CustomerOrder {
     tax_amount: toNumber(order.tax_amount),
     shipping_cost: toNumber(order.shipping_cost),
     discount_amount: toNumber(order.discount_amount),
-    total: toNumber(order.total),
+    total,
+    store_credit_reserved: storeCreditReserved,
+    store_credit_applied: storeCreditApplied,
+    amount_due: paymentStatus === 'PAID'
+      ? 0
+      : Math.max(0, total - storeCreditReserved - storeCreditApplied),
     notes: order.notes ? String(order.notes) : null,
     created_at: String(order.created_at ?? ''),
     updated_at: String(order.updated_at ?? ''),

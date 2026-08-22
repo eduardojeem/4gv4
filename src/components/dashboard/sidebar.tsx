@@ -53,7 +53,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { name: 'Onboarding', href: '/dashboard/onboarding', icon: Rocket, roles: ['admin', 'vendedor', 'tecnico'], description: 'Configuracion inicial' },
       { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, permission: 'pos.read' },
       { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, permission: 'pos.read' },
-      { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, permission: 'pos.read' },
+      { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin'], description: 'Analíticas y ganancias' },
     ],
   },
   {
@@ -66,7 +66,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { name: 'Marcas', href: '/dashboard/brands', icon: Building2, permission: 'products.manage' },
       { name: 'Categorías', href: '/dashboard/categories', icon: Tag, permission: 'products.read' },
       { name: 'Promociones', href: '/dashboard/promotions', icon: Percent, permission: 'promotions.read' },
-      { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['admin'] },
+      { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['super_admin', 'admin'] },
       { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, permission: 'repairs.read' },
       { name: 'Posventa', href: '/dashboard/after-sales', icon: RotateCcw, permission: 'customers.read', description: 'Garantias, cambios y devoluciones' },
       { name: 'Inv. Taller', href: '/dashboard/repairs/inventory', icon: Archive, permission: 'repairs.read' },
@@ -76,11 +76,38 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: 'Análisis',
     items: [
-      { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, permission: 'reports.read' },
+      { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, roles: ['super_admin', 'admin'] },
       { name: 'Administración', href: '/admin', icon: Settings, roles: ['super_admin', 'admin'] },
     ],
   },
 ]
+
+export function SidebarToggleButton({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean
+  onToggle: () => void
+}) {
+  const label = collapsed ? 'Expandir menú' : 'Contraer menú'
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={onToggle}
+      className="h-10 w-10 shrink-0 border border-primary/30 bg-primary/10 text-primary shadow-sm hover:border-primary/50 hover:bg-primary/20 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
+      aria-label={label}
+      title={label}
+    >
+      {collapsed ? (
+        <ChevronRight className="h-5 w-5" />
+      ) : (
+        <ChevronLeft className="h-5 w-5" />
+      )}
+    </Button>
+  )
+}
 
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname()
@@ -186,7 +213,10 @@ export const Sidebar = memo(function Sidebar() {
         collapsed ? "w-16 -translate-x-full lg:translate-x-0" : "w-72 sm:w-80 translate-x-0"
       )}>
         {/* Logo */}
-        <div className="flex items-center justify-between p-4 border-b border-border bg-linear-to-r from-primary/5 to-primary/10 shrink-0">
+        <div className={cn(
+          "flex items-center border-b border-border bg-linear-to-r from-primary/5 to-primary/10 shrink-0",
+          collapsed ? "justify-center p-3" : "justify-between p-4"
+        )}>
           {!collapsed && (
             <div className="flex items-center space-x-3 min-w-0">
               {organizationLogoUrl ? (
@@ -209,19 +239,7 @@ export const Sidebar = memo(function Sidebar() {
               </div>
             </div>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleSidebar}
-            className="p-2 hover:bg-primary/10"
-            aria-label={collapsed ? 'Expandir sidebar' : 'Contraer sidebar'}
-          >
-            {collapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
-          </Button>
+          <SidebarToggleButton collapsed={collapsed} onToggle={toggleSidebar} />
         </div>
 
         {/* Navigation */}

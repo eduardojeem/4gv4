@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, PackageCheck, Plus, RefreshCw, Store, Wrench } from 'lucide-react'
+import { AlertTriangle, PackageCheck, Plus, RefreshCw, Store, Wrench, Sliders } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -9,6 +9,7 @@ import { HelpButton } from '@/components/help/HelpButton'
 interface RepairHeaderProps {
   onRefresh: () => void
   onNewRepair: () => void
+  onOpenReceiptSettings?: () => void
   isLoading?: boolean
   totalRepairs: number
   activeRepairs: number
@@ -20,6 +21,7 @@ interface RepairHeaderProps {
 export function RepairHeader({
   onRefresh,
   onNewRepair,
+  onOpenReceiptSettings,
   isLoading,
   totalRepairs,
   activeRepairs,
@@ -78,11 +80,12 @@ export function RepairHeader({
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:min-w-[260px] lg:max-w-[300px]">
+          <div className="flex flex-col gap-3 lg:min-w-[260px] lg:max-w-[320px]">
             <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
               <Button
+                data-help-id="repair-new"
                 onClick={onNewRepair}
-                className="h-10 flex-1 gap-2 rounded-xl bg-emerald-500 text-white shadow-sm shadow-emerald-950/20 hover:bg-emerald-400 focus-visible:ring-2 focus-visible:ring-emerald-200"
+                className="h-10 flex-1 gap-2 rounded-xl bg-emerald-500 text-white shadow-sm shadow-emerald-950/20 hover:bg-emerald-400 focus-visible:ring-2 focus-visible:ring-emerald-200 font-bold"
               >
                 <Plus className="h-4 w-4" />
                 Nueva reparacion
@@ -95,15 +98,27 @@ export function RepairHeader({
                   variant="outline"
                   onClick={onRefresh}
                   disabled={isLoading}
-                  className="h-10 flex-1 gap-2 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                  className="h-10 flex-1 gap-2 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white text-xs font-semibold"
                 >
                   <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
                   Actualizar
                 </Button>
+                {onOpenReceiptSettings && (
+                  <Button
+                    variant="outline"
+                    onClick={onOpenReceiptSettings}
+                    title="Configurar opciones de comprobante, términos y papel"
+                    className="h-10 px-3 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white text-xs font-semibold gap-1.5"
+                  >
+                    <Sliders className="h-4 w-4 text-emerald-300" />
+                    <span className="hidden sm:inline">Comprobantes</span>
+                  </Button>
+                )}
                 <HelpButton
                   guideKey="repairs"
+                  showLabel
                   variant="outline"
-                  className="h-10 w-10 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                  className="h-10 w-10 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white sm:w-auto [&>span]:hidden sm:[&>span]:inline"
                 />
               </div>
             </div>

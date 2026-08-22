@@ -27,6 +27,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,7 +43,6 @@ import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import {
   createProcessStepsFromTemplate,
   getConfiguredProcessFlows,
-  getProcessSaveOrder,
   PROCESS_STEP_TEMPLATES,
   type ProcessStepTemplateId,
 } from '@/lib/website/process-steps'
@@ -81,8 +81,7 @@ export function ProcessStepsEditor() {
     isLoading,
     error,
     isSaving,
-    updateSetting,
-    refetch,
+    updateSettings,
   } = useAdminWebsiteSettings()
   const [flowsDraft, setFlowsDraft] = useState<ProcessFlow[] | null>(null)
   const [processEnabledDraft, setProcessEnabledDraft] = useState<boolean | null>(null)
@@ -125,37 +124,6 @@ export function ProcessStepsEditor() {
     )
   }
 
-  const persistFlows = async (): Promise<boolean> => {
-    if (flowsDraft === null) return true
-
-    const result = await updateSetting('process_flows', normalizeFlows(flows))
-    if (!result.success) {
-      toast.error(result.error || 'No se pudieron guardar los procesos')
-      return false
-    }
-
-    setFlowsDraft(null)
-    return true
-  }
-
-  const persistVisibility = async (): Promise<boolean> => {
-    if (processEnabledDraft === null) return true
-
-    const newCompanyInfo = {
-      ...defaults.company_info,
-      ...settings?.company_info,
-      processSectionEnabled: processEnabledDraft,
-    }
-    const result = await updateSetting('company_info', newCompanyInfo)
-    if (!result.success) {
-      toast.error(result.error || 'No se pudo guardar la visibilidad de la sección')
-      return false
-    }
-
-    setProcessEnabledDraft(null)
-    return true
-  }
-
   const handleSave = async () => {
     const invalidFlow = flows.find(
       (flow) =>
@@ -181,22 +149,26 @@ export function ProcessStepsEditor() {
       return
     }
 
-    const saveOrder = getProcessSaveOrder({
-      hasStepsChanges: flowsDraft !== null,
-      visibilityDraft: processEnabledDraft,
+    const result = await updateSettings({
+      ...(flowsDraft !== null ? { process_flows: normalizeFlows(flows) } : {}),
+      ...(processEnabledDraft !== null
+        ? {
+            company_info: {
+              ...defaults.company_info,
+              ...settings?.company_info,
+              processSectionEnabled: processEnabledDraft,
+            },
+          }
+        : {}),
     })
 
-    for (const target of saveOrder) {
-      const success =
-        target === 'steps'
-          ? await persistFlows()
-          : await persistVisibility()
-      if (!success) {
-        await refetch()
-        return
-      }
+    if (!result.success) {
+      toast.error(result.error || 'No se pudieron guardar los procesos')
+      return
     }
 
+    setFlowsDraft(null)
+    setProcessEnabledDraft(null)
     toast.success('Procesos actualizados', {
       icon: <Check className="h-4 w-4" />,
     })
@@ -366,46 +338,16 @@ export function ProcessStepsEditor() {
         </Button>
       </div>
 
-      <section className="rounded-lg border p-4 sm:p-5" aria-labelledby="process-status-title">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex gap-3">
-            <div
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${
-                processEnabled
-                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                  : 'bg-muted text-muted-foreground'
-              }`}
-            >
-              {processEnabled
-                ? <Eye className="h-4 w-4" aria-hidden="true" />
-                : <EyeOff className="h-4 w-4" aria-hidden="true" />}
-            </div>
-            <div>
-              <h3 id="process-status-title" className="text-sm font-semibold">
-                {processEnabled ? 'Sección visible' : 'Sección oculta'}
-              </h3>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                {processEnabled
-                  ? `${activeFlowsCount} de ${flows.length} procesos se mostrarán al público.`
-                  : 'Los procesos se conservan, pero no aparecen en el inicio.'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-4 rounded-md border bg-muted/20 px-3 py-2 sm:min-w-[220px]">
-            <div>
-              <Label htmlFor="enable-process" className="text-sm font-medium">
-                Mostrar sección
-              </Label>
-              <p className="text-[11px] text-muted-foreground">Se aplica al guardar.</p>
-            </div>
-            <Switch
-              id="enable-process"
-              checked={processEnabled !== false}
-              onCheckedChange={setProcessEnabledDraft}
-            />
-          </div>
-        </div>
-        <SectionHowItWorks
+      <PublicVisibilityCard
+        title="Visualización de la Sección de Procesos"
+        badgeLabel="Cómo Trabajamos"
+        description={processEnabled
+          ? `Sección activa: ${activeFlowsCount} de ${flows.length} procesos configurados se mostrarán en la portada.`
+          : 'Sección oculta: Los procesos se conservan pero no se muestran a los clientes en la portada.'}
+        enabled={processEnabled !== false}
+        onToggle={setProcessEnabledDraft}
+      />
+      <SectionHowItWorks
           sectionName="los procesos públicos"
           steps={[
             {
@@ -422,7 +364,6 @@ export function ProcessStepsEditor() {
             },
           ]}
         />
-      </section>
 
       <section className="rounded-lg border p-4" aria-labelledby="process-selector-title">
         <div className="flex items-center justify-between gap-3">
