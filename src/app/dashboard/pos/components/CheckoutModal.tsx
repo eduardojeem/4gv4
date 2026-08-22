@@ -39,11 +39,13 @@ import { StoreCreditPanel } from './checkout/StoreCreditPanel'
 import { CustomerSelection } from './checkout/CustomerSelection'
 import { SaleSummary } from './checkout/SaleSummary'
 import { PromotionsSection } from './checkout/PromotionsSection'
+import { SaleConfirmationDialog } from './checkout/SaleConfirmationDialog'
 import type { Promotion } from '@/types/promotion'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { getMixedPaymentValidation } from '../lib/payment-validation'
 import { getRepairBalanceDue } from '../lib/repair-charge'
 import type { CartProductCreditPlan } from '../lib/cart-credit-plans'
+import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
 
 import { useCheckout } from '../contexts/CheckoutContext'
 import { usePOSCustomer } from '../contexts/POSCustomerContext'
@@ -174,6 +176,17 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   // Sistema de creditos
   const { canSellOnCredit, getCreditSummary, loadCreditData } = useCreditSystem()
   const [showCreditHistory, setShowCreditHistory] = React.useState(false)
+  const [pendingConfirmation, setPendingConfirmation] = React.useState<'sale' | 'mixed' | null>(null)
+  const confirmationSubmittedRef = React.useRef(false)
+
+  React.useEffect(() => {
+    if (!isCheckoutOpen) {
+      confirmationSubmittedRef.current = false
+      setPendingConfirmation(null)
+    } else if (paymentStatus === 'failed') {
+      confirmationSubmittedRef.current = false
+    }
+  }, [isCheckoutOpen, paymentStatus])
   
   // Cargar datos de credito cuando cambia el cliente
   React.useEffect(() => {
@@ -192,6 +205,42 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   const canUseCredit = activeCustomer && canSellOnCredit(activeCustomer, creditPlan.financedTotal)
   const displayTotal = paymentMethod === 'credit' ? creditPlan.financedTotal : amountDue
   const creditSummary = activeCustomer ? getCreditSummary(activeCustomer) : null
+  const mixedCreditPrincipal = React.useMemo(() => paymentSplit
+    .filter((split) => split.method === 'credit')
+    .reduce((total, split) => total + split.amount, 0), [paymentSplit])
+  const mixedImmediateAmount = React.useMemo(() => paymentSplit
+    .filter((split) => split.method !== 'credit')
+    .reduce((total, split) => total + split.amount, 0), [paymentSplit])
+  const confirmationHasCredit = paymentMethod === 'credit' || (isMixedPayment && mixedCreditPrincipal > 0)
+  const confirmationCreditPrincipal = isMixedPayment ? mixedCreditPrincipal : amountDue
+  const confirmationCreditSummary = React.useMemo(
+    () => buildPosCreditSummary(confirmationCreditPrincipal, creditTerms),
+    [confirmationCreditPrincipal, creditTerms],
+  )
+  const confirmationImmediateAmount = isMixedPayment
+    ? mixedImmediateAmount
+    : paymentMethod === 'credit' ? 0 : amountDue
+  const confirmationTotal = cartCalculations.total + (confirmationHasCredit ? confirmationCreditSummary.interestAmount : 0)
+  const paymentLabel = isMixedPayment
+    ? confirmationHasCredit ? 'Pago mixto con crédito' : 'Pago mixto'
+    : paymentMethod === 'cash' ? 'Efectivo'
+      : paymentMethod === 'card' ? 'Tarjeta'
+        : paymentMethod === 'transfer' ? 'Transferencia'
+          : paymentMethod === 'credit' ? 'Crédito'
+            : 'Sin seleccionar'
+
+  const confirmPendingSale = React.useCallback(() => {
+    if (paymentStatus === 'processing' || confirmationSubmittedRef.current || !pendingConfirmation) return
+    confirmationSubmittedRef.current = true
+    if (pendingConfirmation === 'mixed') processMixedPayment()
+    else processSale()
+  }, [paymentStatus, pendingConfirmation, processMixedPayment, processSale])
+
+  const openSaleConfirmation = React.useCallback((kind: 'sale' | 'mixed') => {
+    confirmationSubmittedRef.current = false
+    setPendingConfirmation(kind)
+  }, [])
+
   return (
     <Dialog open={isCheckoutOpen} onOpenChange={(open) => {
       if (!open && paymentStatus !== 'processing') onCancel()
@@ -620,7 +669,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                   {paymentMethod === 'credit' ? (
                     <Button
                       className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
-                      onClick={processSale}
+                      onClick={() => openSaleConfirmation('sale')}
                       disabled={
                         !isRegisterOpen ||
                         paymentStatus === 'processing' ||
@@ -637,7 +686,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                         <div className="flex flex-col items-center w-full">
                           <span className="flex items-center gap-2">
                             <Clock className="h-5 w-5" />
-                            Vender a Credito
+                            Revisar venta a crédito
                           </span>
                           <span className="text-xs font-normal opacity-90 mt-0.5">
                             Total financiado {formatCurrency(displayTotal)}
@@ -648,7 +697,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                   ) : (
                     <Button
                       className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
-                      onClick={processSale}
+                      onClick={() => openSaleConfirmation('sale')}
                       disabled={
                         !isRegisterOpen ||
                         paymentStatus === 'processing' ||
@@ -664,7 +713,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                           Procesando...
                         </span>
                       ) : (
-                        <>Confirmar Venta - {formatCurrency(displayTotal)}</>
+                        <>Revisar venta - {formatCurrency(displayTotal)}</>
                       )}
                     </Button>
                   )}
@@ -672,7 +721,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               ) : (
                 <Button
                   className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
-                  onClick={processMixedPayment}
+                  onClick={() => openSaleConfirmation('mixed')}
                   disabled={!isRegisterOpen || paymentStatus === 'processing' || !mixedPaymentValidation.valid}
                 >
                   {paymentStatus === 'processing' ? (
@@ -688,7 +737,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                           ? `Exceso ${formatCurrency(Math.abs(mixedPaymentValidation.remaining))}`
                           : paymentSplit.length === 0
                             ? 'Agregue una forma de pago'
-                            : 'Confirmar Venta Mixta'}
+                            : 'Revisar venta mixta'}
                     </>
                   )}
                 </Button>
@@ -734,6 +783,29 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
       </div>
       </DialogContent>
       
+      <SaleConfirmationDialog
+        open={pendingConfirmation !== null && isCheckoutOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            confirmationSubmittedRef.current = false
+            setPendingConfirmation(null)
+          }
+        }}
+        onConfirm={confirmPendingSale}
+        mode={confirmationHasCredit ? 'credit' : 'sale'}
+        customerName={activeCustomer?.name || 'Consumidor final'}
+        paymentLabel={paymentLabel}
+        total={confirmationTotal}
+        immediateAmount={confirmationImmediateAmount}
+        financedPrincipal={confirmationHasCredit ? confirmationCreditPrincipal : undefined}
+        interestAmount={confirmationHasCredit ? confirmationCreditSummary.interestAmount : undefined}
+        installmentCount={confirmationHasCredit ? confirmationCreditSummary.installmentCount : undefined}
+        installmentAmount={confirmationHasCredit ? confirmationCreditSummary.installmentAmount : undefined}
+        firstDueDate={confirmationHasCredit ? confirmationCreditSummary.firstDueDate : undefined}
+        formatCurrency={formatCurrency}
+        isProcessing={paymentStatus === 'processing'}
+      />
+
       {/* Modal de historial de credito */}
       <Dialog open={showCreditHistory} onOpenChange={setShowCreditHistory}>
         <DialogContent className="max-w-6xl max-h-[92vh] p-0 overflow-hidden">

@@ -20,7 +20,7 @@ interface ProductCardProps {
   isWholesale?: boolean
   wholesaleDiscountRate?: number
   onQuickAdd?: (product: Product, quantity: number) => void
-  onViewDetail?: (product: Product) => void
+  onViewDetail?: (product: Product, tab?: string) => void
   cartQuantity?: number
   showStock?: boolean
   showBarcode?: boolean
@@ -137,7 +137,16 @@ export const ProductCard = memo(({
                 )}
               </div>
               {featuredCreditPlan && (
-                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] text-sky-700 dark:text-sky-300">
+                <div 
+                  className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] text-sky-700 dark:text-sky-300 cursor-pointer hover:bg-sky-500/10 hover:text-sky-800 dark:hover:text-sky-200 rounded px-1 -ml-1 transition-colors"
+                  onClick={(e) => {
+                    if (onViewDetail) {
+                      e.stopPropagation()
+                      onViewDetail(product, 'precios')
+                    }
+                  }}
+                  title="Ver todos los planes de financiación"
+                >
                   <CreditCard className="h-3 w-3" aria-hidden="true" />
                   <span className="font-semibold">Hasta {featuredCreditPlan.count} cuotas</span>
                   <span>Desde {formatCurrency(featuredCreditPlan.installmentAmount)}/mes</span>
@@ -314,7 +323,16 @@ export const ProductCard = memo(({
           )}
 
           {featuredCreditPlan && (
-            <div className="rounded-md border border-sky-500/20 bg-sky-500/10 px-1.5 py-1 text-[9px] leading-tight text-sky-800 dark:text-sky-200">
+            <div 
+              className="rounded-md border border-sky-500/20 bg-sky-500/10 px-1.5 py-1 text-[9px] leading-tight text-sky-800 dark:text-sky-200 cursor-pointer hover:bg-sky-500/20 hover:border-sky-500/30 transition-colors"
+              onClick={(e) => {
+                if (onViewDetail) {
+                  e.stopPropagation()
+                  onViewDetail(product, 'precios')
+                }
+              }}
+              title="Ver todos los planes de financiación"
+            >
               <div className="flex items-center gap-1 font-semibold">
                 <CreditCard className="h-2.5 w-2.5" aria-hidden="true" />
                 Hasta {featuredCreditPlan.count} cuotas

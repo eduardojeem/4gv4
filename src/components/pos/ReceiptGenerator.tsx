@@ -7,6 +7,7 @@ import { Printer, Download, Share2, CheckCircle2 } from 'lucide-react'
 import { getTaxConfig, config } from '@/lib/config'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'
 
 interface CartItem {
   id: string
@@ -253,7 +254,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
             </div>
             <div className="mt-1 flex justify-between border-t border-blue-200 pt-1 text-xs font-semibold dark:border-blue-800">
               <span>Primera cuota:</span>
-              <span>{new Date(receiptData.creditInfo.firstDueDate).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+              <span>{formatPosCreditDueDate(receiptData.creditInfo.firstDueDate)}</span>
             </div>
           </div>
         )}

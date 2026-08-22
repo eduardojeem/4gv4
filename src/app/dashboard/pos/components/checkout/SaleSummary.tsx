@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Wrench } from 'lucide-react'
 import { config, getTaxConfig } from '@/lib/config'
 import { useCheckout } from '../../contexts/CheckoutContext'
-import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
+import { buildPosCreditSummary, formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'
 
 interface CartItem {
   id: string
@@ -160,7 +160,7 @@ export function SaleSummary({
               </div>
               <div className="mt-1 flex justify-between gap-3 border-t border-blue-200 pt-1 dark:border-blue-800">
                 <span>Primera cuota:</span>
-                <strong>{new Date(creditSummary.firstDueDate).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })}</strong>
+                <strong>{formatPosCreditDueDate(creditSummary.firstDueDate)}</strong>
               </div>
             </div>
           </>

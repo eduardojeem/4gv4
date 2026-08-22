@@ -46,6 +46,7 @@ interface POSProductDetailDialogProps {
     isRegisterOpen: boolean
   }
   onUseCreditPlan: (product: Product, quantity: number, plan: ProductCreditPlan) => void
+  autoScrollToCredit?: boolean
 }
 
 export function POSProductDetailDialog({
@@ -56,7 +57,8 @@ export function POSProductDetailDialog({
   creditContext,
   onUseCreditPlan,
   isWholesale = false,
-  wholesaleDiscountRate = 10
+  wholesaleDiscountRate = 10,
+  autoScrollToCredit = false
 }: POSProductDetailDialogProps) {
   const [quantity, setQuantity] = useState(1)
   const [copiedBarcode, setCopiedBarcode] = useState(false)
@@ -70,6 +72,18 @@ export function POSProductDetailDialog({
   }
 
   if (!product) return null
+
+  // Auto-scroll a la seccion de creditos si se requiere
+  React.useEffect(() => {
+    if (open && autoScrollToCredit) {
+      setTimeout(() => {
+        const el = document.getElementById('product-credit-plans-title')
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 150) // pequeño delay para que el dialog termine de animarse
+    }
+  }, [open, autoScrollToCredit])
 
   const stock = product.stock_quantity ?? 0
   const minStock = product.min_stock ?? 5

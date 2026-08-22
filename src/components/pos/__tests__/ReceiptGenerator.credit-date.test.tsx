@@ -34,7 +34,7 @@ describe('ReceiptGenerator credit details', () => {
             installmentAmount: 55000,
             frequency: 'mensuales',
             interestRate: 10,
-            firstDueDate: '2026-07-15T00:00:00.000Z',
+            firstDueDate: '2026-07-15',
           },
         }}
         onPrint={() => undefined}

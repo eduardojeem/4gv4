@@ -39,25 +39,25 @@ describe('buildCreditInstallmentPlan', () => {
       count: 5,
       frequency: 'monthly',
       interestRate: 10,
-    }, { now: new Date('2026-06-15T00:00:00.000Z') })
+    }, { now: new Date(2026, 5, 15) })
 
     expect(summary.baseTotal).toBe(100000)
     expect(summary.interestAmount).toBe(10000)
     expect(summary.financedTotal).toBe(110000)
     expect(summary.installmentAmount).toBe(22000)
-    expect(summary.firstDueDate).toBe('2026-07-15T00:00:00.000Z')
+    expect(summary.firstDueDate).toBe('2026-07-15')
   })
 
   it.each([
-    ['weekly', '2026-06-22T00:00:00.000Z'],
-    ['biweekly', '2026-06-30T00:00:00.000Z'],
-    ['monthly', '2026-07-15T00:00:00.000Z'],
+    ['weekly', '2026-06-22'],
+    ['biweekly', '2026-06-30'],
+    ['monthly', '2026-07-15'],
   ] as const)('exposes the first %s due date for the checkout and receipt', (frequency, expectedDate) => {
     const summary = buildPosCreditSummary(100000, {
       count: 3,
       frequency,
       interestRate: 0,
-    }, { now: new Date('2026-06-15T00:00:00.000Z') })
+    }, { now: new Date(2026, 5, 15) })
 
     expect(summary.firstDueDate).toBe(expectedDate)
   })

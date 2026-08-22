@@ -252,6 +252,7 @@ function POSPageContent() {
   const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false)
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
+  const [detailDialogScrollToCredit, setDetailDialogScrollToCredit] = useState(false)
 
   // Pre-load customer and repair from URL params (e.g. coming from /dashboard/repairs)
   const searchParams = useSearchParams()
@@ -2839,6 +2840,11 @@ function POSPageContent() {
                     wholesaleDiscountRate={WHOLESALE_DISCOUNT_RATE}
                     showStock={true}
                     showBarcode={true}
+                    onViewDetail={(p, tab) => {
+                      setDetailProduct(p)
+                      setDetailDialogScrollToCredit(tab === 'precios')
+                      setIsDetailDialogOpen(true)
+                    }}
                   />
                 </div>
               ) : !productsLoading && !productsError && inventoryProducts.length > 0 ? (
@@ -2862,8 +2868,9 @@ function POSPageContent() {
                       inventoryManager={inventoryManager}
                       isWholesale={isWholesale}
                       wholesaleDiscountRate={WHOLESALE_DISCOUNT_RATE}
-                      onViewDetail={(p) => {
+                      onViewDetail={(p, tab) => {
                         setDetailProduct(p)
+                        setDetailDialogScrollToCredit(tab === 'precios')
                         setIsDetailDialogOpen(true)
                       }}
                     />
@@ -3693,6 +3700,7 @@ function POSPageContent() {
         product={detailProduct}
         open={isDetailDialogOpen}
         onOpenChange={setIsDetailDialogOpen}
+        autoScrollToCredit={detailDialogScrollToCredit}
         onAddToCart={(product, qty) => {
           addToCartHook(product, qty)
         }}
