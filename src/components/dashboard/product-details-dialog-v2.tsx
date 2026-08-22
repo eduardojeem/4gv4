@@ -677,22 +677,25 @@ export function ProductDetailsDialogV2({
                       
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         {product.installments_plans.map((plan, index) => {
+                          const total = product.sale_price * (1 + plan.rate / 100)
+                          const cuotaAmount = total / plan.count
+
                           return (
                             <div key={index} className="flex flex-col rounded-lg border border-indigo-100 bg-indigo-50/30 p-4">
                               <div className="flex items-center justify-between mb-2">
                                 <span className="font-bold text-lg text-indigo-700">{plan.count} cuotas</span>
                                 <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
-                                  {plan.interest_rate > 0 ? `${plan.interest_rate}% recargo` : 'Sin recargo'}
+                                  {plan.rate > 0 ? `${plan.rate}% recargo` : 'Sin recargo'}
                                 </Badge>
                               </div>
                               <div className="mt-2 space-y-1 text-sm">
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Monto de cuota:</span>
-                                  <span className="font-bold">{formatCurrency(plan.installments[0]?.amount ?? 0)}</span>
+                                  <span className="font-bold">{formatCurrency(cuotaAmount)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Total a pagar:</span>
-                                  <span className="font-medium">{formatCurrency((plan.installments[0]?.amount ?? 0) * plan.count)}</span>
+                                  <span className="font-medium">{formatCurrency(total)}</span>
                                 </div>
                               </div>
                             </div>
