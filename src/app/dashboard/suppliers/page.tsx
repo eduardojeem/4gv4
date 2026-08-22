@@ -114,38 +114,6 @@ export default function SuppliersPage() {
   const [searchInput, setSearchInput] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
 
-  if (authLoading) {
-    return (
-      <div className="mx-auto flex max-w-[1480px] flex-col items-center justify-center gap-3 py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-        <p className="text-sm text-slate-500">Verificando permisos de acceso...</p>
-      </div>
-    )
-  }
-
-  if (!canAccess) {
-    return (
-      <div className="flex items-center justify-center min-h-[70vh] p-6">
-        <div className="max-w-md w-full text-center space-y-4 bg-card p-8 rounded-2xl border border-border shadow-lg">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
-            <Shield className="h-8 w-8 text-rose-600 dark:text-rose-400" />
-          </div>
-          <div className="space-y-1">
-            <h1 className="text-xl font-bold text-foreground">Acceso Restringido</h1>
-            <p className="text-xs text-muted-foreground">
-              La gestión de proveedores y costos de compra está reservada para usuarios administradores.
-            </p>
-          </div>
-          <Button asChild className="gap-2 text-xs font-semibold rounded-xl mt-2" size="sm">
-            <Link href="/dashboard">
-              <ArrowLeft className="h-4 w-4" />
-              Volver al Inicio
-            </Link>
-          </Button>
-        </div>
-      </div>
-    )
-  }
   const [businessTypeFilter, setBusinessTypeFilter] = useState('all')
   const [sortBy, setSortBy] = useState('name-asc')
 
@@ -380,6 +348,42 @@ export default function SuppliersPage() {
   ], [handleAddSupplier, handleExport, handleExportJSON, refresh, handleClearAllFilters, router])
 
   const hasFilters = filterTags.length > 0
+
+  // Los guards van DESPUES de todos los hooks: si cortan antes, el primer
+  // render (authLoading) ejecuta menos hooks que el ya resuelto y React tira
+  // "Rendered more hooks than during the previous render".
+  if (authLoading) {
+    return (
+      <div className="mx-auto flex max-w-[1480px] flex-col items-center justify-center gap-3 py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+        <p className="text-sm text-slate-500">Verificando permisos de acceso...</p>
+      </div>
+    )
+  }
+
+  if (!canAccess) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] p-6">
+        <div className="max-w-md w-full text-center space-y-4 bg-card p-8 rounded-2xl border border-border shadow-lg">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+            <Shield className="h-8 w-8 text-rose-600 dark:text-rose-400" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold text-foreground">Acceso Restringido</h1>
+            <p className="text-xs text-muted-foreground">
+              La gestión de proveedores y costos de compra está reservada para usuarios administradores.
+            </p>
+          </div>
+          <Button asChild className="gap-2 text-xs font-semibold rounded-xl mt-2" size="sm">
+            <Link href="/dashboard">
+              <ArrowLeft className="h-4 w-4" />
+              Volver al Inicio
+            </Link>
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
