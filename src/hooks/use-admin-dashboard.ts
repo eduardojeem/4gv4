@@ -178,6 +178,7 @@ export function useAdminDashboard() {
     taxRate: parseFloat(process.env.NEXT_PUBLIC_TAX_RATE || '0.10') * 100,
     repairMaxDiscountPercent: 20,
     repairLaborTaxRate: 10,
+    defaultInstallmentRates: {},
     theme: 'system',
     primaryColor: DEFAULT_SYSTEM_COLOR_SCHEME,
     dateFormat: 'DD/MM/YYYY',

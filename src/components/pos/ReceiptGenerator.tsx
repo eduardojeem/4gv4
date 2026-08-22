@@ -55,6 +55,7 @@ interface ReceiptData {
     installmentAmount: number
     frequency: string
     interestRate: number
+    firstDueDate: string
   }
 }
 
@@ -249,6 +250,10 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
             </div>
             <div className="mt-1 text-xs">
               {receiptData.creditInfo.installmentCount} cuotas {receiptData.creditInfo.frequency} de {formatCurrency(receiptData.creditInfo.installmentAmount)}
+            </div>
+            <div className="mt-1 flex justify-between border-t border-blue-200 pt-1 text-xs font-semibold dark:border-blue-800">
+              <span>Primera cuota:</span>
+              <span>{new Date(receiptData.creditInfo.firstDueDate).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
             </div>
           </div>
         )}

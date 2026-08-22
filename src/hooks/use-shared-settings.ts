@@ -162,7 +162,8 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
     maxLoginAttempts: data.max_login_attempts ?? DEFAULT_SHARED_SETTINGS.maxLoginAttempts,
     passwordMinLength: data.password_min_length ?? DEFAULT_SHARED_SETTINGS.passwordMinLength,
     requireTwoFactor: data.require_two_factor ?? DEFAULT_SHARED_SETTINGS.requireTwoFactor,
-    maintenanceMode: data.maintenance_mode ?? DEFAULT_SHARED_SETTINGS.maintenanceMode
+    maintenanceMode: data.maintenance_mode ?? DEFAULT_SHARED_SETTINGS.maintenanceMode,
+    defaultInstallmentRates: data.default_installment_rates ?? DEFAULT_SHARED_SETTINGS.defaultInstallmentRates
   }
 }
 

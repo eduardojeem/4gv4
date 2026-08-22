@@ -53,7 +53,7 @@ export function buildCreditDueDate(baseDate: Date, index: number, frequency: Cre
   }
 
   if (frequency === 'biweekly') {
-    dueDate.setDate(dueDate.getDate() + (14 * step))
+    dueDate.setDate(dueDate.getDate() + (15 * step))
     return dueDate
   }
 

@@ -51,6 +51,7 @@ export interface ReceiptData {
     installmentAmount: number
     frequency: string
     interestRate: number
+    firstDueDate: string
   }
 }
 

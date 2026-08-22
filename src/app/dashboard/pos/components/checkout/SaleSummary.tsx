@@ -154,8 +154,14 @@ export function SaleSummary({
               <span>+{formatCurrency(creditSummary.interestAmount)}</span>
             </div>
             <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
-              {creditSummary.installmentCount} cuotas {creditTerms.frequency === 'monthly' ? 'mensuales' : creditTerms.frequency === 'biweekly' ? 'quincenales' : 'semanales'} de{' '}
-              <strong>{formatCurrency(creditSummary.installmentAmount)}</strong>
+              <div>
+                {creditSummary.installmentCount} cuotas {creditTerms.frequency === 'monthly' ? 'mensuales' : creditTerms.frequency === 'biweekly' ? 'quincenales' : 'semanales'} de{' '}
+                <strong>{formatCurrency(creditSummary.installmentAmount)}</strong>
+              </div>
+              <div className="mt-1 flex justify-between gap-3 border-t border-blue-200 pt-1 dark:border-blue-800">
+                <span>Primera cuota:</span>
+                <strong>{new Date(creditSummary.firstDueDate).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })}</strong>
+              </div>
             </div>
           </>
         )}
