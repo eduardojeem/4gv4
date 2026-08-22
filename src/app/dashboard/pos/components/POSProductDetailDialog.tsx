@@ -63,16 +63,6 @@ export function POSProductDetailDialog({
   const [quantity, setQuantity] = useState(1)
   const [copiedBarcode, setCopiedBarcode] = useState(false)
 
-  const handleDialogOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      setQuantity(1)
-      setCopiedBarcode(false)
-    }
-    onOpenChange(nextOpen)
-  }
-
-  if (!product) return null
-
   // Auto-scroll a la seccion de creditos si se requiere
   React.useEffect(() => {
     if (open && autoScrollToCredit) {
@@ -84,6 +74,16 @@ export function POSProductDetailDialog({
       }, 150) // pequeño delay para que el dialog termine de animarse
     }
   }, [open, autoScrollToCredit])
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setQuantity(1)
+      setCopiedBarcode(false)
+    }
+    onOpenChange(nextOpen)
+  }
+
+  if (!product) return null
 
   const stock = product.stock_quantity ?? 0
   const minStock = product.min_stock ?? 5
