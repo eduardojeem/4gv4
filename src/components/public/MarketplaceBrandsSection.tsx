@@ -57,8 +57,6 @@ export function MarketplaceBrandsSection({
   const [searchQuery, setSearchQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
 
-  if (brands.length === 0) return null
-
   // Resetear página al buscar
   useEffect(() => {
     setCurrentPage(1)
@@ -83,6 +81,9 @@ export function MarketplaceBrandsSection({
     }
     return maxItems ? filteredBrands.slice(0, maxItems) : filteredBrands
   }, [variant, filteredBrands, startIndex, maxItems])
+
+  // Guard: debe ir despues de todos los hooks (rules-of-hooks)
+  if (brands.length === 0) return null
 
   return (
     <div className="space-y-6">

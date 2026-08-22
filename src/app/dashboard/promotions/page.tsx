@@ -30,7 +30,8 @@ import {
   PromotionFilters,
   PromotionList,
   PromotionAlerts,
-  PromotionAnalytics
+  PromotionAnalytics,
+  OffersCarouselSettingsCard
 } from '@/components/dashboard/promotions'
 import { RouteGuard } from '@/components/auth/permission-guard'
 import { PlanGate } from '@/components/admin/PlanGate'
@@ -218,7 +219,7 @@ export default function PromotionsPage() {
                     Cupones y Descuentos
                   </h4>
                   <p className="text-muted-foreground leading-relaxed">
-                    Crea cupones con códigos alfanuméricos (ej: "SALE10") aplicables en caja o e-commerce, o bien descuentos directos porcentuales o de monto fijo sobre productos y categorías.
+                    Crea cupones con códigos alfanuméricos (ej: &quot;SALE10&quot;) aplicables en caja o e-commerce, o bien descuentos directos porcentuales o de monto fijo sobre productos y categorías.
                   </p>
                 </div>
                 <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
@@ -243,6 +244,9 @@ export default function PromotionsPage() {
             </CardContent>
           </details>
         </Card>
+
+        {/* Carrusel de la tienda pública — se guarda en website_settings */}
+        {canManage && <OffersCarouselSettingsCard />}
 
         {/* Alerts — derivadas de allPromotions para no ocultarse con filtros */}
         <PromotionAlerts

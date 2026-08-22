@@ -97,12 +97,24 @@ export const HeroStatsSchema = z.object({
     .regex(/^[\d\w\+\-\%\s]+$/, 'Formato de estadística inválido'),
 })
 
+export const OffersCarouselSchema = z.object({
+  enabled: z.boolean(),
+  title: z.string().min(3).max(120),
+  subtitle: z.string().max(240),
+  autoplay: z.boolean(),
+  intervalSeconds: z.number().int().min(2).max(30),
+  maxItems: z.number().int().min(3).max(20),
+})
+
 export const OffersSectionSchema = z.object({
   enabled: z.boolean(),
   eyebrow: z.string().min(2).max(60),
   title: z.string().min(3).max(120),
   subtitle: z.string().min(5).max(240),
   accentColor: z.enum(['brand', 'rose', 'amber', 'orange', 'emerald', 'blue', 'sky', 'violet', 'fuchsia', 'red', 'teal']),
+  // Opcional a propósito: el editor de /admin/website guarda offers_section sin
+  // esta clave, y ese PUT no debe empezar a fallar por un campo que no manda.
+  carousel: OffersCarouselSchema.optional(),
 })
 
 const ServiceCtaUrlSchema = z.string()

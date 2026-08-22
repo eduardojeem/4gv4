@@ -145,19 +145,27 @@ beforeAll(() => {
     createMockWebVitalEntry: typeof createMockWebVitalEntry
   }).createMockWebVitalEntry = createMockWebVitalEntry
 
-  // Mock de IntersectionObserver
-  global.IntersectionObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn()
-  }))
+  // Mock de IntersectionObserver / ResizeObserver.
+  // Tienen que ser construibles: una arrow function en mockImplementation hace
+  // que `new IntersectionObserver(...)` tire "is not a constructor".
+  class MockIntersectionObserver {
+    readonly root = null
+    readonly rootMargin = ''
+    readonly thresholds: number[] = []
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+    takeRecords = vi.fn(() => [])
+  }
 
-  // Mock de ResizeObserver
-  global.ResizeObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn()
-  }))
+  class MockResizeObserver {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+  }
+
+  global.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver
+  global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
 
   // Mock de matchMedia
   Object.defineProperty(window, 'matchMedia', {

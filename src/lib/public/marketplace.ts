@@ -45,6 +45,8 @@ type OrganizationRow = {
   review_count?: number | null
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 type ProductRow = {
   id: string
   organization_id: string
@@ -386,19 +388,9 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
     return []
   }
 
-  const { data, error } = await supabase
-    .from('products')
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)')
-    .eq('organization_id', organization.id)
-    .eq('is_active', true)
-    .eq('visibility', 'public')
-    .eq('has_offer', true)
-    .order('featured', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(50)
-
-  if (error || !data) return []
-
+  // Las promociones se leen ANTES que los productos: una oferta automatica
+  // genera descuento sobre productos que no tienen has_offer marcado, asi que
+  // filtrar por has_offer en la base los dejaria siempre afuera.
   const { data: promotionRows } = await supabase
     .from('promotions')
     .select('*')
@@ -407,6 +399,38 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
     .eq('is_active', true)
 
   const automaticPromotions = (promotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
+
+  const promotedProductIds = new Set<string>()
+  const promotedCategoryIds = new Set<string>()
+  for (const promotion of automaticPromotions) {
+    promotion.applicable_products?.forEach((id) => promotedProductIds.add(id))
+    promotion.applicable_categories?.forEach((id) => promotedCategoryIds.add(id))
+  }
+
+  // applicable_categories puede traer centinelas no-UUID (ej: 'service' para
+  // reparaciones). Pasarlos a un filtro sobre una columna uuid aborta la query.
+  const asUuidList = (ids: Set<string>) => [...ids].filter((id) => UUID_PATTERN.test(id))
+  const productIdFilter = asUuidList(promotedProductIds)
+  const categoryIdFilter = asUuidList(promotedCategoryIds)
+
+  // Candidatos: oferta manual, o producto alcanzado por una oferta automatica.
+  const offerCandidateFilters = ['has_offer.eq.true']
+  if (productIdFilter.length > 0) offerCandidateFilters.push(`id.in.(${productIdFilter.join(',')})`)
+  if (categoryIdFilter.length > 0) offerCandidateFilters.push(`category_id.in.(${categoryIdFilter.join(',')})`)
+
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)')
+    .eq('organization_id', organization.id)
+    .eq('is_active', true)
+    .eq('visibility', 'public')
+    .or(offerCandidateFilters.join(','))
+    .order('featured', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (error || !data) return []
+
   const rows = data as unknown as ProductRow[]
 
   return rows
