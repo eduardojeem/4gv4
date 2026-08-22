@@ -59,6 +59,13 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 
+// Upstream agrego auth a la pagina: el guard de authLoading/canAccess es
+// justamente lo que dispara el bug de hooks al resolverse.
+const useAuthMock = vi.fn()
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => useAuthMock(),
+}))
+
 const useSuppliersMock = vi.fn()
 vi.mock('@/hooks/use-suppliers', () => ({
   useSuppliers: () => useSuppliersMock(),
@@ -99,6 +106,8 @@ function suppliersState(overrides: Record<string, unknown> = {}) {
 describe('SuppliersPage - rules of hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // 1er render: auth sin resolver -> solo corren los hooks previos al guard.
+    useAuthMock.mockReturnValue({ user: null, isAdmin: false, loading: true })
     useSupplierSystemMock.mockReturnValue({
       loading: true,
       suppliers: [],
@@ -111,7 +120,9 @@ describe('SuppliersPage - rules of hooks', () => {
     useSuppliersMock.mockReturnValue(suppliersState())
 
     const { rerender } = render(<SuppliersPage />)
-    expect(screen.getByTestId('search-bar')).toBeInTheDocument()
+    // Mientras auth no resuelve solo se ve el guard, no la pagina.
+    expect(screen.getByText(/Verificando permisos/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('search-bar')).not.toBeInTheDocument()
 
     // 2do render: auth/datos resueltos. Este es el paso que hacía que React
     // contara un número distinto de hooks y tirara el error.
@@ -131,6 +142,9 @@ describe('SuppliersPage - rules of hooks', () => {
         pagination: { page: 1, pageSize: 12, total: 1 },
       })
     )
+    // Auth resuelve como admin: el componente pasa ambos guards y llama los
+    // 17 hooks restantes. Este es el paso que hacia crashear a React.
+    useAuthMock.mockReturnValue({ user: { role: 'admin' }, isAdmin: true, loading: false })
     useSupplierSystemMock.mockReturnValue({
       loading: false,
       suppliers: ['integracion-a'],
@@ -161,6 +175,7 @@ describe('SuppliersPage - rules of hooks', () => {
         pagination: { page: 1, pageSize: 12, total: 1 },
       })
     )
+    useAuthMock.mockReturnValue({ user: { role: 'admin' }, isAdmin: true, loading: false })
     useSupplierSystemMock.mockReturnValue({
       loading: false,
       suppliers: [],
