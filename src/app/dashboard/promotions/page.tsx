@@ -200,7 +200,7 @@ export default function PromotionsPage() {
         </header>
 
         {/* Carrusel de la tienda publica - se guarda en website_settings */}
-        {canManage && <OffersCarouselSettingsCard />}
+        {canEdit && <OffersCarouselSettingsCard />}
 
         {/* Alerts — derivadas de allPromotions para no ocultarse con filtros */}
         <PromotionAlerts
