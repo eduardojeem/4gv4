@@ -10,7 +10,13 @@ import {
   BarChart3, 
   ShieldCheck, 
   Lock, 
-  Store
+  Store,
+  Ticket,
+  Sparkles,
+  GalleryHorizontalEnd,
+  Eye,
+  CalendarClock,
+  LineChart
 } from 'lucide-react'
 import type { SectionGuideData } from './SectionGuideModal'
 
@@ -153,26 +159,44 @@ export const CREDITS_GUIDE: SectionGuideData = {
 }
 
 export const PROMOTIONS_GUIDE: SectionGuideData = {
-  title: '¿Cómo funciona la Gestión de Promociones?',
-  subtitle: 'Configura descuentos por temporada, combos 2x1 y cupones de fidelización.',
-  badgeText: 'Marketing & Descuentos',
+  title: '¿Cómo funciona Promociones y la página de Ofertas?',
+  subtitle: 'Una promoción puede vivir en tres lugares distintos. El campo "Disponibilidad pública" decide en cuál.',
+  badgeText: 'Marketing & Tienda pública',
   icon: Percent,
   gradient: 'from-rose-600 via-red-600 to-slate-900',
   steps: [
     {
-      title: 'Reglas de Descuento',
-      description: 'Crea promociones porcentuales o de monto fijo aplicables a productos específicos, marcas o categorías completas.'
+      title: '1. Elegí dónde vive la promoción',
+      description: 'Al crearla, "Disponibilidad pública" define todo. Solo uso interno/POS: sirve únicamente en caja. Cupón para carrito público: el cliente escribe el código al finalizar la compra. Oferta automática: baja el precio solo en la tienda, sin que nadie escriba nada.',
+      icon: Ticket
     },
     {
-      title: 'Vigencia Automática',
-      description: 'Programa fechas y horarios de inicio y fin para que los descuentos se activen y desactiven solos en el POS.'
+      title: '2. Ofertas automáticas: precio rebajado sin código',
+      description: 'Deben ser porcentuales y apuntar a productos concretos. La tienda calcula el precio con descuento y lo muestra tachado sobre el original. Si el producto ya tenía una oferta manual, gana la más barata. Ojo: compra mínima, tope de descuento y límite de usos NO se aplican a las automáticas.',
+      icon: Sparkles
     },
     {
-      title: 'Aplicación en Caja',
-      description: 'El cajero verá automáticamente el precio promocional aplicado en el ticket sin necesidad de cálculos manuales.'
+      title: '3. Cupones: el límite de usos sí se respeta',
+      description: 'El cliente ingresa el código en el carrito. El sistema valida vigencia, compra mínima, tope y cuota de usos, y descuenta el uso dentro de la misma transacción de la compra. Por eso el contador de usos que ves acá solo se mueve con cupones, nunca con ofertas automáticas.',
+      icon: CalendarClock
+    },
+    {
+      title: '4. Controlá la sección pública de ofertas',
+      description: 'Desde "Sección de ofertas" prendés o apagás la página /ofertas entera, y editás su título, bajada y color de acento. Si la apagás, quien entre a /ofertas verá un aviso y un botón al catálogo.',
+      icon: Eye
+    },
+    {
+      title: '5. Dos carruseles, distintos y separados',
+      description: 'El "Carrusel de la página de ofertas" son campañas que armás a mano: imagen, texto y botón por slide, hasta 6. El otro carrusel se arma solo con tus productos rebajados, ordenados por mayor descuento. Cada uno se prende y apaga por separado, y ninguno comparte datos con el carrusel del inicio.',
+      icon: GalleryHorizontalEnd
+    },
+    {
+      title: '6. Leé los números y limpiá lo vencido',
+      description: 'Las alertas avisan de promociones por vencer, activas ya vencidas y creadas que nadie usó. "Limpiar expiradas" desactiva en bloque las que siguen activas pero ya pasaron de fecha. Eliminar una promoción con usos registrados la desactiva en vez de borrarla, para no perder el historial.',
+      icon: LineChart
     }
   ],
-  tip: 'Combina promociones temporales con promociones por volumen para acelerar la rotación de stock estancado.'
+  tip: 'Si creaste una oferta automática y no aparece en la tienda, revisá tres cosas: que sea porcentual, que tenga al menos un producto seleccionado, y que el producto esté activo, visible y con stock.'
 }
 
 export const ORDERS_GUIDE: SectionGuideData = {

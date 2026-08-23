@@ -36,6 +36,13 @@ import { RouteGuard } from '@/components/auth/permission-guard'
 
 // El editor arrastra dialogos y subida de imagenes: se carga solo al abrir la
 // pagina de promociones, no en el bundle compartido del dashboard.
+// Control de la seccion publica de ofertas (visibilidad, textos y color).
+// Es el mismo editor de /admin/website: edita offers_section, la misma clave.
+const OffersSectionEditor = dynamic(
+  () => import('@/components/admin/website/OffersSectionEditor').then((m) => ({ default: m.OffersSectionEditor })),
+  { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl border bg-muted/30" /> }
+)
+
 const OffersPromoCarouselEditor = dynamic(
   () => import('@/components/admin/website/PromotionalCarouselEditor').then((m) => ({ default: m.PromotionalCarouselEditor })),
   { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl border bg-muted/30" /> }
@@ -205,6 +212,9 @@ export default function PromotionsPage() {
             )}
           </div>
         </header>
+
+        {/* Control de la seccion publica de ofertas: visibilidad, textos y color */}
+        {canEdit && <OffersSectionEditor />}
 
         {/* Carrusel de la tienda publica - se guarda en website_settings */}
         {canEdit && <OffersCarouselSettingsCard />}
