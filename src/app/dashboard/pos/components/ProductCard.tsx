@@ -283,7 +283,7 @@ export const ProductCard = memo(({
 
       <CardContent className="p-0 h-full flex flex-col justify-between">
         {/* Imagen compacta y nítida */}
-        <div className="h-16 sm:h-24 bg-gradient-to-b from-muted/40 to-muted/10 flex items-center justify-center border-b border-border/40 overflow-hidden relative group-hover:bg-muted/30 transition-colors">
+        <div className="h-12 sm:h-24 bg-gradient-to-b from-muted/40 to-muted/10 flex items-center justify-center border-b border-border/40 overflow-hidden relative group-hover:bg-muted/30 transition-colors">
           {imageSrc ? (
             <img 
               src={imageSrc} 
@@ -291,30 +291,30 @@ export const ProductCard = memo(({
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
             />
           ) : (
-            <Package className="h-6 w-6 text-muted-foreground/30 sm:h-8 sm:w-8" />
+            <Package className="h-5 w-5 text-muted-foreground/30 sm:h-8 sm:w-8" />
           )}
         </div>
         
-        <div className="p-1.5 sm:p-2.5 flex flex-col flex-1 justify-between gap-0.5 sm:gap-1">
+        <div className="p-1 sm:p-2.5 flex flex-col flex-1 justify-between gap-0 sm:gap-1">
           {/* Titulo y Categoria */}
-          <div>
-            <h3 className="font-semibold text-[11px] sm:text-xs leading-tight sm:leading-snug line-clamp-2 text-foreground group-hover:text-primary transition-colors">
+          <div className="mb-0.5">
+            <h3 className="font-semibold text-[10px] sm:text-xs leading-tight sm:leading-snug line-clamp-2 text-foreground group-hover:text-primary transition-colors">
               {product.name}
             </h3>
             {product.is_active === false && (
-              <span className="mt-0.5 inline-flex items-center gap-0.5 rounded-full bg-slate-900/80 px-1 py-0.2 text-[8px] font-semibold text-white">
+              <span className="mt-0.5 inline-flex items-center gap-0.5 rounded-full bg-slate-900/80 px-1 py-0.2 text-[7px] sm:text-[8px] font-semibold text-white">
                 <EyeOff className="h-2 w-2" />
                 Oculto
               </span>
             )}
-            <p className="text-[9px] text-muted-foreground mt-0.5 truncate">
+            <p className="text-[8px] sm:text-[9px] text-muted-foreground mt-0.5 truncate leading-none">
               {product.category?.name || product.category_id}
             </p>
           </div>
 
           {/* Stock indicator */}
           {showStock && stockStatus && !isOutOfStock && (
-            <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+            <div className="flex items-center gap-1 text-[8px] sm:text-[9px] text-muted-foreground mb-0.5 sm:mb-0">
               <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", stockBarColor)} />
               <span className="truncate tabular-nums font-medium">
                 {stock} disp.
@@ -323,7 +323,7 @@ export const ProductCard = memo(({
           )}
               {featuredCreditPlan && (
             <div 
-              className="rounded-md border border-sky-500/20 bg-sky-500/10 px-1 py-0.5 sm:px-1.5 sm:py-1 text-[8px] sm:text-[9px] leading-tight text-sky-800 dark:text-sky-200 cursor-pointer hover:bg-sky-500/20 hover:border-sky-500/30 transition-colors"
+              className="rounded border border-sky-500/20 bg-sky-500/10 px-1 py-0.5 sm:px-1.5 sm:py-1 text-[7.5px] sm:text-[9px] leading-[1.1] text-sky-800 dark:text-sky-200 cursor-pointer hover:bg-sky-500/20 hover:border-sky-500/30 transition-colors mb-0.5"
               onClick={(e) => {
                 if (onViewDetail) {
                   e.stopPropagation()
@@ -332,25 +332,25 @@ export const ProductCard = memo(({
               }}
               title="Ver todos los planes de financiación"
             >
-              <div className="flex items-center gap-1 font-semibold">
+              <div className="flex items-center gap-0.5 font-semibold">
                 <CreditCard className="h-2 w-2 sm:h-2.5 sm:w-2.5" aria-hidden="true" />
                 Hasta {featuredCreditPlan.count} cuotas
               </div>
-              <div className="mt-0.5 flex flex-wrap gap-x-1">
+              <div className="flex flex-wrap gap-x-1 opacity-90">
                 <span>Desde {formatCurrency(featuredCreditPlan.installmentAmount)}/mes</span>
               </div>
             </div>
           )}
 
           {/* Precios + Botón Agregar */}
-          <div className="pt-1 sm:pt-1.5 border-t border-border/40 flex items-end justify-between gap-1 sm:gap-1.5">
+          <div className="pt-0.5 sm:pt-1.5 border-t border-border/40 flex items-end justify-between gap-1 sm:gap-1.5">
             <div className="flex flex-col min-w-0">
               {isWholesale && (
-                <span className="text-[8px] sm:text-[9px] text-muted-foreground line-through leading-none mb-0.5">
+                <span className="text-[7.5px] sm:text-[9px] text-muted-foreground line-through leading-none mb-0.5">
                   {formatCurrency(price)}
                 </span>
               )}
-              <span className="text-[11px] sm:text-sm font-bold text-primary leading-tight tracking-tight">
+              <span className="text-[10px] sm:text-sm font-bold text-primary leading-none tracking-tight">
                 {formatCurrency(appliedPrice)}
               </span>
             </div>
@@ -361,7 +361,7 @@ export const ProductCard = memo(({
               disabled={isOutOfStock}
               size="sm"
               className={cn(
-                "h-6 px-1.5 sm:h-6.5 sm:px-2 text-[10px] sm:text-[10.5px] font-semibold rounded-md shadow-xs transition-all",
+                "h-5 px-1 sm:h-6.5 sm:px-2 text-[9px] sm:text-[10.5px] font-semibold rounded sm:rounded-md shadow-xs transition-all",
                 cartQuantity > 0 
                   ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                   : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
@@ -369,11 +369,11 @@ export const ProductCard = memo(({
             >
               {cartQuantity > 0 ? (
                 <div className="flex items-center gap-0.5">
-                  <span className="opacity-70 text-[8px] sm:text-[9px]">EN CARRO</span>
+                  <span className="opacity-70 text-[7px] sm:text-[9px]">EN CARRO</span>
                   <span>({cartQuantity})</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5">
                   <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                   <span>AGREGAR</span>
                 </div>
