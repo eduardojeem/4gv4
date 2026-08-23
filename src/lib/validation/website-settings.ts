@@ -173,6 +173,27 @@ export const PromotionalCarouselSchema = z.object({
   slides: z.array(PromotionalCarouselSlideSchema).max(6, 'Máximo 6 diapositivas'),
 })
 
+export const CreditPlanDefaultSchema = z.object({
+  count: z.number().int().min(1, 'Minimo 1 cuota').max(60, 'Maximo 60 cuotas'),
+  rate: z.number().min(0, 'El recargo no puede ser negativo').max(300, 'Recargo demasiado alto'),
+})
+
+export const ProductCreditDefaultsSchema = z.object({
+  enabled: z.boolean(),
+  calculationBase: z.enum(['sale', 'cost']),
+  respectOffer: z.boolean(),
+  costMarkupPercent: z.number().min(0).max(1000),
+  frequency: z.enum(['weekly', 'biweekly', 'monthly']),
+  downPaymentPercent: z.number().min(0).max(90, 'La entrega inicial no puede superar el 90%'),
+  publicByDefault: z.boolean(),
+  plans: z.array(CreditPlanDefaultSchema)
+    .max(12, 'Maximo 12 planes')
+    .refine(
+      (plans) => new Set(plans.map((plan) => plan.count)).size === plans.length,
+      'No repitas la misma cantidad de cuotas',
+    ),
+})
+
 const ServiceCtaUrlSchema = z.string()
   .max(200, 'Enlace CTA no puede exceder 200 caracteres')
   .optional()
@@ -421,6 +442,7 @@ export const WebsiteSettingsSchema = z.object({
   offers_section: OffersSectionSchema.optional(),
   promotional_carousel: PromotionalCarouselSchema.optional(),
   offers_carousel: PromotionalCarouselSchema.optional(),
+  product_credit_defaults: ProductCreditDefaultsSchema.optional(),
   services_section: ServicesSectionSchema.optional(),
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
@@ -441,6 +463,7 @@ export const SETTING_SCHEMAS = {
   offers_section: OffersSectionSchema,
   promotional_carousel: PromotionalCarouselSchema,
   offers_carousel: PromotionalCarouselSchema,
+  product_credit_defaults: ProductCreditDefaultsSchema,
   services_section: ServicesSectionSchema,
   services: ServicesSchema,
   testimonials: TestimonialsSchema,

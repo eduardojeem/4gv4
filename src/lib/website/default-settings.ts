@@ -63,6 +63,20 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       intervalSeconds: 6,
       slides: [],
     },
+    product_credit_defaults: {
+      enabled: true,
+      calculationBase: 'sale',
+      respectOffer: true,
+      costMarkupPercent: 0,
+      frequency: 'monthly',
+      downPaymentPercent: 0,
+      publicByDefault: true,
+      plans: [
+        { count: 3, rate: 0 },
+        { count: 6, rate: 10 },
+        { count: 12, rate: 20 },
+      ],
+    },
     services_section: {
       badge: 'Lo que hacemos',
       title: 'Nuestros servicios',
@@ -121,6 +135,7 @@ export function applyWebsiteSettingsDefaults(
   const offersSection = (settings.offers_section || {}) as Partial<WebsiteSettings['offers_section']>
   const promotionalCarousel = (settings.promotional_carousel || {}) as Partial<WebsiteSettings['promotional_carousel']>
   const offersCarousel = (settings.offers_carousel || {}) as Partial<WebsiteSettings['offers_carousel']>
+  const productCreditDefaults = (settings.product_credit_defaults || {}) as Partial<WebsiteSettings['product_credit_defaults']>
   const servicesSection = (settings.services_section || {}) as Partial<WebsiteSettings['services_section']>
   const maintenanceMode = (settings.maintenance_mode || {}) as Partial<WebsiteSettings['maintenance_mode']>
 
@@ -164,6 +179,15 @@ export function applyWebsiteSettingsDefaults(
       slides: Array.isArray(offersCarousel.slides)
         ? offersCarousel.slides
         : defaults.offers_carousel.slides,
+    },
+    product_credit_defaults: {
+      ...defaults.product_credit_defaults,
+      ...productCreditDefaults,
+      // Los planes se reemplazan enteros: un array vacio es una eleccion
+      // valida (no ofrecer ninguno), no un "usa los defaults".
+      plans: Array.isArray(productCreditDefaults.plans)
+        ? productCreditDefaults.plans
+        : defaults.product_credit_defaults.plans,
     },
     services_section: {
       ...defaults.services_section,

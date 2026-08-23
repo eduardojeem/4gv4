@@ -5,6 +5,13 @@ import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles,
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatPrice } from '@/lib/utils'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import {
+  CREDIT_BASE_LABELS,
+  resolveCreditBase,
+  toProductInstallmentPlans,
+} from '@/lib/credits/product-credit-defaults'
 import {
   Dialog,
   DialogContent,
@@ -191,6 +198,36 @@ export function ProductModal({
   const [chipRate, setChipRate] = useState<Record<number, string>>({})
   // Estado para el panel bulk "agregar varios"
   const [bulkOpen, setBulkOpen] = useState(false)
+  // Elección al activar cuotas: usar los predeterminados o cargar desde cero.
+  // 'pending' muestra el panel; cualquier otro valor lo oculta.
+  const [creditChoice, setCreditChoice] = useState<'pending' | 'defaults' | 'manual'>('pending')
+  // Se lee del endpoint admin. Si el usuario no tiene ese rol simplemente no
+  // hay predeterminados y queda el flujo manual de siempre.
+  const { settings: websiteSettings } = useAdminWebsiteSettings()
+  const creditDefaults = websiteSettings?.product_credit_defaults
+    ?? getWebsiteSettingsDefaults().product_credit_defaults!
+  const creditDefaultsBase = resolveCreditBase(
+    {
+      purchase_price: Number(purchasePrice) || 0,
+      sale_price: Number(salePrice) || 0,
+      offer_price: Number(offerPrice) || 0,
+      has_offer: Boolean(hasOffer),
+    },
+    creditDefaults,
+  )
+  const showCreditChoice = Boolean(
+    installmentsEnabled
+    && creditDefaults.enabled
+    && creditDefaults.plans.length > 0
+    && creditChoice === 'pending'
+    && (installmentsPlans ?? []).length === 0
+  )
+
+  const applyCreditDefaults = () => {
+    form.setValue('installments_plans', toProductInstallmentPlans(creditDefaults), { shouldDirty: true })
+    form.setValue('installments_public', creditDefaults.publicByDefault, { shouldDirty: true })
+    setCreditChoice('defaults')
+  }
   const [bulkDraft, setBulkDraft] = useState<Record<number, { checked: boolean; rate: string }>>(
     () => Object.fromEntries(INSTALLMENT_PRESETS.map(n => [n, { checked: false, rate: '0' }]))
   )
@@ -1197,6 +1234,50 @@ export function ProductModal({
                             Activá la financiación para configurar los planes de cuotas del producto.
                             Los planes quedan guardados aunque la desactives.
                           </p>
+                        ) : showCreditChoice ? (
+                          <div className="space-y-3 rounded-xl border-2 border-indigo-300 bg-indigo-50/60 p-4 dark:border-indigo-800 dark:bg-indigo-950/30">
+                            <div>
+                              <p className="text-sm font-bold text-indigo-900 dark:text-indigo-200">
+                                ¿Cómo querés configurar las cuotas?
+                              </p>
+                              <p className="mt-0.5 text-xs text-indigo-700/80 dark:text-indigo-300/80">
+                                Base configurada: {CREDIT_BASE_LABELS[creditDefaultsBase.source]} · {formatCurrency(creditDefaultsBase.baseAmount)}
+                              </p>
+                            </div>
+
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <button
+                                type="button"
+                                onClick={applyCreditDefaults}
+                                className="rounded-lg border-2 border-indigo-400 bg-white p-3 text-left transition-colors hover:bg-indigo-50 dark:border-indigo-700 dark:bg-slate-900 dark:hover:bg-indigo-950/40"
+                              >
+                                <p className="text-xs font-bold text-indigo-800 dark:text-indigo-300">
+                                  Usar datos predeterminados
+                                </p>
+                                <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-400">
+                                  {creditDefaults.plans.length} plan{creditDefaults.plans.length !== 1 ? 'es' : ''} ya configurado{creditDefaults.plans.length !== 1 ? 's' : ''}
+                                  {creditDefaults.plans.length > 0 && `: ${creditDefaults.plans.map((plan) => `${plan.count}c`).join(', ')}`}
+                                </p>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setCreditChoice('manual')}
+                                className="rounded-lg border-2 border-gray-200 bg-white p-3 text-left transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+                              >
+                                <p className="text-xs font-bold text-gray-800 dark:text-gray-200">
+                                  Cargar nuevos desde cero
+                                </p>
+                                <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-400">
+                                  Armá los planes a mano solo para este producto.
+                                </p>
+                              </button>
+                            </div>
+
+                            <p className="text-[11px] text-indigo-700/70 dark:text-indigo-300/70">
+                              Podés editar los planes después, elijas lo que elijas.
+                            </p>
+                          </div>
                         ) : (
                           <>
                             {/* Toggle independiente: mostrar en la web pública */}

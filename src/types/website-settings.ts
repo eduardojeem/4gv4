@@ -70,6 +70,36 @@ export interface OffersSectionSettings {
   carousel: OffersCarouselSettings
 }
 
+/** Un plan de cuotas: cantidad y recargo porcentual sobre la base. */
+export interface CreditPlanDefault {
+  count: number
+  rate: number
+}
+
+/**
+ * Predeterminados del modulo de productos a credito.
+ * Se aplican al activar cuotas en un producto, que puede aceptarlos tal cual
+ * o cargar los suyos desde cero.
+ */
+export interface ProductCreditDefaults {
+  /** Ofrecer estos predeterminados al activar cuotas en un producto. */
+  enabled: boolean
+  /** Sobre que precio se calculan las cuotas. */
+  calculationBase: 'sale' | 'cost'
+  /** Con base 'sale', usar el precio de oferta cuando el producto tiene una. */
+  respectOffer: boolean
+  /** Margen % que se suma al costo cuando la base es 'cost'. */
+  costMarkupPercent: number
+  /** Periodicidad de las cuotas. */
+  frequency: 'weekly' | 'biweekly' | 'monthly'
+  /** Entrega inicial en % del total, descontada antes de financiar. */
+  downPaymentPercent: number
+  /** Planes ofrecidos por defecto. */
+  plans: CreditPlanDefault[]
+  /** Marcar las cuotas como visibles en la tienda publica al activarlas. */
+  publicByDefault: boolean
+}
+
 export interface PromotionalCarouselSlide {
   id: string
   title: string
@@ -212,6 +242,7 @@ export interface WebsiteSettings {
   promotional_carousel?: PromotionalCarouselSettings
   /** Mismo banner que promotional_carousel, pero para la pagina /ofertas. */
   offers_carousel?: PromotionalCarouselSettings
+  product_credit_defaults?: ProductCreditDefaults
   services_section?: ServicesSectionSettings
   services: Service[]
   testimonials: Testimonial[]

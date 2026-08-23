@@ -7,7 +7,8 @@
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Info, Plus, RefreshCw, Warehouse, X, Maximize2, Minimize2 } from "lucide-react";
+import Link from "next/link";
+import { AlertCircle, Info, Plus, RefreshCw, Warehouse, X, Maximize2, Minimize2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -651,6 +652,21 @@ export default function ProductsPage() {
                 >
                   <Maximize2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   <span>Más espacio</span>
+                </Button>
+
+                {/* Acceso directo a los predeterminados de productos a credito */}
+                <Button
+                  asChild
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 px-3.5 text-xs font-semibold rounded-xl gap-1.5 transition-all shadow-xs border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  title="Configurar los datos predeterminados de cuotas para productos a credito"
+                >
+                  <Link href="/dashboard/products/credit-defaults">
+                    <Wallet className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    <span>Cuotas</span>
+                  </Link>
                 </Button>
 
                 <SectionGuideButton guide={PRODUCTS_GUIDE} />
