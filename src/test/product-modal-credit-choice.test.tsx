@@ -213,6 +213,63 @@ describe('ProductModal — elección de datos de cuotas', () => {
     expect(await screen.findByText(CHOICE_HEADING)).toBeInTheDocument()
   })
 
+  it('explica cómo funcionan las cuotas antes de activarlas', async () => {
+    renderModal()
+    await openPricingTab()
+
+    const guide = await screen.findByText(/¿Cómo funcionan las cuotas\?/i)
+    expect(guide).toBeInTheDocument()
+
+    // El detalle arranca cerrado; al abrirlo aparecen los pasos.
+    await userEvent.click(guide)
+    expect(screen.getByText(/El recargo es un porcentaje que se suma/i)).toBeInTheDocument()
+    expect(screen.getByText(/quedan guardados y vuelven al reactivarla/i)).toBeInTheDocument()
+  })
+
+  it('la explicación dice sobre qué precio se calcula', async () => {
+    const settings = getWebsiteSettingsDefaults()
+    settings.product_credit_defaults!.calculationBase = 'cost'
+    websiteSettings = settings
+
+    renderModal()
+    await openPricingTab()
+    await userEvent.click(await screen.findByText(/¿Cómo funcionan las cuotas\?/i))
+
+    expect(screen.getByText(/La cuota se calcula sobre precio de costo/i)).toBeInTheDocument()
+  })
+
+  it('ofrece un link a la configuración que no pierde el formulario', async () => {
+    renderModal()
+    await openPricingTab()
+    await userEvent.click(await screen.findByText(/¿Cómo funcionan las cuotas\?/i))
+
+    const link = screen.getAllByRole('link', { name: /Configurar predeterminados/i })[0]
+    expect(link).toHaveAttribute('href', '/dashboard/products/credit-defaults')
+    // Pestaña nueva: el modal tiene datos sin guardar.
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
+  })
+
+  it('el link también está en el panel de elección', async () => {
+    renderModal()
+    await openPricingTab()
+    await enableInstallments()
+
+    await screen.findByText(CHOICE_HEADING)
+    expect(screen.getByRole('link', { name: /Configurar predeterminados/i }))
+      .toHaveAttribute('href', '/dashboard/products/credit-defaults')
+  })
+
+  it('la explicación sigue disponible mientras se arman planes a mano', async () => {
+    renderModal()
+    await openPricingTab()
+    await enableInstallments()
+    fireEvent.click(await screen.findByText(START_BLANK))
+
+    await waitFor(() => expect(screen.getByText(/Agregar plan rápido/i)).toBeInTheDocument())
+    expect(screen.getByText(/¿Cómo funcionan las cuotas\?/i)).toBeInTheDocument()
+  })
+
   it('sin predeterminados activos va directo al armado manual', async () => {
     const settings = getWebsiteSettingsDefaults()
     settings.product_credit_defaults!.enabled = false
