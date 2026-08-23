@@ -25,12 +25,37 @@ export default function ProductCreditDefaultsPage() {
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
               Datos predeterminados de cuotas
             </h1>
-            <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-              Definí una sola vez la base de cálculo, las condiciones y los planes. Al activar cuotas
-              en un producto vas a poder usarlos tal cual o cargar unos nuevos desde cero.
-            </p>
           </div>
         </header>
+
+        <div className="bg-sky-50 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-900/50 rounded-xl p-5 md:p-6 mb-2">
+          <h2 className="text-sm font-bold text-sky-900 dark:text-sky-300 mb-3 flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sky-200 dark:bg-sky-900 text-sky-700 dark:text-sky-300">
+              <span className="sr-only">Información</span>
+              i
+            </span>
+            ¿Para qué sirve esta sección?
+          </h2>
+          <div className="text-sm text-sky-800 dark:text-sky-200 space-y-3 leading-relaxed">
+            <p>
+              Aquí podés configurar las <strong>condiciones globales por defecto</strong> que tendrán los productos cuando decidas venderlos a crédito o en cuotas.
+            </p>
+            <ul className="list-disc pl-5 space-y-1.5 opacity-90">
+              <li>
+                <strong>Planes de cuotas (Recargos):</strong> Definí el interés o recargo que se aplicará automáticamente a cada cantidad de cuotas (ej. 10% para 3 cuotas, 20% para 6 cuotas).
+              </li>
+              <li>
+                <strong>Base de cálculo:</strong> Establecé qué porcentaje del valor del producto se tomará como base para calcular las cuotas.
+              </li>
+              <li>
+                <strong>Requisitos y Condiciones:</strong> Guardá condiciones estándar (como anticipos mínimos o requisitos del cliente) que se sugerirán automáticamente.
+              </li>
+            </ul>
+            <p className="font-medium bg-sky-100 dark:bg-sky-900/40 p-2.5 rounded-lg border border-sky-200 dark:border-sky-800/50 mt-4">
+              💡 <strong>¿Qué pasa al crear un producto?</strong> Cuando marques un producto como "Habilitar venta a crédito", el sistema copiará toda esta configuración automáticamente. Podrás dejarla tal cual para ahorrar tiempo, o modificarla individualmente solo para ese producto si necesitás una excepción.
+            </p>
+          </div>
+        </div>
 
         <ProductCreditDefaultsEditor />
       </div>
