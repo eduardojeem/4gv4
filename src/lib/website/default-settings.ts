@@ -55,6 +55,14 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       intervalSeconds: 6,
       slides: [],
     },
+    // Sin slides el banner no se dibuja, asi que arranca habilitado: aparece
+    // recien cuando se carga el primer slide desde el dashboard.
+    offers_carousel: {
+      enabled: true,
+      autoplay: true,
+      intervalSeconds: 6,
+      slides: [],
+    },
     services_section: {
       badge: 'Lo que hacemos',
       title: 'Nuestros servicios',
@@ -112,6 +120,7 @@ export function applyWebsiteSettingsDefaults(
   const heroStats = (settings.hero_stats || {}) as Partial<WebsiteSettings['hero_stats']>
   const offersSection = (settings.offers_section || {}) as Partial<WebsiteSettings['offers_section']>
   const promotionalCarousel = (settings.promotional_carousel || {}) as Partial<WebsiteSettings['promotional_carousel']>
+  const offersCarousel = (settings.offers_carousel || {}) as Partial<WebsiteSettings['offers_carousel']>
   const servicesSection = (settings.services_section || {}) as Partial<WebsiteSettings['services_section']>
   const maintenanceMode = (settings.maintenance_mode || {}) as Partial<WebsiteSettings['maintenance_mode']>
 
@@ -148,6 +157,13 @@ export function applyWebsiteSettingsDefaults(
       slides: Array.isArray(promotionalCarousel.slides)
         ? promotionalCarousel.slides
         : defaults.promotional_carousel.slides,
+    },
+    offers_carousel: {
+      ...defaults.offers_carousel,
+      ...offersCarousel,
+      slides: Array.isArray(offersCarousel.slides)
+        ? offersCarousel.slides
+        : defaults.offers_carousel.slides,
     },
     services_section: {
       ...defaults.services_section,

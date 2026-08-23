@@ -373,16 +373,28 @@ function SegmentedControl<T extends string>({
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function PromotionalCarouselEditor() {
+type PromotionalCarouselEditorProps = {
+  /** Clave de website_settings a editar. Permite reusar este editor para el
+   *  banner del inicio y para el de la pagina de ofertas. */
+  settingKey?: 'promotional_carousel' | 'offers_carousel'
+  title?: string
+  description?: string
+}
+
+export function PromotionalCarouselEditor({
+  settingKey = 'promotional_carousel',
+  title = 'Carrusel de promociones',
+  description = 'Publicá campañas con imágenes y mensajes propios en la página de inicio',
+}: PromotionalCarouselEditorProps = {}) {
   const { settings, isLoading, error, isSaving, updateSetting, refetch } = useAdminWebsiteSettings()
-  const defaults = getWebsiteSettingsDefaults().promotional_carousel!
+  const defaults = getWebsiteSettingsDefaults()[settingKey]!
   const [draft, setDraft] = useState<PromotionalCarouselSettings | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingSlide, setEditingSlide] = useState<PromotionalCarouselSlide | null>(null)
   const [uploading, setUploading] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<SlideFieldErrors>({})
   const [activeEditorSection, setActiveEditorSection] = useState<EditorSection>('content')
-  const current = draft ?? settings?.promotional_carousel ?? defaults
+  const current = draft ?? settings?.[settingKey] ?? defaults
   const hasChanges = draft !== null
   const dirtyContext = useWebsiteEditorDirty()
   // Snapshot del slide tal como estaba al abrir el modal, para poder avisar
@@ -601,14 +613,14 @@ export function PromotionalCarouselEditor() {
 
   const handleSave = async () => {
     if (!draft) return
-    const result = await updateSetting('promotional_carousel', draft)
+    const result = await updateSetting(settingKey, draft)
     if (!result.success) {
       toast.error(result.error || 'No se pudo guardar el carrusel')
       return
     }
     toast.success('Carrusel promocional actualizado', { icon: <Check className="h-4 w-4" /> })
     const persistedPaths = new Set(
-      (settings?.promotional_carousel?.slides ?? [])
+      (settings?.[settingKey]?.slides ?? [])
         .map((slide) => getPromotionStoragePathFromUrl(slide.imageUrl))
         .filter((path): path is string => Boolean(path))
     )
@@ -656,8 +668,8 @@ export function PromotionalCarouselEditor() {
     <div className="max-w-5xl space-y-6 pb-24 md:pb-8">
       <SectionCard
         icon={GalleryHorizontalEnd}
-        title="Carrusel de promociones"
-        description="Publicá campañas con imágenes y mensajes propios en la página de inicio"
+        title={title}
+        description={description}
       >
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

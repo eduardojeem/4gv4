@@ -210,6 +210,8 @@ export interface WebsiteSettings {
   hero_stats?: HeroStats
   offers_section?: OffersSectionSettings
   promotional_carousel?: PromotionalCarouselSettings
+  /** Mismo banner que promotional_carousel, pero para la pagina /ofertas. */
+  offers_carousel?: PromotionalCarouselSettings
   services_section?: ServicesSectionSettings
   services: Service[]
   testimonials: Testimonial[]

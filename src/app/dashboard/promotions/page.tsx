@@ -33,6 +33,13 @@ import {
   OffersCarouselSettingsCard
 } from '@/components/dashboard/promotions'
 import { RouteGuard } from '@/components/auth/permission-guard'
+
+// El editor arrastra dialogos y subida de imagenes: se carga solo al abrir la
+// pagina de promociones, no en el bundle compartido del dashboard.
+const OffersPromoCarouselEditor = dynamic(
+  () => import('@/components/admin/website/PromotionalCarouselEditor').then((m) => ({ default: m.PromotionalCarouselEditor })),
+  { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl border bg-muted/30" /> }
+)
 import { PlanGate } from '@/components/admin/PlanGate'
 import { usePermissions } from '@/hooks/use-permissions'
 
@@ -201,6 +208,17 @@ export default function PromotionsPage() {
 
         {/* Carrusel de la tienda publica - se guarda en website_settings */}
         {canEdit && <OffersCarouselSettingsCard />}
+
+        {/* Carrusel de campañas de la pagina publica de ofertas. Mismo editor y
+            mismo componente publico que el banner del inicio, con sus propios
+            slides bajo la clave offers_carousel. */}
+        {canEdit && (
+          <OffersPromoCarouselEditor
+            settingKey="offers_carousel"
+            title="Carrusel de la página de ofertas"
+            description="Publicá campañas con imágenes y mensajes propios arriba de /ofertas"
+          />
+        )}
 
         {/* Alerts — derivadas de allPromotions para no ocultarse con filtros */}
         <PromotionAlerts

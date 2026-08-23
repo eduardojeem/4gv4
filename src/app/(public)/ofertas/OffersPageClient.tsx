@@ -40,6 +40,7 @@ import {
   type OfferSlide,
 } from '@/components/public/offers/OffersCarouselDeck'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OfferProduct {
@@ -422,6 +423,12 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
 
   return (
     <div className="min-h-screen">
+      {/* ── Carrusel promocional ─────────────────────────────────────────────── */}
+      {/* Mismo componente que el inicio publico: comparten PromotionalCarousel,
+          pero con sus propios slides (offers_carousel) para poder publicar
+          campañas distintas en cada pagina. */}
+      <PromotionalCarousel settings={settings.offers_carousel} />
+
       {/* ── Hero Banner ──────────────────────────────────────────────────────── */}
       <section className={cn('border-b border-white/10 py-10 md:py-14', accent.hero)}>
         {/* Background pattern */}
