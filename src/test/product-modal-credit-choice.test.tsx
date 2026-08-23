@@ -50,10 +50,10 @@ const CHOICE_HEADING = /¿Cómo querés configurar las cuotas\?/i
 const USE_DEFAULTS = /Usar datos predeterminados/i
 const START_BLANK = /Cargar nuevos desde cero/i
 
-function renderModal() {
+function renderModal(product: Parameters<typeof ProductModal>[0]['product'] = null) {
   return render(
     <ProductModal
-      product={null}
+      product={product}
       isOpen
       onClose={vi.fn()}
       onSave={vi.fn()}
@@ -63,6 +63,19 @@ function renderModal() {
     />
   )
 }
+
+/** Producto ya existente con planes propios cargados. */
+const productWithPlans = {
+  id: 'prod-1',
+  name: 'Producto con planes',
+  sku: 'SKU-1',
+  sale_price: 500_000,
+  purchase_price: 300_000,
+  stock_quantity: 5,
+  installments_enabled: true,
+  installments_public: true,
+  installments_plans: [{ count: 4, rate: 5 }],
+} as unknown as Parameters<typeof ProductModal>[0]['product']
 
 /** Abre la pestaña donde viven los precios y las cuotas.
  *  Radix Tabs no reacciona a fireEvent.click en jsdom: necesita los eventos de
@@ -149,6 +162,55 @@ describe('ProductModal — elección de datos de cuotas', () => {
       expect(screen.getByText('✓ 6c')).toBeInTheDocument()
       expect(screen.getByText('✓ 12c')).toBeInTheDocument()
     })
+  })
+
+  it('un producto que ya tiene planes propios no vuelve a preguntar', async () => {
+    renderModal(productWithPlans)
+    await openPricingTab()
+
+    // Ya viene con cuotas activas y un plan cargado: se edita, no se elige.
+    expect(screen.queryByText(CHOICE_HEADING)).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText(/Agregar plan rápido/i)).toBeInTheDocument())
+  })
+
+  it('vuelve a preguntar en el siguiente producto nuevo', async () => {
+    const { rerender } = renderModal()
+    await openPricingTab()
+    await enableInstallments()
+
+    // Primer producto: se elige armar a mano.
+    fireEvent.click(await screen.findByText(START_BLANK))
+    await waitFor(() => expect(screen.queryByText(CHOICE_HEADING)).not.toBeInTheDocument())
+
+    // Se abre el modal para otro producto sin desmontarlo.
+    rerender(
+      <ProductModal
+        product={productWithPlans}
+        isOpen
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        categories={[]}
+        brands={[]}
+        suppliers={[]}
+      />
+    )
+    rerender(
+      <ProductModal
+        product={null}
+        isOpen
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        categories={[]}
+        brands={[]}
+        suppliers={[]}
+      />
+    )
+
+    await openPricingTab()
+    await enableInstallments()
+
+    // La eleccion tiene que estar disponible otra vez.
+    expect(await screen.findByText(CHOICE_HEADING)).toBeInTheDocument()
   })
 
   it('sin predeterminados activos va directo al armado manual', async () => {

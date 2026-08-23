@@ -276,6 +276,9 @@ export function ProductModal({
     newlyUploadedImages.current.clear()
     setSaveFeedback(null)
     setActiveTab('basic')
+    // Cada producto vuelve a preguntar: sin esto, elegir "cargar nuevos" en un
+    // producto se arrastraba al siguiente y la eleccion no volvia a aparecer.
+    setCreditChoice('pending')
 
     if (product) {
       form.reset({
