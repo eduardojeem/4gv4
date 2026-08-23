@@ -283,7 +283,7 @@ export const ProductCard = memo(({
 
       <CardContent className="p-0 h-full flex flex-col justify-between">
         {/* Imagen compacta y nítida */}
-        <div className="h-20 sm:h-24 bg-gradient-to-b from-muted/40 to-muted/10 flex items-center justify-center border-b border-border/40 overflow-hidden relative group-hover:bg-muted/30 transition-colors">
+        <div className="h-16 sm:h-24 bg-gradient-to-b from-muted/40 to-muted/10 flex items-center justify-center border-b border-border/40 overflow-hidden relative group-hover:bg-muted/30 transition-colors">
           {imageSrc ? (
             <img 
               src={imageSrc} 
@@ -291,14 +291,14 @@ export const ProductCard = memo(({
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
             />
           ) : (
-            <Package className="h-7 w-7 text-muted-foreground/30 sm:h-8 sm:w-8" />
+            <Package className="h-6 w-6 text-muted-foreground/30 sm:h-8 sm:w-8" />
           )}
         </div>
         
-        <div className="p-2 sm:p-2.5 flex flex-col flex-1 justify-between gap-1">
+        <div className="p-1.5 sm:p-2.5 flex flex-col flex-1 justify-between gap-0.5 sm:gap-1">
           {/* Titulo y Categoria */}
           <div>
-            <h3 className="font-semibold text-xs leading-snug line-clamp-2 text-foreground group-hover:text-primary transition-colors">
+            <h3 className="font-semibold text-[11px] sm:text-xs leading-tight sm:leading-snug line-clamp-2 text-foreground group-hover:text-primary transition-colors">
               {product.name}
             </h3>
             {product.is_active === false && (
@@ -321,10 +321,9 @@ export const ProductCard = memo(({
               </span>
             </div>
           )}
-
-          {featuredCreditPlan && (
+              {featuredCreditPlan && (
             <div 
-              className="rounded-md border border-sky-500/20 bg-sky-500/10 px-1.5 py-1 text-[9px] leading-tight text-sky-800 dark:text-sky-200 cursor-pointer hover:bg-sky-500/20 hover:border-sky-500/30 transition-colors"
+              className="rounded-md border border-sky-500/20 bg-sky-500/10 px-1 py-0.5 sm:px-1.5 sm:py-1 text-[8px] sm:text-[9px] leading-tight text-sky-800 dark:text-sky-200 cursor-pointer hover:bg-sky-500/20 hover:border-sky-500/30 transition-colors"
               onClick={(e) => {
                 if (onViewDetail) {
                   e.stopPropagation()
@@ -334,26 +333,24 @@ export const ProductCard = memo(({
               title="Ver todos los planes de financiación"
             >
               <div className="flex items-center gap-1 font-semibold">
-                <CreditCard className="h-2.5 w-2.5" aria-hidden="true" />
+                <CreditCard className="h-2 w-2 sm:h-2.5 sm:w-2.5" aria-hidden="true" />
                 Hasta {featuredCreditPlan.count} cuotas
               </div>
               <div className="mt-0.5 flex flex-wrap gap-x-1">
                 <span>Desde {formatCurrency(featuredCreditPlan.installmentAmount)}/mes</span>
-                <span>·</span>
-                <span>{featuredCreditPlan.rate === 0 ? 'Sin interés' : `Tasa ${featuredCreditPlan.rate}%`}</span>
               </div>
             </div>
           )}
 
           {/* Precios + Botón Agregar */}
-          <div className="pt-1.5 border-t border-border/40 flex items-end justify-between gap-1.5">
+          <div className="pt-1 sm:pt-1.5 border-t border-border/40 flex items-end justify-between gap-1 sm:gap-1.5">
             <div className="flex flex-col min-w-0">
               {isWholesale && (
-                <span className="text-[9px] text-muted-foreground line-through leading-none mb-0.5">
+                <span className="text-[8px] sm:text-[9px] text-muted-foreground line-through leading-none mb-0.5">
                   {formatCurrency(price)}
                 </span>
               )}
-              <span className="text-xs sm:text-sm font-bold text-primary leading-tight tracking-tight">
+              <span className="text-[11px] sm:text-sm font-bold text-primary leading-tight tracking-tight">
                 {formatCurrency(appliedPrice)}
               </span>
             </div>
@@ -364,14 +361,23 @@ export const ProductCard = memo(({
               disabled={isOutOfStock}
               size="sm"
               className={cn(
-                "h-6.5 px-2 text-[10.5px] font-semibold rounded-md shadow-xs transition-all",
+                "h-6 px-1.5 sm:h-6.5 sm:px-2 text-[10px] sm:text-[10.5px] font-semibold rounded-md shadow-xs transition-all",
                 cartQuantity > 0 
                   ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                   : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
               )}
             >
-              <Plus className="h-2.5 w-2.5 mr-0.5" />
-              {isOutOfStock ? 'Agotado' : cartQuantity > 0 ? `+1` : 'Agregar'}
+              {cartQuantity > 0 ? (
+                <div className="flex items-center gap-0.5">
+                  <span className="opacity-70 text-[8px] sm:text-[9px]">EN CARRO</span>
+                  <span>({cartQuantity})</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                  <span>AGREGAR</span>
+                </div>
+              )}
             </Button>
           </div>
         </div>
@@ -379,5 +385,4 @@ export const ProductCard = memo(({
     </Card>
   )
 })
-
 ProductCard.displayName = 'ProductCard'
