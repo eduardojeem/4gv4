@@ -12,6 +12,7 @@ import {
   resolveCreditBase,
   toProductInstallmentPlans,
 } from '@/lib/credits/product-credit-defaults'
+import { CreditDefaultsLink, CreditHowItWorks } from '@/components/dashboard/products/CreditHowItWorks'
 import {
   Dialog,
   DialogContent,
@@ -1233,10 +1234,17 @@ export function ProductModal({
                       </CardHeader>
                       <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-3">
                         {!installmentsEnabled ? (
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            Activá la financiación para configurar los planes de cuotas del producto.
-                            Los planes quedan guardados aunque la desactives.
-                          </p>
+                          <div className="space-y-2.5">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Activá la financiación para configurar los planes de cuotas del producto.
+                              Los planes quedan guardados aunque la desactives.
+                            </p>
+                            <CreditHowItWorks
+                              baseLabel={CREDIT_BASE_LABELS[creditDefaultsBase.source]}
+                              planCount={creditDefaults.plans.length}
+                              defaultsEnabled={creditDefaults.enabled}
+                            />
+                          </div>
                         ) : showCreditChoice ? (
                           <div className="space-y-3 rounded-xl border-2 border-indigo-300 bg-indigo-50/60 p-4 dark:border-indigo-800 dark:bg-indigo-950/30">
                             <div>
@@ -1277,9 +1285,12 @@ export function ProductModal({
                               </button>
                             </div>
 
-                            <p className="text-[11px] text-indigo-700/70 dark:text-indigo-300/70">
-                              Podés editar los planes después, elijas lo que elijas.
-                            </p>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-[11px] text-indigo-700/70 dark:text-indigo-300/70">
+                                Podés editar los planes después, elijas lo que elijas.
+                              </p>
+                              <CreditDefaultsLink />
+                            </div>
                           </div>
                         ) : (
                           <>
@@ -1306,6 +1317,14 @@ export function ProductModal({
                                   />
                                 </div>
                               )}
+                            />
+
+                            {/* Como funciona + acceso a la configuracion, tambien
+                                disponible mientras se arman los planes a mano. */}
+                            <CreditHowItWorks
+                              baseLabel={CREDIT_BASE_LABELS[creditDefaultsBase.source]}
+                              planCount={creditDefaults.plans.length}
+                              defaultsEnabled={creditDefaults.enabled}
                             />
 
                             {/* ── Chips rápidos con recargo inline ── */}
