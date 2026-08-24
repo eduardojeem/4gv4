@@ -162,6 +162,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       'supplier_id',
       'brand',
       'brand_id',
+      'tags',
       'min_stock',
       'max_stock',
       'purchase_price',

@@ -45,6 +45,10 @@ export const productSchema = z.object({
     .uuid('Invalid brand ID')
     .optional()
     .nullable(),
+
+  tags: z.array(z.string())
+    .optional()
+    .nullable(),
   
   stock_quantity: z.number()
     .int('Stock quantity must be a whole number')
