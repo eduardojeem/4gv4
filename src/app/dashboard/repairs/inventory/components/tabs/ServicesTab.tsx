@@ -67,6 +67,10 @@ export function ServicesTab() {
   const [serviceToDelete, setServiceToDelete] = useState<Product | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Local pagination
+  const [page, setPage] = useState(1)
+  const itemsPerPage = 20
+
   const filteredServices = useMemo(() => {
     return services.filter(s => {
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -78,6 +82,15 @@ export function ServicesTab() {
       return matchesSearch && matchesMode
     })
   }, [services, searchTerm, viewMode])
+
+  const displayedServices = useMemo(() => {
+    return filteredServices.slice(0, page * itemsPerPage)
+  }, [filteredServices, page, itemsPerPage])
+
+  // Reset page when searching or changing view mode
+  useMemo(() => {
+    setPage(1)
+  }, [searchTerm, viewMode])
 
   const handleEdit = (service: Product) => {
     setEditingService(service)
@@ -303,7 +316,7 @@ export function ServicesTab() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredServices.map((service) => {
+                    displayedServices.map((service) => {
                       const margin = (service.sale_price || 0) - (service.purchase_price || 0)
                       const marginPercent = service.sale_price ? (margin / service.sale_price) * 100 : 0
 
@@ -439,7 +452,7 @@ export function ServicesTab() {
             </div>
           ) : (
             <ServicesCardsGrid
-              services={filteredServices}
+              services={displayedServices}
               loading={loading}
               togglingId={togglingId}
               getVisibilityBadge={getVisibilityBadge}
@@ -448,6 +461,19 @@ export function ServicesTab() {
               onDelete={handleDelete}
               onToggleWeb={handleToggleWeb}
             />
+          )}
+
+          {/* Load More Button */}
+          {displayedServices.length < filteredServices.length && (
+            <div className="flex justify-center mt-6">
+              <Button 
+                variant="outline" 
+                onClick={() => setPage(p => p + 1)}
+                className="bg-white dark:bg-slate-900 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400"
+              >
+                Mostrar más ({filteredServices.length - displayedServices.length} restantes)
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>

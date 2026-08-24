@@ -49,6 +49,10 @@ export function InventoryTab() {
   const [productToDelete, setProductToDelete] = useState<Product | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Local pagination
+  const [page, setPage] = useState(1)
+  const itemsPerPage = 20
+
   const isFiltered = searchTerm !== "" || categoryFilter !== "all" || stockFilter !== "all"
 
   const filteredInventory = useMemo(() => {
@@ -65,6 +69,14 @@ export function InventoryTab() {
       return matchesSearch && matchesCategory && matchesStock
     })
   }, [inventory, searchTerm, categoryFilter, stockFilter])
+
+  const displayedInventory = useMemo(() => {
+    return filteredInventory.slice(0, page * itemsPerPage)
+  }, [filteredInventory, page, itemsPerPage])
+
+  useMemo(() => {
+    setPage(1)
+  }, [searchTerm, categoryFilter, stockFilter])
 
   const handleResetFilters = () => {
     setSearchTerm("")
@@ -216,7 +228,7 @@ export function InventoryTab() {
         <CardContent className="pt-4">
           {viewType === 'table' ? (
             <InventoryTable
-              products={filteredInventory}
+              products={displayedInventory}
               totalCatalogCount={inventory.length}
               loading={loading}
               onViewDetail={handleViewDetail}
@@ -225,7 +237,7 @@ export function InventoryTab() {
             />
           ) : (
             <InventoryCardsGrid
-              products={filteredInventory}
+              products={displayedInventory}
               totalCatalogCount={inventory.length}
               loading={loading}
               onViewDetail={handleViewDetail}
@@ -233,6 +245,19 @@ export function InventoryTab() {
               onDelete={handleDelete}
               onStockAdjust={handleStockAdjust}
             />
+          )}
+
+          {/* Load More Button */}
+          {displayedInventory.length < filteredInventory.length && (
+            <div className="flex justify-center mt-6 pb-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setPage(p => p + 1)}
+                className="bg-white dark:bg-slate-900 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400"
+              >
+                Mostrar más ({filteredInventory.length - displayedInventory.length} restantes)
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
