@@ -62,6 +62,7 @@ import { generateEAN13 } from '@/lib/validations/product-validation'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { productSchema, ProductFormValues } from '@/lib/validations/product-schema'
 import { CategoryModal } from '@/components/categories/CategoryModal'
+import { buildCategoryOptions, getCategoryIndent } from '@/lib/categories/category-tree'
 import { SupplierModal } from './supplier-modal'
 import { BrandModal } from '@/components/dashboard/brands/BrandModal'
 import { useCategories } from '@/hooks/useCategories'
@@ -132,6 +133,10 @@ export function ProductModal({
 
   // Local state for lists to support instant updates
   const [localCategories, setLocalCategories] = useState<Category[]>(categories ?? [])
+
+  // El selector mostraba todo plano: una subcategoria se veia igual que una
+  // raiz y dos hijas homonimas eran indistinguibles.
+  const categoryOptions = useMemo(() => buildCategoryOptions(localCategories), [localCategories])
   const [localBrands, setLocalBrands] = useState<Brand[]>(brands ?? [])
   const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(suppliers ?? [])
 
@@ -944,9 +949,17 @@ export function ProductModal({
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    {localCategories.map((category) => (
+                                    {categoryOptions.map(({ category, depth, parentName }) => (
                                       <SelectItem key={category.id} value={category.id}>
+                                        <span className={depth > 0 ? 'text-muted-foreground' : 'font-medium'}>
+                                          {getCategoryIndent(depth)}
+                                        </span>
                                         {category.name}
+                                        {parentName && (
+                                          <span className="ml-1.5 text-xs text-muted-foreground">
+                                            en {parentName}
+                                          </span>
+                                        )}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
