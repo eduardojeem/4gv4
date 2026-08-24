@@ -2,7 +2,7 @@
 "use client"
 import { logger } from '@/lib/logger'
 
-import { createContext, useContext, useCallback, useMemo, ReactNode, useState } from 'react'
+import { createContext, useContext, useCallback, useMemo, ReactNode, useState, useEffect } from 'react'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { toast } from 'sonner'
 import { formatPrice } from '@/lib/utils'
@@ -77,8 +77,14 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     updateStock: supabaseUpdateStock,
     getProductMovements,
     getAllMovements,
-    createCategory
+    createCategory,
+    setPagination
   } = useProductsSupabase()
+
+  // Cargar más productos para la vista de inventario (default es 20)
+  useEffect(() => {
+    setPagination({ page: 1, limit: 1000 })
+  }, [setPagination])
 
   // Identificar categoría de servicios
   const serviceCategoryId = useMemo(() => {
