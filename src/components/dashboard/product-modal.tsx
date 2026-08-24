@@ -63,6 +63,7 @@ import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { productSchema, ProductFormValues } from '@/lib/validations/product-schema'
 import { CategoryModal } from '@/components/categories/CategoryModal'
 import { buildCategoryOptions, getCategoryIndent } from '@/lib/categories/category-tree'
+import { NewProductChecklist } from '@/components/dashboard/products/NewProductChecklist'
 import { SupplierModal } from './supplier-modal'
 import { BrandModal } from '@/components/dashboard/brands/BrandModal'
 import { useCategories } from '@/hooks/useCategories'
@@ -75,7 +76,7 @@ import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { getProductSubmitState } from './product-modal-submit-state'
 import { getProductSaveFeedback, type ProductSaveFeedback } from '@/lib/products/product-save-feedback'
-import { getFirstProductErrorTab, shouldConfirmProductModalClose } from './product-modal-behavior'
+import { getFirstProductErrorTab, shouldConfirmProductModalClose, getProductRequirementsProgress } from './product-modal-behavior'
 
 interface ProductModalProps {
   product: Product | null
@@ -137,6 +138,7 @@ export function ProductModal({
   // El selector mostraba todo plano: una subcategoria se veia igual que una
   // raiz y dos hijas homonimas eran indistinguibles.
   const categoryOptions = useMemo(() => buildCategoryOptions(localCategories), [localCategories])
+
   const [localBrands, setLocalBrands] = useState<Brand[]>(brands ?? [])
   const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(suppliers ?? [])
 
@@ -245,6 +247,21 @@ export function ProductModal({
   const maxStock = watch('max_stock')
   const unitMeasure = watch('unit_measure')
   const sku = watch('sku')
+  const watchedName = watch('name')
+  const watchedCategoryId = watch('category_id')
+
+  // Progreso de obligatorios: se calcula en vivo para avisar antes de guardar,
+  // no despues de rebotar en la validacion.
+  const requirementsProgress = useMemo(
+    () => getProductRequirementsProgress({
+      name: watchedName,
+      sku,
+      category_id: watchedCategoryId,
+      sale_price: salePrice,
+    }),
+    [watchedName, sku, watchedCategoryId, salePrice],
+  )
+
 
   // Fix #1: Detectar qué tabs contienen errores de validación
   const tabErrorMap = useMemo(() => {
@@ -706,6 +723,17 @@ export function ProductModal({
                       )}
                     </TabsTrigger>
                   </TabsList>
+
+                {/* Al crear: progreso de obligatorios. Al editar: info rapida. */}
+                {!product && (
+                  <NewProductChecklist
+                    requirements={requirementsProgress.requirements}
+                    completed={requirementsProgress.completed}
+                    total={requirementsProgress.total}
+                    isComplete={requirementsProgress.isComplete}
+                    onNavigate={setActiveTab}
+                  />
+                )}
 
                 {/* Quick Info Sidebar */}
                 {product && (
