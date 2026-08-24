@@ -108,10 +108,35 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     })
     
     const serviceIds = new Set(servicesList.map(s => s.id))
-    const inventoryList = products.filter(p => !serviceIds.has(p.id))
+    
+    // Para el inventario de repuestos, filtramos todo lo que sea servicio
+    // y también intentamos ocultar productos que sean claramente accesorios o teléfonos
+    const inventoryList = products.filter(p => {
+      if (serviceIds.has(p.id)) return false
+      
+      const category = categories?.find(c => c.id === p.category_id)
+      if (category) {
+        const catName = category.name.toLowerCase()
+        // Ocultar explícitamente accesorios y celulares del inventario de repuestos
+        if (
+          catName.includes('accesorio') || 
+          catName.includes('funda') || 
+          catName.includes('templado') || 
+          catName.includes('celular') || 
+          catName.includes('teléfono') || 
+          catName.includes('telefono') || 
+          catName.includes('smartphone') ||
+          catName.includes('cable') ||
+          catName.includes('cargador')
+        ) {
+          return false
+        }
+      }
+      return true
+    })
     
     return { services: servicesList, inventory: inventoryList }
-  }, [products, serviceCategoryId])
+  }, [products, serviceCategoryId, categories])
 
   // Obtener movimientos (lazy load)
   const [movements, setMovements] = useState<ProductMovement[]>([])
