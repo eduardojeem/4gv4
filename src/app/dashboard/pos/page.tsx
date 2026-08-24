@@ -88,7 +88,8 @@ import { useAuth } from '@/contexts/auth-context'
 import { CartItem, PaymentMethodOption } from './types'
 import type { Product } from '@/types/product-unified'
 import { branchHeaders } from '@/lib/branches/client'
-import { buildQuickItemPayload, getQuickItemApiError } from './lib/quick-item'
+import { buildQuickItemPayload, getQuickItemApiError, getQuickItemMargin } from './lib/quick-item'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { useHeldSales, HeldSale } from './hooks/useHeldSales'
 import { HeldSalesModal } from './components/HeldSalesModal'
 import { POSShortcutsBar } from './components/POSShortcutsBar'
@@ -365,11 +366,19 @@ function POSPageContent() {
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
   const [isQuickItemDialogOpen, setIsQuickItemDialogOpen] = useState(false)
+  // El costo se oculta a quien no tiene permiso, igual que en el resto del sistema.
+  const canViewCost = useCanViewCost()
   const [quickItemName, setQuickItemName] = useState('')
   const [quickItemPrice, setQuickItemPrice] = useState('')
   const [quickItemQty, setQuickItemQty] = useState('1')
+  const [quickItemPurchasePrice, setQuickItemPurchasePrice] = useState('')
+  const [quickItemWholesalePrice, setQuickItemWholesalePrice] = useState('')
   const [quickItemSku, setQuickItemSku] = useState('')
   const [quickItemPublishToCatalog, setQuickItemPublishToCatalog] = useState(false)
+  const quickItemMargin = getQuickItemMargin(
+    Number(quickItemPurchasePrice) || 0,
+    Number(quickItemPrice) || 0,
+  )
   const [quickItemError, setQuickItemError] = useState('')
   const [quickItemSaving, setQuickItemSaving] = useState(false)
 
@@ -1983,6 +1992,10 @@ function POSPageContent() {
         quantity: quickItemQty,
         sku: quickItemSku,
         publishToCatalog: quickItemPublishToCatalog,
+        // Solo se manda el costo si el usuario puede verlo: para el resto el
+        // campo no existe y el item se crea sin costo, como antes.
+        purchasePrice: canViewCost ? quickItemPurchasePrice : '',
+        wholesalePrice: quickItemWholesalePrice,
       })
       const response = await fetch('/api/products', {
         method: 'POST',
@@ -2010,6 +2023,8 @@ function POSPageContent() {
 
       setQuickItemName('')
       setQuickItemPrice('')
+      setQuickItemPurchasePrice('')
+      setQuickItemWholesalePrice('')
       setQuickItemQty('1')
       setQuickItemSku('')
       setQuickItemPublishToCatalog(false)
@@ -2022,7 +2037,7 @@ function POSPageContent() {
     } finally {
       setQuickItemSaving(false)
     }
-  }, [quickItemName, quickItemPrice, quickItemQty, quickItemSku, quickItemPublishToCatalog, selectedBranchId, syncProduct, addToCartHook])
+  }, [quickItemName, quickItemPrice, quickItemPurchasePrice, quickItemWholesalePrice, quickItemQty, quickItemSku, quickItemPublishToCatalog, canViewCost, selectedBranchId, syncProduct, addToCartHook])
 
   return (
     <div className={`pos-theme pos-shell h-dvh max-h-dvh overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
@@ -3161,6 +3176,53 @@ function POSPageContent() {
                       onChange={(e) => setQuickItemQty(e.target.value)}
                       disabled={quickItemSaving}
                     />
+                  </div>
+                </div>
+
+                {/* Precio de compra y mayorista: opcionales, para no frenar la
+                    carga rapida, pero disponibles cuando hacen falta. */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {canViewCost && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="quick-item-purchase-price">
+                        Precio de compra <span className="text-muted-foreground font-normal">(opcional)</span>
+                      </Label>
+                      <Input
+                        id="quick-item-purchase-price"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={quickItemPurchasePrice}
+                        onChange={(e) => setQuickItemPurchasePrice(e.target.value)}
+                        placeholder="0"
+                        disabled={quickItemSaving}
+                      />
+                      {quickItemMargin ? (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                          Margen: {formatCurrency(quickItemMargin.profit)} ({quickItemMargin.percent}%)
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Dejalo vacio si no lleva costo.</p>
+                      )}
+                    </div>
+                  )}
+                  <div className="grid gap-2">
+                    <Label htmlFor="quick-item-wholesale-price">
+                      Precio mayorista <span className="text-muted-foreground font-normal">(opcional)</span>
+                    </Label>
+                    <Input
+                      id="quick-item-wholesale-price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={quickItemWholesalePrice}
+                      onChange={(e) => setQuickItemWholesalePrice(e.target.value)}
+                      placeholder="0"
+                      disabled={quickItemSaving}
+                    />
+                    <p className="text-xs text-muted-foreground">Debe quedar entre el costo y el precio de venta.</p>
                   </div>
                 </div>
 
