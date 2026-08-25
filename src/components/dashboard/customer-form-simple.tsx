@@ -34,6 +34,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { canInviteCustomer } from '@/lib/customers/invite-customer-to-store'
 import { validateCustomerContact, ALTERNATE_PHONE_LABELS } from '@/lib/customers/contact-rules'
 import { formatThousands, parseThousands } from '@/lib/currency'
 
@@ -53,6 +54,8 @@ export interface SimpleCustomerFormData {
   creditLimit?: string
   paymentTerms?: string
   notes: string
+  /** Enviar invitación a la tienda pública para que el cliente cree su contraseña. */
+  inviteToStore?: boolean
 }
 
 interface ValidationErrors {
@@ -61,6 +64,8 @@ interface ValidationErrors {
 
 interface CustomerFormSimpleProps {
   initialData?: Partial<SimpleCustomerFormData>
+  /** Ofrece invitar a la tienda pública. Solo tiene sentido al crear. */
+  showStoreInvite?: boolean
   onSubmit: (data: SimpleCustomerFormData) => void
   onCancel?: () => void
   submitLabel?: string
@@ -129,6 +134,7 @@ function validateForm(data: SimpleCustomerFormData): ValidationErrors {
 
 export function CustomerFormSimple({
   initialData,
+  showStoreInvite = false,
   onSubmit,
   onCancel,
   submitLabel = 'Guardar Cliente',
@@ -136,6 +142,7 @@ export function CustomerFormSimple({
   className
 }: CustomerFormSimpleProps) {
   const [formData, setFormData] = useState<SimpleCustomerFormData>({
+    inviteToStore: false,
     firstName: '',
     lastName: '',
     ruc: '',
@@ -387,6 +394,33 @@ export function CustomerFormSimple({
                 <AlertCircle className="h-3 w-3" />
                 {errors.email}
               </p>
+            )}
+
+            {/* Invitacion a la tienda publica: aparece recien cuando hay un
+                correo con forma valida, porque sin correo no hay a donde
+                mandarla. */}
+            {showStoreInvite && canInviteCustomer(formData.email) && (
+              <label
+                htmlFor="invite-to-store"
+                className="mt-1.5 flex cursor-pointer items-start gap-2.5 rounded-lg border border-indigo-200 bg-indigo-50/60 p-2.5 dark:border-indigo-900/50 dark:bg-indigo-950/20"
+              >
+                <input
+                  id="invite-to-store"
+                  type="checkbox"
+                  checked={Boolean(formData.inviteToStore)}
+                  onChange={(e) => handleInputChange('inviteToStore', e.target.checked as never)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 accent-indigo-600"
+                />
+                <span className="text-[11px] leading-relaxed">
+                  <span className="font-semibold text-indigo-900 dark:text-indigo-200">
+                    Invitar a la tienda online
+                  </span>
+                  <span className="block text-indigo-700/80 dark:text-indigo-300/80">
+                    Le enviamos un correo a {formData.email.trim()} para que cree su contraseña y
+                    pueda ver sus compras y pedidos.
+                  </span>
+                </span>
+              </label>
             )}
           </div>
         </div>

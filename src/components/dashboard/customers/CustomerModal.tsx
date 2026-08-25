@@ -43,6 +43,7 @@ import {
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerActions } from '@/hooks/use-customer-actions'
 import { CustomerFormSimple, SimpleCustomerFormData } from '../customer-form-simple'
+import { inviteCustomerToStore } from '@/lib/customers/invite-customer-to-store'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
@@ -210,6 +211,23 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
         result = await createCustomer(customerData)
         if (result?.success) {
+          // El cliente ya quedó creado. Si la invitación falla se avisa aparte,
+          // porque reportarlo como error del alta seria enganoso: el usuario
+          // volveria a cargarlo y quedaria duplicado.
+          if (formData.inviteToStore && customerData.email) {
+            const newCustomerId = result.customer?.id
+            const invite = await inviteCustomerToStore(String(newCustomerId ?? ''))
+
+            if (invite.status === 'sent') {
+              toast.success(invite.message)
+            } else if (invite.status === 'already-linked') {
+              toast.info(invite.message)
+            } else {
+              toast.warning('Cliente creado, pero no se envió la invitación', {
+                description: `${invite.message} Podés reintentarlo desde el detalle del cliente.`,
+              })
+            }
+          }
           onClose()
         }
       } else if (customer) {
@@ -654,6 +672,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           ) : (
             // Formulario de edición/creación
             <CustomerFormSimple
+              showStoreInvite={mode === 'create'}
               initialData={getInitialFormData()}
               onSubmit={handleFormSubmit}
               onCancel={() => mode === 'edit' ? setMode('view') : onClose()}
