@@ -766,7 +766,7 @@ function CustomerCard({
       "hover:border-blue-400 hover:shadow-md dark:hover:border-blue-500/40 dark:hover:shadow-black/40",
       selected && "ring-2 ring-blue-500 border-blue-300 dark:border-blue-500/50 shadow-md"
     )}>
-      <CardContent className={cn("flex flex-col justify-between h-full", compact ? "p-3" : "p-4.5")}>
+      <CardContent className={cn("flex flex-col justify-between h-full", compact ? "p-2.5" : "p-4.5")}>
         <div>
           {/* Header con checkbox, badges superiores y acciones */}
           <div className={cn("flex items-center justify-between gap-1.5", compact ? "mb-2" : "mb-3")}>
@@ -799,7 +799,7 @@ function CustomerCard({
           </div>
 
           {/* Avatar, Nombre y Segmento */}
-          <div className={cn("flex items-start gap-2.5", compact ? "mb-2.5" : "mb-3.5")} onClick={onView}>
+          <div className={cn("flex items-start gap-2.5", compact ? "mb-2" : "mb-3.5")} onClick={onView}>
             <Avatar className={cn("border border-slate-200 dark:border-white/10 shrink-0 mt-0.5 shadow-sm", compact ? "h-8 w-8" : "h-11 w-11")}>
               <AvatarImage src={customer.avatar} />
               <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold text-xs">
@@ -842,7 +842,13 @@ function CustomerCard({
           </div>
 
           {/* Contacto directo y WhatsApp */}
-          <div className={cn("rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5", compact ? "p-1.5 space-y-1 mb-2.5 text-[11px]" : "p-2.5 space-y-1.5 mb-3.5 text-xs")}>
+          {/* En compacto se saca el recuadro: eran cajas con borde dentro de
+              otras cajas, que es lo que hacia ver la tarjeta desordenada. */}
+          <div className={cn(
+            compact
+              ? "space-y-0.5 mb-2 text-[11px]"
+              : "rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 p-2.5 space-y-1.5 mb-3.5 text-xs"
+          )}>
             {customer.email && (
               <div 
                 onClick={(e) => handleCopy(e, customer.email!, 'Email')}
@@ -885,7 +891,7 @@ function CustomerCard({
           </div>
 
           {/* Indicador de Deuda & Línea de Crédito */}
-          <div className={compact ? "mb-2.5 space-y-1.5" : "mb-3.5 space-y-1.5"} onClick={(e) => e.stopPropagation()}>
+          <div className={compact ? "mb-2 space-y-1" : "mb-3.5 space-y-1.5"} onClick={(e) => e.stopPropagation()}>
             {customer.credit_limit > 0 && (
               <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 text-xs">
                 <div className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-200">
@@ -904,54 +910,51 @@ function CustomerCard({
             />
           </div>
 
-          {/* Métricas: el total gastado es el dato que se busca de un vistazo,
-              asi que va solo y grande. El resto acompana en una fila menor. */}
+          {/* Métricas. En compacto la tarjeta entra en una grilla de hasta 6
+              columnas: una grilla interna de 3 columnas queda apretada, asi que
+              los datos secundarios van en una sola linea. */}
           <div className={cn(
-            "rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]",
-            compact ? "p-2.5 mb-2.5" : "p-3 mb-3.5"
+            "rounded-lg border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]",
+            compact ? "px-2 py-1.5 mb-2" : "p-3 mb-3.5"
           )}>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Total gastado
-            </div>
-            <div className={cn(
-              "font-bold tabular-nums text-slate-900 dark:text-white",
-              compact ? "text-base" : "text-xl"
-            )}>
-              {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as { total_spent_this_year?: number }).total_spent_this_year ?? customer.lifetime_value) || 0)}
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Gastado
+              </span>
+              <span className={cn(
+                "font-bold tabular-nums text-slate-900 dark:text-white",
+                compact ? "text-sm" : "text-xl"
+              )}>
+                {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as { total_spent_this_year?: number }).total_spent_this_year ?? customer.lifetime_value) || 0)}
+              </span>
             </div>
 
             <div className={cn(
-              "mt-2 grid grid-cols-3 gap-2 border-t border-slate-200/70 dark:border-white/10",
-              compact ? "pt-2" : "pt-2.5"
+              "flex flex-wrap items-center gap-x-1.5 border-t border-slate-200/70 dark:border-white/10 text-slate-500 dark:text-slate-400",
+              compact ? "mt-1 pt-1 text-[10px]" : "mt-2 pt-2 text-xs"
             )}>
-              <div>
-                <div className="text-[10px] text-slate-400 dark:text-slate-500">Compras</div>
-                <div className="text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300">
+              <span className="tabular-nums">
+                <strong className="font-semibold text-slate-700 dark:text-slate-300">
                   {metricsMap[customer.id]?.purchaseCount ?? customer.total_purchases ?? 0}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] text-slate-400 dark:text-slate-500">Reparaciones</div>
-                <div className="text-xs font-semibold tabular-nums text-sky-600 dark:text-sky-400">
+                </strong> compras
+              </span>
+              <span className="text-slate-300 dark:text-slate-600">·</span>
+              <span className="tabular-nums">
+                <strong className="font-semibold text-sky-600 dark:text-sky-400">
                   {metricsMap[customer.id]?.repairCount ?? customer.total_repairs ?? 0}
-                </div>
-              </div>
-              <div>
-                {/* Antes decia "Ultima compra" y mostraba un importe: todo el
-                    mundo lee esa etiqueta como una fecha. Ahora muestra la
-                    fecha, con el importe como dato secundario. */}
-                <div className="text-[10px] text-slate-400 dark:text-slate-500">Última</div>
-                <div className="text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300">
-                  {metricsMap[customer.id]?.lastDate
-                    ? formatters.date(metricsMap[customer.id].lastDate as string)
-                    : '—'}
-                </div>
-                {Boolean(metricsMap[customer.id]?.lastAmount) && (
-                  <div className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
-                    {formatters.currency(metricsMap[customer.id].lastAmount)}
-                  </div>
-                )}
-              </div>
+                </strong> rep.
+              </span>
+              {metricsMap[customer.id]?.lastDate && (
+                <>
+                  <span className="text-slate-300 dark:text-slate-600">·</span>
+                  {/* Antes decia "Ultima compra" con un importe: esa etiqueta se
+                      lee como fecha. Se muestra la fecha, que ya estaba en las
+                      metricas y no se usaba. */}
+                  <span className="tabular-nums" title="Última operación">
+                    {formatters.date(metricsMap[customer.id].lastDate as string)}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
