@@ -634,23 +634,24 @@ export function ProductModal({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit, onInvalidSubmit)} className="flex flex-col flex-1 overflow-hidden h-full">
             {/* Header */}
-            <div className="bg-primary px-4 py-4 md:px-8 md:py-6 text-primary-foreground shrink-0">
-              <div className="flex items-center justify-between">
+            <div className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-4 md:px-8 md:py-6 shrink-0 relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-blue-500/5 dark:bg-blue-400/5 rounded-full blur-3xl pointer-events-none" />
+              <div className="flex items-center justify-between relative">
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-primary-foreground/15 rounded-lg">
-                    <Package className="h-6 w-6" />
+                  <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-xl">
+                    <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
-                    <DialogTitle className="text-2xl font-bold text-primary-foreground">
+                    <DialogTitle className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                       {product ? 'Editar Producto' : 'Nuevo Producto'}
                     </DialogTitle>
-                    <DialogDescription className="text-primary-foreground/80 mt-1">
+                    <DialogDescription className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                       {product ? `SKU: ${product.sku}` : 'Completa la información del nuevo producto'}
                     </DialogDescription>
                   </div>
                 </div>
                 {product && (
-                  <Badge className="bg-white/20 text-white border-white/30">
+                  <Badge variant={product.is_active ? 'default' : 'secondary'} className="px-3 py-1 shadow-sm">
                     {product.is_active ? 'Activo' : 'Inactivo'}
                   </Badge>
                 )}
@@ -667,11 +668,11 @@ export function ProductModal({
 
             <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="flex min-h-0 flex-col md:flex-row flex-1 overflow-hidden">
               {/* Sidebar */}
-              <div className="w-full md:w-56 bg-gray-50 dark:bg-slate-900/50 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800 p-3 md:p-4 overflow-hidden md:overflow-y-auto shrink-0">
-                  <TabsList className="grid grid-cols-3 md:flex md:flex-col h-auto bg-transparent w-full gap-2 text-gray-500 dark:text-gray-400">
+              <div className="w-full md:w-64 bg-slate-50/50 dark:bg-slate-900/30 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-3 md:p-5 overflow-hidden md:overflow-y-auto shrink-0 flex flex-col gap-6">
+                  <TabsList className="grid grid-cols-3 md:flex md:flex-col h-auto bg-transparent w-full gap-2 md:gap-1 p-0 text-slate-500 dark:text-slate-400">
                     <TabsTrigger
                       value="basic"
-                      className="w-full justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border md:border-0 rounded-lg whitespace-nowrap"
+                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
                       <Tag className="h-4 w-4" />
                       <span className="hidden md:inline">Información Básica</span>
@@ -682,7 +683,7 @@ export function ProductModal({
                     </TabsTrigger>
                     <TabsTrigger
                       value="pricing"
-                      className="w-full justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border md:border-0 rounded-lg whitespace-nowrap"
+                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
                       <GSIcon className="h-4 w-4" />
                       <span className="hidden md:inline">Precios y Ofertas</span>
@@ -693,7 +694,7 @@ export function ProductModal({
                     </TabsTrigger>
                     <TabsTrigger
                       value="inventory"
-                      className="w-full justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border md:border-0 rounded-lg whitespace-nowrap"
+                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
                       <Warehouse className="h-4 w-4" />
                       <span className="hidden md:inline">Inventario</span>
@@ -704,7 +705,7 @@ export function ProductModal({
                     </TabsTrigger>
                     <TabsTrigger
                       value="post-sale"
-                      className="w-full justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border md:border-0 rounded-lg whitespace-nowrap"
+                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
                       <RefreshCw className="h-4 w-4" />
                       <span className="hidden md:inline">Postventa</span>
@@ -715,7 +716,7 @@ export function ProductModal({
                     </TabsTrigger>
                     <TabsTrigger
                       value="images"
-                      className="w-full justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border md:border-0 rounded-lg whitespace-nowrap"
+                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
                       <Upload className="h-4 w-4" />
                       <span className="hidden md:inline">Imágenes</span>
@@ -2044,7 +2045,7 @@ export function ProductModal({
           </Tabs>
 
             {/* Footer */}
-            <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-gray-800 px-4 py-3 md:px-8 md:py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0">
+            <div className="sticky bottom-0 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-slate-200 dark:border-slate-800 px-4 py-3 md:px-8 md:py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0 z-10">
               <div
                 id="product-form-status"
                 role="status"
@@ -2063,7 +2064,7 @@ export function ProductModal({
                   variant="outline"
                   onClick={requestClose}
                   disabled={isSubmitting || isUploadingImages}
-                  className="min-w-[100px] flex-1 sm:flex-none border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800"
+                  className="min-w-[100px] flex-1 sm:flex-none border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-medium"
                 >
                   Cancelar
                 </Button>
@@ -2071,10 +2072,10 @@ export function ProductModal({
                   type="submit"
                   disabled={isSubmitting || isUploadingImages}
                   aria-describedby="product-form-status"
-                  className={`min-w-[180px] flex-1 sm:flex-none text-white shadow-lg ${
+                  className={`min-w-[180px] flex-1 sm:flex-none text-white rounded-xl font-medium transition-all ${
                     submitState.ready
-                      ? 'bg-primary hover:bg-primary/90 shadow-sm'
-                      : 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20 dark:bg-amber-700 dark:hover:bg-amber-600'
+                      ? 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20 dark:bg-blue-600 dark:hover:bg-blue-500'
+                      : 'bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-500/20 dark:bg-amber-600 dark:hover:bg-amber-500'
                   }`}
                 >
                   {isSubmitting || isUploadingImages ? (
