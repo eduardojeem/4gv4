@@ -396,32 +396,53 @@ export function CustomerFormSimple({
               </p>
             )}
 
-            {/* Invitacion a la tienda publica: aparece recien cuando hay un
-                correo con forma valida, porque sin correo no hay a donde
-                mandarla. */}
-            {showStoreInvite && canInviteCustomer(formData.email) && (
-              <label
-                htmlFor="invite-to-store"
-                className="mt-1.5 flex cursor-pointer items-start gap-2.5 rounded-lg border border-indigo-200 bg-indigo-50/60 p-2.5 dark:border-indigo-900/50 dark:bg-indigo-950/20"
-              >
-                <input
-                  id="invite-to-store"
-                  type="checkbox"
-                  checked={Boolean(formData.inviteToStore)}
-                  onChange={(e) => handleInputChange('inviteToStore', e.target.checked as never)}
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 accent-indigo-600"
-                />
-                <span className="text-[11px] leading-relaxed">
-                  <span className="font-semibold text-indigo-900 dark:text-indigo-200">
-                    Invitar a la tienda online
+            {/* Invitacion a la tienda publica. Se muestra siempre al crear,
+                aunque todavia no haya correo: si solo apareciera al escribir
+                uno, nadie que no sepa que existe la encontraria. Sin correo
+                valido queda deshabilitada y explica que falta. */}
+            {showStoreInvite && (() => {
+              const canInvite = canInviteCustomer(formData.email)
+              return (
+                <label
+                  htmlFor="invite-to-store"
+                  className={cn(
+                    'mt-1.5 flex items-start gap-2.5 rounded-lg border p-2.5 transition-colors',
+                    canInvite
+                      ? 'cursor-pointer border-indigo-200 bg-indigo-50/60 dark:border-indigo-900/50 dark:bg-indigo-950/20'
+                      : 'cursor-not-allowed border-slate-200 bg-slate-50/60 opacity-70 dark:border-white/10 dark:bg-white/[0.02]'
+                  )}
+                >
+                  <input
+                    id="invite-to-store"
+                    type="checkbox"
+                    disabled={!canInvite}
+                    checked={canInvite && Boolean(formData.inviteToStore)}
+                    onChange={(e) => handleInputChange('inviteToStore', e.target.checked as never)}
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 accent-indigo-600 disabled:cursor-not-allowed"
+                  />
+                  <span className="text-[11px] leading-relaxed">
+                    <span className={cn(
+                      'font-semibold',
+                      canInvite
+                        ? 'text-indigo-900 dark:text-indigo-200'
+                        : 'text-slate-600 dark:text-slate-400'
+                    )}>
+                      Invitar a la tienda online
+                    </span>
+                    <span className={cn(
+                      'block',
+                      canInvite
+                        ? 'text-indigo-700/80 dark:text-indigo-300/80'
+                        : 'text-slate-500 dark:text-slate-400'
+                    )}>
+                      {canInvite
+                        ? `Le enviamos un correo a ${formData.email.trim()} para que cree su contraseña y pueda ver sus compras y pedidos.`
+                        : 'Cargá un correo arriba para poder enviarle la invitación.'}
+                    </span>
                   </span>
-                  <span className="block text-indigo-700/80 dark:text-indigo-300/80">
-                    Le enviamos un correo a {formData.email.trim()} para que cree su contraseña y
-                    pueda ver sus compras y pedidos.
-                  </span>
-                </span>
-              </label>
-            )}
+                </label>
+              )
+            })()}
           </div>
         </div>
       </div>

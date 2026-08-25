@@ -38,34 +38,38 @@ describe('Alta de cliente — invitación a la tienda', () => {
     vi.clearAllMocks()
   })
 
-  it('no ofrece la invitación mientras no haya correo', () => {
+  it('se ve desde el arranque, aunque todavia no haya correo', () => {
+    // Si solo apareciera al escribir un correo, nadie que no sepa que existe
+    // la encontraria: es exactamente como se reporto que "no estaba".
     renderForm()
 
-    expect(screen.queryByText(INVITE_LABEL)).not.toBeInTheDocument()
+    expect(screen.getByText(INVITE_LABEL)).toBeInTheDocument()
+    expect(screen.getByRole('checkbox')).toBeDisabled()
+    expect(screen.getByText(/Cargá un correo arriba/i)).toBeInTheDocument()
   })
 
-  it('aparece al cargar un correo válido', async () => {
+  it('se habilita al cargar un correo válido', async () => {
     renderForm()
     typeEmail('cliente@ejemplo.com')
 
-    expect(await screen.findByText(INVITE_LABEL)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
   })
 
-  it('no aparece con un correo a medio escribir', () => {
+  it('sigue deshabilitada con un correo a medio escribir', () => {
     renderForm()
     typeEmail('cliente@')
 
-    expect(screen.queryByText(INVITE_LABEL)).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox')).toBeDisabled()
   })
 
-  it('desaparece si se borra el correo', async () => {
+  it('vuelve a deshabilitarse si se borra el correo', async () => {
     renderForm()
     typeEmail('cliente@ejemplo.com')
-    await screen.findByText(INVITE_LABEL)
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
 
     typeEmail('')
 
-    await waitFor(() => expect(screen.queryByText(INVITE_LABEL)).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeDisabled())
   })
 
   it('muestra a qué correo se va a enviar', async () => {
@@ -85,7 +89,7 @@ describe('Alta de cliente — invitación a la tienda', () => {
     renderForm()
     typeEmail('cliente@ejemplo.com')
 
-    await screen.findByText(INVITE_LABEL)
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
     expect(screen.getByRole('checkbox')).not.toBeChecked()
   })
 
@@ -97,7 +101,7 @@ describe('Alta de cliente — invitación a la tienda', () => {
     fireEvent.change(document.getElementById('phone')!, { target: { value: '0981123456' } })
     typeEmail('cliente@ejemplo.com')
 
-    await screen.findByText(INVITE_LABEL)
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
     fireEvent.click(screen.getByRole('checkbox'))
     expect(screen.getByRole('checkbox')).toBeChecked()
 
