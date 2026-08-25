@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/client'
 import { startOfDay, format, parseISO, endOfDay, eachDayOfInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { DateRange } from 'react-day-picker'
+import { calculateProfit, calculateSalesCost } from '../lib/pos-profit'
 
 export interface PosStats {
     totalSales: number
@@ -33,7 +34,13 @@ export interface PosStats {
         repairProfit: number
         totalProfit: number
         profitMargin: number
+        /** No se pudo traer el costo: no hay ganancia que afirmar. */
+        costUnavailable: boolean
+        /** Items cuyo producto no tiene costo cargado. */
+        itemsWithoutCost: number
     }
+    /** Consultas que fallaron. La UI avisa en vez de mostrar ceros. */
+    warnings: string[]
 }
 
 interface UsePosStatsReturn {
@@ -72,8 +79,11 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             salesProfit: 0,
             repairProfit: 0,
             totalProfit: 0,
-            profitMargin: 0
-        }
+            profitMargin: 0,
+            costUnavailable: false,
+            itemsWithoutCost: 0
+        },
+        warnings: []
     })
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<Error | null>(null)
@@ -202,14 +212,20 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             ])
 
             if (salesError) throw salesError
-            if (recentError) console.error('Error fetching recent:', recentError)
-            if (creditError) console.error('Error fetching credits:', creditError)
-            if (repairsCreatedError) console.error('Error fetching repairs created:', repairsCreatedError)
-            if (repairsDeliveredError) console.error('Error fetching repairs delivered:', repairsDeliveredError)
+
+            // Los errores parciales ya no se descartan en silencio: se juntan
+            // para que la UI muestre que ese bloque no tiene datos reales, en
+            // lugar de dibujar un cero indistinguible de un dato verdadero.
+            const warnings: string[] = []
+            if (recentError) warnings.push('No se pudieron cargar las transacciones recientes.')
+            if (creditError) warnings.push('No se pudieron cargar los créditos.')
+            if (repairsCreatedError) warnings.push('No se pudieron cargar las reparaciones del período.')
+            if (repairsDeliveredError) warnings.push('No se pudieron cargar las reparaciones entregadas.')
 
             // --- Secondary Query: Fetch items for the retrieved sale IDs ---
             const saleIds = (salesData || []).map(s => s.id)
             let itemsData: any[] = []
+            let costUnavailable = false
 
             if (saleIds.length > 0) {
                 const { data: items, error: itemsError } = await supabase
@@ -218,12 +234,15 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                         quantity,
                         subtotal,
                         sale_id,
-                        product:products(name, cost_price, price)
+                        product:products(name, purchase_price)
                     `)
                     .in('sale_id', saleIds)
 
                 if (itemsError) {
-                    console.error('Error fetching items:', itemsError)
+                    // Sin items no hay costo. Antes esto dejaba totalCost en 0
+                    // y la ganancia salia igual a la facturacion.
+                    costUnavailable = true
+                    warnings.push('No se pudo calcular el costo de mercadería: la ganancia y el margen no están disponibles.')
                 } else {
                     itemsData = items || []
                 }
@@ -257,35 +276,22 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             const repairReadyCount = repairsReady.length
             const repairActiveCount = repairsActiveCount || 0
 
-            // Process Profit & Margin Stats
-            let totalCost = 0
-            const productMap = new Map<string, { name: string; sales: number; revenue: number }>()
-
-            itemsData.forEach((item: any) => {
-                const name = item.product?.name || 'Producto eliminado'
-                const costPrice = Number(item.product?.cost_price || 0)
-                const qty = Number(item.quantity || 0)
-                const subtotal = Number(item.subtotal || 0)
-
-                totalCost += costPrice * qty
-
-                const current = productMap.get(name) || { name, sales: 0, revenue: 0 }
-                productMap.set(name, {
-                    name,
-                    sales: current.sales + qty,
-                    revenue: current.revenue + subtotal
-                })
+            // Costo y ganancia: en pos-profit.ts, con tests.
+            const costBreakdown = calculateSalesCost(itemsData)
+            const profit = calculateProfit({
+                totalSales,
+                totalCost: costBreakdown.totalCost,
+                repairDeliveredAmount,
+                costUnavailable
             })
 
-            const salesProfit = totalSales > totalCost ? totalSales - totalCost : 0
-            const repairProfit = repairDeliveredAmount
-            const totalProfit = salesProfit + repairProfit
-            const profitMargin = totalSales > 0 ? (salesProfit / totalSales) * 100 : 0
+            if (!costUnavailable && costBreakdown.itemsWithoutCost > 0) {
+                warnings.push(
+                    `${costBreakdown.itemsWithoutCost} ítem(s) vendidos no tienen precio de compra cargado: el margen mostrado es optimista.`
+                )
+            }
 
-            const topProducts = Array.from(productMap.values())
-                .sort((a, b) => b.sales - a.sales)
-                .slice(0, 5)
-
+            const topProducts = costBreakdown.products.slice(0, 5)
             const topProduct = topProducts[0] || { name: 'N/A', sales: 0 }
 
             // Process Daily Sales with Gap Filling
@@ -377,12 +383,15 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     activeCount: repairActiveCount
                 },
                 profitStats: {
-                    totalCost,
-                    salesProfit,
-                    repairProfit,
-                    totalProfit,
-                    profitMargin
-                }
+                    totalCost: profit.totalCost,
+                    salesProfit: profit.salesProfit,
+                    repairProfit: profit.repairProfit,
+                    totalProfit: profit.totalProfit,
+                    profitMargin: profit.profitMargin,
+                    costUnavailable: profit.costUnavailable,
+                    itemsWithoutCost: costBreakdown.itemsWithoutCost
+                },
+                warnings
             })
 
         } catch (err) {

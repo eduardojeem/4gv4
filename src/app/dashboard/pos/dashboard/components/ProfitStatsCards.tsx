@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { TrendingUp, DollarSign, PieChart, Layers } from 'lucide-react'
+import { TrendingUp, DollarSign, PieChart, Layers, AlertTriangle } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import type { PosStats } from "../hooks/usePosStats"
 
@@ -10,6 +10,34 @@ interface ProfitStatsCardsProps {
 
 export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
     const { profitStats, totalSales } = stats
+
+    // Sin costo no hay ganancia que afirmar: se avisa en lugar de mostrar
+    // numeros que parecerian calculados.
+    if (profitStats.costUnavailable) {
+        return (
+            <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <div className="p-1.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                        <AlertTriangle className="h-4 w-4" />
+                    </div>
+                    Ganancias &amp; Rentabilidad
+                </h3>
+                <Card className="border border-amber-300/80 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-950/20">
+                    <CardContent className="p-5 space-y-1">
+                        <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                            No se pudo calcular el costo de mercadería
+                        </p>
+                        <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+                            La ganancia y el margen no se muestran para no informar cifras sin respaldo.
+                            La facturación y las reparaciones del período siguen siendo válidas.
+                        </p>
+                    </CardContent>
+                </Card>
+            </div>
+        )
+    }
+
+    const isLoss = profitStats.salesProfit < 0
 
     return (
         <div className="space-y-4">
@@ -35,11 +63,16 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                         <p className="text-[11px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">
                             Ganancia Bruta Ventas
                         </p>
-                        <p className="text-2xl font-bold tracking-tight tabular-nums text-emerald-700 dark:text-emerald-400">
+                        <p className={`text-2xl font-bold tracking-tight tabular-nums ${isLoss ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
                             {formatCurrency(profitStats.salesProfit)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                             Ventas ({formatCurrency(totalSales)}) − Costos ({formatCurrency(profitStats.totalCost)})
+                            {profitStats.itemsWithoutCost > 0 && (
+                                <span className="block text-amber-700 dark:text-amber-400 mt-0.5">
+                                    {profitStats.itemsWithoutCost} ítem(s) sin costo cargado
+                                </span>
+                            )}
                         </p>
                     </CardContent>
                 </Card>
