@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Customer } from '@/hooks/use-customer-state'
+import { aggregateCustomerSpend } from '@/lib/customers/customer-spend'
 
 export type CustomerMetrics = {
   count: number
@@ -28,29 +29,55 @@ export function useCustomerSalesMetricsMap(customerIds: string[]) {
         return
       }
       const supabase = createClient()
-      const { data, error } = await supabase
-        .from('sales')
-        .select('customer_id, total_amount, created_at')
-        .in('customer_id', customerIds)
-        .order('created_at', { ascending: false })
-      if (error) {
+
+      // Tres fuentes: el total gastado antes salia solo de `sales` (POS), asi
+      // que quien compro por la tienda publica o pago una reparacion aparecia
+      // en cero aunque su ficha de detalle si lo contara.
+      const [salesResult, ordersResult, repairsResult] = await Promise.all([
+        supabase
+          .from('sales')
+          .select('customer_id, total_amount, created_at')
+          .in('customer_id', customerIds),
+        supabase
+          .from('customer_orders')
+          .select('customer_id, total, status, created_at')
+          .in('customer_id', customerIds),
+        supabase
+          .from('repairs')
+          .select('customer_id, final_cost, estimated_cost, status, created_at')
+          .in('customer_id', customerIds),
+      ])
+
+      // Si las tres fallan no hay nada que mostrar. Si falla solo una, se usa
+      // lo que si vino: un total parcial es mejor que un cero enganoso.
+      if (salesResult.error && ordersResult.error && repairsResult.error) {
         setMetrics({})
         return
       }
-      const agg: Record<string, CustomerMetrics> = {}
-      for (const row of data || []) {
-        const cid = String((row as any).customer_id || '')
-        if (!cid) continue
-        const totalAmt = Number((row as any).total_amount) || 0
-        const created = (row as any).created_at as string | null
-        if (!agg[cid]) {
-          agg[cid] = { count: 1, total: totalAmt, lastAmount: totalAmt, lastDate: created || null }
-        } else {
-          agg[cid].count += 1
-          agg[cid].total += totalAmt
-        }
-      }
-      setMetrics(agg)
+
+      type Row = Record<string, unknown>
+
+      setMetrics(aggregateCustomerSpend({
+        sales: (salesResult.data ?? []).map((row: Row) => ({
+          customer_id: row.customer_id as string | null,
+          amount: row.total_amount as number | null,
+          date: row.created_at as string | null,
+        })),
+        orders: (ordersResult.data ?? []).map((row: Row) => ({
+          customer_id: row.customer_id as string | null,
+          amount: row.total as number | null,
+          date: row.created_at as string | null,
+          status: row.status as string | null,
+        })),
+        repairs: (repairsResult.data ?? []).map((row: Row) => ({
+          customer_id: row.customer_id as string | null,
+          // Mismo criterio que usa el resto del sistema para lo que paga el
+          // cliente por una reparacion (ver customer-outstanding).
+          amount: (row.final_cost ?? row.estimated_cost) as number | null,
+          date: row.created_at as string | null,
+          status: row.status as string | null,
+        })),
+      }))
     }
     fetchMetrics()
   }, [JSON.stringify(customerIds)])
