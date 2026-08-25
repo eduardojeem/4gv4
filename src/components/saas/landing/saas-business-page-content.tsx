@@ -213,9 +213,6 @@ export function SaaSBusinessPageContent() {
                           </p>
                         </div>
                       </div>
-                      <span className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:text-slate-300">
-                        {business.plan}
-                      </span>
                     </div>
 
                     {/* Encaja / Resultado */}

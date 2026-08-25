@@ -48,9 +48,6 @@ export function SaaSBusinessSection() {
                     <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${business.iconBg}`}>
                       <Icon className={`h-5 w-5 ${business.color}`} />
                     </div>
-                    <Badge variant="outline" className="text-[10px] font-bold border-slate-200 dark:border-slate-700">
-                      Plan {business.plan}
-                    </Badge>
                   </div>
 
                   <h3 className="mt-4 text-base font-bold text-slate-900 dark:text-slate-50">
