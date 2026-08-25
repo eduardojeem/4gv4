@@ -15,4 +15,8 @@ describe('resolveCatalogPartPrice', () => {
   it('falls back to retail when wholesale pricing is not configured', () => {
     expect(resolveCatalogPartPrice({ ...product, wholesale_price: 0 }, true).unitPrice).toBe(120_000)
   })
+
+  it('uses an active offer as the current retail price', () => {
+    expect(resolveCatalogPartPrice({ ...product, offer_price: 105_000 }, false).unitPrice).toBe(105_000)
+  })
 })

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { branchHeaders } from '@/lib/branches/client'
+import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 import type { CatalogItemKind, RepairCatalogItem } from './types'
 
 type SearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
@@ -17,11 +18,6 @@ interface UseRepairCatalogSearchOptions {
 interface ProductSearchResponse {
   data?: { products?: RepairCatalogItem[] }
   error?: string
-}
-
-function isService(item: RepairCatalogItem) {
-  return item.unit_measure?.toLowerCase() === 'servicio'
-    || item.category?.name?.toLowerCase().includes('servicio') === true
 }
 
 export function useRepairCatalogSearch({
@@ -53,7 +49,12 @@ export function useRepairCatalogSearch({
 
     const timeout = window.setTimeout(async () => {
       try {
-        const params = new URLSearchParams({ per_page: '50', query })
+        const params = new URLSearchParams({
+          per_page: '50',
+          query,
+          catalog_kind: kind,
+          is_active: 'true',
+        })
         if (kind === 'part') params.set('strict_branch_stock', 'true')
 
         const response = await fetch(`/api/products?${params.toString()}`, {
@@ -65,7 +66,11 @@ export function useRepairCatalogSearch({
         if (!response.ok) throw new Error(payload.error || 'No se pudo consultar el catálogo.')
 
         const products = Array.isArray(payload.data?.products) ? payload.data.products : []
-        const filtered = products.filter((item) => kind === 'service' ? isService(item) : !isService(item))
+        // Defensa adicional ante respuestas cacheadas o servidores antiguos.
+        // La API ya filtra antes de paginar usando el mismo clasificador.
+        const filtered = products.filter((item) => kind === 'service'
+          ? isServiceLikeProduct(item)
+          : !isServiceLikeProduct(item))
         setItems(filtered)
         setStatus(filtered.length > 0 ? 'success' : 'empty')
       } catch (caught) {

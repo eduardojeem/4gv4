@@ -9,6 +9,7 @@ import { stripProductCost, canViewProductCost, PRODUCT_COST_PERMISSION } from '@
 import { getRequestedBranchId, getDefaultBranch, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
 import { canCreateResource } from '@/lib/saas/subscription-service'
+import { filterProductsByCatalogKind, parseProductCatalogKind } from '@/lib/products/catalog-kind'
 
 // GET /api/products - Get products with variants
 /**
@@ -63,6 +64,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const sortColumn = sortColumns[requestedSort] || 'name'
     const sortAscending = searchParams.get('direction') !== 'desc'
     const strictBranchStock = searchParams.get('strict_branch_stock') === 'true'
+    const catalogKind = parseProductCatalogKind(searchParams.get('catalog_kind'))
     const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1)
     const perPage = Math.min(100, Math.max(1, Number.parseInt(searchParams.get('per_page') || '50', 10) || 50))
     const requestedBranchId = getRequestedBranchId(request)
@@ -147,7 +149,8 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const needsInMemoryPagination =
       stockStatus !== 'all' ||
       stockMin !== null ||
-      stockMax !== null
+      stockMax !== null ||
+      catalogKind !== null
 
     queryBuilder = queryBuilder.order(sortColumn, { ascending: sortAscending })
     if (!needsInMemoryPagination) {
@@ -161,6 +164,8 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       // PostgREST (1000 filas): los productos que caian fuera desaparecian del
       // listado Y del total, sin ninguna senal. Ahora el tope es propio y, si se
       // alcanza, se avisa en la respuesta.
+      // Se pide una fila adicional para detectar de forma confiable si el
+      // barrido quedó truncado (los rangos de PostgREST son inclusivos).
       queryBuilder = queryBuilder.range(0, IN_MEMORY_STOCK_FILTER_CAP)
     }
 
@@ -187,8 +192,9 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       branchScope.branchId,
       baseProducts.map((product) => product.id)
     )
+    const cappedProducts = baseProducts.slice(0, IN_MEMORY_STOCK_FILTER_CAP)
     const branchAwareProducts = strictBranchStock && branchScope.branchId
-      ? baseProducts.map((product) => {
+      ? cappedProducts.map((product) => {
           const branchStock = Number(stockMap.get(product.id) || 0)
           return {
             ...product,
@@ -196,7 +202,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
             branch_stock_quantity: branchStock,
           }
         })
-      : applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped)
+      : applyBranchInventoryToProducts(cappedProducts, stockMap, branchScoped)
     const stockFilteredProducts = branchAwareProducts.filter((product) => {
       const stock = Number(product.stock_quantity || 0)
       if (stockStatus === 'in_stock' && stock <= 0) return false
@@ -211,10 +217,11 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       if (stockMax !== null && Number.isFinite(stockMax) && stock > stockMax) return false
       return true
     })
+    const catalogFilteredProducts = filterProductsByCatalogKind(stockFilteredProducts, catalogKind)
     const filteredProducts = needsInMemoryPagination
-      ? stockFilteredProducts.slice(from, to + 1)
-      : stockFilteredProducts
-    const filteredTotal = needsInMemoryPagination ? stockFilteredProducts.length : (count || 0)
+      ? catalogFilteredProducts.slice(from, to + 1)
+      : catalogFilteredProducts
+    const filteredTotal = needsInMemoryPagination ? catalogFilteredProducts.length : (count || 0)
     // Se alcanzo el tope del barrido: lo listado y el total son parciales.
     const truncated = needsInMemoryPagination && baseProducts.length > IN_MEMORY_STOCK_FILTER_CAP
 

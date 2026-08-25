@@ -25,10 +25,14 @@ describe('useRepairCatalogSearch', () => {
   it('requests current branch stock and keeps only physical parts', async () => {
     let branchHeader: string | null = null
     let strictStock: string | null = null
+    let catalogKind: string | null = null
+    let isActive: string | null = null
     server.use(http.get('/api/products', ({ request }) => {
       const url = new URL(request.url)
       branchHeader = request.headers.get('x-branch-id')
       strictStock = url.searchParams.get('strict_branch_stock')
+      catalogKind = url.searchParams.get('catalog_kind')
+      isActive = url.searchParams.get('is_active')
       return HttpResponse.json({ data: { products: [service, part] } })
     }))
 
@@ -39,14 +43,18 @@ describe('useRepairCatalogSearch', () => {
     await waitFor(() => expect(result.current.status).toBe('success'))
     expect(branchHeader).toBe('branch-a')
     expect(strictStock).toBe('true')
+    expect(catalogKind).toBe('part')
+    expect(isActive).toBe('true')
     expect(result.current.items.map((item) => item.id)).toEqual(['part-1'])
   })
 
   it('classifies service-category products as services and refreshes on demand', async () => {
     let requests = 0
+    let catalogKind: string | null = null
     const categoryService = { ...service, id: 'service-2', unit_measure: 'unidad' }
-    server.use(http.get('/api/products', () => {
+    server.use(http.get('/api/products', ({ request }) => {
       requests += 1
+      catalogKind = new URL(request.url).searchParams.get('catalog_kind')
       return HttpResponse.json({ data: { products: [categoryService, part] } })
     }))
 
@@ -56,6 +64,7 @@ describe('useRepairCatalogSearch', () => {
 
     await waitFor(() => expect(result.current.items).toHaveLength(1))
     expect(result.current.items[0].id).toBe('service-2')
+    expect(catalogKind).toBe('service')
 
     act(() => result.current.refresh())
     await waitFor(() => expect(requests).toBe(2))

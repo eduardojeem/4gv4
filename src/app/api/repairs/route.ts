@@ -117,8 +117,9 @@ async function validateRepairRelations(
   if (productIds.length > 0) {
     const productsResult = await supabase
       .from('products')
-      .select('id, name, sku, unit_measure, purchase_price, sale_price, wholesale_price, tax_rate')
+      .select('id, name, sku, unit_measure, purchase_price, sale_price, offer_price, wholesale_price, tax_rate, category:categories(name)')
       .eq('organization_id', organizationId)
+      .eq('is_active', true)
       .in('id', productIds)
 
     if (productsResult.error) throw productsResult.error
@@ -131,7 +132,7 @@ async function validateRepairRelations(
     const customerIsWholesale = ['wholesale', 'mayorista'].includes(
       String(customerResult.data.customer_type || '').toLowerCase()
     )
-    const resolvedLines = input.parts.flatMap((part) => {
+    const resolvedLines = input.parts.flatMap<CreateRepairInput['parts'][number]>((part) => {
       if (!part.product_id) return [part]
       const product = productsById.get(part.product_id)
       return product

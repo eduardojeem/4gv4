@@ -57,6 +57,16 @@ describe('calculateRepairPricing', () => {
     expect(result.margin).toBe(150_000)
   })
 
+  it('adds explicitly configured labor on top of a catalog service', () => {
+    const result = calculateRepairPricing({
+      laborCost: 40_000,
+      parts: [{ lineType: 'service', cost: 250_000, quantity: 1 }],
+    })
+
+    expect(result.laborCost).toBe(40_000)
+    expect(result.customerTotal).toBe(290_000)
+  })
+
   it('normalizes invalid optional values to zero', () => {
     expect(calculateRepairPricing({
       laborCost: Number.NaN,

@@ -118,7 +118,7 @@ import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashR
 import { Repair } from '@/types/repairs'
 import { useRepairCatalogSearch } from './repairs/new-repair/useRepairCatalogSearch'
 import { CatalogQuickCreateDialog } from './repairs/new-repair/CatalogQuickCreateDialog'
-import { catalogItemPrice, toRepairPart, toRepairServiceLines } from './repairs/new-repair/repair-catalog-selection'
+import { addRepairService, catalogItemPrice, toRepairPart } from './repairs/new-repair/repair-catalog-selection'
 import type { CatalogItemKind, RepairCatalogItem } from './repairs/new-repair/types'
 import type { RepairFormSectionId } from './repairs/new-repair/types'
 import { buildSectionState } from './repairs/new-repair/repair-form-sections'
@@ -500,6 +500,7 @@ export function RepairFormDialogV2({
   const watchedFinalCost = watch('finalCost')
   const watchedLaborCost = watch('laborCost')
   const watchedDiscountAmount = watch('discountAmount')
+  const watchedEstimatedCost = watch('devices.0.estimatedCost')
 
   // Estado mayorista del cliente elegido, para saber qué precio de servicio
   // ofrecer. Solo se puede saber si el cliente tiene cuenta vinculada (el
@@ -554,8 +555,11 @@ export function RepairFormDialogV2({
       if (calculatedPricing.customerTotal !== watchedFinalCost) {
         setValue('finalCost', calculatedPricing.customerTotal, { shouldDirty: true, shouldValidate: true })
       }
+      if (calculatedPricing.customerTotal !== watchedEstimatedCost) {
+        setValue('devices.0.estimatedCost', calculatedPricing.customerTotal, { shouldDirty: true, shouldValidate: true })
+      }
     }
-  }, [calculationMode, calculatedPricing.customerTotal, calculatedPricing.laborCost, watchedFinalCost, watchedLaborCost, setValue])
+  }, [calculationMode, calculatedPricing.customerTotal, calculatedPricing.laborCost, watchedEstimatedCost, watchedFinalCost, watchedLaborCost, setValue])
 
   // Reset only once per dialog session. Technician data can arrive after the
   // dialog opens and must never erase fields the operator already completed.
@@ -851,6 +855,17 @@ export function RepairFormDialogV2({
     })
   }
 
+  const addSelectedService = useCallback((item: RepairCatalogItem) => {
+    const currentParts = getValues('parts') || []
+    const result = addRepairService(currentParts, item, customerIsWholesale)
+    if (!result.added) {
+      toast.info(`El servicio "${item.name}" ya está agregado.`)
+      return false
+    }
+    replaceParts(result.parts as RepairFormData['parts'])
+    return true
+  }, [customerIsWholesale, getValues, replaceParts])
+
   const handleQuickCatalogCreated = (item: RepairCatalogItem) => {
     if (quickCatalogKind === 'part') {
       appendPart(toRepairPart(item, customerIsWholesale))
@@ -862,16 +877,13 @@ export function RepairFormDialogV2({
     }
 
     const deviceIndex = quickServiceDeviceIndex ?? 0
-    const price = catalogItemPrice(item, customerIsWholesale)
-    setValue(`devices.${deviceIndex}.estimatedCost`, price, { shouldDirty: true, shouldValidate: true })
+    if (!addSelectedService(item)) return
     if (!watch(`devices.${deviceIndex}.issue`) || watch(`devices.${deviceIndex}.issue`) === 'Reparación general') {
       setValue(`devices.${deviceIndex}.issue`, item.name, { shouldDirty: true, shouldValidate: true })
     }
 
-    toRepairServiceLines(item, customerIsWholesale).forEach((line) => appendPart(line))
     setCalculationMode('automatic')
     setValue('pricingMode', 'automatic', { shouldDirty: true })
-    setValue('laborCost', 0, { shouldDirty: true, shouldValidate: true })
 
     serviceSearch.refresh()
     toast.success(`Servicio "${item.name}" creado y aplicado a la reparación.`)
@@ -1411,11 +1423,10 @@ export function RepairFormDialogV2({
 
                         {/* Estimated Cost */}
                         <div className="space-y-1.5">
-                          <div className="flex items-center justify-between gap-2">
+                          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <Label className="text-xs font-semibold flex items-center gap-1 text-slate-700 dark:text-slate-300">
                               <DollarSign className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                              Precio de referencia del servicio
-                              <span className="text-[11px] text-muted-foreground ml-1">(opcional)</span>
+                              Total estimado actual
                             </Label>
                             <Button
                               type="button"
@@ -1425,10 +1436,10 @@ export function RepairFormDialogV2({
                                 setServiceSearchIndex(index)
                                 setServiceSearchQuery('')
                               }}
-                              className="h-7 px-3 text-[11px] font-bold rounded-xl border-emerald-300/80 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 shadow-xs transition-all flex items-center gap-1.5"
+                              className="h-9 w-full justify-center px-3 text-[11px] font-bold rounded-xl border-emerald-300/80 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 shadow-xs transition-all flex items-center gap-1.5 sm:h-7 sm:w-auto"
                             >
                               <Wrench className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                              <span>Buscar Servicio</span>
+                              <span>Agregar servicio</span>
                               <Badge className="bg-emerald-600 text-white text-[9px] px-1 py-0 h-3.5 rounded-sm">
                                 Catálogo
                               </Badge>
@@ -1440,14 +1451,17 @@ export function RepairFormDialogV2({
                               type="text"
                               inputMode="numeric"
                               value={formatThousands(watch(`devices.${index}.estimatedCost`))}
-                              onChange={(e) => {
-                                const raw = parseThousands(e.target.value)
-                                setValue(`devices.${index}.estimatedCost`, raw, { shouldDirty: true, shouldValidate: true })
-                              }}
+                              readOnly
+                              aria-readonly="true"
                               placeholder="0"
-                              className={`h-9 text-sm pl-7 font-mono font-bold ${fieldClass} ${errors.devices?.[index]?.estimatedCost ? 'border-red-500' : ''}`}
+                              className={`h-9 text-sm pl-7 font-mono font-bold bg-emerald-50/60 dark:bg-emerald-950/20 ${fieldClass} ${errors.devices?.[index]?.estimatedCost ? 'border-red-500' : ''}`}
                             />
                           </div>
+                          <p className="text-[11px] leading-relaxed text-muted-foreground">
+                            {calculationMode === 'automatic'
+                              ? 'Se actualiza automáticamente: servicios + repuestos cobrados + mano de obra adicional − descuento.'
+                              : 'El total acordado se modifica en la sección Costo estimado.'}
+                          </p>
                           {errors.devices?.[index]?.estimatedCost && (
                             <p className="text-xs text-red-500 flex items-center gap-1">
                               <AlertCircle className="h-3 w-3" />
@@ -3406,9 +3420,8 @@ export function RepairFormDialogV2({
                 <span>Tarifa y desglose</span>
               </div>
               {serviceResults.map((svc) => {
-                const price = customerIsWholesale && svc.wholesale_price
-                  ? svc.wholesale_price
-                  : ((svc.offer_price || svc.sale_price) ?? 0)
+                const price = catalogItemPrice(svc, customerIsWholesale)
+                const hasWholesalePrice = customerIsWholesale && Number(svc.wholesale_price) > 0
                 const baseCost = svc.purchase_price || 0
                 const guess = guessDeviceFromServiceName(svc.name)
 
@@ -3418,10 +3431,10 @@ export function RepairFormDialogV2({
                     onClick={() => {
                       if (serviceSearchIndex === null) return
                       const curIdx = serviceSearchIndex
-                      setValue(`devices.${curIdx}.estimatedCost`, price, {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      })
+                      if (!addSelectedService(svc)) {
+                        setServiceSearchIndex(null)
+                        return
+                      }
                       if (!watch(`devices.${curIdx}.issue`) || watch(`devices.${curIdx}.issue`) === 'Reparación general') {
                         setValue(`devices.${curIdx}.issue`, svc.name, { shouldDirty: true })
                       }
@@ -3446,14 +3459,12 @@ export function RepairFormDialogV2({
                       }
 
                       const basePartCost = Number(svc.purchase_price ?? 0)
-                      toRepairServiceLines(svc, customerIsWholesale).forEach((line) => appendPart(line))
                       setCalculationMode('automatic')
                       setValue('pricingMode', 'automatic', { shouldDirty: true })
-                      setValue('laborCost', 0, { shouldDirty: true, shouldValidate: true })
 
                       toast.success(`Servicio "${svc.name}" — ${formatCurrency(price)}`, {
                         description: [
-                          customerIsWholesale && svc.wholesale_price ? 'Precio mayorista aplicado.' : null,
+                          hasWholesalePrice ? 'Precio mayorista aplicado.' : null,
                           basePartCost > 0
                             ? `Incluye ${formatCurrency(basePartCost)} de material interno; no se cobra por separado.`
                             : 'Servicio cargado como concepto independiente.',
@@ -3474,7 +3485,7 @@ export function RepairFormDialogV2({
                         <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
                           {svc.category?.name || 'Servicio'}
                         </Badge>
-                        {customerIsWholesale && svc.wholesale_price && (
+                        {hasWholesalePrice && (
                           <Badge className="bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300 text-[10px] py-0 px-1.5 font-bold">
                             Mayorista
                           </Badge>

@@ -193,9 +193,12 @@ export function RepairCostCalculator({
 
   const handleFinalCostInputChange = (rawValue: string) => {
     const nextFinalCost = rawValue === '' ? null : Number(rawValue) || 0
+    if (calculationMode === 'automatic') {
+      onCalculationModeChange?.('budget')
+    }
     onFinalCostChange(nextFinalCost)
 
-    if (calculationMode === 'budget') {
+    if (calculationMode === 'automatic' || calculationMode === 'budget') {
       const nextPricing = calculateRepairPricing({
         mode: 'budget',
         currency,
@@ -487,8 +490,7 @@ export function RepairCostCalculator({
           <div className="flex items-center justify-between">
             <Label className="text-base font-semibold flex items-center gap-2 text-emerald-900 dark:text-emerald-300">
               <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              Total de la Reparación
-              {isFinalDerived && <Lock className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />}
+              Presupuesto total
             </Label>
             {finalCost !== null && calculationMode === 'manual' && (
               <button
@@ -517,12 +519,12 @@ export function RepairCostCalculator({
                     : 'border-green-400 dark:border-green-700 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950/40 dark:to-green-900/30 text-green-900 dark:text-green-200'
                   : 'border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900'
               } ${error ? 'border-red-500 dark:border-red-700' : ''}`}
-              disabled={disabled || isFinalDerived}
+              disabled={disabled}
             />
           </div>
           {isFinalDerived && (
             <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-              = Mano de obra + repuestos - descuento.
+              Calculado automáticamente. Podés editarlo para fijar el presupuesto acordado con el cliente.
             </p>
           )}
           {isLaborDerived && finalCost === null && (

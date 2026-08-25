@@ -145,6 +145,26 @@ describe('RepairCostCalculator', () => {
     expect(defaultProps.onFinalCostChange).toHaveBeenCalledWith(400)
   })
 
+  it('permite editar el presupuesto total desde el modo automático y cambia a presupuesto', () => {
+    const onCalculationModeChange = vi.fn()
+    render(
+      <RepairCostCalculator
+        {...defaultProps}
+        calculationMode="automatic"
+        onCalculationModeChange={onCalculationModeChange}
+      />
+    )
+
+    const finalCostInput = screen.getByPlaceholderText(/estimado/)
+    expect(finalCostInput).toBeEnabled()
+
+    fireEvent.change(finalCostInput, { target: { value: '500' } })
+
+    expect(onCalculationModeChange).toHaveBeenCalledWith('budget')
+    expect(defaultProps.onFinalCostChange).toHaveBeenCalledWith(500)
+    expect(defaultProps.onLaborCostChange).toHaveBeenCalledWith(200)
+  })
+
   it('muestra indicador de incremento cuando el costo final es mayor al estimado', () => {
     const props = {
       ...defaultProps,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { catalogItemPrice, toRepairPart, toRepairServiceLines } from './repair-catalog-selection'
+import { addRepairService, catalogItemPrice, toRepairPart, toRepairServiceLines } from './repair-catalog-selection'
 
 const part = {
   id: 'part-1', name: 'Módulo A05', sku: 'MOD-A05', sale_price: 120_000,
@@ -27,5 +27,16 @@ describe('repair catalog selection', () => {
       expect.objectContaining({ name: 'Cambio de módulo', cost: 90_000, internalCost: 0, productId: 'service-1', lineType: 'service' }),
       expect.objectContaining({ name: 'Material incluido · Cambio de módulo', cost: 0, internalCost: 70_000, productId: null, lineType: 'included_material' }),
     ])
+  })
+
+  it('adds one service bundle and rejects duplicate taps', () => {
+    const service = { ...part, id: 'service-1', name: 'Cambio de módulo', unit_measure: 'servicio' }
+    const first = addRepairService([], service, false)
+    const duplicate = addRepairService(first.parts, service, false)
+
+    expect(first.added).toBe(true)
+    expect(first.parts).toHaveLength(2)
+    expect(duplicate.added).toBe(false)
+    expect(duplicate.parts).toEqual(first.parts)
   })
 })

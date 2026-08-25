@@ -1,8 +1,11 @@
 import type { RepairCatalogItem } from './types'
 
 export function catalogItemPrice(item: RepairCatalogItem, wholesale: boolean) {
-  if (wholesale && item.wholesale_price) return item.wholesale_price
-  return item.offer_price || item.sale_price || 0
+  const wholesalePrice = Math.max(0, Number(item.wholesale_price) || 0)
+  const offerPrice = Math.max(0, Number(item.offer_price) || 0)
+  const salePrice = Math.max(0, Number(item.sale_price) || 0)
+  if (wholesale && wholesalePrice > 0) return wholesalePrice
+  return offerPrice > 0 ? offerPrice : salePrice
 }
 
 export function toRepairPart(item: RepairCatalogItem, wholesale: boolean) {
@@ -45,4 +48,25 @@ export function toRepairServiceLines(item: RepairCatalogItem, wholesale: boolean
     productId: null,
     lineType: 'included_material' as const,
   }]
+}
+
+type ExistingRepairLine = {
+  productId?: string | null
+  lineType?: string | null
+}
+
+export function addRepairService<T extends ExistingRepairLine>(
+  existingParts: T[],
+  item: RepairCatalogItem,
+  wholesale: boolean,
+) {
+  const alreadyAdded = existingParts.some((part) => (
+    part.productId === item.id && part.lineType === 'service'
+  ))
+  if (alreadyAdded) return { parts: existingParts, added: false }
+
+  return {
+    parts: [...existingParts, ...toRepairServiceLines(item, wholesale)] as Array<T | ReturnType<typeof toRepairServiceLines>[number]>,
+    added: true,
+  }
 }

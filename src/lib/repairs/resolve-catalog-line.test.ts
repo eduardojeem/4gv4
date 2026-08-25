@@ -24,4 +24,13 @@ describe('resolveCatalogRepairLines', () => {
       expect.objectContaining({ product_id: 'part-1', line_type: 'charged_part', quantity: 2, unit_price: 120_000, unit_cost: 70_000 }),
     ])
   })
+
+  it('recognizes legacy services from their category when unit and sku are generic', () => {
+    const lines = resolveCatalogRepairLines({
+      id: 'service-legacy', name: 'Mantenimiento premium', sku: 'ITEM-1', unit_measure: 'unidad',
+      category: { name: 'Servicios técnicos' }, sale_price: 150_000,
+    }, false, 1)
+
+    expect(lines[0]).toEqual(expect.objectContaining({ line_type: 'service', unit_price: 150_000 }))
+  })
 })

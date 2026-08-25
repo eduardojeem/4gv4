@@ -8,8 +8,10 @@ type CatalogRepairProduct = {
   unit_measure?: string | null
   purchase_price?: number | null
   sale_price?: number | null
+  offer_price?: number | null
   wholesale_price?: number | null
   tax_rate?: number | null
+  category?: { name?: string | null } | Array<{ name?: string | null }> | null
 }
 
 export function resolveCatalogRepairLines(
@@ -23,7 +25,8 @@ export function resolveCatalogRepairLines(
     ? Number(product.tax_rate) as 0 | 5 | 10
     : 10
 
-  if (isServiceLikeProduct(product)) {
+  const category = Array.isArray(product.category) ? product.category[0] ?? null : product.category
+  if (isServiceLikeProduct({ ...product, category })) {
     const serviceLine = {
       product_id: product.id,
       part_name: product.name,

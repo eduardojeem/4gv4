@@ -277,11 +277,10 @@ export default function AdminSettingsPage() {
       ) : null}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-5">
-        <TabsList className="grid h-20 w-full grid-cols-2 sm:h-10 sm:grid-cols-4 sm:w-[600px]">
+        <TabsList className="grid h-20 w-full grid-cols-2 sm:h-10 sm:grid-cols-3 sm:w-[480px]">
           <TabsTrigger value="company"><Building2 />Empresa</TabsTrigger>
           <TabsTrigger value="operations"><ReceiptText />Operación</TabsTrigger>
           <TabsTrigger value="appearance"><Palette />Apariencia</TabsTrigger>
-          <TabsTrigger value="financing"><ReceiptText />Financiación</TabsTrigger>
         </TabsList>
 
         <TabsContent value="company" className="m-0 space-y-4">
@@ -494,47 +493,6 @@ export default function AdminSettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="financing" className="m-0 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Financiación y Cuotas</CardTitle>
-              <CardDescription>Definí el recargo predeterminado para cada plan de cuotas. Se auto-completará cuando agregues opciones de financiación a un producto.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                {[1, 2, 3, 4, 5, 6, 9, 12, 18, 24].map((preset) => {
-                  const val = settings.defaultInstallmentRates?.[String(preset)] ?? 0
-                  return (
-                    <div key={preset} className="space-y-1.5 rounded-lg border bg-muted/10 p-2.5">
-                      <Label htmlFor={`rate-${preset}`} className="text-xs font-semibold">
-                        {preset === 1 ? '1 cuota' : `${preset} cuotas`}
-                      </Label>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-muted-foreground">Recargo:</span>
-                        <Input
-                          id={`rate-${preset}`}
-                          type="number"
-                          min="0"
-                          max="999"
-                          step="0.1"
-                          value={val.toString()}
-                          onChange={(e) => {
-                            updateSetting('defaultInstallmentRates', {
-                              ...(settings.defaultInstallmentRates || {}),
-                              [String(preset)]: e.target.value === '' ? 0 : Number(e.target.value)
-                            })
-                          }}
-                          className="h-7 px-2 text-right"
-                        />
-                        <span className="text-xs font-medium">%</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   )

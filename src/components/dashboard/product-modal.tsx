@@ -69,7 +69,6 @@ import { BrandModal } from '@/components/dashboard/brands/BrandModal'
 import { useCategories } from '@/hooks/useCategories'
 import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
-import { useSharedSettings } from '@/hooks/use-shared-settings'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { removeFile, uploadFile } from '@/lib/supabase-storage'
 import { useForm, useFieldArray } from 'react-hook-form'
@@ -130,7 +129,6 @@ export function ProductModal({
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
   const canViewCost = useCanViewCost()
-  const { settings } = useSharedSettings()
 
   // Local state for lists to support instant updates
   const [localCategories, setLocalCategories] = useState<Category[]>(categories ?? [])
@@ -214,6 +212,9 @@ export function ProductModal({
   const { settings: websiteSettings } = useAdminWebsiteSettings()
   const creditDefaults = websiteSettings?.product_credit_defaults
     ?? getWebsiteSettingsDefaults().product_credit_defaults!
+  const defaultRateForInstallmentCount = (count: number) => (
+    creditDefaults.plans.find((plan) => plan.count === count)?.rate ?? 0
+  )
   const creditDefaultsBase = resolveCreditBase(
     {
       purchase_price: Number(purchasePrice) || 0,
@@ -236,9 +237,7 @@ export function ProductModal({
     form.setValue('installments_public', creditDefaults.publicByDefault, { shouldDirty: true })
     setCreditChoice('defaults')
   }
-  const [bulkDraft, setBulkDraft] = useState<Record<number, { checked: boolean; rate: string }>>(
-    () => Object.fromEntries(INSTALLMENT_PRESETS.map(n => [n, { checked: false, rate: '0' }]))
-  )
+  const [bulkDraft, setBulkDraft] = useState<Record<number, { checked: boolean; rate: string }>>({})
   const warrantyMonths = watch('warranty_months')
   const returnWindowDays = watch('return_window_days')
   const exchangeWindowDays = watch('exchange_window_days')
@@ -1499,7 +1498,7 @@ export function ProductModal({
                                       onClick={() => {
                                         setBulkOpen(false)
                                         setExpandedChip(preset)
-                                        setChipRate((prev) => ({ ...prev, [preset]: prev[preset] ?? String(settings.defaultInstallmentRates?.[String(preset)] ?? '0') }))
+                                        setChipRate((prev) => ({ ...prev, [preset]: prev[preset] ?? String(defaultRateForInstallmentCount(preset)) }))
                                       }}
                                       className="h-7 px-2.5 text-xs border-dashed hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300 transition-colors"
                                     >
@@ -1529,7 +1528,7 @@ export function ProductModal({
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                     {INSTALLMENT_PRESETS.map((n) => {
                                       const already = (installmentsPlans ?? []).some((p) => Number(p?.count) === n)
-                                      const entry = bulkDraft[n] ?? { checked: false, rate: String(settings.defaultInstallmentRates?.[String(n)] ?? '0') }
+                                      const entry = bulkDraft[n] ?? { checked: false, rate: String(defaultRateForInstallmentCount(n)) }
                                       const previewBulk = installmentBase > 0 && entry.checked
                                         ? buildCreditInstallmentPlan({
                                             principalAmount: installmentBase,
@@ -1554,7 +1553,10 @@ export function ProductModal({
                                             onChange={(e) =>
                                               setBulkDraft((prev) => ({
                                                 ...prev,
-                                                [n]: { ...prev[n], checked: e.target.checked },
+                                                [n]: {
+                                                  checked: e.target.checked,
+                                                  rate: prev[n]?.rate ?? String(defaultRateForInstallmentCount(n)),
+                                                },
                                               }))
                                             }
                                             className="h-3.5 w-3.5 accent-indigo-600 shrink-0"
