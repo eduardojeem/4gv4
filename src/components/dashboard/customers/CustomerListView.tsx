@@ -614,7 +614,9 @@ function TableView({
                     </TableCell>
                     <TableCell className={cn(compact ? "py-1.5" : "py-3")}>
                       <div className={cn("font-semibold tabular-nums text-slate-700 dark:text-slate-300", compact ? "text-xs" : "text-sm")}>
-                        {(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)}
+                        {/* purchaseCount, no count: la columna se llama "Compras"
+                            y count incluye tambien las reparaciones. */}
+                        {(metricsMap[customer.id]?.purchaseCount ?? customer.total_purchases ?? 0)}
                       </div>
                     </TableCell>
                     <TableCell className={cn(compact ? "py-1.5" : "py-3")}>
@@ -902,32 +904,53 @@ function CustomerCard({
             />
           </div>
 
-          {/* Métricas destacadas */}
-          <div className={cn("grid grid-cols-2 border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] rounded-xl", compact ? "p-2 gap-1.5 mb-2.5" : "p-3 gap-2 mb-3.5")}>
-            <div>
-              <div className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Total Gastado</div>
-              <div className={cn("font-bold tabular-nums text-slate-900 dark:text-white", compact ? "text-xs" : "text-sm")}>
-                {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as { total_spent_this_year?: number }).total_spent_this_year ?? customer.lifetime_value) || 0)}
-              </div>
+          {/* Métricas: el total gastado es el dato que se busca de un vistazo,
+              asi que va solo y grande. El resto acompana en una fila menor. */}
+          <div className={cn(
+            "rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]",
+            compact ? "p-2.5 mb-2.5" : "p-3 mb-3.5"
+          )}>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              Total gastado
             </div>
-            <div>
-              <div className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Compras / Taller</div>
-              <div className={cn("font-bold tabular-nums text-slate-900 dark:text-white flex items-center gap-1", compact ? "text-xs" : "text-sm")}>
-                <span>{(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)} c.</span>
-                <span className="text-slate-300 dark:text-slate-600">•</span>
-                <span className="text-sky-600 dark:text-sky-400">{customer.total_repairs || 0} t.</span>
-              </div>
+            <div className={cn(
+              "font-bold tabular-nums text-slate-900 dark:text-white",
+              compact ? "text-base" : "text-xl"
+            )}>
+              {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as { total_spent_this_year?: number }).total_spent_this_year ?? customer.lifetime_value) || 0)}
             </div>
-            <div>
-              <div className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Última compra</div>
-              <div className={cn("font-semibold tabular-nums text-slate-700 dark:text-slate-300", compact ? "text-[11px]" : "text-xs")}>
-                {formatters.currency((metricsMap[customer.id]?.lastAmount ?? customer.last_purchase_amount ?? 0))}
+
+            <div className={cn(
+              "mt-2 grid grid-cols-3 gap-2 border-t border-slate-200/70 dark:border-white/10",
+              compact ? "pt-2" : "pt-2.5"
+            )}>
+              <div>
+                <div className="text-[10px] text-slate-400 dark:text-slate-500">Compras</div>
+                <div className="text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300">
+                  {metricsMap[customer.id]?.purchaseCount ?? customer.total_purchases ?? 0}
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Puntos Club</div>
-              <div className={cn("font-semibold tabular-nums text-slate-700 dark:text-slate-300", compact ? "text-[11px]" : "text-xs")}>
-                {(customer as unknown as { loyalty_points?: number }).loyalty_points ?? 0} pts
+              <div>
+                <div className="text-[10px] text-slate-400 dark:text-slate-500">Reparaciones</div>
+                <div className="text-xs font-semibold tabular-nums text-sky-600 dark:text-sky-400">
+                  {metricsMap[customer.id]?.repairCount ?? customer.total_repairs ?? 0}
+                </div>
+              </div>
+              <div>
+                {/* Antes decia "Ultima compra" y mostraba un importe: todo el
+                    mundo lee esa etiqueta como una fecha. Ahora muestra la
+                    fecha, con el importe como dato secundario. */}
+                <div className="text-[10px] text-slate-400 dark:text-slate-500">Última</div>
+                <div className="text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300">
+                  {metricsMap[customer.id]?.lastDate
+                    ? formatters.date(metricsMap[customer.id].lastDate as string)
+                    : '—'}
+                </div>
+                {Boolean(metricsMap[customer.id]?.lastAmount) && (
+                  <div className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
+                    {formatters.currency(metricsMap[customer.id].lastAmount)}
+                  </div>
+                )}
               </div>
             </div>
           </div>

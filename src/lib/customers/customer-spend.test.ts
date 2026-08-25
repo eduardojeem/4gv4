@@ -62,6 +62,31 @@ describe('aggregateCustomerSpend', () => {
     expect(result.c1.total).toBe(100)
   })
 
+  it('separa compras de reparaciones para no contarlas dos veces', () => {
+    // La tarjeta muestra "N compras / M reparaciones": si las reparaciones
+    // entran tambien en el conteo de compras, aparecen duplicadas.
+    const result = aggregateCustomerSpend({
+      sales: [row('c1', 100, '2026-01-01')],
+      orders: [row('c1', 50, '2026-02-01', 'DELIVERED')],
+      repairs: [row('c1', 30, '2026-03-01', 'entregado')],
+    })
+
+    expect(result.c1.purchaseCount).toBe(2)
+    expect(result.c1.repairCount).toBe(1)
+    expect(result.c1.count).toBe(3)
+  })
+
+  it('no cuenta como compra lo que no se sumó', () => {
+    const result = aggregateCustomerSpend({
+      orders: [row('c1', 100, '2026-01-01', 'CANCELLED')],
+      repairs: [row('c1', 50, '2026-02-01', 'reparacion')],
+      sales: [row('c1', 10, '2026-01-05')],
+    })
+
+    expect(result.c1.purchaseCount).toBe(1)
+    expect(result.c1.repairCount).toBe(0)
+  })
+
   it('separa los totales por cliente', () => {
     const result = aggregateCustomerSpend({
       sales: [row('c1', 100, '2026-01-01'), row('c2', 200, '2026-01-02')],

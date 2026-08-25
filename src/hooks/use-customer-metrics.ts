@@ -3,14 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Customer } from '@/hooks/use-customer-state'
-import { aggregateCustomerSpend } from '@/lib/customers/customer-spend'
+import { aggregateCustomerSpend, type CustomerSpendMetrics } from '@/lib/customers/customer-spend'
 
-export type CustomerMetrics = {
-  count: number
-  total: number
-  lastAmount: number
-  lastDate: string | null
-}
+/** Se deriva del tipo de la agregacion para que no puedan divergir. */
+export type CustomerMetrics = CustomerSpendMetrics
 
 export type UseCustomerMetricsOptions = {
   timeRange?: '3months' | '6months' | '12months'

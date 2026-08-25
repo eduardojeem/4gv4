@@ -9,8 +9,13 @@
  */
 
 export type CustomerSpendMetrics = {
-  /** Cantidad de operaciones contadas. */
+  /** Cantidad total de operaciones contadas. */
   count: number
+  /** Compras: ventas del POS + pedidos de la tienda publica. */
+  purchaseCount: number
+  /** Reparaciones terminadas. Se lleva aparte porque la tarjeta las muestra
+   *  como columna propia, y sumarlas a `count` las contaba dos veces. */
+  repairCount: number
   /** Total gastado. */
   total: number
   /** Importe de la operacion mas reciente. */
@@ -68,6 +73,7 @@ export function isCountableRepair(status: string | null | undefined) {
 function addRow(
   target: Record<string, CustomerSpendMetrics>,
   row: SpendRow,
+  kind: 'purchase' | 'repair',
 ) {
   const customerId = String(row.customer_id ?? '').trim()
   if (!customerId) return
@@ -77,11 +83,20 @@ function addRow(
   const current = target[customerId]
 
   if (!current) {
-    target[customerId] = { count: 1, total: amount, lastAmount: amount, lastDate: date }
+    target[customerId] = {
+      count: 1,
+      purchaseCount: kind === 'purchase' ? 1 : 0,
+      repairCount: kind === 'repair' ? 1 : 0,
+      total: amount,
+      lastAmount: amount,
+      lastDate: date,
+    }
     return
   }
 
   current.count += 1
+  if (kind === 'purchase') current.purchaseCount += 1
+  else current.repairCount += 1
   current.total += amount
 
   // La operacion mas reciente puede venir de cualquiera de las tres fuentes,
@@ -97,13 +112,13 @@ export function aggregateCustomerSpend(sources: SpendSources): Record<string, Cu
   const result: Record<string, CustomerSpendMetrics> = {}
 
   for (const row of sources.sales ?? []) {
-    addRow(result, row)
+    addRow(result, row, 'purchase')
   }
   for (const row of sources.orders ?? []) {
-    if (isCountableOrder(row.status)) addRow(result, row)
+    if (isCountableOrder(row.status)) addRow(result, row, 'purchase')
   }
   for (const row of sources.repairs ?? []) {
-    if (isCountableRepair(row.status)) addRow(result, row)
+    if (isCountableRepair(row.status)) addRow(result, row, 'repair')
   }
 
   return result
