@@ -705,8 +705,11 @@ function GridView({
     <div className={cn(
       "grid",
       compact 
-        ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5" 
-        : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        // auto-rows-fr iguala la altura de TODAS las filas, no solo la de cada
+        // fila entre si: sin esto una fila con un cliente sin telefono queda
+        // mas baja que la siguiente.
+        ? "auto-rows-fr grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5"
+        : "auto-rows-fr grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
     )}>
       {customers.map((customer, index) => (
         <motion.div
@@ -714,6 +717,7 @@ function GridView({
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: index * 0.02 }}
+          className="h-full"
         >
           <CustomerCard
             customer={customer}
@@ -761,7 +765,7 @@ function CustomerCard({
 
   return (
     <Card className={cn(
-      "group relative flex flex-col justify-between transition-all duration-300 overflow-hidden cursor-pointer",
+      "group relative flex h-full flex-col justify-between transition-all duration-300 overflow-hidden cursor-pointer",
       "border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]",
       "hover:border-blue-400 hover:shadow-md dark:hover:border-blue-500/40 dark:hover:shadow-black/40",
       selected && "ring-2 ring-blue-500 border-blue-300 dark:border-blue-500/50 shadow-md"
@@ -777,12 +781,19 @@ function CustomerCard({
                 onClick={(e) => e.stopPropagation()}
                 className="border-slate-300 dark:border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
               />
-              <span className="text-[10.5px] font-mono font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded">
-                {customer.customerCode || customer.ruc || 'S/C'}
-              </span>
+              {/* El codigo/RUC es un dato de archivo, no de vistazo: en las
+                  tarjetas chicas ocupaba lugar sin ayudar a reconocer al
+                  cliente. Sigue estando en la tabla y en la ficha. */}
+              {!compact && (
+                <span className="text-[10.5px] font-mono font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded">
+                  {customer.customerCode || customer.ruc || 'S/C'}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
-              {customer.customer_type === 'premium' && (
+              {/* Redundante en compacto: el segmento ya aparece debajo del
+                  nombre, y VIP ademas tiene su estrella. */}
+              {!compact && customer.customer_type === 'premium' && (
                 <Badge className="text-[9px] px-1 py-0 bg-amber-500/10 text-amber-600 border border-amber-500/20 dark:bg-amber-400/20 dark:text-amber-300">
                   <Star className="h-2.5 w-2.5 mr-0.5 fill-amber-400 text-amber-400" />
                   Premium
@@ -841,14 +852,41 @@ function CustomerCard({
             </div>
           </div>
 
-          {/* Contacto directo y WhatsApp */}
-          {/* En compacto se saca el recuadro: eran cajas con borde dentro de
-              otras cajas, que es lo que hacia ver la tarjeta desordenada. */}
-          <div className={cn(
-            compact
-              ? "space-y-0.5 mb-2 text-[11px]"
-              : "rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 p-2.5 space-y-1.5 mb-3.5 text-xs"
-          )}>
+          {/* Contacto. En compacto va solo el telefono con su acceso a
+              WhatsApp: es el dato accionable. El email es largo, se trunca y
+              casi nunca se usa desde la tarjeta; sigue en la ficha completa.
+              La fila se dibuja siempre, aunque falte el dato, para que las
+              tarjetas no cambien de alto entre un cliente y otro. */}
+          {compact ? (
+            <div className="mb-2 flex h-5 items-center justify-between gap-1 text-[11px]" onClick={(e) => e.stopPropagation()}>
+              {customer.phone ? (
+                <div
+                  onClick={(e) => handleCopy(e, customer.phone!, 'Teléfono')}
+                  className="flex min-w-0 items-center gap-1 font-mono text-slate-600 dark:text-slate-400 hover:text-foreground cursor-pointer"
+                  title="Clic para copiar teléfono"
+                >
+                  <Phone className="h-3 w-3 shrink-0 text-slate-400" />
+                  <span className="truncate">{customer.phone}</span>
+                </div>
+              ) : (
+                <span className="text-slate-300 dark:text-slate-600">Sin teléfono</span>
+              )}
+              {whatsappUrl && (
+                <a
+                  href={whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="shrink-0 rounded-md bg-emerald-500/15 p-1 text-emerald-700 transition-colors hover:bg-emerald-500/25 dark:text-emerald-400"
+                  title="Escribir por WhatsApp"
+                  aria-label="Escribir por WhatsApp"
+                >
+                  <MessageCircle className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 p-2.5 space-y-1.5 mb-3.5 text-xs">
             {customer.email && (
               <div 
                 onClick={(e) => handleCopy(e, customer.email!, 'Email')}
@@ -889,6 +927,7 @@ function CustomerCard({
               </div>
             )}
           </div>
+          )}
 
           {/* Indicador de Deuda & Línea de Crédito */}
           <div className={compact ? "mb-2 space-y-1" : "mb-3.5 space-y-1.5"} onClick={(e) => e.stopPropagation()}>
