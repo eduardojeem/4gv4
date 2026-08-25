@@ -2,14 +2,16 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { TrendingUp, DollarSign, PieChart, Layers, AlertTriangle } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
+import { useState } from 'react'
 import type { PosStats } from "../hooks/usePosStats"
+import { figuresForMode, type TaxMode } from "../lib/pos-profit"
 
 interface ProfitStatsCardsProps {
     stats: PosStats
 }
 
 export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
-    const { profitStats, totalSales } = stats
+    const { profitStats } = stats
 
     // Sin costo no hay ganancia que afirmar: se avisa en lugar de mostrar
     // numeros que parecerian calculados.
@@ -37,7 +39,13 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
         )
     }
 
-    const isLoss = profitStats.salesProfit < 0
+    // Con IVA por defecto: el negocio cuenta el IVA cobrado como parte de su
+    // ganancia. El interruptor no vuelve a consultar: ambas bases ya vienen
+    // calculadas.
+    const [taxMode, setTaxMode] = useState<TaxMode>('with-tax')
+    const figures = figuresForMode(profitStats, taxMode)
+    const isLoss = figures.salesProfit < 0
+    const withoutTax = taxMode === 'without-tax'
 
     return (
         <div className="space-y-4">
@@ -49,6 +57,34 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                 <Badge variant="outline" className="border-emerald-300 bg-emerald-100/80 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200 text-[10px] font-bold">
                     Margen
                 </Badge>
+
+                <div className="ml-auto flex items-center gap-2">
+                    {profitStats.taxTotal > 0 && (
+                        <span className="hidden sm:inline text-[11px] font-normal text-muted-foreground tabular-nums">
+                            IVA del período: {formatCurrency(profitStats.taxTotal)}
+                        </span>
+                    )}
+                    <div role="group" aria-label="Base de cálculo" className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5">
+                        {([
+                            { mode: 'with-tax' as const, label: 'Con IVA' },
+                            { mode: 'without-tax' as const, label: 'Sin IVA' },
+                        ]).map((option) => (
+                            <button
+                                key={option.mode}
+                                type="button"
+                                onClick={() => setTaxMode(option.mode)}
+                                aria-pressed={taxMode === option.mode}
+                                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                                    taxMode === option.mode
+                                        ? 'bg-background text-foreground shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </h3>
 
             <div className="grid gap-4 md:grid-cols-4">
@@ -64,10 +100,10 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                             Ganancia Bruta Ventas
                         </p>
                         <p className={`text-2xl font-bold tracking-tight tabular-nums ${isLoss ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                            {formatCurrency(profitStats.salesProfit)}
+                            {formatCurrency(figures.salesProfit)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            Ventas ({formatCurrency(totalSales)}) − Costos ({formatCurrency(profitStats.totalCost)})
+                            {withoutTax ? 'Ventas sin IVA' : 'Ventas'} ({formatCurrency(figures.revenue)}) − Costos ({formatCurrency(profitStats.totalCost)})
                             {profitStats.itemsWithoutCost > 0 && (
                                 <span className="block text-amber-700 dark:text-amber-400 mt-0.5">
                                     {profitStats.itemsWithoutCost} ítem(s) sin costo cargado
@@ -89,7 +125,7 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                             Margen de Ganancia
                         </p>
                         <p className="text-2xl font-bold tracking-tight tabular-nums text-teal-700 dark:text-teal-400">
-                            {profitStats.profitMargin.toFixed(1)}%
+                            {figures.profitMargin.toFixed(1)}%
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                             Porcentaje de rentabilidad s/ ventas
@@ -129,7 +165,7 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                             Ganancia Total Combinada
                         </p>
                         <p className="text-2xl font-bold tracking-tight tabular-nums text-indigo-700 dark:text-indigo-400">
-                            {formatCurrency(profitStats.totalProfit)}
+                            {formatCurrency(figures.totalProfit)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                             Ventas + Reparaciones Entregadas

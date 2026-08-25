@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/client'
 import { startOfDay, format, parseISO, endOfDay, eachDayOfInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { DateRange } from 'react-day-picker'
-import { calculateProfit, calculateSalesCost } from '../lib/pos-profit'
+import { calculateProfit, calculateSalesCost, type ProfitResult } from '../lib/pos-profit'
 
 export interface PosStats {
     totalSales: number
@@ -28,14 +28,10 @@ export interface PosStats {
         readyCount: number
         activeCount: number
     }
-    profitStats: {
-        totalCost: number
-        salesProfit: number
-        repairProfit: number
-        totalProfit: number
-        profitMargin: number
-        /** No se pudo traer el costo: no hay ganancia que afirmar. */
-        costUnavailable: boolean
+    /** Facturacion sin IVA del periodo. */
+    netSales: number
+    /** Ganancia calculada sobre ambas bases: el interruptor no refetchea. */
+    profitStats: ProfitResult & {
         /** Items cuyo producto no tiene costo cargado. */
         itemsWithoutCost: number
     }
@@ -49,6 +45,8 @@ interface UsePosStatsReturn {
     error: Error | null
     refetch: () => Promise<void>
 }
+
+const EMPTY_FIGURES = { revenue: 0, salesProfit: 0, totalProfit: 0, profitMargin: 0 }
 
 export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn {
     const [stats, setStats] = useState<PosStats>({
@@ -74,12 +72,13 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             readyCount: 0,
             activeCount: 0
         },
+        netSales: 0,
         profitStats: {
             totalCost: 0,
-            salesProfit: 0,
             repairProfit: 0,
-            totalProfit: 0,
-            profitMargin: 0,
+            taxTotal: 0,
+            withTax: EMPTY_FIGURES,
+            withoutTax: EMPTY_FIGURES,
             costUnavailable: false,
             itemsWithoutCost: 0
         },
@@ -107,6 +106,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     id,
                     created_at,
                     total:total_amount,
+                    net:subtotal_amount,
                     payment_method
                 `)
                 .gte('created_at', from)
@@ -251,6 +251,12 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             // --- Processing ---
 
             const totalSales = salesData?.reduce((acc, sale) => acc + (sale.total || 0), 0) || 0
+            // Base sin IVA. Si una venta no tiene subtotal se usa su total, para
+            // no restar un IVA que no conocemos.
+            const netSales = salesData?.reduce(
+                (acc, sale) => acc + ((sale as { net?: number | null }).net ?? sale.total ?? 0),
+                0
+            ) || 0
             const totalTransactions = salesData?.length || 0
             const averageTicket = totalTransactions > 0 ? totalSales / totalTransactions : 0
 
@@ -280,6 +286,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             const costBreakdown = calculateSalesCost(itemsData)
             const profit = calculateProfit({
                 totalSales,
+                netSales,
                 totalCost: costBreakdown.totalCost,
                 repairDeliveredAmount,
                 costUnavailable
@@ -382,13 +389,9 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     readyCount: repairReadyCount,
                     activeCount: repairActiveCount
                 },
+                netSales,
                 profitStats: {
-                    totalCost: profit.totalCost,
-                    salesProfit: profit.salesProfit,
-                    repairProfit: profit.repairProfit,
-                    totalProfit: profit.totalProfit,
-                    profitMargin: profit.profitMargin,
-                    costUnavailable: profit.costUnavailable,
+                    ...profit,
                     itemsWithoutCost: costBreakdown.itemsWithoutCost
                 },
                 warnings

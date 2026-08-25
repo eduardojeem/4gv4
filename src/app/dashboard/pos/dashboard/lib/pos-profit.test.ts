@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateProfit, calculateSalesCost, type SaleItemRow } from './pos-profit'
+import { calculateProfit, calculateSalesCost, figuresForMode, type SaleItemRow } from './pos-profit'
 
 const item = (
   name: string,
@@ -66,72 +66,102 @@ describe('calculateSalesCost', () => {
 })
 
 describe('calculateProfit', () => {
-  it('resta el costo de la facturación', () => {
-    const result = calculateProfit({
-      totalSales: 1_000_000,
-      totalCost: 600_000,
-      repairDeliveredAmount: 0,
-    })
+  // Facturacion de 1.100.000 con 100.000 de IVA -> neto 1.000.000.
+  const base = {
+    totalSales: 1_100_000,
+    netSales: 1_000_000,
+    totalCost: 600_000,
+    repairDeliveredAmount: 0,
+  }
 
-    expect(result.salesProfit).toBe(400_000)
-    expect(result.profitMargin).toBe(40)
+  it('con IVA resta el costo de la facturación bruta', () => {
+    const result = calculateProfit(base)
+
+    expect(result.withTax.revenue).toBe(1_100_000)
+    expect(result.withTax.salesProfit).toBe(500_000)
   })
 
-  it('suma la recaudación de taller al total', () => {
-    const result = calculateProfit({
-      totalSales: 1_000_000,
-      totalCost: 600_000,
-      repairDeliveredAmount: 250_000,
-    })
+  it('sin IVA usa la base neta y da un margen menor', () => {
+    const result = calculateProfit(base)
 
-    expect(result.totalProfit).toBe(650_000)
+    expect(result.withoutTax.revenue).toBe(1_000_000)
+    expect(result.withoutTax.salesProfit).toBe(400_000)
+    // El IVA inflaba el margen: esa es la diferencia entre las dos vistas.
+    expect(result.withoutTax.profitMargin).toBeLessThan(result.withTax.profitMargin)
+  })
+
+  it('expone el IVA contenido en el período', () => {
+    expect(calculateProfit(base).taxTotal).toBe(100_000)
+  })
+
+  it('el IVA nunca es negativo aunque el neto venga mal', () => {
+    const result = calculateProfit({ ...base, netSales: 2_000_000 })
+    expect(result.taxTotal).toBe(0)
+  })
+
+  it('si no vino el neto usa el bruto en vez de inventar un IVA', () => {
+    const result = calculateProfit({ ...base, netSales: 0 })
+
+    expect(result.withoutTax.revenue).toBe(1_100_000)
+    expect(result.taxTotal).toBe(0)
+  })
+
+  it('suma la recaudación de taller en ambos modos', () => {
+    const result = calculateProfit({ ...base, repairDeliveredAmount: 250_000 })
+
+    expect(result.withTax.totalProfit).toBe(750_000)
+    expect(result.withoutTax.totalProfit).toBe(650_000)
   })
 
   it('devuelve la pérdida en negativo, no recortada a cero', () => {
     // Antes se recortaba: un periodo con perdida se veia igual que uno sin
     // actividad, que es justo cuando hay que avisar.
-    const result = calculateProfit({
-      totalSales: 500_000,
-      totalCost: 800_000,
-      repairDeliveredAmount: 0,
-    })
+    const result = calculateProfit({ ...base, totalSales: 500_000, netSales: 500_000, totalCost: 800_000 })
 
-    expect(result.salesProfit).toBe(-300_000)
-    expect(result.profitMargin).toBe(-60)
+    expect(result.withTax.salesProfit).toBe(-300_000)
+    expect(result.withTax.profitMargin).toBe(-60)
   })
 
   it('no inventa una ganancia cuando el costo no se pudo obtener', () => {
     // Este es el bug original: con la consulta rota el costo quedaba en 0 y la
     // ganancia salia igual a la facturacion, con margen 100%.
-    const result = calculateProfit({
-      totalSales: 1_000_000,
-      totalCost: 0,
-      repairDeliveredAmount: 0,
-      costUnavailable: true,
-    })
+    const result = calculateProfit({ ...base, totalCost: 0, costUnavailable: true })
 
     expect(result.costUnavailable).toBe(true)
-    expect(result.salesProfit).not.toBe(1_000_000)
-    expect(result.salesProfit).toBe(0)
-    expect(result.profitMargin).toBe(0)
+    expect(result.withTax.salesProfit).toBe(0)
+    expect(result.withoutTax.salesProfit).toBe(0)
+    expect(result.withTax.profitMargin).toBe(0)
   })
 
   it('sin ventas el margen es cero, no una división por cero', () => {
-    const result = calculateProfit({ totalSales: 0, totalCost: 0, repairDeliveredAmount: 0 })
+    const result = calculateProfit({ totalSales: 0, netSales: 0, totalCost: 0, repairDeliveredAmount: 0 })
 
-    expect(result.profitMargin).toBe(0)
-    expect(Number.isFinite(result.profitMargin)).toBe(true)
+    expect(result.withTax.profitMargin).toBe(0)
+    expect(Number.isFinite(result.withTax.profitMargin)).toBe(true)
   })
 
   it('un costo real de cero sí produce margen 100 %, y eso es correcto', () => {
     // Distinto de costUnavailable: aca sabemos que el costo es cero.
-    const result = calculateProfit({
-      totalSales: 100_000,
-      totalCost: 0,
-      repairDeliveredAmount: 0,
-    })
+    const result = calculateProfit({ ...base, totalCost: 0 })
 
-    expect(result.profitMargin).toBe(100)
+    expect(result.withTax.profitMargin).toBe(100)
     expect(result.costUnavailable).toBe(false)
+  })
+})
+
+describe('figuresForMode', () => {
+  const result = calculateProfit({
+    totalSales: 1_100_000,
+    netSales: 1_000_000,
+    totalCost: 600_000,
+    repairDeliveredAmount: 0,
+  })
+
+  it('con IVA es el modo por defecto del negocio', () => {
+    expect(figuresForMode(result, 'with-tax').revenue).toBe(1_100_000)
+  })
+
+  it('sin IVA devuelve la base neta', () => {
+    expect(figuresForMode(result, 'without-tax').revenue).toBe(1_000_000)
   })
 })

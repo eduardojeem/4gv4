@@ -70,25 +70,56 @@ export function calculateSalesCost(items: SaleItemRow[] | null | undefined): Sal
   }
 }
 
+/** Base de facturacion sobre la que se calcula la ganancia. */
+export type TaxMode = 'with-tax' | 'without-tax'
+
 export type ProfitInput = {
+  /** Facturacion con IVA (sales.total_amount). */
   totalSales: number
+  /** Facturacion sin IVA (sales.subtotal_amount). */
+  netSales: number
   totalCost: number
   repairDeliveredAmount: number
   /** true cuando no se pudo traer el costo: no se puede afirmar ganancia. */
   costUnavailable?: boolean
 }
 
-export type ProfitResult = {
-  totalCost: number
+export type ProfitFigures = {
+  /** Facturacion usada como base en este modo. */
+  revenue: number
   salesProfit: number
-  repairProfit: number
   totalProfit: number
   profitMargin: number
+}
+
+export type ProfitResult = {
+  totalCost: number
+  repairProfit: number
+  /** IVA contenido en la facturacion del periodo. */
+  taxTotal: number
+  /** Con IVA: es el modo por defecto. */
+  withTax: ProfitFigures
+  /** Sin IVA: misma formula sobre la base neta. */
+  withoutTax: ProfitFigures
   costUnavailable: boolean
 }
 
+function figuresFor(revenue: number, totalCost: number, repairProfit: number): ProfitFigures {
+  const salesProfit = revenue - totalCost
+  return {
+    revenue,
+    salesProfit,
+    totalProfit: salesProfit + repairProfit,
+    profitMargin: revenue > 0 ? (salesProfit / revenue) * 100 : 0,
+  }
+}
+
 /**
- * Margen bruto del período.
+ * Margen bruto del período, calculado sobre las dos bases a la vez.
+ *
+ * Se devuelven ambas para que el interruptor "con IVA / sin IVA" cambie de
+ * vista sin volver a consultar la base. Con IVA es el modo por defecto: el
+ * negocio cuenta el IVA cobrado dentro de su ganancia.
  *
  * Dos decisiones explicitas:
  *
@@ -98,33 +129,41 @@ export type ProfitResult = {
  * - Una perdida se devuelve negativa. Recortarla a cero hacia que un periodo
  *   con perdida se viera igual que uno sin actividad.
  *
- * Sigue siendo margen BRUTO: no resta gastos operativos ni separa el IVA.
+ * Sigue siendo margen BRUTO: no resta gastos operativos.
  */
 export function calculateProfit(input: ProfitInput): ProfitResult {
   const totalSales = toNumber(input.totalSales)
+  // Si no vino el neto se cae al bruto: mejor repetir la cifra que inventar
+  // un neto restando un IVA que no conocemos.
+  const netSales = toNumber(input.netSales) || totalSales
   const repairProfit = toNumber(input.repairDeliveredAmount)
   const costUnavailable = Boolean(input.costUnavailable)
   const totalCost = costUnavailable ? 0 : toNumber(input.totalCost)
+  const taxTotal = Math.max(0, totalSales - netSales)
 
   if (costUnavailable) {
+    const empty: ProfitFigures = { revenue: 0, salesProfit: 0, totalProfit: 0, profitMargin: 0 }
     return {
       totalCost: 0,
-      salesProfit: 0,
       repairProfit,
-      totalProfit: 0,
-      profitMargin: 0,
+      taxTotal,
+      withTax: empty,
+      withoutTax: empty,
       costUnavailable: true,
     }
   }
 
-  const salesProfit = totalSales - totalCost
-
   return {
     totalCost,
-    salesProfit,
     repairProfit,
-    totalProfit: salesProfit + repairProfit,
-    profitMargin: totalSales > 0 ? (salesProfit / totalSales) * 100 : 0,
+    taxTotal,
+    withTax: figuresFor(totalSales, totalCost, repairProfit),
+    withoutTax: figuresFor(netSales, totalCost, repairProfit),
     costUnavailable: false,
   }
+}
+
+/** Elige las cifras del modo activo. */
+export function figuresForMode(result: ProfitResult, mode: TaxMode): ProfitFigures {
+  return mode === 'without-tax' ? result.withoutTax : result.withTax
 }
