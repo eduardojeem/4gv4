@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import { useEffect, useRef, useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
@@ -775,20 +777,18 @@ export function CompanyInfoForm() {
             </Label>
             <Input id="ruc" value={formData.ruc || ''} onChange={(e) => handleChange('ruc', e.target.value)} placeholder="12345678-9" maxLength={50} className="h-11" />
           </div>
+          {/* El tipo de negocio se movio a Configuracion > Empresa. Se sigue
+              guardando en company_info, asi que este formulario lo conserva al
+              enviar (ver sanitizedData): sacarlo del payload lo borraria. */}
           <div className="space-y-2">
-            <Label htmlFor="businessType" className="text-sm font-medium">Tipo de negocio</Label>
-            <Select value={formData.businessType || ''} onValueChange={(v) => handleChange('businessType', v)}>
-              <SelectTrigger id="businessType" className="h-11">
-                <SelectValue placeholder="Seleccionar..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="retail">Minorista (tienda física)</SelectItem>
-                <SelectItem value="repair">Reparaciones técnicas</SelectItem>
-                <SelectItem value="wholesale">Mayorista / distribución</SelectItem>
-                <SelectItem value="service">Servicios profesionales</SelectItem>
-                <SelectItem value="mixed">Mixto (venta + servicio)</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label className="text-sm font-medium text-muted-foreground">Tipo de negocio</Label>
+            <p className="text-sm text-muted-foreground">
+              Se configura en{' '}
+              <Link href="/admin/settings" className="font-medium text-primary hover:underline">
+                Configuración › Empresa
+              </Link>
+              .
+            </p>
           </div>
         </div>
       </SectionCard>
