@@ -626,6 +626,8 @@ export function ProductModal({
       if (!open) requestClose()
     }}>
       <DialogContent
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
         showCloseButton={!isSubmitting && !isUploadingImages}
         className="max-w-[95vw] w-full lg:max-w-6xl h-[95vh] p-0 gap-0 overflow-hidden bg-white dark:bg-slate-900 border-none flex flex-col"
       >
