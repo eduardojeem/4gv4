@@ -226,7 +226,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     : paymentMethod === 'cash' ? 'Efectivo'
       : paymentMethod === 'card' ? 'Tarjeta'
         : paymentMethod === 'transfer' ? 'Transferencia'
-          : paymentMethod === 'credit' ? 'CrÃ©dito'
+          : paymentMethod === 'credit' ? 'Crédito'
             : 'Sin seleccionar'
 
   const confirmPendingSale = React.useCallback(() => {
@@ -252,7 +252,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             Cobrar venta
           </DialogTitle>
           <DialogDescription className="text-sm mt-1 text-slate-500 dark:text-slate-400">
-            VerificÃ¡ el cliente, elegÃ­ cÃ³mo cobra la venta y confirmÃ¡ el total.
+            Verificá el cliente, elegí cómo cobra la venta y confirmá el total.
           </DialogDescription>
         </DialogHeader>
 
@@ -269,7 +269,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-background text-xs font-bold">2</span>
               <span className="min-w-0">
                 <span className="block truncate font-semibold">Forma de cobro</span>
-                <span className="hidden truncate text-[10px] capitalize text-muted-foreground sm:block">{isMixedPayment ? 'Pago mixto' : (paymentMethod || 'Elegir mÃ©todo')}</span>
+                <span className="hidden truncate text-[10px] capitalize text-muted-foreground sm:block">{isMixedPayment ? 'Pago mixto' : (paymentMethod || 'Elegir método')}</span>
               </span>
             </li>
             <li className="flex min-w-0 items-center gap-2 rounded-md border bg-card px-2 py-2 sm:px-3">
@@ -745,27 +745,27 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
 
               {!isRegisterOpen ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  âš ï¸ La caja registradora debe estar abierta para confirmar la venta.
+                  ⚠️ La caja registradora debe estar abierta para confirmar la venta.
                 </p>
               ) : paymentMethod === 'cash' && cashReceived < amountDue ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  ðŸ’¡ Ingresa el efectivo recibido o haz clic en <strong>Monto Exacto</strong>.
+                  💡 Ingresa el efectivo recibido o haz clic en <strong>Monto Exacto</strong>.
                 </p>
               ) : paymentMethod === 'card' && cardNumber.length < 4 ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  ðŸ’¡ Ingresa los 4 dígitos finales del ticket de tarjeta.
+                  💡 Ingresa los 4 dígitos finales del ticket de tarjeta.
                 </p>
               ) : paymentMethod === 'transfer' && !transferReference ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  ðŸ’¡ Ingresa el número de referencia de la transferencia.
+                  💡 Ingresa el número de referencia de la transferencia.
                 </p>
               ) : paymentMethod === 'credit' && !activeCustomer ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  ðŸ’¡ Selecciona un cliente en la columna izquierda para vender a crédito.
+                  💡 Selecciona un cliente en la columna izquierda para vender a crédito.
                 </p>
               ) : paymentMethod === 'credit' && !canUseCredit ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  ðŸ’¡ Habilita la línea de crédito del cliente en el panel de pago.
+                  💡 Habilita la línea de crédito del cliente en el panel de pago.
                 </p>
               ) : null}
 
