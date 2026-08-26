@@ -807,15 +807,15 @@ export function useCashRegister() {
         }
     }, [selectedBranchId, supabase])
 
-    // Realtime subscription: sync movements added externally (e.g., credit payments)
+    // Realtime subscription: sync movements & session closures in real-time across terminals
     useEffect(() => {
         if (!config.supabase.isConfigured || !supabase || !currentSession) return
 
-        // Capture id so the subscription filter doesn't change on every movement insert
         const sessionId = currentSession.id
+        const channelName = `cash_session_${sessionId}_${Date.now()}`
 
         const channel = supabase
-            .channel('cash_movements_sync')
+            .channel(channelName)
             .on(
                 'postgres_changes',
                 {
@@ -825,10 +825,9 @@ export function useCashRegister() {
                     filter: `session_id=eq.${sessionId}`
                 },
                 (payload) => {
-                    // Only add if not already in local state (avoid duplicates from own inserts)
                     const newMovement = payload.new as CashMovement
                     setCurrentSession(prev => {
-                        if (!prev) return prev
+                        if (!prev || prev.id !== sessionId) return prev
                         const exists = prev.movements.some(m => m.id === newMovement.id)
                         if (exists) return prev
                         return {
@@ -838,12 +837,48 @@ export function useCashRegister() {
                     })
                 }
             )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'cash_movements',
+                    filter: `session_id=eq.${sessionId}`
+                },
+                (payload) => {
+                    const oldId = payload.old?.id
+                    if (!oldId) return
+                    setCurrentSession(prev => {
+                        if (!prev || prev.id !== sessionId) return prev
+                        return {
+                            ...prev,
+                            movements: prev.movements.filter(m => m.id !== oldId)
+                        }
+                    })
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'cash_closures',
+                    filter: `id=eq.${sessionId}`
+                },
+                (payload) => {
+                    const updated = payload.new as { date?: string | null; closed_at?: string | null; closing_balance?: number }
+                    if (updated && (updated.date || updated.closed_at)) {
+                        setCurrentSession(null)
+                        toast.info('El turno de caja ha sido cerrado.')
+                    }
+                }
+            )
             .subscribe()
 
         return () => {
-            supabase!.removeChannel(channel)
+            supabase?.removeChannel(channel)
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSession.id used via sessionId capture; full object excluded to avoid re-subscribing on every movement
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSession.id used via sessionId capture
     }, [selectedBranchId, supabase, currentSession?.id])
 
     return {

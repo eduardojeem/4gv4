@@ -94,74 +94,157 @@ export function ZClosureDetailsModal({ isOpen, onClose, closure }: ZClosureDetai
       <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="utf-8">
           <title>Cierre Z - ${closure.date}</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-            .section { margin-bottom: 20px; }
-            .section h3 { background: #f5f5f5; padding: 8px; margin: 0; }
-            .row { display: flex; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid #eee; }
-            .total { font-weight: bold; background: #f0f0f0; }
-            .discrepancy { color: ${closure.discrepancy === 0 ? 'green' : 'red'}; font-weight: bold; }
+            @page {
+              margin: 4mm;
+              size: auto;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Courier New', monospace;
+              margin: 0;
+              padding: 10px;
+              color: #000;
+              background: #fff;
+              font-size: 12px;
+              line-height: 1.4;
+              max-width: 320px;
+              margin: 0 auto;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 1px dashed #000;
+              padding-bottom: 8px;
+              margin-bottom: 12px;
+            }
+            .title {
+              font-size: 16px;
+              font-weight: 900;
+              letter-spacing: 1px;
+              margin: 0 0 4px 0;
+            }
+            .meta {
+              font-size: 11px;
+              color: #333;
+              margin: 2px 0;
+            }
+            .section {
+              margin-bottom: 12px;
+              border-bottom: 1px dashed #ccc;
+              padding-bottom: 8px;
+            }
+            .section-title {
+              font-size: 11px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin: 0 0 6px 0;
+              border-bottom: 1px solid #000;
+              padding-bottom: 2px;
+            }
+            .row {
+              display: flex;
+              justify-content: space-between;
+              padding: 2px 0;
+              font-size: 11.5px;
+            }
+            .total-row {
+              font-weight: 800;
+              font-size: 12.5px;
+              padding-top: 4px;
+              border-top: 1px solid #000;
+            }
+            .discrepancy {
+              font-weight: 800;
+            }
+            .signatures {
+              margin-top: 24px;
+              display: flex;
+              justify-content: space-between;
+              gap: 16px;
+              text-align: center;
+              font-size: 10px;
+            }
+            .sign-line {
+              border-top: 1px solid #000;
+              padding-top: 4px;
+              flex: 1;
+            }
+            .footer {
+              margin-top: 16px;
+              text-align: center;
+              font-size: 10px;
+              color: #555;
+            }
           </style>
         </head>
         <body>
           <div class="header">
-            <h1>CIERRE Z</h1>
-            <p>Fecha: ${new Date(closure.date).toLocaleDateString('es-PY')} - Hora: ${new Date(closure.closedAt).toLocaleTimeString('es-PY')}</p>
-            <p>Caja: ${closure.registerId} | Operador: ${closure.closedBy}</p>
+            <h1 class="title">COMPROBANTE CIERRE Z</h1>
+            <p class="meta">Fecha: ${new Date(closure.date).toLocaleDateString('es-PY')} - ${new Date(closure.closedAt).toLocaleTimeString('es-PY')}</p>
+            <p class="meta">Caja: ${closure.registerId} | Responsable: ${closure.closedBy || 'Sistema'}</p>
           </div>
           
           <div class="section">
-            <h3>RESUMEN FINANCIERO</h3>
+            <div class="section-title">RESUMEN FINANCIERO</div>
             <div class="row"><span>Saldo Inicial:</span><span>${formatCurrency(closure.openingBalance)}</span></div>
-            <div class="row"><span>Saldo Final:</span><span>${formatCurrency(closure.closingBalance)}</span></div>
-            <div class="row"><span>Saldo Esperado:</span><span>${formatCurrency(closure.expectedBalance)}</span></div>
-            <div class="row discrepancy"><span>Discrepancia:</span><span>${formatCurrency(closure.discrepancy)}</span></div>
+            <div class="row"><span>Total Ventas:</span><span>${formatCurrency(closure.totalSales)}</span></div>
+            <div class="row"><span>Ingresos Manuales:</span><span>${formatCurrency(closure.totalCashIn)}</span></div>
+            <div class="row"><span>Egresos / Retiros:</span><span>-${formatCurrency(closure.totalCashOut)}</span></div>
+            <div class="row total-row"><span>Saldo Esperado:</span><span>${formatCurrency(closure.expectedBalance)}</span></div>
+            <div class="row"><span>Saldo Declarado:</span><span>${formatCurrency(closure.closingBalance)}</span></div>
+            <div class="row discrepancy">
+              <span>Diferencia:</span>
+              <span>${closure.discrepancy > 0 ? '+' : ''}${formatCurrency(closure.discrepancy)} ${Math.abs(closure.discrepancy) < 1 ? '[CUADRADA]' : closure.discrepancy > 0 ? '[SOBRANTE]' : '[FALTANTE]'}</span>
+            </div>
           </div>
           
           <div class="section">
-            <h3>MOVIMIENTOS</h3>
-            <div class="row"><span>Ventas Totales:</span><span>${formatCurrency(closure.totalSales)}</span></div>
-            <div class="row"><span>Ingresos de Caja:</span><span>${formatCurrency(closure.totalCashIn)}</span></div>
-            <div class="row"><span>Egresos de Caja:</span><span>${formatCurrency(closure.totalCashOut)}</span></div>
-            <div class="row total"><span>Total Movimientos:</span><span>${closure.movementsCount}</span></div>
-          </div>
-          
-          <div class="section">
-            <h3>VENTAS POR MÉTODO DE PAGO</h3>
+            <div class="section-title">VENTAS POR FORMA DE PAGO</div>
             <div class="row"><span>Efectivo:</span><span>${formatCurrency(closure.salesByCash)}</span></div>
             <div class="row"><span>Tarjeta:</span><span>${formatCurrency(closure.salesByCard)}</span></div>
-            <div class="row"><span>Transferencia:</span><span>${formatCurrency(closure.salesByTransfer)}</span></div>
-            <div class="row"><span>Mixto:</span><span>${formatCurrency(closure.salesByMixed)}</span></div>
+            <div class="row"><span>Transferencia / QR:</span><span>${formatCurrency(closure.salesByTransfer)}</span></div>
+            <div class="row"><span>Mixto / Otros:</span><span>${formatCurrency(closure.salesByMixed)}</span></div>
+            <div class="row total-row"><span>Total Movimientos:</span><span>${closure.movementsCount}</span></div>
           </div>
           
           ${closure.notes ? `
           <div class="section">
-            <h3>NOTAS</h3>
-            <p>${closure.notes}</p>
+            <div class="section-title">OBSERVACIONES</div>
+            <p style="margin: 4px 0; font-size: 11px;">${closure.notes}</p>
           </div>
           ` : ''}
-          
-          <div style="margin-top: 40px; text-align: center; font-size: 12px; color: #666;">
-            Reporte generado automáticamente el ${new Date().toLocaleString('es-PY')}
+
+          <div class="signatures">
+            <div class="sign-line">Firma Cajero</div>
+            <div class="sign-line">Firma Supervisor</div>
           </div>
+          
+          <div class="footer">
+            Sistema de Gestión POS • Impreso: ${new Date().toLocaleString('es-PY')}
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
         </body>
       </html>
     `
 
     printWindow.document.write(printContent)
     printWindow.document.close()
-    printWindow.print()
   }
 
   const getDiscrepancyStatus = () => {
-    if (closure.discrepancy === 0) {
-      return { color: 'text-green-600', bg: 'bg-green-100', label: 'Sin discrepancia', icon: '✓' }
+    if (Math.abs(closure.discrepancy) < 1) {
+      return { color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800', label: 'Sin discrepancia', icon: '✓' }
     } else if (Math.abs(closure.discrepancy) <= 10000) {
-      return { color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Discrepancia menor', icon: '⚠' }
+      return { color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800', label: 'Discrepancia menor', icon: '⚠' }
     } else {
-      return { color: 'text-red-600', bg: 'bg-red-100', label: 'Discrepancia significativa', icon: '⚠' }
+      return { color: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-100 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800', label: 'Discrepancia significativa', icon: '⚠' }
     }
   }
 
