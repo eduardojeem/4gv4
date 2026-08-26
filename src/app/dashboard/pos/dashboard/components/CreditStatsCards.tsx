@@ -10,7 +10,7 @@ interface CreditStatsCardsProps {
 export function CreditStatsCards({ stats }: CreditStatsCardsProps) {
     const { creditStats } = stats
 
-    if (!creditStats || creditStats.count === 0) {
+    if (!creditStats) {
         return null
     }
 
@@ -75,21 +75,27 @@ export function CreditStatsCards({ stats }: CreditStatsCardsProps) {
                 </Card>
             </div>
 
-            {stats.allCredits && stats.allCredits.length > 0 && (
-                <Card className="border border-border/60 shadow-sm overflow-hidden bg-card mt-6">
-                    <div className="w-full overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+            <Card className="border border-border/60 shadow-sm overflow-hidden bg-card mt-6">
+                <div className="w-full overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                            <tr>
+                                <th className="px-4 py-3 font-medium">Fecha</th>
+                                <th className="px-4 py-3 font-medium">Cliente</th>
+                                <th className="px-4 py-3 font-medium">Referencia (Venta)</th>
+                                <th className="px-4 py-3 font-medium text-right">Monto Original</th>
+                                <th className="px-4 py-3 font-medium">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                            {(!stats.allCredits || stats.allCredits.length === 0) ? (
                                 <tr>
-                                    <th className="px-4 py-3 font-medium">Fecha</th>
-                                    <th className="px-4 py-3 font-medium">Cliente</th>
-                                    <th className="px-4 py-3 font-medium">Referencia (Venta)</th>
-                                    <th className="px-4 py-3 font-medium text-right">Monto Original</th>
-                                    <th className="px-4 py-3 font-medium">Estado</th>
+                                    <td colSpan={5} className="px-4 py-8 text-center text-slate-500 font-medium">
+                                        No hay créditos emitidos en este periodo
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                                {stats.allCredits.map((credit) => (
+                            ) : (
+                                stats.allCredits.map((credit) => (
                                     <tr key={credit.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                                         <td className="px-4 py-3 text-slate-500">
                                             {new Date(credit.created_at).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -110,12 +116,12 @@ export function CreditStatsCards({ stats }: CreditStatsCardsProps) {
                                             {credit.status === 'cancelled' && <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-slate-100 text-slate-800 border-transparent dark:bg-slate-800 dark:text-slate-300">Anulado</span>}
                                         </td>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </Card>
-            )}
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
         </div>
     )
 }

@@ -117,8 +117,8 @@ export function DetailedSalesTable({ stats }: DetailedSalesTableProps) {
 
             <SaleDetailsModal 
                 saleId={selectedSaleId}
-                open={!!selectedSaleId}
-                onOpenChange={(open) => !open && setSelectedSaleId(null)}
+                isOpen={!!selectedSaleId}
+                onClose={() => setSelectedSaleId(null)}
             />
         </div>
     )
