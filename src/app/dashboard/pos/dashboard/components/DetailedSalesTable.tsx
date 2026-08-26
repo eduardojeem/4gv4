@@ -15,7 +15,7 @@ interface DetailedSalesTableProps {
 }
 
 export function DetailedSalesTable({ stats }: DetailedSalesTableProps) {
-    const { allSales } = stats
+    const allSales = stats.allSales || []
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null)
 
     return (
