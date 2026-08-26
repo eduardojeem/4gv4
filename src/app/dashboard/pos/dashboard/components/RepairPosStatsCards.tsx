@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import Link from 'next/link'
-import { Wrench, PackageCheck, CheckCircle2, ArrowRight, DollarSign, Calendar, TrendingUp, Search, ExternalLink } from 'lucide-react'
+import { Wrench, PackageCheck, CheckCircle2, ArrowRight, DollarSign, Calendar, TrendingUp, Search, ExternalLink, Banknote } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import type { PosStats } from "../hooks/usePosStats"
 import { format, parseISO } from 'date-fns'
@@ -209,6 +209,75 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                     </CardContent>
                 </Card>
             )}
+
+            {/* Nueva tabla de Créditos por Reparaciones */}
+            <Card className="mt-6 border-slate-200 dark:border-slate-800">
+                <CardHeader className="py-4 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-900/50 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Banknote className="h-4 w-4 text-rose-500" />
+                        Créditos por Reparaciones (Deuda Activa)
+                    </CardTitle>
+                    <div className="text-right">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total Pendiente</p>
+                        <p className="text-base font-bold text-rose-600 dark:text-rose-400">
+                            {formatCurrency(stats.repairCreditStats?.pendingAmount || 0)}
+                        </p>
+                    </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <ScrollArea className="max-h-[300px]">
+                        <div className="min-w-[800px]">
+                            <table className="w-full text-sm text-left">
+                                <thead className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+                                    <tr>
+                                        <th className="px-4 py-3 font-medium">Fecha</th>
+                                        <th className="px-4 py-3 font-medium">Cliente</th>
+                                        <th className="px-4 py-3 font-medium">Referencia</th>
+                                        <th className="px-4 py-3 font-medium text-right">Deuda Original</th>
+                                        <th className="px-4 py-3 font-medium text-right">Saldo Pendiente</th>
+                                        <th className="px-4 py-3 font-medium">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                                    {(!stats.allRepairCredits || stats.allRepairCredits.length === 0) ? (
+                                        <tr>
+                                            <td colSpan={6} className="px-4 py-8 text-center text-slate-500 font-medium">
+                                                No hay créditos por reparaciones en este periodo
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        stats.allRepairCredits.map((credit: any) => (
+                                            <tr key={credit.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                                <td className="px-4 py-3 text-slate-500">
+                                                    {new Date(credit.created_at).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-600 dark:text-slate-300 font-medium">
+                                                    {credit.customer?.name || 'Desconocido'}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-500">
+                                                    {credit.label || 'Reparación'}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-400">
+                                                    {formatCurrency(Number(credit.totalDebt) || 0)}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-semibold text-rose-600 dark:text-rose-400">
+                                                    {formatCurrency(Number(credit.pendingDebt) || 0)}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {credit.status === 'active' && <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-blue-100 text-blue-800 border-transparent dark:bg-blue-900 dark:text-blue-200">Activo</span>}
+                                                    {credit.status === 'paid' && <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-800 border-transparent dark:bg-emerald-900 dark:text-emerald-200">Pagado</span>}
+                                                    {credit.status === 'defaulted' && <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-rose-100 text-rose-800 border-transparent dark:bg-rose-900 dark:text-rose-200">En Mora</span>}
+                                                    {credit.status === 'cancelled' && <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-slate-100 text-slate-800 border-transparent dark:bg-slate-800 dark:text-slate-300">Anulado</span>}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </ScrollArea>
+                </CardContent>
+            </Card>
 
             {/* Modal de Detalle */}
             <Dialog open={!!selectedRepair} onOpenChange={(open) => !open && setSelectedRepair(null)}>

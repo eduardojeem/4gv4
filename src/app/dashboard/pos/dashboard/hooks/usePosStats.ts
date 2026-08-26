@@ -15,11 +15,17 @@ export interface PosStats {
     topProducts: Array<{ name: string; sales: number; revenue: number }>
     recentSales: any[]
     allSales: any[]
-    allCredits: any[]
+    allCredits: any[] // Sales credits
+    allRepairCredits: any[] // Repair credits
     creditStats: {
         totalAmount: number
         count: number
         averageTicket: number
+        pendingAmount: number
+    }
+    repairCreditStats: {
+        totalAmount: number
+        count: number
         pendingAmount: number
     }
     repairStats: {
@@ -72,10 +78,16 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
         recentSales: [],
         allSales: [],
         allCredits: [],
+        allRepairCredits: [],
         creditStats: {
             totalAmount: 0,
             count: 0,
             averageTicket: 0,
+            pendingAmount: 0
+        },
+        repairCreditStats: {
+            totalAmount: 0,
+            count: 0,
             pendingAmount: 0
         },
         repairStats: {
@@ -149,6 +161,8 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     status,
                     customer:customers!customer_id(name),
                     sale_id,
+                    origin_type,
+                    label,
                     installments:credit_installments(amount, amount_paid)
                 `)
                 .gte('created_at', from)
@@ -333,10 +347,19 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 return { ...c, totalDebt, pendingDebt, sale }
             })
 
-            const creditTotalAmount = credits.reduce((sum, c) => sum + (c.totalDebt || 0), 0)
-            const creditCount = credits.length
+            const saleCredits = credits.filter(c => c.origin_type === 'sale' || !c.origin_type)
+            const repairCredits = credits.filter(c => c.origin_type === 'repair')
+
+            const creditTotalAmount = saleCredits.reduce((sum, c) => sum + (c.totalDebt || 0), 0)
+            const creditCount = saleCredits.length
             const creditAvgTicket = creditCount > 0 ? creditTotalAmount / creditCount : 0
-            const creditPendingAmount = credits
+            const creditPendingAmount = saleCredits
+                .filter(c => c.status === 'active' || c.status === 'defaulted')
+                .reduce((sum, c) => sum + (c.pendingDebt || 0), 0)
+
+            const repairCreditTotalAmount = repairCredits.reduce((sum, c) => sum + (c.totalDebt || 0), 0)
+            const repairCreditCount = repairCredits.length
+            const repairCreditPendingAmount = repairCredits
                 .filter(c => c.status === 'active' || c.status === 'defaulted')
                 .reduce((sum, c) => sum + (c.pendingDebt || 0), 0)
 
@@ -483,12 +506,18 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 topProducts,
                 recentSales,
                 allSales,
-                allCredits: credits,
+                allCredits: saleCredits,
+                allRepairCredits: repairCredits,
                 creditStats: {
                     totalAmount: creditTotalAmount,
                     count: creditCount,
                     averageTicket: creditAvgTicket,
                     pendingAmount: creditPendingAmount
+                },
+                repairCreditStats: {
+                    totalAmount: repairCreditTotalAmount,
+                    count: repairCreditCount,
+                    pendingAmount: repairCreditPendingAmount
                 },
                 repairStats: {
                     totalAmount: repairTotalAmount,
