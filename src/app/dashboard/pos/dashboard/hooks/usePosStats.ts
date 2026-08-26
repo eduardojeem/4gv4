@@ -580,7 +580,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
         } finally {
             setLoading(false)
         }
-    }, [dateRange, supabase])
+    }, [dateRange, supabase, organizationId])
 
     useEffect(() => {
         fetchStats()
