@@ -148,7 +148,8 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     created_at,
                     status,
                     customer:customers!customer_id(name),
-                    sale:sales!sale_id(code, total_amount)
+                    sale:sales!sale_id(code, total_amount),
+                    installments:credit_installments(amount, amount_paid)
                 `)
                 .gte('created_at', from)
                 .lte('created_at', to)
@@ -304,13 +305,31 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             const totalTransactions = salesData?.length || 0
             const averageTicket = totalTransactions > 0 ? totalSales / totalTransactions : 0
 
-            const credits = creditData || []
-            const creditTotalAmount = credits.reduce((sum, c) => sum + (c.principal || 0), 0)
+            // Process Credits Stats
+            // Para créditos con cuotas (installments), la deuda total es la suma de las cuotas (que incluye interés)
+            // y la deuda pendiente es la suma de las cuotas menos lo que ya se pagó.
+            const credits = (creditData || []).map(c => {
+                const hasInstallments = c.installments && c.installments.length > 0
+                let totalDebt = c.principal || 0
+                let pendingDebt = c.principal || 0
+
+                if (hasInstallments) {
+                    totalDebt = c.installments.reduce((sum: number, inst: any) => sum + (Number(inst.amount) || 0), 0)
+                    const totalPaid = c.installments.reduce((sum: number, inst: any) => sum + (Number(inst.amount_paid) || 0), 0)
+                    pendingDebt = totalDebt - totalPaid
+                } else if (c.status === 'paid' || c.status === 'cancelled') {
+                    pendingDebt = 0
+                }
+
+                return { ...c, totalDebt, pendingDebt }
+            })
+
+            const creditTotalAmount = credits.reduce((sum, c) => sum + (c.totalDebt || 0), 0)
             const creditCount = credits.length
             const creditAvgTicket = creditCount > 0 ? creditTotalAmount / creditCount : 0
             const creditPendingAmount = credits
                 .filter(c => c.status === 'active' || c.status === 'defaulted')
-                .reduce((sum, c) => sum + (c.principal || 0), 0)
+                .reduce((sum, c) => sum + (c.pendingDebt || 0), 0)
 
             // Process Repairs Stats
             type RepairRow = { id: string; ticket_number?: string | null; device_brand?: string | null; device_model?: string | null; final_cost?: number | null; estimated_cost?: number | null; paid_amount?: number | null; parts_cost?: number | null; labor_cost?: number | null; payment_status?: string | null; status?: string; delivered_at?: string | null; created_at?: string | null }

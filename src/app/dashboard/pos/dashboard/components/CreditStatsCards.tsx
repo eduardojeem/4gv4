@@ -83,14 +83,15 @@ export function CreditStatsCards({ stats }: CreditStatsCardsProps) {
                                 <th className="px-4 py-3 font-medium">Fecha</th>
                                 <th className="px-4 py-3 font-medium">Cliente</th>
                                 <th className="px-4 py-3 font-medium">Referencia (Venta)</th>
-                                <th className="px-4 py-3 font-medium text-right">Monto Original</th>
+                                <th className="px-4 py-3 font-medium text-right">Deuda Original</th>
+                                <th className="px-4 py-3 font-medium text-right">Saldo Pendiente</th>
                                 <th className="px-4 py-3 font-medium">Estado</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                             {(!stats.allCredits || stats.allCredits.length === 0) ? (
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-8 text-center text-slate-500 font-medium">
+                                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500 font-medium">
                                         No hay créditos emitidos en este periodo
                                     </td>
                                 </tr>
@@ -106,8 +107,11 @@ export function CreditStatsCards({ stats }: CreditStatsCardsProps) {
                                         <td className="px-4 py-3 text-slate-500">
                                             {credit.sale?.code || 'S/N'}
                                         </td>
-                                        <td className="px-4 py-3 text-right font-semibold text-indigo-600 dark:text-indigo-400">
-                                            {formatCurrency(Number(credit.principal) || 0)}
+                                        <td className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-400">
+                                            {formatCurrency(Number(credit.totalDebt) || 0)}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-semibold text-rose-600 dark:text-rose-400">
+                                            {formatCurrency(Number(credit.pendingDebt) || 0)}
                                         </td>
                                         <td className="px-4 py-3">
                                             {credit.status === 'active' && <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-blue-100 text-blue-800 border-transparent dark:bg-blue-900 dark:text-blue-200">Activo</span>}
