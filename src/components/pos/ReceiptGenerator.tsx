@@ -91,7 +91,8 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       : config.company.email,
     ruc: settings.companyRuc || config.company.ruc,
     website: settings.companyName ? `www.${settings.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'www.miempresa.com',
-    logoUrl: logoUrl
+    logoUrl: logoUrl,
+    slogan: websiteSettings?.company_info?.slogan || 'Servicio Técnico Especializado'
   }
 
   const getPaymentMethodLabel = (method: string) => {
@@ -111,25 +112,27 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
   return (
     <div id="receipt-content" className="max-w-md mx-auto bg-card text-foreground rounded-lg shadow-lg border border-border print:max-w-full print:shadow-none print:border-none print:rounded-none print:mx-0 print:bg-transparent print:text-black">
       {/* Encabezado mejorado con logo */}
-      <div className="text-center border-b-2 border-dashed border-border pb-4 mb-4 bg-gradient-to-b from-primary/5 to-transparent pt-4">
+      <div className="text-center border-b-2 border-dashed border-border pb-4 mb-4 bg-gradient-to-b from-primary/5 to-transparent pt-4 print:bg-transparent print:border-black">
         {/* Initials placeholder */}
         <div className="flex justify-center mb-2">
           {logoUrl ? (
             <img src={logoUrl} alt="Logo" className="w-16 h-16 object-contain" />
           ) : (
-            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-bold text-2xl">
+            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-bold text-2xl print:border print:border-black print:bg-transparent print:text-black">
               {companyInfo.name ? companyInfo.name.substring(0, 2).toUpperCase() : 'Mi'}
             </div>
           )}
         </div>
         <h1 className="text-2xl font-bold uppercase tracking-tight">{companyInfo.name}</h1>
-        <p className="text-sm font-medium text-primary">Reparación y Service</p>
-        {companyInfo.ruc && (
-          <p className="text-xs font-semibold text-muted-foreground mt-1">RUC: {companyInfo.ruc}</p>
+        {companyInfo.slogan && (
+          <p className="text-sm font-medium text-primary print:text-black">{companyInfo.slogan}</p>
         )}
-        <p className="text-xs text-muted-foreground">{companyInfo.address}</p>
-        <p className="text-xs text-muted-foreground">Tel: {companyInfo.phone}</p>
-        <p className="text-xs text-muted-foreground">Email: {companyInfo.email}</p>
+        {companyInfo.ruc && (
+          <p className="text-xs font-semibold text-muted-foreground mt-1 print:text-black">RUC: {companyInfo.ruc}</p>
+        )}
+        <p className="text-xs text-muted-foreground print:text-black">{companyInfo.address}</p>
+        <p className="text-xs text-muted-foreground print:text-black">Tel: {companyInfo.phone}</p>
+        <p className="text-xs text-muted-foreground print:text-black">Email: {companyInfo.email}</p>
       </div>
 
       {/* Número de ticket destacado */}
