@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { memo } from 'react'
 import Link from 'next/link'
@@ -322,7 +322,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               <div className="flex items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 dark:border-emerald-800 dark:bg-emerald-950/40">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <div>
-                  <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300">Â¡Venta completada con Ã©xito!</div>
+                  <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300">¡Venta completada con éxito!</div>
                   <div className="text-[11px] text-emerald-700 dark:text-emerald-400">Generando comprobante de venta...</div>
                 </div>
               </div>
@@ -333,7 +333,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <div className="space-y-0.5 min-w-0">
                   <div className="text-xs font-bold text-rose-800 dark:text-rose-300">No se pudo completar la venta</div>
                   <div className="text-xs text-rose-700 dark:text-rose-300 font-medium">
-                    {paymentError || 'OcurriÃ³ un error al procesar el cobro. Verifique la conexiÃ³n y los datos ingresados.'}
+                    {paymentError || 'Ocurrió un error al procesar el cobro. Verifique la conexión y los datos ingresados.'}
                   </div>
                 </div>
               </div>
@@ -350,7 +350,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               </span>
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">1. Cliente</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">IdentificÃ¡ al comprador y vinculÃ¡ reparaciones si corresponde.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Identificá al comprador y vinculá reparaciones si corresponde.</p>
               </div>
             </div>
             <CustomerSelection
@@ -390,14 +390,14 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                       
                       {selectedRepairIds.length === 0 && activeRepairs.length > 0 && (
                          <div className="text-xs text-muted-foreground mb-2 px-1">
-                            Seleccione las reparaciones que desea vincular a esta venta.
+                            Seleccioná las reparaciones que deseás vincular a esta venta.
                          </div>
                       )}
 
                       {activeRepairs.length === 0 ? (
-                         <div className="text-sm text-muted-foreground bg-muted/30 p-3 rounded-md text-center border border-dashed">
+                          <div className="text-sm text-muted-foreground bg-muted/30 p-3 rounded-md text-center border border-dashed">
                             No hay reparaciones pendientes para este cliente.
-                         </div>
+                          </div>
                       ) : (
                          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                              {activeRepairs.map((repair) => {
@@ -470,7 +470,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                         <div className="px-3 pb-3 pt-0 animate-in slide-in-from-top-1 duration-200">
                                            {(repair.paid_amount || 0) > 0 && (
                                               <div className="mt-1 mb-2 text-[11px] text-muted-foreground">
-                                                 Costo total {formatCurrency(repair.final_cost || repair.estimated_cost || 0)} Â· ya pagado {formatCurrency(repair.paid_amount || 0)}
+                                                 Costo total {formatCurrency(repair.final_cost || repair.estimated_cost || 0)} — ya pagado {formatCurrency(repair.paid_amount || 0)}
                                               </div>
                                            )}
                                            {repair.notes && (
