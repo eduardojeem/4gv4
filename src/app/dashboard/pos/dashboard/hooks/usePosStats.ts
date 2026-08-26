@@ -27,6 +27,10 @@ export interface PosStats {
         readyAmount: number
         readyCount: number
         activeCount: number
+        deliveredPartsCost: number
+        deliveredLaborCost: number
+        netProfit: number
+        deliveredRepairs: any[]
     }
     /** Facturacion sin IVA del periodo. */
     netSales: number
@@ -70,7 +74,11 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             deliveredCount: 0,
             readyAmount: 0,
             readyCount: 0,
-            activeCount: 0
+            activeCount: 0,
+            deliveredPartsCost: 0,
+            deliveredLaborCost: 0,
+            netProfit: 0,
+            deliveredRepairs: []
         },
         netSales: 0,
         profitStats: {
@@ -165,12 +173,18 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 .from('repairs')
                 .select(`
                     id,
+                    ticket_number,
+                    device_brand,
+                    device_model,
                     created_at,
                     delivered_at,
                     status,
                     final_cost,
                     estimated_cost,
-                    paid_amount
+                    paid_amount,
+                    parts_cost,
+                    labor_cost,
+                    payment_status
                 `)
                 .gte('delivered_at', from)
                 .lte('delivered_at', to)
@@ -269,13 +283,17 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 .reduce((sum, c) => sum + (c.principal || 0), 0)
 
             // Process Repairs Stats
-            type RepairRow = { id: string; final_cost?: number | null; estimated_cost?: number | null; paid_amount?: number | null; status?: string; delivered_at?: string | null }
+            type RepairRow = { id: string; ticket_number?: string | null; device_brand?: string | null; device_model?: string | null; final_cost?: number | null; estimated_cost?: number | null; paid_amount?: number | null; parts_cost?: number | null; labor_cost?: number | null; payment_status?: string | null; status?: string; delivered_at?: string | null; created_at?: string | null }
             const repairsCreated = (repairsCreatedData || []) as unknown as RepairRow[]
             const repairTotalAmount = repairsCreated.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
 
             const repairsDelivered = (repairsDeliveredData || []) as unknown as RepairRow[]
             const repairDeliveredAmount = repairsDelivered.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? r.paid_amount ?? 0) || 0), 0)
             const repairDeliveredCount = repairsDelivered.length
+            
+            const repairDeliveredPartsCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.parts_cost) || 0), 0)
+            const repairDeliveredLaborCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.labor_cost) || 0), 0)
+            const repairNetProfit = repairDeliveredAmount - repairDeliveredPartsCost - repairDeliveredLaborCost
 
             const repairsReady = (repairsReadyData || []) as unknown as RepairRow[]
             const repairReadyAmount = repairsReady.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
@@ -387,7 +405,11 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     deliveredCount: repairDeliveredCount,
                     readyAmount: repairReadyAmount,
                     readyCount: repairReadyCount,
-                    activeCount: repairActiveCount
+                    activeCount: repairActiveCount,
+                    deliveredPartsCost: repairDeliveredPartsCost,
+                    deliveredLaborCost: repairDeliveredLaborCost,
+                    netProfit: repairNetProfit,
+                    deliveredRepairs: repairsDelivered
                 },
                 netSales,
                 profitStats: {
