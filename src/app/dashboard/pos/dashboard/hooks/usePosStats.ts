@@ -30,7 +30,13 @@ export interface PosStats {
         deliveredPartsCost: number
         deliveredLaborCost: number
         netProfit: number
+        refundsAmount: number
         deliveredRepairs: any[]
+    }
+    refunds: {
+        totalAmount: number
+        salesAmount: number
+        repairsAmount: number
     }
     /** Facturacion sin IVA del periodo. */
     netSales: number
@@ -78,7 +84,13 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             deliveredPartsCost: 0,
             deliveredLaborCost: 0,
             netProfit: 0,
+            refundsAmount: 0,
             deliveredRepairs: []
+        },
+        refunds: {
+            totalAmount: 0,
+            salesAmount: 0,
+            repairsAmount: 0
         },
         netSales: 0,
         profitStats: {
@@ -206,6 +218,14 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 .select('id', { count: 'exact', head: true })
                 .in('status', ['recibido', 'diagnostico', 'reparacion', 'en_reparacion', 'pausado'])
 
+            // 8. Fetch Refunds
+            const afterSalesPromise = supabase
+                .from('after_sales_cases')
+                .select('id, source_type, refund_amount, status, request_type')
+                .not('refund_amount', 'is', null)
+                .gte('resolved_at', from)
+                .lte('resolved_at', to)
+
             // Execute parallel primary queries
             const [
                 { data: salesData, error: salesError },
@@ -214,7 +234,8 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 { data: repairsCreatedData, error: repairsCreatedError },
                 { data: repairsDeliveredData, error: repairsDeliveredError },
                 { data: repairsReadyData },
-                { count: repairsActiveCount }
+                { count: repairsActiveCount },
+                { data: afterSalesData, error: afterSalesError }
             ] = await Promise.all([
                 salesPromise,
                 creditsPromise,
@@ -222,7 +243,8 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 repairsCreatedPromise,
                 repairsDeliveredPromise,
                 repairsReadyPromise,
-                repairsActivePromise
+                repairsActivePromise,
+                afterSalesPromise
             ])
 
             if (salesError) throw salesError
@@ -293,7 +315,19 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             
             const repairDeliveredPartsCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.parts_cost) || 0), 0)
             const repairDeliveredLaborCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.labor_cost) || 0), 0)
-            const repairNetProfit = repairDeliveredAmount - repairDeliveredPartsCost
+            
+            // Procesar reembolsos resueltos
+            const afterSales = afterSalesData || []
+            const repairRefundsAmount = afterSales
+                .filter(c => c.source_type === 'repair' && (c.status === 'resolved' || c.status === 'approved'))
+                .reduce((sum, c) => sum + (Number(c.refund_amount) || 0), 0)
+            const saleRefundsAmount = afterSales
+                .filter(c => (c.source_type === 'sale' || c.source_type === 'product' || c.source_type === 'sale_item') && (c.status === 'resolved' || c.status === 'approved'))
+                .reduce((sum, c) => sum + (Number(c.refund_amount) || 0), 0)
+            const totalRefundsAmount = repairRefundsAmount + saleRefundsAmount
+
+            // Ganancia neta de taller descuenta costo de repuestos y devoluciones
+            const repairNetProfit = repairDeliveredAmount - repairDeliveredPartsCost - repairRefundsAmount
 
             const repairsReady = (repairsReadyData || []) as unknown as RepairRow[]
             const repairReadyAmount = repairsReady.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
@@ -303,10 +337,10 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             // Costo y ganancia: en pos-profit.ts, con tests.
             const costBreakdown = calculateSalesCost(itemsData)
             const profit = calculateProfit({
-                totalSales,
-                netSales,
+                totalSales: totalSales - saleRefundsAmount,
+                netSales: netSales - saleRefundsAmount,
                 totalCost: costBreakdown.totalCost,
-                repairDeliveredAmount,
+                repairDeliveredAmount: repairNetProfit,
                 costUnavailable
             })
 
@@ -409,7 +443,13 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     deliveredPartsCost: repairDeliveredPartsCost,
                     deliveredLaborCost: repairDeliveredLaborCost,
                     netProfit: repairNetProfit,
+                    refundsAmount: repairRefundsAmount,
                     deliveredRepairs: repairsDelivered
+                },
+                refunds: {
+                    totalAmount: totalRefundsAmount,
+                    salesAmount: saleRefundsAmount,
+                    repairsAmount: repairRefundsAmount
                 },
                 netSales,
                 profitStats: {

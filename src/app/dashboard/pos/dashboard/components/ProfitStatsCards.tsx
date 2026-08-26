@@ -103,7 +103,8 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                             {formatCurrency(figures.salesProfit)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {withoutTax ? 'Ventas sin IVA' : 'Ventas'} ({formatCurrency(figures.revenue)}) − Costos ({formatCurrency(profitStats.totalCost)})
+                            {withoutTax ? 'Ventas sin IVA' : 'Ventas'} ({formatCurrency(figures.revenue)}) - Costos ({formatCurrency(profitStats.totalCost)})
+                            {stats.refunds?.salesAmount > 0 && ` - Devoluciones (${formatCurrency(stats.refunds.salesAmount)})`}
                             {profitStats.itemsWithoutCost > 0 && (
                                 <span className="block text-amber-700 dark:text-amber-400 mt-0.5">
                                     {profitStats.itemsWithoutCost} ítem(s) sin costo cargado
@@ -122,13 +123,13 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                             </div>
                         </div>
                         <p className="text-[11px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">
-                            Margen de Ganancia
+                            Margen (Solo Ventas)
                         </p>
                         <p className="text-2xl font-bold tracking-tight tabular-nums text-teal-700 dark:text-teal-400">
-                            {figures.profitMargin.toFixed(1)}%
+                            {figures.profitMargin.toFixed(2)}%
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            Porcentaje de rentabilidad s/ ventas
+                            Rentabilidad sobre las ventas
                         </p>
                     </CardContent>
                 </Card>

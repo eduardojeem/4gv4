@@ -99,6 +99,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                             Facturación - Repuestos ({formatCurrency(repairStats.deliveredPartsCost)})
+                            {repairStats.refundsAmount > 0 && ` - Devoluciones (${formatCurrency(repairStats.refundsAmount)})`}
                         </p>
                     </CardContent>
                 </Card>
