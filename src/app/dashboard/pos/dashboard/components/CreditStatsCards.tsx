@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card"
-import { CreditCard, Wallet, AlertCircle } from 'lucide-react'
+import { Progress } from "@/components/ui/progress"
+import { CreditCard, Wallet, AlertCircle, Receipt, User, Clock } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { PosStats } from "../hooks/usePosStats"
 

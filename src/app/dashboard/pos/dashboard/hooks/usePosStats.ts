@@ -249,7 +249,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 .from('repairs')
                 .select('id', { count: 'exact', head: true })
                 .eq('organization_id', organizationId)
-                .in('status', ['recibido', 'diagnostico', 'reparacion', 'en_reparacion', 'pausado'])
+                .in('status', ['recibido', 'diagnostico', 'reparacion', 'pausado'])
 
             // 8. Fetch Refunds
             const afterSalesPromise = supabase

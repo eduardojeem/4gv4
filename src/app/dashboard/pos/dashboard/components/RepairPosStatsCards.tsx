@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
+import { Progress } from "@/components/ui/progress"
 import Link from 'next/link'
-import { Wrench, PackageCheck, CheckCircle2, ArrowRight, DollarSign, Calendar, TrendingUp, Search, ExternalLink, Banknote } from 'lucide-react'
+import { Wrench, PackageCheck, CheckCircle2, ArrowRight, DollarSign, Calendar, TrendingUp, Search, ExternalLink, Banknote, User, Clock } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import type { PosStats } from "../hooks/usePosStats"
 import { format, parseISO } from 'date-fns'
