@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import type { CashSession, CashMovementAdmin, AdminAction, SessionStatus } from '../types'
+import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 interface SessionDetailSheetProps {
   session: CashSession | null
@@ -343,7 +344,7 @@ export function SessionDetailSheet({ session, open, onClose, onAction, fetchMove
                             <span className="text-xs font-medium">{config.label}</span>
                             {movement.payment_method && (
                               <Badge variant="outline" className="text-[9px] h-4">
-                                {movement.payment_method}
+                                {paymentMethodLabel(movement.payment_method)}
                               </Badge>
                             )}
                           </div>

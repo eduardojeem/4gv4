@@ -97,6 +97,7 @@ import { formatCurrency } from '@/lib/currency'
 import { useCustomerPurchases } from '@/hooks/useCustomerData'
 import { useCustomerRepairs } from '@/hooks/useCustomerRepairs'
 import { TimelineView } from './TimelineView'
+import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 interface CustomerHistoryProps {
   customer: Customer
@@ -391,7 +392,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
         type: 'purchase',
         date: purchase.date,
         title: `Compra #${purchase.invoiceNumber}`,
-        description: `${purchase.items.length} artículo${purchase.items.length > 1 ? 's' : ''} - ${purchase.paymentMethod}`,
+        description: `${purchase.items.length} artículo${purchase.items.length > 1 ? 's' : ''} - ${paymentMethodLabel(purchase.paymentMethod)}`,
         amount: purchase.total,
         status: purchase.status,
         details: purchase
@@ -967,7 +968,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm text-gray-600 dark:text-gray-400">{purchase.paymentMethod}</span>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">{paymentMethodLabel(purchase.paymentMethod)}</span>
                           </TableCell>
                           <TableCell>
                             <span className="font-semibold">{formatCurrency(purchase.total)}</span>
@@ -1074,7 +1075,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">Método de Pago</label>
-                  <p className="text-gray-900">{selectedPurchase.paymentMethod}</p>
+                  <p className="text-gray-900">{paymentMethodLabel(selectedPurchase.paymentMethod)}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">Estado</label>

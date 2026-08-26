@@ -37,6 +37,8 @@ const CUSTOMER_SEGMENT: Record<string, string> = {
   nuevo: 'Nuevo',
   high_value: 'Alto valor',
   low_value: 'Bajo valor',
+  returning: 'Recurrente',
+  individual: 'Particular',
 }
 
 export function customerSegmentLabel(value: string | null | undefined) {
