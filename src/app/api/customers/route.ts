@@ -190,7 +190,7 @@ export const POST = withTenantAuth({ permission: ['crm.customers.manage', 'pos.s
     const validation = customerSchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const supabase = await createClient()
@@ -220,7 +220,7 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
     const validation = customerUpdateSchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const { id, ...updates } = validation.data

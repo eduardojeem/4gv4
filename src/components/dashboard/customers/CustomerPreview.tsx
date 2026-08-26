@@ -28,6 +28,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Customer } from '@/hooks/use-customer-state'
 import { formatCurrency } from '@/lib/currency'
+import { customerStatusLabel, customerTypeLabel } from '@/lib/i18n/labels'
 
 interface CustomerPreviewProps {
   customer: Customer
@@ -106,10 +107,10 @@ export function CustomerPreview({
               
               <div className="flex items-center gap-2 mb-2">
                 <Badge className={cn("text-xs", getStatusColor(customer.status))}>
-                  {customer.status}
+                  {customerStatusLabel(customer.status)}
                 </Badge>
                 <Badge className={cn("text-xs", getCustomerTypeColor(customer.customer_type))}>
-                  {customer.customer_type}
+                  {customerTypeLabel(customer.customer_type)}
                 </Badge>
               </div>
               

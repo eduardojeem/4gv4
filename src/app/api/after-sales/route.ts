@@ -170,7 +170,7 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
 
     if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: validation.error.issues[0]?.message || 'Validation failed', details: validation.error.issues },
+        { success: false, error: validation.error.issues[0]?.message || 'Error de validación', details: validation.error.issues },
         { status: 400 }
       )
     }

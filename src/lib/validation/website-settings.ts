@@ -505,7 +505,7 @@ export function validateSetting(key: string, value: unknown) {
     }
     return {
       success: false,
-      error: 'Validation failed'
+      error: 'Error de validación'
     }
   }
 }

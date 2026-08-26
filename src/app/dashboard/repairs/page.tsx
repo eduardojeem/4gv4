@@ -61,6 +61,7 @@ import { resolveRepairHelpAction } from './repair-help-action-resolver'
 
 // Types
 import { Repair } from '@/types/repairs'
+import { repairStatusLabel } from '@/lib/i18n/labels'
 
 // Code splitting: Cargar componentes pesados bajo demanda
 // Mejora el tiempo de carga inicial y reduce el bundle size
@@ -607,7 +608,7 @@ function RepairsPageContent() {
       if (customerName.includes(q) || device.includes(q) || id.includes(q) || ticket.includes(q)) {
         results.push({
           title: `${repair.customer.name} • ${repair.device}`,
-          subtitle: `${repair.ticketNumber || repair.id.slice(0, 8)} • ${repair.status}`,
+          subtitle: `${repair.ticketNumber || repair.id.slice(0, 8)} • ${repairStatusLabel(repair.status)}`,
           href: `/dashboard/repairs?search=${encodeURIComponent(repair.id)}`
         })
       }

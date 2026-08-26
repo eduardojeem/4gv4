@@ -37,9 +37,9 @@ describe('buildQuickItemPayload', () => {
 describe('getQuickItemApiError', () => {
   it('uses validation detail returned by the products API', () => {
     expect(getQuickItemApiError({
-      error: 'Validation failed',
-      details: [{ field: 'sku', message: 'SKU can only contain letters' }],
-    })).toBe('sku: SKU can only contain letters')
+      error: 'Error de validación',
+      details: [{ field: 'sku', message: 'El SKU solo admite letras, números, guiones y guiones bajos' }],
+    })).toBe('sku: El SKU solo admite letras, números, guiones y guiones bajos')
   })
 })
 

@@ -9,6 +9,7 @@ import type { PosStats } from "../hooks/usePosStats"
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { SaleDetailsModal } from '@/app/dashboard/pos/components/SaleDetailsModal'
+import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 interface DetailedSalesTableProps {
     stats: PosStats
@@ -90,7 +91,7 @@ export function DetailedSalesTable({ stats }: DetailedSalesTableProps) {
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <Badge variant="outline" className="text-[10px] uppercase font-semibold">
-                                                            {sale.payment_method}
+                                                            {paymentMethodLabel(sale.payment_method)}
                                                         </Badge>
                                                     </td>
                                                     <td className="px-6 py-4 text-center">

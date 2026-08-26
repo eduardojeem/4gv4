@@ -7,6 +7,7 @@ import { es } from 'date-fns/locale'
 import { PosStats } from "../hooks/usePosStats"
 import { SaleDetailsModal } from '@/app/dashboard/pos/components/SaleDetailsModal'
 import { formatCurrency } from '@/lib/currency'
+import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 interface RecentTransactionsListProps {
   sales: PosStats['recentSales']
@@ -76,7 +77,7 @@ export function RecentTransactionsList({ sales }: RecentTransactionsListProps) {
                 <div className="flex items-center gap-4 text-sm ml-4 shrink-0">
                   <div className="text-right">
                     <Badge variant="outline" className="text-[9px] uppercase tracking-wider font-semibold border-border/50 bg-background mb-0.5 px-1.5 py-0">
-                      {sale.payment_method}
+                      {paymentMethodLabel(sale.payment_method)}
                     </Badge>
                     <p className="font-bold tabular-nums text-foreground">
                       {formatCurrency(Number(sale.total) || 0)}

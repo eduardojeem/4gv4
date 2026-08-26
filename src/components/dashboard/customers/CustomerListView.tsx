@@ -58,6 +58,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
 import { CustomerCreditBadge } from './CustomerCreditBadge'
 import { CustomerCreditSummary } from '@/hooks/use-customer-credits'
+import { customerSegmentLabel } from '@/lib/i18n/labels'
 
 interface CustomerListViewProps {
   customers: Customer[]
@@ -602,7 +603,7 @@ function TableView({
                                   : "border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400"
                             )}
                           >
-                            {customer.segment}
+                            {customerSegmentLabel(customer.segment)}
                           </Badge>
                         )}
                       </div>
@@ -845,7 +846,7 @@ function CustomerCard({
                           : "border-slate-200 text-slate-600 dark:border-white/10 dark:text-slate-400"
                     )}
                   >
-                    {customer.segment}
+                    {customerSegmentLabel(customer.segment)}
                   </Badge>
                 )}
               </div>
