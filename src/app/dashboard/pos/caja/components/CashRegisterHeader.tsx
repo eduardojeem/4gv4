@@ -68,18 +68,18 @@ export const CashRegisterHeader = React.memo(function CashRegisterHeader({ audit
                   {isRegisterOpen ? 'Turno abierto' : 'Turno cerrado'}
                 </Badge>
 
-                <Badge variant="outline" className="gap-1">
-                  {isOnline ? <Wifi className="h-3 w-3 text-emerald-600" /> : <WifiOff className="h-3 w-3 text-rose-600" />}
-                  {isOnline ? 'En linea' : 'Sin conexion'}
+                <Badge variant="outline" className="gap-1 font-medium">
+                  {isOnline ? <Wifi className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> : <WifiOff className="h-3 w-3 text-rose-600 dark:text-rose-400" />}
+                  {isOnline ? 'En línea' : 'Sin conexión'}
                 </Badge>
 
                 <span className="hidden md:inline">•</span>
-                <span>{new Date().toLocaleDateString('es-PY', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                <span className="capitalize">{new Date().toLocaleDateString('es-PY', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
               </div>
 
               <p className="text-xs text-muted-foreground">
                 {isRegisterOpen
-                  ? 'Operativa activa: registre entradas/salidas y realice arqueos periodicos.'
+                  ? 'Operativa activa: registre entradas/salidas y realice arqueos periódicos.'
                   : 'Operativa pausada: abra la caja para iniciar el turno.'}
               </p>
             </div>
@@ -90,17 +90,17 @@ export const CashRegisterHeader = React.memo(function CashRegisterHeader({ audit
               variant="outline"
               size="sm"
               onClick={() => setShowGuide(true)}
-              className="gap-1.5 border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 font-semibold"
+              className="gap-1.5 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 font-semibold rounded-xl"
             >
-              <HelpCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <HelpCircle className="h-4 w-4 text-primary" />
               <span>¿Cómo funciona?</span>
             </Button>
 
             <Select value={activeRegisterId} onValueChange={setActiveRegisterId}>
-              <SelectTrigger className="h-9 w-48">
+              <SelectTrigger className="h-9 w-48 rounded-xl font-medium">
                 <SelectValue placeholder="Seleccionar caja" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl">
                 {registers.map((r) => (
                   <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                 ))}
@@ -113,14 +113,15 @@ export const CashRegisterHeader = React.memo(function CashRegisterHeader({ audit
               onClick={handleSync}
               title="Sincronizar datos"
               disabled={isSyncing}
+              className="rounded-xl"
             >
               <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
             </Button>
 
             <Link href={auditPageHref}>
-              <Button variant="default" size="sm">
+              <Button variant="default" size="sm" className="rounded-xl font-semibold">
                 <FileText className="mr-2 h-4 w-4" />
-                Auditoria
+                Auditoría
               </Button>
             </Link>
           </div>
