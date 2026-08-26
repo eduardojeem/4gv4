@@ -42,18 +42,18 @@ export function DetailedSalesTable({ stats }: DetailedSalesTableProps) {
                         <ScrollArea className="h-[400px]">
                             <div className="w-full">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
-                                        <tr>
-                                            <th className="px-4 py-3 font-medium">Factura / Ticket</th>
-                                            <th className="px-4 py-3 font-medium">Fecha</th>
-                                            <th className="px-4 py-3 font-medium">Cliente</th>
-                                            <th className="px-4 py-3 font-medium text-right">Monto Total</th>
-                                            <th className="px-4 py-3 font-medium text-right">Costo Productos</th>
-                                            <th className="px-4 py-3 font-medium text-right">Ganancia Neta</th>
-                                            <th className="px-4 py-3 font-medium">Método Pago</th>
-                                            <th className="px-4 py-3 font-medium w-12 text-center">Acciones</th>
-                                        </tr>
-                                    </thead>
+                                    <thead className="text-xs text-slate-500 bg-slate-50/80 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 shadow-sm">
+                                    <tr>
+                                        <th className="px-6 py-4 font-medium uppercase tracking-wider">Comprobante</th>
+                                        <th className="px-6 py-4 font-medium uppercase tracking-wider">Fecha</th>
+                                        <th className="px-6 py-4 font-medium uppercase tracking-wider">Cliente</th>
+                                        <th className="px-6 py-4 font-medium uppercase tracking-wider text-right">Facturado</th>
+                                        <th className="px-6 py-4 font-medium uppercase tracking-wider text-right">Costo Items</th>
+                                        <th className="px-6 py-4 font-medium uppercase tracking-wider text-right">Ganancia Neta</th>
+                                        <th className="px-6 py-4 font-medium uppercase tracking-wider text-center">Método</th>
+                                        <th className="px-6 py-4 font-medium uppercase tracking-wider w-12 text-center">Acciones</th>
+                                    </tr>
+                                </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                                         {allSales.map((sale) => {
                                             const total = Number(sale.total || 0)
@@ -65,22 +65,22 @@ export function DetailedSalesTable({ stats }: DetailedSalesTableProps) {
                                             
                                             return (
                                                 <tr key={sale.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                                                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">
+                                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-slate-100">
                                                         <span className="font-mono text-xs">{code}</span>
                                                     </td>
-                                                    <td className="px-4 py-3 text-slate-500">
+                                                    <td className="px-6 py-4 text-slate-500">
                                                         {format(parseISO(sale.created_at), 'dd/MM/yyyy HH:mm', { locale: es })}
                                                     </td>
-                                                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                                                    <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
                                                         {customerName}
                                                     </td>
-                                                    <td className="px-4 py-3 text-right font-medium text-emerald-600 dark:text-emerald-400">
+                                                    <td className="px-6 py-4 text-right font-medium text-emerald-600 dark:text-emerald-400">
                                                         {formatCurrency(total)}
                                                     </td>
-                                                    <td className="px-4 py-3 text-right text-slate-500">
+                                                    <td className="px-6 py-4 text-right text-slate-500">
                                                         {formatCurrency(cost)}
                                                     </td>
-                                                    <td className="px-4 py-3 text-right font-bold text-indigo-600 dark:text-indigo-400">
+                                                    <td className="px-6 py-4 text-right font-bold text-indigo-600 dark:text-indigo-400">
                                                         {formatCurrency(profit)}
                                                         {refund > 0 && (
                                                             <div className="text-[10px] text-rose-500 font-normal mt-0.5 whitespace-nowrap">
@@ -88,12 +88,12 @@ export function DetailedSalesTable({ stats }: DetailedSalesTableProps) {
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3">
+                                                    <td className="px-6 py-4">
                                                         <Badge variant="outline" className="text-[10px] uppercase font-semibold">
                                                             {sale.payment_method}
                                                         </Badge>
                                                     </td>
-                                                    <td className="px-4 py-3 text-center">
+                                                    <td className="px-6 py-4 text-center">
                                                         <Button 
                                                             variant="ghost" 
                                                             size="icon" 
