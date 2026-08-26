@@ -98,7 +98,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                             {formatCurrency(repairStats.netProfit)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            Facturación - Repuestos ({formatCurrency(repairStats.deliveredPartsCost)}) - MO ({formatCurrency(repairStats.deliveredLaborCost)})
+                            Facturación - Repuestos ({formatCurrency(repairStats.deliveredPartsCost)})
                         </p>
                     </CardContent>
                 </Card>
@@ -142,7 +142,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                                             <th className="px-4 py-3 font-medium">Equipo</th>
                                             <th className="px-4 py-3 font-medium">Fecha Entrega</th>
                                             <th className="px-4 py-3 font-medium text-right">Facturado</th>
-                                            <th className="px-4 py-3 font-medium text-right">Costos (Rep/MO)</th>
+                                            <th className="px-4 py-3 font-medium text-right">Costo Repuestos</th>
                                             <th className="px-4 py-3 font-medium text-right">Ganancia Neta</th>
                                             <th className="px-4 py-3 font-medium">Estado de Pago</th>
                                             <th className="px-4 py-3 font-medium w-12 text-center">Acciones</th>
@@ -153,7 +153,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                                             const totalBilled = Number(r.final_cost ?? r.estimated_cost ?? r.paid_amount ?? 0)
                                             const partsCost = Number(r.parts_cost ?? 0)
                                             const laborCost = Number(r.labor_cost ?? 0)
-                                            const net = totalBilled - partsCost - laborCost
+                                            const net = totalBilled - partsCost
                                             
                                             // Normalizar status de pago
                                             const paymentStatus = (r.payment_status || 'desconocido').toLowerCase()
@@ -179,7 +179,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                                                         {formatCurrency(totalBilled)}
                                                     </td>
                                                     <td className="px-4 py-3 text-right text-slate-500">
-                                                        {formatCurrency(partsCost)} <span className="text-slate-300">/</span> {formatCurrency(laborCost)}
+                                                        {formatCurrency(partsCost)}
                                                     </td>
                                                     <td className="px-4 py-3 text-right font-bold text-indigo-600 dark:text-indigo-400">
                                                         {formatCurrency(net)}
@@ -245,7 +245,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                                 <div className="space-y-1 text-right">
                                     <p className="text-xs text-slate-500 uppercase">Ganancia Neta</p>
                                     <p className="font-bold text-indigo-600 dark:text-indigo-400">
-                                        {formatCurrency(Number(selectedRepair.final_cost ?? selectedRepair.estimated_cost ?? selectedRepair.paid_amount ?? 0) - Number(selectedRepair.parts_cost ?? 0) - Number(selectedRepair.labor_cost ?? 0))}
+                                        {formatCurrency(Number(selectedRepair.final_cost ?? selectedRepair.estimated_cost ?? selectedRepair.paid_amount ?? 0) - Number(selectedRepair.parts_cost ?? 0))}
                                     </p>
                                 </div>
                                 <div className="space-y-1">

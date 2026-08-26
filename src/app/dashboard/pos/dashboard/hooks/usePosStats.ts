@@ -293,7 +293,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             
             const repairDeliveredPartsCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.parts_cost) || 0), 0)
             const repairDeliveredLaborCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.labor_cost) || 0), 0)
-            const repairNetProfit = repairDeliveredAmount - repairDeliveredPartsCost - repairDeliveredLaborCost
+            const repairNetProfit = repairDeliveredAmount - repairDeliveredPartsCost
 
             const repairsReady = (repairsReadyData || []) as unknown as RepairRow[]
             const repairReadyAmount = repairsReady.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
