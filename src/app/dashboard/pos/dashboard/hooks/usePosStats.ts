@@ -416,7 +416,8 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             }))
 
             // Build allSales enriched with items cost
-            const allSales = sales.map((sale: any) => {
+            const validSalesData = salesData || []
+            const allSales = validSalesData.map((sale: any) => {
                 const saleItems = itemsData.filter((i: any) => i.sale_id === sale.id)
                 const saleCost = calculateSalesCost(saleItems).totalCost
                 const refundAmount = saleRefundsAmount > 0 
@@ -442,7 +443,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
 
             setStats({
                 totalSales,
-                totalTransactions: sales.length,
+                totalTransactions: validSalesData.length,
                 averageTicket,
                 topProduct,
                 dailySales,
