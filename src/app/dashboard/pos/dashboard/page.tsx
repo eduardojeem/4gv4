@@ -23,6 +23,8 @@ import { CreditStatsCards } from './components/CreditStatsCards'
 import { RepairPosStatsCards } from './components/RepairPosStatsCards'
 import { ProfitStatsCards } from './components/ProfitStatsCards'
 
+import { DetailedSalesTable } from './components/DetailedSalesTable'
+
 export default function POSDashboard() {
   const { user, isAdmin, loading: authLoading } = useAuth()
   const canAccess = Boolean(isAdmin || user?.role === 'admin' || user?.role === 'super_admin')
@@ -202,6 +204,8 @@ export default function POSDashboard() {
             <RecentTransactionsList sales={stats.recentSales} />
             <TopProductsCard products={stats.topProducts} />
           </div>
+
+          <DetailedSalesTable stats={stats} />
         </>
       )}
     </div>

@@ -14,6 +14,7 @@ export interface PosStats {
     paymentMethods: Array<{ name: string; value: number; color: string }>
     topProducts: Array<{ name: string; sales: number; revenue: number }>
     recentSales: any[]
+    allSales: any[]
     creditStats: {
         totalAmount: number
         count: number
@@ -68,6 +69,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
         paymentMethods: [],
         topProducts: [],
         recentSales: [],
+        allSales: [],
         creditStats: {
             totalAmount: 0,
             count: 0,
@@ -125,9 +127,11 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 .select(`
                     id,
                     created_at,
+                    code,
                     total:total_amount,
                     net:subtotal_amount,
-                    payment_method
+                    payment_method,
+                    customer:customers!customer_id(name)
                 `)
                 .gte('created_at', from)
                 .lte('created_at', to)
@@ -221,7 +225,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             // 8. Fetch Refunds
             const afterSalesPromise = supabase
                 .from('after_sales_cases')
-                .select('id, source_type, refund_amount, status, request_type')
+                .select('id, source_type, refund_amount, status, request_type, sale_id')
                 .not('refund_amount', 'is', null)
                 .gte('resolved_at', from)
                 .lte('resolved_at', to)
@@ -411,22 +415,41 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 color: colors[name] || '#6b7280'
             }))
 
-            // Process Recent Sales
+            // Build allSales enriched with items cost
+            const allSales = sales.map((sale: any) => {
+                const saleItems = itemsData.filter((i: any) => i.sale_id === sale.id)
+                const saleCost = calculateSalesCost(saleItems).totalCost
+                const refundAmount = saleRefundsAmount > 0 
+                    ? afterSales.filter(c => c.source_type === 'sale' && c.sale_id === sale.id && (c.status === 'resolved' || c.status === 'approved')).reduce((sum, c) => sum + (Number(c.refund_amount) || 0), 0)
+                    : 0
+                return {
+                    ...sale,
+                    cost: saleCost,
+                    refundAmount,
+                    profit: (sale.total || 0) - saleCost - refundAmount
+                }
+            })
+
+            // Fix recentSales missing fields
             const recentSales = (recentData || []).map((sale: any) => ({
-                ...sale,
-                items_count: sale.sale_items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0,
-                customer_name: sale.customer?.name || 'Cliente Casual'
+                id: sale.id,
+                created_at: sale.created_at,
+                total: sale.total,
+                payment_method: sale.payment_method,
+                customer: sale.customer,
+                items: sale.sale_items
             }))
 
             setStats({
                 totalSales,
-                totalTransactions,
+                totalTransactions: sales.length,
                 averageTicket,
                 topProduct,
                 dailySales,
                 paymentMethods,
                 topProducts,
                 recentSales,
+                allSales,
                 creditStats: {
                     totalAmount: creditTotalAmount,
                     count: creditCount,
