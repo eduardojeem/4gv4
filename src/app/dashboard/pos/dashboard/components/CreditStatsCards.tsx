@@ -74,6 +74,48 @@ export function CreditStatsCards({ stats }: CreditStatsCardsProps) {
                     </CardContent>
                 </Card>
             </div>
+
+            {stats.allCredits && stats.allCredits.length > 0 && (
+                <Card className="border border-border/60 shadow-sm overflow-hidden bg-card mt-6">
+                    <div className="w-full overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                                <tr>
+                                    <th className="px-4 py-3 font-medium">Fecha</th>
+                                    <th className="px-4 py-3 font-medium">Cliente</th>
+                                    <th className="px-4 py-3 font-medium">Referencia (Venta)</th>
+                                    <th className="px-4 py-3 font-medium text-right">Monto Original</th>
+                                    <th className="px-4 py-3 font-medium">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                                {stats.allCredits.map((credit) => (
+                                    <tr key={credit.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                        <td className="px-4 py-3 text-slate-500">
+                                            {new Date(credit.created_at).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300 font-medium">
+                                            {credit.customer?.name || 'Desconocido'}
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-500">
+                                            {credit.sale?.code || 'S/N'}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-semibold text-indigo-600 dark:text-indigo-400">
+                                            {formatCurrency(Number(credit.principal) || 0)}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {credit.status === 'active' && <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-blue-100 text-blue-800 border-transparent dark:bg-blue-900 dark:text-blue-200">Activo</span>}
+                                            {credit.status === 'paid' && <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-800 border-transparent dark:bg-emerald-900 dark:text-emerald-200">Pagado</span>}
+                                            {credit.status === 'defaulted' && <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-rose-100 text-rose-800 border-transparent dark:bg-rose-900 dark:text-rose-200">En Mora</span>}
+                                            {credit.status === 'cancelled' && <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-slate-100 text-slate-800 border-transparent dark:bg-slate-800 dark:text-slate-300">Anulado</span>}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
         </div>
     )
 }

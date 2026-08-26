@@ -15,6 +15,7 @@ export interface PosStats {
     topProducts: Array<{ name: string; sales: number; revenue: number }>
     recentSales: any[]
     allSales: any[]
+    allCredits: any[]
     creditStats: {
         totalAmount: number
         count: number
@@ -70,6 +71,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
         topProducts: [],
         recentSales: [],
         allSales: [],
+        allCredits: [],
         creditStats: {
             totalAmount: 0,
             count: 0,
@@ -144,7 +146,9 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     id,
                     principal,
                     created_at,
-                    status
+                    status,
+                    customer:customers!customer_id(name),
+                    sale:sales!sale_id(code, total_amount)
                 `)
                 .gte('created_at', from)
                 .lte('created_at', to)
@@ -451,6 +455,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 topProducts,
                 recentSales,
                 allSales,
+                allCredits: credits,
                 creditStats: {
                     totalAmount: creditTotalAmount,
                     count: creditCount,
