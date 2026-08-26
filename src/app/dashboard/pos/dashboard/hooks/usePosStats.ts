@@ -4,6 +4,7 @@ import { startOfDay, format, parseISO, endOfDay, eachDayOfInterval } from 'date-
 import { es } from 'date-fns/locale'
 import { DateRange } from 'react-day-picker'
 import { calculateProfit, calculateSalesCost, type ProfitResult } from '../lib/pos-profit'
+import { useBranch } from '@/contexts/branch-context'
 
 export interface PosStats {
     totalSales: number
@@ -122,11 +123,13 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
     })
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<Error | null>(null)
+    const { selectedBranch } = useBranch()
+    const organizationId = selectedBranch?.organization_id
 
     const supabase = useMemo(() => createClient(), [])
 
     const fetchStats = useCallback(async () => {
-        if (!dateRange?.from) return
+        if (!dateRange?.from || !organizationId) return
 
         setLoading(true)
         setError(null)
@@ -147,6 +150,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     payment_method,
                     customer:customers!customer_id(name)
                 `)
+                .eq('organization_id', organizationId)
                 .gte('created_at', from)
                 .lte('created_at', to)
                 .order('created_at', { ascending: false })
@@ -165,6 +169,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     label,
                     installments:credit_installments(amount, amount_paid)
                 `)
+                .eq('organization_id', organizationId)
                 .gte('created_at', from)
                 .lte('created_at', to)
 
@@ -183,6 +188,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                         product:products(name)
                     )
                 `)
+                .eq('organization_id', organizationId)
                 .gte('created_at', from)
                 .lte('created_at', to)
                 .order('created_at', { ascending: false })
@@ -200,6 +206,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     estimated_cost,
                     paid_amount
                 `)
+                .eq('organization_id', organizationId)
                 .gte('created_at', from)
                 .lte('created_at', to)
 
@@ -221,6 +228,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     labor_cost,
                     payment_status
                 `)
+                .eq('organization_id', organizationId)
                 .gte('delivered_at', from)
                 .lte('delivered_at', to)
 
@@ -233,21 +241,42 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     estimated_cost,
                     paid_amount
                 `)
+                .eq('organization_id', organizationId)
                 .eq('status', 'listo')
 
             // 7. Fetch Active Repairs Count
             const repairsActivePromise = supabase
                 .from('repairs')
                 .select('id', { count: 'exact', head: true })
+                .eq('organization_id', organizationId)
                 .in('status', ['recibido', 'diagnostico', 'reparacion', 'en_reparacion', 'pausado'])
 
             // 8. Fetch Refunds
             const afterSalesPromise = supabase
                 .from('after_sales_cases')
                 .select('id, source_type, refund_amount, status, request_type, sale_id')
+                .eq('organization_id', organizationId)
                 .not('refund_amount', 'is', null)
                 .gte('resolved_at', from)
                 .lte('resolved_at', to)
+
+            // 9. Fetch Sale Items (for calculating costs)
+            const saleItemsPromise = supabase
+                .from('sale_items')
+                .select(`
+                    id,
+                    sale_id,
+                    product_id,
+                    quantity,
+                    subtotal,
+                    product:products(
+                        id,
+                        average_cost
+                    )
+                `)
+                .eq('organization_id', organizationId)
+                .gte('created_at', from)
+                .lte('created_at', to)
 
             // Execute parallel primary queries
             const [
