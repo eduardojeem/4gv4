@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Separator } from "@/components/ui/separator"
 import Link from 'next/link'
-import { Wrench, PackageCheck, CheckCircle2, ArrowRight, DollarSign, Calendar, TrendingUp } from 'lucide-react'
+import { Wrench, PackageCheck, CheckCircle2, ArrowRight, DollarSign, Calendar, TrendingUp, Search, ExternalLink } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import type { PosStats } from "../hooks/usePosStats"
 import { format, parseISO } from 'date-fns'
@@ -15,6 +17,7 @@ interface RepairPosStatsCardsProps {
 
 export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
     const { repairStats } = stats
+    const [selectedRepair, setSelectedRepair] = useState<any | null>(null)
 
     return (
         <div className="space-y-4 mt-6">
@@ -142,6 +145,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                                             <th className="px-4 py-3 font-medium text-right">Costos (Rep/MO)</th>
                                             <th className="px-4 py-3 font-medium text-right">Ganancia Neta</th>
                                             <th className="px-4 py-3 font-medium">Estado de Pago</th>
+                                            <th className="px-4 py-3 font-medium w-12 text-center">Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -183,6 +187,17 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                                                     <td className="px-4 py-3">
                                                         {paymentBadge}
                                                     </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            className="h-8 w-8 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/30 dark:hover:text-blue-400"
+                                                            onClick={() => setSelectedRepair(r)}
+                                                        >
+                                                            <Search className="h-4 w-4" />
+                                                            <span className="sr-only">Ver detalle</span>
+                                                        </Button>
+                                                    </td>
                                                 </tr>
                                             )
                                         })}
@@ -193,6 +208,88 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                     </CardContent>
                 </Card>
             )}
+
+            {/* Modal de Detalle */}
+            <Dialog open={!!selectedRepair} onOpenChange={(open) => !open && setSelectedRepair(null)}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Wrench className="h-5 w-5 text-amber-500" />
+                            Detalle de Reparación
+                        </DialogTitle>
+                        <DialogDescription>
+                            Información financiera y general de la reparación.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedRepair && (
+                        <div className="space-y-4 py-4">
+                            <div className="flex items-center justify-between border-b pb-4">
+                                <div>
+                                    <p className="text-sm font-medium text-slate-500">Ticket</p>
+                                    <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{selectedRepair.ticket_number || 'S/N'}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-medium text-slate-500">Equipo</p>
+                                    <p className="text-base font-semibold">{selectedRepair.device_brand} {selectedRepair.device_model}</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <p className="text-xs text-slate-500 uppercase">Facturación Bruta</p>
+                                    <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                        {formatCurrency(Number(selectedRepair.final_cost ?? selectedRepair.estimated_cost ?? selectedRepair.paid_amount ?? 0))}
+                                    </p>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                    <p className="text-xs text-slate-500 uppercase">Ganancia Neta</p>
+                                    <p className="font-bold text-indigo-600 dark:text-indigo-400">
+                                        {formatCurrency(Number(selectedRepair.final_cost ?? selectedRepair.estimated_cost ?? selectedRepair.paid_amount ?? 0) - Number(selectedRepair.parts_cost ?? 0) - Number(selectedRepair.labor_cost ?? 0))}
+                                    </p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-xs text-slate-500 uppercase">Costo Repuestos</p>
+                                    <p className="font-medium text-slate-700 dark:text-slate-300">
+                                        {formatCurrency(Number(selectedRepair.parts_cost ?? 0))}
+                                    </p>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                    <p className="text-xs text-slate-500 uppercase">Mano de Obra</p>
+                                    <p className="font-medium text-slate-700 dark:text-slate-300">
+                                        {formatCurrency(Number(selectedRepair.labor_cost ?? 0))}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <Separator />
+
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium">Estado de Pago:</p>
+                                <Badge variant={selectedRepair.payment_status?.toLowerCase() === 'pagado' || selectedRepair.payment_status?.toLowerCase() === 'paid' ? 'default' : 'secondary'} className="uppercase text-xs font-bold">
+                                    {selectedRepair.payment_status || 'Pendiente'}
+                                </Badge>
+                            </div>
+                            
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium">Fecha de Entrega:</p>
+                                <p className="text-sm text-slate-600 dark:text-slate-400">
+                                    {selectedRepair.delivered_at ? format(parseISO(selectedRepair.delivered_at), 'dd/MM/yyyy HH:mm') : '-'}
+                                </p>
+                            </div>
+
+                            <div className="mt-4 pt-4 flex justify-end gap-2">
+                                <Button variant="outline" onClick={() => setSelectedRepair(null)}>Cerrar</Button>
+                                <Button asChild className="gap-2">
+                                    <Link href={`/dashboard/repairs?search=${selectedRepair.ticket_number}`}>
+                                        Ver Taller Completo <ExternalLink className="h-4 w-4" />
+                                    </Link>
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
