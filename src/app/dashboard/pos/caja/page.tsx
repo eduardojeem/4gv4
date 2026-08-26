@@ -190,13 +190,15 @@ export default function CashRegisterPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className={`grid w-full max-w-3xl ${canAccessAudit ? 'grid-cols-5' : 'grid-cols-4'} mb-4`}>
-          <TabsTrigger value="overview">Resumen</TabsTrigger>
-          <TabsTrigger value="electronic">Cobros</TabsTrigger>
-          <TabsTrigger value="report">Reporte</TabsTrigger>
-          <TabsTrigger value="history">Historial</TabsTrigger>
-          {canAccessAudit && <TabsTrigger value="audit">Auditoria</TabsTrigger>}
-        </TabsList>
+        <div className="w-full overflow-x-auto no-scrollbar pb-1 mb-4">
+          <TabsList className={`inline-flex w-auto min-w-full sm:min-w-0 sm:grid sm:max-w-3xl ${canAccessAudit ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} p-1 h-auto bg-muted/60 dark:bg-muted/30 rounded-xl border border-border/50`}>
+            <TabsTrigger value="overview" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Resumen</TabsTrigger>
+            <TabsTrigger value="electronic" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Cobros</TabsTrigger>
+            <TabsTrigger value="report" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Reporte</TabsTrigger>
+            <TabsTrigger value="history" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Historial</TabsTrigger>
+            {canAccessAudit && <TabsTrigger value="audit" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Auditoría</TabsTrigger>}
+          </TabsList>
+        </div>
 
         <TabsContent value="overview" className="space-y-4">
           {activeTab === 'overview' && (
@@ -270,94 +272,102 @@ export default function CashRegisterPage() {
         setIsCloseDialogOpen(open)
         if (!open) setClosingCountedAmount('')
       }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cerrar Caja</DialogTitle>
-            <DialogDescription>
-              Registre el monto físico contado en caja para calcular diferencias.
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden rounded-2xl bg-card border-border shadow-2xl">
+          <DialogHeader className="p-5 sm:p-6 border-b bg-muted/30 text-left">
+            <DialogTitle className="text-lg font-bold">Cerrar Turno de Caja</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+              Registre el monto físico contado en caja para conciliar y calcular diferencias.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Fix #2: Resumen financiero antes de confirmar cierre */}
-          <div className="rounded-lg border bg-muted/40 p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Apertura:</span>
-              <span className="font-semibold">
-                {new Intl.NumberFormat('es-PY').format(currentRegister.movements.find(m => m.type === 'opening')?.amount ?? 0)} Gs.
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Ventas:</span>
-              <span className="font-semibold text-emerald-600">
-                +{new Intl.NumberFormat('es-PY').format(
-                  currentRegister.movements.filter(isPhysicalCashSale).reduce((s, m) => s + m.amount, 0)
-                )} Gs.
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Entradas:</span>
-              <span className="font-semibold text-emerald-600">
-                +{new Intl.NumberFormat('es-PY').format(
-                  currentRegister.movements.filter(m => m.type === 'cash_in' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
-                )} Gs.
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Salidas:</span>
-              <span className="font-semibold text-rose-600">
-                -{new Intl.NumberFormat('es-PY').format(
-                  currentRegister.movements.filter(m => m.type === 'cash_out' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
-                )} Gs.
-              </span>
-            </div>
-            <div className="h-px bg-border" />
-            <div className="flex justify-between font-bold">
-              <span>Esperado en caja:</span>
-              <span className="text-blue-700 dark:text-blue-400">
-                {new Intl.NumberFormat('es-PY').format(currentRegister.balance)} Gs.
-              </span>
-            </div>
-            {parsedClosingAmount !== null && (
-              <div className={`flex justify-between font-bold ${
-                parsedClosingAmount === currentRegister.balance
-                  ? 'text-emerald-600'
-                  : Math.abs(parsedClosingAmount - currentRegister.balance) > 0
-                    ? 'text-amber-600'
-                    : ''
-              }`}>
-                <span>Diferencia:</span>
-                <span>
-                  {parsedClosingAmount > currentRegister.balance ? '+' : ''}
-                  {new Intl.NumberFormat('es-PY').format(parsedClosingAmount - currentRegister.balance)} Gs.
+          <div className="p-5 sm:p-6 space-y-4">
+            {/* Resumen financiero antes de confirmar cierre */}
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Fondo de Apertura:</span>
+                <span className="font-semibold tabular-nums">
+                  {new Intl.NumberFormat('es-PY').format(currentRegister.movements.find(m => m.type === 'opening')?.amount ?? 0)} Gs.
                 </span>
               </div>
-            )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ventas en Efectivo:</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  +{new Intl.NumberFormat('es-PY').format(
+                    currentRegister.movements.filter(isPhysicalCashSale).reduce((s, m) => s + m.amount, 0)
+                  )} Gs.
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ingresos Manuales:</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  +{new Intl.NumberFormat('es-PY').format(
+                    currentRegister.movements.filter(m => m.type === 'cash_in' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
+                  )} Gs.
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Egresos / Retiros:</span>
+                <span className="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
+                  -{new Intl.NumberFormat('es-PY').format(
+                    currentRegister.movements.filter(m => m.type === 'cash_out' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
+                  )} Gs.
+                </span>
+              </div>
+              <div className="h-px bg-border/60 my-1" />
+              <div className="flex justify-between font-bold text-sm">
+                <span>Esperado en caja:</span>
+                <span className="text-primary tabular-nums">
+                  {new Intl.NumberFormat('es-PY').format(currentRegister.balance)} Gs.
+                </span>
+              </div>
+              {parsedClosingAmount !== null && (
+                <div className={`flex justify-between font-bold text-sm pt-1 border-t border-dashed border-border/60 ${
+                  parsedClosingAmount === currentRegister.balance
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : Math.abs(parsedClosingAmount - currentRegister.balance) > 0
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : ''
+                }`}>
+                  <span>Diferencia:</span>
+                  <span className="tabular-nums">
+                    {parsedClosingAmount > currentRegister.balance ? '+' : ''}
+                    {new Intl.NumberFormat('es-PY').format(parsedClosingAmount - currentRegister.balance)} Gs.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="closing-counted" className="text-xs font-semibold text-foreground">
+                Monto real contado en efectivo físico
+              </Label>
+              <Input
+                id="closing-counted"
+                type="text"
+                inputMode="numeric"
+                value={closingCountedAmount}
+                onChange={(e) => setClosingCountedAmount(e.target.value.replace(/\D/g, ''))}
+                placeholder={`Ej: ${new Intl.NumberFormat('es-PY').format(currentRegister.balance)}`}
+                className="h-11 text-base font-bold font-mono tabular-nums rounded-xl"
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Cuente el dinero físico real del cajón e ingrese el total aquí.
+              </p>
+            </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="closing-counted">Monto real contado en caja</Label>
-            <Input
-              id="closing-counted"
-              type="number"
-              inputMode="decimal"
-              value={closingCountedAmount}
-              onChange={(e) => setClosingCountedAmount(e.target.value)}
-              placeholder={`Ej: ${new Intl.NumberFormat('es-PY').format(currentRegister.balance)}`}
-              autoFocus
-            />
-            <p className="text-xs text-muted-foreground">
-              Cuente el efectivo físico y escriba el total aquí.
-            </p>
-          </div>
-
-          <DialogFooter>
+          <DialogFooter className="p-4 sm:px-6 bg-muted/20 border-t border-border/50 flex flex-row items-center justify-between sm:justify-end gap-2">
             <Button variant="outline" onClick={() => {
               setIsCloseDialogOpen(false)
               setClosingCountedAmount('')
-            }}>Cancelar</Button>
+            }} className="h-10 text-xs rounded-xl flex-1 sm:flex-none">
+              Cancelar
+            </Button>
             <Button
               variant="destructive"
               disabled={parsedClosingAmount === null || isSubmitting}
+              className="h-10 text-xs font-bold rounded-xl flex-1 sm:flex-none shadow-md"
               onClick={async () => {
                 if (parsedClosingAmount === null) return
                 setIsSubmitting(true)
@@ -373,7 +383,7 @@ export default function CashRegisterPage() {
               }}
             >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isSubmitting ? 'Cerrando...' : 'Confirmar Cierre'}
+              {isSubmitting ? 'Cerrando turno...' : 'Confirmar Cierre'}
             </Button>
           </DialogFooter>
         </DialogContent>
