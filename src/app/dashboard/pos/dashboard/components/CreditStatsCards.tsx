@@ -30,14 +30,11 @@ export function CreditStatsCards({ stats }: CreditStatsCardsProps) {
                                 <Wallet className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                             </div>
                         </div>
-                        <p className="text-[11px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Créditos Emitidos</p>
-                        <p className="text-2xl font-bold tracking-tight tabular-nums text-indigo-700 dark:text-indigo-400">
+                        <p className="text-[11px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Monto Original Otorgado</p>
+                        <p className="text-2xl font-bold tracking-tight tabular-nums text-foreground">
                             {formatCurrency(creditStats.totalAmount)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {creditStats.count} transacciones a crédito
-                        </p>
-                    </CardContent>
                             {creditStats.count} créditos emitidos
                         </p>
                     </CardContent>
