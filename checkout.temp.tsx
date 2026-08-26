@@ -222,7 +222,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     : paymentMethod === 'credit' ? 0 : amountDue
   const confirmationTotal = cartCalculations.total + (confirmationHasCredit ? confirmationCreditSummary.interestAmount : 0)
   const paymentLabel = isMixedPayment
-    ? confirmationHasCredit ? 'Pago mixto con crédito' : 'Pago mixto'
+    ? confirmationHasCredit ? 'Pago mixto con crÃ©dito' : 'Pago mixto'
     : paymentMethod === 'cash' ? 'Efectivo'
       : paymentMethod === 'card' ? 'Tarjeta'
         : paymentMethod === 'transfer' ? 'Transferencia'
@@ -245,18 +245,18 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     <Dialog open={isCheckoutOpen} onOpenChange={(open) => {
       if (!open && paymentStatus !== 'processing') onCancel()
     }}>
-      <DialogContent showCloseButton={paymentStatus !== 'processing'} className="flex max-h-[92vh] w-[95vw] flex-col overflow-hidden p-0 border-0 shadow-2xl rounded-2xl max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-full max-sm:rounded-none sm:max-w-3xl md:max-w-5xl lg:max-w-6xl">
-        <DialogHeader className="shrink-0 border-b bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-sm px-5 py-4 pr-12 sm:px-7 sm:py-5">
-          <DialogTitle className="flex items-center gap-3 text-lg sm:text-xl font-bold tracking-tight">
-            <DollarSign className="h-6 w-6 text-primary p-1 bg-primary/10 rounded-lg" aria-hidden="true" />
+      <DialogContent showCloseButton={paymentStatus !== 'processing'} className="flex max-h-[92vh] w-[95vw] flex-col overflow-hidden p-0 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-full max-sm:rounded-none sm:max-w-3xl md:max-w-5xl lg:max-w-6xl">
+        <DialogHeader className="shrink-0 border-b bg-muted/30 px-4 py-3 pr-12 sm:px-6 sm:py-4">
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <DollarSign className="h-4 w-4 text-primary" aria-hidden="true" />
             Cobrar venta
           </DialogTitle>
-          <DialogDescription className="text-sm mt-1 text-slate-500 dark:text-slate-400">
+          <DialogDescription className="text-xs sm:text-sm">
             VerificÃ¡ el cliente, elegÃ­ cÃ³mo cobra la venta y confirmÃ¡ el total.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="shrink-0 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 px-5 py-3 sm:px-7 sm:py-4">
+        <div className="shrink-0 border-b bg-background/95 px-4 py-2.5 sm:px-6 sm:py-3">
           <ol className="grid grid-cols-3 gap-1.5 text-xs sm:gap-3 sm:text-sm" aria-label="Pasos para cobrar la venta">
             <li className="flex min-w-0 items-center gap-2 rounded-md bg-primary/10 px-2 py-2 text-primary sm:px-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</span>
@@ -343,14 +343,14 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 max-sm:pb-44 sm:px-6">
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.72fr)]">
-          <div className="space-y-4 rounded-2xl border shadow-sm bg-white dark:bg-slate-950 p-5 md:p-6">
-            <div className="flex items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm">
+          <div className="space-y-4 rounded-xl border bg-card/70 p-4 md:p-5">
+            <div className="flex items-center gap-3 border-b pb-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <UserRound className="h-4 w-4" aria-hidden="true" />
               </span>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">1. Cliente</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">IdentificÃ¡ al comprador y vinculÃ¡ reparaciones si corresponde.</p>
+                <h3 className="text-sm font-semibold">1. Cliente</h3>
+                <p className="text-xs text-muted-foreground">IdentificÃ¡ al comprador y vinculÃ¡ reparaciones si corresponde.</p>
               </div>
             </div>
             <CustomerSelection
@@ -533,7 +533,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                        <div className="text-[10px] text-muted-foreground leading-tight">
                                           {canDeliver
                                             ? 'Actualizar estado a "Entregado"'
-                                            : `${notReady.length === 1 ? 'La reparación no está' : `${notReady.length} reparaciones no están`} en "Listo para entrega". Podés cobrarla igual.`}
+                                            : `${notReady.length === 1 ? 'La reparaciÃ³n no estÃ¡' : `${notReady.length} reparaciones no estÃ¡n`} en "Listo para entrega". PodÃ©s cobrarla igual.`}
                                        </div>
                                     </div>
                                  </div>
@@ -586,12 +586,12 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             />
 
             <div className="flex items-center gap-3 border-b pb-3 pt-2">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <WalletCards className="h-4 w-4" aria-hidden="true" />
               </span>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">2. Forma de cobro</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Elegí un método simple o combiná varios en pago mixto.</p>
+                <h3 className="text-sm font-semibold">2. Forma de cobro</h3>
+                <p className="text-xs text-muted-foreground">ElegÃ­ un mÃ©todo simple o combinÃ¡ varios en pago mixto.</p>
               </div>
             </div>
             <PaymentMethods
@@ -607,7 +607,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <span>
                   Opciones adicionales
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">Promoción, descuento o nota</span>
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">PromociÃ³n, descuento o nota</span>
                 </span>
                 <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
               </summary>
@@ -637,7 +637,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                     id="pos-checkout-notes"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Información adicional de la venta"
+                    placeholder="InformaciÃ³n adicional de la venta"
                   />
                 </div>
               </div>
@@ -646,12 +646,12 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
 
           <div className="rounded-xl border bg-card/70 p-4 md:sticky md:top-0 md:p-5">
             <div className="mb-4 flex items-center gap-3 border-b pb-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <ReceiptText className="h-4 w-4" aria-hidden="true" />
               </span>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">3. Revisar y confirmar</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Comprobá los importes antes de registrar la venta.</p>
+                <h3 className="text-sm font-semibold">3. Revisar y confirmar</h3>
+                <p className="text-xs text-muted-foreground">ComprobÃ¡ los importes antes de registrar la venta.</p>
               </div>
             </div>
             <SaleSummary
@@ -663,7 +663,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             />
 
             <div data-testid="pos-checkout-actions" className="mt-6 space-y-2 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-50 max-sm:border-t max-sm:bg-background/95 max-sm:px-4 max-sm:pt-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.45)] max-sm:backdrop-blur">
-              <span data-testid="pos-checkout-footer" className="sr-only">Confirmación de la venta</span>
+              <span data-testid="pos-checkout-footer" className="sr-only">ConfirmaciÃ³n de la venta</span>
               {!isMixedPayment ? (
                 <>
                   {paymentMethod === 'credit' ? (
@@ -686,7 +686,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                         <div className="flex flex-col items-center w-full">
                           <span className="flex items-center gap-2">
                             <Clock className="h-5 w-5" />
-                            Revisar venta a crédito
+                            Revisar venta a crÃ©dito
                           </span>
                           <span className="text-xs font-normal opacity-90 mt-0.5">
                             Total financiado {formatCurrency(displayTotal)}
@@ -753,19 +753,19 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 </p>
               ) : paymentMethod === 'card' && cardNumber.length < 4 ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  ðŸ’¡ Ingresa los 4 dígitos finales del ticket de tarjeta.
+                  ðŸ’¡ Ingresa los 4 dÃ­gitos finales del ticket de tarjeta.
                 </p>
               ) : paymentMethod === 'transfer' && !transferReference ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  ðŸ’¡ Ingresa el número de referencia de la transferencia.
+                  ðŸ’¡ Ingresa el nÃºmero de referencia de la transferencia.
                 </p>
               ) : paymentMethod === 'credit' && !activeCustomer ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  ðŸ’¡ Selecciona un cliente en la columna izquierda para vender a crédito.
+                  ðŸ’¡ Selecciona un cliente en la columna izquierda para vender a crÃ©dito.
                 </p>
               ) : paymentMethod === 'credit' && !canUseCredit ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  ðŸ’¡ Habilita la línea de crédito del cliente en el panel de pago.
+                  ðŸ’¡ Habilita la lÃ­nea de crÃ©dito del cliente en el panel de pago.
                 </p>
               ) : null}
 
@@ -811,7 +811,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
         <DialogContent className="max-w-6xl max-h-[92vh] p-0 overflow-hidden">
           <DialogHeader className="px-6 py-4 border-b bg-muted/30 flex flex-row items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
-              <Clock className="h-6 w-6 text-primary p-1 bg-primary/10 rounded-lg" />
+              <Clock className="h-4 w-4 text-primary" />
               Historial de Credito
             </DialogTitle>
           </DialogHeader>
