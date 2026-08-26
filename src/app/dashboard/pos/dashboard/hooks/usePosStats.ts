@@ -148,7 +148,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     created_at,
                     status,
                     customer:customers!customer_id(name),
-                    sale:sales!sale_id(code, total_amount),
+                    sale_id,
                     installments:credit_installments(amount, amount_paid)
                 `)
                 .gte('created_at', from)
@@ -321,7 +321,16 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     pendingDebt = 0
                 }
 
-                return { ...c, totalDebt, pendingDebt }
+                // Intentamos encontrar la venta asociada en salesData (que comparte el mismo rango de fechas)
+                let sale = null
+                if (c.sale_id && salesData) {
+                    const foundSale = salesData.find(s => s.id === c.sale_id)
+                    if (foundSale) {
+                        sale = { code: foundSale.code, total_amount: foundSale.total_amount || foundSale.total }
+                    }
+                }
+
+                return { ...c, totalDebt, pendingDebt, sale }
             })
 
             const creditTotalAmount = credits.reduce((sum, c) => sum + (c.totalDebt || 0), 0)
