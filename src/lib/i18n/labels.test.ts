@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   customerSegmentLabel,
+  customerTypeKey,
   customerStatusLabel,
   customerTypeLabel,
   orderStatusLabel,
@@ -42,6 +43,22 @@ describe('customerTypeLabel', () => {
   it('comparte vocabulario con el segmento', () => {
     expect(customerTypeLabel('premium')).toBe('Premium')
     expect(customerTypeLabel('wholesale')).toBe('Mayorista')
+  })
+})
+
+describe('customerTypeKey', () => {
+  it('unifica los sinónimos que la app compara por separado', () => {
+    // El formulario guarda 'mayorista' y el cobro comparaba contra 'wholesale':
+    // ese cliente se quedaba sin la chapa de Mayorista.
+    expect(customerTypeKey('mayorista')).toBe('wholesale')
+    expect(customerTypeKey('wholesale')).toBe('wholesale')
+    expect(customerTypeKey('empresa')).toBe('business')
+    expect(customerTypeKey('individual')).toBe('regular')
+  })
+
+  it('deja pasar sin tocar lo que no conoce', () => {
+    expect(customerTypeKey('otro')).toBe('otro')
+    expect(customerTypeKey(null)).toBe('')
   })
 })
 

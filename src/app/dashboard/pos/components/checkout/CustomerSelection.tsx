@@ -21,6 +21,7 @@ import {
 import { usePOSCustomer } from '../../contexts/POSCustomerContext'
 import { useCreditSystem } from '@/hooks/use-credit-system'
 import { CustomerQuickCreateDialog } from '@/components/dashboard/repairs/CustomerQuickCreateDialog'
+import { customerTypeKey, customerTypeLabel } from '@/lib/i18n/labels'
 
 interface CreditSummary {
   totalCredit: number
@@ -168,7 +169,7 @@ export function CustomerSelection({
                 <SelectContent>
                   <SelectItem value="all">Todos los tipos</SelectItem>
                   {customerTypes.map((type) => (
-                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                    <SelectItem key={type} value={type}>{customerTypeLabel(type)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -212,7 +213,7 @@ export function CustomerSelection({
                   <SelectItem key={customer.id} value={customer.id}>
                     {customer.name}
                     {customer.phone ? ` · ${customer.phone}` : ''}
-                    {customer.type ? ` · ${customer.type}` : ''}
+                    {customer.type ? ` · ${customerTypeLabel(customer.type)}` : ''}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -227,12 +228,12 @@ export function CustomerSelection({
                 <div className="min-w-0">
                   <h4 className="flex flex-wrap items-center gap-2 text-base font-bold sm:text-lg">
                     <span className="break-words">{activeCustomer.name}</span>
-                    {activeCustomer.type === 'vip' && (
+                    {customerTypeKey(activeCustomer.type) === 'vip' && (
                       <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-900">
                         <Star className="h-3 w-3 mr-1 fill-yellow-600 text-yellow-600" /> VIP
                       </Badge>
                     )}
-                    {activeCustomer.type === 'wholesale' && (
+                    {customerTypeKey(activeCustomer.type) === 'wholesale' && (
                       <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-900">
                         Mayorista
                       </Badge>

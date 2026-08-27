@@ -50,6 +50,31 @@ export function customerTypeLabel(value: string | null | undefined) {
   return lookup(CUSTOMER_SEGMENT, value)
 }
 
+/**
+ * Clave canonica del tipo/segmento, para comparar en vez de mostrar.
+ *
+ * El formulario de clientes guarda 'mayorista' y el resto de la app compara
+ * contra 'wholesale': un cliente cargado desde ese formulario no recibia la
+ * chapa de Mayorista en el cobro. La tabla de sinonimos ya vive en este
+ * archivo, asi que duplicarla afuera se desincronizaria sola.
+ */
+const CUSTOMER_TYPE_CANONICAL: Record<string, string> = {
+  regular: 'regular',
+  particular: 'regular',
+  individual: 'regular',
+  wholesale: 'wholesale',
+  mayorista: 'wholesale',
+  vip: 'vip',
+  business: 'business',
+  empresa: 'business',
+  premium: 'premium',
+}
+
+export function customerTypeKey(value: string | null | undefined): string {
+  const key = String(value ?? '').trim().toLowerCase()
+  return CUSTOMER_TYPE_CANONICAL[key] ?? key
+}
+
 /** Estado del cliente (`customers.status`). */
 const CUSTOMER_STATUS: Record<string, string> = {
   active: 'Activo',
