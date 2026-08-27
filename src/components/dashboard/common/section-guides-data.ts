@@ -16,7 +16,10 @@ import {
   GalleryHorizontalEnd,
   Eye,
   CalendarClock,
-  LineChart
+  LineChart,
+  ShoppingCart,
+  Store as StoreIcon,
+  Megaphone
 } from 'lucide-react'
 import type { SectionGuideData } from './SectionGuideModal'
 
@@ -195,6 +198,59 @@ export const PROMOTIONS_GUIDE: SectionGuideData = {
       description: 'Las alertas avisan de promociones por vencer, activas ya vencidas y creadas que nadie usó. "Limpiar expiradas" desactiva en bloque las que siguen activas pero ya pasaron de fecha. Eliminar una promoción con usos registrados la desactiva en vez de borrarla, para no perder el historial.',
       icon: LineChart
     }
+  ],
+  examples: [
+    {
+      goal: 'Quiero 20% de descuento en fundas todo el fin de semana, en la tienda online, sin que el cliente escriba nada',
+      icon: Sparkles,
+      setup: [
+        'Nueva promoción → Tipo: Porcentaje, Valor: 20',
+        'Disponibilidad pública: Oferta automática',
+        'Productos: elegí las fundas una por una (las automáticas no aceptan "todo el catálogo")',
+        'Vigencia: viernes 00:00 a domingo 23:59',
+      ],
+      result: 'La tienda muestra las fundas con el precio viejo tachado y el nuevo al lado, y aparecen solas en /ofertas. El contador de usos queda en cero: las automáticas no cuentan usos.',
+    },
+    {
+      goal: 'Quiero dar 50.000 Gs de descuento a quien compre más de 500.000 Gs, pero solo a los primeros 100',
+      icon: ShoppingCart,
+      setup: [
+        'Nueva promoción → Tipo: Monto fijo, Valor: 50000',
+        'Disponibilidad pública: Cupón para carrito público',
+        'Código: escribí uno fácil de dictar, por ejemplo AHORRA50',
+        'Compra mínima: 500000 · Límite de usos: 100',
+      ],
+      result: 'El cliente escribe AHORRA50 al finalizar la compra. El sistema valida vigencia, mínimo y cupo en la misma transacción, así que nunca se pasa de 100 aunque dos personas compren a la vez.',
+    },
+    {
+      goal: 'Quiero un descuento que solo pueda dar el cajero, a criterio, y que no se vea en la web',
+      icon: Ticket,
+      setup: [
+        'Nueva promoción → Tipo: Porcentaje, Valor: 10',
+        'Disponibilidad pública: Solo uso interno / POS',
+        'No hace falta código ni productos',
+      ],
+      result: 'Aparece en la lista de descuentos de la caja y en ningún lado de la tienda pública. Útil para clientes conocidos o para destrabar una venta.',
+    },
+    {
+      goal: 'Quiero anunciar "Semana del celular" con una imagen grande arriba de la página de ofertas',
+      icon: Megaphone,
+      setup: [
+        'Pestaña Página pública → Carrusel de campañas',
+        'Activalo y agregá una diapositiva: imagen, título, bajada y botón',
+        'Podés cargar hasta 6 diapositivas y ordenarlas',
+      ],
+      result: 'Se ve un banner arriba de /ofertas, con el mismo diseño del carrusel del inicio pero con contenido propio. No comparte diapositivas con el del inicio: son dos carruseles separados.',
+    },
+    {
+      goal: 'Quiero apagar la página de ofertas mientras preparo la próxima campaña',
+      icon: StoreIcon,
+      setup: [
+        'Pestaña Página pública → Sección de ofertas',
+        'Apagá el interruptor de visibilidad',
+      ],
+      result: 'Quien entre a /ofertas ve un aviso y un botón al catálogo. Tus promociones siguen existiendo y los cupones se siguen pudiendo canjear en el carrito: solo se oculta la página.',
+    },
   ],
   tip: 'Si creaste una oferta automática y no aparece en la tienda, revisá tres cosas: que sea porcentual, que tenga al menos un producto seleccionado, y que el producto esté activo, visible y con stock.'
 }
