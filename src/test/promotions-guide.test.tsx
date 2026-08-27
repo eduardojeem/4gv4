@@ -8,7 +8,7 @@
 
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { PROMOTIONS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { SectionGuideModal } from '@/components/dashboard/common/SectionGuideModal'
 
@@ -104,6 +104,23 @@ describe('SectionGuideModal con la guía de promociones', () => {
     expect(screen.getByText(new RegExp(first.goal.slice(0, 30)))).toBeInTheDocument()
     expect(screen.getByText(first.result)).toBeInTheDocument()
     expect(screen.getByText(first.setup[0])).toBeInTheDocument()
+  })
+
+  it('se cierra con la X de la cabecera, no solo con "Entendido"', async () => {
+    // El boton del primitivo hereda el color del cuerpo y quedaba oscuro sobre
+    // el degradado; se reemplazo por uno propio, que tiene que seguir cerrando.
+    const onOpenChange = vi.fn()
+    render(<SectionGuideModal open onOpenChange={onOpenChange} guide={PROMOTIONS_GUIDE} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('deja una sola X: no quedaron dos botones de cerrar superpuestos', () => {
+    render(<SectionGuideModal open onOpenChange={() => {}} guide={PROMOTIONS_GUIDE} />)
+
+    expect(screen.getAllByRole('button', { name: /Cerrar|Close/i })).toHaveLength(1)
   })
 
   it('una guía sin ejemplos no muestra pestañas', () => {
