@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -14,10 +14,12 @@ import {
   ChevronRight,
   TrendingUp,
   Wallet,
-  Activity
+  Activity,
+  HelpCircle
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { useCashRegisterContext, ZClosureRecord } from '../../contexts/CashRegisterContext'
+import { CashRegisterGuideDialog } from './CashRegisterGuideDialog'
 
 interface CashRegisterHistoryProps {
   onOpenFullHistory: () => void
@@ -29,23 +31,60 @@ function byClosedAtDesc(a: ZClosureRecord, b: ZClosureRecord) {
 }
 
 export function CashRegisterHistory({ onOpenFullHistory, onOpenAudit }: CashRegisterHistoryProps) {
+  const [showGuide, setShowGuide] = useState(false)
+  const [period, setPeriod] = useState<'today' | 'week' | 'month' | 'year' | 'all'>('week')
   const { zClosureHistory } = useCashRegisterContext()
 
   const sortedHistory = useMemo(() => {
     return [...zClosureHistory].sort(byClosedAtDesc)
   }, [zClosureHistory])
 
-  const recentClosures = useMemo(() => sortedHistory.slice(0, 6), [sortedHistory])
+  const filteredHistory = useMemo(() => {
+    const now = new Date()
+    let cutoff: Date | null = null
+
+    if (period === 'today') {
+      cutoff = new Date(now)
+      cutoff.setHours(0, 0, 0, 0)
+    } else if (period === 'week') {
+      cutoff = new Date(now)
+      cutoff.setDate(now.getDate() - 7)
+    } else if (period === 'month') {
+      cutoff = new Date(now)
+      cutoff.setMonth(now.getMonth() - 1)
+    } else if (period === 'year') {
+      cutoff = new Date(now)
+      cutoff.setFullYear(now.getFullYear() - 1)
+    }
+
+    if (!cutoff) return sortedHistory
+    return sortedHistory.filter(c => new Date(c.closedAt || c.date) >= cutoff!)
+  }, [sortedHistory, period])
+
+  const recentClosures = useMemo(() => filteredHistory.slice(0, 8), [filteredHistory])
 
   const summary = useMemo(() => {
-    const total = sortedHistory.length
-    const perfect = sortedHistory.filter((c) => Math.abs(c.discrepancy) < 1).length
+    const total = filteredHistory.length
+    const perfect = filteredHistory.filter((c) => Math.abs(c.discrepancy) < 1).length
     const withDiff = total - perfect
-    const totalSales = sortedHistory.reduce((sum, c) => sum + c.totalSales, 0)
+    const totalSales = filteredHistory.reduce((sum, c) => sum + c.totalSales, 0)
     const avgSales = total > 0 ? totalSales / total : 0
-    const totalDiscrepancy = sortedHistory.reduce((sum, c) => sum + Math.abs(c.discrepancy), 0)
-    return { total, perfect, withDiff, totalSales, avgSales, totalDiscrepancy }
-  }, [sortedHistory])
+
+    const totalOver = filteredHistory
+      .filter((c) => c.discrepancy > 0.5)
+      .reduce((sum, c) => sum + c.discrepancy, 0)
+
+    const totalShort = filteredHistory
+      .filter((c) => c.discrepancy < -0.5)
+      .reduce((sum, c) => sum + Math.abs(c.discrepancy), 0)
+
+    const netDiscrepancy = filteredHistory.reduce((sum, c) => sum + (c.discrepancy || 0), 0)
+
+    return { total, perfect, withDiff, totalSales, avgSales, totalOver, totalShort, netDiscrepancy }
+  }, [filteredHistory])
+
+  const isNetOver = summary.netDiscrepancy > 0.5
+  const isNetShort = summary.netDiscrepancy < -0.5
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -73,6 +112,40 @@ export function CashRegisterHistory({ onOpenFullHistory, onOpenAudit }: CashRegi
             <Shield className="h-4 w-4 mr-2 text-violet-600" />
             Ir a auditoría
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowGuide(true)}
+            className="gap-1.5 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 text-xs font-semibold rounded-xl"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            <span>¿Cómo funciona?</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Selector de Período Rápido */}
+      <div className="flex items-center justify-between p-2 rounded-2xl border border-border/60 bg-muted/20 gap-2 flex-wrap">
+        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-2">Período de Visualización:</span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[
+            { key: 'today', label: 'Hoy' },
+            { key: 'week', label: 'Esta Semana (Por Defecto)' },
+            { key: 'month', label: 'Este Mes' },
+            { key: 'year', label: 'Este Año' },
+            { key: 'all', label: 'Todo el Historial' }
+          ].map(p => (
+            <Button
+              key={p.key}
+              type="button"
+              size="sm"
+              variant={period === p.key ? 'default' : 'outline'}
+              onClick={() => setPeriod(p.key as any)}
+              className="h-7 text-xs px-3 rounded-xl font-medium"
+            >
+              {p.label}
+            </Button>
+          ))}
         </div>
       </div>
 
@@ -125,15 +198,76 @@ export function CashRegisterHistory({ onOpenFullHistory, onOpenAudit }: CashRegi
           </CardContent>
         </Card>
 
-        <Card className="border border-rose-200/80 dark:border-rose-800/60 bg-gradient-to-br from-rose-50/50 to-transparent dark:from-rose-950/20 shadow-sm">
+        <Card
+          className={`border shadow-sm transition-colors ${
+            isNetShort
+              ? 'border-rose-200/80 dark:border-rose-800/60 bg-gradient-to-br from-rose-50/60 to-transparent dark:from-rose-950/30'
+              : isNetOver
+              ? 'border-amber-200/80 dark:border-amber-800/60 bg-gradient-to-br from-amber-50/60 to-transparent dark:from-amber-950/30'
+              : 'border-emerald-200/80 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50/60 to-transparent dark:from-emerald-950/30'
+          }`}
+        >
           <CardContent className="p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 rounded-lg bg-rose-100 dark:bg-rose-900/40">
-                <Wallet className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`p-2 rounded-lg ${
+                    isNetShort
+                      ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400'
+                      : isNetOver
+                      ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400'
+                      : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
+                  }`}
+                >
+                  <Wallet className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide font-bold text-foreground">Dif. acumulada</p>
+                </div>
               </div>
-              <p className="text-[11px] uppercase tracking-wide font-semibold text-rose-900 dark:text-rose-400">Dif. acumulada</p>
+
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                  isNetShort
+                    ? 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300'
+                    : isNetOver
+                    ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
+                    : 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+                }`}
+              >
+                {isNetShort ? 'Faltante Neto' : isNetOver ? 'Sobrante Neto' : 'Exacto'}
+              </span>
             </div>
-            <p className="text-2xl font-bold mt-1 tabular-nums text-rose-700 dark:text-rose-400">{formatCurrency(summary.totalDiscrepancy)}</p>
+
+            <p
+              className={`text-xl sm:text-2xl font-black mt-1 tabular-nums ${
+                isNetShort
+                  ? 'text-rose-600 dark:text-rose-400'
+                  : isNetOver
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-emerald-600 dark:text-emerald-400'
+              }`}
+            >
+              {isNetOver ? `+${formatCurrency(summary.netDiscrepancy)}` : isNetShort ? `-${formatCurrency(Math.abs(summary.netDiscrepancy))}` : 'Gs. 0'}
+            </p>
+
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[10px] text-muted-foreground">
+              {summary.totalOver > 0 && (
+                <span className="text-amber-600 dark:text-amber-400 font-medium">
+                  ▲ +{formatCurrency(summary.totalOver)}
+                </span>
+              )}
+              {summary.totalShort > 0 && (
+                <span className="text-rose-600 dark:text-rose-400 font-medium">
+                  ▼ -{formatCurrency(summary.totalShort)}
+                </span>
+              )}
+              {summary.totalOver === 0 && summary.totalShort === 0 && (
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                  Sin variaciones en turnos
+                </span>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -217,6 +351,12 @@ export function CashRegisterHistory({ onOpenFullHistory, onOpenAudit }: CashRegi
           )}
         </CardContent>
       </Card>
+
+      <CashRegisterGuideDialog
+        open={showGuide}
+        onOpenChange={setShowGuide}
+        initialSection="history"
+      />
     </div>
   )
 }

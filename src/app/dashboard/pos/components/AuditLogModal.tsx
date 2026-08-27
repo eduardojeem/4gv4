@@ -30,6 +30,8 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { useCashRegisterContext, AuditLogEntry } from '../contexts/CashRegisterContext'
+import { formatRegisterName, formatUserLabel } from '@/app/dashboard/pos/lib/formatters'
+import { downloadCsvReport } from '@/app/dashboard/pos/lib/exportCsv'
 
 interface AuditLogModalProps {
   isOpen: boolean
@@ -62,10 +64,7 @@ function getActionMeta(action: string) {
 }
 
 function getUserDisplay(entry: AuditLogEntry) {
-  const name = (entry.userName || '').trim()
-  const email = (entry.userEmail || '').trim()
-  if (name && email && name !== email) return `${name} (${email})`
-  return name || email || 'Usuario no identificado'
+  return formatUserLabel(entry.userName, entry.userEmail, entry.userId)
 }
 
 export function AuditLogModal({ isOpen, onClose }: AuditLogModalProps) {
@@ -191,41 +190,57 @@ export function AuditLogModal({ isOpen, onClose }: AuditLogModalProps) {
   const exportAuditLog = () => {
     if (!canExportData) return
 
-    const headers = [
-      'Fecha/Hora',
-      'Usuario',
-      'Accion',
-      'Detalles',
-      'Caja',
-      'Monto',
-      'Saldo Anterior',
-      'Saldo Nuevo'
-    ]
+    downloadCsvReport({
+      filename: `registro_auditoria_pos_${new Date().toISOString().slice(0, 10)}`,
+      title: 'Registro General de Auditoría de Operaciones POS',
+      subtitle: `Eventos filtrados: ${filteredLog.length} registros`,
+      summaryStats: [
+        { label: 'Total de Registros Exportados:', value: filteredLog.length },
+        { label: 'Total Monto Acumulado:', value: formatCurrency(filteredLog.reduce((s, e) => s + (e.amount || 0), 0)) }
+      ],
+      headers: [
+        'Fecha',
+        'Hora',
+        'Usuario / Responsable',
+        'Acción Realizada',
+        'Caja / Terminal',
+        'Monto Involucrado (Gs.)',
+        'Concepto / Detalles',
+        'Saldo Previo (Gs.)',
+        'Saldo Posterior (Gs.)',
+        'ID del Evento'
+      ],
+      rows: filteredLog.map((entry) => {
+        const d = new Date(entry.timestamp)
+        const dateStr = d.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        const timeStr = d.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-    const rows = filteredLog.map((entry) => [
-      new Date(entry.timestamp).toLocaleString('es-PY'),
-      getUserDisplay(entry),
-      getActionMeta(entry.action).label,
-      entry.details || '',
-      entry.registerId || '',
-      entry.amount !== undefined ? formatCurrency(entry.amount) : '',
-      entry.previousBalance !== undefined ? formatCurrency(entry.previousBalance) : '',
-      entry.newBalance !== undefined ? formatCurrency(entry.newBalance) : ''
-    ])
-
-    const csv = [
-      headers.join(','),
-      ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n')
-
-    const bom = '\uFEFF'
-    const blob = new Blob([bom, csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `audit_log_${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+        return [
+          dateStr,
+          timeStr,
+          getUserDisplay(entry),
+          getActionMeta(entry.action).label,
+          formatRegisterName(entry.registerId, registers),
+          entry.amount !== undefined ? entry.amount : 0,
+          entry.details || '',
+          entry.previousBalance !== undefined ? entry.previousBalance : '',
+          entry.newBalance !== undefined ? entry.newBalance : '',
+          entry.id
+        ]
+      }),
+      footerTotals: [
+        'TOTALES',
+        '',
+        '',
+        '',
+        '',
+        filteredLog.reduce((s, e) => s + (e.amount || 0), 0),
+        '',
+        '',
+        '',
+        ''
+      ]
+    })
   }
 
   if (!canViewAuditLog) {
@@ -459,7 +474,7 @@ export function AuditLogModal({ isOpen, onClose }: AuditLogModalProps) {
                             {entry.registerId && (
                               <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground mt-1 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
                                 <Shield className="h-2.5 w-2.5" />
-                                {entry.registerId}
+                                {formatRegisterName(entry.registerId, registers)}
                               </span>
                             )}
                           </div>

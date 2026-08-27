@@ -15,6 +15,7 @@ import { formatCurrency } from '@/lib/currency'
 import { useCashRegisterContext, ZClosureRecord } from '../contexts/CashRegisterContext'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { formatRegisterName, formatUserLabel } from '@/app/dashboard/pos/lib/formatters'
 
 interface ZClosureHistoryModalProps {
   isOpen: boolean
@@ -23,9 +24,9 @@ interface ZClosureHistoryModalProps {
 }
 
 export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosureHistoryModalProps) {
-  const { zClosureHistory, checkPermission } = useCashRegisterContext()
+  const { zClosureHistory, checkPermission, registers } = useCashRegisterContext()
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedPeriod, setSelectedPeriod] = useState<'all' | 'week' | 'month'>('all')
+  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'year' | 'all'>('week')
   const [selectedClosure, setSelectedClosure] = useState<ZClosureRecord | null>(null)
 
   const filteredHistory = useMemo(() => {
@@ -43,12 +44,16 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
     // Filter by period
     if (selectedPeriod !== 'all') {
       const now = new Date()
-      const cutoffDate = new Date()
+      let cutoffDate = new Date()
 
-      if (selectedPeriod === 'week') {
+      if (selectedPeriod === 'today') {
+        cutoffDate.setHours(0, 0, 0, 0)
+      } else if (selectedPeriod === 'week') {
         cutoffDate.setDate(now.getDate() - 7)
       } else if (selectedPeriod === 'month') {
         cutoffDate.setMonth(now.getMonth() - 1)
+      } else if (selectedPeriod === 'year') {
+        cutoffDate.setFullYear(now.getFullYear() - 1)
       }
 
       filtered = filtered.filter(closure =>
@@ -351,27 +356,46 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
             <div className="space-y-4 p-6 bg-white dark:bg-gray-900 shrink-0">
               {/* Filters and Search */}
               <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-                <div className="flex gap-2">
+                <div className="flex gap-1.5 flex-wrap">
                   <Button
-                    variant={selectedPeriod === 'all' ? 'default' : 'outline'}
+                    variant={selectedPeriod === 'today' ? 'default' : 'outline'}
                     size="sm"
-                    onClick={() => setSelectedPeriod('all')}
+                    onClick={() => setSelectedPeriod('today')}
+                    className="h-8 text-xs rounded-xl"
                   >
-                    Todos
+                    Hoy
                   </Button>
                   <Button
                     variant={selectedPeriod === 'week' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setSelectedPeriod('week')}
+                    className="h-8 text-xs rounded-xl"
                   >
-                    Última semana
+                    Esta semana
                   </Button>
                   <Button
                     variant={selectedPeriod === 'month' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setSelectedPeriod('month')}
+                    className="h-8 text-xs rounded-xl"
                   >
-                    Último mes
+                    Este mes
+                  </Button>
+                  <Button
+                    variant={selectedPeriod === 'year' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedPeriod('year')}
+                    className="h-8 text-xs rounded-xl"
+                  >
+                    Este año
+                  </Button>
+                  <Button
+                    variant={selectedPeriod === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedPeriod('all')}
+                    className="h-8 text-xs rounded-xl"
+                  >
+                    Todos
                   </Button>
                 </div>
 
@@ -454,7 +478,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
                                 {new Date(closure.date).toLocaleDateString('es-PY', { weekday: 'long', year: 'numeric' })}
                               </p>
                               <p className="text-xs text-muted-foreground capitalize">
-                                {new Date(closure.closedAt).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })} • {closure.registerId}
+                                {new Date(closure.closedAt).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })} • {formatRegisterName(closure.registerId, registers)}
                               </p>
                             </div>
                           </div>

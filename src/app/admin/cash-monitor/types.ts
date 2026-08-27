@@ -60,6 +60,13 @@ export interface CashSession {
   current_balance?: number
   movements_count?: number
   sales_count?: number
+  total_sales?: number
+  sales_by_cash?: number
+  sales_by_card?: number
+  sales_by_transfer?: number
+  sales_by_mixed?: number
+  income_total?: number
+  expense_total?: number
   last_movement?: CashMovementAdmin | null
   duration_hours?: number
 }
@@ -149,6 +156,9 @@ export interface CashRegisterConfig {
 // Dashboard / Metrics Types
 // ============================================================================
 
+export type MonitorPeriod = 'today' | 'week' | 'month' | 'year' | 'all'
+export type DiscrepancyFilterType = 'all' | 'perfect' | 'with_diff' | 'over' | 'short'
+
 export interface CashMonitorMetrics {
   totalRegisters: number
   openSessions: number
@@ -156,13 +166,24 @@ export interface CashMonitorMetrics {
   suspendedSessions: number
   blockedSessions: number
   totalBalance: number
+  totalSales: number
   totalDiscrepancies: number
+  totalOver: number
+  totalShort: number
+  perfectSessions: number
+  sessionsWithDiff: number
+  salesCash: number
+  salesCard: number
+  salesTransfer: number
+  salesMixed: number
   unresolvedAlerts: number
   criticalAlerts: number
 }
 
 export interface SessionFilter {
   status?: SessionStatus | 'all'
+  period?: MonitorPeriod
+  discrepancy?: DiscrepancyFilterType
   registerId?: string
   branch?: string
   dateFrom?: string

@@ -1,14 +1,16 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { RefreshCcw, Download, Printer, CalendarRange, TrendingUp, TrendingDown, Wallet, Sigma, CheckCircle2 } from 'lucide-react'
+import { RefreshCcw, Download, Printer, CalendarRange, TrendingUp, TrendingDown, Wallet, Sigma, CheckCircle2, HelpCircle, FileText } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { useCashRegisterContext } from '../../contexts/CashRegisterContext'
 import { useCashRegisterReport } from '../../hooks/useCashRegisterReport'
 import { CashRegisterCharts } from '../../components/CashRegisterCharts'
+import { CashRegisterGuideDialog } from './CashRegisterGuideDialog'
+import { downloadPdfReport } from '@/app/dashboard/pos/lib/exportPdf'
 
 interface CashRegisterReportProps {
   onCloseRegister: () => void
@@ -16,6 +18,7 @@ interface CashRegisterReportProps {
 }
 
 export function CashRegisterReport({ onCloseRegister, advancedMode = false }: CashRegisterReportProps) {
+  const [showGuide, setShowGuide] = useState(false)
   const { cashReport, getCurrentRegister } = useCashRegisterContext()
   const {
     reportStart,
@@ -32,6 +35,41 @@ export function CashRegisterReport({ onCloseRegister, advancedMode = false }: Ca
     if (!cashReport) return 0
     return (cashReport.incomes || 0) - (cashReport.expenses || 0)
   }, [cashReport])
+
+  const exportReportPdf = async () => {
+    if (!cashReport) return
+
+    await downloadPdfReport({
+      filename: `reporte_financiero_caja_${new Date().toISOString().slice(0, 10)}`,
+      title: 'Reporte Financiero y de Operaciones de Caja',
+      subtitle: `Período: ${cashReport.periodStart || reportStart} a ${cashReport.periodEnd || reportEnd}`,
+      orientation: 'landscape',
+      summaryStats: [
+        { label: 'Ventas Totales', value: formatCurrency(cashReport.totalSales || 0) },
+        { label: 'Ingresos Caja', value: formatCurrency(cashReport.incomes || 0) },
+        { label: 'Gastos / Egresos', value: formatCurrency(cashReport.expenses || 0) },
+        { label: 'Resultado Neto', value: formatCurrency(netResult) }
+      ],
+      headers: [
+        'Método / Canal de Cobro',
+        'Monto Recaudado (Gs.)',
+        'Participación (%)',
+        'Cantidad de Transacciones'
+      ],
+      rows: (cashReport.paymentMethods || []).map(pm => [
+        pm.method.toUpperCase(),
+        formatCurrency(pm.amount),
+        `${(pm.percentage || 0).toFixed(1)}%`,
+        pm.count || 0
+      ]),
+      columnStyles: {
+        0: { cellWidth: 150 },
+        1: { cellWidth: 150, halign: 'right' },
+        2: { cellWidth: 100, halign: 'center' },
+        3: { cellWidth: 100, halign: 'center' }
+      }
+    })
+  }
 
   return (
     <div className="space-y-6 print-content animate-in fade-in duration-300">
@@ -64,16 +102,28 @@ export function CashRegisterReport({ onCloseRegister, advancedMode = false }: Ca
               <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setPresetRange('today')}>
                 Hoy
               </Button>
-              <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setPresetRange('week')}>
+              <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs font-semibold" onClick={() => setPresetRange('week')}>
                 Semana
               </Button>
               <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setPresetRange('month')}>
                 Mes
               </Button>
+              <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setPresetRange('year')}>
+                Año
+              </Button>
             </div>
             <Button size="sm" onClick={generateReport} disabled={isGenerating} className="shadow-sm">
               <RefreshCcw className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
               Generar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowGuide(true)}
+              className="gap-1.5 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 text-xs font-semibold rounded-xl"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+              <span>¿Cómo funciona?</span>
             </Button>
           </div>
         </div>
@@ -174,11 +224,19 @@ export function CashRegisterReport({ onCloseRegister, advancedMode = false }: Ca
               </div>
 
               <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportReportPdf}
+                  className="text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 border-red-200 dark:border-red-800/80 font-bold"
+                >
+                  <FileText className="h-4 w-4 mr-1.5 text-red-600 dark:text-red-400" /> Descargar PDF
+                </Button>
                 <Button variant="outline" size="sm" onClick={exportReportCSV} className="bg-white dark:bg-gray-950">
-                  <Download className="h-4 w-4 mr-2" /> CSV
+                  <Download className="h-4 w-4 mr-1.5" /> CSV
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => window.print()} className="bg-white dark:bg-gray-950">
-                  <Printer className="h-4 w-4 mr-2" /> Imprimir
+                  <Printer className="h-4 w-4 mr-1.5" /> Imprimir
                 </Button>
                 <div className="w-px h-8 bg-border mx-1 hidden md:block"></div>
                 <Button
@@ -239,6 +297,12 @@ export function CashRegisterReport({ onCloseRegister, advancedMode = false }: Ca
           </Card>
         </>
       )}
+
+      <CashRegisterGuideDialog
+        open={showGuide}
+        onOpenChange={setShowGuide}
+        initialSection="report"
+      />
     </div>
   )
 }

@@ -27,6 +27,8 @@ import {
 import { formatCurrency } from '@/lib/currency'
 import type { CashSession, AdminAction, SessionStatus } from '../types'
 
+import { formatRegisterName, formatUserLabel } from '@/app/dashboard/pos/lib/formatters'
+
 interface SessionsTableProps {
   sessions: CashSession[]
   loading: boolean
@@ -63,11 +65,11 @@ function formatDate(dateStr: string | null): string {
 export function SessionsTable({ sessions, loading, onSelectSession, onAction, liveMode }: SessionsTableProps) {
   if (loading) {
     return (
-      <Card>
+      <Card className="rounded-2xl border border-border/70 shadow-xs">
         <CardContent className="p-6">
           <div className="space-y-4">
             {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-lg" />
+              <Skeleton key={i} className="h-16 w-full rounded-xl" />
             ))}
           </div>
         </CardContent>
@@ -77,12 +79,12 @@ export function SessionsTable({ sessions, loading, onSelectSession, onAction, li
 
   if (sessions.length === 0) {
     return (
-      <Card>
+      <Card className="rounded-2xl border border-dashed border-border/70 shadow-xs">
         <CardContent className="p-12 text-center">
-          <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-          <h3 className="text-lg font-semibold text-muted-foreground">Sin sesiones</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            No hay sesiones que coincidan con los filtros actuales
+          <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-40" />
+          <h3 className="text-base font-semibold text-foreground">Sin sesiones registradas</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            No se encontraron sesiones para los filtros de fecha o estado seleccionados.
           </p>
         </CardContent>
       </Card>
@@ -90,169 +92,176 @@ export function SessionsTable({ sessions, loading, onSelectSession, onAction, li
   }
 
   return (
-    <Card className="border shadow-sm">
-      <CardHeader className="pb-3 border-b">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          {liveMode && <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-          </span>}
-          {liveMode ? 'Cajas en Tiempo Real' : 'Todas las Sesiones'}
-          <Badge variant="outline" className="ml-auto text-xs font-normal">
-            {sessions.length} resultados
+    <Card className="border border-border/70 shadow-xs rounded-2xl overflow-hidden">
+      <CardHeader className="py-3 px-4 border-b bg-muted/20">
+        <CardTitle className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+          {liveMode && (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+          )}
+          {liveMode ? 'Cajas Activas en Vivo' : 'Historial y Monitoreo de Sesiones'}
+          <Badge variant="outline" className="ml-auto text-[11px] font-medium rounded-lg">
+            {sessions.length} turnos
           </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs">
             <thead>
-              <tr className="border-b bg-muted/30">
-                <th className="text-left p-3 font-medium text-muted-foreground">Caja</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Estado</th>
-                <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Cajero</th>
-                <th className="text-right p-3 font-medium text-muted-foreground">Monto Inicial</th>
-                <th className="text-right p-3 font-medium text-muted-foreground hidden lg:table-cell">Balance Cierre</th>
-                <th className="text-right p-3 font-medium text-muted-foreground hidden md:table-cell">Diferencia</th>
-                <th className="text-center p-3 font-medium text-muted-foreground hidden lg:table-cell">Movimientos</th>
-                <th className="text-left p-3 font-medium text-muted-foreground hidden xl:table-cell">Duración</th>
-                <th className="text-right p-3 font-medium text-muted-foreground">Acciones</th>
+              <tr className="border-b bg-muted/30 text-muted-foreground font-semibold">
+                <th className="text-left py-3 px-3.5">Caja / Terminal</th>
+                <th className="text-left py-3 px-2">Estado</th>
+                <th className="text-left py-3 px-3 hidden md:table-cell">Cajero</th>
+                <th className="text-right py-3 px-3">Fondo Inicial</th>
+                <th className="text-right py-3 px-3 hidden sm:table-cell">Ventas</th>
+                <th className="text-right py-3 px-3">Balance / Gaveta</th>
+                <th className="text-right py-3 px-3 hidden md:table-cell">Diferencia (Arqueo)</th>
+                <th className="text-center py-3 px-2 hidden lg:table-cell">Movs.</th>
+                <th className="text-left py-3 px-3 hidden xl:table-cell">Duración</th>
+                <th className="text-right py-3 px-3.5">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {sessions.map((session) => {
                 const status = statusConfig[session.status]
+                const diff = session.discrepancy || 0
+                const isClosed = session.status === 'closed'
+                const isOpen = session.status === 'open'
+                const openerLabel = formatUserLabel(session.opened_by_name || session.opened_by)
+                const regName = formatRegisterName(session.register_id)
+
                 return (
                   <tr
                     key={session.id}
                     className="hover:bg-muted/30 transition-colors cursor-pointer"
                     onClick={() => onSelectSession(session)}
                   >
-                    <td className="p-3">
-                      <div className="font-medium">{session.register_id}</div>
-                      <div className="text-xs text-muted-foreground">{session.branch_id}</div>
+                    <td className="py-3 px-3.5">
+                      <div className="font-semibold text-foreground">{regName}</div>
+                      <div className="text-[10px] text-muted-foreground">{session.branch_id || 'Principal'}</div>
                     </td>
-                    <td className="p-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${status.color}`}>
+                    <td className="py-3 px-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${status.color}`}>
                         {status.label}
                       </span>
                     </td>
-                    <td className="p-3 hidden md:table-cell">
+                    <td className="py-3 px-3 hidden md:table-cell">
                       <div className="flex items-center gap-1.5">
-                        <User className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-xs truncate max-w-[140px]" title={session.opened_by_name || session.opened_by || 'No identificado'}>
-                          {session.opened_by_name || (session.opened_by ? session.opened_by.slice(0, 8) + '...' : '')}
+                        <User className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <span className="text-xs truncate max-w-[130px] font-medium" title={openerLabel}>
+                          {openerLabel}
                         </span>
-                        {!session.opened_by_name && !session.opened_by && (
-                          <span className="text-[10px] text-amber-600 dark:text-amber-400 italic">sin registro</span>
-                        )}
                       </div>
                     </td>
-                    <td className="p-3 text-right font-mono text-xs">
+                    <td className="py-3 px-3 text-right font-mono tabular-nums text-muted-foreground">
                       {formatCurrency(session.opening_balance)}
                     </td>
-                    <td className="p-3 text-right font-mono text-xs hidden lg:table-cell">
-                      {session.closing_balance != null
-                        ? formatCurrency(session.closing_balance)
-                        : <span className="text-muted-foreground">-</span>
-                      }
+                    <td className="py-3 px-3 text-right hidden sm:table-cell">
+                      <div className="font-mono font-semibold text-foreground tabular-nums">
+                        {formatCurrency(session.total_sales || 0)}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground">
+                        Ef: {formatCurrency(session.sales_by_cash || 0)}
+                      </div>
                     </td>
-                    <td className="p-3 text-right hidden md:table-cell">
-                      {session.status === 'closed' ? (
-                        (() => {
-                          const diff = session.discrepancy || 0
-                          const hasExpectedBalance = session.expected_balance > 0
-
-                          // If no expected_balance stored, we can't determine discrepancy reliably
-                          if (!hasExpectedBalance && diff === 0) {
-                            return (
-                              <span className="text-[10px] text-muted-foreground italic">sin arqueo</span>
-                            )
-                          }
-
-                          if (diff === 0) {
-                            return (
-                              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                Exacto
-                              </span>
-                            )
-                          }
-                          if (diff > 0) {
-                            return (
-                              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                +{formatCurrency(diff)} sobrante
-                              </span>
-                            )
-                          }
-                          return (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 dark:text-red-400">
-                              <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                              {formatCurrency(Math.abs(diff))} faltante
-                            </span>
-                          )
-                        })()
+                    <td className="py-3 px-3 text-right font-mono tabular-nums">
+                      {isOpen ? (
+                        <div>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(session.current_balance || session.opening_balance)}
+                          </span>
+                          <span className="block text-[9px] text-emerald-700 dark:text-emerald-500 font-sans">
+                            ● en vivo
+                          </span>
+                        </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
+                        <span className="font-semibold text-foreground">
+                          {session.closing_balance != null
+                            ? formatCurrency(session.closing_balance)
+                            : formatCurrency(session.current_balance || 0)}
+                        </span>
                       )}
                     </td>
-                    <td className="p-3 text-center hidden lg:table-cell">
-                      <Badge variant="outline" className="text-xs font-mono">
+                    <td className="py-3 px-3 text-right hidden md:table-cell">
+                      {isClosed ? (
+                        Math.abs(diff) < 1 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100/70 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md">
+                            ✓ Exacto
+                          </span>
+                        ) : diff > 0.5 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-100/70 dark:bg-amber-950/50 px-2 py-0.5 rounded-md font-mono">
+                            ▲ +{formatCurrency(diff)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 dark:text-rose-400 bg-rose-100/70 dark:bg-rose-950/50 px-2 py-0.5 rounded-md font-mono">
+                            ▼ -{formatCurrency(Math.abs(diff))}
+                          </span>
+                        )
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 dark:text-blue-400 bg-blue-100/60 dark:bg-blue-950/40 px-2 py-0.5 rounded-md">
+                          En curso
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-2 text-center hidden lg:table-cell">
+                      <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0 rounded">
                         {session.movements_count || 0}
                       </Badge>
                     </td>
-                    <td className="p-3 hidden xl:table-cell">
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <td className="py-3 px-3 hidden xl:table-cell">
+                      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                         <Clock className="h-3 w-3" />
                         {formatDuration(session.duration_hours)}
                       </div>
                     </td>
-                    <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3 px-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
+                          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg">
+                            <MoreHorizontal className="h-3.5 w-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => onSelectSession(session)}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ver detalle
+                        <DropdownMenuContent align="end" className="w-48 text-xs rounded-xl shadow-lg">
+                          <DropdownMenuItem onClick={() => onSelectSession(session)} className="gap-2">
+                            <Eye className="h-3.5 w-3.5 text-blue-600" />
+                            Ver detalle completo
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {session.status === 'open' && (
                             <>
-                              <DropdownMenuItem onClick={() => onAction('remote_close', session)}>
-                                <XCircle className="h-4 w-4 mr-2 text-red-500" />
+                              <DropdownMenuItem onClick={() => onAction('remote_close', session)} className="gap-2 text-rose-600 focus:text-rose-600">
+                                <XCircle className="h-3.5 w-3.5" />
                                 Cerrar remotamente
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => onAction('suspend', session)}>
-                                <PauseCircle className="h-4 w-4 mr-2 text-amber-500" />
+                              <DropdownMenuItem onClick={() => onAction('suspend', session)} className="gap-2 text-amber-600 focus:text-amber-600">
+                                <PauseCircle className="h-3.5 w-3.5" />
                                 Suspender
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => onAction('block', session)}>
-                                <Lock className="h-4 w-4 mr-2 text-red-500" />
+                              <DropdownMenuItem onClick={() => onAction('block', session)} className="gap-2 text-red-600 focus:text-red-600">
+                                <Lock className="h-3.5 w-3.5" />
                                 Bloquear
                               </DropdownMenuItem>
                             </>
                           )}
                           {session.status === 'suspended' && (
-                            <DropdownMenuItem onClick={() => onAction('unsuspend', session)}>
-                              <PlayCircle className="h-4 w-4 mr-2 text-emerald-500" />
+                            <DropdownMenuItem onClick={() => onAction('unsuspend', session)} className="gap-2 text-emerald-600 focus:text-emerald-600">
+                              <PlayCircle className="h-3.5 w-3.5" />
                               Reactivar
                             </DropdownMenuItem>
                           )}
                           {session.status === 'blocked' && (
-                            <DropdownMenuItem onClick={() => onAction('unblock', session)}>
-                              <Unlock className="h-4 w-4 mr-2 text-blue-500" />
+                            <DropdownMenuItem onClick={() => onAction('unblock', session)} className="gap-2 text-blue-600 focus:text-blue-600">
+                              <Unlock className="h-3.5 w-3.5" />
                               Desbloquear
                             </DropdownMenuItem>
                           )}
                           {session.status === 'closed' && (
-                            <DropdownMenuItem onClick={() => onAction('reopen', session)}>
-                              <RotateCcw className="h-4 w-4 mr-2 text-violet-500" />
-                              Reabrir
+                            <DropdownMenuItem onClick={() => onAction('reopen', session)} className="gap-2 text-violet-600 focus:text-violet-600">
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              Reabrir turno
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>

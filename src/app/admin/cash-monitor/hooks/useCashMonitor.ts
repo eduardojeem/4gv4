@@ -26,12 +26,21 @@ export function useCashMonitor() {
     suspendedSessions: 0,
     blockedSessions: 0,
     totalBalance: 0,
+    totalSales: 0,
     totalDiscrepancies: 0,
+    totalOver: 0,
+    totalShort: 0,
+    perfectSessions: 0,
+    sessionsWithDiff: 0,
+    salesCash: 0,
+    salesCard: 0,
+    salesTransfer: 0,
+    salesMixed: 0,
     unresolvedAlerts: 0,
     criticalAlerts: 0
   })
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<SessionFilter>({ status: 'all' })
+  const [filter, setFilter] = useState<SessionFilter>({ status: 'all', period: 'week', discrepancy: 'all' })
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null)
   const { selectedBranchId } = useBranch()
 
@@ -53,12 +62,11 @@ export function useCashMonitor() {
         .from('cash_closures')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100)
+        .limit(200)
 
       query = withBranchFilter(query, selectedBranchId)
 
-      // Apply filters - use date column as primary status indicator
-      // (compatible with both old schema without 'status' column and new schema with it)
+      // Apply status filter
       if (filter.status && filter.status !== 'all') {
         switch (filter.status) {
           case 'open':
@@ -78,9 +86,30 @@ export function useCashMonitor() {
       if (filter.registerId) {
         query = query.eq('register_id', filter.registerId)
       }
+
+      // Period filter calculation
+      let periodCutoff: Date | null = null
+      const now = new Date()
+      if (filter.period === 'today') {
+        periodCutoff = new Date(now)
+        periodCutoff.setHours(0, 0, 0, 0)
+      } else if (filter.period === 'week' || !filter.period) {
+        periodCutoff = new Date(now)
+        periodCutoff.setDate(now.getDate() - 7)
+      } else if (filter.period === 'month') {
+        periodCutoff = new Date(now)
+        periodCutoff.setMonth(now.getMonth() - 1)
+      } else if (filter.period === 'year') {
+        periodCutoff = new Date(now)
+        periodCutoff.setFullYear(now.getFullYear() - 1)
+      }
+
       if (filter.dateFrom) {
         query = query.gte('created_at', filter.dateFrom)
+      } else if (periodCutoff && filter.period !== 'all') {
+        query = query.gte('created_at', periodCutoff.toISOString())
       }
+
       if (filter.dateTo) {
         query = query.lte('created_at', filter.dateTo)
       }
@@ -89,10 +118,20 @@ export function useCashMonitor() {
 
       if (error) throw error
 
-      // Fetch movement counts per session AND resolve who opened each session
+      // Fetch movement counts and breakdowns per session
       const sessionIds = data?.map(s => s.id) || []
-      const movementCounts: Record<string, { total: number; sales: number; lastMovement: CashMovementAdmin | null }> = {}
-      // Map session_id -> user who created the opening movement (fallback for opened_by)
+      const movementCounts: Record<string, {
+        total: number
+        sales: number
+        salesCash: number
+        salesCard: number
+        salesTransfer: number
+        salesMixed: number
+        totalSales: number
+        cashIn: number
+        cashOut: number
+        lastMovement: CashMovementAdmin | null
+      }> = {}
       const sessionOpenerMap: Record<string, string> = {}
 
       if (sessionIds.length > 0) {
@@ -108,15 +147,40 @@ export function useCashMonitor() {
         if (movements) {
           movements.forEach(m => {
             if (!movementCounts[m.session_id]) {
-              movementCounts[m.session_id] = { total: 0, sales: 0, lastMovement: m }
+              movementCounts[m.session_id] = {
+                total: 0,
+                sales: 0,
+                salesCash: 0,
+                salesCard: 0,
+                salesTransfer: 0,
+                salesMixed: 0,
+                totalSales: 0,
+                cashIn: 0,
+                cashOut: 0,
+                lastMovement: m
+              }
             } else {
-              // Update lastMovement to the most recent
               movementCounts[m.session_id].lastMovement = m
             }
+
+            const amt = Number(m.amount) || 0
             movementCounts[m.session_id].total++
-            if (m.type === 'sale') movementCounts[m.session_id].sales++
-            // Track who opened the session:
-            // Priority: opening movement creator > earliest movement creator
+
+            if (m.type === 'sale' || (m.type as string) === 'venta') {
+              movementCounts[m.session_id].sales++
+              movementCounts[m.session_id].totalSales += amt
+
+              const pm = m.payment_method || 'cash'
+              if (pm === 'cash' || pm === 'efectivo') movementCounts[m.session_id].salesCash += amt
+              else if (pm === 'card' || pm === 'tarjeta') movementCounts[m.session_id].salesCard += amt
+              else if (pm === 'transfer' || pm === 'transferencia' || pm === 'qr') movementCounts[m.session_id].salesTransfer += amt
+              else if (pm === 'mixed' || pm === 'mixto') movementCounts[m.session_id].salesMixed += amt
+            } else if (m.type === 'cash_in' || (m.type as string) === 'ingreso') {
+              movementCounts[m.session_id].cashIn += amt
+            } else if (m.type === 'cash_out' || (m.type as string) === 'egreso') {
+              movementCounts[m.session_id].cashOut += amt
+            }
+
             if (m.created_by) {
               if (m.type === 'opening') {
                 sessionOpenerMap[m.session_id] = m.created_by
@@ -128,13 +192,10 @@ export function useCashMonitor() {
         }
       }
 
-      // If we still can't identify openers, try to get the current user as ultimate fallback
-      // This handles the case where old sessions have no created_by at all
       let currentUserId: string | null = null
       const { data: userData } = await supabase.auth.getUser()
       currentUserId = userData.user?.id || null
 
-      // Collect ALL user IDs: from opened_by, closed_by, opening movements, and current user
       const userIds = new Set<string>()
       data?.forEach(s => {
         if (s.opened_by) userIds.add(s.opened_by)
@@ -143,7 +204,6 @@ export function useCashMonitor() {
       Object.values(sessionOpenerMap).forEach(uid => userIds.add(uid))
       if (currentUserId) userIds.add(currentUserId)
 
-      // Filter out non-UUID values (e.g. 'system') before querying profiles
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
       const validUserIds = Array.from(userIds).filter(id => uuidRegex.test(id))
 
@@ -162,34 +222,51 @@ export function useCashMonitor() {
         }
       }
 
-      // Map known non-UUID identifiers
       userIds.forEach(id => {
         if (!uuidRegex.test(id)) {
           userMap[id] = id === 'system' ? 'Sistema' : id
         }
       })
 
-      // Map to CashSession
-      // Re-use the movements we already fetched (they're in movementCounts iteration)
-      // We need to re-fetch or store them. Let's store during the first iteration.
-      // Actually, let's rebuild from the movements query we already did above.
-      // The movements variable is scoped inside the if block, so let's restructure.
-
-      const mapped: CashSession[] = (data || []).map(s => {
-        const mc = movementCounts[s.id] || { total: 0, sales: 0, lastMovement: null }
+      let mapped: CashSession[] = (data || []).map(s => {
+        const mc = movementCounts[s.id] || {
+          total: 0,
+          sales: 0,
+          salesCash: 0,
+          salesCard: 0,
+          salesTransfer: 0,
+          salesMixed: 0,
+          totalSales: 0,
+          cashIn: 0,
+          cashOut: 0,
+          lastMovement: null
+        }
         const openedAt = new Date(s.created_at)
         const now = new Date()
         const durationHours = (now.getTime() - openedAt.getTime()) / (1000 * 60 * 60)
-
-        // Resolve who opened: prefer opened_by column, fallback to opening movement creator, then current user
         const effectiveOpenedBy = s.opened_by || sessionOpenerMap[s.id] || currentUserId || null
-
-        // Discrepancy logic:
-        // Use the stored discrepancy from DB if available (set by closeRegister)
-        // This is the REAL discrepancy calculated at close time:
-        //   discrepancy = actual_cash_counted - expected_balance
-        // where expected = opening + sales(cash) + cash_in - cash_out
         const discrepancy = Number(s.discrepancy) || 0
+
+        const totalSalesDb = Number(s.total_sales) || Number(s.sales_total) || 0
+        const salesCashDb = Number(s.sales_total_cash) || 0
+        const salesCardDb = Number(s.sales_total_card) || 0
+        const salesTransferDb = Number(s.sales_total_transfer) || 0
+        const salesMixedDb = Number(s.sales_total_mixed) || 0
+        const incomeTotalDb = Number(s.income_total) || 0
+        const expenseTotalDb = Number(s.expense_total) || 0
+
+        const totalSales = totalSalesDb > 0 ? totalSalesDb : (mc.totalSales > 0 ? mc.totalSales : (salesCashDb + salesCardDb + salesTransferDb + salesMixedDb))
+        const salesCash = salesCashDb > 0 ? salesCashDb : mc.salesCash
+        const salesCard = salesCardDb > 0 ? salesCardDb : mc.salesCard
+        const salesTransfer = salesTransferDb > 0 ? salesTransferDb : mc.salesTransfer
+        const salesMixed = salesMixedDb > 0 ? salesMixedDb : mc.salesMixed
+
+        const openingBal = Number(s.opening_balance) || 0
+        const incomeTotal = incomeTotalDb > 0 ? incomeTotalDb : mc.cashIn
+        const expenseTotal = expenseTotalDb > 0 ? expenseTotalDb : mc.cashOut
+        const currentBalance = s.closing_balance !== null && s.closing_balance !== undefined
+          ? Number(s.closing_balance)
+          : (openingBal + totalSales + incomeTotal - expenseTotal)
 
         return {
           id: s.id,
@@ -201,10 +278,18 @@ export function useCashMonitor() {
           opened_by_name: effectiveOpenedBy ? userMap[effectiveOpenedBy] : undefined,
           closed_by: s.closed_by,
           closed_by_name: s.closed_by ? userMap[s.closed_by] : undefined,
-          opening_balance: s.opening_balance || 0,
+          opening_balance: openingBal,
           closing_balance: s.closing_balance,
-          expected_balance: Number(s.expected_balance) || 0,
+          current_balance: currentBalance,
+          expected_balance: Number(s.expected_balance) || currentBalance,
           discrepancy,
+          total_sales: totalSales,
+          sales_by_cash: salesCash,
+          sales_by_card: salesCard,
+          sales_by_transfer: salesTransfer,
+          sales_by_mixed: salesMixed,
+          income_total: incomeTotal,
+          expense_total: expenseTotal,
           branch_id: s.branch_id || selectedBranchId || 'principal',
           created_at: s.created_at,
           date: s.date,
@@ -219,6 +304,18 @@ export function useCashMonitor() {
           duration_hours: s.status === 'open' ? Math.round(durationHours * 10) / 10 : undefined
         }
       })
+
+      // Apply discrepancy filter in memory
+      if (filter.discrepancy && filter.discrepancy !== 'all') {
+        mapped = mapped.filter(s => {
+          if (s.status === 'open') return true
+          if (filter.discrepancy === 'perfect') return Math.abs(s.discrepancy) < 1
+          if (filter.discrepancy === 'with_diff') return Math.abs(s.discrepancy) >= 1
+          if (filter.discrepancy === 'over') return s.discrepancy > 0.5
+          if (filter.discrepancy === 'short') return s.discrepancy < -0.5
+          return true
+        })
+      }
 
       setSessions(mapped)
     } catch (error) {
@@ -349,10 +446,25 @@ export function useCashMonitor() {
     const suspended = sessions.filter(s => s.status === 'suspended')
     const blocked = sessions.filter(s => s.status === 'blocked')
 
-    const totalBalance = open.reduce((sum, s) => sum + (s.opening_balance || 0), 0)
-    const totalDiscrepancies = sessions
-      .filter(s => Math.abs(s.discrepancy) > 0)
+    const totalBalance = open.reduce((sum, s) => sum + (s.current_balance || s.opening_balance || 0), 0)
+    const totalSales = sessions.reduce((sum, s) => sum + (s.total_sales || 0), 0)
+    const salesCash = sessions.reduce((sum, s) => sum + (s.sales_by_cash || 0), 0)
+    const salesCard = sessions.reduce((sum, s) => sum + (s.sales_by_card || 0), 0)
+    const salesTransfer = sessions.reduce((sum, s) => sum + (s.sales_by_transfer || 0), 0)
+    const salesMixed = sessions.reduce((sum, s) => sum + (s.sales_by_mixed || 0), 0)
+
+    const closedSessions = sessions.filter(s => s.status !== 'open')
+    const totalOver = closedSessions
+      .filter(s => s.discrepancy > 0.5)
+      .reduce((sum, s) => sum + s.discrepancy, 0)
+
+    const totalShort = closedSessions
+      .filter(s => s.discrepancy < -0.5)
       .reduce((sum, s) => sum + Math.abs(s.discrepancy), 0)
+
+    const totalDiscrepancies = closedSessions.reduce((sum, s) => sum + (s.discrepancy || 0), 0)
+    const perfectSessions = closedSessions.filter(s => Math.abs(s.discrepancy) < 1).length
+    const sessionsWithDiff = closedSessions.filter(s => Math.abs(s.discrepancy) >= 1).length
 
     const unresolvedAlerts = alerts.filter(a => !a.is_resolved).length
     const criticalAlerts = alerts.filter(a => !a.is_resolved && a.severity === 'critical').length
@@ -364,7 +476,16 @@ export function useCashMonitor() {
       suspendedSessions: suspended.length,
       blockedSessions: blocked.length,
       totalBalance,
+      totalSales,
       totalDiscrepancies,
+      totalOver,
+      totalShort,
+      perfectSessions,
+      sessionsWithDiff,
+      salesCash,
+      salesCard,
+      salesTransfer,
+      salesMixed,
       unresolvedAlerts,
       criticalAlerts
     })

@@ -155,21 +155,66 @@ export function useCashRegister() {
             return acc
         }, {} as Record<string, CashMovement[]>)
 
-        const formatted = sessions.map(session => ({
-            ...session,
-            id: session.id,
-            register_id: session.register_id,
-            opened_by: session.opened_by || 'system',
-            closed_by: session.closed_by,
-            opening_balance: session.opening_balance,
-            closing_balance: session.closing_balance,
-            expected_balance: session.expected_balance || 0,
-            discrepancy: session.discrepancy || 0,
-            status: 'closed' as const,
-            opened_at: session.created_at, // Map created_at to opened_at
-            closed_at: session.date,       // Map date to closed_at
-            movements: movementsBySession[session.id] || []
-        }))
+        // Fetch user profiles for opened_by and closed_by in sessions
+        const sessionUserIds = [...new Set(
+            sessions.flatMap(s => [s.opened_by, s.closed_by]).filter(Boolean)
+        )] as string[]
+
+        let sessionUserMap: Record<string, string> = {}
+        if (sessionUserIds.length > 0) {
+            try {
+                const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, name, full_name, email')
+                    .in('id', sessionUserIds)
+
+                if (profiles && profiles.length > 0) {
+                    sessionUserMap = profiles.reduce((acc, p: any) => {
+                        const displayName = p.name || p.full_name || (p.email ? p.email.split('@')[0] : '')
+                        if (displayName) {
+                            acc[p.id] = displayName
+                        }
+                        return acc
+                    }, {} as Record<string, string>)
+                }
+            } catch (err) {
+                console.warn('Could not load profiles for sessions:', err)
+            }
+        }
+
+        const formatted = sessions.map(session => {
+            const sessionMovements = movementsBySession[session.id] || []
+            const openingMov = sessionMovements.find(m => m.type === 'opening')
+            const closingMov = sessionMovements.find(m => m.type === 'closing')
+
+            // Resuelve el nombre del usuario de apertura
+            const openedByRaw = session.opened_by
+            const openedByName = openedByRaw
+                ? (sessionUserMap[openedByRaw] || openedByRaw)
+                : (openingMov?.userName || openingMov?.userEmail || '')
+
+            // Resuelve el nombre del usuario de cierre
+            const closedByRaw = session.closed_by
+            const closedByName = closedByRaw && closedByRaw !== 'system'
+                ? (sessionUserMap[closedByRaw] || closedByRaw)
+                : (closingMov?.userName || closingMov?.userEmail || (closedByRaw === 'system' ? 'Sistema' : ''))
+
+            return {
+                ...session,
+                id: session.id,
+                register_id: session.register_id,
+                opened_by: openedByName,
+                closed_by: closedByName,
+                opening_balance: session.opening_balance,
+                closing_balance: session.closing_balance,
+                expected_balance: session.expected_balance || 0,
+                discrepancy: session.discrepancy || 0,
+                status: 'closed' as const,
+                opened_at: session.created_at, // Map created_at to opened_at
+                closed_at: session.date,       // Map date to closed_at
+                movements: sessionMovements
+            }
+        })
 
         setHistory(formatted)
         return formatted
@@ -199,36 +244,28 @@ export function useCashRegister() {
         const movements = data || []
         const userIds = [...new Set(movements.map(m => m.created_by).filter(Boolean))] as string[]
         let userMap: Record<string, string> = {}
-        
         let emailMap: Record<string, string> = {}
-        if (userIds.length > 0) {
-            const { data: profilesWithEmail, error: profilesWithEmailError } = await supabase
-                .from('profiles')
-                .select('id, full_name, email')
-                .in('id', userIds)
 
-            if (profilesWithEmailError) {
-                const { data: profilesFallback } = await supabase
+        if (userIds.length > 0) {
+            try {
+                const { data: profilesWithEmail } = await supabase
                     .from('profiles')
-                    .select('id, full_name')
+                    .select('id, name, full_name, email')
                     .in('id', userIds)
 
-                if (profilesFallback) {
-                    userMap = profilesFallback.reduce((acc, p) => {
-                        acc[p.id] = p.full_name || 'Usuario'
+                if (profilesWithEmail) {
+                    userMap = profilesWithEmail.reduce((acc, p: any) => {
+                        acc[p.id] = p.name || p.full_name || ''
+                        return acc
+                    }, {} as Record<string, string>)
+
+                    emailMap = profilesWithEmail.reduce((acc, p: any) => {
+                        acc[p.id] = p.email || ''
                         return acc
                     }, {} as Record<string, string>)
                 }
-            } else if (profilesWithEmail) {
-                userMap = profilesWithEmail.reduce((acc, p) => {
-                    acc[p.id] = p.full_name || ''
-                    return acc
-                }, {} as Record<string, string>)
-
-                emailMap = profilesWithEmail.reduce((acc, p) => {
-                    acc[p.id] = p.email || ''
-                    return acc
-                }, {} as Record<string, string>)
+            } catch (err) {
+                console.warn('Could not load profiles for audit log:', err)
             }
         }
 
@@ -238,7 +275,7 @@ export function useCashRegister() {
             const userEmail = userId ? (emailMap[userId] || '') : ''
             return {
                 ...item,
-                userName: userName || userEmail || (userId ? 'Usuario Desconocido' : 'Usuario no identificado'),
+                userName: userName || userEmail || (userId ? 'Usuario' : 'Usuario no identificado'),
                 userEmail
             }
         })

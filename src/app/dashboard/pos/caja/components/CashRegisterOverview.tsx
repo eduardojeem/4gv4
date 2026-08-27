@@ -28,11 +28,13 @@ import {
   ArrowDownRight,
   TrendingUp,
   ShieldCheck,
-  Smartphone
+  Smartphone,
+  HelpCircle
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { useCashRegisterContext } from '../../contexts/CashRegisterContext'
 import { CashMovementTimeline } from '../../components/CashMovementTimeline'
+import { CashRegisterGuideDialog } from './CashRegisterGuideDialog'
 import { cn } from '@/lib/utils'
 
 interface CashRegisterOverviewProps {
@@ -55,9 +57,11 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
   const {
     getCurrentRegister,
     userPermissions,
-    calculateDiscrepancy
+    calculateDiscrepancy,
+    lastCashCount
   } = useCashRegisterContext()
 
+  const [showGuide, setShowGuide] = useState(false)
   const register = getCurrentRegister
   const isRegisterOpen = register.isOpen
   const canCashIn = userPermissions.canAddCashIn
@@ -75,14 +79,23 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
   }, [register.movements])
 
   const metrics = useMemo(() => {
-    const incomes = movements
-      .filter(m => m.type === 'sale' || m.type === 'cash_in')
+    // 1. Efectivo físico que entra a caja
+    const cashSales = movements
+      .filter(m => m.type === 'sale' && (!m.payment_method || m.payment_method === 'cash' || m.payment_method === 'efectivo'))
       .reduce((sum, m) => sum + (Number(m.amount) || 0), 0)
 
-    const expenses = movements
-      .filter(m => m.type === 'cash_out')
+    const manualCashIn = movements
+      .filter(m => m.type === 'cash_in' && (!m.payment_method || m.payment_method === 'cash' || m.payment_method === 'efectivo'))
       .reduce((sum, m) => sum + (Number(m.amount) || 0), 0)
 
+    const totalCashIncomes = cashSales + manualCashIn
+
+    // 2. Efectivo físico que sale de caja (retiros, compras, etc.)
+    const totalCashExpenses = movements
+      .filter(m => m.type === 'cash_out' && (!m.payment_method || m.payment_method === 'cash' || m.payment_method === 'efectivo'))
+      .reduce((sum, m) => sum + (Number(m.amount) || 0), 0)
+
+    // 3. Ventas totales (todos los métodos)
     const salesMovements = movements.filter(m => m.type === 'sale')
     const totalSalesCount = salesMovements.length
 
@@ -103,7 +116,14 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
       return acc
     }, { cash: 0, card: 0, transfer: 0, credit: 0, others: 0, totalSales: 0 })
 
-    return { incomes, expenses, paymentMethods, totalSalesCount }
+    return {
+      cashIncomes: totalCashIncomes,
+      cashExpenses: totalCashExpenses,
+      cashSales,
+      manualCashIn,
+      paymentMethods,
+      totalSalesCount
+    }
   }, [movements])
 
   const filteredMovements = useMemo(() => {
@@ -166,10 +186,21 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
             </h3>
             <p className="text-xs text-muted-foreground">Acciones frecuentes para registrar movimientos o cuadrar efectivo</p>
           </div>
-          <Badge variant="outline" className="w-fit text-[11px] font-semibold bg-muted/40 gap-1.5 py-1">
-            <Clock className="h-3.5 w-3.5 text-primary" />
-            {openingMovement ? `Abierta a las ${new Date(openingMovement.created_at).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })}` : 'Turno en curso'}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowGuide(true)}
+              className="h-8 gap-1.5 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 text-xs font-semibold rounded-xl"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+              <span>¿Cómo funciona?</span>
+            </Button>
+            <Badge variant="outline" className="w-fit text-[11px] font-semibold bg-muted/40 gap-1.5 py-1">
+              <Clock className="h-3.5 w-3.5 text-primary" />
+              {openingMovement ? `Abierta a las ${new Date(openingMovement.created_at).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })}` : 'Turno en curso'}
+            </Badge>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
@@ -284,33 +315,35 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
           </CardContent>
         </Card>
 
-        {/* Ingresos Totales */}
+        {/* Ingresos Totales de Efectivo */}
         <Card className="border border-emerald-200/80 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50/50 to-transparent dark:from-emerald-950/20 shadow-sm hover:shadow-md transition-shadow rounded-2xl">
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
                 <ArrowUpCircle className="h-4 w-4" />
               </div>
-              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">Total Entradas</p>
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">Entradas en Efectivo</p>
             </div>
             <p className="text-2xl font-bold tracking-tight text-emerald-700 dark:text-emerald-400 tabular-nums">
-              +{formatCurrency(metrics.incomes)}
+              +{formatCurrency(metrics.cashIncomes)}
             </p>
-            <p className="text-[11px] text-muted-foreground mt-1">Ventas contado + aportes</p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Ventas contado: {formatCurrency(metrics.cashSales)}
+            </p>
           </CardContent>
         </Card>
 
-        {/* Egresos Totales */}
+        {/* Egresos Totales de Efectivo */}
         <Card className="border border-rose-200/80 dark:border-rose-800/60 bg-gradient-to-br from-rose-50/50 to-transparent dark:from-rose-950/20 shadow-sm hover:shadow-md transition-shadow rounded-2xl">
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-2 rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400">
                 <ArrowDownCircle className="h-4 w-4" />
               </div>
-              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">Total Salidas</p>
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">Salidas de Efectivo</p>
             </div>
             <p className="text-2xl font-bold tracking-tight text-rose-700 dark:text-rose-400 tabular-nums">
-              -{formatCurrency(metrics.expenses)}
+              -{formatCurrency(metrics.cashExpenses)}
             </p>
             <p className="text-[11px] text-muted-foreground mt-1">Gastos, insumos y retiros</p>
           </CardContent>
@@ -319,30 +352,46 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
         {/* Discrepancia / Estado de Arqueo */}
         <Card className={cn(
           "border shadow-sm hover:shadow-md transition-shadow rounded-2xl",
-          Math.abs(discrepancy) > 0 
-            ? "border-amber-200/80 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/20 dark:border-amber-900/40" 
+          lastCashCount
+            ? Math.abs(discrepancy) > 0 
+              ? "border-amber-200/80 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/20 dark:border-amber-900/40" 
+              : "border-emerald-200/80 bg-gradient-to-br from-emerald-50/50 to-transparent dark:from-emerald-950/20 dark:border-emerald-900/40"
             : "border-slate-200/80 bg-gradient-to-br from-slate-50/50 to-transparent dark:from-slate-900/20 dark:border-slate-800/60"
         )}>
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-2">
               <div className={cn(
                 "p-2 rounded-xl",
-                Math.abs(discrepancy) > 0 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-slate-100 text-slate-700 dark:bg-slate-800/40 dark:text-slate-300"
+                lastCashCount
+                  ? Math.abs(discrepancy) > 0 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
+                  : "bg-slate-100 text-slate-700 dark:bg-slate-800/40 dark:text-slate-300"
               )}>
-                {Math.abs(discrepancy) > 0 ? <AlertTriangle className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                {lastCashCount ? (Math.abs(discrepancy) > 0 ? <AlertTriangle className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />) : <Calculator className="h-4 w-4" />}
               </div>
               <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">Último Arqueo</p>
             </div>
-            <p className={cn("text-2xl font-bold tracking-tight tabular-nums", Math.abs(discrepancy) > 0 ? "text-amber-700 dark:text-amber-400" : "text-foreground")}>
-              {Math.abs(discrepancy) > 0 ? `${discrepancy > 0 ? '+' : ''}${formatCurrency(discrepancy)}` : '0 Gs.'}
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              {Math.abs(discrepancy) > 0 ? 'Diferencia no conciliada' : 'Caja perfectamente cuadrada'}
-            </p>
+            {lastCashCount ? (
+              <div>
+                <p className={cn("text-2xl font-bold tracking-tight tabular-nums", Math.abs(discrepancy) > 0 ? (discrepancy > 0 ? "text-amber-700 dark:text-amber-400" : "text-rose-700 dark:text-rose-400") : "text-emerald-700 dark:text-emerald-400")}>
+                  {Math.abs(discrepancy) < 1 ? '0 Gs.' : `${discrepancy > 0 ? '+' : ''}${formatCurrency(discrepancy)}`}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {Math.abs(discrepancy) < 1 ? '✓ Conteo 100% exacto' : discrepancy > 0 ? 'Sobrante detectado' : 'Faltante detectado'}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-2xl font-bold tracking-tight text-muted-foreground tabular-nums">
+                  Pendiente
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Sin conteo físico registrado
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
-
       {/* ── 3. DISTRIBUCIÓN DE COBROS + TIMELINE DE MOVIMIENTOS ── */}
       <div className="grid gap-6 lg:grid-cols-3">
         
@@ -468,6 +517,11 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
         </Card>
       </div>
 
+      <CashRegisterGuideDialog
+        open={showGuide}
+        onOpenChange={setShowGuide}
+        initialSection="overview"
+      />
     </div>
   )
 })
