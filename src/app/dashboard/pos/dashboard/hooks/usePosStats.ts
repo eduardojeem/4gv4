@@ -369,7 +369,8 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 if (c.sale_id && salesData) {
                     const foundSale = salesData.find(s => s.id === c.sale_id)
                     if (foundSale) {
-                        sale = { code: foundSale.code, total_amount: foundSale.total_amount || foundSale.total }
+                        // El select aliasa total_amount como `total`: no hay campo total_amount.
+                        sale = { code: foundSale.code, total_amount: foundSale.total || 0 }
                     }
                 }
 

@@ -11,6 +11,7 @@ import { User, Mail, Phone, Plus, Search, Star, Wrench, Tag, Shield, CheckCircle
 import { formatCurrency } from '@/lib/currency'
 import { useCustomerRepairs, type CustomerRepair } from '@/hooks/useCustomerRepairs'
 import { useCustomerState, type Customer as DbCustomer } from '@/hooks/use-customer-state'
+import { customerSegmentLabel, customerStatusLabel, customerTypeLabel } from '@/lib/i18n/labels'
 
 type Customer = DbCustomer
 
@@ -153,16 +154,16 @@ export function CustomerSelector({
                                     <p className="font-medium">{selectedCustomer.name}</p>
                                     <div className="flex flex-wrap gap-2 mt-1">
                                         <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
-                                            <Shield className="h-3 w-3" />{selectedCustomer.customer_type}
+                                            <Shield className="h-3 w-3" />{customerTypeLabel(selectedCustomer.customer_type)}
                                         </Badge>
                                         <Badge variant="secondary" className="text-xs inline-flex items-center gap-1">
-                                            <Tag className="h-3 w-3" />{selectedCustomer.segment}
+                                            <Tag className="h-3 w-3" />{customerSegmentLabel(selectedCustomer.segment)}
                                         </Badge>
                                         <Badge
                                             variant={selectedCustomer.status === 'active' ? 'default' : selectedCustomer.status === 'inactive' ? 'secondary' : 'destructive'}
                                             className="text-xs inline-flex items-center gap-1"
                                         >
-                                            <CheckCircle className="h-3 w-3" />{selectedCustomer.status}
+                                            <CheckCircle className="h-3 w-3" />{customerStatusLabel(selectedCustomer.status)}
                                         </Badge>
                                     </div>
                                     {selectedCustomer.email && (
@@ -343,16 +344,16 @@ export function CustomerSelector({
                                                     <p className="font-medium">{customer.name}</p>
                                                     <div className="flex flex-wrap gap-2 mt-1">
                                                         <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
-                                                            <Shield className="h-3 w-3" />{customer.customer_type}
+                                                            <Shield className="h-3 w-3" />{customerTypeLabel(customer.customer_type)}
                                                         </Badge>
                                                         <Badge variant="secondary" className="text-xs inline-flex items-center gap-1">
-                                                            <Tag className="h-3 w-3" />{customer.segment}
+                                                            <Tag className="h-3 w-3" />{customerSegmentLabel(customer.segment)}
                                                         </Badge>
                                                         <Badge
                                                             variant={customer.status === 'active' ? 'default' : customer.status === 'inactive' ? 'secondary' : 'destructive'}
                                                             className="text-xs inline-flex items-center gap-1"
                                                         >
-                                                            <CheckCircle className="h-3 w-3" />{customer.status}
+                                                            <CheckCircle className="h-3 w-3" />{customerStatusLabel(customer.status)}
                                                         </Badge>
                                                     </div>
                                                     {customer.email && (

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
 import { Repair } from "@/types/repairs"
+import { repairStatusLabel } from '@/lib/i18n/labels'
 
 interface RepairSelectorProps {
   repairs: Repair[]
@@ -160,7 +161,7 @@ export function RepairSelector({
                       <span>{repair.ticketNumber || repair.id.slice(0, 8)}</span>
                     </div>
                     <Badge variant="outline" className="ml-auto text-[10px] h-4 shrink-0">
-                      {repair.status}
+                      {repairStatusLabel(repair.status)}
                     </Badge>
                   </div>
                 </button>

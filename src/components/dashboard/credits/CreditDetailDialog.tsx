@@ -20,6 +20,7 @@ import {
     AlertCircle, CalendarClock, ChevronDown, ChevronUp, ShoppingBag, History,
     Package2, Wallet, BadgeDollarSign, Hash, Phone, Mail, IdCard, MapPin, Building2, User
 } from 'lucide-react'
+import { customerTypeLabel } from '@/lib/i18n/labels'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface InstallmentItem {
@@ -347,7 +348,7 @@ export function CreditDetailDialog({
                                             <DialogTitle className="text-xl sm:text-2xl font-bold leading-tight truncate">{credit.customer_name}</DialogTitle>
                                             {customerDetails?.customer_type ? (
                                                 <span className="hidden sm:inline-flex rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] uppercase font-bold text-muted-foreground">
-                                                    {customerDetails.customer_type}
+                                                    {customerTypeLabel(customerDetails.customer_type)}
                                                 </span>
                                             ) : null}
                                         </div>

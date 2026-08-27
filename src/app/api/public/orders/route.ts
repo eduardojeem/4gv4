@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminSupabase()
     const validation = publicOrderSchema.safeParse(await request.json())
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const input = validation.data

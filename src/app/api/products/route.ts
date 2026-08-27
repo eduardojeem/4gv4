@@ -297,7 +297,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       
       return NextResponse.json({
         success: false,
-        error: 'Validation failed',
+        error: 'Error de validación',
         code: 'VALIDATION_FAILED',
         details: errors
       }, { status: 400 })
@@ -486,7 +486,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       
       return NextResponse.json({
         success: false,
-        error: 'Validation failed',
+        error: 'Error de validación',
         details: errors
       }, { status: 400 })
     }

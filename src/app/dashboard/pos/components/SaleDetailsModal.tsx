@@ -14,6 +14,7 @@ import { createReceiptData, printReceipt, CompanyInfo } from '@/lib/receipt-util
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { config } from '@/lib/config'
 import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
+import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 interface SaleDetailsModalProps {
   isOpen: boolean
@@ -178,7 +179,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                       <CreditCard className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-medium">Pago</span>
                     </div>
-                    <p className="text-lg font-bold capitalize">{sale.payment_method}</p>
+                    <p className="text-lg font-bold">{paymentMethodLabel(sale.payment_method)}</p>
                     <Badge variant={sale.payment_status === 'paid' ? 'default' : 'secondary'} className="mt-1">
                       {sale.payment_status === 'paid' ? 'Pagada' : sale.payment_status}
                     </Badge>

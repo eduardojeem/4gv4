@@ -171,7 +171,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
     const validation = categorySchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación' }, { status: 400 })
     }
 
     const payload = validation.data
@@ -223,7 +223,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     const validation = categoryUpdateSchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación' }, { status: 400 })
     }
 
     const { id, ...updates } = validation.data

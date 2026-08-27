@@ -97,7 +97,7 @@ export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'po
       
       return NextResponse.json({
         success: false,
-        error: 'Validation failed',
+        error: 'Error de validación',
         details: errors
       }, { status: 400 })
     }
@@ -251,7 +251,7 @@ export const PUT = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos'
       
       return NextResponse.json({
         success: false,
-        error: 'Validation failed',
+        error: 'Error de validación',
         details: errors
       }, { status: 400 })
     }

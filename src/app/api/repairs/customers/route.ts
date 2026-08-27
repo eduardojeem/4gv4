@@ -157,7 +157,7 @@ export const POST = withTenantAuth({ permission: [...writePermissions], module: 
     const validation = repairCustomerSchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const supabase = await createClient()
@@ -188,7 +188,7 @@ export const PUT = withTenantAuth({ permission: [...writePermissions], module: '
     const validation = repairCustomerUpdateSchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const { id, updates } = normalizeCustomerUpdatePayload(validation.data)

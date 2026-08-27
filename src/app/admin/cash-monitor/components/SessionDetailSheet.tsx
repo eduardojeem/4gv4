@@ -37,6 +37,7 @@ import {
 import { formatCurrency } from '@/lib/currency'
 import { formatRegisterName, formatUserLabel } from '@/app/dashboard/pos/lib/formatters'
 import type { CashSession, CashMovementAdmin, AdminAction, SessionStatus } from '../types'
+import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 interface SessionDetailSheetProps {
   session: CashSession | null
@@ -404,7 +405,7 @@ export function SessionDetailSheet({ session, open, onClose, onAction, fetchMove
                             <span className="text-xs font-bold text-foreground">{config.label}</span>
                             {movement.payment_method && (
                               <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 rounded">
-                                {movement.payment_method}
+                                {paymentMethodLabel(movement.payment_method)}
                               </Badge>
                             )}
                           </div>

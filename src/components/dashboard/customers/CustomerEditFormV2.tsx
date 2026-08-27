@@ -46,6 +46,7 @@ import { Customer } from '@/hooks/use-customer-state'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import customerService from '@/services/customer-service'
+import { customerTypeLabel } from '@/lib/i18n/labels'
 
 // Validation Schema
 const customerEditSchema = z.object({
@@ -700,7 +701,7 @@ export function CustomerEditFormV2({
                   <div className="flex justify-between py-1">
                     <span className="text-slate-500">Tipo:</span>
                     <Badge variant="outline" className="text-[10px] uppercase font-bold">
-                      {watchedValues.customer_type}
+                      {customerTypeLabel(watchedValues.customer_type)}
                     </Badge>
                   </div>
                 </CardContent>

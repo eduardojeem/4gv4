@@ -120,7 +120,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       }))
 
       return NextResponse.json(
-        { success: false, error: 'Validation failed', details },
+        { success: false, error: 'Error de validación', details },
         { status: 400 }
       )
     }

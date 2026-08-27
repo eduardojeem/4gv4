@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import type { Customer } from '@/hooks/use-customer-state'
 import { formatCurrency } from '@/lib/currency'
+import { customerSegmentLabel } from '@/lib/i18n/labels'
 
 interface CustomerDetailModalProps {
   open: boolean
@@ -177,7 +178,7 @@ export function CustomerDetailModal({ open, onClose, customer }: CustomerDetailM
               {customer.segment && (
                 <div className="flex items-center gap-3 text-sm">
                   <User className="h-4 w-4 text-muted-foreground" />
-                  <span>Segmento: {customer.segment}</span>
+                  <span>Segmento: {customerSegmentLabel(customer.segment)}</span>
                 </div>
               )}
             </div>

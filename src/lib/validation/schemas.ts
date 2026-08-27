@@ -2,8 +2,10 @@ import { z } from 'zod'
 import { SALE_STATUS, normalizeSaleStatus } from '@/lib/sales-status'
 
 /**
- * Validation schemas for API endpoints
- * Using Zod for runtime type checking and validation
+ * Esquemas de validación de los endpoints.
+ *
+ * Los mensajes van en español porque las rutas los devuelven tal cual en
+ * `details` de la respuesta 400 y la UI los muestra al usuario.
  */
 
 // ============================================================================
@@ -12,37 +14,37 @@ import { SALE_STATUS, normalizeSaleStatus } from '@/lib/sales-status'
 
 export const productSchema = z.object({
   name: z.string()
-    .min(1, 'Product name is required')
-    .max(200, 'Product name must be less than 200 characters'),
+    .min(1, 'El nombre del producto es obligatorio')
+    .max(200, 'El nombre no puede superar los 200 caracteres'),
   
   sku: z.string()
-    .min(1, 'SKU is required')
-    .max(50, 'SKU must be less than 50 characters')
-    .regex(/^[A-Z0-9-_]+$/i, 'SKU can only contain letters, numbers, hyphens, and underscores'),
+    .min(1, 'El SKU es obligatorio')
+    .max(50, 'El SKU no puede superar los 50 caracteres')
+    .regex(/^[A-Z0-9-_]+$/i, 'El SKU solo admite letras, números, guiones y guiones bajos'),
   
   description: z.string()
-    .max(2000, 'Description must be less than 2000 characters')
+    .max(2000, 'La descripción no puede superar los 2000 caracteres')
     .optional()
     .nullable(),
   
   category_id: z.string()
-    .uuid('Invalid category ID')
+    .uuid('La categoría seleccionada no es válida')
     .optional()
     .nullable(),
   
   supplier_id: z.string()
-    .uuid('Invalid supplier ID')
+    .uuid('El proveedor seleccionado no es válido')
     .optional()
     .nullable(),
   
   brand: z.string()
-    .max(100, 'Brand name must be less than 100 characters')
+    .max(100, 'La marca no puede superar los 100 caracteres')
     .transform(v => v.trim().replace(/\b\w/g, c => c.toUpperCase()))
     .optional()
     .nullable(),
 
   brand_id: z.string()
-    .uuid('Invalid brand ID')
+    .uuid('La marca seleccionada no es válida')
     .optional()
     .nullable(),
 
@@ -51,34 +53,34 @@ export const productSchema = z.object({
     .nullable(),
   
   stock_quantity: z.number()
-    .int('Stock quantity must be a whole number')
-    .nonnegative('Stock quantity cannot be negative')
+    .int('El stock debe ser un número entero')
+    .nonnegative('El stock no puede ser negativo')
     .default(0),
   
   min_stock: z.number()
-    .int('Minimum stock must be a whole number')
-    .nonnegative('Minimum stock cannot be negative')
+    .int('El stock mínimo debe ser un número entero')
+    .nonnegative('El stock mínimo no puede ser negativo')
     .default(0),
 
   max_stock: z.number()
-    .int('Maximum stock must be a whole number')
-    .nonnegative('Maximum stock cannot be negative')
+    .int('El stock máximo debe ser un número entero')
+    .nonnegative('El stock máximo no puede ser negativo')
     .optional()
     .nullable(),
   
   purchase_price: z.number()
-    .nonnegative('Purchase price cannot be negative'),
+    .nonnegative('El precio de compra no puede ser negativo'),
   
   sale_price: z.number()
-    .positive('Sale price must be greater than 0'),
+    .positive('El precio de venta debe ser mayor a 0'),
 
   wholesale_price: z.number()
-    .nonnegative('Wholesale price cannot be negative')
+    .nonnegative('El precio mayorista no puede ser negativo')
     .optional()
     .nullable(),
 
   offer_price: z.number()
-    .nonnegative('Offer price cannot be negative')
+    .nonnegative('El precio de oferta no puede ser negativo')
     .optional()
     .nullable(),
 
@@ -104,45 +106,45 @@ export const productSchema = z.object({
   visibility: z.enum(['public', 'wholesale', 'hidden']).optional(),
 
   warranty_months: z.number()
-    .int('Warranty months must be a whole number')
-    .nonnegative('Warranty months cannot be negative')
+    .int('Los meses de garantía deben ser un número entero')
+    .nonnegative('Los meses de garantía no pueden ser negativos')
     .optional()
     .nullable(),
 
   warranty_info: z.string()
-    .max(1000, 'Warranty info must be less than 1000 characters')
+    .max(1000, 'La información de garantía no puede superar los 1000 caracteres')
     .optional()
     .nullable(),
 
   return_window_days: z.number()
-    .int('Return window days must be a whole number')
-    .nonnegative('Return window days cannot be negative')
+    .int('Los días para devolución deben ser un número entero')
+    .nonnegative('Los días para devolución no pueden ser negativos')
     .optional()
     .nullable(),
 
   exchange_window_days: z.number()
-    .int('Exchange window days must be a whole number')
-    .nonnegative('Exchange window days cannot be negative')
+    .int('Los días para cambio deben ser un número entero')
+    .nonnegative('Los días para cambio no pueden ser negativos')
     .optional()
     .nullable(),
 
   return_policy: z.string()
-    .max(1000, 'Return policy must be less than 1000 characters')
+    .max(1000, 'La política de devolución no puede superar los 1000 caracteres')
     .optional()
     .nullable(),
 
   exchange_policy: z.string()
-    .max(1000, 'Exchange policy must be less than 1000 characters')
+    .max(1000, 'La política de cambio no puede superar los 1000 caracteres')
     .optional()
     .nullable(),
   
   barcode: z.string()
-    .max(50, 'Barcode must be less than 50 characters')
+    .max(50, 'El código de barras no puede superar los 50 caracteres')
     .optional()
     .nullable(),
   
   unit_measure: z.string()
-    .max(20, 'Unit measure must be less than 20 characters')
+    .max(20, 'La unidad de medida no puede superar los 20 caracteres')
     .default('unidad'),
 
   images: z.array(z.string())
@@ -150,13 +152,13 @@ export const productSchema = z.object({
     .nullable(),
 
   image_url: z.string()
-    .max(2048, 'Image URL must be less than 2048 characters')
+    .max(2048, 'La URL de la imagen no puede superar los 2048 caracteres')
     .optional()
     .nullable(),
 })
 
 export const productUpdateSchema = productSchema.partial().extend({
-  id: z.string().uuid('Invalid product ID')
+  id: z.string().uuid('El producto seleccionado no es válido')
 })
 
 // ============================================================================
@@ -165,17 +167,17 @@ export const productUpdateSchema = productSchema.partial().extend({
 
 export const saleItemSchema = z.object({
   product_id: z.string()
-    .uuid('Invalid product ID'),
+    .uuid('El producto seleccionado no es válido'),
   
   quantity: z.number()
-    .int('Quantity must be a whole number')
-    .positive('Quantity must be at least 1'),
+    .int('La cantidad debe ser un número entero')
+    .positive('La cantidad debe ser al menos 1'),
   
   unit_price: z.number()
-    .nonnegative('Unit price cannot be negative'),
+    .nonnegative('El precio unitario no puede ser negativo'),
   
   total: z.number()
-    .nonnegative('Total cannot be negative')
+    .nonnegative('El total no puede ser negativo')
     .optional() // Can be calculated from quantity * unit_price
 })
 
@@ -185,23 +187,23 @@ export const saleItemSchema = z.object({
 
 export const saleSchema = z.object({
   customer_id: z.string()
-    .uuid('Invalid customer ID')
+    .uuid('El cliente seleccionado no es válido')
     .optional()
     .nullable(),
   
   items: z.array(saleItemSchema)
-    .min(1, 'Sale must have at least one item')
-    .max(100, 'Cannot have more than 100 items in a single sale'),
+    .min(1, 'La venta debe tener al menos un ítem')
+    .max(100, 'Una venta no puede tener más de 100 ítems'),
   
   total_amount: z.number()
-    .positive('Total amount must be greater than 0'),
+    .positive('El total debe ser mayor a 0'),
   
   tax_amount: z.number()
-    .nonnegative('Tax amount cannot be negative')
+    .nonnegative('El IVA no puede ser negativo')
     .default(0),
   
   discount_amount: z.number()
-    .nonnegative('Discount amount cannot be negative')
+    .nonnegative('El descuento no puede ser negativo')
     .default(0),
   
   payment_method: z.enum(['efectivo', 'tarjeta', 'transferencia']),
@@ -211,7 +213,7 @@ export const saleSchema = z.object({
     .transform((status) => normalizeSaleStatus(status) ?? SALE_STATUS.COMPLETED),
   
   notes: z.string()
-    .max(500, 'Notes must be less than 500 characters')
+    .max(500, 'Las notas no pueden superar los 500 caracteres')
     .optional()
 }).refine(
   (data) => {
@@ -227,12 +229,12 @@ export const saleSchema = z.object({
     return Math.abs(expectedTotal - data.total_amount) <= tolerance
   },
   {
-    message: 'Total amount does not match items total minus discount plus tax'
+    message: 'El total no coincide con la suma de los ítems menos el descuento más el IVA'
   }
 )
 
 export const saleUpdateSchema = z.object({
-  id: z.string().uuid('Invalid sale ID'),
+  id: z.string().uuid('La venta indicada no es válida'),
   status: z.enum(['pendiente', 'completada', 'cancelada', 'pending', 'completed', 'cancelled'])
     .optional()
     .transform((status) => (status ? normalizeSaleStatus(status) : undefined))
