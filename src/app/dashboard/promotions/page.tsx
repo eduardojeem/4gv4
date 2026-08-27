@@ -34,6 +34,7 @@ import {
   Eye,
   GalleryHorizontalEnd,
   Percent,
+  Coins,
 } from 'lucide-react'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { PROMOTIONS_GUIDE } from '@/components/dashboard/common/section-guides-data'
@@ -56,6 +57,11 @@ import { RouteGuard } from '@/components/auth/permission-guard'
 const OffersSectionEditor = dynamic(
   () => import('@/components/admin/website/OffersSectionEditor').then((m) => ({ default: m.OffersSectionEditor })),
   { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl border bg-muted/30" /> }
+)
+
+const LoyaltyRafflesPanel = dynamic(
+  () => import('@/components/dashboard/loyalty').then((m) => ({ default: m.LoyaltyRafflesPanel })),
+  { ssr: false, loading: () => <div className="h-64 animate-pulse rounded-2xl border bg-muted/30" /> }
 )
 
 const OffersPromoCarouselEditor = dynamic(
@@ -285,7 +291,7 @@ export default function PromotionsPage() {
         />
 
         <Tabs value={tab} onValueChange={setTab} className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-2xl grid-cols-3">
             <TabsTrigger value="promociones" className="gap-1.5 text-xs font-semibold sm:text-sm">
               <Percent className="h-3.5 w-3.5" />
               Promociones
@@ -298,6 +304,10 @@ export default function PromotionsPage() {
             <TabsTrigger value="publica" className="gap-1.5 text-xs font-semibold sm:text-sm">
               <Store className="h-3.5 w-3.5" />
               Página pública
+            </TabsTrigger>
+            <TabsTrigger value="puntos" className="gap-1.5 text-xs font-semibold sm:text-sm">
+              <Coins className="h-3.5 w-3.5" />
+              Puntos y sorteos
             </TabsTrigger>
           </TabsList>
 
@@ -390,6 +400,11 @@ export default function PromotionsPage() {
                 </p>
               </div>
             )}
+          </TabsContent>
+
+          {/* ── Puntos y sorteos ───────────────────────────────────────── */}
+          <TabsContent value="puntos" className="mt-6">
+            <LoyaltyRafflesPanel canManage={canManage} />
           </TabsContent>
         </Tabs>
 

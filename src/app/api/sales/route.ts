@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
 import { saleSchema, saleUpdateSchema } from '@/lib/validation/schemas'
 import { SALE_STATUS } from '@/lib/sales-status'
 
@@ -195,6 +196,30 @@ export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'po
       }
     }
     
+    // 4. Acreditar puntos de fidelidad.
+    //
+    // Va despues del stock y fuera del camino critico a proposito: si algo
+    // falla acá, la venta ya está hecha y no se revierte por los puntos. La
+    // función es idempotente por venta, así que un reintento posterior no
+    // acredita dos veces. Sin cliente asignado no hay a quién acreditarle.
+    if (finalCustomerId) {
+      const { error: loyaltyError } = await supabase.rpc('award_loyalty_points_for_sale', {
+        p_organization_id: organization.id,
+        p_customer_id: finalCustomerId,
+        p_amount: validated.total_amount,
+        p_sale_id: sale.id,
+        p_idempotency_key: `sale:${sale.id}`,
+      })
+
+      if (loyaltyError && !isLoyaltyModuleMissing(loyaltyError)) {
+        // Se registra pero no se le devuelve error al cajero: la venta salió.
+        logger.warn('No se pudieron acreditar los puntos de la venta', {
+          saleId: sale.id,
+          error: loyaltyError.message,
+        })
+      }
+    }
+
     logger.info('Sale created successfully', {
       saleId: sale.id,
       itemCount: saleItems.length,
