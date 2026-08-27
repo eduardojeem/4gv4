@@ -141,6 +141,7 @@ create index if not exists loyalty_ledger_organization_idx
 create or replace function public.prevent_loyalty_ledger_mutation()
 returns trigger
 language plpgsql
+set search_path = pg_catalog, public
 as $$
 begin
   raise exception 'El historial de puntos es inmutable: registrá un ajuste compensatorio en vez de editar.'
@@ -326,6 +327,7 @@ create unique index if not exists raffle_winners_ticket_unique
 create or replace function public.prevent_raffle_record_mutation()
 returns trigger
 language plpgsql
+set search_path = pg_catalog, public
 as $$
 begin
   raise exception 'Los números de participación y los ganadores no se pueden modificar.'

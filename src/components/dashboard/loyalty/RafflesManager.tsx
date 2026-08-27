@@ -18,8 +18,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Gift, Loader2, Plus, ShieldAlert, Ticket, Trophy, Users, X } from 'lucide-react'
+import { Coins, Gift, Loader2, Plus, ShieldAlert, Ticket, Trophy, Users, X } from 'lucide-react'
 import { responsiblePlayNotice } from '@/lib/raffles/responsible-play'
+import { RaffleRedeemDialog } from './RaffleRedeemDialog'
 import type { RaffleRow } from '@/hooks/use-loyalty'
 
 interface RafflesManagerProps {
@@ -27,6 +28,7 @@ interface RafflesManagerProps {
   onCreate: (values: Record<string, unknown>) => Promise<boolean>
   onUpdateStatus: (id: string, status: RaffleRow['status']) => Promise<boolean>
   onDraw: (id: string) => Promise<unknown>
+  onRefresh: () => void
   canManage: boolean
 }
 
@@ -55,7 +57,8 @@ function ticketCount(raffle: RaffleRow) {
   return raffle.tickets?.[0]?.count ?? 0
 }
 
-export function RafflesManager({ raffles, onCreate, onUpdateStatus, onDraw, canManage }: RafflesManagerProps) {
+export function RafflesManager({ raffles, onCreate, onUpdateStatus, onDraw, onRefresh, canManage }: RafflesManagerProps) {
+  const [redeemFor, setRedeemFor] = useState<RaffleRow | null>(null)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [drawing, setDrawing] = useState<string | null>(null)
@@ -161,8 +164,17 @@ export function RafflesManager({ raffles, onCreate, onUpdateStatus, onDraw, canM
                     )}
                   </div>
 
-                  {canManage && (
-                    <div className="flex shrink-0 flex-wrap gap-2">
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {/* Canjear no requiere permiso de gestion: lo hace quien
+                        atiende el mostrador. La base valida el resto. */}
+                    {raffle.status === 'published' && !ended && (
+                      <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setRedeemFor(raffle)}>
+                        <Coins className="h-3.5 w-3.5" />
+                        Canjear números
+                      </Button>
+                    )}
+                    {canManage && (
+                      <>
                       {raffle.status === 'draft' && (
                         <Button size="sm" variant="outline" onClick={() => onUpdateStatus(raffle.id, 'published')}>
                           Publicar
@@ -179,8 +191,9 @@ export function RafflesManager({ raffles, onCreate, onUpdateStatus, onDraw, canM
                           Sortear
                         </Button>
                       )}
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             )
@@ -343,6 +356,12 @@ export function RafflesManager({ raffles, onCreate, onUpdateStatus, onDraw, canM
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <RaffleRedeemDialog
+        raffle={redeemFor}
+        onOpenChange={(open) => !open && setRedeemFor(null)}
+        onRedeemed={onRefresh}
+      />
 
       {/* ── Confirmar sorteo ──────────────────────────────────────────── */}
       <AlertDialog open={!!confirmDraw} onOpenChange={(value) => !value && setConfirmDraw(null)}>

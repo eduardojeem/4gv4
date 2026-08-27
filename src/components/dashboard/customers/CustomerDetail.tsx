@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import dynamic from 'next/dynamic'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
@@ -67,6 +68,12 @@ import { CustomerDetailMetrics } from './CustomerDetailMetrics'
 import { CustomerLinkAccount } from './CustomerLinkAccount'
 import { WholesaleToggle } from './WholesaleToggle'
 import { formatCurrency } from '@/lib/currency'
+
+// Trae su propio fetch: se carga solo cuando el usuario abre la pestaña.
+const CustomerPointsHistory = dynamic(
+  () => import('@/components/dashboard/loyalty').then((m) => ({ default: m.CustomerPointsHistory })),
+  { ssr: false, loading: () => <div className="h-40 animate-pulse rounded-2xl border bg-muted/30" /> }
+)
 
 interface CustomerDetailProps {
   customer: Customer
@@ -804,6 +811,13 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
               Autorizados
             </TabsTrigger>
             <TabsTrigger
+              value="points"
+              className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:shadow-none px-0 font-medium text-gray-500 hover:text-gray-700"
+            >
+              <Coins className="h-4 w-4 mr-2" />
+              Puntos
+            </TabsTrigger>
+            <TabsTrigger
               value="notes"
               className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:shadow-none px-0 font-medium text-gray-500 hover:text-gray-700"
             >
@@ -1270,6 +1284,10 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
         </TabsContent>
 
         {/* Tab Content: Notes */}
+        <TabsContent value="points">
+          <CustomerPointsHistory customerId={currentCustomer.id} />
+        </TabsContent>
+
         <TabsContent value="notes">
           <Card>
             <CardHeader>
