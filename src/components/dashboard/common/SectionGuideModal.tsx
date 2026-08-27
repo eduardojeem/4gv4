@@ -3,16 +3,15 @@
 import React from 'react'
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ShieldCheck, CheckCircle2, LucideIcon, Sparkles, ArrowRight } from 'lucide-react'
+import { ShieldCheck, CheckCircle2, LucideIcon, Sparkles, ArrowRight, X } from 'lucide-react'
 
 export interface GuideStep {
   title: string
@@ -60,35 +59,39 @@ export function SectionGuideModal({
   const gradient = guide.gradient || 'from-blue-600 via-indigo-600 to-slate-900'
   const hasExamples = Boolean(guide.examples?.length)
 
+  // Los pasos entran en dos columnas cuando hay ancho. Van numerados, asi que
+  // el orden de lectura sigue claro y se evita un scroll largo.
   const stepsBlock = (
-    <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
-      {guide.steps.map((step, idx) => {
-        const StepIcon = step.icon
-        return (
-          <div
-            key={idx}
-            className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 space-y-1.5"
-          >
-            <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-bold shadow-xs shrink-0">
-                {idx + 1}
-              </span>
-              <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                {StepIcon && <StepIcon className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />}
-                {step.title}
-              </h4>
+    <div className="space-y-4 p-5 sm:p-6">
+      <div className="grid gap-3 lg:grid-cols-2">
+        {guide.steps.map((step, idx) => {
+          const StepIcon = step.icon
+          return (
+            <div
+              key={idx}
+              className="space-y-2 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/30"
+            >
+              <div className="flex items-start gap-2.5">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white shadow-xs dark:bg-white dark:text-slate-900">
+                  {idx + 1}
+                </span>
+                <h4 className="flex items-center gap-1.5 text-sm font-bold leading-snug text-slate-900 dark:text-slate-100">
+                  {StepIcon && <StepIcon className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />}
+                  {step.title}
+                </h4>
+              </div>
+              <p className="pl-8.5 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
+                {step.description}
+              </p>
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300 pl-8 leading-relaxed">
-              {step.description}
-            </p>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
 
       {guide.tip && (
-        <div className="p-3 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 flex items-start gap-2.5">
-          <ShieldCheck className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-[11px] text-amber-900 dark:text-amber-200 leading-snug">
+        <div className="flex items-start gap-2.5 rounded-2xl border border-amber-200/60 bg-amber-50/60 p-3.5 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="text-[13px] leading-relaxed text-amber-900 dark:text-amber-200">
             <strong>Consejo clave:</strong> {guide.tip}
           </div>
         </div>
@@ -96,96 +99,124 @@ export function SectionGuideModal({
     </div>
   )
 
+  const examplesBlock = (
+    <div className="grid gap-3 p-5 sm:p-6 lg:grid-cols-2">
+      {(guide.examples ?? []).map((example, idx) => {
+        const ExampleIcon = example.icon || Sparkles
+        return (
+          <div
+            key={idx}
+            className="flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/30"
+          >
+            <div className="flex items-start gap-2 border-b border-slate-200/80 bg-white/60 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/50">
+              <ExampleIcon className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+              <p className="text-[13px] font-bold leading-snug text-slate-900 dark:text-slate-100">
+                &laquo;{example.goal}&raquo;
+              </p>
+            </div>
+            <div className="flex flex-1 flex-col justify-between gap-3 px-4 py-3.5">
+              <ol className="space-y-2">
+                {example.setup.map((line, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
+                    <span className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      {i + 1}
+                    </span>
+                    {line}
+                  </li>
+                ))}
+              </ol>
+              <div className="flex items-start gap-2 rounded-xl border border-emerald-200/60 bg-emerald-50/70 px-3 py-2.5 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+                <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <p className="text-[13px] leading-relaxed text-emerald-900 dark:text-emerald-200">
+                  {example.result}
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[620px] p-0 overflow-hidden rounded-3xl border-slate-200 dark:border-slate-800 shadow-2xl">
+      {/*
+        Alto acotado al viewport con la cabecera y el pie fijos: solo scrollea
+        el contenido. Antes el cuerpo tenia un max-h-[60vh] suelto, que en
+        pantallas bajas desbordaba y en altas desperdiciaba espacio.
+        El boton de cerrar del primitivo hereda el color del cuerpo y quedaba
+        oscuro sobre el degradado; se usa uno propio en blanco.
+      */}
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[88vh] flex-col gap-0 overflow-hidden rounded-3xl border-slate-200 p-0 shadow-2xl sm:max-w-[720px] lg:max-w-[880px] dark:border-slate-800"
+      >
         {/* Cabecera con degradado */}
-        <div className={`bg-gradient-to-br ${gradient} p-6 text-white text-left relative overflow-hidden`}>
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-          
-          <div className="flex items-center gap-3 mb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-md shadow-inner text-white">
+        <div className={`relative shrink-0 overflow-hidden bg-gradient-to-br ${gradient} p-5 text-left text-white sm:p-6`}>
+          <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+
+          <DialogClose asChild>
+            <button
+              type="button"
+              aria-label="Cerrar"
+              className="absolute right-4 top-4 z-10 rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white focus:outline-hidden focus-visible:ring-2 focus-visible:ring-white/60"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </DialogClose>
+
+          <div className="mb-2 flex items-center gap-3 pr-10">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white shadow-inner backdrop-blur-md">
               <Icon className="h-5 w-5" />
             </div>
-            <div>
-              <Badge className="bg-white/20 hover:bg-white/30 text-white border-0 text-[10px] font-bold uppercase tracking-wider">
+            <div className="min-w-0">
+              <Badge className="border-0 bg-white/20 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-white/30">
                 {guide.badgeText || 'Guía de Sección'}
               </Badge>
-              <DialogTitle className="text-xl font-bold text-white tracking-tight mt-0.5">
+              <DialogTitle className="mt-0.5 text-lg font-bold tracking-tight text-white sm:text-xl">
                 {guide.title}
               </DialogTitle>
             </div>
           </div>
-          
+
           {guide.subtitle && (
-            <DialogDescription className="text-white/80 text-xs leading-relaxed max-w-lg">
+            <DialogDescription className="max-w-2xl text-[13px] leading-relaxed text-white/80">
               {guide.subtitle}
             </DialogDescription>
           )}
         </div>
 
         {hasExamples ? (
-          <Tabs defaultValue="steps" className="w-full">
-            <div className="px-5 pt-4">
-              <TabsList className="grid w-full grid-cols-2">
+          <Tabs defaultValue="steps" className="flex min-h-0 flex-1 flex-col gap-0">
+            <div className="shrink-0 border-b border-slate-100 px-5 pt-4 pb-3 sm:px-6 dark:border-slate-800">
+              <TabsList className="grid w-full max-w-sm grid-cols-2">
                 <TabsTrigger value="steps" className="text-xs font-semibold">Paso a paso</TabsTrigger>
                 <TabsTrigger value="examples" className="text-xs font-semibold">
                   Ejemplos ({guide.examples!.length})
                 </TabsTrigger>
               </TabsList>
             </div>
-            <TabsContent value="steps" className="mt-0">{stepsBlock}</TabsContent>
-            <TabsContent value="examples" className="mt-0">
-              <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
-                {guide.examples!.map((example, idx) => {
-                  const ExampleIcon = example.icon || Sparkles
-                  return (
-                    <div
-                      key={idx}
-                      className="overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/30"
-                    >
-                      <div className="flex items-start gap-2 border-b border-slate-200/80 bg-white/60 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-900/50">
-                        <ExampleIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
-                        <p className="text-xs font-bold leading-snug text-slate-900 dark:text-slate-100">
-                          &laquo;{example.goal}&raquo;
-                        </p>
-                      </div>
-                      <div className="space-y-2 px-3.5 py-3">
-                        <ol className="space-y-1.5">
-                          {example.setup.map((line, i) => (
-                            <li key={i} className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                                {i + 1}
-                              </span>
-                              {line}
-                            </li>
-                          ))}
-                        </ol>
-                        <div className="flex items-start gap-1.5 rounded-xl border border-emerald-200/60 bg-emerald-50/70 px-2.5 py-2 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                          <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                          <p className="text-[11px] leading-snug text-emerald-900 dark:text-emerald-200">
-                            {example.result}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+            <TabsContent value="steps" className="mt-0 min-h-0 flex-1 overflow-y-auto">
+              {stepsBlock}
+            </TabsContent>
+            <TabsContent value="examples" className="mt-0 min-h-0 flex-1 overflow-y-auto">
+              {examplesBlock}
             </TabsContent>
           </Tabs>
-        ) : stepsBlock}
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto">{stepsBlock}</div>
+        )}
 
-        <DialogFooter className="p-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800 sm:justify-end">
+        <div className="flex shrink-0 items-center justify-end border-t border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
           <Button
             type="button"
-            className="rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+            className="rounded-xl bg-slate-900 text-xs font-bold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
             onClick={() => onOpenChange(false)}
           >
-            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
             Entendido
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )
