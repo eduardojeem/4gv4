@@ -37,7 +37,16 @@ const ACCENTS: Array<{
   { value: 'teal', label: 'Turquesa', swatch: 'bg-gradient-to-br from-teal-400 to-teal-600', preview: 'bg-gradient-to-br from-teal-500/15 via-background to-background border-teal-200/50 dark:border-teal-900/30' },
 ]
 
-export function OffersSectionEditor() {
+interface OffersSectionEditorProps {
+  /**
+   * Reemplaza el ancho y el padding de pagina del contenedor. En
+   * /admin/website este editor ocupa la pagina entera; embebido en
+   * Promociones tiene que seguir el ancho de las demas tarjetas.
+   */
+  className?: string
+}
+
+export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}) {
   const { settings, isLoading, error, isSaving, updateSetting, refetch } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults().offers_section
   const [draft, setDraft] = useState<OffersSectionSettings | null>(null)
@@ -84,7 +93,7 @@ export function OffersSectionEditor() {
   const selectedAccent = ACCENTS.find((accent) => accent.value === current.accentColor) ?? ACCENTS[0]
 
   return (
-    <div className="max-w-4xl space-y-8 md:space-y-10 pb-24 md:pb-8">
+    <div className={cn('space-y-8 md:space-y-10', className ?? 'max-w-4xl pb-24 md:pb-8')}>
       <Card className={cn('relative overflow-hidden border shadow-sm transition-all', selectedAccent.preview, !current.enabled && 'opacity-60 grayscale')}>
         {/* Decorative elements to match public site */}
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-foreground/5 blur-3xl" />
