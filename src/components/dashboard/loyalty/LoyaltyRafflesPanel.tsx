@@ -31,6 +31,7 @@ export function LoyaltyRafflesPanel({ canManage }: { canManage: boolean }) {
     createRaffle,
     updateRaffleStatus,
     drawRaffle,
+    refresh,
   } = useLoyalty()
 
   if (loading) {
@@ -71,6 +72,7 @@ export function LoyaltyRafflesPanel({ canManage }: { canManage: boolean }) {
         onCreate={createRaffle}
         onUpdateStatus={updateRaffleStatus}
         onDraw={drawRaffle}
+        onRefresh={refresh}
         canManage={canManage}
       />
     </div>
