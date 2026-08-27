@@ -19,7 +19,13 @@ import {
   LineChart,
   ShoppingCart,
   Store as StoreIcon,
-  Megaphone
+  Megaphone,
+  Coins,
+  Gift,
+  Trophy,
+  ShieldAlert,
+  History,
+  Dices
 } from 'lucide-react'
 import type { SectionGuideData } from './SectionGuideModal'
 
@@ -253,6 +259,120 @@ export const PROMOTIONS_GUIDE: SectionGuideData = {
     },
   ],
   tip: 'Si creaste una oferta automática y no aparece en la tienda, revisá tres cosas: que sea porcentual, que tenga al menos un producto seleccionado, y que el producto esté activo, visible y con stock.'
+}
+
+export const LOYALTY_GUIDE: SectionGuideData = {
+  title: '¿Cómo funcionan los Puntos y los Sorteos?',
+  subtitle: 'El cliente acumula puntos comprando y los canjea por números de sorteo. El saldo lo lleva la base de datos, no el mostrador.',
+  badgeText: 'Fidelización & Sorteos',
+  icon: Coins,
+  gradient: 'from-amber-600 via-orange-600 to-slate-900',
+  steps: [
+    {
+      title: '1. Definí cuánto vale una compra',
+      description: 'En "Acumulación de puntos" elegís cuánta moneda hace falta por punto. Con 10.000 Gs por punto, una compra de 150.000 deja 15 puntos. Podés truncar o redondear las fracciones, ponerle un techo diario por cliente y hacer que los puntos venzan a los X meses.',
+      icon: Coins
+    },
+    {
+      title: '2. Los puntos se acreditan solos al cobrar',
+      description: 'No hay que hacer nada en la caja: al cerrar una venta con cliente asignado, el sistema acredita los puntos. Si la venta se reintenta, no se acredita dos veces — cada venta tiene una sola acreditación posible.',
+      icon: ShoppingCart
+    },
+    {
+      title: '3. Campañas para dar puntos extra',
+      description: 'Una promoción temporal multiplica los puntos (x2, x3) o suma una cantidad fija, durante un período. Podés ponerle compra mínima, tope por cliente y tope total. Si hay varias vigentes se aplica una sola: la que más le conviene al cliente.',
+      icon: CalendarClock
+    },
+    {
+      title: '4. Sorteos: el cliente canjea puntos por números',
+      description: 'Creás el sorteo con premios, fechas, cuánto cuesta cada número y cuántos puede llevar cada persona. Nace como borrador; recién cuando lo publicás el mostrador puede vender números. Una persona puede llevar varios números del mismo sorteo.',
+      icon: Gift
+    },
+    {
+      title: '5. Los números salen al azar, no en orden',
+      description: 'Cada número se toma al azar de los que quedan libres. Se hace así para que nadie pueda deducir cuántos participantes hay ni reservar el próximo. Si dos personas compran en el mismo instante, la base garantiza que no se repita ninguno.',
+      icon: Dices
+    },
+    {
+      title: '6. El sorteo se corre una sola vez',
+      description: 'Cerrás el sorteo y apretás "Sortear": se elige un ganador por premio, una misma persona no se lleva dos premios, y el sorteo queda marcado como realizado. No se puede repetir hasta que salga el resultado deseado. La semilla usada queda guardada para que cualquiera pueda verificar el resultado.',
+      icon: Trophy
+    },
+    {
+      title: '7. Cada cliente ve su historial',
+      description: 'En la ficha del cliente están el saldo, todos los movimientos (qué compra los sumó, qué canje los restó, el saldo después de cada uno), los números que tiene y los premios que ganó.',
+      icon: History
+    },
+    {
+      title: '8. Nadie puede tocar los saldos a mano',
+      description: 'Las tablas de puntos no aceptan escritura directa: ni desde el navegador ni desde la API. Todo pasa por funciones de la base que validan permiso, saldo y topes. El historial es inmutable: un error se corrige con un ajuste compensatorio, que queda registrado con motivo y autor.',
+      icon: ShieldAlert
+    }
+  ],
+  examples: [
+    {
+      goal: 'Quiero que cada 10.000 Gs de compra den 1 punto',
+      icon: Coins,
+      setup: [
+        'Pestaña Puntos y sorteos → Acumulación de puntos',
+        'Moneda necesaria por punto: 10000 · Puntos que otorga: 1',
+        'Fracciones: Truncar (una compra de 19.999 da 1 punto, no 2)',
+        'Prendé el interruptor y guardá'
+      ],
+      result: 'Desde ese momento, toda venta con cliente asignado acredita puntos sola. La tarjeta te muestra el ejemplo en vivo: una compra de 150.000 deja 15 puntos.'
+    },
+    {
+      goal: 'Quiero doble puntos el fin de semana, pero sin regalar más de 500 puntos en total',
+      icon: CalendarClock,
+      setup: [
+        'Promociones temporales de puntos → Nueva',
+        'Tipo: Multiplicador · Multiplicador: 2',
+        'Desde el viernes 00:00 hasta el domingo 23:59',
+        'Tope total: 500'
+      ],
+      result: 'Una compra que daba 15 puntos ahora da 30. La tarjeta muestra una barra con cuánta bonificación se entregó; al llegar a 500 la promoción deja de sumar extra, pero las compras siguen sumando sus puntos base.'
+    },
+    {
+      goal: 'Quiero sortear un celular entre quienes junten puntos, máximo 10 números por persona',
+      icon: Gift,
+      setup: [
+        'Sorteos → Nuevo sorteo',
+        'Premios: 1º Celular, 2º Auricular (agregá los que quieras)',
+        'Puntos por número: 50 · Máx. por cliente: 10 · Números totales: 1000',
+        'Cargá las fechas y creá. Después apretá Publicar'
+      ],
+      result: 'El mostrador ya puede canjear puntos por números. Un cliente con 500 puntos puede llevar 10 números: el sistema le descuenta 500 puntos y le asigna 10 números al azar entre el 1 y el 1000, sin repetir.'
+    },
+    {
+      goal: 'Llegó el día: quiero elegir al ganador y poder demostrar que fue limpio',
+      icon: Trophy,
+      setup: [
+        'Sorteos → Cerrar (deja de vender números)',
+        'Después Sortear y confirmá'
+      ],
+      result: 'Sale un ganador por premio. Queda guardada la semilla usada: con ese dato el sorteo se puede volver a correr y verificar que salió lo mismo. Una misma persona no se lleva dos premios, y el sorteo no se puede repetir.'
+    },
+    {
+      goal: 'Un cliente dice que le faltan puntos de una compra',
+      icon: History,
+      setup: [
+        'Abrí la ficha del cliente → historial de puntos',
+        'Revisá los movimientos: cada uno dice de dónde salió y con qué saldo quedó',
+        'Si falta, cargá un ajuste con el motivo'
+      ],
+      result: 'El ajuste suma los puntos y queda registrado con quién lo hizo y por qué. El movimiento original no se edita nunca: el historial es inmutable, así que siempre se puede reconstruir qué pasó.'
+    },
+    {
+      goal: 'Un cliente me pide que no lo dejemos participar más en sorteos',
+      icon: ShieldAlert,
+      setup: [
+        'Abrí la ficha del cliente → historial de puntos',
+        'Apretá "Registrar autoexclusión": queda excluido por un año'
+      ],
+      result: 'Mientras esté vigente, el sistema rechaza cualquier canje de esa persona aunque tenga saldo de sobra y el sorteo esté abierto. Sigue acumulando puntos por sus compras: lo único bloqueado es participar.'
+    }
+  ],
+  tip: 'Si un cliente compró y no ve los puntos, revisá tres cosas: que la acumulación esté prendida, que la venta tenga el cliente asignado (sin cliente no hay a quién acreditarle), y que la compra supere la tasa de conversión — una compra de 9.999 con tasa de 10.000 da cero puntos.'
 }
 
 export const ORDERS_GUIDE: SectionGuideData = {
