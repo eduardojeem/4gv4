@@ -22,6 +22,7 @@ create or replace function public.calculate_base_loyalty_points(
 returns integer
 language plpgsql
 immutable
+set search_path = pg_catalog, public
 as $$
 declare
   raw_points numeric;
@@ -797,6 +798,7 @@ drop function if exists public.protect_loyalty_rule_counter();
 create or replace function public.set_raffle_updated_at()
 returns trigger
 language plpgsql
+set search_path = pg_catalog, public
 as $$
 begin
   new.updated_at := now();
