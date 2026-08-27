@@ -3,9 +3,11 @@
 -- Reglas de seguridad que ordenan todo el archivo:
 --
 --  1. El saldo NO es un campo editable. La verdad es `loyalty_ledger`, que es
---     append-only: un trigger bloquea update y delete. `loyalty_accounts.balance`
---     es un espejo que solo mantiene el trigger del ledger, para no sumar la
---     tabla entera en cada lectura.
+--     append-only: un trigger bloquea el update. `loyalty_accounts.balance` es
+--     un espejo que solo mantiene el trigger del ledger, para no sumar la tabla
+--     entera en cada lectura. El `balance_after` de cada asiento lo calcula un
+--     trigger BEFORE INSERT que bloquea la cuenta, asi que el encadenamiento
+--     del saldo no depende de que el llamador haga bien la cuenta.
 --  2. Ninguna tabla acepta escritura directa: se hace `revoke all` y las
 --     politicas de RLS son solo de lectura. Toda mutacion pasa por funciones
 --     `security definer` que validan permiso, organizacion y reglas de negocio.
@@ -148,8 +150,55 @@ $$;
 
 drop trigger if exists loyalty_ledger_no_update on public.loyalty_ledger;
 create trigger loyalty_ledger_no_update
-  before update or delete on public.loyalty_ledger
+  before update on public.loyalty_ledger
   for each row execute function public.prevent_loyalty_ledger_mutation();
+
+/**
+ * Calcula `balance_after` a partir del saldo bloqueado, no del que le pasen.
+ *
+ * Antes cada funcion leia el saldo y armaba el asiento con esa foto. Dos
+ * operaciones simultaneas sobre el mismo cliente (dos cajas, o una venta y un
+ * ajuste) leian el mismo saldo y la segunda pisaba a la primera: los puntos de
+ * una de las dos desaparecian sin ningun error.
+ *
+ * Ahora el asiento se completa aca, despues de bloquear la cuenta, asi que el
+ * saldo se encadena aunque el llamador se equivoque.
+ */
+create or replace function public.compute_loyalty_balance_after()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  locked_balance integer;
+begin
+  -- Garantiza que la fila exista para poder bloquearla.
+  insert into public.loyalty_accounts (customer_id, organization_id, balance)
+  values (new.customer_id, new.organization_id, 0)
+  on conflict (customer_id) do nothing;
+
+  select balance into locked_balance
+  from public.loyalty_accounts
+  where customer_id = new.customer_id
+  for update;
+
+  new.balance_after := coalesce(locked_balance, 0) + new.points;
+
+  if new.balance_after < 0 then
+    raise exception 'La operación dejaría el saldo en negativo (saldo actual: %, movimiento: %).',
+      coalesce(locked_balance, 0), new.points
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists loyalty_ledger_compute_balance on public.loyalty_ledger;
+create trigger loyalty_ledger_compute_balance
+  before insert on public.loyalty_ledger
+  for each row execute function public.compute_loyalty_balance_after();
 
 -- El espejo del saldo lo mantiene solo este trigger.
 create or replace function public.sync_loyalty_account_from_ledger()
@@ -284,9 +333,11 @@ begin
 end;
 $$;
 
+-- Solo update: el delete en cascada (borrar un sorteo o un cliente) tiene que
+-- poder pasar. La escritura directa ya esta bloqueada por los grants.
 drop trigger if exists raffle_tickets_immutable on public.raffle_tickets;
 create trigger raffle_tickets_immutable
-  before update or delete on public.raffle_tickets
+  before update on public.raffle_tickets
   for each row execute function public.prevent_raffle_record_mutation();
 
 commit;

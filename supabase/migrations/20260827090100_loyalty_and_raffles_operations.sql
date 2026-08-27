@@ -637,6 +637,15 @@ begin
 end;
 $$;
 
+-- `loyalty_ledger.raffle_id` se declara sin referencia en la migracion
+-- anterior porque `raffles` todavia no existia. Se cierra aca.
+alter table public.loyalty_ledger
+  drop constraint if exists loyalty_ledger_raffle_id_fkey;
+
+alter table public.loyalty_ledger
+  add constraint loyalty_ledger_raffle_id_fkey
+  foreign key (raffle_id) references public.raffles(id) on delete set null;
+
 -- ───────────────────────────────────────────────────────────────────────────
 -- RLS: solo lectura, y solo dentro de la organizacion
 -- ───────────────────────────────────────────────────────────────────────────
@@ -764,28 +773,26 @@ with check (
 );
 
 grant insert, update on table public.loyalty_settings to authenticated;
-grant insert, update, delete on table public.loyalty_point_rules to authenticated;
+grant insert, delete on table public.loyalty_point_rules to authenticated;
 grant insert, update, delete on table public.raffles to authenticated;
+
+-- Update columna por columna: todo menos el contador de bonificacion.
+grant update (
+  name, description, starts_at, ends_at, kind, multiplier, bonus_points,
+  max_bonus_points_per_customer, max_bonus_points_total, min_purchase_amount,
+  is_active
+) on table public.loyalty_point_rules to authenticated;
 
 -- `awarded_bonus_points` lo lleva la funcion de acreditacion: si se pudiera
 -- editar a mano, el cupo de la promocion dejaria de significar algo.
-create or replace function public.protect_loyalty_rule_counter()
-returns trigger
-language plpgsql
-as $$
-begin
-  if new.awarded_bonus_points is distinct from old.awarded_bonus_points
-     and current_setting('role', true) <> 'postgres' then
-    new.awarded_bonus_points := old.awarded_bonus_points;
-  end if;
-  return new;
-end;
-$$;
-
+--
+-- Se protege con un grant por columna y no con un trigger. Un trigger que
+-- mirara `current_setting('role')` no serviria: bajo PostgREST ese GUC vale
+-- 'authenticated' incluso dentro de una funcion security definer, asi que
+-- habria revertido el incremento hecho por la propia acreditacion y el cupo
+-- total nunca se habria aplicado.
 drop trigger if exists loyalty_point_rules_protect_counter on public.loyalty_point_rules;
-create trigger loyalty_point_rules_protect_counter
-  before update on public.loyalty_point_rules
-  for each row execute function public.protect_loyalty_rule_counter();
+drop function if exists public.protect_loyalty_rule_counter();
 
 create or replace function public.set_raffle_updated_at()
 returns trigger
