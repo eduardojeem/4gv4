@@ -1,0 +1,82 @@
+.card {
+  transition: border-color 240ms ease, background-color 240ms ease;
+}
+
+.mascotStage {
+  position: relative;
+  display: grid;
+  width: 3.75rem;
+  height: 3.5rem;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.mascotGlow {
+  position: absolute;
+  inset: 20% 12% 5%;
+  border-radius: 9999px;
+  background: rgb(34 211 238 / 22%);
+  filter: blur(10px);
+  animation: mascot-glow 3.6s ease-in-out infinite;
+}
+
+.mascot {
+  position: relative;
+  z-index: 1;
+  width: 4.25rem;
+  height: auto;
+  max-width: none;
+  filter: drop-shadow(0 5px 8px rgb(8 145 178 / 18%));
+  transform-origin: 50% 85%;
+  animation: mascot-float 4.8s ease-in-out infinite;
+  transition: filter 240ms ease, transform 240ms ease;
+  will-change: transform;
+}
+
+.card:hover {
+  border-color: rgb(34 211 238 / 38%);
+  background-color: rgb(34 211 238 / 10%);
+}
+
+.card:hover .mascot {
+  animation-play-state: paused;
+  filter: drop-shadow(0 7px 10px rgb(34 211 238 / 26%));
+  transform: translateY(-2px) rotate(1deg) scale(1.035);
+}
+
+@keyframes mascot-float {
+  0%,
+  100% {
+    transform: translateY(1px) rotate(-0.5deg);
+  }
+
+  50% {
+    transform: translateY(-4px) rotate(0.75deg);
+  }
+}
+
+@keyframes mascot-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.9);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .mascot,
+  .mascotGlow {
+    animation: none;
+    transition: none;
+  }
+
+  .card:hover .mascot {
+    transform: none;
+  }
+}

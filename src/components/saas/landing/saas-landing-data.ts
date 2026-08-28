@@ -221,7 +221,6 @@ export const defaultSyncPlans: SaaSPlan[] = [
       products: '100 ítems',
       branches: '1 sucursal',
       repairs: '10 / mes',
-      storage: '1 GB',
     },
     highlights: [
       'Hasta 2 usuarios concurrentes',
@@ -250,7 +249,6 @@ export const defaultSyncPlans: SaaSPlan[] = [
       products: '1.000 ítems',
       branches: '1 sucursal',
       repairs: '100 / mes',
-      storage: '5 GB',
     },
     highlights: [
       'Hasta 5 usuarios con roles asignados',
@@ -278,7 +276,6 @@ export const defaultSyncPlans: SaaSPlan[] = [
       products: '10.000 ítems',
       branches: '5 sucursales',
       repairs: 'Ilimitadas',
-      storage: '50 GB',
     },
     highlights: [
       'Hasta 20 usuarios y cajeros',
@@ -307,7 +304,6 @@ export const defaultSyncPlans: SaaSPlan[] = [
       products: 'Ilimitados',
       branches: 'Ilimitadas',
       repairs: 'Ilimitadas',
-      storage: 'Ilimitado',
     },
     highlights: [
       'Usuarios y sucursales sin límites',

@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding()
   return {
     title: `Planes y Precios | ${branding.platformName}`,
-    description: 'Planes FREE, BASIC, PRO y ENTERPRISE para operar POS, inventario físico y de servicios, reparaciones y marketplace.',
+    description: 'Compará los planes activos para operar POS, inventario físico y de servicios, reparaciones y marketplace.',
   }
 }
 
@@ -22,7 +22,7 @@ export default async function SaaSPlansPage() {
   // Obtenemos los planes desde la DB, solo los activos, ordenados por precio
   const { data: plans } = await supabase
     .from('subscription_plans')
-    .select('*')
+    .select('id, tier, name, price, price_note, description, is_popular, is_active, limits, highlights, features, color_config')
     .eq('is_active', true)
     .order('price', { ascending: true })
 

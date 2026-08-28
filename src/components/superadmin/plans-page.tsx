@@ -123,17 +123,17 @@ function KPICard({
 }) {
   const t = kpiTones[tone]
   return (
-    <Card className={cn('rounded-lg border shadow-none', t.wrap)}>
-      <CardContent className="p-4">
+    <Card className={cn('rounded-3xl border shadow-xs transition-all duration-200 hover:shadow-md backdrop-blur-md', t.wrap)}>
+      <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">
+          <div className="space-y-1.5">
+            <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
               {label}
             </p>
-            <p className={cn('text-xl font-bold', t.value)}>{value}</p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">{helper}</p>
+            <p className={cn('text-2xl sm:text-3xl font-black tracking-tight', t.value)}>{value}</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{helper}</p>
           </div>
-          <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md', t.icon)}>
+          <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-xs', t.icon)}>
             <Icon className="h-5 w-5" />
           </div>
         </div>
@@ -146,21 +146,21 @@ function FeatureValue({ val }: { val: boolean | string }) {
   if (val === true)
     return (
       <div className="flex justify-center">
-        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/10">
-          <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shadow-2xs">
+          <Check className="h-4 w-4" />
         </div>
       </div>
     )
   if (val === false)
     return (
       <div className="flex justify-center">
-        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800/60">
-          <Minus className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800/60 dark:text-slate-500">
+          <Minus className="h-4 w-4" />
         </div>
       </div>
     )
   return (
-    <span className="block text-center text-xs font-semibold text-slate-600 dark:text-slate-300">
+    <span className="block text-center text-xs font-bold text-slate-700 dark:text-slate-300">
       {val}
     </span>
   )
@@ -179,16 +179,16 @@ function LimitBar({
   const numericVal = typeof val === 'number' ? val : parseInt(String(val), 10)
   const hasNumber = !isNaN(numericVal) && numericVal > 0
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-        <p className={cn('text-xs font-bold', accent)}>
-          {isUnlimited ? '∞' : String(val ?? '–')}
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+        <p className={cn('font-black text-xs', isUnlimited ? 'text-emerald-600 dark:text-emerald-400' : accent)}>
+          {isUnlimited ? '∞ Ilimitado' : String(val ?? '–')}
         </p>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
         {isUnlimited ? (
-          <div className={cn('h-full w-full rounded-full bg-gradient-to-r opacity-70', accent.replace('text-', 'from-').replace('-600', '-400').replace('-300', '-200'))} />
+          <div className="h-full w-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-500 opacity-80" />
         ) : hasNumber ? (
           <div
             className={cn('h-full rounded-full bg-gradient-to-r', accent.replace('text-', 'from-').replace('-600', '-500').replace('-300', '-400'))}
@@ -229,33 +229,33 @@ function PlanCard({
   return (
     <div
       className={cn(
-        'group relative flex flex-col overflow-hidden rounded-lg border bg-white transition-colors duration-200 hover:border-slate-400 dark:bg-slate-900 dark:hover:border-slate-600',
-        !plan.is_active && 'opacity-70 grayscale',
+        'group relative flex flex-col justify-between overflow-hidden rounded-3xl border bg-white/95 backdrop-blur-xl transition-all duration-300 hover:shadow-2xl dark:bg-slate-900/90',
+        !plan.is_active && 'opacity-65 grayscale',
         plan.is_popular
-          ? 'border-violet-300 ring-2 ring-violet-200 dark:border-violet-700 dark:ring-violet-800/40'
-          : 'border-slate-200 dark:border-slate-800',
+          ? 'border-violet-400 ring-2 ring-violet-300 shadow-xl dark:border-violet-600 dark:ring-violet-900/40'
+          : 'border-slate-200/90 shadow-sm dark:border-slate-800/80',
       )}
     >
       {/* Tier accent bar */}
-      <div className={cn('h-1.5 w-full bg-gradient-to-r', accent)} />
+      <div className={cn('h-2 w-full bg-gradient-to-r', accent)} />
 
       {/* Popular badge */}
       {plan.is_popular && (
-        <div className="absolute right-0 top-1.5 rounded-bl-xl bg-violet-600 px-3 py-1">
-          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-white">
-            <Sparkles className="h-2.5 w-2.5" />
+        <div className="absolute right-0 top-2 rounded-bl-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3.5 py-1 shadow-md">
+          <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-white">
+            <Sparkles className="h-3 w-3" />
             Popular
           </span>
         </div>
       )}
 
-      <div className="flex flex-col gap-5 p-6">
+      <div className="flex flex-col gap-5 p-6 sm:p-7">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
-          <div className={cn('flex h-10 w-10 items-center justify-center rounded-md', plan.color_config?.icon || 'bg-slate-100 dark:bg-slate-800')}>
+          <div className={cn('flex h-11 w-11 items-center justify-center rounded-2xl shadow-xs', plan.color_config?.icon || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200')}>
             <Icon className="h-5 w-5" />
           </div>
-          <span className={cn('rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider', badge)}>
+          <span className={cn('rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider shadow-2xs', badge)}>
             {plan.name}
           </span>
         </div>
@@ -263,20 +263,22 @@ function PlanCard({
         {/* Price */}
         <div>
           <div className="flex items-baseline gap-1.5">
-            <span className={cn('text-3xl font-extrabold tracking-tight', accentText)}>
+            <span className={cn('text-3xl sm:text-4xl font-black tracking-tight', accentText)}>
               {formatPYG(plan.price)}
             </span>
             {plan.price > 0 && (
-              <span className="text-xs font-medium text-slate-400">/mes</span>
+              <span className="text-xs font-semibold text-slate-400">/mes</span>
             )}
           </div>
           {(plan.trial_days ?? 0) > 0 && (
-            <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-cyan-600 dark:text-cyan-400">
-              <Star className="h-2.5 w-2.5" />
+            <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800/60 px-2.5 py-0.5 text-[11px] font-bold text-cyan-700 dark:text-cyan-300">
+              <Star className="h-3 w-3 fill-current" />
               Trial {plan.trial_days} días gratis
             </span>
           )}
-          <p className="mt-2 text-[13px] leading-relaxed text-slate-500 dark:text-slate-400">{plan.description}</p>
+          <p className="mt-2.5 text-xs sm:text-[13px] leading-relaxed text-slate-500 dark:text-slate-400 min-h-[36px]">
+            {plan.description}
+          </p>
         </div>
 
         {/* Org count pill */}
@@ -589,22 +591,37 @@ export function PlansPageContent() {
     },
   ]
 
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'popular'>('all')
+
+  const filteredPlans = plans.filter((p) => {
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.tier.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+    if (!matchesSearch) return false
+
+    if (statusFilter === 'active') return p.is_active
+    if (statusFilter === 'inactive') return !p.is_active
+    if (statusFilter === 'popular') return p.is_popular
+    return true
+  })
+
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
 
       {/* ── Premium Header ── */}
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="contents">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase text-slate-400">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-400">
               <Sparkles className="h-3.5 w-3.5 text-violet-500" />
               Superadmin · Facturación · SaaS
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
-              Gestión de Planes
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
+              Gestión de Planes SaaS
             </h1>
-            <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-              Control completo sobre precios, límites y features de los planes SaaS. Los cambios se aplican en tiempo real.
+            <p className="max-w-2xl text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              Control centralizado sobre precios, límites y módulos activos. Los cambios se sincronizan en tiempo real con la base de datos.
             </p>
           </div>
 
@@ -614,9 +631,9 @@ export function PlansPageContent() {
               size="sm"
               onClick={loadPlans}
               disabled={loading}
-              className="h-9 gap-2"
+              className="h-9 gap-2 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer"
             >
-              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
               Actualizar
             </Button>
             <Button
@@ -624,9 +641,9 @@ export function PlansPageContent() {
               size="sm"
               onClick={exportJson}
               disabled={loading || plans.length === 0}
-              className="h-9 gap-2"
+              className="h-9 gap-2 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer"
             >
-              <Download className="h-4 w-4" />
+              <Download className="h-3.5 w-3.5" />
               Exportar JSON
             </Button>
             <Button
@@ -634,9 +651,9 @@ export function PlansPageContent() {
               onClick={() => setCreateOpen(true)}
               disabled={loading || allTiersUsed}
               title={allTiersUsed ? 'Ya existen los 4 planes (free, basic, pro, enterprise). Editá uno existente.' : undefined}
-              className="h-9 gap-2"
+              className="h-9 gap-2 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 cursor-pointer"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Nuevo plan
             </Button>
           </div>
@@ -650,38 +667,61 @@ export function PlansPageContent() {
         ))}
       </section>
 
-      {/* ── View toggle ── */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-900">
+      {/* ── Search, Filters & View Toggle Toolbar ── */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white/90 p-3 shadow-2xs dark:border-slate-800 dark:bg-slate-900/80 sm:flex-row sm:items-center sm:justify-between">
+
+        {/* Left: View Tabs */}
+        <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100/70 p-1 dark:border-slate-800 dark:bg-slate-800/70">
           <button
             onClick={() => setActiveTab('cards')}
             className={cn(
-              'flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors',
+              'flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
               activeTab === 'cards'
-                ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-slate-50'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+                ? 'bg-white text-slate-950 shadow-xs dark:bg-slate-900 dark:text-slate-50'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200',
             )}
           >
-            <CreditCard className="h-3.5 w-3.5" />
-            Pricing cards
+            <CreditCard className="h-3.5 w-3.5 text-violet-500" />
+            Pricing Cards
           </button>
           <button
             onClick={() => setActiveTab('table')}
             className={cn(
-              'flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors',
+              'flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
               activeTab === 'table'
-                ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-slate-50'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+                ? 'bg-white text-slate-950 shadow-xs dark:bg-slate-900 dark:text-slate-50'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200',
             )}
           >
-            <ArrowUpRight className="h-3.5 w-3.5" />
-            Comparativa de features
+            <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
+            Comparativa & Features
           </button>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] font-medium text-slate-400">
-          <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          Sincronizado con BD
+        {/* Right: Search & Status Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status filter chips */}
+          <div className="flex items-center gap-1 rounded-xl bg-slate-100/80 p-1 dark:bg-slate-800/60">
+            {(['all', 'active', 'popular'] as const).map((filterKey) => (
+              <button
+                key={filterKey}
+                onClick={() => setStatusFilter(filterKey)}
+                className={cn(
+                  'rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer',
+                  statusFilter === filterKey
+                    ? 'bg-white text-slate-900 shadow-2xs dark:bg-slate-900 dark:text-slate-50'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200',
+                )}
+              >
+                {filterKey === 'all' ? 'Todos' : filterKey === 'active' ? 'Activos' : 'Populares'}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 text-[11px] font-medium text-slate-400 pl-1">
+            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            Sincronizado
+          </div>
         </div>
       </div>
 
@@ -690,21 +730,18 @@ export function PlansPageContent() {
         <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
           {loading ? (
             Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[520px] w-full rounded-lg" />
+              <Skeleton key={i} className="h-[520px] w-full rounded-3xl" />
             ))
-          ) : plans.length === 0 ? (
-            <div className="col-span-4 flex flex-col items-center gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center dark:border-slate-700 dark:bg-slate-900/30">
+          ) : filteredPlans.length === 0 ? (
+            <div className="col-span-4 flex flex-col items-center gap-4 rounded-3xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center dark:border-slate-700 dark:bg-slate-900/30">
               <AlertCircle className="h-10 w-10 text-slate-300" />
               <div>
-                <p className="font-semibold text-slate-600 dark:text-slate-400">Sin planes configurados</p>
-                <p className="mt-1 text-sm text-slate-400">Creá el primer plan con el botón &quot;Nuevo plan&quot;</p>
+                <p className="font-bold text-slate-700 dark:text-slate-300">No se encontraron planes</p>
+                <p className="mt-1 text-xs text-slate-400">Ajustá los filtros o creá un nuevo plan</p>
               </div>
-              <Button onClick={() => setCreateOpen(true)} className="gap-2">
-                <Plus className="h-4 w-4" /> Crear primer plan
-              </Button>
             </div>
           ) : (
-            plans.map((plan) => (
+            filteredPlans.map((plan) => (
               <PlanCard
                 key={plan.tier}
                 plan={plan}
@@ -721,20 +758,20 @@ export function PlansPageContent() {
 
       {/* ── Feature Comparison Table ── */}
       {activeTab === 'table' && (
-        <Card className="overflow-hidden rounded-lg border-slate-200/80 shadow-none dark:border-slate-800">
-          <CardHeader className="border-b border-slate-100 px-6 py-5 dark:border-slate-800">
-            <div className="flex items-center justify-between">
+        <Card className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 backdrop-blur-xl shadow-lg dark:border-slate-800 dark:bg-slate-900/95">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/50 px-6 py-5 dark:border-slate-800 dark:bg-slate-950/40">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold text-slate-950 dark:text-slate-50">
-                  Comparativa completa de features
+                <h2 className="text-base sm:text-lg font-black text-slate-950 dark:text-slate-50 tracking-tight">
+                  Matriz Comparativa de Features y Módulos
                 </h2>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Hacé clic en ✓ o — para activar/desactivar un feature en un plan directamente.
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Hacé clic directamente en ✓ o — para activar o desactivar una función en un plan en tiempo real.
                 </p>
               </div>
-              <Badge variant="outline" className="gap-1 rounded-full text-xs">
-                <div className="h-2 w-2 rounded-full bg-emerald-400" />
-                Live
+              <Badge variant="outline" className="gap-1.5 rounded-full text-xs font-bold w-fit bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
+                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                Edición en Vivo
               </Badge>
             </div>
           </CardHeader>
