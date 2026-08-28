@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { isLoyaltyModuleMissing, LOYALTY_MIGRATION_HINT } from '@/lib/loyalty/module-status'
+import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
 import { logger } from '@/lib/logger'
 
 const prizeSchema = z.object({
@@ -80,11 +81,7 @@ export const POST = withTenantAuth({ permission: 'promotions.manage', module: 'p
     .single()
 
   if (error) {
-    if (isLoyaltyModuleMissing(error)) {
-      return NextResponse.json({ error: LOYALTY_MIGRATION_HINT, code: 'MODULE_NOT_INSTALLED' }, { status: 503 })
-    }
-    logger.error('raffle create failed', { error })
-    return NextResponse.json({ error: 'No se pudo crear el sorteo' }, { status: 500 })
+    return loyaltyErrorResponse(error, 'crear el sorteo', { organizationId: organization.id })
   }
 
   return NextResponse.json({ raffle: data }, { status: 201 })
