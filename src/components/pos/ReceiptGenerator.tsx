@@ -48,6 +48,11 @@ interface ReceiptData {
   payments: PaymentSplit[]
   change?: number
   loyaltyPoints?: number
+  raffleTickets?: {
+    raffleName: string
+    ticketNumbers: number[]
+    drawDate?: string
+  }
   creditInfo?: {
     baseTotal: number
     interestAmount: number
@@ -325,6 +330,32 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
               <span className="font-bold text-amber-700 dark:text-amber-400 text-base print:text-black">
                 ¡Ganaste {receiptData.loyaltyPoints} puntos de lealtad!
               </span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Sorteos automáticos ganados en la compra */}
+      {receiptData.raffleTickets && receiptData.raffleTickets.ticketNumbers.length > 0 && (
+        <>
+          <Separator className="my-4" />
+          <div className="mb-4 text-sm text-center px-4 print:px-0">
+            <div className="rounded-lg p-3 bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-900/20 dark:to-pink-900/20 border border-rose-200 dark:border-rose-800 print:bg-none print:border-black print:rounded-none">
+              <span className="font-extrabold text-rose-700 dark:text-rose-400 text-sm print:text-black block mb-1">
+                🎟️ ¡Estás participando del {receiptData.raffleTickets.raffleName}!
+              </span>
+              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-1 font-mono font-bold text-xs">
+                {receiptData.raffleTickets.ticketNumbers.map((num) => (
+                  <span key={num} className="bg-rose-100 dark:bg-rose-900/40 text-rose-900 dark:text-rose-200 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-700 print:border-black print:text-black">
+                    #{num}
+                  </span>
+                ))}
+              </div>
+              {receiptData.raffleTickets.drawDate && (
+                <span className="text-[11px] text-rose-600 dark:text-rose-300 block mt-1 print:text-black">
+                  Fecha del sorteo: {receiptData.raffleTickets.drawDate}
+                </span>
+              )}
             </div>
           </div>
         </>

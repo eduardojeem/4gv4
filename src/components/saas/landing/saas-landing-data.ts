@@ -3,21 +3,17 @@ import {
   Boxes,
   Building2,
   CheckCircle2,
-  CreditCard,
   Headphones,
   LockKeyhole,
   MessageCircle,
   Package,
   ReceiptText,
   ShieldCheck,
-  ShoppingBag,
   ShoppingCart,
   Store,
   Tag,
   Truck,
-  Users,
   Wrench,
-  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -89,13 +85,13 @@ export const socialProof = [
 export const trustItems = [
   { label: 'Aislamiento 100% por empresa', icon: LockKeyhole },
   { label: 'Roles y permisos granulares', icon: ShieldCheck },
-  { label: 'Pagopar, Stripe, Bancard y Códigos', icon: CreditCard },
+  { label: 'POS, inventario y reparaciones conectados', icon: CheckCircle2 },
 ]
 
 export const features: SaaSFeature[] = [
   {
     title: 'POS y Caja en Mostrador',
-    description: 'Ventas rápidas y fluidas, turnos de caja, métodos de pago combinados, auditoría y arqueo diario.',
+    description: 'Ventas rápidas y fluidas, turnos de caja, tickets, auditoría y arqueo diario.',
     icon: ShoppingCart,
     tone: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-950/30',
   },
@@ -190,7 +186,7 @@ export const businessTypes: SaaSBusinessType[] = [
     title: 'Negocios con Ecommerce & Delivery',
     description: 'Publicación de productos y servicios en tienda online propia, recepción de pedidos y despacho local.',
     metrics: 'Catálogo online + Carrito + Despachos',
-    modules: ['Tienda Ecommerce', 'Gestión de Pedidos', 'Envíos & Delivery', 'Pagos Online'],
+    modules: ['Tienda Ecommerce', 'Gestión de Pedidos', 'Envíos & Delivery', 'Catálogo Sincronizado'],
     fit: 'Ideal para comercios que venden tanto en tienda física como por internet.',
     result: 'Ventas omnicanal con stock 100% sincronizado automáticamente.',
     plan: 'PRO o ENTERPRISE',
@@ -205,7 +201,7 @@ export const businessTypes: SaaSBusinessType[] = [
 export const workflowSteps = [
   { title: '1. Registrá tu organización', description: 'Creá tu empresa, personalizá tu logo, moneda y configurá tus datos fiscales.', icon: Building2 },
   { title: '2. Cargá productos y servicios', description: 'Importá tu inventario físico y catálogo de servicios con precios y categorías.', icon: Boxes },
-  { title: '3. Operá y hacé crecer tu negocio', description: 'Vendé en caja, atendé reparaciones técnicas, recibí pagos y consultá métricas en vivo.', icon: ReceiptText },
+  { title: '3. Operá y hacé crecer tu negocio', description: 'Vendé en caja, atendé reparaciones técnicas, gestioná pedidos y consultá métricas en vivo.', icon: ReceiptText },
 ]
 
 /** Planes oficiales sincronizados con PLAN_LIMITS del sistema */
@@ -317,7 +313,7 @@ export const defaultSyncPlans: SaaSPlan[] = [
       'Usuarios y sucursales sin límites',
       'Productos físicos y servicios ilimitados',
       'Módulo completo de Delivery y despachos',
-      'Integraciones vía API personalizada',
+      'Configuración adaptada a la operación',
       'SLA garantizado del 99.9%',
       'Soporte técnico y onboarding prioritario',
     ],
@@ -329,7 +325,7 @@ export const plans = defaultSyncPlans
 
 export const planNotes = [
   { title: 'Aislamiento estricto de datos', description: 'Cada empresa opera sobre un entorno 100% aislado por organización.' },
-  { title: 'Métodos de pago flexibles', description: 'Aceptamos Pagopar, tarjetas vía Stripe, Bancard, transferencias y códigos de activación.' },
+  { title: 'Operación centralizada', description: 'Gestioná ventas, inventario, clientes y reparaciones desde una sola plataforma.' },
   { title: 'Escalabilidad sin fricción', description: 'Cambiá de plan o agregá sucursales cuando tu negocio lo necesite sin perder datos.' },
 ]
 

@@ -256,10 +256,10 @@ export default function LoginPage() {
             <CardHeader className="space-y-4 pb-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  {branding.logoUrl ? (
+                  {branding.logoDarkUrl || branding.logoUrl ? (
                     <div className="flex h-10 items-center">
                       <img
-                        src={branding.logoUrl}
+                        src={branding.logoDarkUrl || branding.logoUrl}
                         alt={isCustomerContext ? branding.marketplaceName : branding.platformName}
                         className="h-10 w-auto max-w-[180px] object-contain"
                       />

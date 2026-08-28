@@ -219,7 +219,7 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
       <div className="container flex h-16 items-center justify-between gap-4">
         {/* Logo */}
         <Link href={withTenantPrefix('/inicio')} className="group flex items-center gap-3 shrink-0" aria-label="Ir a inicio">
-          <div className={`relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl shadow-md shadow-primary/10 transition-all duration-300 group-hover:scale-105 group-hover:rotate-3 ${
+          <div className={`relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl p-1 shadow-md shadow-primary/10 transition-all duration-300 group-hover:scale-105 group-hover:rotate-3 ${
             companyInfo?.headerStyle === 'accent'
               ? 'bg-white text-primary'
               : 'bg-primary text-primary-foreground'
@@ -230,7 +230,7 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
                 alt={companyInfo?.name || 'Logo'}
                 fill
                 sizes="40px"
-                className="object-cover"
+                className="object-contain p-0.5"
               />
             ) : (
               <Store className="h-5.5 w-5.5" />

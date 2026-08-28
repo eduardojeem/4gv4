@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { ArrowRight, Boxes, ExternalLink, ShieldCheck, ShoppingCart, Wrench, Sparkles, CheckCircle2, CreditCard, Building2, Store } from 'lucide-react'
+import { ArrowRight, Boxes, ExternalLink, ShieldCheck, ShoppingCart, Wrench, Sparkles, CheckCircle2, ReceiptText, Building2, Store } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { type PlatformBranding } from '@/lib/platform/branding'
 import { trustItems } from './saas-landing-data'
+import { SaaSBrandAssistant } from './saas-brand-assistant'
 
 export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
   return (
@@ -18,10 +19,18 @@ export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
         {/* Left Column: Headline, Copy & CTAs */}
         <div className="max-w-3xl">
           <div className="flex flex-wrap items-center gap-2 mb-6">
-            <Badge className="border-cyan-500/30 bg-cyan-950/60 text-cyan-300 gap-1.5 px-3 py-1 font-semibold text-xs shadow-xs">
-              <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
-              SaaS Multiempresa Todo en Uno
-            </Badge>
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-950/70 py-1 pl-1.5 pr-3 text-xs font-semibold text-cyan-300 shadow-md backdrop-blur-md">
+              {branding.faviconUrl || branding.logoDarkUrl || branding.logoUrl ? (
+                <img
+                  src={branding.faviconUrl || branding.logoDarkUrl || branding.logoUrl}
+                  alt={branding.platformName}
+                  className="h-5 w-5 rounded-full object-contain bg-slate-900/80 p-0.5 border border-cyan-500/40"
+                />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+              )}
+              <span>{branding.platformName} · SaaS Multiempresa</span>
+            </div>
             <Badge variant="outline" className="border-white/15 bg-white/5 text-slate-300 text-xs px-2.5 py-0.5">
               📦 Físicos + ⚙️ Servicios
             </Badge>
@@ -64,18 +73,28 @@ export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
         {/* Right Column: Live Operation Interactive Preview Card */}
         <div className="rounded-3xl border border-white/15 bg-gradient-to-b from-slate-900/90 to-slate-950 p-5 text-slate-50 shadow-2xl backdrop-blur-xl relative">
           
-          {/* Header of the mock panel */}
+          {/* Header of the mock panel with official brand logo */}
           <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
             <div className="flex items-center gap-3">
-              <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+              {branding.logoDarkUrl || branding.logoUrl ? (
+                <div className="flex h-8 items-center bg-slate-950/80 px-2.5 py-1 rounded-lg border border-cyan-500/20 shadow-xs">
+                  <img
+                    src={branding.logoDarkUrl || branding.logoUrl}
+                    alt={branding.platformName}
+                    className="h-6 w-auto max-w-[120px] object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+              )}
               <div>
-                <div className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <span>Operación en Tiempo Real</span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/40 text-emerald-400 bg-emerald-950/40 font-semibold">
+                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span>Panel Central</span>
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-emerald-500/40 text-emerald-400 bg-emerald-950/40 font-semibold">
                     En Vivo
                   </Badge>
                 </div>
-                <div className="text-xs text-slate-400">Sucursal Central · Caja Activa</div>
+                <div className="text-[11px] text-slate-400">Sucursal Central · Caja Activa</div>
               </div>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -94,7 +113,7 @@ export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
                 </div>
                 <div>
                   <div className="text-xs font-bold text-white">Punto de Venta (POS)</div>
-                  <div className="text-[11px] text-slate-400">Cobros mixtos, turnos y tickets</div>
+                  <div className="text-[11px] text-slate-400">Ventas, turnos y tickets</div>
                 </div>
               </div>
               <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[10px]">
@@ -135,11 +154,13 @@ export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
             </div>
           </div>
 
+          <SaaSBrandAssistant />
+
           {/* Bottom highlight bar */}
           <div className="mt-4 pt-3.5 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
             <div className="flex items-center gap-1.5">
-              <CreditCard className="h-3.5 w-3.5 text-slate-300" />
-              <span>Pagopar · Stripe · Bancard · Cupones</span>
+              <ReceiptText className="h-3.5 w-3.5 text-slate-300" />
+              <span>Ventas · Caja · Inventario · Reparaciones</span>
             </div>
             <span className="text-emerald-400 font-semibold flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3" />

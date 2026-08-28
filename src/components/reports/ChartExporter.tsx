@@ -1,41 +1,75 @@
-﻿'use client'
+'use client'
 
 import { useCallback, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import * as XLSX from 'xlsx'
-import { motion  } from '../ui/motion'
+import XLSXStyle from 'xlsx-js-style'
 import { toast } from 'sonner'
 import { 
   Download, 
-  FileImage, 
   FileText, 
-  BarChart3, 
   RefreshCw,
-  Camera,
-  Palette,
   Layout,
-  Zap
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
-import { Card, CardContent } from '@/components/ui/card'
+
+// ── Helpers de estilos Excel (módulo-level, estáticos) ────────────────────────
+const XS = XLSXStyle
+
+const XL_C = {
+  violet:  '7C3AED',
+  violetL: 'EDE9FE',
+  blue:    '1D4ED8',
+  green:   '15803D',
+  red:     'B91C1C',
+  amber:   'B45309',
+  indigo:  '3730A3',
+  indigoL: 'E0E7FF',
+  gray:    '374151',
+  grayL:   'F9FAFB',
+  white:   'FFFFFF',
+  border:  'D1D5DB',
+}
+
+type XCellStyle = {
+  font?: { bold?: boolean; sz?: number; color?: { rgb: string }; name?: string }
+  fill?: { fgColor: { rgb: string } }
+  border?: Record<string, { style: string; color: { rgb: string } }>
+  alignment?: { horizontal?: string; vertical?: string; wrapText?: boolean }
+}
+
+const XL_BORDER = {
+  top:    { style: 'thin', color: { rgb: XL_C.border } },
+  bottom: { style: 'thin', color: { rgb: XL_C.border } },
+  left:   { style: 'thin', color: { rgb: XL_C.border } },
+  right:  { style: 'thin', color: { rgb: XL_C.border } },
+}
+
+const xlCell = (v: string | number, s: XCellStyle, t?: string) => ({
+  v, t: t ?? (typeof v === 'number' ? 'n' : 's'), s,
+})
+
+const xlHdr = (bgRgb: string): XCellStyle => ({
+  font:      { bold: true, sz: 10, color: { rgb: XL_C.white }, name: 'Calibri' },
+  fill:      { fgColor: { rgb: bgRgb } },
+  border:    XL_BORDER,
+  alignment: { horizontal: 'center', vertical: 'center' },
+})
+
+const xlData = (rowIdx: number, align = 'left'): XCellStyle => ({
+  font:      { sz: 10, color: { rgb: XL_C.gray }, name: 'Calibri' },
+  fill:      { fgColor: { rgb: rowIdx % 2 === 0 ? XL_C.white : XL_C.grayL } },
+  border:    XL_BORDER,
+  alignment: { horizontal: align },
+})
+
+const xlNum = (rowIdx: number): XCellStyle => xlData(rowIdx, 'right')
 
 interface ChartExportOptions {
   includeCharts: boolean
@@ -488,52 +522,252 @@ export function ChartExporter({
     }
   }, [options, title, chartRefs, chartTitles, metrics, data, chartData, captureChart, onExport, sanitizeFileName])
 
-  // Función para exportar Excel con gráficos
+  // Función para exportar Excel completo y detallado
   const exportExcelOnly = useCallback(async () => {
     setIsExporting(true)
     setExportProgress(0)
 
     try {
-      const wb = XLSX.utils.book_new()
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
+      const wb = XLSXStyle.utils.book_new()
+      const now = new Date()
+      const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
       const safeTitle = sanitizeFileName(title)
+      const dateLabel = now.toLocaleString('es-PY', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
 
-      const summaryRows = [
-        ['Reporte', title],
-        ['Generado', new Date().toLocaleString('es-ES')],
-        ['', ''],
-        ['Incluye datos', options.includeData ? 'Sí' : 'No'],
-        ['Incluye métricas', options.includeMetrics ? 'Sí' : 'No']
-      ]
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
-      wsSummary['!cols'] = [{ wch: 28 }, { wch: 56 }]
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen')
-      setExportProgress(20)
+      // ── Hoja 1: Resumen ───────────────────────────────────────────────────────
+      {
+        const titleS: XCellStyle  = { font: { bold: true, sz: 16, color: { rgb: XL_C.white }, name: 'Calibri' }, fill: { fgColor: { rgb: XL_C.violet } }, alignment: { horizontal: 'left', vertical: 'center' } }
+        const subtitleS: XCellStyle = { font: { sz: 10, color: { rgb: XL_C.gray }, name: 'Calibri' }, fill: { fgColor: { rgb: XL_C.grayL } }, alignment: { horizontal: 'left' } }
+        const labelS: XCellStyle = { font: { bold: true, sz: 10, color: { rgb: XL_C.gray }, name: 'Calibri' }, fill: { fgColor: { rgb: XL_C.white } }, border: XL_BORDER }
+        const kpiHdr: XCellStyle = xlHdr(XL_C.violet)
+        const indexHdr: XCellStyle = xlHdr(XL_C.gray)
+        const indexRow = (rowIdx: number): XCellStyle => ({ font: { sz: 10, color: { rgb: XL_C.gray }, name: 'Calibri' }, fill: { fgColor: { rgb: rowIdx % 2 === 0 ? XL_C.white : XL_C.violetL } }, border: XL_BORDER, alignment: { horizontal: 'left' } })
 
-      if (options.includeData && data.length > 0) {
-        const ws = XLSX.utils.json_to_sheet(data)
-        const headers = Object.keys(data[0] || {})
-        ws['!autofilter'] = { ref: `A1:${String.fromCharCode(64 + Math.max(headers.length, 1))}1` }
+        const metricEntries = Object.entries(metrics)
+
+        const rows: any[][] = [
+          [xlCell('📊  REPORTE DE ANALYTICS', titleS), xlCell('', titleS)],
+          [xlCell(`Negocio: ${title}`, subtitleS), xlCell('', subtitleS)],
+          [xlCell(`Generado el: ${dateLabel}`, subtitleS), xlCell('', subtitleS)],
+          [xlCell('', {}), xlCell('', {})],
+          [xlCell('INDICADORES CLAVE DEL PERIODO', kpiHdr), xlCell('', kpiHdr)],
+          [xlCell('Métrica', labelS), xlCell('Valor', { ...labelS, alignment: { horizontal: 'right' } })],
+          ...metricEntries.map(([k, v], i) => [
+            xlCell(k, xlData(i)),
+            xlCell(v, { ...xlNum(i), alignment: { horizontal: 'right' } }),
+          ]),
+          [xlCell('', {}), xlCell('', {})],
+          [xlCell('CONTENIDO DEL ARCHIVO', indexHdr), xlCell('', indexHdr)],
+          [xlCell('Hoja', { ...labelS }), xlCell('Descripción', labelS)],
+          ...[
+            ['KPIs',            'Indicadores clave del período seleccionado'],
+            ['Ventas por Dia',  'Facturación diaria: POS, Taller y Total Bruto'],
+            ['Ventas por Hora', 'Distribución de ingresos por franja horaria'],
+            ['Finanzas',        'Ingresos, Egresos, Ganancia y Margen %'],
+            ['Sucursales',      'Movimiento POS desglosado por sucursal'],
+            ['Top Categorias',  'Categorías más vendidas con participación %'],
+            ['Reparaciones',    'Estados de órdenes del taller'],
+          ].map(([h, desc], i) => [xlCell(h, indexRow(i)), xlCell(desc, indexRow(i))]),
+        ]
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 40 }, { wch: 52 }]
+        ws['!rows'] = [{ hpt: 28 }, { hpt: 16 }, { hpt: 16 }]
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Resumen')
+      }
+      setExportProgress(14)
+
+      // ── Hoja 2: KPIs ─────────────────────────────────────────────────────────
+      if (Object.keys(metrics).length > 0) {
+        const hdr = xlHdr(XL_C.violet)
+        const rows: any[][] = [
+          [xlCell('Métrica', hdr), xlCell('Valor', hdr), xlCell('Notas', hdr)],
+          ...Object.entries(metrics).map(([k, v], i) => [
+            xlCell(k, xlData(i)),
+            xlCell(v, xlNum(i)),
+            xlCell('', xlData(i)),
+          ]),
+        ]
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 42 }, { wch: 28 }, { wch: 40 }]
+        ws['!autofilter'] = { ref: 'A1:C1' }
         ws['!freeze'] = { xSplit: 0, ySplit: 1 }
-        XLSX.utils.book_append_sheet(wb, ws, 'Datos')
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'KPIs')
+      }
+      setExportProgress(28)
+
+      // ── Hoja 3: Ventas por Día ────────────────────────────────────────────────
+      const salesTrend = chartData?.[0] ?? data
+      if (salesTrend && salesTrend.length > 0) {
+        const hdr = xlHdr(XL_C.blue)
+        const rows: any[][] = [
+          [xlCell('Fecha', hdr), xlCell('POS (Gs.)', hdr), xlCell('Taller (Gs.)', hdr), xlCell('Total Bruto (Gs.)', hdr), xlCell('Cant. Órdenes', hdr)],
+          ...salesTrend.map((p: any, i: number) => {
+            const pos = p.posRevenue ?? 0
+            const rep = p.repairRevenue ?? 0
+            const tot = p.grossRevenue ?? pos + rep
+            return [
+              xlCell(p.label ?? '', xlData(i)),
+              xlCell(pos, xlNum(i)),
+              xlCell(rep, xlNum(i)),
+              xlCell(tot, { ...xlNum(i), font: { bold: true, sz: 10, color: { rgb: tot > 0 ? XL_C.blue : XL_C.red }, name: 'Calibri' } }),
+              xlCell(p.orders ?? 0, xlNum(i)),
+            ]
+          }),
+        ]
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 24 }, { wch: 16 }]
+        ws['!autofilter'] = { ref: 'A1:E1' }
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Ventas por Dia')
+      }
+      setExportProgress(42)
+
+      // ── Hoja 4: Ventas por Hora ───────────────────────────────────────────────
+      const hourlySales = chartData?.[1]
+      if (hourlySales && hourlySales.length > 0) {
+        const hdr = xlHdr(XL_C.indigo)
+        const maxVal = Math.max(...hourlySales.map((p: any) => p.value ?? 0))
+        const rows: any[][] = [
+          [xlCell('Hora', hdr), xlCell('Ingresos (Gs.)', hdr), xlCell('Barra visual', hdr)],
+          ...hourlySales.map((p: any, i: number) => {
+            const val = p.value ?? 0
+            const bars = maxVal > 0 ? '█'.repeat(Math.round((val / maxVal) * 20)) : ''
+            return [
+              xlCell(p.label ?? '', xlData(i, 'center')),
+              xlCell(val, xlNum(i)),
+              xlCell(bars, { ...xlData(i), font: { sz: 9, color: { rgb: XL_C.indigo }, name: 'Calibri' } }),
+            ]
+          }),
+        ]
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 10 }, { wch: 22 }, { wch: 30 }]
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Ventas por Hora')
       }
       setExportProgress(55)
 
-      if (options.includeMetrics && Object.keys(metrics).length > 0) {
-        const metricsData = Object.entries(metrics).map(([key, value]) => ({
-          Métrica: key,
-          Valor: value
-        }))
-        const wsMetrics = XLSX.utils.json_to_sheet(metricsData)
-        wsMetrics['!cols'] = [{ wch: 40 }, { wch: 22 }]
-        XLSX.utils.book_append_sheet(wb, wsMetrics, 'Métricas')
+      // ── Hoja 5: Finanzas ──────────────────────────────────────────────────────
+      const financeComp = chartData?.[5]
+      if (financeComp && financeComp.length > 0) {
+        const hdr = xlHdr(XL_C.green)
+        const rows: any[][] = [
+          [xlCell('Periodo', hdr), xlCell('Ingresos (Gs.)', hdr), xlCell('Egresos (Gs.)', hdr), xlCell('Ganancia (Gs.)', hdr), xlCell('Margen (%)', hdr)],
+          ...financeComp.map((p: any, i: number) => {
+            const ingr = p.ingresos ?? 0
+            const egr  = p.egresos  ?? 0
+            const gan  = p.ganancia ?? 0
+            const mrg  = ingr > 0 ? +((gan / ingr) * 100).toFixed(1) : 0
+            const ganStyle: XCellStyle = {
+              ...xlNum(i),
+              font: { bold: true, sz: 10, color: { rgb: gan >= 0 ? XL_C.green : XL_C.red }, name: 'Calibri' },
+            }
+            return [
+              xlCell(p.label ?? '', xlData(i)),
+              xlCell(ingr, xlNum(i)),
+              xlCell(egr,  { ...xlNum(i), font: { sz: 10, color: { rgb: XL_C.red }, name: 'Calibri' } }),
+              xlCell(gan,  ganStyle),
+              xlCell(mrg,  { ...xlNum(i), font: { sz: 10, color: { rgb: mrg >= 0 ? XL_C.green : XL_C.red }, name: 'Calibri' } }),
+            ]
+          }),
+        ]
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 20 }, { wch: 22 }, { wch: 20 }, { wch: 22 }, { wch: 14 }]
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Finanzas')
       }
-      setExportProgress(85)
+      setExportProgress(66)
 
-      XLSX.writeFile(wb, `${safeTitle}_excel_${timestamp}.xlsx`)
+      // ── Hoja 6: Sucursales ────────────────────────────────────────────────────
+      const byBranch = chartData?.[2]
+      if (byBranch && byBranch.length > 0) {
+        const hdr = xlHdr(XL_C.blue)
+        const maxVal = Math.max(...byBranch.map((p: any) => p.value ?? 0))
+        const rows: any[][] = [
+          [xlCell('Sucursal', hdr), xlCell('Movimiento POS (Gs.)', hdr), xlCell('Part. %', hdr)],
+          ...byBranch.map((p: any, i: number) => {
+            const val = p.value ?? 0
+            const pct = maxVal > 0 ? +((val / maxVal) * 100).toFixed(1) : 0
+            return [
+              xlCell(p.label ?? '', xlData(i)),
+              xlCell(val, xlNum(i)),
+              xlCell(pct, xlNum(i)),
+            ]
+          }),
+        ]
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 30 }, { wch: 26 }, { wch: 12 }]
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Sucursales')
+      }
+      setExportProgress(76)
+
+      // ── Hoja 7: Top Categorías ────────────────────────────────────────────────
+      const topCats = chartData?.[3]
+      if (topCats && topCats.length > 0) {
+        const hdr = xlHdr(XL_C.indigo)
+        const total = topCats.reduce((acc: number, p: any) => acc + (p.value ?? 0), 0)
+        const rows: any[][] = [
+          [xlCell('Categoría', hdr), xlCell('Ventas (Gs.)', hdr), xlCell('Part. %', hdr), xlCell('Ranking', hdr)],
+          ...topCats.map((p: any, i: number) => {
+            const val = p.value ?? 0
+            const pct = total > 0 ? +((val / total) * 100).toFixed(1) : 0
+            const rankStyle: XCellStyle = {
+              font: { bold: true, sz: 11, color: { rgb: i === 0 ? 'D97706' : i === 1 ? '6B7280' : i === 2 ? '92400E' : XL_C.gray }, name: 'Calibri' },
+              fill: { fgColor: { rgb: i % 2 === 0 ? XL_C.white : XL_C.indigoL } },
+              border: XL_BORDER,
+              alignment: { horizontal: 'center' },
+            }
+            return [
+              xlCell(p.label ?? '', xlData(i)),
+              xlCell(val, xlNum(i)),
+              xlCell(pct, xlNum(i)),
+              xlCell(i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`, rankStyle, 's'),
+            ]
+          }),
+        ]
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 32 }, { wch: 22 }, { wch: 12 }, { wch: 10 }]
+        ws['!autofilter'] = { ref: 'A1:D1' }
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Top Categorias')
+      }
+      setExportProgress(86)
+
+      // ── Hoja 8: Reparaciones ──────────────────────────────────────────────────
+      const repairSt = chartData?.[4]
+      if (repairSt && repairSt.length > 0) {
+        const hdr = xlHdr(XL_C.amber)
+        const total = repairSt.reduce((acc: number, p: any) => acc + (p.value ?? 0), 0)
+        const totalS: XCellStyle = { font: { bold: true, sz: 10, color: { rgb: XL_C.white }, name: 'Calibri' }, fill: { fgColor: { rgb: XL_C.amber } }, border: XL_BORDER, alignment: { horizontal: 'right' } }
+        const rows: any[][] = [
+          [xlCell('Estado', hdr), xlCell('Cantidad', hdr), xlCell('Part. %', hdr)],
+          ...repairSt.map((p: any, i: number) => {
+            const val = p.value ?? 0
+            const pct = total > 0 ? +((val / total) * 100).toFixed(1) : 0
+            return [
+              xlCell(p.label ?? '', xlData(i)),
+              xlCell(val, xlNum(i)),
+              xlCell(pct, xlNum(i)),
+            ]
+          }),
+          [xlCell('', {}), xlCell('', {}), xlCell('', {})],
+          [xlCell('TOTAL', totalS), xlCell(total, totalS), xlCell('100%', totalS)],
+        ]
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 30 }, { wch: 14 }, { wch: 12 }]
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Reparaciones')
+      }
+      setExportProgress(95)
+
+      XLSXStyle.writeFile(wb, `${safeTitle}_analytics_${timestamp}.xlsx`)
       setExportProgress(100)
       onExport?.('excel', true)
-      toast.success('Excel generado y descargado.')
+
+      const sheetCount = wb.SheetNames.length
+      toast.success(`Excel descargado — ${sheetCount} hojas con colores y datos.`)
     } catch (error) {
       console.error('Error exportando Excel:', error)
       onExport?.('excel', false)
@@ -544,374 +778,95 @@ export function ChartExporter({
       setIsExporting(false)
       setTimeout(() => setExportProgress(0), 2000)
     }
-  }, [options.includeData, options.includeMetrics, title, data, metrics, onExport, sanitizeFileName])
+  }, [title, data, metrics, chartData, onExport, sanitizeFileName])
 
-  // Función para exportar Excel con gráficos (ZIP)
-  const exportExcelWithCharts = useCallback(async () => {
-    setIsExporting(true)
-    setExportProgress(0)
 
-    try {
-      const wb = XLSX.utils.book_new()
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
-      const safeTitle = sanitizeFileName(title)
-      const zipEntries: Array<{ fileName: string; dataURL: string }> = []
-
-      // Hoja de resumen
-      const summaryRows = [
-        ['Reporte', title],
-        ['Generado', new Date().toLocaleString('es-ES')],
-        ['Total de gráficos', String(chartRefs.length)],
-        ['Formato de imágenes', options.chartFormat.toUpperCase()],
-        ['', ''],
-        ['Secciones incluidas', [
-          options.includeData ? 'Datos' : null,
-          options.includeMetrics ? 'Métricas' : null,
-          options.includeCharts ? 'Gráficos' : null
-        ].filter(Boolean).join(', ') || 'Ninguna']
-      ]
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
-      wsSummary['!cols'] = [{ wch: 28 }, { wch: 68 }]
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen')
-
-      // Hoja de datos
-      if (options.includeData && data.length > 0) {
-        const ws = XLSX.utils.json_to_sheet(data)
-        const headers = Object.keys(data[0] || {})
-        ws['!autofilter'] = { ref: `A1:${String.fromCharCode(64 + Math.max(headers.length, 1))}1` }
-        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
-        XLSX.utils.book_append_sheet(wb, ws, 'Datos')
-      }
-
-      // Hoja de métricas
-      if (options.includeMetrics && Object.keys(metrics).length > 0) {
-        const metricsData = Object.entries(metrics).map(([key, value]) => ({
-          Métrica: key,
-          Valor: value
-        }))
-        const wsMetrics = XLSX.utils.json_to_sheet(metricsData)
-        wsMetrics['!cols'] = [{ wch: 40 }, { wch: 22 }]
-        XLSX.utils.book_append_sheet(wb, wsMetrics, 'Métricas')
-      }
-
-      // Índice de gráficos dentro del Excel
-      const chartsIndexRows: any[][] = [['#', 'Título', 'Archivo', 'Resolución']]
-
-      // Capturar gráficos y agregar metadatos
-      for (let i = 0; i < chartRefs.length; i++) {
-        setExportProgress((i / Math.max(chartRefs.length, 1)) * 75)
-
-        if (!options.includeCharts) continue
-
-        const chartImage = await captureChart(chartRefs[i], chartTitles[i])
-        if (!chartImage) continue
-
-        const imageFileName = `graficos/${String(i + 1).padStart(2, '0')}_${sanitizeFileName(chartTitles[i])}.${options.chartFormat}`
-        zipEntries.push({ fileName: imageFileName, dataURL: chartImage.dataURL })
-
-        chartsIndexRows.push([
-          i + 1,
-          chartTitles[i],
-          imageFileName,
-          `${chartImage.width}x${chartImage.height}`
-        ])
-
-        const currentChartData = (chartData && chartData[i]) || []
-        if (currentChartData.length > 0) {
-          const wsChartData = XLSX.utils.json_to_sheet(currentChartData)
-          const sheetName = `Datos_${i + 1}`.slice(0, 31)
-          XLSX.utils.book_append_sheet(wb, wsChartData, sheetName)
-        }
-      }
-      const wsChartsIndex = XLSX.utils.aoa_to_sheet(chartsIndexRows)
-      wsChartsIndex['!cols'] = [{ wch: 6 }, { wch: 42 }, { wch: 48 }, { wch: 16 }]
-      XLSX.utils.book_append_sheet(wb, wsChartsIndex, 'Graficos')
-
-      setExportProgress(82)
-
-      // Empaquetar ZIP: Excel + carpeta de gráficos + manifiesto
-      const { default: JSZip } = await import('jszip')
-      const zip = new JSZip()
-      const workbookArray = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-      zip.file(`${safeTitle}_reporte_${timestamp}.xlsx`, workbookArray)
-
-      zipEntries.forEach(({ fileName, dataURL }) => {
-        const base64 = dataURL.split(',')[1] || ''
-        zip.file(fileName, base64, { base64: true })
-      })
-
-      const manifest = [
-        `Reporte: ${title}`,
-        `Generado: ${new Date().toLocaleString('es-ES')}`,
-        `Graficos incluidos: ${zipEntries.length}`,
-        `Formato: ${options.chartFormat.toUpperCase()}`,
-        '',
-        'Contenido:',
-        `- ${safeTitle}_reporte_${timestamp}.xlsx`,
-        '- graficos/*'
-      ].join('\n')
-      zip.file('LEEME.txt', manifest)
-
-      setExportProgress(92)
-      const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
-      const url = URL.createObjectURL(zipBlob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${safeTitle}_excel_graficos_${timestamp}.zip`
-      link.click()
-      URL.revokeObjectURL(url)
-
-      setExportProgress(100)
-      onExport?.('excel-charts', true)
-      if (options.includeCharts && zipEntries.length === 0) {
-        toast.warning('ZIP descargado, pero no se pudo capturar ningún gráfico — solo incluye el Excel.')
-      } else {
-        toast.success('ZIP con Excel y gráficos descargado.')
-      }
-
-    } catch (error) {
-      console.error('Error exportando Excel con gráficos:', error)
-      onExport?.('excel-charts', false)
-      toast.error('No se pudo generar el ZIP con Excel y gráficos.', {
-        description: error instanceof Error ? error.message : undefined,
-      })
-    } finally {
-      setIsExporting(false)
-      setTimeout(() => setExportProgress(0), 2000)
-    }
-  }, [options, title, chartRefs, chartTitles, metrics, data, chartData, captureChart, onExport, sanitizeFileName])
 
   return (
-    <div className={`flex items-center gap-4 ${className}`}>
-      {/* Botones de exportación con gráficos */}
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => exportAsImage('png')}
-          disabled={isExporting}
-          className="gap-2 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 hover:from-purple-100 hover:to-pink-100 dark:hover:from-purple-800/30 dark:hover:to-pink-800/30 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300"
-          title="Exportar gráficos como imágenes PNG"
-        >
-          {isExporting ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <FileImage className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-          )}
-          Imágenes
-        </Button>
+    <div className={`flex items-center gap-2 ${className}`}>
 
+      {/* ── PDF ── */}
+      <div className="flex items-center rounded-xl border border-border overflow-hidden shadow-xs">
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
           onClick={exportPDFWithCharts}
           disabled={isExporting}
-          className="gap-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-800/30 dark:hover:to-indigo-800/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300"
-          title="Exportar PDF completo con gráficos incluidos"
+          className="gap-2 h-8 px-3 rounded-none text-xs font-semibold text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
         >
           {isExporting ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <FileText className="h-3.5 w-3.5" />
           )}
-          PDF + Gráficos
+          Descargar PDF
         </Button>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={exportExcelOnly}
-          disabled={isExporting}
-          className="gap-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 hover:from-green-100 hover:to-emerald-100 dark:hover:from-green-800/30 dark:hover:to-emerald-800/30 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
-          title="Exportar Excel con datos (sin gráficos)"
-        >
-          {isExporting ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          )}
-          Excel
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={exportExcelWithCharts}
-          disabled={isExporting}
-          className="gap-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 hover:from-green-100 hover:to-emerald-100 dark:hover:from-green-800/30 dark:hover:to-emerald-800/30 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
-          title="Exportar Excel + gráficos en un ZIP"
-        >
-          {isExporting ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <BarChart3 className="h-4 w-4 text-green-600 dark:text-green-400" />
-          )}
-          Excel + Gráficos (ZIP)
-        </Button>
+        {/* Opción de orientación del PDF */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isExporting}
+              className="h-8 w-7 px-0 rounded-none border-l border-border text-muted-foreground hover:bg-muted"
+              title="Opciones de PDF"
+            >
+              <Layout className="h-3 w-3" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-52 p-3" align="end">
+            <p className="text-xs font-semibold text-foreground mb-2">Orientación del PDF</p>
+            <div className="flex gap-2">
+              {(['landscape', 'portrait'] as const).map((layout) => (
+                <button
+                  key={layout}
+                  type="button"
+                  onClick={() => setOptions(prev => ({ ...prev, pageLayout: layout }))}
+                  className={`flex-1 py-1.5 px-2 text-xs rounded-lg border font-medium transition-colors ${
+                    options.pageLayout === layout
+                      ? 'bg-rose-600 text-white border-rose-600'
+                      : 'bg-muted text-muted-foreground border-border hover:border-rose-400'
+                  }`}
+                >
+                  {layout === 'landscape' ? '⬛ Horizontal' : '▬ Vertical'}
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
-      {/* Configuración avanzada */}
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2 border-slate-200 dark:border-slate-600 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80">
-            <Palette className="h-4 w-4" />
-            Opciones
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-80 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700" align="end">
-          <div className="space-y-4">
-            <div>
-              <h4 className="font-medium text-sm mb-3 flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                <Camera className="h-4 w-4" />
-                Configuración de Gráficos
-              </h4>
-              
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="include-charts" className="text-sm text-slate-700 dark:text-slate-300">Incluir gráficos</Label>
-                  <Switch
-                    id="include-charts"
-                    checked={options.includeCharts}
-                    onCheckedChange={(checked) => 
-                      setOptions(prev => ({ ...prev, includeCharts: checked }))
-                    }
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="include-data" className="text-sm text-slate-700 dark:text-slate-300">Incluir datos</Label>
-                  <Switch
-                    id="include-data"
-                    checked={options.includeData}
-                    onCheckedChange={(checked) => 
-                      setOptions(prev => ({ ...prev, includeData: checked }))
-                    }
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="include-metrics" className="text-sm text-slate-700 dark:text-slate-300">Incluir métricas</Label>
-                  <Switch
-                    id="include-metrics"
-                    checked={options.includeMetrics}
-                    onCheckedChange={(checked) => 
-                      setOptions(prev => ({ ...prev, includeMetrics: checked }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
+      {/* ── Excel ── */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={exportExcelOnly}
+        disabled={isExporting}
+        className="gap-2 h-8 px-3 rounded-xl text-xs font-semibold text-emerald-700 dark:text-emerald-400 border-border hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-300"
+      >
+        {isExporting ? (
+          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Download className="h-3.5 w-3.5" />
+        )}
+        Exportar Excel
+      </Button>
 
-            <Separator className="bg-slate-200 dark:bg-slate-700" />
-
-            <div className="space-y-3">
-              <div>
-                <Label className="text-sm text-slate-700 dark:text-slate-300">Calidad de imagen</Label>
-                <Select 
-                  value={options.chartQuality} 
-                  onValueChange={(value: 'low' | 'medium' | 'high') => 
-                    setOptions(prev => ({ ...prev, chartQuality: value }))
-                  }
-                >
-                  <SelectTrigger className="w-full mt-1 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                    <SelectItem value="low" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">Baja (rápida)</SelectItem>
-                    <SelectItem value="medium" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">Media (balanceada)</SelectItem>
-                    <SelectItem value="high" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">Alta (mejor calidad)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-sm text-slate-700 dark:text-slate-300">Formato de imagen</Label>
-                <Select 
-                  value={options.chartFormat} 
-                  onValueChange={(value: 'png' | 'jpeg') => 
-                    setOptions(prev => ({ ...prev, chartFormat: value }))
-                  }
-                >
-                  <SelectTrigger className="w-full mt-1 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                    <SelectItem value="png" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">PNG (sin pérdida)</SelectItem>
-                    <SelectItem value="jpeg" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">JPEG (comprimido)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-sm text-slate-700 dark:text-slate-300">Orientación de página</Label>
-                <Select 
-                  value={options.pageLayout} 
-                  onValueChange={(value: 'portrait' | 'landscape') => 
-                    setOptions(prev => ({ ...prev, pageLayout: value }))
-                  }
-                >
-                  <SelectTrigger className="w-full mt-1 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                    <SelectItem value="portrait" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">Vertical</SelectItem>
-                    <SelectItem value="landscape" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">Horizontal</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-sm text-slate-700 dark:text-slate-300">Gráficos por página (PDF)</Label>
-                <Select
-                  value={String(options.pdfChartsPerPage)}
-                  onValueChange={(value: '1' | '2' | '4') =>
-                    setOptions(prev => ({ ...prev, pdfChartsPerPage: Number(value) as 1 | 2 | 4 }))
-                  }
-                >
-                  <SelectTrigger className="w-full mt-1 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                    <SelectItem value="1" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">1 (detallado)</SelectItem>
-                    <SelectItem value="2" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">2 (compacto)</SelectItem>
-                    <SelectItem value="4" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">4 (resumen)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
-
-      {/* Indicador de progreso */}
+      {/* Barra de progreso */}
       {isExporting && (
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-3"
-        >
-          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <Zap className="h-4 w-4 text-yellow-500 dark:text-yellow-400 animate-pulse" />
-            Procesando gráficos...
-          </div>
-          
-          <div className="w-32 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 dark:from-purple-400 dark:to-pink-400"
-              initial={{ width: 0 }}
-              animate={{ width: `${exportProgress}%` }}
-              transition={{ duration: 0.3 }}
+        <div className="flex items-center gap-2">
+          <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-rose-500 to-pink-500 transition-all duration-300 rounded-full"
+              style={{ width: `${exportProgress}%` }}
             />
           </div>
-          
-          <Badge variant="secondary" className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+          <span className="text-[11px] text-muted-foreground tabular-nums">
             {Math.round(exportProgress)}%
-          </Badge>
-        </motion.div>
+          </span>
+        </div>
       )}
     </div>
   )
 }
-
-
-

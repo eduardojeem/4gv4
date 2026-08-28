@@ -5,10 +5,10 @@ import { Boxes, ShoppingCart, Store, Wrench } from 'lucide-react'
 import { workflowSteps } from './saas-landing-data'
 import { cn } from '@/lib/utils'
 
-const highlights = [
+export const saasHighlights = [
   {
     title: 'Vende en mostrador con POS',
-    description: 'Sistema POS rápido y ágil diseñado para la operación diaria. Cajas, turnos, pagos mixtos, cobros con tarjeta y auditoría de arqueo en una interfaz sin distracciones.',
+    description: 'Sistema POS rápido y ágil diseñado para la operación diaria. Ventas, turnos, tickets y auditoría de arqueo en una interfaz sin distracciones.',
     icon: ShoppingCart,
     color: 'cyan',
     className: 'lg:col-span-7',
@@ -24,7 +24,7 @@ const highlights = [
   },
   {
     title: 'Gestiona reparaciones técnicas',
-    description: 'Módulo de servicio técnico completo: órdenes de trabajo, estados en tiempo real, repuestos utilizados y seguimiento público por QR.',
+    description: 'Módulo de servicio técnico completo: órdenes de trabajo, estados actualizados, repuestos utilizados y seguimiento público para clientes.',
     icon: Wrench,
     color: 'amber',
     className: 'lg:col-span-5',
@@ -108,7 +108,7 @@ export function SaaSFeaturesSection() {
 
         {/* Bento Grid */}
         <div className="mx-auto mt-16 grid max-w-2xl grid-cols-1 gap-6 sm:mt-20 lg:mx-0 lg:max-w-none lg:grid-cols-12">
-          {highlights.map((feature, index) => {
+          {saasHighlights.map((feature, index) => {
             const Icon = feature.icon
             const theme = colorMaps[feature.color as keyof typeof colorMaps]
             

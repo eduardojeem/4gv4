@@ -47,6 +47,7 @@ export interface RaffleRow {
   draw_seed: string | null
   tickets?: Array<{ count: number }>
   winners?: Array<{ count: number }>
+  participants_count?: number
 }
 
 export const DEFAULT_LOYALTY_SETTINGS: Omit<LoyaltySettingsRow, 'organization_id'> = {

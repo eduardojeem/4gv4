@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from 'react'
+import { AnalyticsGuideDialog } from '@/app/admin/analytics/components/AnalyticsGuideDialog'
 import type { DateRange } from 'react-day-picker'
 import { endOfDay, startOfDay, subDays } from 'date-fns'
 import {
@@ -22,6 +23,7 @@ import {
   Building2,
   CalendarRange,
   Gauge,
+  HelpCircle,
   RefreshCw,
   ShieldAlert,
   ShoppingBag,
@@ -283,6 +285,7 @@ export default function AnalyticsDashboard() {
   const [preset, setPreset] = useState<AnalyticsPreset>('30d')
   const [branch, setBranch] = useState('all')
   const [dateRange, setDateRange] = useState<DateRange | undefined>(buildPresetRange('30d'))
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const normalizedRange = useMemo(() => {
     const fallback = buildPresetRange(preset)
@@ -369,12 +372,30 @@ export default function AnalyticsDashboard() {
 
   return (
     <div className="space-y-6">
+      <AnalyticsGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
+
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">¿Cómo va el negocio?</h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
-            Ventas, inventario, cajas, reparaciones y clientes. Se compara automáticamente con el periodo anterior.
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-violet-600 text-white shadow-sm">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
+              ¿Cómo va el negocio?
+            </h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setGuideOpen(true)}
+              className="h-7 gap-1.5 text-xs rounded-xl border-violet-200 text-violet-700 dark:border-violet-800 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+              ¿Cómo funciona?
+            </Button>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 ml-10">
+            Ventas, inventario, cajas, reparaciones y clientes — comparado automáticamente con el período anterior.
           </p>
         </div>
 
@@ -575,8 +596,8 @@ export default function AnalyticsDashboard() {
         </SectionFrame>
 
         <SectionFrame
-          title="Lo que deberías saber"
-          description="Alertas y observaciones importantes del periodo: qué mejoró, qué necesita atención y dónde hay riesgo."
+          title="Alertas Automáticas del Período"
+          description="Qué mejoró, qué bajó y dónde hay riesgo en este período. El sistema analiza los datos y te avisa automáticamente."
           badge={<SectionBadge>Alertas</SectionBadge>}
           className="xl:col-span-4"
         >
@@ -792,8 +813,8 @@ export default function AnalyticsDashboard() {
         </SectionFrame>
 
         <SectionFrame
-          title="Los mejores del periodo"
-          description="Qué productos se vendieron más, qué cajeros facturaron más, quiénes son los mejores clientes y técnicos."
+          title="Rankings de Desempeño"
+          description="Los productos más vendidos, los cajeros que más facturaron, los mejores clientes y los técnicos más eficientes del período."
           badge={<SectionBadge>Rankings</SectionBadge>}
           className="xl:col-span-12"
           contentClassName="pt-0"

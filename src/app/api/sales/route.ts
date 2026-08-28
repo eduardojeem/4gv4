@@ -3,6 +3,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
+import { tryAutoRaffleEntryForSale } from '@/lib/raffles/auto-entry'
 import { saleSchema, saleUpdateSchema } from '@/lib/validation/schemas'
 import { SALE_STATUS } from '@/lib/sales-status'
 
@@ -218,6 +219,44 @@ export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'po
           error: loyaltyError.message,
         })
       }
+
+      // 5. Entrada automática a sorteos abiertos vigentes si el cliente califica
+      let autoRaffleTickets = null
+      try {
+        autoRaffleTickets = await tryAutoRaffleEntryForSale(
+          supabase,
+          organization.id,
+          finalCustomerId,
+          validated.total_amount
+        )
+      } catch (raffleErr) {
+        logger.warn('No se pudieron asignar tickets automáticos de sorteo', { error: raffleErr })
+      }
+
+      logger.info('Sale created successfully', {
+        saleId: sale.id,
+        itemCount: saleItems.length,
+        total: validated.total_amount,
+        userId: user.id
+      })
+      
+      // Fetch complete sale with relations for response
+      const { data: completeSale } = await supabase
+        .from('sales')
+        .select(`
+          *,
+          customer:customers!customer_id(id, first_name, last_name),
+          sale_items(*, product:products(id, name, sku))
+        `)
+        .eq('id', sale.id)
+        .eq('organization_id', organization.id)
+        .single()
+      
+      return NextResponse.json({
+        success: true,
+        data: completeSale || sale,
+        raffleTickets: autoRaffleTickets
+      }, { status: 201 })
     }
 
     logger.info('Sale created successfully', {

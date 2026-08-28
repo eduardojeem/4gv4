@@ -10,9 +10,20 @@ export function SaaSCTASection({ branding }: { branding: PlatformBranding }) {
 
       <div className="relative mx-auto flex max-w-7xl flex-col gap-8 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
         <div className="max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-cyan-950/60 border border-cyan-500/30 px-3 py-1 text-xs font-semibold text-cyan-300 mb-3">
-            <Sparkles className="h-3 w-3 text-cyan-400" />
-            Comenzá en menos de 2 minutos
+          <div className="flex items-center gap-3 mb-4">
+            {branding.logoDarkUrl || branding.logoUrl ? (
+              <div className="flex h-10 items-center">
+                <img
+                  src={branding.logoDarkUrl || branding.logoUrl}
+                  alt={branding.platformName}
+                  className="h-9 w-auto max-w-[180px] object-contain drop-shadow-[0_2px_14px_rgba(6,182,212,0.3)]"
+                />
+              </div>
+            ) : null}
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-cyan-950/60 border border-cyan-500/30 px-3 py-1 text-xs font-semibold text-cyan-300">
+              <Sparkles className="h-3 w-3 text-cyan-400" />
+              Comenzá en menos de 2 minutos
+            </div>
           </div>
           <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-white">
             ¿Listo para digitalizar y ordenar tu empresa?

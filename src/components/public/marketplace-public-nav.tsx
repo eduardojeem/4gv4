@@ -84,26 +84,51 @@ export function MarketplacePublicNav() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
 
           {/* Logo */}
-          <Link href="/marketplace" className="flex shrink-0 items-center gap-3">
-            {branding.logoUrl ? (
-              <div className="flex h-10 items-center">
-                <img
-                  src={branding.logoUrl}
-                  alt={branding.platformName}
-                  className="h-10 w-auto max-w-[180px] object-contain"
-                />
+          <Link href="/marketplace" className="flex shrink-0 items-center gap-3 group">
+            {branding.logoUrl || branding.logoDarkUrl ? (
+              <div className="flex items-center transition-transform duration-200 group-hover:scale-[1.02]">
+                {branding.logoDarkUrl && branding.logoUrl ? (
+                  <>
+                    <img
+                      src={branding.logoUrl}
+                      alt={branding.platformName}
+                      className={`${
+                        branding.logoHeight === 'sm' ? 'h-8 max-w-[160px]' : branding.logoHeight === 'lg' ? 'h-12 sm:h-14 max-w-[260px]' : branding.logoHeight === 'xl' ? 'h-14 sm:h-16 max-w-[300px]' : 'h-10 sm:h-11 max-w-[210px]'
+                      } w-auto object-contain dark:hidden drop-shadow-xs`}
+                    />
+                    <img
+                      src={branding.logoDarkUrl}
+                      alt={branding.platformName}
+                      className={`${
+                        branding.logoHeight === 'sm' ? 'h-8 max-w-[160px]' : branding.logoHeight === 'lg' ? 'h-12 sm:h-14 max-w-[260px]' : branding.logoHeight === 'xl' ? 'h-14 sm:h-16 max-w-[300px]' : 'h-10 sm:h-11 max-w-[210px]'
+                      } w-auto object-contain hidden dark:block ${branding.logoGlowDark !== false ? 'drop-shadow-[0_2px_14px_rgba(6,182,212,0.35)]' : ''}`}
+                    />
+                  </>
+                ) : (
+                  <img
+                    src={branding.logoUrl || branding.logoDarkUrl}
+                    alt={branding.platformName}
+                    className={`${
+                      branding.logoHeight === 'sm' ? 'h-8 max-w-[160px]' : branding.logoHeight === 'lg' ? 'h-12 sm:h-14 max-w-[260px]' : branding.logoHeight === 'xl' ? 'h-14 sm:h-16 max-w-[300px]' : 'h-10 sm:h-11 max-w-[210px]'
+                    } w-auto object-contain`}
+                  />
+                )}
               </div>
             ) : (
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-600 text-white shadow-sm">
                 <LayoutGrid className="h-5 w-5" />
               </div>
             )}
-            <div className="hidden sm:block">
-              <div className="text-sm font-bold leading-none text-slate-900 dark:text-slate-50">
-                {branding.marketplaceName}
+            {!branding.hideNavBrandText && (
+              <div className="hidden sm:block">
+                <div className="text-sm font-bold leading-none text-slate-900 dark:text-slate-50">
+                  {branding.marketplaceName}
+                </div>
+                {!branding.hideNavTagline && (
+                  <div className="mt-0.5 text-[11px] text-slate-400">{branding.marketplaceTagline}</div>
+                )}
               </div>
-              <div className="mt-0.5 text-[11px] text-slate-400">{branding.marketplaceTagline}</div>
-            </div>
+            )}
           </Link>
 
           {/* Search — desktop */}

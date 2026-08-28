@@ -32,21 +32,41 @@ const raffleSchema = z.object({
 export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.create'], module: 'promotions' }, async (_request, { organization }) => {
   const supabase = await createOrgScopedClient(organization.id)
 
-  const { data, error } = await supabase
-    .from('raffles')
-    .select('*, tickets:raffle_tickets(count), winners:raffle_winners(count)')
-    .eq('organization_id', organization.id)
-    .order('created_at', { ascending: false })
+  const [rafflesRes, ticketsRes] = await Promise.all([
+    supabase
+      .from('raffles')
+      .select('*, tickets:raffle_tickets(count), winners:raffle_winners(count)')
+      .eq('organization_id', organization.id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('raffle_tickets')
+      .select('raffle_id, customer_id')
+      .eq('organization_id', organization.id)
+  ])
 
-  if (error) {
-    if (isLoyaltyModuleMissing(error)) {
+  if (rafflesRes.error) {
+    if (isLoyaltyModuleMissing(rafflesRes.error)) {
       return NextResponse.json({ moduleInstalled: false, raffles: [], message: LOYALTY_MIGRATION_HINT })
     }
-    logger.error('raffles read failed', { error })
+    logger.error('raffles read failed', { error: rafflesRes.error })
     return NextResponse.json({ error: 'No se pudieron cargar los sorteos' }, { status: 500 })
   }
 
-  return NextResponse.json({ moduleInstalled: true, raffles: data ?? [] })
+  // Agrupamos clientes únicos por sorteo
+  const participantMap: Record<string, Set<string>> = {}
+  if (ticketsRes.data) {
+    for (const t of ticketsRes.data) {
+      if (!participantMap[t.raffle_id]) participantMap[t.raffle_id] = new Set()
+      participantMap[t.raffle_id].add(t.customer_id)
+    }
+  }
+
+  const enhancedRaffles = (rafflesRes.data ?? []).map((raffle) => ({
+    ...raffle,
+    participants_count: participantMap[raffle.id]?.size ?? 0,
+  }))
+
+  return NextResponse.json({ moduleInstalled: true, raffles: enhancedRaffles })
 })
 
 export const POST = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, { organization, user }) => {

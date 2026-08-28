@@ -38,7 +38,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: branding.platformName,
     description: branding.seoDescription,
     icons: {
-      icon: branding.logoUrl || '/globe.svg',
+      icon: branding.faviconUrl || branding.logoUrl || '/globe.svg',
     },
   };
 }

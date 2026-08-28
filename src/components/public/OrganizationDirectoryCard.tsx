@@ -54,17 +54,18 @@ export function OrganizationDirectoryCard({ organization, className }: Props) {
         )}
 
         {/* Logo superpuesto */}
-        <div className="absolute -bottom-5 left-3 z-10 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-white bg-white shadow-md dark:border-slate-800 dark:bg-slate-900">
+        <div className="absolute -bottom-5 left-3 z-10 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-white bg-white p-1 shadow-md dark:border-slate-800 dark:bg-slate-900">
           {organization.logo_url ? (
-            <Image
+            <img
               src={organization.logo_url}
               alt={organization.name}
-              width={48}
-              height={48}
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain"
+              loading="lazy"
             />
           ) : (
-            <Building2 className="h-5 w-5 text-slate-400" />
+            <div className="flex h-full w-full items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-blue-600 font-bold text-xs text-white">
+              {organization.name.slice(0, 2).toUpperCase()}
+            </div>
           )}
         </div>
       </div>

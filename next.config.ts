@@ -58,7 +58,14 @@ const nextConfig: NextConfig = {
       'dompurify',
       '@dnd-kit/core',
       '@dnd-kit/sortable',
-      'sonner'
+      'sonner',
+      'xlsx-js-style',
+      'jspdf',
+      'jspdf-autotable',
+      'swr',
+      '@tanstack/react-table',
+      'clsx',
+      'tailwind-merge'
     ],
     
     // Optimizaciones adicionales (optimizeCss usa Critters, solo tiene sentido en producción)
