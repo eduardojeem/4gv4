@@ -159,30 +159,30 @@ export default async function SuperAdminPage() {
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-6">
 
       {/* Header */}
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
+      <header className="order-0 flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1.5">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
             <LayoutDashboard className="h-3.5 w-3.5" />
             Centro de control SaaS
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            Buenas, super admin
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+            Resumen ejecutivo
           </h1>
           <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-            Resumen general de la plataforma. Empezá por las alertas y entrá directo a la sección que necesita acción.
+            Estado comercial y operativo de la plataforma, ordenado por prioridad.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm" className="gap-2">
-            <Link href="/superadmin/monitoring">
+            <Link href="/superadmin/analytics">
               <Activity className="h-3.5 w-3.5" />
-              Monitoreo
+              Analytics
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm" className="gap-2">
-            <Link href="/superadmin/diagnostic">
-              <Zap className="h-3.5 w-3.5" />
-              Diagnóstico
+            <Link href="/superadmin/saas-metrics">
+              <Gauge className="h-3.5 w-3.5" />
+              Uso y límites
             </Link>
           </Button>
           <Button asChild size="sm" className="gap-2">
@@ -196,7 +196,7 @@ export default async function SuperAdminPage() {
 
       {/* Missing tables alert */}
       {missingTables.length > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+        <div className="order-1 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/20">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
@@ -213,7 +213,7 @@ export default async function SuperAdminPage() {
       )}
 
       {/* Hero metrics */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="order-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores ejecutivos">
         <HeroMetric
           label="MRR confirmado"
           value={formatMoney(overview.subscriptionHealth.estimatedMrr)}
@@ -249,7 +249,7 @@ export default async function SuperAdminPage() {
       </section>
 
       {/* Health bar */}
-      <Card>
+      <Card className="order-4">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
@@ -321,7 +321,17 @@ export default async function SuperAdminPage() {
       </Card>
 
       {/* 2-column: Attention + Recent orgs */}
-      <section className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+      <section className="order-2 space-y-3" aria-labelledby="priority-heading">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400">Prioridad de hoy</p>
+            <h2 id="priority-heading" className="mt-1 text-xl font-bold text-slate-900 dark:text-slate-50">Qué necesita atención</h2>
+          </div>
+          <Button asChild variant="ghost" size="sm" className="gap-1.5">
+            <Link href="/superadmin/subscriptions">Gestionar suscripciones <ArrowRight className="h-3.5 w-3.5" /></Link>
+          </Button>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
 
         {/* Attention items */}
         <Card>
@@ -448,10 +458,16 @@ export default async function SuperAdminPage() {
             )}
           </CardContent>
         </Card>
+        </div>
       </section>
 
       {/* Plans distribution + Platform stats */}
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="order-5 space-y-3" aria-labelledby="platform-context-heading">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Contexto secundario</p>
+          <h2 id="platform-context-heading" className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-50">Plataforma y distribución</h2>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
 
         {/* Plans distribution */}
         <Card>
@@ -528,6 +544,11 @@ export default async function SuperAdminPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm"><Link href="/superadmin/monitoring"><Activity className="h-3.5 w-3.5" />Monitoreo técnico</Link></Button>
+          <Button asChild variant="outline" size="sm"><Link href="/superadmin/diagnostic"><Zap className="h-3.5 w-3.5" />Diagnóstico</Link></Button>
+        </div>
       </section>
 
     </div>

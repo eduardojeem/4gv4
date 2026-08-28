@@ -20,18 +20,18 @@ export function SaaSBrandAssistant({
       <div className={styles.mascotStage}>
         <span className={styles.mascotGlow} aria-hidden="true" />
         <Image
-          src="/branding/mascot/mi-tienda-assistant-2d.png"
+          src="/images/robot/robot-white-cyan.png"
           alt="Asistente de Mi Tienda"
           width={80}
-          height={73}
-          sizes="68px"
-          className={styles.mascot}
+          height={80}
+          sizes="80px"
+          className="h-full w-full object-contain drop-shadow-md select-none"
         />
       </div>
 
-      <div className="min-w-0">
-        <p className="text-xs font-semibold text-cyan-200">{title}</p>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-bold text-cyan-200">{title}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-slate-300">
           {description}
         </p>
       </div>

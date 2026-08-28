@@ -78,6 +78,8 @@ type NavItem = NavChild & {
   section: NavSection
   badge?: string
   children?: NavChild[]
+  overviewTitle?: string
+  overviewIcon?: NavIcon
 }
 
 const sectionMeta: Record<NavSection, { label: string; color: string }> = {
@@ -165,22 +167,23 @@ const navItems: NavItem[] = [
       { title: 'Base de datos', href: '/superadmin/database-monitoring', icon: Database },
     ],
   },
-  { title: 'Audit Logs', href: '/superadmin/audit-logs', icon: Shield, description: 'Registro de auditoria y trazabilidad', section: 'system' },
-  { title: 'Emails', href: '/superadmin/emails', icon: Mail, description: 'Plantillas transaccionales', section: 'system' },
-  { title: 'Notificaciones', href: '/superadmin/notifications', icon: Bell, description: 'Notificaciones globales a tenants', section: 'system' },
-  { title: 'Configuracion', href: '/superadmin/settings', icon: Settings, description: 'Parametros globales del sistema', section: 'system' },
   {
-    title: 'Mantenimiento',
-    href: '/superadmin/maintenance',
-    icon: Wrench,
-    description: 'Cache, sesiones y purga de logs',
+    title: 'Más herramientas',
+    href: '/superadmin/audit-logs',
+    icon: MoreHorizontal,
+    overviewTitle: 'Auditoría',
+    overviewIcon: Shield,
+    description: 'Auditoría, comunicaciones y mantenimiento',
     section: 'system',
     children: [
-      { title: 'Tareas globales', href: '/superadmin/maintenance', icon: Wrench },
-      { title: 'Storage cleanup', href: '/superadmin/storage-cleanup', icon: Trash2 },
+      { title: 'Emails', href: '/superadmin/emails', icon: Mail },
+      { title: 'Notificaciones', href: '/superadmin/notifications', icon: Bell },
+      { title: 'Configuración', href: '/superadmin/settings', icon: Settings },
+      { title: 'Mantenimiento', href: '/superadmin/maintenance', icon: Wrench },
+      { title: 'Limpieza de archivos', href: '/superadmin/storage-cleanup', icon: Trash2 },
+      { title: 'Diagnóstico', href: '/superadmin/diagnostic', icon: Bug },
     ],
   },
-  { title: 'Diagnostico', href: '/superadmin/diagnostic', icon: Bug, description: 'Pruebas rapidas de APIs y permisos', section: 'system' },
 ]
 
 function isItemActive(pathname: string, item: NavChild) {
@@ -189,7 +192,14 @@ function isItemActive(pathname: string, item: NavChild) {
 }
 
 function getActiveItem(pathname: string) {
-  const allItems = navItems.flatMap(item => [item, ...(item.children ?? [])])
+  const allItems = navItems.flatMap(item => [
+    {
+      ...item,
+      title: item.overviewTitle ?? item.title,
+      icon: item.overviewIcon ?? item.icon,
+    },
+    ...(item.children ?? []),
+  ])
   return allItems
     .filter(item => isItemActive(pathname, item))
     .sort((a, b) => b.href.length - a.href.length)[0]
@@ -213,7 +223,14 @@ function getBreadcrumbs(pathname: string): { title: string; href: string }[] {
 function getUniqueSectionItems(section: NavSection): NavChild[] {
   return uniqueNavigationItems(navItems
     .filter((item) => item.section === section)
-    .flatMap((item) => [item, ...(item.children ?? [])]))
+    .flatMap((item) => [
+      {
+        ...item,
+        title: item.overviewTitle ?? item.title,
+        icon: item.overviewIcon ?? item.icon,
+      },
+      ...(item.children ?? []),
+    ]))
 }
 
 function getInitials(name: string) {
@@ -269,6 +286,8 @@ function CollapsedNavMenu({
   onNavigate: (href: string) => void
 }) {
   const Icon = item.icon
+  const OverviewIcon = item.overviewIcon ?? item.icon
+  const overviewTitle = item.overviewTitle ?? item.title
 
   return (
     <DropdownMenu>
@@ -304,8 +323,8 @@ function CollapsedNavMenu({
         </DropdownMenuLabel>
         <DropdownMenuItem asChild>
           <Link href={item.href} onClick={() => onNavigate(item.href)}>
-            <Icon className="mr-2 h-4 w-4" />
-            <span>{item.title}</span>
+            <OverviewIcon className="mr-2 h-4 w-4" />
+            <span>{overviewTitle}</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -390,7 +409,11 @@ function NavItemRow({
 
   if (hasChildren) {
     const children: NavChild[] = [
-      { title: 'Vista general', href: item.href, icon: item.icon },
+      {
+        title: item.overviewTitle ?? 'Vista general',
+        href: item.href,
+        icon: item.overviewIcon ?? item.icon,
+      },
       ...(item.children?.filter((child) => child.href !== item.href) ?? []),
     ]
 
@@ -509,7 +532,7 @@ function SidebarContent({
 
   return (
     <div className="flex h-full flex-col bg-slate-950">
-      <div className={cn('flex h-14 shrink-0 items-center border-b border-white/10', collapsed ? 'justify-center px-3' : 'justify-between px-4')}>
+      <div className={cn('flex h-20 shrink-0 items-center border-b border-white/10', collapsed ? 'justify-center px-3' : 'justify-between px-5')}>
         <Link href="/superadmin" onClick={() => onNavigate('/superadmin')} className={cn('flex min-w-0 items-center gap-3', collapsed && 'mx-auto')}>
           <div className="flex h-8 shrink-0 items-center">
             <Image
@@ -518,14 +541,14 @@ function SidebarContent({
               width={132}
               height={32}
               priority
-              className={cn('w-auto object-contain', collapsed ? 'h-8 max-w-8' : 'h-8 max-w-[132px]')}
+              className={cn('w-auto object-contain', collapsed ? 'h-9 max-w-9' : 'h-9 max-w-[132px]')}
             />
           </div>
           {!collapsed && (
             <div className="min-w-0">
               <p className="truncate text-sm font-bold leading-tight text-white">SERVIX 360</p>
-              <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-widest text-indigo-400">
-                Super Admin
+              <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-400">
+                Centro de control
               </p>
             </div>
           )}
@@ -544,8 +567,8 @@ function SidebarContent({
         )}
       </div>
 
-      <ScrollArea className="flex-1 py-2">
-        <nav className={cn('space-y-1', collapsed ? 'px-2' : 'px-3')}>
+      <ScrollArea className="flex-1 py-3">
+        <nav aria-label="Navegación principal del superadmin" className={cn('space-y-1', collapsed ? 'px-2.5' : 'px-3')}>
           {sectionOrder.map((section) => {
             const items = navItems.filter(item => item.section === section)
             if (!items.length) return null
@@ -606,37 +629,57 @@ function SidebarContent({
         </nav>
       </ScrollArea>
 
+      {!collapsed && (
+        <aside
+          aria-label="Asistente del centro de control"
+          className="mx-3 mb-3 flex shrink-0 items-center gap-3 overflow-hidden rounded-xl border border-cyan-400/20 bg-cyan-400/[0.07] p-3"
+        >
+          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-900 ring-1 ring-white/10">
+            <span className="absolute inset-2 rounded-full bg-cyan-400/20 blur-md" aria-hidden="true" />
+            <Image
+              src="/branding/mascot/mi-tienda-assistant-2d.png"
+              alt="Robot asistente de SERVIX 360"
+              width={72}
+              height={66}
+              sizes="56px"
+              className="relative h-auto w-16 object-contain motion-safe:animate-[pulse_4s_ease-in-out_infinite]"
+            />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-cyan-100">Todo bajo control</p>
+            <p className="mt-1 text-[11px] leading-4 text-slate-400">
+              Navega, revisa y administra la plataforma desde un solo lugar.
+            </p>
+          </div>
+        </aside>
+      )}
+
     </div>
   )
 }
 
 function Breadcrumb({ pathname }: { pathname: string }) {
   const crumbs = getBreadcrumbs(pathname)
+  const parentCrumbs = crumbs.slice(0, -1)
 
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5">
       <Link
         href="/superadmin"
-        className="flex h-6 items-center gap-1.5 rounded-md px-2 text-xs font-semibold uppercase tracking-widest text-indigo-600 transition-colors hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
+        className="flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
       >
         <Crown className="h-3 w-3" />
-        SA
+        Centro de control
       </Link>
-      {crumbs.map((crumb, index) => (
+      {parentCrumbs.map((crumb) => (
         <span key={crumb.href} className="flex min-w-0 items-center gap-1.5">
           <ChevronRight className="h-3 w-3 shrink-0 text-slate-300 dark:text-slate-600" />
-          {index === crumbs.length - 1 ? (
-            <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
-              {crumb.title}
-            </span>
-          ) : (
-            <Link
-              href={crumb.href}
-              className="truncate text-xs text-slate-500 transition-colors hover:text-slate-700 dark:hover:text-slate-300"
-            >
-              {crumb.title}
-            </Link>
-          )}
+          <Link
+            href={crumb.href}
+            className="truncate text-xs text-slate-500 transition-colors hover:text-slate-700 dark:hover:text-slate-300"
+          >
+            {crumb.title}
+          </Link>
         </span>
       ))}
     </nav>
@@ -655,25 +698,14 @@ export function SuperAdminShell({
   const { signOut, user } = useAuth()
 
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
+  const [expandedPathname, setExpandedPathname] = useState<string | null>(null)
   const [collapsedSections, setCollapsedSections] = useState<Set<NavSection>>(new Set())
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Read persisted sidebar state after hydration to avoid SSR/client mismatch
   useEffect(() => {
-    let nextExpandedItems: Set<string> | null = null
     let nextCollapsedSections: Set<NavSection> | null = null
     let nextIsCollapsed = false
-
-    try {
-      const stored = window.localStorage.getItem('sa_sidebar_expanded')
-      if (stored) {
-        const parsed = JSON.parse(stored) as unknown
-        if (Array.isArray(parsed)) {
-          const firstExpandedItem = parsed.find((value): value is string => typeof value === 'string')
-          nextExpandedItems = firstExpandedItem ? new Set([firstExpandedItem]) : new Set()
-        }
-      }
-    } catch { /* ignore */ }
 
     try {
       const stored = window.localStorage.getItem('sa_sidebar_collapsed_sections')
@@ -692,7 +724,6 @@ export function SuperAdminShell({
     } catch { /* ignore */ }
 
     queueMicrotask(() => {
-      if (nextExpandedItems) setExpandedItems(nextExpandedItems)
       if (nextCollapsedSections) setCollapsedSections(nextCollapsedSections)
       if (nextIsCollapsed) setIsCollapsed(true)
     })
@@ -731,14 +762,6 @@ export function SuperAdminShell({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem('sa_sidebar_expanded', JSON.stringify(Array.from(expandedItems)))
-    } catch {
-      // Ignore persistence failure.
-    }
-  }, [expandedItems])
-
-  useEffect(() => {
-    try {
       window.localStorage.setItem('sa_sidebar_collapsed_sections', JSON.stringify(Array.from(collapsedSections)))
     } catch {
       // Ignore persistence failure.
@@ -746,7 +769,7 @@ export function SuperAdminShell({
   }, [collapsedSections])
 
   const effectiveExpandedItems = useMemo(() => {
-    if (expandedItems.size) return expandedItems
+    if (expandedPathname === pathname && expandedItems.size) return expandedItems
 
     const activeParent = navItems.find(item => (
       Boolean(item.children?.length)
@@ -754,7 +777,7 @@ export function SuperAdminShell({
     ))
 
     return activeParent ? new Set([activeParent.title]) : new Set<string>()
-  }, [expandedItems, pathname])
+  }, [expandedItems, expandedPathname, pathname])
 
   const activeItem = useMemo(() => getActiveItem(pathname), [pathname])
   const userDisplayName = user?.profile?.name || userEmail || 'Super admin'
@@ -765,10 +788,11 @@ export function SuperAdminShell({
   }, [router, signOut])
 
   const handleToggleExpanded = useCallback((title: string) => {
+    setExpandedPathname(pathname)
     setExpandedItems((current) => {
       return current.has(title) ? new Set() : new Set([title])
     })
-  }, [])
+  }, [pathname])
 
   const handleToggleSection = useCallback((section: NavSection) => {
     setCollapsedSections((current) => {
@@ -787,6 +811,7 @@ export function SuperAdminShell({
       item.href === href || item.children?.some(child => child.href === href)
     ))
 
+    setExpandedPathname(href)
     setExpandedItems(parentItem?.children?.length ? new Set([parentItem.title]) : new Set())
   }, [])
 
@@ -819,7 +844,7 @@ export function SuperAdminShell({
         <aside
           className={cn(
             'hidden shrink-0 overflow-hidden border-r border-white/10 transition-[width] duration-200 lg:flex lg:flex-col',
-            isCollapsed ? 'w-16' : 'w-60'
+            isCollapsed ? 'w-20' : 'w-72'
           )}
         >
           <SidebarContent mode="desktop" {...sidebarProps} />
@@ -833,8 +858,8 @@ export function SuperAdminShell({
               aria-label={isCollapsed ? 'Expandir menu lateral' : 'Colapsar menu lateral'}
               aria-expanded={!isCollapsed}
               className={cn(
-                'absolute top-[18px] z-40 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-400 shadow-sm transition-[left,background-color,color,border-color] duration-200 hover:border-slate-500 hover:bg-slate-800 hover:text-white lg:flex',
-                isCollapsed ? 'left-[50px]' : 'left-[226px]'
+                'absolute top-[26px] z-40 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-400 shadow-sm transition-[left,background-color,color,border-color] duration-200 hover:border-slate-500 hover:bg-slate-800 hover:text-white lg:flex',
+                isCollapsed ? 'left-[66px]' : 'left-[274px]'
               )}
             >
               {isCollapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
@@ -847,7 +872,10 @@ export function SuperAdminShell({
         </Tooltip>
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
-          <header className="relative z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900">
+          <header
+            aria-label="Barra de control del superadmin"
+            className="relative z-20 flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200/90 bg-white/95 px-3 backdrop-blur sm:min-h-20 sm:gap-4 sm:px-5 dark:border-slate-800 dark:bg-slate-900/95"
+          >
             <div className="flex min-w-0 items-center gap-2">
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
@@ -863,12 +891,17 @@ export function SuperAdminShell({
                 </SheetContent>
               </Sheet>
 
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-900 sm:hidden dark:text-slate-50">
-                  {activeItem?.title ?? 'Super Admin'}
-                </p>
+              <div className="min-w-0 py-2">
                 <div className="hidden sm:block">
                   <Breadcrumb pathname={pathname} />
+                </div>
+                <div className="mt-1 min-w-0 sm:mt-1.5">
+                  <p className="truncate text-base font-semibold tracking-tight text-slate-950 dark:text-white sm:text-lg">
+                    {activeItem?.title ?? 'Centro de control'}
+                  </p>
+                  <p className="hidden truncate text-xs text-slate-500 md:block dark:text-slate-400">
+                    {activeItem?.description ?? 'Administración global de la plataforma'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -877,8 +910,8 @@ export function SuperAdminShell({
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
-                className="hidden h-9 w-64 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-left text-xs text-slate-500 transition-colors hover:border-slate-300 hover:bg-white lg:flex dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-slate-800/70"
-                aria-label="Buscar secciones"
+                className="hidden h-10 w-72 items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 text-left text-xs text-slate-500 transition-colors hover:border-slate-300 hover:bg-white lg:flex dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-slate-800/70"
+                aria-label="Buscar en el centro de control"
               >
                 <Search className="h-3.5 w-3.5" />
                 <span className="flex-1">Buscar secciones...</span>
@@ -892,7 +925,7 @@ export function SuperAdminShell({
                 size="icon"
                 className="h-9 w-9 lg:hidden"
                 onClick={() => setSearchOpen(true)}
-                aria-label="Buscar secciones"
+                aria-label="Abrir búsqueda"
               >
                 <Search className="h-4 w-4" />
               </Button>
@@ -903,7 +936,7 @@ export function SuperAdminShell({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-9 gap-2 px-2.5"
+                      className="h-10 gap-2 border-slate-900 bg-slate-900 px-3 text-white hover:bg-slate-800 hover:text-white dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100 dark:hover:bg-cyan-500/20"
                       aria-label="Acciones rápidas"
                     >
                       <Plus className="h-4 w-4" />
@@ -1065,10 +1098,11 @@ export function SuperAdminShell({
 
           <main
             id="superadmin-content"
+            aria-label={`Contenido de ${activeItem?.title ?? 'Super Admin'}`}
             className="relative flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 outline-none dark:bg-slate-950"
             tabIndex={-1}
           >
-            <div className="min-w-0 px-4 py-5 sm:px-6 sm:py-6 xl:px-8">
+            <div className="min-w-0 px-3 py-4 sm:px-6 sm:py-6 xl:px-8 xl:py-7">
               <div className="mx-auto w-full max-w-[1600px]">
                 {children}
               </div>

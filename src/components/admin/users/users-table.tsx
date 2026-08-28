@@ -29,6 +29,7 @@ import {
 import { SupabaseUser } from '@/hooks/use-users-supabase'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
+import { isProtectedOrganizationOwner } from '@/lib/auth/organization-owner-policy'
 
 type SortDirection = 'asc' | 'desc' | null
 
@@ -55,6 +56,10 @@ const ROLE_CONFIG: Record<string, { label: string; className: string }> = {
   admin: {
     label: 'Administrador',
     className: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
+  },
+  owner: {
+    label: 'Propietario',
+    className: 'bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300 dark:border-cyan-800',
   },
   tecnico: {
     label: 'Técnico',
@@ -242,6 +247,7 @@ export function UsersTable({
                 const statusConf = getStatusConfig(user.status)
                 const initials = user.name ? user.name.charAt(0).toUpperCase() : '?'
                 const isInactive = user.status !== 'active'
+                const isOwner = isProtectedOrganizationOwner(user.role)
 
                 return (
                   <TableRow
@@ -278,6 +284,11 @@ export function UsersTable({
                         >
                           {roleConf.label}
                         </Badge>
+                        {isOwner ? (
+                          <span className="text-[10px] text-muted-foreground" title="Responsable principal de la empresa; se gestiona mediante transferencia de propiedad">
+                            Responsable principal
+                          </span>
+                        ) : null}
                         {user.isWholesale ? (
                           <Badge
                             variant="outline"
@@ -394,24 +405,28 @@ export function UsersTable({
                         >
                           <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-md"
-                          onClick={() => onEdit(user)}
-                          title="Editar usuario"
-                        >
-                          <Edit className="h-3.5 w-3.5 text-blue-500" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-md"
-                          onClick={() => onDelete(user)}
-                          title="Desactivar usuario"
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                        </Button>
+                        {!isOwner ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-md"
+                              onClick={() => onEdit(user)}
+                              title="Editar usuario"
+                            >
+                              <Edit className="h-3.5 w-3.5 text-blue-500" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-md"
+                              onClick={() => onDelete(user)}
+                              title="Desactivar usuario"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                            </Button>
+                          </>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>

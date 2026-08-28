@@ -22,7 +22,7 @@ describe('SaaSBrandAssistant', () => {
     render(<SaaSBrandAssistant />)
 
     expect(screen.getByRole('img', { name: 'Asistente de Mi Tienda' }))
-      .toHaveAttribute('src', '/branding/mascot/mi-tienda-assistant-2d.png')
+      .toHaveAttribute('src', '/images/robot/robot-white-cyan.png')
 
     const stylesheet = readFileSync(
       join(process.cwd(), 'src/components/saas/landing/saas-brand-assistant.module.css'),

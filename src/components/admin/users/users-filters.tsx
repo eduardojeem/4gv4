@@ -24,6 +24,7 @@ interface UsersFiltersProps {
 
 const ROLE_OPTIONS = [
   { value: 'all', label: 'Todos los roles' },
+  { value: 'owner', label: 'Propietario' },
   { value: 'admin', label: 'Administrador' },
   { value: 'super_admin', label: 'Super Admin' },
   { value: 'vendedor', label: 'Vendedor' },

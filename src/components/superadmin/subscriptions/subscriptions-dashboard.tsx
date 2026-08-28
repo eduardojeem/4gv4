@@ -6,26 +6,54 @@ import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   ArrowUpRight,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  Copy,
   CreditCard,
   Download,
+  ExternalLink,
+  Globe,
+  Layers,
+  LayoutGrid,
+  List,
+  Minus,
   RefreshCw,
+  Search,
+  Shield,
+  Sparkles,
+  Users,
+  Wrench,
+  X,
+  Zap,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Pagination } from '@/components/ui/pagination'
+import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useUrlListState } from '@/hooks/useUrlListState'
 import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagination'
+import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
+import { MonitoringRobotMascot, type RobotMood } from '../MonitoringRobotMascot'
 
 import type { EditForm, SuperAdminSubscription, SortValue, TabValue } from './types'
 import {
   csvCell,
   daysUntil,
+  formatDate,
+  formatMoney,
   getRecommendation,
   isAttention,
   periodLabel,
+  periodProgress,
   toDateTimeLocalValue,
+  PLAN_STYLES,
+  STATUS_STYLES,
 } from './utils'
 import { SubscriptionStats } from './subscription-stats'
 import { SubscriptionFilters } from './subscription-filters'
@@ -33,6 +61,8 @@ import { SubscriptionTable } from './subscription-table'
 import { SubscriptionCard } from './subscription-card'
 import { SubscriptionDetailDialog } from './subscription-detail-dialog'
 import { SubscriptionSidebar } from './subscription-sidebar'
+import { PlanBadge, StatusBadge } from './subscription-badges'
+import { cn } from '@/lib/utils'
 
 // Re-export type for the page
 export type { SuperAdminSubscription }
@@ -53,6 +83,169 @@ function toEditForm(sub: SuperAdminSubscription): EditForm {
     cancel_at_period_end: sub.cancel_at_period_end,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Subscription Focus Hero Component
+// ---------------------------------------------------------------------------
+
+function SubscriptionFocusHero({
+  subscription: sub,
+  onOpenEdit,
+  onClearFilter,
+  onCopy,
+}: {
+  subscription: SuperAdminSubscription
+  onOpenEdit: () => void
+  onClearFilter: () => void
+  onCopy: (val: string | null) => void
+}) {
+  const renewalDays = daysUntil(sub.current_period_ends_at)
+  const trialDays = daysUntil(sub.trial_ends_at)
+  const progress = periodProgress(sub)
+  const priceFormatted = sub.plan_details?.price_monthly
+    ? formatMoney(sub.plan_details.price_monthly, sub.plan_details.currency || 'PYG')
+    : 'Gratuito / N/A'
+
+  return (
+    <div className="space-y-6">
+      {/* Top Banner Navigation */}
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50/80 via-white to-indigo-50/80 p-3.5 dark:border-violet-800/60 dark:from-violet-950/40 dark:via-slate-900 dark:to-indigo-950/40 shadow-xs">
+        <div className="flex items-center gap-2 text-xs font-bold text-violet-900 dark:text-violet-200">
+          <Sparkles className="h-4 w-4 text-violet-600" />
+          <span>Mostrando Suscripción de Tenant Seleccionado</span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onClearFilter}
+          className="h-8 gap-1.5 rounded-xl text-xs font-bold border-violet-300 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/50 cursor-pointer"
+        >
+          <X className="h-3.5 w-3.5" />
+          Ver todas las suscripciones
+        </Button>
+      </div>
+
+      {/* Main Focus Card */}
+      <section className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 shadow-md dark:border-slate-800 dark:bg-slate-900/95">
+
+        {/* Header Hero */}
+        <div className="flex flex-col gap-5 border-b border-slate-100 bg-slate-50/60 p-6 dark:border-slate-800 dark:bg-slate-950/40 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-violet-600 text-white text-xl font-black shadow-md ring-2 ring-white dark:ring-slate-800">
+              {sub.organization_name.slice(0, 2).toUpperCase()}
+            </div>
+
+            <div className="space-y-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
+                  {sub.organization_name}
+                </h2>
+                <PlanBadge plan={sub.plan} />
+                <StatusBadge status={sub.status} />
+                <Badge variant="outline" className="rounded-full text-xs font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700">
+                  {priceFormatted}
+                </Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+                {sub.organization_slug && (
+                  <button
+                    type="button"
+                    onClick={() => onCopy(`${window.location.origin}/${sub.organization_slug}/inicio`)}
+                    className="inline-flex items-center gap-1 font-mono font-bold text-slate-600 dark:text-slate-300 hover:text-cyan-600 transition-colors cursor-pointer"
+                    title="Copiar URL pública"
+                  >
+                    <span>/{sub.organization_slug}</span>
+                    <Copy className="h-3.5 w-3.5 text-slate-400" />
+                  </button>
+                )}
+                <span className="text-slate-300 dark:text-slate-700">·</span>
+                <span className="text-slate-500 font-medium">Proveedor: <strong className="text-slate-800 dark:text-slate-200">{sub.provider.toUpperCase()}</strong></span>
+                <span className="text-slate-300 dark:text-slate-700">·</span>
+                <button
+                  type="button"
+                  onClick={() => onCopy(sub.id)}
+                  className="inline-flex items-center gap-1 font-mono text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  title="Copiar UUID de suscripción"
+                >
+                  <span className="truncate max-w-[120px] sm:max-w-[200px]">ID: {sub.id}</span>
+                  <Copy className="h-3 w-3 text-slate-400" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Toolbar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={onOpenEdit}
+              size="sm"
+              className="gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer"
+            >
+              <Wrench className="h-3.5 w-3.5" />
+              Editar Suscripción
+            </Button>
+            <EnterSupportButton organizationId={sub.organization_id} organizationName={sub.organization_name} />
+            {sub.organization_slug && (
+              <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer">
+                <a href={`/${sub.organization_slug}/inicio`} target="_blank" rel="noreferrer">
+                  <Globe className="h-3.5 w-3.5 text-cyan-600" />
+                  Abrir tienda
+                  <ExternalLink className="h-3 w-3 text-slate-400" />
+                </a>
+              </Button>
+            )}
+            <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer">
+              <Link href={`/superadmin/organizations?q=${encodeURIComponent(sub.organization_slug || sub.organization_name)}`}>
+                <Building2 className="h-3.5 w-3.5 text-violet-600" />
+                Ficha Empresa
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* Focus KPI Bar */}
+        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="p-5 space-y-1">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Plan & Facturación</p>
+            <p className="truncate text-base font-black text-slate-900 dark:text-slate-100">{sub.plan_details?.name || sub.plan}</p>
+            <p className="truncate text-xs text-slate-500 font-medium">{priceFormatted}</p>
+          </div>
+
+          <div className="p-5 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Vigencia del Período</p>
+              <span className={cn('text-xs font-extrabold', renewalDays !== null && renewalDays <= 7 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400')}>
+                {renewalDays === null ? 'Sin vencimiento' : renewalDays < 0 ? `${Math.abs(renewalDays)}d vencido` : `${renewalDays}d restantes`}
+              </span>
+            </div>
+            <Progress value={progress} className="h-1.5" />
+            <p className="text-[11px] text-slate-400 font-medium">{periodLabel(sub)}</p>
+          </div>
+
+          <div className="p-5 space-y-1">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Uso Operativo del Tenant</p>
+            <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+              {sub.members_count ?? 0} miembros · {sub.products_count ?? 0} productos
+            </p>
+            <p className="text-xs text-slate-500 font-medium">{sub.sales_count ?? 0} ventas registradas</p>
+          </div>
+
+          <div className="p-5 space-y-1">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Acción Recomendada</p>
+            <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">{getRecommendation(sub)}</p>
+            <p className="text-xs text-slate-500 font-medium">Owner: {sub.owner_email || 'Sin email'}</p>
+          </div>
+        </div>
+
+      </section>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main Dashboard
+// ---------------------------------------------------------------------------
 
 export function SubscriptionsDashboard({ subscriptions, planOptions: configuredPlanOptions, loadError }: Props) {
   const router = useRouter()
@@ -167,10 +360,13 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
         return Number(isAttention(b)) - Number(isAttention(a))
       })
   }, [plan, provider, query, sort, status, subscriptions, tab])
+
   const pagination = useMemo(
     () => paginateList(filtered, state.page, state.size),
     [filtered, state.page, state.size]
   )
+
+  const focusedSubscription = query.trim() && filtered.length === 1 ? filtered[0] ?? null : null
 
   // Stats
   const stats = useMemo(() => {
@@ -234,11 +430,17 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+    toast.success('Reporte CSV descargado con éxito')
   }
 
   async function copyValue(value: string | null) {
     if (!value) return
-    await navigator.clipboard.writeText(value)
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success('Copiado al portapapeles')
+    } catch {
+      toast.error('No se pudo copiar')
+    }
   }
 
   function openDetail(sub: SuperAdminSubscription) {
@@ -277,6 +479,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
         throw new Error(payload?.error || 'No se pudo actualizar la suscripción')
       }
 
+      toast.success('Suscripción actualizada correctamente')
       router.refresh()
       closeDetail()
     } catch (error) {
@@ -296,24 +499,29 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     { value: 'canceling', label: `Cancelan (${tabCounts.canceling})` },
   ]
 
+  // Robot Mascot Mood & Insight
+  const robotMood: RobotMood = focusedSubscription
+    ? focusedSubscription.status === 'active' ? 'healthy' : 'warning'
+    : stats.atRisk > 0 ? 'warning' : 'healthy'
+
+  const robotMessage = focusedSubscription
+    ? `Suscripción de ${focusedSubscription.organization_name} · Plan ${focusedSubscription.plan} (${formatMoney(focusedSubscription.plan_details?.price_monthly ?? 0, 'PYG')}) · ${getRecommendation(focusedSubscription)}`
+    : `MRR Estimado: ${formatMoney(stats.estimatedMrr, 'PYG')} · ${stats.active} suscripciones activas (${stats.activeRate}% tasa de conversión). ${stats.atRisk} cuentas requieren atención.`
+
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       {/* Page header */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-950/50">
-              <CreditCard className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-            </div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Billing SaaS
-            </span>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-400">
+            <CreditCard className="h-3.5 w-3.5 text-violet-500" />
+            Superadmin · Facturación & Planes SaaS
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            Suscripciones
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-50">
+            Control de Suscripciones
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Control operativo de planes, trials, renovaciones y cuentas en riesgo.
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+            Monitoreo operativo de planes, trials, renovaciones y cuentas en riesgo.
           </p>
         </div>
 
@@ -321,30 +529,53 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
           <Button
             variant="outline"
             size="sm"
-            className="h-9 gap-2"
+            className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer"
             onClick={() => router.refresh()}
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="h-3.5 w-3.5" />
             Actualizar
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className="h-9 gap-2"
+            className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer"
             onClick={exportCsv}
             disabled={filtered.length === 0}
           >
-            <Download className="h-4 w-4" />
+            <Download className="h-3.5 w-3.5" />
             Exportar CSV
           </Button>
-          <Button asChild size="sm" className="h-9 gap-2">
-            <Link href="/superadmin/billing">
-              Facturación
-              <ArrowUpRight className="h-4 w-4" />
+          <Button asChild size="sm" className="gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer">
+            <Link href="/superadmin/plans">
+              <Sparkles className="h-3.5 w-3.5" />
+              Catálogo de Planes
             </Link>
           </Button>
         </div>
       </header>
+
+      {/* 🤖 ROBOT MASCOT GUARDIAN */}
+      <MonitoringRobotMascot
+        mood={robotMood}
+        statusText={robotMessage}
+        headline={focusedSubscription ? `Auditoría: ${focusedSubscription.organization_name}` : 'Analista Financiero SaaS'}
+        metrics={{
+          healthScore: stats.activeRate,
+          activeAlerts: stats.atRisk,
+        }}
+        onQuickAction={() => router.refresh()}
+        actionLabel="Sincronizar Datos"
+      />
+
+      {/* Focused Subscription Hero Panel */}
+      {focusedSubscription && (
+        <SubscriptionFocusHero
+          subscription={focusedSubscription}
+          onOpenEdit={() => openDetail(focusedSubscription)}
+          onClearFilter={() => setQuery('')}
+          onCopy={copyValue}
+        />
+      )}
 
       {/* Load error */}
       {loadError && (
@@ -356,23 +587,30 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
       )}
 
       {/* Stats */}
-      <SubscriptionStats stats={stats} />
+      {!focusedSubscription && <SubscriptionStats stats={stats} />}
 
       {/* Main content + sidebar */}
-      <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+      <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
         {/* Table card */}
-        <Card className="overflow-hidden rounded-xl border-0 shadow-sm ring-1 ring-slate-200/80 dark:ring-slate-800/80">
-          <CardHeader className="border-b border-slate-100 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900/60">
+        <Card className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 shadow-sm dark:border-slate-800 dark:bg-slate-900/95">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/50 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40 space-y-3">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <CardTitle className="text-base">Control de suscripciones</CardTitle>
-                <p className="mt-1 text-sm text-slate-400">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-50">
+                    Cartera de Suscripciones
+                  </CardTitle>
+                  <Badge variant="outline" className="text-xs font-bold px-2 py-0.5 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800">
+                    {filtered.length} de {subscriptions.length}
+                  </Badge>
+                </div>
+                <CardDescription className="text-xs">
                   Segmenta la cartera, ordena por urgencia y edita sin salir del flujo.
-                </p>
+                </CardDescription>
               </div>
             </div>
 
-            <div className="mt-4">
+            <div className="pt-2">
               <SubscriptionFilters
                 query={query}
                 plan={plan}
@@ -400,13 +638,13 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
               onValueChange={(v) => setTab(v as TabValue)}
             >
               {/* Tab list */}
-              <div className="overflow-x-auto border-b border-slate-100 bg-slate-50/60 px-4 dark:border-slate-800 dark:bg-slate-900/30">
-                <TabsList className="h-11 gap-0 rounded-none bg-transparent p-0">
+              <div className="overflow-x-auto border-b border-slate-100 bg-slate-50/60 px-6 dark:border-slate-800 dark:bg-slate-900/30">
+                <TabsList className="h-11 gap-2 rounded-none bg-transparent p-0">
                   {TABS.map(({ value, label }) => (
                     <TabsTrigger
                       key={value}
                       value={value}
-                      className="h-11 rounded-none border-b-2 border-transparent px-4 text-sm font-medium text-slate-500 data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 dark:text-slate-400 dark:data-[state=active]:border-slate-100 dark:data-[state=active]:text-slate-100"
+                      className="h-11 rounded-none border-b-2 border-transparent px-3 text-xs font-bold text-slate-500 data-[state=active]:border-violet-600 data-[state=active]:bg-transparent data-[state=active]:text-violet-600 dark:text-slate-400 dark:data-[state=active]:border-violet-400 dark:data-[state=active]:text-violet-300 transition-all cursor-pointer"
                     >
                       {label}
                     </TabsTrigger>
@@ -414,7 +652,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
                 </TabsList>
               </div>
 
-              {/* Tab content — same filtered list for all tabs (filtering is done in useMemo) */}
+              {/* Tab content */}
               {TABS.map(({ value }) => (
                 <TabsContent key={value} value={value} className="m-0">
                   {/* Desktop table */}
@@ -437,8 +675,8 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
                         />
                       ))
                     ) : (
-                      <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-700">
-                        <p className="text-sm text-slate-400">
+                      <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800">
+                        <p className="text-xs font-bold text-slate-400">
                           No hay suscripciones que coincidan con los filtros.
                         </p>
                       </div>
@@ -448,7 +686,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
               ))}
             </Tabs>
             <Pagination
-              className="border-t px-4 py-3"
+              className="border-t border-slate-100 dark:border-slate-800 px-6 py-4"
               currentPage={pagination.page}
               totalPages={pagination.totalPages}
               itemsPerPage={pagination.pageSize}

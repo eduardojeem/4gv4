@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
-import { createAdminSupabase, mapUiRoleToDbRole } from '@/lib/supabase/admin'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { canCreateResource } from '@/lib/saas/subscription-service'
 import { canWriteGlobalUserIdentity } from '@/lib/auth/admin-role-scope'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 import { WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/wholesale-access'
+import {
+  canAssignRoleFromUserManagement,
+  isProtectedOrganizationOwner,
+  normalizeManagedUserRole,
+  type ManagedUserRole,
+} from '@/lib/auth/organization-owner-policy'
 
-type CanonicalRole = 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
+type CanonicalRole = ManagedUserRole
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
 
 type ProfileRow = {
@@ -51,30 +57,10 @@ type UserOrganizationSummary = {
   status?: string | null
 }
 
-const DEFAULT_ROLE: CanonicalRole = 'cliente'
 const DEFAULT_STATUS: ProfileStatus = 'active'
 
 function normalizeRole(role: unknown): CanonicalRole {
-  if (typeof role !== 'string') return DEFAULT_ROLE
-  const mapped = mapUiRoleToDbRole(role)
-  if (mapped === 'super_admin' || mapped === 'admin' || mapped === 'vendedor' || mapped === 'tecnico' || mapped === 'cliente') {
-    return mapped
-  }
-
-  switch (role.toLowerCase().trim()) {
-    case 'owner':
-      return 'admin'
-    case 'seller':
-    case 'cashier':
-    case 'manager':
-      return 'vendedor'
-    case 'technician':
-      return 'tecnico'
-    case 'customer':
-      return 'cliente'
-    default:
-      return DEFAULT_ROLE
-  }
+  return normalizeManagedUserRole(role)
 }
 
 function normalizeStatus(status: unknown): ProfileStatus {
@@ -107,7 +93,8 @@ function normalizeScope(value: unknown): UserScope {
 
 // Roles tal como se guardan en organization_members, agrupados por rol canonico.
 const ORG_ROLE_GROUPS: Record<Exclude<CanonicalRole, 'super_admin'>, string[]> = {
-  admin: ['owner', 'admin'],
+  owner: ['owner'],
+  admin: ['admin'],
   vendedor: ['seller'],
   tecnico: ['technician'],
   cliente: ['customer'],
@@ -115,6 +102,8 @@ const ORG_ROLE_GROUPS: Record<Exclude<CanonicalRole, 'super_admin'>, string[]> =
 
 function mapAppRoleToOrgRole(role: CanonicalRole): string {
   switch (role) {
+    case 'owner':
+      return 'owner'
     case 'admin':
       return 'admin'
     case 'vendedor':
@@ -233,7 +222,7 @@ function buildOrganizationMemberStats(members: MemberRow[]) {
     total: members.length,
     active: members.filter((m) => normalizeStatus(m.status) === 'active').length,
     inactive: members.filter((m) => normalizeStatus(m.status) !== 'active').length,
-    admins: members.filter((m) => normalizeRole(m.role) === 'admin').length,
+    admins: members.filter((m) => ['owner', 'admin'].includes(normalizeRole(m.role))).length,
     newThisMonth: members.filter((m) => {
       const t = m.created_at ? new Date(m.created_at).getTime() : 0
       return Number.isFinite(t) && t >= startOfMonth
@@ -634,11 +623,27 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
   ])
 
   const currentRole = normalizeRole(membershipRow?.role ?? roleRow?.role ?? profile?.role)
+  if (isProtectedOrganizationOwner(membershipRow?.role)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'El propietario no se puede editar, degradar ni desactivar desde la gestión de usuarios. Usá una transferencia de propiedad.',
+        code: 'OWNER_PROTECTED',
+      },
+      { status: 403 }
+    )
+  }
   if (currentRole === 'super_admin' && context.user.role !== 'super_admin') {
     return NextResponse.json({ success: false, error: 'No puedes modificar un super administrador' }, { status: 403 })
   }
 
   const nextRole = typeof body?.role === 'string' ? normalizeRole(body.role) : currentRole
+  if (typeof body?.role === 'string' && !canAssignRoleFromUserManagement(body.role)) {
+    return NextResponse.json(
+      { success: false, error: 'El rol Propietario solo puede asignarse mediante una transferencia de propiedad.', code: 'OWNER_TRANSFER_REQUIRED' },
+      { status: 400 }
+    )
+  }
   const nextStatus =
     typeof body?.status === 'string'
       ? normalizeStatus(body.status)
@@ -648,8 +653,8 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ success: false, error: 'Solo un super admin puede asignar super_admin' }, { status: 403 })
   }
 
-  const isAdminRole = currentRole === 'admin' || currentRole === 'super_admin'
-  const nextIsAdminRole = nextRole === 'admin' || nextRole === 'super_admin'
+  const isAdminRole = currentRole === 'owner' || currentRole === 'admin' || currentRole === 'super_admin'
+  const nextIsAdminRole = nextRole === 'owner' || nextRole === 'admin' || nextRole === 'super_admin'
   const isBeingDeactivated = typeof body?.status === 'string' && nextStatus !== 'active'
   // A role change away from admin removes administrative access just as much as
   // a deactivation does, so both paths must go through the same guards.

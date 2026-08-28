@@ -181,7 +181,7 @@ export default async function SuperAdminOrganizationSettingsPage() {
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm" className="gap-2">
-            <Link href="/admin/settings">
+            <Link href="/superadmin/settings">
               <ExternalLink className="h-3.5 w-3.5" />
               Editar configuración del sistema
             </Link>
@@ -198,7 +198,7 @@ export default async function SuperAdminOrganizationSettingsPage() {
             <p className="text-xs text-orange-700 dark:text-orange-400">La plataforma está en mantenimiento. Los usuarios no pueden acceder.</p>
           </div>
           <Button asChild variant="outline" size="sm" className="ml-auto shrink-0 border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300">
-            <Link href="/admin/settings">Desactivar</Link>
+            <Link href="/superadmin/settings">Desactivar</Link>
           </Button>
         </div>
       )}
@@ -210,7 +210,7 @@ export default async function SuperAdminOrganizationSettingsPage() {
           title="Acceso y registro"
           icon={Globe}
           iconColor="border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400"
-          action={{ label: 'Editar', href: '/admin/settings' }}
+          action={{ label: 'Editar', href: '/superadmin/settings' }}
         >
           <SettingRow
             label="Registro público"
@@ -241,7 +241,7 @@ export default async function SuperAdminOrganizationSettingsPage() {
           title="Seguridad"
           icon={Shield}
           iconColor="border-red-200 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400"
-          action={{ label: 'Editar', href: '/admin/settings' }}
+          action={{ label: 'Editar', href: '/superadmin/settings' }}
         >
           <SettingRow
             label="Autenticación de dos factores"
@@ -282,7 +282,7 @@ export default async function SuperAdminOrganizationSettingsPage() {
           title="Defaults del sistema"
           icon={SlidersHorizontal}
           iconColor="border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-400"
-          action={{ label: 'Editar', href: '/admin/settings' }}
+          action={{ label: 'Editar', href: '/superadmin/settings' }}
         >
           <SettingRow
             label="Moneda del sistema"
@@ -329,7 +329,7 @@ export default async function SuperAdminOrganizationSettingsPage() {
           title="Información de la plataforma"
           icon={Building2}
           iconColor="border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-          action={{ label: 'Editar', href: '/admin/settings' }}
+          action={{ label: 'Editar', href: '/superadmin/settings' }}
         >
           <SettingRow
             label="Nombre"
@@ -438,7 +438,7 @@ export default async function SuperAdminOrganizationSettingsPage() {
           { href: '/superadmin/plans', icon: CreditCard, label: 'Administrar planes', sub: 'Precios, límites y features' },
           { href: '/superadmin/subscriptions', icon: BadgeCheck, label: 'Suscripciones', sub: 'Estado por organización' },
           { href: '/superadmin/organizations', icon: Users, label: 'Organizaciones', sub: 'Directorio de tenants' },
-          { href: '/admin/settings', icon: Cog, label: 'Settings del sistema', sub: 'Editar configuración global' },
+          { href: '/superadmin/settings', icon: Cog, label: 'Settings del sistema', sub: 'Editar configuración global' },
         ].map(({ href, icon: Icon, label, sub }) => (
           <Link
             key={href}

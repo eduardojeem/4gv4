@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/client'
 import { User } from './use-admin-dashboard'
 import { useAuth } from '@/contexts/auth-context'
 import { toast } from 'sonner'
+import { normalizeManagedUserRole } from '@/lib/auth/organization-owner-policy'
 
 export interface SupabaseUser extends User {
   avatar_url?: string
@@ -38,7 +39,7 @@ interface UseUsersOptions {
 
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
 
-type CanonicalRole = 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
+type CanonicalRole = 'super_admin' | 'owner' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
 type SerializableError = {
   message?: string
   name?: string
@@ -68,26 +69,10 @@ type ApiUserProfile = {
   is_wholesale?: boolean | null
 }
 
-const DEFAULT_ROLE: CanonicalRole = 'cliente'
 const DEFAULT_STATUS: ProfileStatus = 'active'
 
 function normalizeRole(role: unknown): CanonicalRole {
-  if (typeof role !== 'string') return DEFAULT_ROLE
-  const value = role.trim().toLowerCase()
-
-  if (value === 'super_admin' || value === 'admin' || value === 'vendedor' || value === 'tecnico' || value === 'cliente') {
-    return value
-  }
-
-  if (value === 'supervisor' || value === 'manager' || value === 'employee') {
-    return 'vendedor'
-  }
-
-  if (value === 'technician') {
-    return 'tecnico'
-  }
-
-  return DEFAULT_ROLE
+  return normalizeManagedUserRole(role)
 }
 
 function normalizeStatus(status: unknown): ProfileStatus {

@@ -47,6 +47,7 @@ import { PlanCreateSheet } from './plan-create-sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { getCommercialFeatureValue, isCommercialFeatureLabel } from '@/lib/saas/commercial-plan-features'
+import { RobotGuide } from '@/components/common/RobotGuide'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -660,7 +661,17 @@ export function PlansPageContent() {
         </div>
       </header>
 
-      {/* ── KPI Cards ── */}
+      {/* 🤖 Robot Mascot Consultant */}
+      <div className="rounded-3xl border border-violet-200/80 bg-gradient-to-r from-violet-50/70 via-white to-purple-50/70 p-4 sm:p-5 shadow-xs dark:border-violet-900/60 dark:from-violet-950/40 dark:via-slate-900 dark:to-purple-950/30">
+        <RobotGuide
+          variant="navy-gold"
+          size="md"
+          speechTitle="ByteBot · Consultor de Planes & Facturación SaaS"
+          speechText={`Actualmente cuentas con ${activeCount} planes activos en catálogo generando un MRR estimado de ${mrrFormatted}. Los cambios que realices en precios y módulos se aplican en tiempo real.`}
+        />
+      </div>
+
+      {/* ── KPIs ── */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((k) => (
           <KPICard key={k.label} {...k} />

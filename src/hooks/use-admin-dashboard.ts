@@ -12,7 +12,7 @@ export interface User {
   id: string
   name: string
   email: string
-  role: 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
+  role: 'super_admin' | 'owner' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
   status: 'active' | 'inactive' | 'suspended'
   lastLogin: string
   createdAt: string

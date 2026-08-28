@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import type { SupabaseUser } from '@/hooks/use-users-supabase'
+import { isProtectedOrganizationOwner } from '@/lib/auth/organization-owner-policy'
 
-type RoleKey = 'super_admin' | 'admin' | 'tecnico' | 'vendedor' | 'cliente'
+type RoleKey = 'super_admin' | 'owner' | 'admin' | 'tecnico' | 'vendedor' | 'cliente'
 
 type RoleNode = {
   key: RoleKey
@@ -30,6 +31,14 @@ const ROLE_NODES: RoleNode[] = [
     icon: ShieldCheck,
     accent: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
     badge: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800',
+  },
+  {
+    key: 'owner',
+    label: 'Propietario',
+    description: 'Responsable principal; controla empresa y facturación',
+    icon: ShieldCheck,
+    accent: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300',
+    badge: 'bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300 dark:border-cyan-800',
   },
   {
     key: 'admin',
@@ -221,15 +230,17 @@ export function UsersRoleTree({
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            aria-label={`Editar ${user.name}`}
-                            onClick={() => onEdit(user)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
+                          {!isProtectedOrganizationOwner(user.role) ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              aria-label={`Editar ${user.name}`}
+                              onClick={() => onEdit(user)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null}
                         </span>
                       </li>
                     ))}
