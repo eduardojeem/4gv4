@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
-import { createClient } from '@/lib/supabase/server'
+import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { isLoyaltyModuleMissing, LOYALTY_MIGRATION_HINT } from '@/lib/loyalty/module-status'
 import { logger } from '@/lib/logger'
 
@@ -21,14 +21,14 @@ function raffleId(routeContext: unknown): string | null {
  * que es un estado terminal, así que no se puede repetir hasta que salga el
  * resultado deseado.
  */
-export const POST = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, _context, routeContext) => {
+export const POST = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, { organization }, routeContext) => {
   const id = raffleId(routeContext)
   if (!id) return NextResponse.json({ error: 'Falta el sorteo' }, { status: 400 })
 
   const body = await request.json().catch(() => ({}))
   const parsed = drawSchema.safeParse(body ?? {})
 
-  const supabase = await createClient()
+  const supabase = await createOrgScopedClient(organization.id)
 
   const { data, error } = await supabase.rpc('draw_raffle_winners', {
     p_raffle_id: id,

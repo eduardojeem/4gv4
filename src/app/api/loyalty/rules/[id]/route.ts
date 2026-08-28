@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
-import { createClient } from '@/lib/supabase/server'
+import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
 
 const patchSchema = z.object({
@@ -40,7 +40,7 @@ export const PATCH = withTenantAuth({ permission: 'promotions.manage', module: '
     )
   }
 
-  const supabase = await createClient()
+  const supabase = await createOrgScopedClient(organization.id)
 
   // `awarded_bonus_points` no se acepta nunca desde el cliente: lo lleva la
   // funcion de acreditacion y un trigger revierte cualquier intento.
@@ -63,7 +63,7 @@ export const DELETE = withTenantAuth({ permission: 'promotions.manage', module: 
   const id = ruleId(routeContext)
   if (!id) return NextResponse.json({ error: 'Falta el identificador de la promoción' }, { status: 400 })
 
-  const supabase = await createClient()
+  const supabase = await createOrgScopedClient(organization.id)
 
   const { error } = await supabase
     .from('loyalty_point_rules')

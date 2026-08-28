@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
-import { createClient } from '@/lib/supabase/server'
+import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
 import { logger } from '@/lib/logger'
 
@@ -15,7 +15,7 @@ export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.c
   const id = raffleId(routeContext)
   if (!id) return NextResponse.json({ error: 'Falta el sorteo' }, { status: 400 })
 
-  const supabase = await createClient()
+  const supabase = await createOrgScopedClient(organization.id)
 
   const [raffle, tickets, winners] = await Promise.all([
     supabase.from('raffles').select('*').eq('id', id).eq('organization_id', organization.id).maybeSingle(),
@@ -66,7 +66,7 @@ export const PATCH = withTenantAuth({ permission: 'promotions.manage', module: '
     )
   }
 
-  const supabase = await createClient()
+  const supabase = await createOrgScopedClient(organization.id)
 
   const { data, error } = await supabase
     .from('raffles')
