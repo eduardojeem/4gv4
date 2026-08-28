@@ -166,7 +166,7 @@ export function MonitoringRobotMascot({
       <div className={cn('absolute -right-20 -top-20 h-64 w-64 rounded-full bg-gradient-to-br blur-3xl opacity-60 pointer-events-none', moodConfig.visorGlow)} />
 
       <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-6">
-        
+
         {/* 3D Robot Figure */}
         <motion.div
           animate={{
