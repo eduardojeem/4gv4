@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
+import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
 import { logger } from '@/lib/logger'
 
 function raffleId(routeContext: unknown): string | null {
@@ -76,8 +77,7 @@ export const PATCH = withTenantAuth({ permission: 'promotions.manage', module: '
     .single()
 
   if (error) {
-    logger.error('raffle update failed', { error })
-    return NextResponse.json({ error: 'No se pudo actualizar el sorteo' }, { status: 500 })
+    return loyaltyErrorResponse(error, 'actualizar el sorteo', { raffleId: id })
   }
 
   return NextResponse.json({ raffle: data })

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { isLoyaltyModuleMissing, LOYALTY_MIGRATION_HINT } from '@/lib/loyalty/module-status'
+import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
 import { logger } from '@/lib/logger'
 
 const settingsSchema = z.object({
@@ -68,11 +69,9 @@ export const PUT = withTenantAuth({ permission: 'promotions.manage', module: 'pr
     .single()
 
   if (error) {
-    if (isLoyaltyModuleMissing(error)) {
-      return NextResponse.json({ error: LOYALTY_MIGRATION_HINT, code: 'MODULE_NOT_INSTALLED' }, { status: 503 })
-    }
-    logger.error('loyalty settings write failed', { error })
-    return NextResponse.json({ error: 'No se pudo guardar la configuración' }, { status: 500 })
+    return loyaltyErrorResponse(error, 'guardar la configuración de puntos', {
+      organizationId: organization.id,
+    })
   }
 
   return NextResponse.json({ settings: data })

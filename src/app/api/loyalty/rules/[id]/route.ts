@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
-import { logger } from '@/lib/logger'
+import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
 
 const patchSchema = z.object({
   name: z.string().min(2).optional(),
@@ -53,8 +53,7 @@ export const PATCH = withTenantAuth({ permission: 'promotions.manage', module: '
     .single()
 
   if (error) {
-    logger.error('loyalty rule update failed', { error })
-    return NextResponse.json({ error: 'No se pudo actualizar la promoción' }, { status: 500 })
+    return loyaltyErrorResponse(error, 'actualizar la promoción', { ruleId: id })
   }
 
   return NextResponse.json({ rule: data })
@@ -73,8 +72,7 @@ export const DELETE = withTenantAuth({ permission: 'promotions.manage', module: 
     .eq('organization_id', organization.id)
 
   if (error) {
-    logger.error('loyalty rule delete failed', { error })
-    return NextResponse.json({ error: 'No se pudo eliminar la promoción' }, { status: 500 })
+    return loyaltyErrorResponse(error, 'eliminar la promoción', { ruleId: id })
   }
 
   return NextResponse.json({ success: true })
