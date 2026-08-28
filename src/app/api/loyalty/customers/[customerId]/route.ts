@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
-import { createClient } from '@/lib/supabase/server'
+import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { isLoyaltyModuleMissing, LOYALTY_MIGRATION_HINT } from '@/lib/loyalty/module-status'
 import { logger } from '@/lib/logger'
 
@@ -15,7 +15,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'p
   const id = customerId(routeContext)
   if (!id) return NextResponse.json({ error: 'Falta el cliente' }, { status: 400 })
 
-  const supabase = await createClient()
+  const supabase = await createOrgScopedClient(organization.id)
 
   const [account, ledger, tickets, winners] = await Promise.all([
     supabase.from('loyalty_accounts').select('*').eq('customer_id', id).eq('organization_id', organization.id).maybeSingle(),
@@ -49,7 +49,7 @@ const adjustSchema = z.object({
 })
 
 /** Ajuste manual. Pasa por la función, que exige motivo y bloquea negativos. */
-export const POST = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, _context, routeContext) => {
+export const POST = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, { organization }, routeContext) => {
   const id = customerId(routeContext)
   if (!id) return NextResponse.json({ error: 'Falta el cliente' }, { status: 400 })
 
@@ -67,7 +67,7 @@ export const POST = withTenantAuth({ permission: 'promotions.manage', module: 'p
     )
   }
 
-  const supabase = await createClient()
+  const supabase = await createOrgScopedClient(organization.id)
 
   const { data, error } = await supabase.rpc('adjust_loyalty_points', {
     p_customer_id: id,
@@ -98,7 +98,7 @@ const exclusionSchema = z.object({
  * Registrarla la puede hacer el mostrador; levantarla exige permiso de gestión,
  * y eso lo decide la función de la base, no esta ruta.
  */
-export const PATCH = withTenantAuth({ permission: 'pos.sales.create', module: 'promotions' }, async (request: NextRequest, _context, routeContext) => {
+export const PATCH = withTenantAuth({ permission: 'pos.sales.create', module: 'promotions' }, async (request: NextRequest, { organization }, routeContext) => {
   const id = customerId(routeContext)
   if (!id) return NextResponse.json({ error: 'Falta el cliente' }, { status: 400 })
 
@@ -116,7 +116,7 @@ export const PATCH = withTenantAuth({ permission: 'pos.sales.create', module: 'p
     )
   }
 
-  const supabase = await createClient()
+  const supabase = await createOrgScopedClient(organization.id)
 
   const { data, error } = await supabase.rpc('set_loyalty_self_exclusion', {
     p_customer_id: id,

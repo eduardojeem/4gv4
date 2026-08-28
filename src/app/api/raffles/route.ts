@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
-import { createClient } from '@/lib/supabase/server'
+import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { isLoyaltyModuleMissing, LOYALTY_MIGRATION_HINT } from '@/lib/loyalty/module-status'
 import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
 import { logger } from '@/lib/logger'
@@ -30,7 +30,7 @@ const raffleSchema = z.object({
 })
 
 export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.create'], module: 'promotions' }, async (_request, { organization }) => {
-  const supabase = await createClient()
+  const supabase = await createOrgScopedClient(organization.id)
 
   const { data, error } = await supabase
     .from('raffles')
@@ -64,7 +64,7 @@ export const POST = withTenantAuth({ permission: 'promotions.manage', module: 'p
     )
   }
 
-  const supabase = await createClient()
+  const supabase = await createOrgScopedClient(organization.id)
 
   const { data, error } = await supabase
     .from('raffles')
