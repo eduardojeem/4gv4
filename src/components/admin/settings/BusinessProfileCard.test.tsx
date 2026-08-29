@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { SubscriptionStatusProvider, type SubscriptionStatusData } from '@/contexts/SubscriptionStatusContext'
 import { BusinessProfileCard } from './BusinessProfileCard'
 
@@ -33,6 +34,13 @@ const status: SubscriptionStatusData = {
 }
 
 describe('BusinessProfileCard', () => {
+  beforeAll(() => {
+    Element.prototype.hasPointerCapture = vi.fn(() => false)
+    Element.prototype.setPointerCapture = vi.fn()
+    Element.prototype.releasePointerCapture = vi.fn()
+    Element.prototype.scrollIntoView = vi.fn()
+  })
+
   it('explains the business profile and distinguishes unavailable repairs', () => {
     render(
       <SubscriptionStatusProvider value={status}>
@@ -67,5 +75,28 @@ describe('BusinessProfileCard', () => {
     expect(screen.getByText('Plan actual: Pro')).toBeInTheDocument()
     expect(screen.getByText('Incluido en Pro, pero desactivado para esta organización')).toBeInTheDocument()
     expect(screen.getByText('No incluido en Pro. Disponible en Enterprise, pero ese plan no está activo')).toBeInTheDocument()
+  })
+
+  it('does not disable entitled modules when the business profile changes', async () => {
+    const user = userEvent.setup()
+    render(
+      <SubscriptionStatusProvider value={{
+        ...status,
+        planCode: 'PRO',
+        planName: 'Pro',
+        entitledModules: ['inventory', 'pos', 'crm', 'analytics', 'security'],
+        enabledModules: ['inventory', 'pos', 'crm', 'analytics', 'security'],
+        effectiveModules: ['inventory', 'pos', 'crm', 'analytics', 'security'],
+      }}>
+        <BusinessProfileCard />
+      </SubscriptionStatusProvider>,
+    )
+
+    await user.click(screen.getByLabelText('Forma de trabajo'))
+    await user.click(screen.getByRole('option', { name: 'Negocio mixto' }))
+
+    expect(screen.getByLabelText('Analítica')).toBeChecked()
+    expect(screen.getByLabelText('Seguridad y auditoría')).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Aplicar recomendación' })).toBeInTheDocument()
   })
 })

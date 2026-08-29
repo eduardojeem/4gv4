@@ -74,10 +74,8 @@ export function BusinessProfileCard() {
     || model !== profile.operatingModel
     || JSON.stringify([...enabled].sort()) !== JSON.stringify([...(profile.enabledModules ?? profile.effectiveModules)].sort())
 
-  const applyPreset = (nextVertical: BusinessVertical, nextModel: OperatingModel) => {
-    setVertical(nextVertical)
-    setModel(nextModel)
-    setEnabled(getSuggestedModules(nextVertical, nextModel).filter(module => entitled.has(module)))
+  const applySuggestedModules = () => {
+    setEnabled(getSuggestedModules(vertical, model).filter(module => entitled.has(module)))
   }
 
   const toggleModule = (module: OrganizationModule, checked: boolean) => {
@@ -160,7 +158,7 @@ export function BusinessProfileCard() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="business-vertical">Rubro</Label>
-            <Select value={vertical} onValueChange={value => applyPreset(value as BusinessVertical, model)}>
+            <Select value={vertical} onValueChange={value => setVertical(value as BusinessVertical)}>
               <SelectTrigger id="business-vertical" aria-label="Rubro" className="h-11">
                 <SelectValue />
               </SelectTrigger>
@@ -173,7 +171,7 @@ export function BusinessProfileCard() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="operating-model">Forma de trabajo</Label>
-            <Select value={model} onValueChange={value => applyPreset(vertical, value as OperatingModel)}>
+            <Select value={model} onValueChange={value => setModel(value as OperatingModel)}>
               <SelectTrigger id="operating-model" aria-label="Forma de trabajo" className="h-11">
                 <SelectValue />
               </SelectTrigger>
@@ -192,7 +190,12 @@ export function BusinessProfileCard() {
               <h3 className="text-sm font-medium">Herramientas visibles</h3>
               <p className="text-xs text-muted-foreground">Cada herramienta indica si depende del plan o de la configuración de la organización.</p>
             </div>
-            <Badge variant="secondary">Plan actual: {profile.planName}</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">Plan actual: {profile.planName}</Badge>
+              <Button type="button" variant="outline" size="sm" onClick={applySuggestedModules}>
+                Aplicar recomendación
+              </Button>
+            </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {ORGANIZATION_MODULES.map(module => {
