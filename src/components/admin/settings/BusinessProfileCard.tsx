@@ -90,6 +90,13 @@ export function BusinessProfileCard() {
     || JSON.stringify([...enabled].sort()) !== JSON.stringify([...(profile.enabledModules ?? profile.effectiveModules)].sort())
 
   const applySuggestedModules = () => {
+    const modulesToDisable = enabled.filter(module => !recommendedIncluded.includes(module))
+    if (
+      modulesToDisable.length > 0
+      && !window.confirm(
+        `Aplicar la recomendación desactivará ${modulesToDisable.length} ${modulesToDisable.length === 1 ? 'herramienta' : 'herramientas'}. Los datos se conservarán. ¿Querés continuar?`,
+      )
+    ) return
     setEnabled(recommendedIncluded)
   }
 

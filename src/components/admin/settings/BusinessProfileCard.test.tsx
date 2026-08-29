@@ -97,7 +97,12 @@ describe('BusinessProfileCard', () => {
 
     expect(screen.getByLabelText('Analítica')).toBeChecked()
     expect(screen.getByLabelText('Seguridad y auditoría')).toBeChecked()
-    expect(screen.getByRole('button', { name: 'Aplicar recomendación' })).toBeInTheDocument()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await user.click(screen.getByRole('button', { name: 'Aplicar recomendación' }))
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('desactivará 2 herramientas'))
+    expect(screen.getByLabelText('Analítica')).toBeChecked()
+    expect(screen.getByLabelText('Seguridad y auditoría')).toBeChecked()
+    confirm.mockRestore()
   })
 
   it('shows business recommendations, higher-plan modules, and safe activation actions', () => {
