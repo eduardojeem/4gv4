@@ -57,9 +57,21 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
       if (options.module) {
         const planInfo = await getOrganizationPlanInfo(organization.id)
         if (!planInfo.modules.includes(options.module)) {
+          const commerciallyAvailable = planInfo.entitledModules.includes(options.module)
+            || planInfo.moduleTrials.some(trial => trial.module === options.module)
           return NextResponse.json(
-            { error: 'Module unavailable', message: 'This module is not enabled for the current plan.' },
-            { status: 402 }
+            commerciallyAvailable
+              ? {
+                  error: 'Module disabled',
+                  code: 'MODULE_DISABLED',
+                  message: 'This module is disabled for the current organization.',
+                }
+              : {
+                  error: 'Module unavailable',
+                  code: 'MODULE_NOT_ENTITLED',
+                  message: 'This module is not enabled for the current plan.',
+                },
+            { status: commerciallyAvailable ? 403 : 402 }
           )
         }
       }

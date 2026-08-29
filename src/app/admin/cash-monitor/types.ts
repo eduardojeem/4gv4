@@ -1,3 +1,5 @@
+import type { CashPaymentMethod } from '@/app/dashboard/pos/types'
+
 // ============================================================================
 // CASH ADMIN MONITOR - Types & Interfaces
 // ============================================================================
@@ -77,7 +79,7 @@ export interface CashMovementAdmin {
   type: 'opening' | 'sale' | 'cash_in' | 'cash_out' | 'closing'
   amount: number
   reason: string | null
-  payment_method: 'cash' | 'card' | 'transfer' | 'mixed' | null
+  payment_method: CashPaymentMethod | null
   created_by: string | null
   created_by_name?: string
   created_at: string

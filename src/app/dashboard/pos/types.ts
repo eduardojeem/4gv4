@@ -58,19 +58,32 @@ export interface PaymentMethodOption {
   color?: string
 }
 
+export type CashMovementType = 'opening' | 'apertura' | 'sale' | 'venta' | 'in' | 'cash_in' | 'ingreso' | 'out' | 'cash_out' | 'egreso' | 'closing' | 'cierre'
+export type CashPaymentMethod = 'cash' | 'efectivo' | 'card' | 'tarjeta' | 'transfer' | 'transferencia' | 'qr' | 'sipap' | 'mixed' | 'mixto'
+
 export interface CashMovement {
   id: string
-  type: 'opening' | 'sale' | 'in' | 'cash_in' | 'out' | 'cash_out' | 'closing'
+  type: CashMovementType
   amount: number
   note?: string
   reason?: string // Alias for note
   timestamp?: string
   created_at?: string // Alias for timestamp
-  payment_method?: 'cash' | 'card' | 'transfer' | 'mixed'
+  payment_method?: CashPaymentMethod
+  created_by?: string
+  userName?: string
+  userEmail?: string
 }
 
 export interface CashRegisterState {
   isOpen: boolean
   balance: number
   movements: CashMovement[]
+  register_id?: string
+  opened_at?: string
+  opened_by?: string
+  opening_balance?: number
+  total_sales?: number
+  total_cash_in?: number
+  total_cash_out?: number
 }

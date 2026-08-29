@@ -27,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
-import { BusinessTypeCard } from '@/components/admin/settings/BusinessTypeCard'
+import { BusinessProfileCard } from '@/components/admin/settings/BusinessProfileCard'
 import { useAuth } from '@/contexts/auth-context'
 import { useTheme } from '@/contexts/theme-context'
 import {
@@ -284,10 +284,9 @@ export default function AdminSettingsPage() {
         </TabsList>
 
         <TabsContent value="company" className="m-0 space-y-4">
-          {/* Se guarda en website_settings.company_info, no en system_settings
-              como el resto de esta pantalla: lo leen el onboarding y el sitio
-              publico desde ahi. Ver BusinessTypeCard. */}
-          <BusinessTypeCard />
+          {/* El perfil operativo es tenant-aware y se guarda en organizations.
+              La información editorial pública continúa separada en website_settings. */}
+          <BusinessProfileCard />
 
           <Card>
             <CardHeader>

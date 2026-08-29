@@ -1616,6 +1616,9 @@ export interface Database {
       }
       organizations: {
         Row: {
+          business_vertical: string
+          operating_model: string
+          enabled_modules: string[] | null
           id: string
           name: string
           slug: string
@@ -1627,6 +1630,9 @@ export interface Database {
           marketplace_public: boolean
         }
         Insert: {
+          business_vertical?: string
+          operating_model?: string
+          enabled_modules?: string[] | null
           id?: string
           name: string
           slug: string
@@ -1638,6 +1644,9 @@ export interface Database {
           marketplace_public: boolean
         }
         Update: {
+          business_vertical?: string
+          operating_model?: string
+          enabled_modules?: string[] | null
           id?: string
           name?: string
           slug?: string

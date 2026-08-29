@@ -5,6 +5,7 @@ import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { ACTIVE_REPAIR_STATUSES, COMPLETED_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 import type { RepairStatus } from '@/types/repairs'
+import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,8 @@ type TechnicianAggregate = {
  */
 export async function GET(req: NextRequest) {
   try {
+    const moduleContext = await resolveRepairModuleContext()
+    if (isNextResponse(moduleContext)) return moduleContext
     const auth = await requireStaff()
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse

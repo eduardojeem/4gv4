@@ -1,6 +1,12 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
 import type { ModuleTrial } from './plan-features'
+import { buildOrganizationBusinessProfile } from './effective-modules'
+import type {
+  BusinessVertical,
+  OperatingModel,
+  OrganizationModule,
+} from '@/lib/organization/business-profile'
 
 export type ResourceType = 'users' | 'branches' | 'cashRegisters' | 'products' | 'categories' | 'repairs' | 'services'
 export type PlanCode = 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE'
@@ -644,6 +650,11 @@ export async function getOrganizationPlanInfo(
   code: PlanCode
   name: string
   modules: string[]
+  entitledModules: string[]
+  enabledModules: OrganizationModule[] | null
+  effectiveModules: OrganizationModule[]
+  businessVertical: BusinessVertical
+  operatingModel: OperatingModel
   downgradedFromExpiry: boolean
   moduleTrials: ModuleTrial[]
   trialedModules: string[]
@@ -652,7 +663,7 @@ export async function getOrganizationPlanInfo(
   const supabase = createAdminSupabase()
   const [{ data: sub }, { data: org }, { data: trials }] = await Promise.all([
     supabase.from('subscriptions').select('plan, payment_status, cancel_at_period_end, current_period_ends_at').eq('organization_id', organizationId).maybeSingle(),
-    supabase.from('organizations').select('plan').eq('id', organizationId).maybeSingle(),
+    supabase.from('organizations').select('plan, business_vertical, operating_model, enabled_modules').eq('id', organizationId).maybeSingle(),
     supabase
       .from('organization_module_trials')
       .select('module, expires_at')
@@ -681,15 +692,27 @@ export async function getOrganizationPlanInfo(
       daysLeft: Math.max(0, Math.ceil((new Date(t.expires_at).getTime() - now) / 86400000)),
     }))
 
-  // Módulos efectivos = los del plan + los que están en trial activo.
-  const modules = Array.from(new Set([...planModules, ...moduleTrials.map((t) => t.module)]))
+  const profile = buildOrganizationBusinessProfile({
+    persisted: {
+      businessVertical: org?.business_vertical,
+      operatingModel: org?.operating_model,
+      enabledModules: org?.enabled_modules,
+    },
+    entitledModules: planModules,
+    trialModules: moduleTrials.map((trial) => trial.module),
+  })
 
   // Baja de cortesía: quedó en FREE por impago (la automatización marca payment_status='unpaid').
   const downgradedFromExpiry = code === 'FREE' && sub?.payment_status === 'unpaid'
   return {
     code,
     name: typeof plan?.name === 'string' ? plan.name : code,
-    modules,
+    modules: profile.effectiveModules,
+    entitledModules: planModules,
+    enabledModules: profile.enabledModules,
+    effectiveModules: profile.effectiveModules,
+    businessVertical: profile.businessVertical,
+    operatingModel: profile.operatingModel,
     downgradedFromExpiry,
     moduleTrials,
     trialedModules,

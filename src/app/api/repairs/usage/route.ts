@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { canCreateRepair } from '@/lib/saas/subscription-service'
+import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 
 export const dynamic = 'force-dynamic'
 
 // Uso y límite mensual de reparaciones de la organización (para mostrar avisos).
 export async function GET() {
   try {
+    const moduleContext = await resolveRepairModuleContext()
+    if (isNextResponse(moduleContext)) return moduleContext
     const auth = await requireStaff()
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse

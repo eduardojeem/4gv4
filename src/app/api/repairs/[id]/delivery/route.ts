@@ -91,7 +91,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
     }
     const resolvedInput = parsed.data
     const isCredit = resolvedInput.payment?.method === 'credit'
-    if (isCredit && (ctx.role === 'tecnico' || ctx.role === 'technician')) {
+    if (isCredit && ctx.role === 'tecnico') {
       return NextResponse.json(
         { error: 'Permisos insuficientes para registrar una entrega a crédito.', code: 'REPAIR_CREDIT_UNAUTHORIZED' },
         { status: 403 },

@@ -46,7 +46,7 @@ export default async function DashboardOnboardingPage() {
     redirect('/dashboard')
   }
 
-  const [{ data: subscription }, { data: settings }] = await Promise.all([
+  const [{ data: subscription }, { data: settings }, { data: businessProfile }] = await Promise.all([
     admin
       .from('subscriptions')
       .select('plan, status, trial_ends_at')
@@ -56,6 +56,11 @@ export default async function DashboardOnboardingPage() {
       .from('organization_settings')
       .select('display_name, currency, timezone, modules')
       .eq('organization_id', organization.id)
+      .maybeSingle(),
+    admin
+      .from('organizations')
+      .select('business_vertical, operating_model')
+      .eq('id', organization.id)
       .maybeSingle(),
   ])
 
@@ -150,6 +155,8 @@ export default async function DashboardOnboardingPage() {
         ruc: adminSettings.companyRuc ?? companyInfo.ruc ?? '',
         whatsapp: companyInfo.whatsapp || '',
         businessType: companyInfo.businessType || '',
+        businessVertical: businessProfile?.business_vertical || 'general',
+        operatingModel: businessProfile?.operating_model || companyInfo.businessType || 'retail',
         instagram: companyInfo.instagram || '',
         facebook: companyInfo.facebook || '',
         tiktok: companyInfo.tiktok || '',

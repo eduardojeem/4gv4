@@ -7,18 +7,10 @@ import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders, withBranchFilter } from '@/lib/branches/client'
 import { calculateExpectedCashBalance, isPhysicalManualMovement } from '@/app/dashboard/pos/lib/cash-balance'
+import type { CashMovement } from '@/app/dashboard/pos/types'
+import { summarizeCashMovements } from '@/app/dashboard/pos/lib/cash-report'
 
-export interface CashMovement {
-    id: string
-    type: 'sale' | 'cash_in' | 'cash_out' | 'opening' | 'closing'
-    amount: number
-    reason?: string
-    payment_method?: 'cash' | 'card' | 'transfer' | 'mixed'
-    created_at: string
-    created_by?: string
-    userName?: string
-    userEmail?: string
-}
+export type { CashMovement } from '@/app/dashboard/pos/types'
 
 export interface CashRegisterSession {
     id: string
@@ -783,36 +775,7 @@ export function useCashRegister() {
         const safeMovements = movements || []
 
         // Calculate totals
-        const report = safeMovements.reduce((acc, mov) => {
-            const amount = Number(mov.amount) || 0
-
-            if (mov.type === 'sale') {
-                acc.totalSales += amount
-
-                // Track by payment method
-                const method = mov.payment_method || 'cash'
-                if (method === 'cash') acc.cashSales += amount
-                else if (method === 'card') acc.cardSales += amount
-                else if (method === 'transfer') acc.transferSales += amount
-                else if (method === 'mixed') acc.mixedSales += amount
-
-                // Sales count as income
-                acc.incomes += amount
-            } else if (mov.type === 'cash_in') {
-                acc.incomes += amount
-            } else if (mov.type === 'cash_out') {
-                acc.expenses += amount
-            }
-            return acc
-        }, {
-            incomes: 0,
-            expenses: 0,
-            totalSales: 0,
-            cashSales: 0,
-            cardSales: 0,
-            transferSales: 0,
-            mixedSales: 0
-        })
+        const report = summarizeCashMovements(safeMovements as CashMovement[])
 
         // Fetch opening balance of the first session in the period
         let firstSessionQuery = supabase
@@ -836,10 +799,12 @@ export function useCashRegister() {
             closingBalance,
             incomes: report.incomes,
             expenses: report.expenses,
+            totalSales: report.totalSales,
             cashSales: report.cashSales,
             cardSales: report.cardSales,
             transferSales: report.transferSales,
             mixedSales: report.mixedSales,
+            paymentMethods: report.paymentMethods,
             discrepancy: 0
         }
     }, [selectedBranchId, supabase])

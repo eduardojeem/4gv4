@@ -4,7 +4,7 @@ import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/requi
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { roleHasPermission } from '@/lib/saas/permissions'
-import { FULL_REPAIR_SELECT } from '@/app/api/repairs/_lib'
+import { FULL_REPAIR_SELECT, isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 import { canTransition } from '@/lib/repairs/state-machine'
 import type { RepairStatus } from '@/types/repairs'
 
@@ -70,6 +70,8 @@ function buildStatusUpdate(stage: RepairStage, currentCompletedAt: string | null
 // PATCH /api/repairs/:id/status
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const moduleContext = await resolveRepairModuleContext()
+    if (isNextResponse(moduleContext)) return moduleContext
     const auth = await requireStaff()
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse

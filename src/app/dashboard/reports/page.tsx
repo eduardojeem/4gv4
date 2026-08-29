@@ -96,7 +96,8 @@ interface KpiDelta {
 
 export default function ReportsPage() {
   const { selectedBranchId } = useBranch()
-  const { planCode, organizationName } = useSubscriptionStatus()
+  const { planCode, organizationName, effectiveModules } = useSubscriptionStatus()
+  const hasRepairs = effectiveModules.includes('repairs')
   const canExport = canExportReports(planCode) // exportar/descargar: Basic en adelante
   const canViewCost = useCanViewCost()
   const reportBrand = organizationName || 'Mi Negocio'
@@ -243,7 +244,12 @@ export default function ReportsPage() {
       }, 1000)
     }
 
-    const tables = ['sales', 'sale_items', 'repairs', 'customers']
+    const tables = [
+      'sales',
+      'sale_items',
+      'customers',
+      ...(hasRepairs ? ['repairs'] : []),
+    ]
     
     tables.forEach(table => {
       const channel = supabase
@@ -264,7 +270,7 @@ export default function ReportsPage() {
       if (timeout) clearTimeout(timeout)
       channels.forEach(channel => supabase.removeChannel(channel))
     }
-  }, [])
+  }, [hasRepairs])
 
   // Cargar datos reales de Supabase
   useEffect(() => {
@@ -441,14 +447,14 @@ export default function ReportsPage() {
         const totalOrders = processedSalesData.reduce((sum, item) => sum + item.orders, 0)
         setAvgPurchasesPerCustomer(uniqueCustomersCount > 0 ? totalOrders / uniqueCustomersCount : 0)
 
-        const { data: repairsData, error: repairsError } = await withBranchFilter(
+        const { data: repairsData, error: repairsError } = hasRepairs ? await withBranchFilter(
           supabase
             .from('repairs')
             .select('id, created_at, received_at, completed_at, status, final_cost, labor_cost, parts_cost')
             .gte('created_at', dateRange.from.toISOString())
             .lte('created_at', dateRange.to.toISOString()),
           selectedBranchId
-        )
+        ) : { data: [], error: null }
 
         if (repairsError) throw repairsError
         const safeRepairs = repairsData ?? []
@@ -602,7 +608,7 @@ export default function ReportsPage() {
     }
 
     fetchReportsData()
-  }, [dateRange, categoryDateRange, refreshTrigger, selectedBranchId, toLocalDateKey])
+  }, [categoryDateRange, dateRange, hasRepairs, refreshTrigger, selectedBranchId, toLocalDateKey])
 
   useEffect(() => {
     const now = new Date()
@@ -872,7 +878,7 @@ export default function ReportsPage() {
           <TabsTrigger value="products">Productos</TabsTrigger>
           <TabsTrigger value="categories">Categorías</TabsTrigger>
           <TabsTrigger value="customers">Clientes</TabsTrigger>
-          <TabsTrigger value="repairs">Reparaciones</TabsTrigger>
+          {hasRepairs ? <TabsTrigger value="repairs">Reparaciones</TabsTrigger> : null}
         </TabsList>
 
         <TabsContent value="sales" className="space-y-4">
@@ -915,7 +921,7 @@ export default function ReportsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="repairs" className="space-y-4">
+        {hasRepairs ? <TabsContent value="repairs" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Tendencia de Reparaciones</CardTitle>
@@ -996,7 +1002,7 @@ export default function ReportsPage() {
           <div className="flex justify-end">
             <Button variant="outline" onClick={() => exportReport('reparaciones')} disabled={!canExport} title={!canExport ? 'Exportar disponible desde el plan Basic' : undefined}>Exportar Reparaciones (CSV)</Button>
           </div>
-        </TabsContent>
+        </TabsContent> : null}
 
         <ReportsProductsTab
           productTopCount={productTopCount}
@@ -1236,8 +1242,6 @@ function ReportsSkeleton() {
     </div>
   )
 }
-
-
 
 
 

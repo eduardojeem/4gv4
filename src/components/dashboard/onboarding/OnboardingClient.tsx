@@ -66,6 +66,8 @@ type CompanyInfoForm = {
   ruc: string
   whatsapp: string
   businessType: string
+  businessVertical: string
+  operatingModel: string
   instagram: string
   facebook: string
   tiktok: string
@@ -497,14 +499,28 @@ export function OnboardingClient({
                   <Input id="ruc" value={form.ruc} onChange={(event) => updateField('ruc', event.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="businessType">Tipo de negocio</Label>
-                  <select id="businessType" value={form.businessType} onChange={(event) => updateField('businessType', event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                    <option value="">Sin especificar</option>
-                    <option value="retail">Tienda minorista</option>
-                    <option value="repair">Reparaciones técnicas</option>
-                    <option value="wholesale">Mayorista / distribución</option>
-                    <option value="service">Servicios profesionales</option>
-                    <option value="mixed">Venta y servicios</option>
+                  <Label htmlFor="businessVertical">Rubro</Label>
+                  <select id="businessVertical" value={form.businessVertical} onChange={(event) => updateField('businessVertical', event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                    <option value="general">Comercio general</option>
+                    <option value="clothing">Ropa y moda</option>
+                    <option value="cosmetics">Cosmética y belleza</option>
+                    <option value="electronics">Electrónica y tecnología</option>
+                    <option value="food">Alimentos</option>
+                    <option value="hardware">Ferretería</option>
+                    <option value="other">Otro rubro</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="operatingModel">Forma de trabajo</Label>
+                  <select id="operatingModel" value={form.operatingModel} onChange={(event) => {
+                    updateField('operatingModel', event.target.value)
+                    updateField('businessType', event.target.value)
+                  }} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                    <option value="retail">Venta minorista</option>
+                    <option value="wholesale">Venta mayorista</option>
+                    <option value="service">Prestación de servicios</option>
+                    <option value="repair">Taller y reparaciones</option>
+                    <option value="mixed">Negocio mixto</option>
                   </select>
                 </div>
                 <div className="space-y-2 sm:col-span-2">

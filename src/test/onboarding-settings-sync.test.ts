@@ -60,6 +60,19 @@ describe('onboarding and admin settings synchronization', () => {
     expect(migration).toContain('insert into public.website_settings')
   })
 
+  it('captures the canonical business vertical and operating model during onboarding', () => {
+    const page = read('src/app/dashboard/onboarding/page.tsx')
+    const route = read('src/app/api/onboarding/complete/route.ts')
+    const client = read('src/components/dashboard/onboarding/OnboardingClient.tsx')
+
+    expect(client).toContain('businessVertical')
+    expect(client).toContain('operatingModel')
+    expect(page).toContain('business_vertical')
+    expect(page).toContain('operating_model')
+    expect(route).toContain('getSuggestedModules')
+    expect(route).toContain('enabled_modules')
+  })
+
   it('presents onboarding as a focused configuration workspace', () => {
     const client = read('src/components/dashboard/onboarding/OnboardingClient.tsx')
 

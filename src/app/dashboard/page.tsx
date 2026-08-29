@@ -53,6 +53,7 @@ import { Label } from '@/components/ui/label'
 import { HelpButton } from '@/components/help/HelpButton'
 import { useAuth } from '@/contexts/auth-context'
 import { useCashRegister } from '@/hooks/useCashRegister'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 // Dynamic imports
 const RecentActivity = dynamic(
@@ -193,6 +194,8 @@ function KpiCard({ stat, loading }: { stat: KpiStat; loading: boolean }) {
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
+  const { effectiveModules } = useSubscriptionStatus()
+  const hasRepairs = effectiveModules.includes('repairs')
   const [isPending, startTransition] = useTransition()
   const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId } = useBranch()
@@ -206,7 +209,7 @@ export default function DashboardPage() {
     { title: 'Clientes nuevos', value: '—', icon: Users, tone: 'violet', href: '/dashboard/customers' },
     { title: 'Productos', value: '—', icon: Package, tone: 'cyan', href: '/dashboard/products' },
     { title: 'Stock bajo', value: '—', icon: AlertTriangle, tone: 'amber', href: '/dashboard/products?filter=low_stock' },
-    { title: 'Reparaciones', value: '—', icon: Wrench, tone: 'red', href: '/dashboard/repairs' },
+    ...(hasRepairs ? [{ title: 'Reparaciones', value: '—', icon: Wrench, tone: 'red' as const, href: '/dashboard/repairs' }] : []),
   ])
 
   const [repairStats, setRepairStats] = useState<{
@@ -322,35 +325,35 @@ export default function DashboardPage() {
         supabase.from('customers').select('created_at').gte('created_at', startOfWeek.toISOString()),
         supabase.from('products').select('id, stock_quantity, min_stock, unit_measure, category_id').eq('is_active', true),
         supabase.from('categories').select('id, name').eq('is_active', true),
-        withBranchFilter(
+        hasRepairs ? withBranchFilter(
           // Fuente única de "en proceso": incluye pausado y excluye listo
           // (listo = reparación terminada, esperando retiro).
           supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', [...ACTIVE_REPAIR_STATUSES]),
           selectedBranchId,
-        ),
+        ) : Promise.resolve({ count: 0, data: [] }),
         withBranchFilter(
           supabase.from('sales').select('total_amount,created_at,status')
             .gte('created_at', last7Days[0].toISOString()).in('status', [...COMPLETED_SALE_STATUSES]),
           selectedBranchId,
         ),
         // Reparaciones ingresadas hoy
-        withBranchFilter(
+        hasRepairs ? withBranchFilter(
           supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, created_at')
             .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
           selectedBranchId,
-        ),
+        ) : Promise.resolve({ data: [] }),
         // Reparaciones entregadas hoy
-        withBranchFilter(
+        hasRepairs ? withBranchFilter(
           supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, delivered_at')
             .or(`delivered_at.gte.${startOfDay.toISOString()},status.eq.entregado`),
           selectedBranchId,
-        ),
+        ) : Promise.resolve({ data: [] }),
         // Reparaciones listas para retiro
-        withBranchFilter(
+        hasRepairs ? withBranchFilter(
           supabase.from('repairs').select('final_cost, estimated_cost, paid_amount')
             .eq('status', 'listo'),
           selectedBranchId,
-        ),
+        ) : Promise.resolve({ data: [] }),
       ])
 
       type RepairItem = { final_cost?: number | null; estimated_cost?: number | null; paid_amount?: number | null; status?: string; delivered_at?: string | null; created_at?: string }
@@ -488,12 +491,12 @@ export default function DashboardPage() {
           icon: AlertTriangle, tone: lowStockCount > 0 ? 'amber' : 'emerald', href: '/dashboard/products?filter=low_stock',
           badge: lowStockCount > 0 ? '⚠' : undefined,
         },
-        {
+        ...(hasRepairs ? [{
           title: 'Reparaciones',
           value: String(repairsActive),
           subtitle: 'en proceso',
-          icon: Wrench, tone: 'red', href: '/dashboard/repairs',
-        },
+          icon: Wrench, tone: 'red' as const, href: '/dashboard/repairs',
+        }] : []),
       ])
       // Cooldown de 30s: el timeout re-habilita el botón sin depender de otro render.
       setCanRefresh(false)
@@ -504,7 +507,7 @@ export default function DashboardPage() {
     } finally {
       setLoadingStats(false)
     }
-  }, [selectedBranchId, supabase])
+  }, [hasRepairs, selectedBranchId, supabase])
 
   useEffect(() => {
     if (config.supabase.isConfigured) {
@@ -536,7 +539,7 @@ export default function DashboardPage() {
 
   const quickActions = [
     { title: 'Nueva venta', icon: ShoppingCart, href: '/dashboard/pos', tone: 'indigo' as const },
-    { title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs?new=true', tone: 'amber' as const },
+    ...(hasRepairs ? [{ title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs?new=true', tone: 'amber' as const }] : []),
     { title: 'Nueva devolución', icon: RotateCcw, href: '/dashboard/after-sales?new=true', tone: 'violet' as const },
     { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers?new=true', tone: 'violet' as const },
     { title: 'Nuevo producto', icon: Package, href: '/dashboard/products?new=true', tone: 'emerald' as const },
@@ -623,7 +626,7 @@ export default function DashboardPage() {
               Nueva venta
             </Link>
           </Button>
-          <Button
+          {hasRepairs ? <Button
             asChild
             size="sm"
             className="gap-2 bg-amber-500 text-slate-950 hover:bg-amber-400"
@@ -632,7 +635,7 @@ export default function DashboardPage() {
               <Wrench className="h-3.5 w-3.5" />
               Nueva reparación
             </Link>
-          </Button>
+          </Button> : null}
           <Button
             asChild
             size="sm"
@@ -674,7 +677,7 @@ export default function DashboardPage() {
       </section>
 
       {/* Resumen Financiero de Reparaciones del Día */}
-      <section className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/90 via-orange-50/40 to-amber-50/50 p-5 shadow-sm dark:border-amber-900/40 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30">
+      {hasRepairs ? <section className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/90 via-orange-50/40 to-amber-50/50 p-5 shadow-sm dark:border-amber-900/40 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200/60 pb-3.5 dark:border-amber-900/40">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm dark:bg-amber-600">
@@ -763,7 +766,7 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
-      </section>
+      </section> : null}
 
       {/* Actions + Activity */}
       <section className="grid gap-4 lg:grid-cols-[0.4fr_0.6fr]">
