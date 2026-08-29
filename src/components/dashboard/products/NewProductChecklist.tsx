@@ -17,6 +17,7 @@ const TAB_LABELS: Record<ProductModalTab, string> = {
   basic: 'Básica',
   pricing: 'Precios',
   inventory: 'Inventario',
+  variants: 'Variantes',
   'post-sale': 'Postventa',
   images: 'Imágenes',
 }

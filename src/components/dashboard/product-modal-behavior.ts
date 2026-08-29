@@ -1,9 +1,10 @@
-export type ProductModalTab = 'basic' | 'pricing' | 'inventory' | 'post-sale' | 'images'
+export type ProductModalTab = 'basic' | 'pricing' | 'inventory' | 'variants' | 'post-sale' | 'images'
 
 const TAB_FIELDS: Record<ProductModalTab, string[]> = {
   basic: ['sku', 'name', 'description', 'category_id', 'brand_id', 'brand', 'supplier_id', 'barcode', 'unit_measure', 'is_active', 'visibility'],
   pricing: ['purchase_price', 'sale_price', 'wholesale_price', 'offer_price', 'has_offer'],
   inventory: ['stock_quantity', 'min_stock', 'max_stock'],
+  variants: ['has_variants', 'variant_attribute_config', 'variants'],
   'post-sale': ['warranty_months', 'warranty_info', 'return_window_days', 'exchange_window_days', 'return_policy', 'exchange_policy'],
   images: ['images'],
 }
