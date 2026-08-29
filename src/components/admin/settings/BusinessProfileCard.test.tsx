@@ -1,0 +1,41 @@
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import { SubscriptionStatusProvider, type SubscriptionStatusData } from '@/contexts/SubscriptionStatusContext'
+import { BusinessProfileCard } from './BusinessProfileCard'
+
+const status: SubscriptionStatusData = {
+  status: 'active',
+  isBlocked: false,
+  isTrialing: false,
+  trialDaysLeft: null,
+  periodDaysLeft: null,
+  planCode: 'BASIC',
+  planName: 'Basic',
+  modules: ['inventory', 'pos', 'crm'],
+  entitledModules: ['inventory', 'pos', 'crm'],
+  enabledModules: ['inventory', 'pos', 'crm'],
+  effectiveModules: ['inventory', 'pos', 'crm'],
+  businessVertical: 'clothing',
+  operatingModel: 'retail',
+  downgradedFromExpiry: false,
+  moduleTrials: [],
+  trialedModules: [],
+  organizationName: 'Moda Uno',
+  organizationLogoUrl: null,
+}
+
+describe('BusinessProfileCard', () => {
+  it('explains the business profile and distinguishes unavailable repairs', () => {
+    render(
+      <SubscriptionStatusProvider value={status}>
+        <BusinessProfileCard />
+      </SubscriptionStatusProvider>,
+    )
+
+    expect(screen.getByText('Perfil y módulos del negocio')).toBeInTheDocument()
+    expect(screen.getByLabelText('Rubro')).toHaveTextContent('Ropa y moda')
+    expect(screen.getByLabelText('Forma de trabajo')).toHaveTextContent('Venta minorista')
+    expect(screen.getByText('Reparaciones')).toBeInTheDocument()
+    expect(screen.getAllByText('No incluido en el plan').length).toBeGreaterThan(0)
+  })
+})

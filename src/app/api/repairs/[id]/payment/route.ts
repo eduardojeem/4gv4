@@ -105,7 +105,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
       }, { status: 422 })
     }
 
-    if (isCredit && (ctx.role === 'tecnico' || ctx.role === 'technician')) {
+    if (isCredit && ctx.role === 'tecnico') {
       return NextResponse.json(
         { error: 'Permisos insuficientes para cobrar a credito.' },
         { status: 403 },

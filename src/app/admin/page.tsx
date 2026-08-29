@@ -12,6 +12,7 @@ import { RepairsChart } from '@/components/dashboard/repairs-chart'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
 import { useBranch } from '@/contexts/branch-context'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import {
   adminNavCategories,
   filterCategoriesByPermissions,
@@ -73,6 +74,8 @@ function MetricCard({
 
 export default function AdminHome() {
   const { repairs, isLoading, error, refreshRepairs } = useRepairs()
+  const { effectiveModules } = useSubscriptionStatus()
+  const hasRepairs = effectiveModules.includes('repairs')
   const { user, hasPermission, isAdmin } = useAuth()
   const { selectedBranch } = useBranch()
 
@@ -107,10 +110,14 @@ export default function AdminHome() {
     () => navCategories
       .map(category => ({
         ...category,
-        items: category.items.filter(item => item.href && item.href !== '/admin'),
+        items: category.items.filter(item => (
+          item.href
+          && item.href !== '/admin'
+          && (hasRepairs || (!item.href.startsWith('/dashboard/repairs') && !item.href.startsWith('/dashboard/technician')))
+        )),
       }))
       .filter(category => category.items.length > 0),
-    [navCategories],
+    [hasRepairs, navCategories],
   )
 
   // El resumen financiero se consulta contra la organización activa, así que se
@@ -140,7 +147,7 @@ export default function AdminHome() {
           <Badge variant="outline" className="font-normal text-muted-foreground">
             {branchScope}
           </Badge>
-          <Button
+          {hasRepairs ? <Button
             type="button"
             variant="outline"
             size="sm"
@@ -151,11 +158,11 @@ export default function AdminHome() {
           >
             <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} aria-hidden="true" />
             {isLoading ? 'Actualizando…' : 'Actualizar'}
-          </Button>
+          </Button> : null}
         </div>
       </div>
 
-      {error ? (
+      {hasRepairs && error ? (
         <Card role="alert" className="border-destructive/50 bg-destructive/5">
           <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2">
@@ -177,7 +184,7 @@ export default function AdminHome() {
       ) : null}
 
       {/* Quick Metrics */}
-      {showSkeleton ? (
+      {hasRepairs ? (showSkeleton ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-busy="true" aria-label="Cargando indicadores">
           {[0, 1, 2, 3].map((key) => (
             <Skeleton key={key} className="h-[92px] w-full rounded-xl" />
@@ -196,7 +203,7 @@ export default function AdminHome() {
           <MetricCard label="Ingresadas Hoy" value={metrics.today} icon={TrendingUp} tone="positive" />
           <MetricCard label="Pendientes" value={metrics.pending} icon={Clock} tone="waiting" />
         </div>
-      )}
+      )) : null}
 
       {/* Finanzas de la organización, con su propio período */}
       {canSeeFinances ? <FinanceSnapshot /> : null}
@@ -243,7 +250,7 @@ export default function AdminHome() {
 
       {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="min-w-0 border shadow-sm">
+        {hasRepairs ? <Card className="min-w-0 border shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Ventas</CardTitle>
             <CardDescription>Tendencia semanal</CardDescription>
@@ -251,7 +258,7 @@ export default function AdminHome() {
           <CardContent className="min-w-0">
             <SalesChart />
           </CardContent>
-        </Card>
+        </Card> : null}
         <Card className="min-w-0 border shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Reparaciones</CardTitle>

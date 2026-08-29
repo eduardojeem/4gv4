@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthResponse, requireStaff } from '@/lib/auth/require-auth'
 import { formatWhatsAppPhone } from '@/lib/whatsapp'
+import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 
 type WhatsAppSendBody = {
   repairId?: string
@@ -31,6 +32,8 @@ function getCloudApiConfig() {
 
 export async function POST(request: Request) {
   try {
+    const moduleContext = await resolveRepairModuleContext()
+    if (isNextResponse(moduleContext)) return moduleContext
     const auth = await requireStaff()
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse
@@ -117,6 +120,8 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
+    const moduleContext = await resolveRepairModuleContext()
+    if (isNextResponse(moduleContext)) return moduleContext
     const auth = await requireStaff()
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse

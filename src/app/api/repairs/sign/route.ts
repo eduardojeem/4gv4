@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateRepairHash } from '@/lib/repair-qr'
 import { createClient } from '@/lib/supabase/server'
+import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 
 /**
  * POST /api/repairs/sign
@@ -8,6 +9,8 @@ import { createClient } from '@/lib/supabase/server'
  */
 export async function POST(request: NextRequest) {
   try {
+    const moduleContext = await resolveRepairModuleContext()
+    if (isNextResponse(moduleContext)) return moduleContext
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 

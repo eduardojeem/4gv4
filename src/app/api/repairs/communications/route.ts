@@ -19,7 +19,7 @@ type CommunicationBody = {
 // A diferencia del insert directo por cliente, aquí seteamos organization_id
 // desde la reparación, de modo que el mensaje sea visible en las analíticas
 // de comunicaciones a nivel organización (no queda huérfano de org).
-export const POST = withTenantAuth({}, async (req, { organization }) => {
+export const POST = withTenantAuth({ module: 'repairs' }, async (req, { organization }) => {
   try {
     const body = (await req.json().catch(() => ({}))) as CommunicationBody
     const { repairId, channel, content, templateId, status, toEmail } = body
@@ -75,7 +75,7 @@ export const POST = withTenantAuth({}, async (req, { organization }) => {
 })
 
 // Historial de mensajes de la organización (opcionalmente filtrado por reparación).
-export const GET = withTenantAuth({}, async (req, { organization }) => {
+export const GET = withTenantAuth({ module: 'repairs' }, async (req, { organization }) => {
   try {
     const { searchParams } = new URL(req.url)
     const repairId = searchParams.get('repairId')
@@ -102,7 +102,7 @@ export const GET = withTenantAuth({}, async (req, { organization }) => {
 })
 
 // Actualiza el estado de un mensaje (p.ej. confirmar que se envió manualmente).
-export const PATCH = withTenantAuth({}, async (req, { organization }) => {
+export const PATCH = withTenantAuth({ module: 'repairs' }, async (req, { organization }) => {
   try {
     const body = (await req.json().catch(() => ({}))) as { id?: string; status?: string }
     if (!body.id || !VALID_STATUSES.has(body.status ?? '')) {

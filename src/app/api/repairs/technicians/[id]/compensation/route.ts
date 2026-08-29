@@ -5,6 +5,7 @@ import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/requi
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { computeTechnicianEarnings } from '@/lib/technician/earnings-server'
+import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,8 @@ const compensationSchema = z.object({
 })
 
 async function resolveContext(req: NextRequest) {
+  const moduleContext = await resolveRepairModuleContext()
+  if (isNextResponse(moduleContext)) return { response: moduleContext }
   const auth = await requireStaff()
   const authResponse = getAuthResponse(auth)
   if (authResponse) return { response: authResponse as NextResponse }

@@ -33,6 +33,7 @@ export interface ZClosureRecord {
   salesByMixed: number
   movementsCount: number
   notes?: string
+  status?: 'open' | 'closed'
   // Movimientos individuales de la sesión
   movements: import('@/hooks/useCashRegister').CashMovement[]
 }
@@ -85,6 +86,8 @@ export interface CashReport {
   transferSales?: number
   mixedSales?: number
   discrepancy?: number
+  totalSales: number
+  paymentMethods: Array<{ method: string; amount: number; percentage: number; count: number }>
 }
 
 interface CashRegisterContextType {
@@ -236,7 +239,11 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     return {
       isOpen: true,
       balance,
-      movements: currentSession.movements
+      movements: currentSession.movements,
+      register_id: currentSession.register_id,
+      opened_at: currentSession.opened_at,
+      opened_by: currentSession.opened_by,
+      opening_balance: currentSession.opening_balance,
     }
   }, [currentSession, activeRegisterId])
 

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,8 @@ const patchSchema = z.object({
 // PATCH: admin confirma/anula; el técnico (o admin) acusa recibo.
 export async function PATCH(req: NextRequest, context: RouteParams) {
   try {
+    const moduleContext = await resolveRepairModuleContext()
+    if (isNextResponse(moduleContext)) return moduleContext
     const auth = await requireStaff()
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse

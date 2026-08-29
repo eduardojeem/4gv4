@@ -15,6 +15,8 @@ import {
   normalizeOrganizationModules,
   toOnboardingAdminSettings,
 } from '@/lib/organization/admin-settings'
+import { BusinessProfileInputSchema, getSuggestedModules } from '@/lib/organization/business-profile'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 type OnboardingMetadata = Record<string, unknown> & {
   onboarding?: Record<string, unknown>
@@ -36,6 +38,8 @@ const onboardingSchema = z.object({
   ruc: z.string().trim().max(50).optional().or(z.literal('')),
   whatsapp: z.string().trim().max(50).optional().or(z.literal('')),
   businessType: z.string().trim().max(50).optional().or(z.literal('')),
+  businessVertical: BusinessProfileInputSchema.shape.businessVertical.default('general'),
+  operatingModel: BusinessProfileInputSchema.shape.operatingModel.default('retail'),
   instagram: z.string().trim().max(100).optional().or(z.literal('')),
   facebook: z.string().trim().max(100).optional().or(z.literal('')),
   tiktok: z.string().trim().max(100).optional().or(z.literal('')),
@@ -184,6 +188,43 @@ export async function POST(request: Request) {
     logger.error('Failed to complete onboarding', { error: updateError.message, organizationId })
     return NextResponse.json({ error: 'No se pudo finalizar el onboarding.' }, { status: 500 })
   }
+
+  const planInfo = await getOrganizationPlanInfo(organizationId)
+  const entitled = new Set([
+    ...planInfo.entitledModules,
+    ...planInfo.moduleTrials.map(trial => trial.module),
+  ])
+  const enabledModules = getSuggestedModules(input.businessVertical, input.operatingModel)
+    .filter(module => entitled.has(module))
+  const { error: profileUpdateError } = await admin
+    .from('organizations')
+    .update({
+      business_vertical: input.businessVertical,
+      operating_model: input.operatingModel,
+      enabled_modules: enabledModules,
+      updated_at: now,
+    })
+    .eq('id', organizationId)
+
+  if (profileUpdateError) {
+    logger.error('Failed to save onboarding business profile', { error: profileUpdateError.message, organizationId })
+    return NextResponse.json({
+      error: 'La configuración general se guardó, pero no se pudo aplicar el perfil del negocio. Intentá nuevamente.',
+    }, { status: 500 })
+  }
+
+  await admin.from('tenant_audit_log').insert({
+    organization_id: organizationId,
+    user_id: user.id,
+    action: 'organization_business_profile.onboarding_saved',
+    resource: 'organization',
+    resource_id: organizationId,
+    metadata: {
+      business_vertical: input.businessVertical,
+      operating_model: input.operatingModel,
+      enabled_modules: enabledModules,
+    },
+  })
 
   const completedAt = completion && typeof completion === 'object' && !Array.isArray(completion)
     ? String((completion as Record<string, unknown>).completed_at || now)

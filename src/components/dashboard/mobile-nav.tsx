@@ -19,20 +19,24 @@ import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { Button } from '@/components/ui/button'
 import type { LucideIcon } from 'lucide-react'
 import { canRoleAccessSection } from '@/lib/auth/section-access'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import type { OrganizationModule } from '@/lib/organization/business-profile'
+import { isNavigationModuleAvailable } from '@/lib/navigation/dashboard-navigation'
 
 type NavItem = {
   name: string
   href: string
   icon: LucideIcon
+  requiredModule?: OrganizationModule
 }
 
 const MOBILE_NAV_ITEMS: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart },
+  { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart, requiredModule: 'pos' },
   { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag },
-  { name: 'Productos', href: '/dashboard/products', icon: Package },
+  { name: 'Productos', href: '/dashboard/products', icon: Package, requiredModule: 'inventory' },
   { name: 'Clientes', href: '/dashboard/customers', icon: Users },
-  { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench },
+  { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, requiredModule: 'repairs' },
   { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3 },
 ]
 
@@ -40,13 +44,15 @@ export const MobileNav = memo(function MobileNav() {
   const pathname = usePathname()
   const { user } = useAuth()
   const { toggleSidebar } = useDashboardLayout()
+  const { effectiveModules } = useSubscriptionStatus()
   const userRole = user?.role
 
   const filteredItems = useMemo(() => {
     return MOBILE_NAV_ITEMS
       .filter((item) => canRoleAccessSection(userRole, item.href))
+      .filter((item) => isNavigationModuleAvailable(item.requiredModule, effectiveModules))
       .slice(0, 5)
-  }, [userRole])
+  }, [userRole, effectiveModules])
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-border bg-background/95 backdrop-blur-sm supports-backdrop-filter:bg-background/80 shadow-lg">

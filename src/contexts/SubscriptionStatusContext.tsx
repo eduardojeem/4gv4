@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from 'react'
 import { repairPhotoLimit, canExportReports, type PlanCode, type ModuleTrial } from '@/lib/saas/plan-features'
+import type { BusinessVertical, OperatingModel, OrganizationModule } from '@/lib/organization/business-profile'
 
 export type { PlanCode, ModuleTrial }
 export { repairPhotoLimit, canExportReports }
@@ -18,6 +19,14 @@ export type SubscriptionStatusData = {
   planName: string
   /** Módulos habilitados por el plan (fuente: tabla `plans.modules`). */
   modules: string[]
+  /** Módulos incluidos por el plan, antes de preferencias de la organización. */
+  entitledModules: string[]
+  /** Selección de la organización. null conserva todos los módulos contratados. */
+  enabledModules: OrganizationModule[] | null
+  /** Módulos realmente utilizables: derecho comercial + selección de la organización. */
+  effectiveModules: OrganizationModule[]
+  businessVertical: BusinessVertical
+  operatingModel: OperatingModel
   /** true si la org quedó en FREE por impago (baja de cortesía) → mostrar aviso de reactivación. */
   downgradedFromExpiry: boolean
   /** Trials de módulos activos (no vencidos), con días restantes. */
@@ -39,6 +48,11 @@ const DEFAULTS: SubscriptionStatusData = {
   planCode: 'FREE',
   planName: 'Free',
   modules: [],
+  entitledModules: [],
+  enabledModules: null,
+  effectiveModules: [],
+  businessVertical: 'general',
+  operatingModel: 'retail',
   downgradedFromExpiry: false,
   moduleTrials: [],
   trialedModules: [],
@@ -70,4 +84,9 @@ export function useSubscriptionStatus() {
 export function usePlanModule(module: string): boolean {
   const { modules } = useSubscriptionStatus()
   return modules.includes(module)
+}
+
+export function useEffectiveModule(module: OrganizationModule): boolean {
+  const { effectiveModules } = useSubscriptionStatus()
+  return effectiveModules.includes(module)
 }
