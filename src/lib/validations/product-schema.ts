@@ -1,5 +1,9 @@
 import * as z from "zod"
 import { validateBarcode } from "./product-validation"
+import {
+  ProductAttributeDefinitionSchema,
+  ProductVariantInputSchema,
+} from "@/lib/products/variant-contract"
 
 export const productSchema = z
   .object({
@@ -141,8 +145,27 @@ export const productSchema = z
     is_active: z.boolean().default(true),
     visibility: z.enum(['public', 'wholesale', 'hidden']).optional().default('public'),
     images: z.array(z.string()).default([]),
+    has_variants: z.boolean().default(false),
+    variant_attribute_config: z.array(ProductAttributeDefinitionSchema).default([]),
+    variants: z.array(ProductVariantInputSchema).default([]),
   })
   .superRefine((data, ctx) => {
+    if (data.has_variants && data.variant_attribute_config.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Agrega al menos un atributo para el producto con variantes",
+        path: ["variant_attribute_config"],
+      })
+    }
+
+    if (data.has_variants && data.variants.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Agrega al menos una variante",
+        path: ["variants"],
+      })
+    }
+
     // sale_price > purchase_price
     if (data.purchase_price > 0 && data.sale_price > 0) {
       if (data.sale_price <= data.purchase_price) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye } from 'lucide-react'
+import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatPrice } from '@/lib/utils'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
@@ -76,6 +76,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { getProductSubmitState } from './product-modal-submit-state'
 import { getProductSaveFeedback, type ProductSaveFeedback } from '@/lib/products/product-save-feedback'
 import { getFirstProductErrorTab, shouldConfirmProductModalClose, getProductRequirementsProgress } from './product-modal-behavior'
+import { ProductVariantsEditor } from '@/components/dashboard/products/ProductVariantsEditor'
+import { ProductVariantReview } from '@/components/dashboard/products/ProductVariantReview'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 interface ProductModalProps {
   product: Product | null
@@ -129,6 +132,7 @@ export function ProductModal({
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
   const canViewCost = useCanViewCost()
+  const { businessVertical } = useSubscriptionStatus()
 
   // Local state for lists to support instant updates
   const [localCategories, setLocalCategories] = useState<Category[]>(categories ?? [])
@@ -171,7 +175,10 @@ export function ProductModal({
       barcode: '',
       is_active: true,
       visibility: 'public',
-      images: []
+      images: [],
+      has_variants: false,
+      variant_attribute_config: [],
+      variants: [],
     }
   })
 
@@ -248,6 +255,12 @@ export function ProductModal({
   const sku = watch('sku')
   const watchedName = watch('name')
   const watchedCategoryId = watch('category_id')
+  const variantConfig = watch(['has_variants', 'variant_attribute_config', 'variants'])
+  const variantValue = {
+    hasVariants: Boolean(variantConfig[0]),
+    attributes: variantConfig[1] ?? [],
+    variants: variantConfig[2] ?? [],
+  }
 
   // Progreso de obligatorios: se calcula en vivo para avisar antes de guardar,
   // no despues de rebotar en la validacion.
@@ -267,6 +280,7 @@ export function ProductModal({
     const basicFields = ['sku', 'name', 'description', 'category_id', 'brand_id', 'brand', 'supplier_id', 'barcode', 'unit_measure', 'is_active']
     const pricingFields = ['purchase_price', 'sale_price', 'wholesale_price', 'offer_price', 'has_offer', 'installments_enabled', 'installments_plans']
     const inventoryFields = ['stock_quantity', 'min_stock', 'max_stock']
+    const variantFields = ['has_variants', 'variant_attribute_config', 'variants']
     const postSaleFields = ['warranty_months', 'warranty_info', 'return_window_days', 'exchange_window_days', 'return_policy', 'exchange_policy']
     const imagesFields = ['images']
     const errorKeys = Object.keys(errors)
@@ -274,6 +288,7 @@ export function ProductModal({
       basic: errorKeys.some(k => basicFields.includes(k)),
       pricing: errorKeys.some(k => pricingFields.includes(k)),
       inventory: errorKeys.some(k => inventoryFields.includes(k)),
+      variants: errorKeys.some(k => variantFields.includes(k)),
       postSale: errorKeys.some(k => postSaleFields.includes(k)),
       images: errorKeys.some(k => imagesFields.includes(k)),
     }
@@ -334,7 +349,12 @@ export function ProductModal({
         barcode: product.barcode || '',
         is_active: product.is_active ?? true,
         visibility: (product as any).visibility || 'public',
-        images: product.images || []
+        images: product.images || [],
+        has_variants: Boolean((product as any).has_variants),
+        variant_attribute_config: Array.isArray((product as any).variant_attribute_config)
+          ? (product as any).variant_attribute_config
+          : [],
+        variants: Array.isArray((product as any).variants) ? (product as any).variants : [],
       })
     } else {
       form.reset({
@@ -361,7 +381,10 @@ export function ProductModal({
         barcode: '',
         is_active: true,
         visibility: 'public',
-        images: []
+        images: [],
+        has_variants: false,
+        variant_attribute_config: [],
+        variants: [],
       })
     }
   }, [product, form])
@@ -699,6 +722,17 @@ export function ProductModal({
                       <span className="hidden md:inline">Inventario</span>
                       <span className="md:hidden">Stock</span>
                       {tabErrorMap.inventory && (
+                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="variants"
+                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                    >
+                      <Layers3 className="h-4 w-4" />
+                      <span className="hidden md:inline">Variantes</span>
+                      <span className="md:hidden">Variantes</span>
+                      {tabErrorMap.variants && (
                         <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
                       )}
                     </TabsTrigger>
@@ -1860,6 +1894,26 @@ export function ProductModal({
                       </CardContent>
                     </Card>
                   </div>
+                </TabsContent>
+
+                <TabsContent value="variants" className="space-y-5 py-4">
+                  <ProductVariantsEditor
+                    businessVertical={businessVertical}
+                    value={variantValue}
+                    baseSku={sku}
+                    basePrices={{
+                      purchasePrice: Number(purchasePrice) || 0,
+                      salePrice: Number(salePrice) || 0,
+                      wholesalePrice: Number(wholesalePrice) > 0 ? Number(wholesalePrice) : undefined,
+                    }}
+                    disabled={isSubmitting}
+                    onChange={(next) => {
+                      form.setValue('has_variants', next.hasVariants, { shouldDirty: true, shouldValidate: true })
+                      form.setValue('variant_attribute_config', next.attributes, { shouldDirty: true, shouldValidate: true })
+                      form.setValue('variants', next.variants, { shouldDirty: true, shouldValidate: true })
+                    }}
+                  />
+                  <ProductVariantReview value={variantValue} />
                 </TabsContent>
 
                 {/* Post-Sale */}

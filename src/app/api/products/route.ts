@@ -10,6 +10,7 @@ import { getRequestedBranchId, getDefaultBranch, resolveBranchScopeForUser } fro
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
 import { canCreateResource } from '@/lib/saas/subscription-service'
 import { filterProductsByCatalogKind, parseProductCatalogKind } from '@/lib/products/catalog-kind'
+import { ProductVariantsPayloadSchema } from '@/lib/products/variant-contract'
 
 // GET /api/products - Get products with variants
 /**
@@ -17,6 +18,48 @@ import { filterProductsByCatalogKind, parseProductCatalogKind } from '@/lib/prod
  * memoria. Generoso para cubrir catalogos grandes sin traer la tabla entera.
  */
 const IN_MEMORY_STOCK_FILTER_CAP = 5000
+
+const VARIANT_ERROR_STATUS: Record<string, number> = {
+  VARIANT_SKU_DUPLICATE: 409,
+  VARIANT_BARCODE_DUPLICATE: 409,
+  VARIANT_STOCK_INSUFFICIENT: 409,
+  VARIANT_BRANCH_FORBIDDEN: 403,
+  VARIANT_ACTOR_FORBIDDEN: 403,
+  VARIANT_PRODUCT_NOT_IN_ORGANIZATION: 404,
+}
+
+function getVariantErrorCode(error: { message?: string | null }): string | null {
+  const message = error.message ?? ''
+  return Object.keys(VARIANT_ERROR_STATUS).find((code) => message.includes(code)) ?? null
+}
+
+function toVariantRpcRows(variants: Array<{
+  id?: string
+  name: string
+  attributes: Record<string, string>
+  sku?: string
+  barcode?: string
+  purchasePrice: number
+  salePrice: number
+  wholesalePrice?: number
+  minStock: number
+  stockQuantity: number
+  isActive: boolean
+}>) {
+  return variants.map((variant) => ({
+    id: variant.id,
+    name: variant.name,
+    attributes: variant.attributes,
+    sku: variant.sku ?? '',
+    barcode: variant.barcode,
+    purchase_price: variant.purchasePrice,
+    sale_price: variant.salePrice,
+    wholesale_price: variant.wholesalePrice,
+    min_stock: variant.minStock,
+    stock_quantity: variant.stockQuantity,
+    is_active: variant.isActive,
+  }))
+}
 
 export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (request, { user, organization }) => {
   try {
@@ -328,6 +371,100 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       )
     }
 
+    if (validated.has_variants) {
+      const variantPayload = ProductVariantsPayloadSchema.safeParse({
+        hasVariants: true,
+        attributes: validated.variant_attribute_config,
+        variants: validated.variants,
+      })
+
+      if (!variantPayload.success) {
+        return NextResponse.json({
+          success: false,
+          error: 'Error de validación',
+          code: 'VALIDATION_FAILED',
+          details: variantPayload.error.issues.map((issue) => ({
+            field: issue.path.join('.'),
+            message: issue.message,
+          })),
+        }, { status: 400 })
+      }
+
+      const variantBranchId = branchScope.branchId ?? defaultBranch?.id
+      if (!variantBranchId) {
+        return NextResponse.json(
+          { success: false, error: 'Seleccioná una sucursal para asignar el stock de las variantes.', code: 'BRANCH_REQUIRED' },
+          { status: 400 },
+        )
+      }
+
+      const admin = createAdminSupabase()
+      const { data: saved, error: saveError } = await admin.rpc('save_product_with_variants', {
+        p_product: {
+          ...validated,
+          organization_id: organization.id,
+          variant_attribute_config: variantPayload.data.attributes,
+        },
+        p_variants: toVariantRpcRows(variantPayload.data.variants),
+        p_branch_id: variantBranchId,
+        p_actor_id: user.id,
+      })
+
+      if (saveError) {
+        const code = getVariantErrorCode(saveError)
+        logger.error('Failed to create product with variants', {
+          code: code ?? saveError.code,
+          error: saveError.message,
+          organizationId: organization.id,
+        })
+        return NextResponse.json(
+          {
+            success: false,
+            error: code === 'VARIANT_SKU_DUPLICATE'
+              ? 'Ya existe una variante con ese SKU en la organización.'
+              : code === 'VARIANT_BARCODE_DUPLICATE'
+                ? 'Ya existe una variante con ese código de barras en la organización.'
+                : 'No se pudo guardar el producto con sus variantes.',
+            code: code ?? 'PRODUCT_VARIANTS_SAVE_FAILED',
+          },
+          { status: code ? VARIANT_ERROR_STATUS[code] : 500 },
+        )
+      }
+
+      const savedProductId = String((saved as { product_id?: unknown } | null)?.product_id ?? '')
+      const [{ data: product, error: productError }, { data: variants, error: variantsError }] = await Promise.all([
+        admin.from('products').select('*').eq('id', savedProductId).eq('organization_id', organization.id).single(),
+        admin.from('product_variants').select('*').eq('product_id', savedProductId).eq('organization_id', organization.id).order('created_at'),
+      ])
+
+      if (productError || variantsError || !product) {
+        logger.error('Failed to reload product variants after save', {
+          productId: savedProductId,
+          productError: productError?.message,
+          variantsError: variantsError?.message,
+        })
+        return NextResponse.json(
+          { success: false, error: 'El producto se guardó, pero no se pudo recargar.', code: 'PRODUCT_VARIANTS_RELOAD_FAILED' },
+          { status: 500 },
+        )
+      }
+
+      const canReadCost = canViewProductCost(user.role)
+      const visibleVariants = (variants ?? []).map((variant) => {
+        if (canReadCost) return variant
+        const { purchase_price: _purchasePrice, ...visible } = variant
+        return visible
+      })
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          product: stripProductCost(product as Record<string, unknown>, user.role),
+          variants: visibleVariants,
+        },
+      }, { status: 201 })
+    }
+
     const requestedStock = Number(validated.stock_quantity || 0)
     const branchScopedCreate = Boolean(branchScope.branchId)
     const shouldZeroGlobalStock = Boolean(
@@ -494,7 +631,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     const validated = validationResult.data
     const { data: existingProduct, error: existingProductError } = await supabase
       .from('products')
-      .select('id')
+      .select('*')
       .eq('id', validated.id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -513,6 +650,88 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         { success: false, error: 'Producto no encontrado' },
         { status: 404 }
       )
+    }
+
+    if (validated.has_variants !== undefined && (validated.has_variants || existingProduct.has_variants)) {
+      const variantPayload = ProductVariantsPayloadSchema.safeParse({
+        hasVariants: validated.has_variants,
+        attributes: validated.variant_attribute_config ?? existingProduct.variant_attribute_config ?? [],
+        variants: validated.variants ?? [],
+      })
+
+      if (!variantPayload.success) {
+        return NextResponse.json({
+          success: false,
+          error: 'Error de validación',
+          code: 'VALIDATION_FAILED',
+          details: variantPayload.error.issues.map((issue) => ({
+            field: issue.path.join('.'),
+            message: issue.message,
+          })),
+        }, { status: 400 })
+      }
+
+      const variantBranchId = branchScope.branchId ?? (await getDefaultBranch(organization.id))?.id
+      if (!variantBranchId) {
+        return NextResponse.json(
+          { success: false, error: 'Seleccioná una sucursal para actualizar las variantes.', code: 'BRANCH_REQUIRED' },
+          { status: 400 },
+        )
+      }
+
+      const admin = createAdminSupabase()
+      const { data: saved, error: saveError } = await admin.rpc('save_product_with_variants', {
+        p_product: {
+          ...existingProduct,
+          ...validated,
+          id: validated.id,
+          organization_id: organization.id,
+          has_variants: variantPayload.data.hasVariants,
+          variant_attribute_config: variantPayload.data.attributes,
+        },
+        p_variants: toVariantRpcRows(variantPayload.data.variants),
+        p_branch_id: variantBranchId,
+        p_actor_id: user.id,
+      })
+
+      if (saveError) {
+        const code = getVariantErrorCode(saveError)
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'No se pudo actualizar el producto con sus variantes.',
+            code: code ?? 'PRODUCT_VARIANTS_SAVE_FAILED',
+          },
+          { status: code ? VARIANT_ERROR_STATUS[code] : 500 },
+        )
+      }
+
+      const savedProductId = String((saved as { product_id?: unknown } | null)?.product_id ?? validated.id)
+      const [{ data: product, error: productError }, { data: variants, error: variantsError }] = await Promise.all([
+        admin.from('products').select('*').eq('id', savedProductId).eq('organization_id', organization.id).single(),
+        admin.from('product_variants').select('*').eq('product_id', savedProductId).eq('organization_id', organization.id).order('created_at'),
+      ])
+
+      if (productError || variantsError || !product) {
+        return NextResponse.json(
+          { success: false, error: 'El producto se actualizó, pero no se pudo recargar.', code: 'PRODUCT_VARIANTS_RELOAD_FAILED' },
+          { status: 500 },
+        )
+      }
+
+      const visibleVariants = (variants ?? []).map((variant) => {
+        if (canViewProductCost(user.role)) return variant
+        const { purchase_price: _purchasePrice, ...visible } = variant
+        return visible
+      })
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          product: stripProductCost(product as Record<string, unknown>, user.role),
+          variants: visibleVariants,
+        },
+      })
     }
 
     const desiredStockQuantity = validated.stock_quantity

@@ -1,5 +1,9 @@
 import { z } from 'zod'
 import { SALE_STATUS, normalizeSaleStatus } from '@/lib/sales-status'
+import {
+  ProductAttributeDefinitionSchema,
+  ProductVariantInputSchema,
+} from '@/lib/products/variant-contract'
 
 /**
  * Esquemas de validación de los endpoints.
@@ -12,7 +16,13 @@ import { SALE_STATUS, normalizeSaleStatus } from '@/lib/sales-status'
 // Product Schemas
 // ============================================================================
 
-export const productSchema = z.object({
+const productVariantsFields = {
+  has_variants: z.boolean().default(false),
+  variant_attribute_config: z.array(ProductAttributeDefinitionSchema).default([]),
+  variants: z.array(ProductVariantInputSchema).default([]),
+}
+
+const productBaseSchema = z.object({
   name: z.string()
     .min(1, 'El nombre del producto es obligatorio')
     .max(200, 'El nombre no puede superar los 200 caracteres'),
@@ -155,11 +165,42 @@ export const productSchema = z.object({
     .max(2048, 'La URL de la imagen no puede superar los 2048 caracteres')
     .optional()
     .nullable(),
+
+  ...productVariantsFields,
 })
 
-export const productUpdateSchema = productSchema.partial().extend({
+const validateProductVariants = (
+  product: {
+    has_variants?: boolean
+    variant_attribute_config?: unknown[]
+    variants?: unknown[]
+  },
+  context: z.RefinementCtx,
+) => {
+  if (!product.has_variants) return
+
+  if (!product.variant_attribute_config?.length) {
+    context.addIssue({
+      code: 'custom',
+      path: ['variant_attribute_config'],
+      message: 'Agregá al menos un atributo para el producto con variantes',
+    })
+  }
+
+  if (!product.variants?.length) {
+    context.addIssue({
+      code: 'custom',
+      path: ['variants'],
+      message: 'Agregá al menos una variante',
+    })
+  }
+}
+
+export const productSchema = productBaseSchema.superRefine(validateProductVariants)
+
+export const productUpdateSchema = productBaseSchema.partial().extend({
   id: z.string().uuid('El producto seleccionado no es válido')
-})
+}).superRefine(validateProductVariants)
 
 // ============================================================================
 // Sale Item Schema

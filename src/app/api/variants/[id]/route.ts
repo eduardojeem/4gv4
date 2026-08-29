@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth, requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { withTenantAuth } from '@/lib/api/withTenantAuth'
+import { canViewProductCost } from '@/lib/auth/role-utils'
 
 type ProductSummaryRow = {
   sale_price: number | null
@@ -26,12 +27,17 @@ type ProductVariantRow = {
   sku: string | null
   variant_name: string | null
   price_adjustment: number | null
+  sale_price?: number | null
+  wholesale_price?: number | null
+  purchase_price?: number | null
+  min_stock?: number | null
+  barcode?: string | null
   stock_quantity: number | null
   is_active: boolean | null
   created_at: string | null
   updated_at: string | null
   product?: ProductSummaryRow | ProductSummaryRow[] | null
-  attributes?: VariantAttributeValue[] | null
+  attributes?: Record<string, string> | VariantAttributeValue[] | null
 }
 
 function toSafeNumber(value: unknown, fallback = 0): number {
@@ -39,10 +45,18 @@ function toSafeNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(number) ? number : fallback
 }
 
-function normalizeAttributeValues(value: unknown): VariantAttributeValue[] {
-  if (!Array.isArray(value)) return []
+function normalizeAttributeValues(value: unknown): Record<string, string> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .map(([key, item]) => [key.trim(), String(item).trim()] as const)
+        .filter(([key, item]) => key && item),
+    )
+  }
 
-  return value
+  if (!Array.isArray(value)) return {}
+
+  return Object.fromEntries(value
     .filter((entry) => entry && typeof entry === 'object')
     .map((entry) => {
       const item = entry as Record<string, unknown>
@@ -55,7 +69,8 @@ function normalizeAttributeValues(value: unknown): VariantAttributeValue[] {
         color_hex: item.color_hex ? String(item.color_hex) : undefined,
       }
     })
-    .filter((entry) => entry.attribute_id && entry.option_id && entry.value)
+    .filter((entry) => entry.attribute_name && entry.value)
+    .map((entry) => [entry.attribute_name, entry.value]))
 }
 
 function normalizeProductSummary(value: unknown): ProductSummaryRow | null {
@@ -74,18 +89,18 @@ function normalizeProductSummary(value: unknown): ProductSummaryRow | null {
   return null
 }
 
-function mapVariantRow(row: ProductVariantRow) {
+function mapVariantRow(row: ProductVariantRow, includeCost: boolean) {
   const product = normalizeProductSummary(row.product)
   const basePrice = toSafeNumber(product?.sale_price, 0)
   const baseWholesalePrice = toSafeNumber(product?.wholesale_price, 0)
   const baseCostPrice = toSafeNumber(product?.purchase_price, 0)
   const priceAdjustment = toSafeNumber(row.price_adjustment, 0)
 
-  const price = basePrice + priceAdjustment
-  const wholesalePrice = baseWholesalePrice > 0 ? baseWholesalePrice + priceAdjustment : undefined
-  const costPrice = baseCostPrice > 0 ? baseCostPrice : undefined
+  const price = toSafeNumber(row.sale_price, basePrice + priceAdjustment)
+  const wholesalePrice = toSafeNumber(row.wholesale_price, baseWholesalePrice > 0 ? baseWholesalePrice + priceAdjustment : 0) || undefined
+  const costPrice = toSafeNumber(row.purchase_price, baseCostPrice) || undefined
 
-  const minStock = toSafeNumber(product?.min_stock, 0)
+  const minStock = toSafeNumber(row.min_stock, toSafeNumber(product?.min_stock, 0))
   const maxStockNumber = toSafeNumber(product?.max_stock, NaN)
   const maxStock = Number.isFinite(maxStockNumber) ? maxStockNumber : undefined
 
@@ -93,11 +108,12 @@ function mapVariantRow(row: ProductVariantRow) {
     id: row.id,
     product_id: row.product_id,
     sku: row.sku ?? '',
+    barcode: row.barcode ?? undefined,
     name: row.variant_name ?? row.sku ?? `Variante ${row.id.slice(0, 8)}`,
     attributes: normalizeAttributeValues(row.attributes),
     price,
     wholesale_price: wholesalePrice,
-    cost_price: costPrice,
+    ...(includeCost ? { cost_price: costPrice } : {}),
     stock: toSafeNumber(row.stock_quantity, 0),
     min_stock: minStock,
     max_stock: maxStock,
@@ -108,17 +124,13 @@ function mapVariantRow(row: ProductVariantRow) {
 }
 
 // GET /api/variants/[id] - Obtener variante específica
-export async function GET(
+export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { organization, user },
+  routeContext,
+) => {
   try {
-    const auth = await requireAuth()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
+    const { params } = routeContext as { params: Promise<{ id: string }> }
     const { id } = await params
     const supabase = await createClient()
 
@@ -126,6 +138,7 @@ export async function GET(
       .from('product_variants')
       .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (error) {
@@ -142,7 +155,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: mapVariantRow(data as ProductVariantRow),
+      data: mapVariantRow(data as ProductVariantRow, canViewProductCost(user.role)),
     })
   } catch (error) {
     logger.error('Variants [id] GET API error', { error })
@@ -151,20 +164,16 @@ export async function GET(
       { status: 500 }
     )
   }
-}
+})
 
 // PUT /api/variants/[id] - Actualizar variante específica (staff only)
-export async function PUT(
+export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { organization, user },
+  routeContext,
+) => {
   try {
-    const auth = await requireStaff()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
+    const { params } = routeContext as { params: Promise<{ id: string }> }
     const { id } = await params
     const body = await request.json()
     const supabase = await createClient()
@@ -173,6 +182,7 @@ export async function PUT(
       .from('product_variants')
       .select('id, sku, product:products(sale_price)')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (existingError) {
@@ -206,6 +216,7 @@ export async function PUT(
           .from('product_variants')
           .select('id')
           .neq('id', id)
+          .eq('organization_id', organization.id)
           .eq('sku', nextSku)
           .maybeSingle()
 
@@ -253,12 +264,30 @@ export async function PUT(
       patch.price_adjustment = toSafeNumber(body.price_adjustment, 0)
     } else if (body.price !== undefined) {
       patch.price_adjustment = toSafeNumber(body.price, baseSalePrice) - baseSalePrice
+      patch.sale_price = Math.max(0, toSafeNumber(body.price, baseSalePrice))
+    }
+
+    if (body.purchase_price !== undefined || body.cost_price !== undefined) {
+      patch.purchase_price = Math.max(0, toSafeNumber(body.purchase_price ?? body.cost_price, 0))
+    }
+    if (body.wholesale_price !== undefined) {
+      patch.wholesale_price = Math.max(0, toSafeNumber(body.wholesale_price, 0))
+    }
+    if (body.min_stock !== undefined) {
+      patch.min_stock = Math.max(0, toSafeNumber(body.min_stock, 0))
+    }
+    if (body.barcode !== undefined) {
+      patch.barcode = String(body.barcode).trim() || null
+    }
+    if (body.attributes && typeof body.attributes === 'object') {
+      patch.attributes = body.attributes
     }
 
     const { data: updated, error: updateError } = await supabase
       .from('product_variants')
       .update(patch)
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
       .maybeSingle()
 
@@ -279,7 +308,7 @@ export async function PUT(
 
     return NextResponse.json({
       success: true,
-      data: mapVariantRow(updated as ProductVariantRow),
+      data: mapVariantRow(updated as ProductVariantRow, canViewProductCost(user.role)),
     })
   } catch (error) {
     logger.error('Variants [id] PUT API error', { error })
@@ -288,20 +317,16 @@ export async function PUT(
       { status: 500 }
     )
   }
-}
+})
 
 // DELETE /api/variants/[id] - Eliminar variante específica (staff only)
-export async function DELETE(
+export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'inventory' }, async (
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { organization, user },
+  routeContext,
+) => {
   try {
-    const auth = await requireStaff()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
+    const { params } = routeContext as { params: Promise<{ id: string }> }
     const { id } = await params
     const supabase = await createClient()
 
@@ -309,6 +334,7 @@ export async function DELETE(
       .from('product_variants')
       .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (existingError) {
@@ -328,8 +354,9 @@ export async function DELETE(
 
     const { error: deleteError } = await supabase
       .from('product_variants')
-      .delete()
+      .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', id)
+      .eq('organization_id', organization.id)
 
     if (deleteError) {
       logger.error('Failed to delete variant by id', {
@@ -342,8 +369,8 @@ export async function DELETE(
     return NextResponse.json({
       success: true,
       data: {
-        message: 'Variante eliminada exitosamente',
-        deleted_variant: mapVariantRow(existing as ProductVariantRow),
+        message: 'Variante desactivada para preservar su historial',
+        deleted_variant: mapVariantRow(existing as ProductVariantRow, canViewProductCost(user.role)),
       },
     })
   } catch (error) {
@@ -353,20 +380,16 @@ export async function DELETE(
       { status: 500 }
     )
   }
-}
+})
 
 // PATCH /api/variants/[id]/stock - Actualizar solo el stock de una variante (staff only)
-export async function PATCH(
+export const PATCH = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { organization, user },
+  routeContext,
+) => {
   try {
-    const auth = await requireStaff()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
+    const { params } = routeContext as { params: Promise<{ id: string }> }
     const { id } = await params
     const body = await request.json()
     const operation = String(body?.operation || '').trim()
@@ -392,6 +415,7 @@ export async function PATCH(
       .from('product_variants')
       .select('stock_quantity')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (existingError) {
@@ -424,6 +448,7 @@ export async function PATCH(
       .from('product_variants')
       .update({ stock_quantity: nextStock })
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
       .maybeSingle()
 
@@ -445,7 +470,7 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      data: mapVariantRow(updated as ProductVariantRow),
+      data: mapVariantRow(updated as ProductVariantRow, canViewProductCost(user.role)),
     })
   } catch (error) {
     logger.error('Variants [id] PATCH API error', { error })
@@ -454,4 +479,4 @@ export async function PATCH(
       { status: 500 }
     )
   }
-}
+})

@@ -5,6 +5,7 @@ describe('getFirstProductErrorTab', () => {
   it('opens the first section that contains a validation error after submit', () => {
     expect(getFirstProductErrorTab(['sale_price', 'stock_quantity'])).toBe('pricing')
     expect(getFirstProductErrorTab(['exchange_window_days'])).toBe('post-sale')
+    expect(getFirstProductErrorTab(['variants'])).toBe('variants')
   })
 
   it('does not force navigation when no known field has an error', () => {
