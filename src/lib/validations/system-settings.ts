@@ -127,9 +127,20 @@ export type SystemSettings = z.infer<typeof SystemSettingsSchema>
 /**
  * Esquema para actualizaciones parciales
  */
-export const SystemSettingsPartialSchema = SystemSettingsSchema.partial()
+const partialSystemSettingsShape = Object.fromEntries(
+  Object.entries(SystemSettingsSchema.shape).map(([key, schema]) => [
+    key,
+    schema instanceof z.ZodDefault
+      ? schema.removeDefault().optional()
+      : schema.optional(),
+  ])
+) as z.ZodRawShape
 
-export type SystemSettingsPartial = z.infer<typeof SystemSettingsPartialSchema>
+// `SystemSettingsSchema.partial()` conserva los `.default(...)` internos de
+// Zod. En una petición parcial eso convertía campos ausentes en valores vacíos
+// y el servidor los persistía como si el administrador los hubiera borrado.
+export type SystemSettingsPartial = Partial<SystemSettings>
+export const SystemSettingsPartialSchema: z.ZodType<SystemSettingsPartial> = z.object(partialSystemSettingsShape)
 
 /**
  * Esquema para mapear de DB a frontend
