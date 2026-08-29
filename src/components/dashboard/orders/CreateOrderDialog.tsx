@@ -41,6 +41,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { validateDeliveryContact } from '@/lib/orders/creation-rules'
 import { cn } from '@/lib/utils'
 import { formatMoney } from './format'
@@ -104,6 +105,11 @@ export function CreateOrderDialog({
   onCreated: () => void
 }) {
   const { selectedBranchId, selectedBranch } = useBranch()
+  const { effectiveModules } = useSubscriptionStatus()
+  const hasDelivery = effectiveModules.includes('delivery')
+  const availableFulfillmentOptions = hasDelivery
+    ? FULFILLMENT_OPTIONS
+    : FULFILLMENT_OPTIONS.filter(option => option.value === 'PICKUP')
   const [products, setProducts] = useState<ProductOption[]>([])
   const [customers, setCustomers] = useState<CustomerOption[]>([])
   const [productSearch, setProductSearch] = useState('')
@@ -850,8 +856,8 @@ export function CreateOrderDialog({
                 <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-500">Paso 3 · Entrega y pago</p>
                 <div className="space-y-2">
                   {/* Fulfillment pills */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {FULFILLMENT_OPTIONS.map((opt) => (
+                  <div className={cn('grid gap-2', hasDelivery ? 'grid-cols-2' : 'grid-cols-1')}>
+                    {availableFulfillmentOptions.map((opt) => (
                       <button
                         key={opt.value}
                         type="button"
@@ -870,6 +876,9 @@ export function CreateOrderDialog({
                       </button>
                     ))}
                   </div>
+                  {!hasDelivery ? (
+                    <p className="text-xs text-slate-500">Las entregas están desactivadas para esta organización.</p>
+                  ) : null}
 
                   {/* Payment method */}
                   <Select value={paymentMethod} onValueChange={setPaymentMethod}>

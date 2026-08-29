@@ -196,6 +196,8 @@ function KpiCard({ stat, loading }: { stat: KpiStat; loading: boolean }) {
 export default function DashboardPage() {
   const { effectiveModules } = useSubscriptionStatus()
   const hasRepairs = effectiveModules.includes('repairs')
+  const hasOrders = effectiveModules.includes('orders')
+  const hasServices = effectiveModules.includes('services')
   const [isPending, startTransition] = useTransition()
   const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId } = useBranch()
@@ -205,7 +207,7 @@ export default function DashboardPage() {
   const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [stats, setStats] = useState<KpiStat[]>([
     { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/dashboard/reports' },
-    { title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo', href: '/dashboard/orders' },
+    ...(hasOrders ? [{ title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo' as const, href: '/dashboard/orders' }] : []),
     { title: 'Clientes nuevos', value: '—', icon: Users, tone: 'violet', href: '/dashboard/customers' },
     { title: 'Productos', value: '—', icon: Package, tone: 'cyan', href: '/dashboard/products' },
     { title: 'Stock bajo', value: '—', icon: AlertTriangle, tone: 'amber', href: '/dashboard/products?filter=low_stock' },
@@ -315,13 +317,13 @@ export default function DashboardPage() {
             .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
           selectedBranchId,
         ),
-        withBranchFilter(
+        hasOrders ? withBranchFilter(
           supabase
             .from('customer_orders')
             .select('id', { count: 'exact', head: true })
             .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED']),
           selectedBranchId,
-        ),
+        ) : Promise.resolve({ count: 0, data: [] }),
         supabase.from('customers').select('created_at').gte('created_at', startOfWeek.toISOString()),
         supabase.from('products').select('id, stock_quantity, min_stock, unit_measure, category_id').eq('is_active', true),
         supabase.from('categories').select('id, name').eq('is_active', true),
@@ -408,11 +410,11 @@ export default function DashboardPage() {
           .map(c => c.id)
       )
 
-      const servicesList = productRows.filter(p => {
+      const servicesList = hasServices ? productRows.filter(p => {
         const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
         const isServiceCat = Boolean(p.category_id && serviceCategoryIds.has(p.category_id))
         return isServiceUnit || isServiceCat
-      })
+      }) : []
       const servicesCount = servicesList.length
 
       const physicalProducts = productRows.filter(p => {
@@ -421,7 +423,7 @@ export default function DashboardPage() {
         return !isServiceUnit && !isServiceCat
       })
       const physicalProductsCount = physicalProducts.length
-      const totalCatalogCount = productRows.length
+      const totalCatalogCount = hasServices ? productRows.length : physicalProductsCount
 
       const repairsActive = repairsActiveCount || 0
 
@@ -452,43 +454,45 @@ export default function DashboardPage() {
         }).length
       })
 
-      setStats([
+      const nextStats: KpiStat[] = [
         {
           title: 'Ventas del día',
           value: formatCurrency(totalRevenueToday),
           subtitle: `${completedToday} venta${completedToday !== 1 ? 's' : ''} completada${completedToday !== 1 ? 's' : ''}`,
-          icon: Banknote, tone: 'emerald', href: '/dashboard/reports',
+          icon: Banknote, tone: 'emerald' as const, href: '/dashboard/reports',
           trend: trendData,
         },
-        {
+        ...(hasOrders ? [{
           title: 'Órdenes activas',
           value: String(activeOrders),
           subtitle: 'pedidos por completar',
-          icon: ShoppingCart, tone: 'indigo', href: '/dashboard/orders',
+          icon: ShoppingCart, tone: 'indigo' as const, href: '/dashboard/orders',
           badge: activeOrders > 0 ? 'Atender' : undefined,
-        },
+        }] : []),
         {
           title: 'Clientes nuevos',
           value: String(newCustomers),
           subtitle: 'últimos 7 días',
-          icon: Users, tone: 'violet', href: '/dashboard/customers',
+          icon: Users, tone: 'violet' as const, href: '/dashboard/customers',
           trend: customerTrend,
         },
         {
           title: 'Catálogo / Inventario',
           value: String(totalCatalogCount),
-          subtitle: `${physicalProductsCount} productos · ${servicesCount} servicios`,
-          icon: Package, tone: 'cyan', href: '/dashboard/products',
+          subtitle: hasServices
+            ? `${physicalProductsCount} productos · ${servicesCount} servicios`
+            : `${physicalProductsCount} productos`,
+          icon: Package, tone: 'cyan' as const, href: '/dashboard/products',
           breakdown: [
             { label: 'Productos', count: physicalProductsCount, icon: Package },
-            { label: 'Servicios', count: servicesCount, icon: Wrench },
+            ...(hasServices ? [{ label: 'Servicios', count: servicesCount, icon: Wrench }] : []),
           ],
         },
         {
           title: 'Stock bajo',
           value: String(lowStockCount),
           subtitle: lowStockCount > 0 ? 'requiere reposición' : 'inventario OK',
-          icon: AlertTriangle, tone: lowStockCount > 0 ? 'amber' : 'emerald', href: '/dashboard/products?filter=low_stock',
+          icon: AlertTriangle, tone: lowStockCount > 0 ? 'amber' as const : 'emerald' as const, href: '/dashboard/products?filter=low_stock',
           badge: lowStockCount > 0 ? '⚠' : undefined,
         },
         ...(hasRepairs ? [{
@@ -497,7 +501,8 @@ export default function DashboardPage() {
           subtitle: 'en proceso',
           icon: Wrench, tone: 'red' as const, href: '/dashboard/repairs',
         }] : []),
-      ])
+      ]
+      setStats(nextStats)
       // Cooldown de 30s: el timeout re-habilita el botón sin depender de otro render.
       setCanRefresh(false)
       if (refreshCooldownRef.current) clearTimeout(refreshCooldownRef.current)
@@ -507,7 +512,7 @@ export default function DashboardPage() {
     } finally {
       setLoadingStats(false)
     }
-  }, [hasRepairs, selectedBranchId, supabase])
+  }, [hasOrders, hasRepairs, hasServices, selectedBranchId, supabase])
 
   useEffect(() => {
     if (config.supabase.isConfigured) {
@@ -845,7 +850,7 @@ export default function DashboardPage() {
         {[
           { href: '/dashboard/pos', icon: ShoppingCart, label: 'Punto de venta', sub: 'POS y cobros' },
           { href: '/dashboard/products', icon: Boxes, label: 'Inventario', sub: 'Catálogo y stock' },
-          { href: '/dashboard/orders', icon: Receipt, label: 'Órdenes', sub: 'Historial y estado' },
+          ...(hasOrders ? [{ href: '/dashboard/orders', icon: Receipt, label: 'Órdenes', sub: 'Historial y estado' }] : []),
           { href: '/dashboard/customers', icon: ClipboardList, label: 'Clientes', sub: 'CRM y contactos' },
           { href: '/dashboard/after-sales', icon: RotateCcw, label: 'Posventa y Devoluciones', sub: 'Garantías y reclamos' },
           { href: '/marketplace', icon: Globe, label: 'Marketplace', sub: 'Explorar empresas y productos' },

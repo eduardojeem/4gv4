@@ -33,7 +33,7 @@ type NavItem = {
 const MOBILE_NAV_ITEMS: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart, requiredModule: 'pos' },
-  { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag },
+  { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, requiredModule: 'orders' },
   { name: 'Productos', href: '/dashboard/products', icon: Package, requiredModule: 'inventory' },
   { name: 'Clientes', href: '/dashboard/customers', icon: Users },
   { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, requiredModule: 'repairs' },

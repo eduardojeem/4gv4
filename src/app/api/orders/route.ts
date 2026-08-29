@@ -19,6 +19,7 @@ import { loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import type { AppRole } from '@/lib/auth/role-utils'
 import type { FulfillmentType, PaymentMethod } from '@/lib/orders/types'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 const STAT_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const
 const STATUS_FILTERS = new Set<string>(STAT_STATUSES)
@@ -58,7 +59,7 @@ const createOrderSchema = z.object({
   }
 })
 
-export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request, { organization }) => {
+export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage', module: 'orders' }, async (request, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const page = Math.max(1, Number(searchParams.get('page') || 1))
@@ -196,7 +197,7 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
   }
 })
 
-export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request, { user, organization }) => {
+export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage', module: 'orders' }, async (request, { user, organization }) => {
   try {
     const validation = createOrderSchema.safeParse(await request.json())
 
@@ -205,6 +206,16 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
     }
 
     const input = validation.data
+    if (input.fulfillmentType === 'DELIVERY') {
+      const { effectiveModules } = await getOrganizationPlanInfo(organization.id)
+      if (!effectiveModules.includes('delivery')) {
+        return NextResponse.json({
+          success: false,
+          error: 'Las entregas están desactivadas para esta organización.',
+          code: 'DELIVERY_MODULE_DISABLED',
+        }, { status: 403 })
+      }
+    }
     const supabase = await createClient()
     const requestedBranchId = getRequestedBranchId(request, input.branchId)
     let branchScope: Awaited<ReturnType<typeof resolveBranchScopeForUser>>

@@ -63,7 +63,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { name: 'Clientes', href: '/dashboard/customers', icon: Users, permission: 'customers.read' },
       { name: 'Créditos', href: '/dashboard/credits', icon: CreditCard, permission: 'credits.read', requiredModule: 'credits' },
-      { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, permission: 'orders.read' },
+      { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, permission: 'orders.read', requiredModule: 'orders' },
       { name: 'Productos', href: '/dashboard/products', icon: Package, permission: 'products.read', requiredModule: 'inventory' },
       { name: 'Marcas', href: '/dashboard/brands', icon: Building2, permission: 'products.manage' },
       { name: 'Categorías', href: '/dashboard/categories', icon: Tag, permission: 'products.read' },

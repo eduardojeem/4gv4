@@ -20,7 +20,7 @@ async function getRouteId(routeContext: unknown) {
   return resolved?.id
 }
 
-export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request, { user, organization }, routeContext) => {
+export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', module: 'orders' }, async (request, { user, organization }, routeContext) => {
   try {
     const id = await getRouteId(routeContext)
     if (!id) return NextResponse.json({ success: false, error: 'Order ID required' }, { status: 400 })

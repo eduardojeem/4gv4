@@ -43,7 +43,7 @@ async function resolveActorNames(ids: string[]) {
   return names
 }
 
-export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (_request, { organization }, routeContext) => {
+export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage', module: 'orders' }, async (_request, { organization }, routeContext) => {
   try {
     const id = await getRouteId(routeContext)
     if (!id) return NextResponse.json({ success: false, error: 'Order ID required' }, { status: 400 })

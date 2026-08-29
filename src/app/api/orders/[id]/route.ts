@@ -4,6 +4,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { logger } from '@/lib/logger'
 import { createClient } from '@/lib/supabase/server'
 import { normalizeOrder } from '@/lib/orders/helpers'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 const updateOrderSchema = z.object({
   payment_method: z.enum(['CASH', 'CARD', 'TRANSFER', 'DIGITAL_WALLET']).optional(),
@@ -25,7 +26,7 @@ async function getRouteId(routeContext: unknown) {
   return resolved?.id
 }
 
-export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (_request, { organization }, routeContext) => {
+export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage', module: 'orders' }, async (_request, { organization }, routeContext) => {
   try {
     const id = await getRouteId(routeContext)
     if (!id) return NextResponse.json({ success: false, error: 'Order ID required' }, { status: 400 })
@@ -48,7 +49,7 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
   }
 })
 
-export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request, { organization }, routeContext) => {
+export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage', module: 'orders' }, async (request, { organization }, routeContext) => {
   try {
     const id = await getRouteId(routeContext)
     if (!id) return NextResponse.json({ success: false, error: 'Order ID required' }, { status: 400 })
@@ -56,6 +57,17 @@ export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
     const validation = updateOrderSchema.safeParse(await request.json())
     if (!validation.success) {
       return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
+    }
+
+    if (validation.data.fulfillment_type === 'DELIVERY') {
+      const { effectiveModules } = await getOrganizationPlanInfo(organization.id)
+      if (!effectiveModules.includes('delivery')) {
+        return NextResponse.json({
+          success: false,
+          error: 'Las entregas están desactivadas para esta organización.',
+          code: 'DELIVERY_MODULE_DISABLED',
+        }, { status: 403 })
+      }
     }
 
     const supabase = await createClient()
