@@ -33,6 +33,9 @@ describe('BusinessProfileCard', () => {
     )
 
     expect(screen.getByText('Perfil y módulos del negocio')).toBeInTheDocument()
+    expect(screen.getByText('Rubro actual')).toBeInTheDocument()
+    expect(screen.getByTestId('current-business-vertical')).toHaveTextContent('Ropa y moda')
+    expect(screen.getByTestId('current-operating-model')).toHaveTextContent('Venta minorista')
     expect(screen.getByLabelText('Rubro')).toHaveTextContent('Ropa y moda')
     expect(screen.getByLabelText('Forma de trabajo')).toHaveTextContent('Venta minorista')
     expect(screen.getByText('Reparaciones')).toBeInTheDocument()

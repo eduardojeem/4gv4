@@ -118,6 +118,38 @@ export function BusinessProfileCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
+        <section
+          aria-label="Configuración actual del negocio"
+          className="rounded-lg border bg-muted/30 p-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Rubro actual</h3>
+              <p className="text-xs text-muted-foreground">Configuración guardada para esta organización.</p>
+            </div>
+            <Badge variant="secondary">Guardado</Badge>
+          </div>
+          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs text-muted-foreground">Actividad principal</dt>
+              <dd data-testid="current-business-vertical" className="mt-0.5 text-sm font-medium">
+                {verticalLabels[profile.businessVertical]}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Forma de trabajo actual</dt>
+              <dd data-testid="current-operating-model" className="mt-0.5 text-sm font-medium">
+                {modelLabels[profile.operatingModel]}
+              </dd>
+            </div>
+          </dl>
+          {dirty ? (
+            <p role="status" className="mt-3 border-t pt-3 text-xs font-medium text-amber-700 dark:text-amber-300">
+              Tenés cambios pendientes. El rubro actual seguirá vigente hasta guardar el perfil.
+            </p>
+          ) : null}
+        </section>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="business-vertical">Rubro</Label>
