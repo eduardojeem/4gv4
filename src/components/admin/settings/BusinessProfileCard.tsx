@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Building2, Check, Loader2, LockKeyhole, Wrench } from 'lucide-react'
+import { ArrowUpRight, Building2, Check, Loader2, LockKeyhole, Sparkles, Wrench } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -70,12 +71,34 @@ export function BusinessProfileCard() {
     () => new Map(profile.moduleTrials.map(trial => [trial.module, trial])),
     [profile.moduleTrials],
   )
+  const suggestedModules = useMemo(
+    () => getSuggestedModules(vertical, model),
+    [vertical, model],
+  )
+  const recommendedIncluded = suggestedModules.filter(module => entitled.has(module))
+  const currentPlanRank = { FREE: 0, BASIC: 1, PRO: 2, ENTERPRISE: 3 }[profile.planCode] ?? 0
+  const higherPlanModules = ORGANIZATION_MODULES.flatMap(module => {
+    if (entitled.has(module)) return []
+    const plans = (profile.modulePlanAvailability?.[module] ?? []).filter(plan => {
+      const rank = { FREE: 0, BASIC: 1, PRO: 2, ENTERPRISE: 3 }[plan.name.toUpperCase() as 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE']
+      return rank === undefined || rank > currentPlanRank
+    })
+    return plans.length > 0 ? [{ module, plans }] : []
+  })
   const dirty = vertical !== profile.businessVertical
     || model !== profile.operatingModel
     || JSON.stringify([...enabled].sort()) !== JSON.stringify([...(profile.enabledModules ?? profile.effectiveModules)].sort())
 
   const applySuggestedModules = () => {
-    setEnabled(getSuggestedModules(vertical, model).filter(module => entitled.has(module)))
+    setEnabled(recommendedIncluded)
+  }
+
+  const enableSuggestedModules = () => {
+    setEnabled(current => Array.from(new Set([...current, ...recommendedIncluded])))
+  }
+
+  const enableAllEntitledModules = () => {
+    setEnabled(ORGANIZATION_MODULES.filter(module => entitled.has(module)))
   }
 
   const toggleModule = (module: OrganizationModule, checked: boolean) => {
@@ -184,6 +207,60 @@ export function BusinessProfileCard() {
           </div>
         </div>
 
+        <div className="grid gap-3 lg:grid-cols-2">
+          <section className="rounded-lg border bg-primary/5 p-4" aria-labelledby="recommended-modules-title">
+            <div className="flex items-start gap-2">
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <h3 id="recommended-modules-title" className="text-sm font-semibold">
+                  Recomendado para {verticalLabels[vertical]}
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Basado también en “{modelLabels[model]}”. Solo se activan herramientas incluidas en tu plan.
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {suggestedModules.map(module => (
+                <Badge key={module} variant={entitled.has(module) ? 'secondary' : 'outline'}>
+                  {moduleLabels[module]}{entitled.has(module) ? '' : ' · requiere otro plan'}
+                </Badge>
+              ))}
+            </div>
+            <Button type="button" variant="outline" size="sm" className="mt-3" onClick={enableSuggestedModules}>
+              Activar recomendados incluidos
+            </Button>
+          </section>
+
+          <section className="rounded-lg border p-4" aria-labelledby="higher-plan-modules-title">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 id="higher-plan-modules-title" className="text-sm font-semibold">Disponible en planes superiores</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">Herramientas bloqueadas y el plan que permite habilitarlas.</p>
+              </div>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/admin/subscriptions/change-plan">
+                  Ver planes <ArrowUpRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+            {higherPlanModules.length > 0 ? (
+              <ul className="mt-3 space-y-2">
+                {higherPlanModules.map(({ module, plans }) => (
+                  <li key={module} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs">
+                    <span className="font-medium">{moduleLabels[module]} — {plans.map(plan => plan.name).join(', ')}</span>
+                    {plans.every(plan => !plan.isActive) ? <Badge variant="outline">Plan inactivo</Badge> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Tu plan ya incluye todas las herramientas disponibles en planes superiores activos.
+              </p>
+            )}
+          </section>
+        </div>
+
         <div className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -194,6 +271,9 @@ export function BusinessProfileCard() {
               <Badge variant="secondary">Plan actual: {profile.planName}</Badge>
               <Button type="button" variant="outline" size="sm" onClick={applySuggestedModules}>
                 Aplicar recomendación
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={enableAllEntitledModules}>
+                Activar todo lo incluido
               </Button>
             </div>
           </div>

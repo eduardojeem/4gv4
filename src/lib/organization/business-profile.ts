@@ -60,11 +60,24 @@ const MODULE_PRESETS: Record<OperatingModel, OrganizationModule[]> = {
   mixed: ['inventory', 'pos', 'crm', 'orders', 'repairs', 'services'],
 }
 
+const VERTICAL_RECOMMENDATIONS: Record<BusinessVertical, OrganizationModule[]> = {
+  general: [],
+  clothing: ['inventory', 'pos', 'crm', 'orders', 'ecommerce', 'delivery', 'promotions'],
+  cosmetics: ['inventory', 'pos', 'crm', 'orders', 'ecommerce', 'delivery', 'promotions', 'credits'],
+  electronics: ['inventory', 'pos', 'crm', 'repairs', 'services', 'orders', 'delivery', 'credits'],
+  food: ['inventory', 'pos', 'crm', 'orders', 'ecommerce', 'delivery', 'promotions'],
+  hardware: ['inventory', 'inventory_admin', 'pos', 'crm', 'orders', 'delivery', 'credits', 'analytics'],
+  other: [],
+}
+
 export function getSuggestedModules(
-  _vertical: BusinessVertical,
+  vertical: BusinessVertical,
   operatingModel: OperatingModel,
 ): OrganizationModule[] {
-  return [...MODULE_PRESETS[operatingModel]]
+  return Array.from(new Set([
+    ...MODULE_PRESETS[operatingModel],
+    ...VERTICAL_RECOMMENDATIONS[vertical],
+  ]))
 }
 
 type LegacyProfileInput = {

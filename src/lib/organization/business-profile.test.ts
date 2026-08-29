@@ -54,6 +54,24 @@ describe('organization business profile', () => {
     expect(new Set(modules).size).toBe(modules.length)
   })
 
+  it('adds vertical-specific recommendations without duplicating modules', () => {
+    expect(getSuggestedModules('clothing', 'retail')).toEqual(expect.arrayContaining([
+      'inventory', 'pos', 'orders', 'ecommerce', 'delivery', 'promotions',
+    ]))
+    expect(getSuggestedModules('cosmetics', 'retail')).toEqual(expect.arrayContaining([
+      'delivery', 'promotions', 'credits',
+    ]))
+    expect(getSuggestedModules('hardware', 'retail')).toEqual(expect.arrayContaining([
+      'inventory_admin', 'orders', 'delivery', 'credits', 'analytics',
+    ]))
+    expect(getSuggestedModules('electronics', 'repair')).toEqual(expect.arrayContaining([
+      'repairs', 'services', 'orders', 'delivery', 'credits',
+    ]))
+
+    expect(new Set(getSuggestedModules('cosmetics', 'mixed')).size)
+      .toBe(getSuggestedModules('cosmetics', 'mixed').length)
+  })
+
   it('builds the effective profile from persisted values and plan access', () => {
     expect(buildOrganizationBusinessProfile({
       persisted: {

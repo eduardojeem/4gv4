@@ -99,4 +99,25 @@ describe('BusinessProfileCard', () => {
     expect(screen.getByLabelText('Seguridad y auditoría')).toBeChecked()
     expect(screen.getByRole('button', { name: 'Aplicar recomendación' })).toBeInTheDocument()
   })
+
+  it('shows business recommendations, higher-plan modules, and safe activation actions', () => {
+    render(
+      <SubscriptionStatusProvider value={{
+        ...status,
+        modulePlanAvailability: {
+          ...status.modulePlanAvailability,
+          analytics: [{ name: 'Pro', isActive: true }],
+          security: [{ name: 'Pro', isActive: true }],
+        },
+      }}>
+        <BusinessProfileCard />
+      </SubscriptionStatusProvider>,
+    )
+
+    expect(screen.getByText('Recomendado para Ropa y moda')).toBeInTheDocument()
+    expect(screen.getByText('Disponible en planes superiores')).toBeInTheDocument()
+    expect(screen.getByText('Analítica — Pro')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Activar recomendados incluidos' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Activar todo lo incluido' })).toBeInTheDocument()
+  })
 })
