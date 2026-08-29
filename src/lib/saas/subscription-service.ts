@@ -7,6 +7,7 @@ import type {
   OperatingModel,
   OrganizationModule,
 } from '@/lib/organization/business-profile'
+import { ORGANIZATION_MODULES } from '@/lib/organization/business-profile'
 
 export type ResourceType = 'users' | 'branches' | 'cashRegisters' | 'products' | 'categories' | 'repairs' | 'services'
 export type PlanCode = 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE'
@@ -650,6 +651,7 @@ export async function getOrganizationPlanInfo(
   code: PlanCode
   name: string
   modules: string[]
+  modulePlanAvailability: Partial<Record<OrganizationModule, string[]>>
   entitledModules: string[]
   enabledModules: OrganizationModule[] | null
   effectiveModules: OrganizationModule[]
@@ -672,13 +674,31 @@ export async function getOrganizationPlanInfo(
 
   const code = normalizePlanCode(sub?.plan || org?.plan)
 
-  const { data: plan } = await supabase
+  const { data: availablePlans } = await supabase
     .from('plans')
-    .select('name, modules')
-    .eq('code', code)
-    .maybeSingle()
+    .select('code, name, modules, is_active')
+
+  const planRows = (availablePlans ?? []) as Array<{
+    code: string
+    name: string
+    modules: unknown
+    is_active: boolean | null
+  }>
+  const plan = planRows.find(row => String(row.code).toUpperCase() === code)
 
   const planModules = Array.isArray(plan?.modules) ? plan.modules.map(String) : []
+  const modulePlanAvailability: Partial<Record<OrganizationModule, string[]>> = {}
+  for (const availablePlan of planRows) {
+    if (availablePlan.is_active === false || !Array.isArray(availablePlan.modules)) continue
+    for (const module of availablePlan.modules) {
+      if (!ORGANIZATION_MODULES.includes(module as OrganizationModule)) continue
+      const key = module as OrganizationModule
+      modulePlanAvailability[key] = [
+        ...(modulePlanAvailability[key] ?? []),
+        availablePlan.name || String(availablePlan.code),
+      ]
+    }
+  }
 
   // Trials: separar activos (no vencidos) de los ya usados.
   const now = Date.now()
@@ -708,6 +728,7 @@ export async function getOrganizationPlanInfo(
     code,
     name: typeof plan?.name === 'string' ? plan.name : code,
     modules: profile.effectiveModules,
+    modulePlanAvailability,
     entitledModules: planModules,
     enabledModules: profile.enabledModules,
     effectiveModules: profile.effectiveModules,

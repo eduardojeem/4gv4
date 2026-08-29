@@ -22,6 +22,10 @@ const status: SubscriptionStatusData = {
   trialedModules: [],
   organizationName: 'Moda Uno',
   organizationLogoUrl: null,
+  modulePlanAvailability: {
+    delivery: ['Enterprise'],
+    repairs: ['Basic', 'Pro', 'Enterprise'],
+  },
 }
 
 describe('BusinessProfileCard', () => {
@@ -39,6 +43,25 @@ describe('BusinessProfileCard', () => {
     expect(screen.getByLabelText('Rubro')).toHaveTextContent('Ropa y moda')
     expect(screen.getByLabelText('Forma de trabajo')).toHaveTextContent('Venta minorista')
     expect(screen.getByText('Reparaciones')).toBeInTheDocument()
-    expect(screen.getAllByText('No incluido en el plan').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/No incluido en el plan Basic/).length).toBeGreaterThan(0)
+  })
+
+  it('explains whether a module is included, disabled by the organization, or available in another plan', () => {
+    render(
+      <SubscriptionStatusProvider value={{
+        ...status,
+        planCode: 'PRO',
+        planName: 'Pro',
+        entitledModules: ['inventory', 'repairs'],
+        enabledModules: ['inventory'],
+        effectiveModules: ['inventory'],
+      }}>
+        <BusinessProfileCard />
+      </SubscriptionStatusProvider>,
+    )
+
+    expect(screen.getByText('Plan actual: Pro')).toBeInTheDocument()
+    expect(screen.getByText('Incluido en Pro, pero desactivado para esta organización')).toBeInTheDocument()
+    expect(screen.getByText('No incluido en Pro. Disponible en Enterprise')).toBeInTheDocument()
   })
 })

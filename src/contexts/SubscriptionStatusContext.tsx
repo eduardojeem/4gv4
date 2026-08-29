@@ -19,6 +19,8 @@ export type SubscriptionStatusData = {
   planName: string
   /** Módulos habilitados por el plan (fuente: tabla `plans.modules`). */
   modules: string[]
+  /** Nombres de los planes activos que incluyen cada módulo. */
+  modulePlanAvailability?: Partial<Record<OrganizationModule, string[]>>
   /** Módulos incluidos por el plan, antes de preferencias de la organización. */
   entitledModules: string[]
   /** Selección de la organización. null conserva todos los módulos contratados. */

@@ -29,6 +29,7 @@ export async function SubscriptionGate({ children }: { children: React.ReactNode
           planCode: planInfo.code,
           planName: planInfo.name,
           modules: planInfo.modules,
+          modulePlanAvailability: planInfo.modulePlanAvailability,
           entitledModules: planInfo.entitledModules,
           enabledModules: planInfo.enabledModules,
           effectiveModules: planInfo.effectiveModules,

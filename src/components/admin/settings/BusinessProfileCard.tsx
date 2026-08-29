@@ -62,7 +62,14 @@ export function BusinessProfileCard() {
     profile.enabledModules ?? profile.effectiveModules,
   )
   const [saving, setSaving] = useState(false)
-  const entitled = useMemo(() => new Set(profile.entitledModules), [profile.entitledModules])
+  const entitled = useMemo(
+    () => new Set([...profile.entitledModules, ...profile.moduleTrials.map(trial => trial.module)]),
+    [profile.entitledModules, profile.moduleTrials],
+  )
+  const trialByModule = useMemo(
+    () => new Map(profile.moduleTrials.map(trial => [trial.module, trial])),
+    [profile.moduleTrials],
+  )
   const dirty = vertical !== profile.businessVertical
     || model !== profile.operatingModel
     || JSON.stringify([...enabled].sort()) !== JSON.stringify([...(profile.enabledModules ?? profile.effectiveModules)].sort())
@@ -180,14 +187,28 @@ export function BusinessProfileCard() {
         </div>
 
         <div className="space-y-3">
-          <div>
-            <h3 className="text-sm font-medium">Herramientas visibles</h3>
-            <p className="text-xs text-muted-foreground">Solo podés activar herramientas incluidas en tu plan actual.</p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-medium">Herramientas visibles</h3>
+              <p className="text-xs text-muted-foreground">Cada herramienta indica si depende del plan o de la configuración de la organización.</p>
+            </div>
+            <Badge variant="secondary">Plan actual: {profile.planName}</Badge>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {ORGANIZATION_MODULES.map(module => {
               const isEntitled = entitled.has(module)
               const checked = enabled.includes(module) && isEntitled
+              const trial = trialByModule.get(module)
+              const availablePlans = profile.modulePlanAvailability?.[module] ?? []
+              const availabilityText = trial
+                ? `Prueba habilitada: ${trial.daysLeft} ${trial.daysLeft === 1 ? 'día restante' : 'días restantes'}`
+                : isEntitled
+                  ? checked
+                    ? `Incluido en ${profile.planName} y habilitado`
+                    : `Incluido en ${profile.planName}, pero desactivado para esta organización`
+                  : availablePlans.length > 0
+                    ? `No incluido en ${profile.planName}. Disponible en ${availablePlans.join(', ')}`
+                    : `No incluido en el plan ${profile.planName}`
               return (
                 <label
                   key={module}
@@ -205,7 +226,7 @@ export function BusinessProfileCard() {
                       {moduleLabels[module]}
                     </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {isEntitled ? (checked ? 'Activo' : 'Disponible, desactivado') : 'No incluido en el plan'}
+                      {availabilityText}
                     </span>
                   </span>
                   {isEntitled
