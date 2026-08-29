@@ -29,28 +29,28 @@ export const PLAN_LIMITS: Record<SaaSPlan, PlanLimits> = {
     products: 100,
     branches: 1,
     storageMb: 1024,
-    modules: ['inventory', 'pos', 'crm'],
+    modules: ['inventory', 'pos', 'crm', 'services'],
   },
   BASIC: {
     users: 5,
     products: 1000,
     branches: 1,
     storageMb: 5120,
-    modules: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm'],
+    modules: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'services', 'orders', 'delivery'],
   },
   PRO: {
     users: 20,
     products: 10000,
     branches: 5,
     storageMb: 51200,
-    modules: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'analytics', 'promotions', 'security'],
+    modules: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'promotions', 'security'],
   },
   ENTERPRISE: {
     users: null,
     products: null,
     branches: null,
     storageMb: null,
-    modules: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'delivery', 'analytics', 'promotions', 'security'],
+    modules: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'promotions', 'security'],
   },
 }
 

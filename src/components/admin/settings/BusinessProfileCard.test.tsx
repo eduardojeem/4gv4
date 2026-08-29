@@ -23,8 +23,12 @@ const status: SubscriptionStatusData = {
   organizationName: 'Moda Uno',
   organizationLogoUrl: null,
   modulePlanAvailability: {
-    delivery: ['Enterprise'],
-    repairs: ['Basic', 'Pro', 'Enterprise'],
+    delivery: [{ name: 'Enterprise', isActive: false }],
+    repairs: [
+      { name: 'Basic', isActive: true },
+      { name: 'Pro', isActive: true },
+      { name: 'Enterprise', isActive: false },
+    ],
   },
 }
 
@@ -62,6 +66,6 @@ describe('BusinessProfileCard', () => {
 
     expect(screen.getByText('Plan actual: Pro')).toBeInTheDocument()
     expect(screen.getByText('Incluido en Pro, pero desactivado para esta organización')).toBeInTheDocument()
-    expect(screen.getByText('No incluido en Pro. Disponible en Enterprise')).toBeInTheDocument()
+    expect(screen.getByText('No incluido en Pro. Disponible en Enterprise, pero ese plan no está activo')).toBeInTheDocument()
   })
 })

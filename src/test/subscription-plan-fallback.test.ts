@@ -29,6 +29,13 @@ describe('buildFallbackPlan', () => {
     expect(buildFallbackPlan('ENTERPRISE').limits.products).toBeNull()
   })
 
+  it('keeps operational module entitlements when the plan row is temporarily unavailable', () => {
+    expect(buildFallbackPlan('FREE').modules).toContain('services')
+    expect(buildFallbackPlan('FREE').modules).not.toContain('orders')
+    expect(buildFallbackPlan('BASIC').modules).toEqual(expect.arrayContaining(['services', 'orders', 'delivery']))
+    expect(buildFallbackPlan('PRO').modules).toEqual(expect.arrayContaining(['services', 'orders', 'delivery']))
+  })
+
   it('accepts the aliases the app uses for plan codes', () => {
     expect(buildFallbackPlan('basic').limits.products).toBe(500)
     expect(buildFallbackPlan('starter').limits.products).toBe(500)

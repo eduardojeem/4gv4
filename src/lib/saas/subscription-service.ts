@@ -2,8 +2,10 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
 import type { ModuleTrial } from './plan-features'
 import { buildOrganizationBusinessProfile } from './effective-modules'
+import { deriveTechnicalModules } from './plan-modules'
 import type {
   BusinessVertical,
+  ModulePlanAvailability,
   OperatingModel,
   OrganizationModule,
 } from '@/lib/organization/business-profile'
@@ -124,7 +126,7 @@ const DEFAULT_PLAN: PlanRecord = {
   currency: 'PYG',
   limits: DEFAULT_LIMITS.FREE,
   features: { marketplace: 'basic', analytics: 'limited' },
-  modules: ['inventory', 'pos'],
+  modules: deriveTechnicalModules('FREE', []),
   is_active: true,
 }
 
@@ -172,6 +174,7 @@ export function buildFallbackPlan(planCode: string): PlanRecord {
     ...DEFAULT_PLAN,
     code: planCode,
     limits: DEFAULT_LIMITS[fallbackCode] ?? DEFAULT_LIMITS.FREE,
+    modules: deriveTechnicalModules(fallbackCode, []),
     limits_are_fallback: true,
   })
 }
@@ -651,7 +654,7 @@ export async function getOrganizationPlanInfo(
   code: PlanCode
   name: string
   modules: string[]
-  modulePlanAvailability: Partial<Record<OrganizationModule, string[]>>
+  modulePlanAvailability: Partial<Record<OrganizationModule, ModulePlanAvailability[]>>
   entitledModules: string[]
   enabledModules: OrganizationModule[] | null
   effectiveModules: OrganizationModule[]
@@ -687,15 +690,18 @@ export async function getOrganizationPlanInfo(
   const plan = planRows.find(row => String(row.code).toUpperCase() === code)
 
   const planModules = Array.isArray(plan?.modules) ? plan.modules.map(String) : []
-  const modulePlanAvailability: Partial<Record<OrganizationModule, string[]>> = {}
+  const modulePlanAvailability: Partial<Record<OrganizationModule, ModulePlanAvailability[]>> = {}
   for (const availablePlan of planRows) {
-    if (availablePlan.is_active === false || !Array.isArray(availablePlan.modules)) continue
+    if (!Array.isArray(availablePlan.modules)) continue
     for (const module of availablePlan.modules) {
       if (!ORGANIZATION_MODULES.includes(module as OrganizationModule)) continue
       const key = module as OrganizationModule
       modulePlanAvailability[key] = [
         ...(modulePlanAvailability[key] ?? []),
-        availablePlan.name || String(availablePlan.code),
+        {
+          name: availablePlan.name || String(availablePlan.code),
+          isActive: availablePlan.is_active !== false,
+        },
       ]
     }
   }

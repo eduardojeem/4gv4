@@ -200,15 +200,19 @@ export function BusinessProfileCard() {
               const checked = enabled.includes(module) && isEntitled
               const trial = trialByModule.get(module)
               const availablePlans = profile.modulePlanAvailability?.[module] ?? []
+              const activePlanNames = availablePlans.filter(plan => plan.isActive).map(plan => plan.name)
+              const inactivePlanNames = availablePlans.filter(plan => !plan.isActive).map(plan => plan.name)
               const availabilityText = trial
                 ? `Prueba habilitada: ${trial.daysLeft} ${trial.daysLeft === 1 ? 'día restante' : 'días restantes'}`
                 : isEntitled
                   ? checked
                     ? `Incluido en ${profile.planName} y habilitado`
                     : `Incluido en ${profile.planName}, pero desactivado para esta organización`
-                  : availablePlans.length > 0
-                    ? `No incluido en ${profile.planName}. Disponible en ${availablePlans.join(', ')}`
-                    : `No incluido en el plan ${profile.planName}`
+                  : activePlanNames.length > 0
+                    ? `No incluido en ${profile.planName}. Disponible en ${activePlanNames.join(', ')}`
+                    : inactivePlanNames.length > 0
+                      ? `No incluido en ${profile.planName}. Disponible en ${inactivePlanNames.join(', ')}, pero ese plan no está activo`
+                      : `No incluido en el plan ${profile.planName}; no está asignado a otro plan`
               return (
                 <label
                   key={module}

@@ -36,6 +36,9 @@ import {
   Wrench,
   TicketPercent,
   ShieldCheck,
+  ClipboardList,
+  Handshake,
+  Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCommercialFeatureValue } from '@/lib/saas/commercial-plan-features'
@@ -49,6 +52,9 @@ const FEATURE_LIST = [
   { key: 'users',     label: 'Gestión de usuarios',        icon: Users        },
   { key: 'branches',  label: 'Sucursales múltiples',       icon: Building2    },
   { key: 'repairs',   label: 'Módulo de Reparaciones',     icon: Wrench       },
+  { key: 'services',  label: 'Servicios',                  icon: Handshake    },
+  { key: 'orders',    label: 'Pedidos',                    icon: ClipboardList },
+  { key: 'delivery',  label: 'Entregas',                   icon: Truck        },
   { key: 'crm',       label: 'CRM / Clientes',             icon: Users        },
   { key: 'ecommerce', label: 'Ecommerce & Marketplace',    icon: Globe        },
   { key: 'analytics', label: 'Analytics avanzado',         icon: TrendingUp   },

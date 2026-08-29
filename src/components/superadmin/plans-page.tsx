@@ -29,6 +29,9 @@ import {
   AlertCircle,
   TicketPercent,
   ShieldCheck,
+  ClipboardList,
+  Handshake,
+  Truck,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -434,6 +437,9 @@ const availableFeatures = [
   { key: 'users',     label: 'Gestión de usuarios',         icon: Users        },
   { key: 'branches',  label: 'Sucursales múltiples',        icon: Building2    },
   { key: 'repairs',   label: 'Módulo de Reparaciones',      icon: Wrench       },
+  { key: 'services',  label: 'Servicios',                   icon: Handshake    },
+  { key: 'orders',    label: 'Pedidos',                     icon: ClipboardList },
+  { key: 'delivery',  label: 'Entregas',                    icon: Truck        },
   { key: 'crm',       label: 'CRM / Gestión de clientes',   icon: Users        },
   { key: 'ecommerce', label: 'Ecommerce & Marketplace',     icon: Globe        },
   { key: 'analytics', label: 'Analytics avanzado',          icon: TrendingUp   },

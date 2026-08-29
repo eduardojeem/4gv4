@@ -31,6 +31,10 @@ export const ORGANIZATION_MODULES = [
 export type BusinessVertical = (typeof BUSINESS_VERTICALS)[number]
 export type OperatingModel = (typeof OPERATING_MODELS)[number]
 export type OrganizationModule = (typeof ORGANIZATION_MODULES)[number]
+export type ModulePlanAvailability = {
+  name: string
+  isActive: boolean
+}
 
 export const BusinessProfileInputSchema = z.object({
   businessVertical: z.enum(BUSINESS_VERTICALS),

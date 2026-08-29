@@ -19,6 +19,9 @@ import {
   TrendingUp, Users, Wrench,
   TicketPercent,
   ShieldCheck,
+  ClipboardList,
+  Handshake,
+  Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -72,6 +75,9 @@ const FEATURE_LIST = [
   { label: 'Gestión de usuarios',     icon: Users        },
   { label: 'Sucursales múltiples',    icon: Building2    },
   { label: 'Módulo de Reparaciones',  icon: Wrench       },
+  { label: 'Servicios',               icon: Handshake    },
+  { label: 'Pedidos',                 icon: ClipboardList },
+  { label: 'Entregas',                icon: Truck        },
   { label: 'CRM / Clientes',          icon: Users        },
   { label: 'Ecommerce & Marketplace', icon: Globe        },
   { label: 'Analytics avanzado',      icon: TrendingUp   },
