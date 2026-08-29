@@ -6,14 +6,16 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Search, SlidersHorizontal } from 'lucide-react'
+import type { DashboardSearchType } from '@/lib/navigation/dashboard-navigation'
 
 interface GlobalSearchProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSearch?: (input: { query: string; filters: any }) => Promise<Array<{ title: string; subtitle?: string; href: string }>> | Array<{ title: string; subtitle?: string; href: string }>
+  availableTypes?: readonly DashboardSearchType[]
 }
 
-export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps) {
+export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: GlobalSearchProps) {
   const [query, setQuery] = useState('')
   const [filters, setFilters] = useState<any>({ type: 'todos', status: 'todos' })
   const [results, setResults] = useState<Array<{ title: string; subtitle?: string; href: string }>>([])
@@ -45,6 +47,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps
   }, [query, open, onSearch, filters])
 
   const activeFilters = useMemo(() => Object.entries(filters).filter(([, v]) => !!v), [filters])
+  const showsType = (type: DashboardSearchType) => !availableTypes || availableTypes.includes(type)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -99,14 +102,14 @@ export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps
               Tipo
               <select
                 className="border rounded px-2 py-1 text-sm bg-background"
-                value={filters.type ?? 'todos'}
+                value={showsType(filters.type as DashboardSearchType) ? (filters.type ?? 'todos') : 'todos'}
                 onChange={e => setFilters(f => ({ ...f, type: e.target.value as any }))}
                 aria-label="Filtrar por tipo"
               >
                 <option value="todos">Todos</option>
-                <option value="productos">Productos</option>
-                <option value="clientes">Clientes</option>
-                <option value="reparaciones">Reparaciones</option>
+                {showsType('productos') && <option value="productos">Productos</option>}
+                {showsType('clientes') && <option value="clientes">Clientes</option>}
+                {showsType('reparaciones') && <option value="reparaciones">Reparaciones</option>}
                 <option value="usuarios">Usuarios</option>
                 <option value="seguridad">Seguridad</option>
               </select>

@@ -30,6 +30,7 @@ import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { cn } from '@/lib/utils'
 import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 const GlobalSearch = dynamic(() => import('@/components/ui/global-search').then(mod => mod.GlobalSearch), { 
   ssr: false,
@@ -45,7 +46,8 @@ export const Header = memo(function Header() {
   const [isMacPlatform, setIsMacPlatform] = useState(false)
   const router = useRouter()
   const { toggleSidebar } = useDashboardLayout()
-  const { search } = useDashboardSearch()
+  const { search, availableTypes } = useDashboardSearch()
+  const { effectiveModules } = useSubscriptionStatus()
   const { user, signOut } = useAuth()
 
   // Notifications logic
@@ -272,7 +274,11 @@ export const Header = memo(function Header() {
             onClick={() => setSearchOpen(true)}
           >
             <Search className="mr-2 h-4 w-4" />
-            <span className="truncate">Buscar productos, clientes, reparaciones...</span>
+            <span className="truncate">
+              {effectiveModules.includes('repairs')
+                ? 'Buscar productos, clientes, reparaciones...'
+                : 'Buscar productos y clientes...'}
+            </span>
             <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100 shadow-sm">
               {isMacPlatform ? <><span className="text-xs">⌘</span>K</> : 'Ctrl+K'}
             </kbd>
@@ -284,6 +290,7 @@ export const Header = memo(function Header() {
           open={searchOpen}
           onOpenChange={setSearchOpen}
           onSearch={search}
+          availableTypes={availableTypes}
         />
 
         {/* Right side */}

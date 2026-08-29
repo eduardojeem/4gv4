@@ -1,6 +1,11 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase/client'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import {
+    filterDashboardSearchResultsByModules,
+    getAvailableDashboardSearchTypes,
+} from '@/lib/navigation/dashboard-navigation'
 
 interface SearchResult {
     title: string
@@ -22,6 +27,11 @@ interface SearchFilters {
  */
 export function useDashboardSearch() {
     const router = useRouter()
+    const { effectiveModules } = useSubscriptionStatus()
+    const availableTypes = useMemo(
+        () => getAvailableDashboardSearchTypes(effectiveModules),
+        [effectiveModules],
+    )
 
     const search = useCallback(async (input: { query: string; filters: SearchFilters }): Promise<SearchResult[]> => {
         const { query, filters } = input
@@ -36,7 +46,7 @@ export function useDashboardSearch() {
 
         try {
             // Búsqueda en productos
-            if (filterType === 'todos' || filterType === 'productos') {
+            if (effectiveModules.includes('inventory') && (filterType === 'todos' || filterType === 'productos')) {
                 const { data: products } = await supabase
                     .from('products')
                     .select('id, name, sku, sale_price')
@@ -73,7 +83,7 @@ export function useDashboardSearch() {
             }
 
             // Búsqueda en reparaciones
-            if (filterType === 'todos' || filterType === 'reparaciones') {
+            if (effectiveModules.includes('repairs') && (filterType === 'todos' || filterType === 'reparaciones')) {
                 const { data: repairs } = await supabase
                     .from('repairs')
                     .select(`
@@ -99,8 +109,8 @@ export function useDashboardSearch() {
             console.error('Error en búsqueda global:', error)
         }
 
-        return results
-    }, [])
+        return filterDashboardSearchResultsByModules(results, effectiveModules)
+    }, [effectiveModules])
 
     const navigateToResult = useCallback((href: string) => {
         router.push(href)
@@ -108,6 +118,7 @@ export function useDashboardSearch() {
 
     return {
         search,
-        navigateToResult
+        navigateToResult,
+        availableTypes,
     }
 }
