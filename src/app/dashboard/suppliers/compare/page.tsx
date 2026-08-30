@@ -2,7 +2,6 @@
 import { logger } from '@/lib/logger'
 
 import { useState, useEffect, useMemo } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import {
     Table,
     TableBody,
@@ -49,7 +48,6 @@ export default function PriceComparisonPage() {
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
     const [selectedSupplierId, setSelectedSupplierId] = useState<string>('all')
-    const supabase = createClient()
 
     // Order Modal State
     const [orderModalOpen, setOrderModalOpen] = useState(false)
@@ -60,36 +58,37 @@ export default function PriceComparisonPage() {
         const fetchProducts = async () => {
             try {
                 setLoading(true)
-                // Use products table instead of supplier_products
-                const { data, error } = await supabase
-                    .from('products')
-                    .select('*, suppliers(name)')
-                    .gt('stock_quantity', 0) // Only compare available products
-
-                if (error) throw error
+                const response = await fetch('/api/products?stock_status=in_stock&per_page=200', { cache: 'no-store' })
+                const payload = await response.json().catch(() => null) as {
+                    success?: boolean
+                    error?: string
+                    data?: { products?: Array<Record<string, unknown>> }
+                } | null
+                if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudieron cargar los productos')
+                const data = payload.data?.products ?? []
 
                 // Map to SupplierProduct interface
-                const mappedProducts: SupplierProduct[] = (data || []).map((p: any) => ({
-                    id: p.id,
-                    name: p.name,
-                    suppliersku: p.sku,
-                    internalsku: p.sku,
-                    unitprice: p.sale_price,
+                const mappedProducts: SupplierProduct[] = data.map((p) => ({
+                    id: String(p.id),
+                    name: String(p.name || ''),
+                    suppliersku: String(p.sku || ''),
+                    internalsku: String(p.sku || ''),
+                    unitprice: Number(p.sale_price || 0),
                     currency: 'USD',
-                    supplier_id: p.supplier_id,
-                    suppliers: p.suppliers
+                    supplier_id: String(p.supplier_id || ''),
+                    suppliers: p.suppliers as SupplierProduct['suppliers']
                 }))
 
                 setProducts(mappedProducts)
-            } catch (error: any) {
-                logger.error('Error fetching products for comparison', { error, details: error.message })
+            } catch (error: unknown) {
+                logger.error('Error fetching products for comparison', { error, details: error instanceof Error ? error.message : String(error) })
             } finally {
                 setLoading(false)
             }
         }
 
         fetchProducts()
-    }, [supabase])
+    }, [])
 
     const uniqueSuppliers = useMemo(() => {
         const suppliers = new Map()
