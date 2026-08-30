@@ -10,7 +10,7 @@ export type ActiveOrganizationPayload = {
   role: OrganizationRole
 }
 
-export async function GET(_request?: Request) {
+export async function GET() {
   const supabase = await createClient()
   const { data: { user }, error } = await supabase.auth.getUser()
 
