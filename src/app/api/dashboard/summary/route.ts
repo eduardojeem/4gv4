@@ -83,7 +83,6 @@ export async function GET(request: NextRequest) {
     .from('repairs')
     .select('id,device_brand,device_model,status,created_at,delivered_at,final_cost,estimated_cost,paid_amount')
     .eq('organization_id', organization.id)
-    .or(`created_at.gte.${weekStart.toISOString()},delivered_at.gte.${dayStart.toISOString()},status.eq.listo`)
 
   if (branchId) {
     salesQuery = salesQuery.eq('branch_id', branchId)
