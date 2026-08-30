@@ -200,15 +200,27 @@ export async function getMarketplaceOrganizations(limit = 24): Promise<Marketpla
   })
 }
 
-export async function getMarketplaceProducts(
+type MarketplaceProductFilters = {
+  q?: string
+  categoria?: string
+  subcategoria?: string
+  marca?: string
+}
+
+export type MarketplaceProductsPage = {
+  products: MarketplaceProduct[]
+  total: number
+}
+
+export async function getMarketplaceProductsPage(
   limit = 48,
-  options?: { q?: string; categoria?: string; subcategoria?: string; marca?: string }
-): Promise<MarketplaceProduct[]> {
+  options?: MarketplaceProductFilters
+): Promise<MarketplaceProductsPage> {
   const supabase = createAdminSupabase()
 
   let query = supabase
     .from('products')
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name, parent_id), organizations!inner(id, name, slug)')
+    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name, parent_id), organizations!inner(id, name, slug)', { count: 'exact' })
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
@@ -247,12 +259,12 @@ export async function getMarketplaceProducts(
     }
   }
 
-  const { data, error } = await query
+  const { data, count, error } = await query
     .order('featured', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  if (error || !data) return []
+  if (error || !data) return { products: [], total: 0 }
 
   const rows = (data ?? []) as unknown as ProductRow[]
   const organizationIds = [...new Set(rows.map((product) => product.organization_id))]
@@ -267,7 +279,7 @@ export async function getMarketplaceProducts(
     promotionsByOrganization.set(organizationId, promotions)
   })
 
-  return rows
+  const products = rows
     .map<MarketplaceProduct | null>((product) => {
       const organization = getProductOrganization(product)
       if (!organization) return null
@@ -288,6 +300,19 @@ export async function getMarketplaceProducts(
       }
     })
     .filter((product): product is MarketplaceProduct => product !== null)
+
+  return {
+    products,
+    total: count ?? products.length,
+  }
+}
+
+export async function getMarketplaceProducts(
+  limit = 48,
+  options?: MarketplaceProductFilters
+): Promise<MarketplaceProduct[]> {
+  const page = await getMarketplaceProductsPage(limit, options)
+  return page.products
 }
 
 export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]> {

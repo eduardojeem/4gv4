@@ -3,43 +3,192 @@
 import { useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, Smartphone, Headphones, Laptop, Battery, Cpu, Shield, Package, Camera, Watch, Tablet, Cable, HardDrive } from 'lucide-react'
+import {
+  ArrowRight,
+  Battery,
+  Cable,
+  Camera,
+  Coffee,
+  Cpu,
+  Flame,
+  Gamepad2,
+  HardDrive,
+  Headphones,
+  Home,
+  Laptop,
+  Layers,
+  Package,
+  Shield,
+  Smartphone,
+  Snowflake,
+  Speaker,
+  Tablet,
+  Tv,
+  Utensils,
+  Volume2,
+  WashingMachine,
+  Watch,
+  Wind,
+  Wrench,
+  Sparkles,
+  Grid3X3,
+} from 'lucide-react'
 import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
 
-// ── Category icon + color mapping by keyword ───────────────────────────────
-const CATEGORY_PRESETS: Array<{
+interface CategoryPreset {
   keywords: string[]
   icon: LucideIcon
   gradient: string
-  text: string
-}> = [
-  { keywords: ['celular', 'telefono', 'phone', 'movil', 'iphone', 'samsung', 'android'], icon: Smartphone,   gradient: 'from-blue-500 to-indigo-600',    text: 'text-blue-600 dark:text-blue-400' },
-  { keywords: ['accesorio', 'auricular', 'audifono', 'headphone', 'casco'],              icon: Headphones,   gradient: 'from-violet-500 to-purple-600',  text: 'text-violet-600 dark:text-violet-400' },
-  { keywords: ['laptop', 'notebook', 'computadora', 'pc', 'computacion'],               icon: Laptop,       gradient: 'from-slate-500 to-gray-700',     text: 'text-slate-600 dark:text-slate-400' },
-  { keywords: ['cable', 'adaptador', 'hub', 'usb'],                                    icon: Cable,        gradient: 'from-indigo-500 to-blue-600',    text: 'text-indigo-600 dark:text-indigo-400' },
-  { keywords: ['bateria', 'carga', 'cargador'],                                        icon: Battery,      gradient: 'from-emerald-500 to-teal-600',   text: 'text-emerald-600 dark:text-emerald-400' },
-  { keywords: ['almacenamiento', 'memoria', 'pendrive', 'disco'],                       icon: HardDrive,    gradient: 'from-cyan-600 to-sky-700',       text: 'text-cyan-700 dark:text-cyan-300' },
-  { keywords: ['repuesto', 'pantalla', 'display', 'vidrio', 'modulo'],                  icon: Cpu,          gradient: 'from-orange-500 to-amber-600',   text: 'text-orange-600 dark:text-orange-400' },
-  { keywords: ['funda', 'case', 'protector', 'cover', 'estuche'],                       icon: Shield,       gradient: 'from-rose-500 to-pink-600',      text: 'text-rose-600 dark:text-rose-400' },
-  { keywords: ['camara', 'foto', 'camera', 'lente'],                                    icon: Camera,       gradient: 'from-amber-500 to-yellow-500',   text: 'text-amber-600 dark:text-amber-400' },
-  { keywords: ['smartwatch', 'reloj', 'watch', 'wearable'],                             icon: Watch,        gradient: 'from-cyan-500 to-sky-600',       text: 'text-cyan-600 dark:text-cyan-400' },
-  { keywords: ['tablet', 'ipad'],                                                        icon: Tablet,       gradient: 'from-teal-500 to-emerald-600',   text: 'text-teal-600 dark:text-teal-400' },
-]
-
-const FALLBACK_PRESET = { icon: Package, gradient: 'from-gray-400 to-slate-500', text: 'text-gray-600 dark:text-gray-400' }
-
-function getCategoryPreset(name: string) {
-  const lower = name.toLowerCase()
-  return CATEGORY_PRESETS.find(p => p.keywords.some(k => lower.includes(k))) ?? FALLBACK_PRESET
+  accentBg: string
 }
 
-/**
- * "Shop by category" grid for the public home. Lets visitors jump straight into
- * the catalog filtered by a category. Hidden when the store has no categories.
- */
+const CATEGORY_PRESETS: CategoryPreset[] = [
+  // ── Electrodomésticos & Climatización ──
+  {
+    keywords: ['tv', 'televisor', 'smart tv', 'pantallas', 'proyector'],
+    icon: Tv,
+    gradient: 'from-blue-600 to-indigo-700',
+    accentBg: 'group-hover:border-blue-500/50 group-hover:shadow-blue-500/10',
+  },
+  {
+    keywords: ['heladera', 'refrigerador', 'freezer', 'frio', 'congelador', 'cava'],
+    icon: Snowflake,
+    gradient: 'from-cyan-500 to-blue-600',
+    accentBg: 'group-hover:border-cyan-500/50 group-hover:shadow-cyan-500/10',
+  },
+  {
+    keywords: ['lavarropa', 'lavado', 'secarropa', 'lavavajilla'],
+    icon: WashingMachine,
+    gradient: 'from-sky-500 to-indigo-600',
+    accentBg: 'group-hover:border-sky-500/50 group-hover:shadow-sky-500/10',
+  },
+  {
+    keywords: ['climatizacion', 'aire acondicionado', 'aire', 'split', 'ventilador', 'calefaccion', 'estufa', 'caloventor'],
+    icon: Wind,
+    gradient: 'from-teal-500 to-cyan-700',
+    accentBg: 'group-hover:border-teal-500/50 group-hover:shadow-teal-500/10',
+  },
+  {
+    keywords: ['cocina', 'horno', 'microondas', 'anafe', 'parrilla', 'extractor', 'campana'],
+    icon: Flame,
+    gradient: 'from-amber-500 to-orange-600',
+    accentBg: 'group-hover:border-orange-500/50 group-hover:shadow-orange-500/10',
+  },
+  {
+    keywords: ['pequeño electrodomestico', 'licuadora', 'cafetera', 'tostadora', 'batidora', 'pava', 'aspiradora', 'plancha'],
+    icon: Coffee,
+    gradient: 'from-amber-600 to-rose-600',
+    accentBg: 'group-hover:border-amber-500/50 group-hover:shadow-amber-500/10',
+  },
+  {
+    keywords: ['audio', 'parlante', 'equipo de musica', 'soundbar', 'bafle', 'microfono'],
+    icon: Speaker,
+    gradient: 'from-violet-600 to-purple-700',
+    accentBg: 'group-hover:border-violet-500/50 group-hover:shadow-violet-500/10',
+  },
+
+  // ── Tecnología, Celulares & Computación ──
+  {
+    keywords: ['celular', 'telefono', 'smartphone', 'phone', 'movil', 'iphone', 'samsung', 'xiaomi', 'motorola'],
+    icon: Smartphone,
+    gradient: 'from-blue-500 to-indigo-600',
+    accentBg: 'group-hover:border-blue-500/50 group-hover:shadow-blue-500/10',
+  },
+  {
+    keywords: ['computadora', 'notebook', 'laptop', 'pc', 'computacion', 'all in one'],
+    icon: Laptop,
+    gradient: 'from-slate-700 to-zinc-900',
+    accentBg: 'group-hover:border-slate-500/50 group-hover:shadow-slate-500/10',
+  },
+  {
+    keywords: ['tablet', 'ipad'],
+    icon: Tablet,
+    gradient: 'from-teal-600 to-emerald-700',
+    accentBg: 'group-hover:border-teal-500/50 group-hover:shadow-teal-500/10',
+  },
+  {
+    keywords: ['smartwatch', 'reloj', 'wearable', 'band'],
+    icon: Watch,
+    gradient: 'from-cyan-600 to-sky-700',
+    accentBg: 'group-hover:border-cyan-500/50 group-hover:shadow-cyan-500/10',
+  },
+  {
+    keywords: ['auricular', 'audifono', 'headphone', 'airpods', 'tws', 'casco'],
+    icon: Headphones,
+    gradient: 'from-purple-600 to-pink-600',
+    accentBg: 'group-hover:border-purple-500/50 group-hover:shadow-purple-500/10',
+  },
+  {
+    keywords: ['gamer', 'gaming', 'consola', 'playstation', 'ps5', 'xbox', 'nintendo', 'joystick'],
+    icon: Gamepad2,
+    gradient: 'from-emerald-500 to-green-700',
+    accentBg: 'group-hover:border-emerald-500/50 group-hover:shadow-emerald-500/10',
+  },
+  {
+    keywords: ['cable', 'cargador', 'fuente', 'adaptador', 'hub', 'usb'],
+    icon: Cable,
+    gradient: 'from-indigo-500 to-blue-600',
+    accentBg: 'group-hover:border-indigo-500/50 group-hover:shadow-indigo-500/10',
+  },
+  {
+    keywords: ['bateria', 'powerbank', 'pila'],
+    icon: Battery,
+    gradient: 'from-emerald-600 to-teal-700',
+    accentBg: 'group-hover:border-emerald-500/50 group-hover:shadow-emerald-500/10',
+  },
+  {
+    keywords: ['almacenamiento', 'disco', 'ssd', 'pendrive', 'memoria', 'sd'],
+    icon: HardDrive,
+    gradient: 'from-cyan-700 to-blue-800',
+    accentBg: 'group-hover:border-cyan-500/50 group-hover:shadow-cyan-500/10',
+  },
+  {
+    keywords: ['repuesto', 'pantalla', 'display', 'modulo', 'flex', 'placa'],
+    icon: Cpu,
+    gradient: 'from-orange-500 to-amber-600',
+    accentBg: 'group-hover:border-orange-500/50 group-hover:shadow-orange-500/10',
+  },
+  {
+    keywords: ['funda', 'case', 'protector', 'vidrio templado', 'hidrogel'],
+    icon: Shield,
+    gradient: 'from-rose-500 to-pink-600',
+    accentBg: 'group-hover:border-rose-500/50 group-hover:shadow-rose-500/10',
+  },
+  {
+    keywords: ['camara', 'foto', 'video', 'seguridad', 'dvr'],
+    icon: Camera,
+    gradient: 'from-amber-500 to-yellow-600',
+    accentBg: 'group-hover:border-amber-500/50 group-hover:shadow-amber-500/10',
+  },
+  {
+    keywords: ['herramienta', 'servicio', 'taller', 'ferreteria', 'soldador'],
+    icon: Wrench,
+    gradient: 'from-zinc-700 to-zinc-900',
+    accentBg: 'group-hover:border-zinc-500/50 group-hover:shadow-zinc-500/10',
+  },
+  {
+    keywords: ['hogar', 'mueble', 'bazar', 'deco', 'cocina y comedor'],
+    icon: Home,
+    gradient: 'from-stone-600 to-zinc-800',
+    accentBg: 'group-hover:border-stone-500/50 group-hover:shadow-stone-500/10',
+  },
+]
+
+const FALLBACK_PRESET: CategoryPreset = {
+  keywords: [],
+  icon: Package,
+  gradient: 'from-primary to-primary/80',
+  accentBg: 'group-hover:border-primary/50 group-hover:shadow-primary/10',
+}
+
+function getCategoryPreset(name: string): CategoryPreset {
+  const lower = name.toLowerCase()
+  return CATEGORY_PRESETS.find((p) => p.keywords.some((k) => lower.includes(k))) ?? FALLBACK_PRESET
+}
+
 export function CategoryShowcase() {
   const mounted = useSyncExternalStore(
     () => () => undefined,
@@ -53,12 +202,12 @@ export function CategoryShowcase() {
 
   if (!mounted || isLoading) {
     return (
-      <section className="border-t bg-background py-10 md:py-14">
-        <div className="container">
-          <div className="mb-6 h-9 w-56 animate-pulse rounded-md bg-muted" />
+      <section className="py-12 bg-background border-b border-border/80">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-6 h-8 w-48 animate-pulse rounded-xl bg-muted" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-40 animate-pulse rounded-lg bg-muted" />
+              <div key={i} className="h-32 animate-pulse rounded-2xl bg-muted/60" />
             ))}
           </div>
         </div>
@@ -66,9 +215,6 @@ export function CategoryShowcase() {
     )
   }
 
-  // Solo categorías con productos publicados: una vitrina que lleva a "no hay
-  // productos" es peor que no mostrar la categoría. Si el backend todavía no
-  // envía productCount (respuesta cacheada vieja), no se filtra nada.
   const hasCounts = categories.some((c) => typeof c.productCount === 'number')
   const withProducts = hasCounts
     ? categories.filter((c) => (c.productCount ?? 0) > 0)
@@ -76,98 +222,97 @@ export function CategoryShowcase() {
 
   if (withProducts.length === 0) return null
 
-  // Se priorizan las categorías con más productos en vez del orden alfabético,
-  // que dejaba fuera del top 8 al catálogo principal.
+  // Mostrar hasta 12 categorías si hay variedad (electrodomésticos, tecno, etc.)
   const items = [...withProducts]
     .sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0) || a.name.localeCompare(b.name))
-    .slice(0, 8)
-  const hasMore = withProducts.length > items.length
+    .slice(0, 12)
 
   return (
-    <section className="border-t bg-background py-10 md:py-14">
-      <div className="container">
-        {/* Header */}
-        <div className="mb-6 flex items-end justify-between gap-4 md:mb-8">
+    <section className="py-12 sm:py-16 bg-background border-b border-border/80">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Cabecera de Sección */}
+        <div className="mb-8 flex items-end justify-between gap-4">
           <div>
-            {/* Se evita `text-primary` para textos sobre fondo neutro: el color
-                de marca lo define cada tienda (esta usa #08080d) y en modo
-                oscuro queda ilegible. `foreground` sigue siempre al tema. */}
-            <span className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-              <Package className="h-3.5 w-3.5" />
-              Categorías
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
+              <Grid3X3 className="h-3.5 w-3.5" />
+              Categorías Principales
             </span>
-            <h2 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
-              Encontrá lo que necesitás
+            <h2 className="mt-1.5 text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              Comprá por Categoría
             </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Accedé directamente a los productos de cada categoría.
+            <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+              Encontrá rápidamente lo que buscás navegando en nuestros rubros y líneas de productos.
             </p>
           </div>
+
           <Link
             href={`${tenantPrefix}/productos`}
-            className="hidden shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold text-card-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground sm:inline-flex"
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2 text-xs font-bold text-foreground shadow-xs hover:border-primary/50 hover:bg-muted transition-all group"
           >
-            Ver todo el catálogo
-            <ArrowRight className="h-4 w-4" />
+            <span>Ver catálogo completo</span>
+            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 text-primary" />
           </Link>
         </div>
 
-        {/* Grid */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-4">
+        {/* Grid de Categorías con Cards Modernas y Vibrantes */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 sm:gap-4">
           {items.map((category) => {
             const preset = getCategoryPreset(category.name)
             const Icon = preset.icon
             const count = category.productCount ?? 0
+
             return (
               <Link
                 key={category.id}
                 href={`${tenantPrefix}/productos?category_id=${encodeURIComponent(category.id)}`}
-                aria-label={`Ver productos de ${category.name}${count ? ` (${count})` : ''}`}
-                className="group relative flex min-h-40 flex-col overflow-hidden rounded-lg border border-border/70 bg-card p-4 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:min-h-44 sm:p-5"
+                className={cn(
+                  'group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card p-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-md',
+                  preset.accentBg
+                )}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className={cn('flex h-11 w-11 items-center justify-center rounded-md bg-gradient-to-br text-white shadow-sm sm:h-12 sm:w-12', preset.gradient)}>
-                    <Icon className="h-6 w-6" aria-hidden="true" />
+                <div className="flex items-start justify-between gap-2">
+                  <div
+                    className={cn(
+                      'flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-xs transition-transform duration-200 group-hover:scale-110',
+                      preset.gradient
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
                   </div>
+
                   {count > 0 && (
-                    <span className="rounded-full border bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground shadow-sm">
+                    <span className="rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-bold text-muted-foreground tabular-nums">
                       {count}
                     </span>
                   )}
                 </div>
 
-                <div className="mt-5 min-w-0">
-                  <span className="line-clamp-2 text-sm font-bold leading-snug text-foreground sm:text-base">
+                <div className="mt-4">
+                  <h3 className="text-xs sm:text-sm font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-tight">
                     {category.name}
-                  </span>
-                  {count > 0 && (
-                    <span className="mt-1 block text-xs text-muted-foreground sm:hidden">
-                      {count} {count === 1 ? 'producto' : 'productos'}
-                    </span>
-                  )}
+                  </h3>
+                  <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-muted-foreground group-hover:text-primary transition-colors">
+                    <span>Ver productos</span>
+                    <ArrowRight className="h-3 w-3 opacity-0 -translate-x-1 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
+                  </div>
                 </div>
-
-                <span className={cn('mt-auto flex items-center gap-1.5 pt-4 text-xs font-semibold', preset.text)}>
-                  Explorar
-                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                </span>
               </Link>
             )
           })}
         </div>
 
-        {/* Ver todo — mobile, y en desktop solo si quedaron categorías fuera */}
-        <div className={cn('mt-6 text-center', !hasMore && 'sm:hidden')}>
+        {/* Botón Ver Todo en Mobile */}
+        <div className="mt-6 text-center sm:hidden">
           <Link
             href={`${tenantPrefix}/productos`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-5 py-2.5 text-sm font-semibold text-card-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-bold text-foreground shadow-xs hover:bg-muted"
           >
-            {hasMore
-              ? `Ver las ${withProducts.length} categorías`
-              : 'Ver todo el catálogo'}
-            <ArrowRight className="h-4 w-4" />
+            <span>Ver todo el catálogo</span>
+            <ArrowRight className="h-3.5 w-3.5 text-primary" />
           </Link>
         </div>
+
       </div>
     </section>
   )

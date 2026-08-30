@@ -74,6 +74,7 @@ export function ProductsClient({
   const [sortOpen, setSortOpen] = useState(false)
   const [view, setView] = useState<ViewMode>('grid')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(16)
   const [selected, setSelected] = useState<MarketplaceProduct | null>(null)
   
   const sortRef = useRef<HTMLDivElement>(null)
@@ -271,10 +272,10 @@ export function ProductsClient({
   }, [products, onlyOffers, sort])
 
   // ─── Paginación ─────────────────────────────────────────────────────────────
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage = Math.min(page, totalPages)
-  const pageStart = (safePage - 1) * PAGE_SIZE
-  const paginated = filtered.slice(pageStart, pageStart + PAGE_SIZE)
+  const pageStart = (safePage - 1) * pageSize
+  const paginated = filtered.slice(pageStart, pageStart + pageSize)
 
   function goToPage(p: number) {
     setPage(p)
@@ -309,8 +310,8 @@ export function ProductsClient({
 
   return (
     <>
-      {/* ── TOOLBAR DE BÚSQUEDA Y FILTROS ───────────────────────────────────── */}
-      <div className="mb-8 space-y-4 bg-card p-4 sm:p-5 rounded-2xl border border-border/80 shadow-xs">
+      {/* ── TOOLBAR DE BÚSQUEDA Y FILTROS (STICKY AL HACER SCROLL) ── */}
+      <div className="sticky top-[68px] z-30 mb-8 space-y-4 rounded-2xl border border-border/80 bg-background/95 p-4 sm:p-5 shadow-md backdrop-blur-xl transition-shadow">
         
         {/* Fila 1: Búsqueda + Selector de Marca + Toggle de Vista */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -507,24 +508,26 @@ export function ProductsClient({
 
         {/* ── Subcategorías / Ramas Hijas (si la categoría seleccionada tiene hijos) ── */}
         {initialCategory && childSubcategories.length > 0 && (
-          <div className="pt-2 border-t border-border/60">
-            <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-muted-foreground">
-              <FolderTree className="h-3.5 w-3.5 text-primary" />
-              <span>Subcategorías de {activeCategory?.name ?? 'la categoría'}:</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
+          <div className="pt-1.5 border-t border-border/60">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs">
+              <span className="shrink-0 flex items-center gap-1 font-bold text-muted-foreground mr-1">
+                <FolderTree className="h-3.5 w-3.5 text-primary" />
+                <span>Ramas:</span>
+              </span>
+
               <button
                 type="button"
                 onClick={() => updateUrlParam('subcategoria', '')}
                 className={cn(
-                  'rounded-lg px-2.5 py-1 text-xs font-semibold transition-all',
+                  'shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shadow-2xs',
                   !initialSubcategory
-                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    ? 'bg-primary text-primary-foreground'
                     : 'border border-border/80 bg-background text-muted-foreground hover:text-foreground'
                 )}
               >
-                Todas las subcategorías
+                Todas
               </button>
+
               {childSubcategories.map((sub) => {
                 const isSubActive = initialSubcategory === sub.id
                 return (
@@ -533,9 +536,9 @@ export function ProductsClient({
                     type="button"
                     onClick={() => updateUrlParam('subcategoria', isSubActive ? '' : sub.id)}
                     className={cn(
-                      'flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all border',
+                      'shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all border shadow-2xs',
                       isSubActive
-                        ? 'border-primary bg-primary text-primary-foreground shadow-xs'
+                        ? 'border-primary bg-primary text-primary-foreground'
                         : 'border-border/80 bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
                     )}
                   >
@@ -553,42 +556,26 @@ export function ProductsClient({
           </div>
         )}
 
-        {/* ── Franja de Marcas Rápidas / Sugerencias de Marcas ── */}
+        {/* ── Franja Compacta de Marcas Rápidas ── */}
         {contextBrands.length > 0 && (
-          <div className="pt-2 border-t border-border/60">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          <div className="pt-1.5 border-t border-border/60">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs">
+              <span className="shrink-0 flex items-center gap-1 font-bold text-muted-foreground mr-1">
                 <Tag className="h-3.5 w-3.5 text-primary" />
-                <span>
-                  {initialCategory
-                    ? `Marcas sugeridas en ${activeCategory?.name ?? 'esta categoría'}:`
-                    : 'Marcas disponibles:'}
-                </span>
-              </div>
+                <span>Marcas:</span>
+              </span>
 
-              {initialBrand && (
-                <button
-                  type="button"
-                  onClick={() => updateUrlParam('marca', '')}
-                  className="text-[11px] font-semibold text-primary hover:underline"
-                >
-                  Ver todas las marcas
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-hide">
               <button
                 type="button"
                 onClick={() => updateUrlParam('marca', '')}
                 className={cn(
-                  'shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all shadow-xs',
+                  'shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shadow-2xs',
                   !initialBrand
                     ? 'bg-primary text-primary-foreground'
-                    : 'border border-border/80 bg-background text-muted-foreground hover:text-foreground hover:border-primary/40'
+                    : 'border border-border/80 bg-background text-muted-foreground hover:text-foreground'
                 )}
               >
-                Todas las marcas
+                Todas
               </button>
 
               {contextBrands.map((brand) => {
@@ -599,14 +586,14 @@ export function ProductsClient({
                     type="button"
                     onClick={() => updateUrlParam('marca', isBrandActive ? '' : brand.name)}
                     className={cn(
-                      'group shrink-0 flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all shadow-xs',
+                      'group shrink-0 flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all shadow-2xs',
                       isBrandActive
-                        ? 'border-violet-500 bg-violet-600 text-white ring-2 ring-violet-400/30'
+                        ? 'border-violet-500 bg-violet-600 text-white ring-1 ring-violet-400/40'
                         : 'border-border/80 bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
                     )}
                   >
                     {brand.logo_url ? (
-                      <div className="relative h-4 w-4 shrink-0 overflow-hidden rounded-md bg-white p-0.5 shadow-xs">
+                      <div className="relative h-3.5 w-3.5 shrink-0 overflow-hidden rounded-sm bg-white p-0.5">
                         <Image
                           src={brand.logo_url}
                           alt=""
@@ -617,7 +604,7 @@ export function ProductsClient({
                       </div>
                     ) : (
                       <span className={cn(
-                        'flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-[10px] font-bold uppercase',
+                        'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-[9px] font-bold uppercase',
                         isBrandActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
                       )}>
                         {brand.name.charAt(0)}
@@ -625,7 +612,7 @@ export function ProductsClient({
                     )}
                     <span>{brand.name}</span>
                     <span className={cn(
-                      'rounded-full px-1.5 py-0.2 text-[10px] tabular-nums',
+                      'rounded-full px-1.5 py-px text-[10px] tabular-nums',
                       isBrandActive ? 'bg-white/25 text-white' : 'bg-muted text-muted-foreground'
                     )}>
                       {brand.count}
@@ -854,54 +841,87 @@ export function ProductsClient({
       )}
 
       {/* ── PAGINACIÓN ─────────────────────────────────────────────────────── */}
-      {totalPages > 1 && (
-        <div className="mt-10 flex flex-col items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => goToPage(safePage - 1)}
-              disabled={safePage === 1}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/80 bg-background text-foreground transition-all hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
-              aria-label="Página anterior"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
+      {(totalPages > 1 || filtered.length > 12) && (
+        <div className="mt-10 pt-6 border-t border-border/60 flex flex-col sm:flex-row items-center justify-between gap-4">
+          
+          {/* Resumen de Resultados */}
+          <div className="text-xs text-muted-foreground order-2 sm:order-1 text-center sm:text-left">
+            Mostrando <strong className="text-foreground">{filtered.length > 0 ? pageStart + 1 : 0} - {Math.min(pageStart + pageSize, filtered.length)}</strong> de{' '}
+            <strong className="text-foreground">{filtered.length}</strong> productos
+          </div>
 
-            {pageNumbers().map((n, i) =>
-              n === '…' ? (
-                <span key={`ellipsis-${i}`} className="px-2 text-xs text-muted-foreground">
-                  …
-                </span>
-              ) : (
+          {/* Navegación de Páginas */}
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5 order-1 sm:order-2">
+              <button
+                type="button"
+                onClick={() => goToPage(safePage - 1)}
+                disabled={safePage === 1}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/80 bg-background text-foreground transition-all hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
+                aria-label="Página anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              {pageNumbers().map((n, i) =>
+                n === '…' ? (
+                  <span key={`ellipsis-${i}`} className="px-1 text-xs text-muted-foreground">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => goToPage(n as number)}
+                    className={cn(
+                      'flex h-8 min-w-8 px-2 items-center justify-center rounded-lg border text-xs font-semibold transition-all',
+                      safePage === n
+                        ? 'border-primary bg-primary text-primary-foreground shadow-xs font-bold'
+                        : 'border-border/80 bg-background text-foreground hover:bg-muted'
+                    )}
+                  >
+                    {n}
+                  </button>
+                )
+              )}
+
+              <button
+                type="button"
+                onClick={() => goToPage(safePage + 1)}
+                disabled={safePage === totalPages}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/80 bg-background text-foreground transition-all hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
+                aria-label="Página siguiente"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Selector de Límite por Página */}
+          <div className="flex items-center gap-1.5 order-3">
+            <span className="text-[11px] font-semibold text-muted-foreground">Ver:</span>
+            <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/80">
+              {[12, 16, 24, 48].map((size) => (
                 <button
-                  key={n}
+                  key={size}
                   type="button"
-                  onClick={() => goToPage(n as number)}
+                  onClick={() => {
+                    setPageSize(size)
+                    setPage(1)
+                  }}
                   className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-xl border text-xs font-semibold transition-all',
-                    safePage === n
-                      ? 'border-primary bg-primary text-primary-foreground shadow-xs'
-                      : 'border-border/80 bg-background text-foreground hover:bg-muted'
+                    'px-2 py-0.5 rounded-md text-[11px] font-bold transition-all',
+                    pageSize === size
+                      ? 'bg-background text-foreground shadow-2xs'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  {n}
+                  {size}
                 </button>
-              )
-            )}
-
-            <button
-              type="button"
-              onClick={() => goToPage(safePage + 1)}
-              disabled={safePage === totalPages}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/80 bg-background text-foreground transition-all hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
-              aria-label="Página siguiente"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+              ))}
+            </div>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            Página {safePage} de {totalPages}
-          </p>
+
         </div>
       )}
 

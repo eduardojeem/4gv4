@@ -7,7 +7,7 @@ import { MarketplaceProductCarousel } from '@/components/public/MarketplaceProdu
 import { CategoryCarouselSection } from '@/components/public/CategoryCarouselSection'
 import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { MarketplaceOffersSection, type MarketplaceOfferGroup } from '@/components/public/MarketplaceOffersSection'
-import { getMarketplaceOrganizations, getMarketplaceProducts, getMarketplaceBrands } from '@/lib/public/marketplace'
+import { getMarketplaceOrganizations, getMarketplaceProductsPage, getMarketplaceBrands } from '@/lib/public/marketplace'
 import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsSection'
 import { getPlatformBranding } from '@/lib/platform/branding'
 import { MarketplaceOrgProductGrid } from '@/components/public/MarketplaceOrgProductGrid'
@@ -23,11 +23,12 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic'
 
 export default async function MarketplacePage() {
-  const [organizations, marketplaceProducts, brands] = await Promise.all([
+  const [organizations, marketplacePage, brands] = await Promise.all([
     getMarketplaceOrganizations(),
-    getMarketplaceProducts(48),
+    getMarketplaceProductsPage(48),
     getMarketplaceBrands(30),
   ])
+  const marketplaceProducts = marketplacePage.products
 
   const featuredProducts = marketplaceProducts.filter((product) => product.featured)
   const restProducts = marketplaceProducts.filter((product) => !product.featured)
@@ -57,7 +58,7 @@ export default async function MarketplacePage() {
     }))
     .sort((a, b) => b.products.length - a.products.length)
 
-  const totalProducts = organizations.reduce((s, o) => s + o.products_count, 0)
+  const totalProducts = marketplacePage.total
 
   return (
     <div>

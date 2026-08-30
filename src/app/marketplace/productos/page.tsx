@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { MarketplaceProductCarousel } from '@/components/public/MarketplaceProductCarousel'
 import { ProductsClient } from '@/components/public/ProductsClient'
 import { CategoryCarouselSection } from '@/components/public/CategoryCarouselSection'
-import { getMarketplaceProducts, getMarketplaceCategories, getMarketplaceBrands } from '@/lib/public/marketplace'
+import { getMarketplaceProductsPage, getMarketplaceCategories, getMarketplaceBrands } from '@/lib/public/marketplace'
 
 export const metadata: Metadata = {
   title: 'Productos | Marketplace MiPOS',
@@ -21,12 +21,13 @@ type PageProps = {
 export default async function MarketplaceProductsPage({ searchParams }: PageProps) {
   const { q, categoria, subcategoria, marca } = await searchParams
 
-  const [products, categories, categoryBrands, allBrands] = await Promise.all([
-    getMarketplaceProducts(120, { q, categoria, subcategoria, marca }),
+  const [productPage, categories, categoryBrands, allBrands] = await Promise.all([
+    getMarketplaceProductsPage(120, { q, categoria, subcategoria, marca }),
     getMarketplaceCategories(),
     categoria ? getMarketplaceBrands(30, { categoria }) : Promise.resolve([]),
     getMarketplaceBrands(60),
   ])
+  const products = productPage.products
 
   const brands = categoria && categoryBrands.length > 0 ? categoryBrands : allBrands
   const offerProducts = products.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price)
@@ -71,8 +72,13 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-semibold text-foreground shadow-xs">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  {products.length} producto{products.length !== 1 ? 's' : ''} disponibles
+                  {productPage.total} producto{productPage.total !== 1 ? 's' : ''} encontrado{productPage.total !== 1 ? 's' : ''}
                 </span>
+                {productPage.total > products.length && (
+                  <span className="text-xs text-muted-foreground">
+                    Mostrando {products.length}
+                  </span>
+                )}
                 {offerProducts.length > 0 && (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 shadow-xs dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400">
                     <Tag className="h-3 w-3" />

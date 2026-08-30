@@ -59,6 +59,7 @@ export type ProductFilters = {
   minPrice?: number
   maxPrice?: number
   inStock?: boolean
+  offers?: boolean
   sort?: string
   page?: number
   perPage?: number
@@ -162,7 +163,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     Number.isFinite(rawMaxPrice) && rawMaxPrice > 0 ? rawMaxPrice : MAX_PRICE
 
   // #8 — Validar sort contra lista permitida; valores desconocidos caen a 'name'.
-  const ALLOWED_SORTS = ['name', 'price_asc', 'price_desc', 'newest'] as const
+  const ALLOWED_SORTS = ['name', 'price_asc', 'price_desc', 'newest', 'discount_desc', 'featured', 'default'] as const
   type AllowedSort = typeof ALLOWED_SORTS[number]
   const sort: AllowedSort = (ALLOWED_SORTS as readonly string[]).includes(rawSort)
     ? (rawSort as AllowedSort)
@@ -341,6 +342,10 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
     if (inStock) q = q.gt('stock_quantity', 0)
 
+    if (filters.offers) {
+      q = q.eq('has_offer', true)
+    }
+
     switch (sort) {
       case 'price_asc':
         return q.order(priceCol, { ascending: true })
@@ -348,6 +353,11 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
         return q.order(priceCol, { ascending: false })
       case 'newest':
         return q.order('created_at', { ascending: false })
+      case 'discount_desc':
+        return q.order('has_offer', { ascending: false }).order('created_at', { ascending: false })
+      case 'featured':
+      case 'default':
+        return q.order('featured', { ascending: false }).order('has_offer', { ascending: false }).order('created_at', { ascending: false })
       default:
         return q.order('name', { ascending: true })
     }

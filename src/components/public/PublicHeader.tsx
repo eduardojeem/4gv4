@@ -33,7 +33,7 @@ import { LogOut } from 'lucide-react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname, isTenantPublicSection } from '@/lib/saas/tenant'
 import { AuthModal } from '@/components/public/AuthModal'
-import { isPublicServicesPageAvailable } from '@/lib/website/services'
+import { isPublicServicesPageAvailable, isPublicRepairsAvailable } from '@/lib/website/services'
 import type { WebsiteSettings } from '@/types/website-settings'
 
 export function PublicHeader({ initialSettings = null }: { initialSettings?: WebsiteSettings | null }) {
@@ -148,6 +148,10 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
     effectiveSettings?.company_info?.servicesPageEnabled,
     effectiveSettings?.services
   )
+  const repairsEnabled = isPublicRepairsAvailable(
+    effectiveSettings?.company_info,
+    effectiveSettings?.services
+  )
   const offersEnabled = effectiveSettings?.offers_section?.enabled !== false
 
   const navLinks = [
@@ -155,6 +159,7 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
     { href: withTenantPrefix('/productos'), label: 'Productos', icon: Package },
     ...(offersEnabled ? [{ href: withTenantPrefix('/ofertas'), label: 'Ofertas', icon: Tag }] : []),
     ...(servicesEnabled ? [{ href: withTenantPrefix('/servicios'), label: 'Servicios', icon: Briefcase }] : []),
+    ...(repairsEnabled ? [{ href: withTenantPrefix('/mis-reparaciones'), label: 'Reparaciones', icon: Shield }] : []),
     { href: withTenantPrefix('/track'), label: 'Rastrear pedidos', icon: Truck },
   ]
   const customerLoginHref = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
@@ -296,7 +301,7 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
           {/* Theme toggle - visible on all screens */}
           {mounted && <ThemeToggle />}
 
-          {user?.id && <PublicRepairReadyNotifications userId={user.id} />}
+          {user?.id && repairsEnabled && <PublicRepairReadyNotifications userId={user.id} />}
 
           {/* User menu */}
           {user ? (

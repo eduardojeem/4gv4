@@ -23,6 +23,7 @@ export interface CompanyInfo {
   facebook?: string
   tiktok?: string
   servicesPageEnabled?: boolean
+  repairTrackingEnabled?: boolean
   marketplacePublic?: boolean
   processSectionEnabled?: boolean
   slug?: string
