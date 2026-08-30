@@ -334,30 +334,26 @@ export function useCashMonitor() {
     if (!supabase || !organization?.id) return
 
     try {
-      let query = supabase
+      let sessionsQuery = supabase
+        .from('cash_closures')
+        .select('id')
+        .eq('organization_id', organization.id)
+        .limit(500)
+      sessionsQuery = withBranchFilter(sessionsQuery, selectedBranchId)
+      const { data: tenantSessions, error: sessionsError } = await sessionsQuery
+      if (sessionsError) throw sessionsError
+      const sessionIds = (tenantSessions || []).map((session) => session.id)
+      if (sessionIds.length === 0) {
+        setAlerts([])
+        return
+      }
+
+      const query = supabase
         .from('cash_alerts')
         .select('*')
+        .in('session_id', sessionIds)
         .order('created_at', { ascending: false })
         .limit(50)
-
-      if (selectedBranchId) {
-        const { data: branchSessions, error: sessionsError } = await supabase
-          .from('cash_closures')
-          .select('id')
-          .eq('organization_id', organization.id)
-          .eq('branch_id', selectedBranchId)
-          .limit(500)
-
-        if (sessionsError) throw sessionsError
-
-        const sessionIds = (branchSessions || []).map((session) => session.id)
-        if (sessionIds.length === 0) {
-          setAlerts([])
-          return
-        }
-
-        query = query.in('session_id', sessionIds)
-      }
 
       const { data, error } = await query
 
@@ -375,30 +371,26 @@ export function useCashMonitor() {
     if (!supabase || !organization?.id) return
 
     try {
-      let query = supabase
+      let sessionsQuery = supabase
+        .from('cash_closures')
+        .select('id')
+        .eq('organization_id', organization.id)
+        .limit(500)
+      sessionsQuery = withBranchFilter(sessionsQuery, selectedBranchId)
+      const { data: tenantSessions, error: sessionsError } = await sessionsQuery
+      if (sessionsError) throw sessionsError
+      const sessionIds = (tenantSessions || []).map((session) => session.id)
+      if (sessionIds.length === 0) {
+        setAuditLog([])
+        return
+      }
+
+      const query = supabase
         .from('cash_admin_audit')
         .select('*')
+        .in('session_id', sessionIds)
         .order('created_at', { ascending: false })
         .limit(100)
-
-      if (selectedBranchId) {
-        const { data: branchSessions, error: sessionsError } = await supabase
-          .from('cash_closures')
-          .select('id')
-          .eq('organization_id', organization.id)
-          .eq('branch_id', selectedBranchId)
-          .limit(500)
-
-        if (sessionsError) throw sessionsError
-
-        const sessionIds = (branchSessions || []).map((session) => session.id)
-        if (sessionIds.length === 0) {
-          setAuditLog([])
-          return
-        }
-
-        query = query.in('session_id', sessionIds)
-      }
 
       const { data, error } = await query
 
