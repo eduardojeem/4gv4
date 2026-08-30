@@ -56,7 +56,7 @@ export default async function PublicLayout({
         >
           <SkipToContentLink />
           <PublicHeader initialSettings={settings} />
-          <div className="flex-1 pb-16 md:pb-0">{children}</div>
+          <div className="flex-1 pb-16 lg:pb-0">{children}</div>
           <PublicFooter initialSettings={settings} />
           <StoreMobileBottomNav />
           <WhatsAppFloatButton />

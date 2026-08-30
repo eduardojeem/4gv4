@@ -255,7 +255,7 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Navegacion principal">
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="Navegacion principal">
           {navLinks.map((link) => {
             const active = isActive(link.href)
             const LinkIcon = link.icon
@@ -402,22 +402,22 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
             </>
           )}
 
-          {/* Mobile menu toggle */}
+          {/* Mobile & Tablet menu toggle */}
           <button
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/80 bg-background text-foreground hover:bg-muted transition-colors lg:hidden"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label={mobileMenuOpen ? 'Cerrar menu' : 'Abrir menu'}
             aria-expanded={mobileMenuOpen}
             aria-controls="public-mobile-menu"
           >
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
         </div>
       </div>
 
       {/* ── MODAL / DRAWER LATERAL OFF-CANVAS (SHEET) ESTILO MARKETPLACE ── */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           {/* Backdrop Difuminado */}
           <div
             className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"

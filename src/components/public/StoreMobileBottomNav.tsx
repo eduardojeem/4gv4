@@ -61,8 +61,8 @@ export function StoreMobileBottomNav() {
   return (
     <>
       <nav
-        aria-label="Navegación móvil de la tienda"
-        className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/80 bg-background/95 backdrop-blur-xl px-2 shadow-lg md:hidden"
+        aria-label="Navegación móvil y tablet de la tienda"
+        className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/80 bg-background/95 backdrop-blur-xl px-2 shadow-lg lg:hidden"
       >
         {/* Tab 1-3: Inicio, Productos, Ofertas */}
         {tabs.map((tab) => {
