@@ -6,6 +6,7 @@ import { SkipToContentLink } from '@/components/ui/skip-link'
 import { WhatsAppFloatButton } from '@/components/whatsapp-float-button'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWithDrawer'
+import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await fetchWebsiteSettings()
@@ -55,8 +56,9 @@ export default async function PublicLayout({
         >
           <SkipToContentLink />
           <PublicHeader initialSettings={settings} />
-          <div className="flex-1">{children}</div>
+          <div className="flex-1 pb-16 md:pb-0">{children}</div>
           <PublicFooter initialSettings={settings} />
+          <StoreMobileBottomNav />
           <WhatsAppFloatButton />
         </div>
       </CartProviderWithDrawer>

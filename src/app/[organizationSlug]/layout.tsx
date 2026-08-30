@@ -5,6 +5,7 @@ import { SkipToContentLink } from '@/components/ui/skip-link'
 import { WhatsAppFloatButton } from '@/components/whatsapp-float-button'
 import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWithDrawer'
 import { CustomerLinkBanner } from '@/components/public/CustomerLinkBanner'
+import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 
 export default async function OrganizationPublicLayout({
@@ -22,17 +23,15 @@ export default async function OrganizationPublicLayout({
         <div 
           className="flex min-h-screen flex-col" 
           data-color-scheme={brandColor === 'custom' ? undefined : brandColor}
-          // El color de marca se expone como --brand-primary (no como --primary
-          // directo): globals.css lo mapea y, en modo oscuro, lo aclara. Antes
-          // una marca casi negra quedaba ilegible sobre fondo oscuro.
           data-custom-brand={brandColor === 'custom' && customBrandColor ? '' : undefined}
           style={brandColor === 'custom' && customBrandColor ? { '--brand-primary': customBrandColor } as React.CSSProperties : undefined}
         >
           <SkipToContentLink />
           <PublicHeader initialSettings={settings} />
           <CustomerLinkBanner />
-          <div className="flex-1">{children}</div>
+          <div className="flex-1 pb-16 md:pb-0">{children}</div>
           <PublicFooter initialSettings={settings} />
+          <StoreMobileBottomNav />
           <WhatsAppFloatButton />
         </div>
       </CartProviderWithDrawer>

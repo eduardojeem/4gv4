@@ -10,6 +10,7 @@ import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { PublicRepairReadyNotifications } from '@/components/public/PublicRepairReadyNotifications'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
+import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -414,133 +415,207 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
         </div>
       </div>
 
-      {/* Mobile menu */}
-      <div
+      {/* Mobile Drawer (Slide-Over Off-Canvas con Backdrop Blur) */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs transition-opacity md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
         id="public-mobile-menu"
         ref={mobileMenuRef}
         aria-hidden={!mobileMenuOpen}
         inert={!mobileMenuOpen}
-        className={`overflow-y-auto border-t border-border/50 bg-background transition-all duration-300 ease-in-out md:hidden ${
-          mobileMenuOpen ? 'max-h-[calc(100vh-4rem)] opacity-100' : 'max-h-0 opacity-0 border-transparent'
-        }`}
+        className={cn(
+          'fixed inset-y-0 right-0 z-50 flex w-full max-w-[320px] flex-col justify-between border-l border-border/80 bg-background/98 p-5 shadow-2xl backdrop-blur-xl transition-transform duration-300 ease-in-out md:hidden',
+          mobileMenuOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
+        )}
       >
-        <nav className="container flex flex-col gap-1 py-4" aria-label="Navegacion movil">
-          {navLinks.map((link) => {
-            const active = isActive(link.href)
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                aria-current={active ? 'page' : undefined}
-                className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                  active
-                    ? 'bg-accent text-foreground'
-                    : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                }`}
-              >
-                {link.icon && <link.icon className="h-4 w-4" />}
-                {link.label}
-              </Link>
-            )
-          })}
-
-          <div className="my-3 border-t border-border/50" />
-
-          {/* Mobile CTAs */}
-          <div className="flex flex-col gap-2 px-1">
-            {tenantPrefix && (
-              <Link
-                href="/marketplace"
-                className="flex items-center gap-3 rounded-lg border border-cyan-500/80 bg-cyan-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-cyan-600/20 transition-colors hover:bg-cyan-500"
-              >
-                <Store className="h-4 w-4" />
-                Volver al marketplace
-              </Link>
+        {/* Cabecera del Drawer */}
+        <div className="flex items-center justify-between pb-4 border-b border-border/60">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {companyLogoUrl ? (
+              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-xl border border-border/80 bg-background p-0.5">
+                <Image
+                  src={companyLogoUrl}
+                  alt={companyInfo?.name || 'Logo'}
+                  fill
+                  unoptimized
+                  className="object-contain"
+                />
+              </div>
+            ) : (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-xs">
+                {companyInfo?.name?.slice(0, 2).toUpperCase() || '4G'}
+              </div>
             )}
-            {user ? (
-              <>
+            <span className="truncate text-sm font-bold text-foreground">
+              {companyInfo?.name || 'Tienda Oficial'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Cerrar menú"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Cuerpo del Drawer: Navegación & Cuenta */}
+        <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1 scrollbar-thin scrollbar-thumb-muted">
+          
+          {/* Tarjeta de Usuario / Mi Cuenta */}
+          {user ? (
+            <div className="rounded-2xl border border-border/80 bg-card p-3 shadow-xs">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10 border border-border shadow-xs">
+                  <AvatarImage src={user?.profile?.avatar_url || ''} alt={user?.profile?.name || 'Usuario'} />
+                  <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
+                    {userInitials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-bold text-foreground">
+                    {user?.profile?.name || 'Usuario'}
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {user?.email || 'usuario@email.com'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-1 pt-2 border-t border-border/60">
                 {canAccessDashboard && (
                   <Link
                     href="/dashboard"
-                    className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-primary bg-primary/10 transition-colors hover:bg-primary/20"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
                   >
-                    <LayoutDashboard className="h-4 w-4" />
-                    Ir al Panel
+                    <LayoutDashboard className="h-3.5 w-3.5" />
+                    <span>Panel de Administración</span>
                   </Link>
                 )}
                 <Link
                   href={withTenantPrefix('/perfil')}
-                  className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
-                  <User className="h-4 w-4" />
-                  Mi Perfil
+                  <User className="h-3.5 w-3.5" />
+                  <span>Mi Perfil</span>
                 </Link>
                 <Link
                   href={withTenantPrefix('/perfil/autorizados')}
-                  className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
-                  <Shield className="h-4 w-4" />
-                  Personas Autorizadas
+                  <Shield className="h-3.5 w-3.5" />
+                  <span>Personas Autorizadas</span>
                 </Link>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start rounded-lg text-destructive hover:text-destructive hover:bg-destructive/5"
-                  onClick={() => {
-                    setMobileMenuOpen(false)
-                    setLogoutOpen(true)
-                  }}
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Cerrar Sesion
-                </Button>
-              </>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                className="w-full gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md shadow-cyan-600/20 transition-all hover:from-cyan-500 hover:to-sky-500 active:scale-[0.99]"
-                onClick={() => { setMobileMenuOpen(false); setAuthOpen(true) }}
-              >
-                <User className="h-4 w-4" />
-                Mi cuenta
-              </Button>
-            )}
-          </div>
+              </div>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              className="w-full gap-2 rounded-xl bg-primary font-bold text-xs text-primary-foreground shadow-xs hover:bg-primary/90"
+              onClick={() => {
+                setMobileMenuOpen(false)
+                setAuthOpen(true)
+              }}
+            >
+              <User className="h-4 w-4" />
+              <span>Ingresar / Crear cuenta</span>
+            </Button>
+          )}
 
-          {/* Mobile contact info — only when the org provides it */}
+          {/* Enlaces Principales de Navegación */}
+          <nav className="space-y-1" aria-label="Navegación móvil">
+            {navLinks.map((link) => {
+              const active = isActive(link.href)
+              const Icon = link.icon
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-colors',
+                    active
+                      ? 'bg-primary text-primary-foreground shadow-xs'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {Icon && <Icon className="h-4 w-4 shrink-0" />}
+                    <span className="truncate">{link.label}</span>
+                  </div>
+                  {active && <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />}
+                </Link>
+              )
+            })}
+          </nav>
+
+          {/* Horarios & Teléfono de Atención */}
           {(weekdayHours || phoneDisplay) && (
-          <div className="mt-3 border-t border-border/50 px-4 pt-4">
-            <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+            <div className="rounded-2xl border border-border/60 bg-muted/40 p-3 space-y-2 text-xs">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Atención y Contacto
+              </span>
               {weekdayHours && (
-                <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5" />
+                <div className="flex items-center gap-2 text-muted-foreground text-[11px]">
+                  <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
                   <span>{weekdayHours}</span>
-                </div>
-              )}
-              {companyInfo?.hours?.saturday && (
-                <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>
-                    {'Sab: '}
-                    {companyInfo.hours.saturday.replace(/^(sáb|sab)\s*:\s*/i, '')}
-                  </span>
                 </div>
               )}
               {phoneDisplay && (
                 <a
                   href={`tel:${phoneClean}`}
-                  className="flex items-center gap-2 transition-colors hover:text-foreground"
+                  className="flex items-center gap-2 text-xs font-bold text-foreground hover:text-primary transition-colors"
                 >
-                  <Phone className="h-3.5 w-3.5" />
+                  <Phone className="h-3.5 w-3.5 text-primary shrink-0" />
                   <span>{phoneDisplay}</span>
                 </a>
               )}
             </div>
-          </div>
           )}
-        </nav>
-      </div>
+
+        </div>
+
+        {/* Pie del Drawer */}
+        <div className="pt-3 border-t border-border/60 space-y-2">
+          {tenantPrefix && (
+            <Link
+              href="/marketplace"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center justify-center gap-2 w-full rounded-xl border border-cyan-500/80 bg-cyan-600 px-3 py-2 text-xs font-bold text-white shadow-xs hover:bg-cyan-500 transition-colors"
+            >
+              <Store className="h-3.5 w-3.5" />
+              <span>Volver al Marketplace</span>
+            </Link>
+          )}
+
+          {user && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-center rounded-xl text-xs font-bold text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => {
+                setMobileMenuOpen(false)
+                setLogoutOpen(true)
+              }}
+            >
+              <LogOut className="mr-1.5 h-3.5 w-3.5" />
+              <span>Cerrar Sesión</span>
+            </Button>
+          )}
+        </div>
+      </aside>
 
       {/* Auth modal — login/registro del cliente, scopeado al tenant */}
       <AuthModal
