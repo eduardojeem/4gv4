@@ -54,6 +54,7 @@ import { HelpButton } from '@/components/help/HelpButton'
 import { useAuth } from '@/contexts/auth-context'
 import { useCashRegister } from '@/hooks/useCashRegister'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 // Dynamic imports
 const RecentActivity = dynamic(
@@ -201,10 +202,10 @@ export default function DashboardPage() {
   const [isPending, startTransition] = useTransition()
   const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId } = useBranch()
+  const { organization } = useActiveOrganization()
   const [loadingStats, setLoadingStats] = useState(true)
   const [canRefresh, setCanRefresh] = useState(true)
   const refreshCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [stats, setStats] = useState<KpiStat[]>([
     { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/dashboard/reports' },
     ...(hasOrders ? [{ title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo' as const, href: '/dashboard/orders' }] : []),
@@ -285,7 +286,7 @@ export default function DashboardPage() {
   }, [currentSession])
 
   const fetchDashboardStats = useCallback(async () => {
-    if (!config.supabase.isConfigured) return
+    if (!config.supabase.isConfigured || !organization?.id) return
     setLoadingStats(true)
     try {
       const now = new Date()
@@ -313,7 +314,7 @@ export default function DashboardPage() {
         { data: repairsReadyData },
       ] = await Promise.all([
         withBranchFilter(
-          supabase.from('sales').select('total:total_amount,status,created_at')
+          supabase.from('sales').select('total:total_amount,status,created_at').eq('organization_id', organization.id)
             .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
           selectedBranchId,
         ),
@@ -321,38 +322,39 @@ export default function DashboardPage() {
           supabase
             .from('customer_orders')
             .select('id', { count: 'exact', head: true })
+            .eq('organization_id', organization.id)
             .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED']),
           selectedBranchId,
         ) : Promise.resolve({ count: 0, data: [] }),
-        supabase.from('customers').select('created_at').gte('created_at', startOfWeek.toISOString()),
-        supabase.from('products').select('id, stock_quantity, min_stock, unit_measure, category_id').eq('is_active', true),
-        supabase.from('categories').select('id, name').eq('is_active', true),
+        supabase.from('customers').select('created_at').eq('organization_id', organization.id).gte('created_at', startOfWeek.toISOString()),
+        supabase.from('products').select('id, stock_quantity, min_stock, unit_measure, category_id').eq('organization_id', organization.id).eq('is_active', true),
+        supabase.from('categories').select('id, name').eq('organization_id', organization.id).eq('is_active', true),
         hasRepairs ? withBranchFilter(
           // Fuente única de "en proceso": incluye pausado y excluye listo
           // (listo = reparación terminada, esperando retiro).
-          supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', [...ACTIVE_REPAIR_STATUSES]),
+          supabase.from('repairs').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id).in('status', [...ACTIVE_REPAIR_STATUSES]),
           selectedBranchId,
         ) : Promise.resolve({ count: 0, data: [] }),
         withBranchFilter(
-          supabase.from('sales').select('total_amount,created_at,status')
+          supabase.from('sales').select('total_amount,created_at,status').eq('organization_id', organization.id)
             .gte('created_at', last7Days[0].toISOString()).in('status', [...COMPLETED_SALE_STATUSES]),
           selectedBranchId,
         ),
         // Reparaciones ingresadas hoy
         hasRepairs ? withBranchFilter(
-          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, created_at')
+          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, created_at').eq('organization_id', organization.id)
             .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
           selectedBranchId,
         ) : Promise.resolve({ data: [] }),
         // Reparaciones entregadas hoy
         hasRepairs ? withBranchFilter(
-          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, delivered_at')
+          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, delivered_at').eq('organization_id', organization.id)
             .or(`delivered_at.gte.${startOfDay.toISOString()},status.eq.entregado`),
           selectedBranchId,
         ) : Promise.resolve({ data: [] }),
         // Reparaciones listas para retiro
         hasRepairs ? withBranchFilter(
-          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount')
+          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount').eq('organization_id', organization.id)
             .eq('status', 'listo'),
           selectedBranchId,
         ) : Promise.resolve({ data: [] }),
@@ -512,35 +514,15 @@ export default function DashboardPage() {
     } finally {
       setLoadingStats(false)
     }
-  }, [hasOrders, hasRepairs, hasServices, selectedBranchId, supabase])
+  }, [hasOrders, hasRepairs, hasServices, organization?.id, selectedBranchId, supabase])
 
   useEffect(() => {
-    if (config.supabase.isConfigured) {
+    if (config.supabase.isConfigured && organization?.id) {
       startTransition(() => fetchDashboardStats())
     } else {
       setLoadingStats(false)
     }
-  }, [fetchDashboardStats])
-
-  // Load organization slug for store link
-  useEffect(() => {
-    if (!config.supabase.isConfigured) return
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase
-        .from('organization_members')
-        .select('organizations!inner(slug)')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .limit(1)
-        .maybeSingle()
-        .then(({ data }) => {
-          const org = data?.organizations as { slug?: string } | { slug?: string }[] | null
-          const slug = Array.isArray(org) ? org[0]?.slug : org?.slug
-          if (slug) setOrgSlug(slug)
-        })
-    })
-  }, [supabase])
+  }, [fetchDashboardStats, organization?.id])
 
   const quickActions = [
     { title: 'Nueva venta', icon: ShoppingCart, href: '/dashboard/pos', tone: 'indigo' as const },
@@ -549,7 +531,7 @@ export default function DashboardPage() {
     { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers?new=true', tone: 'violet' as const },
     { title: 'Nuevo producto', icon: Package, href: '/dashboard/products?new=true', tone: 'emerald' as const },
     { title: 'Ver reportes', icon: BarChart3, href: '/dashboard/reports', tone: 'cyan' as const },
-    { title: 'Mi tienda pública', icon: Store, href: orgSlug ? `/${orgSlug}/inicio` : '/marketplace/empresas', tone: 'emerald' as const },
+    { title: 'Mi tienda pública', icon: Store, href: organization?.slug ? `/${organization.slug}/inicio` : '/marketplace/empresas', tone: 'emerald' as const },
     { title: 'Marketplace', icon: Globe, href: '/marketplace', tone: 'cyan' as const },
   ]
 
