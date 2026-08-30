@@ -9,8 +9,13 @@ export function isValidGoogleMapsUrl(value?: string | null): boolean {
 
     const hostname = url.hostname.toLowerCase()
     if (hostname === 'maps.app.goo.gl') return true
+    if (hostname === 'goo.gl' && url.pathname.startsWith('/maps')) return true
 
-    return GOOGLE_DOMAIN_PATTERN.test(hostname) && url.pathname.startsWith('/maps')
+    if (GOOGLE_DOMAIN_PATTERN.test(hostname)) {
+      return url.pathname.startsWith('/maps') || hostname.startsWith('maps.')
+    }
+
+    return false
   } catch {
     return false
   }

@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(resolve(process.cwd(), 'src/app/api/dashboard/summary/route.ts'), 'utf8')
+const dashboardPage = readFileSync(resolve(process.cwd(), 'src/app/dashboard/page.tsx'), 'utf8')
 
 describe('dashboard summary tenant contract', () => {
   it('scopes every operational source to the resolved organization', () => {
@@ -22,5 +23,10 @@ describe('dashboard summary tenant contract', () => {
 
   it('never accepts an organization id from the request', () => {
     expect(source).not.toMatch(/searchParams\.get\(['"]organizationId['"]\)/)
+  })
+
+  it('builds public store links from the validated organization context', () => {
+    expect(dashboardPage).not.toContain('orgSlug')
+    expect(dashboardPage).toContain('organization?.slug')
   })
 })

@@ -12,7 +12,6 @@ import { formatPrice, cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
 import { resolvePublicUnitPrice } from '@/lib/orders/public-pricing'
 import { usePublicCart } from '@/hooks/use-public-cart'
-import { useCartDrawer } from '@/contexts/cart-drawer-context'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -46,7 +45,6 @@ export function ProductCard(props: ProductCardProps) {
       ? productBranches.map((branch) => branch.name).join(', ')
       : undefined
   const { addProduct } = usePublicCart()
-  const { open: openCartDrawer } = useCartDrawer()
   const { settings: websiteSettings, isLoading: isLoadingWebsiteSettings } = useWebsiteSettings()
   const pathname = usePathname()
   const [imageError, setImageError] = useState(false)
@@ -169,7 +167,6 @@ export function ProductCard(props: ProductCardProps) {
     if (closeModal) setQuickViewOpen(false)
     setJustAdded(true)
     setTimeout(() => setJustAdded(false), 1500)
-    openCartDrawer()
   }
 
   return (

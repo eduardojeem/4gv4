@@ -16,6 +16,7 @@ import {
   toOnboardingAdminSettings,
 } from '@/lib/organization/admin-settings'
 import { BusinessProfileInputSchema, getSuggestedModules } from '@/lib/organization/business-profile'
+import { getWebsiteDefaultsForVertical } from '@/lib/website/default-settings'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 type OnboardingMetadata = Record<string, unknown> & {
@@ -146,6 +147,13 @@ export async function POST(request: Request) {
     phone: input.phone,
     email: input.email || '',
   }
+
+  const verticalDefaults = getWebsiteDefaultsForVertical(
+    input.businessVertical,
+    input.operatingModel,
+    input.businessType
+  )
+
   const websiteCompanyInfo = {
     name: input.displayName,
     phone: input.phone,
@@ -167,6 +175,10 @@ export async function POST(request: Request) {
     instagram: input.instagram || '',
     facebook: input.facebook || '',
     tiktok: input.tiktok || '',
+    servicesPageEnabled: verticalDefaults.company_info?.servicesPageEnabled ?? false,
+    repairTrackingEnabled: verticalDefaults.company_info?.repairTrackingEnabled ?? false,
+    processSectionEnabled: verticalDefaults.company_info?.processSectionEnabled ?? true,
+    marketplacePublic: true,
   }
 
   const { data: completion, error: updateError } = await admin.rpc(
@@ -187,6 +199,23 @@ export async function POST(request: Request) {
   if (updateError) {
     logger.error('Failed to complete onboarding', { error: updateError.message, organizationId })
     return NextResponse.json({ error: 'No se pudo finalizar el onboarding.' }, { status: 500 })
+  }
+
+  // Populate vertical-tailored website defaults (hero, stats, process)
+  const initialWebsiteRows = [
+    { key: 'hero_content', value: verticalDefaults.hero_content },
+    { key: 'hero_stats', value: verticalDefaults.hero_stats },
+    { key: 'process_steps', value: verticalDefaults.process_steps },
+  ].filter((row) => row.value !== undefined)
+
+  for (const row of initialWebsiteRows) {
+    await admin.from('website_settings').upsert({
+      organization_id: organizationId,
+      key: row.key,
+      value: row.value,
+      updated_by: user.id,
+      updated_at: now,
+    }, { onConflict: 'organization_id,key' })
   }
 
   const planInfo = await getOrganizationPlanInfo(organizationId)

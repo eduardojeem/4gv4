@@ -127,7 +127,7 @@ export function ProductModal({
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false)
   const [isBrandModalOpen, setIsBrandModalOpen] = useState(false)
-  
+
   const { createCategory } = useCategories()
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
@@ -188,7 +188,7 @@ export function ProductModal({
     isSubmitting: isSubmitting || isUploadingImages,
     isValid,
   })
-  
+
   // Watch values for calculations
   const purchasePrice = watch('purchase_price')
   const salePrice = watch('sale_price')
@@ -397,7 +397,7 @@ export function ProductModal({
       global_category_id: categoryData.global_category_id,
       is_active: categoryData.is_active,
     }
-    
+
     const result = await createCategory(payload)
     if (result.success && result.data) {
        const newCategory = result.data as unknown as Category
@@ -451,7 +451,7 @@ export function ProductModal({
 
   const cleanProductData = (data: ProductFormValues) => {
     const rest = { ...data };
-    
+
     // Si no hay producto (creación), no enviamos ID
     if (!product) {
        delete (rest as any).id
@@ -463,9 +463,9 @@ export function ProductModal({
       const found = localBrands.find(b => b.id === data.brand_id)
       if (found) brandName = found.name
     }
-    
+
     const images = Array.isArray(data.images) ? data.images.filter(Boolean) : []
-    
+
     return {
       ...rest,
       category_id: data.category_id || null,
@@ -527,7 +527,7 @@ export function ProductModal({
 
       console.log('Sending product data:', cleanedData)
       await onSave(cleanedData as unknown as ProductFormData)
-      
+
       toast.success(
         product ? 'Producto actualizado correctamente' : 'Producto creado correctamente',
         {
@@ -601,15 +601,15 @@ export function ProductModal({
 
   const handleUploadFiles = async (files: File[]): Promise<string[]> => {
     const uploadedUrls: string[] = []
-    
+
     for (const file of files) {
       try {
         const fileExt = file.name.split('.').pop() || 'jpg'
         const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`
         const filePath = `products/${fileName}`
-        
+
         const result = await uploadFile('product-images', filePath, file)
-        
+
         if (result.success && result.url) {
           uploadedUrls.push(result.url)
           newlyUploadedImages.current.set(result.url, filePath)
@@ -622,7 +622,7 @@ export function ProductModal({
         toast.error('Error al subir imagen')
       }
     }
-    
+
     return uploadedUrls
   }
 
@@ -656,26 +656,71 @@ export function ProductModal({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit, onInvalidSubmit)} className="flex flex-col flex-1 overflow-hidden h-full">
             {/* Header */}
-            <div className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-4 md:px-8 md:py-6 shrink-0 relative overflow-hidden">
-              <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-blue-500/5 dark:bg-blue-400/5 rounded-full blur-3xl pointer-events-none" />
-              <div className="flex items-center justify-between relative">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-xl">
-                    <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <div className={`shrink-0 relative overflow-hidden ${product
+              ? 'border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-slate-900 dark:to-blue-950/20'
+              : 'border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-blue-50 via-indigo-50/50 to-purple-50/30 dark:from-blue-950/30 dark:via-indigo-950/20 dark:to-slate-900'
+            }`}>
+              {/* Decorative blur blob */}
+              <div className="absolute top-0 right-0 -mr-16 -mt-16 w-56 h-56 bg-blue-500/8 dark:bg-blue-400/8 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute bottom-0 left-1/3 w-40 h-24 bg-indigo-400/6 dark:bg-indigo-400/6 rounded-full blur-2xl pointer-events-none" />
+
+              <div className="px-4 py-4 md:px-8 md:py-5 relative">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3.5">
+                    {/* Icon badge */}
+                    <div className={`relative flex-shrink-0 p-2.5 rounded-xl shadow-sm border ${product
+                      ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                      : 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-400/30 shadow-blue-500/25'
+                    }`}>
+                      <Package className={`h-5 w-5 ${product ? 'text-blue-600 dark:text-blue-400' : 'text-white'}`} />
+                      {!product && (
+                        <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900">
+                          <span className="text-[8px] font-bold text-white">+</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <DialogTitle className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                        {product ? 'Editar Producto' : 'Nuevo Producto'}
+                      </DialogTitle>
+                      <DialogDescription className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                        {product
+                          ? <span>SKU: <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">{product.sku}</span></span>
+                          : 'Completá la información básica para dar de alta el producto'
+                        }
+                      </DialogDescription>
+                    </div>
                   </div>
-                  <div>
-                    <DialogTitle className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                      {product ? 'Editar Producto' : 'Nuevo Producto'}
-                    </DialogTitle>
-                    <DialogDescription className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      {product ? `SKU: ${product.sku}` : 'Completa la información del nuevo producto'}
-                    </DialogDescription>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {product && (
+                      <Badge variant={product.is_active ? 'default' : 'secondary'} className="px-3 py-1 shadow-sm">
+                        {product.is_active ? '● Activo' : '○ Inactivo'}
+                      </Badge>
+                    )}
+                    {!product && (
+                      <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800 px-2.5 py-1 text-xs font-semibold">
+                        ✦ Nuevo
+                      </Badge>
+                    )}
                   </div>
                 </div>
-                {product && (
-                  <Badge variant={product.is_active ? 'default' : 'secondary'} className="px-3 py-1 shadow-sm">
-                    {product.is_active ? 'Activo' : 'Inactivo'}
-                  </Badge>
+
+                {/* Tips rápidos para producto nuevo */}
+                {!product && (
+                  <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {[
+                      { icon: '🔑', tip: 'SKU, Nombre, Categoría y Precio de venta son obligatorios' },
+                      { icon: '💡', tip: 'Podés agregar imágenes, variantes y configurar cuotas después' },
+                      { icon: '👁️', tip: 'El producto aparecerá en tu tienda pública si está "Activo" y "Público"' },
+                    ].map(({ icon, tip }) => (
+                      <div key={tip} className="flex items-start gap-2 rounded-lg bg-white/70 dark:bg-slate-800/50 border border-blue-100/80 dark:border-blue-900/40 px-3 py-2">
+                        <span className="text-base leading-none mt-0.5 flex-shrink-0">{icon}</span>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">{tip}</p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
@@ -804,6 +849,19 @@ export function ProductModal({
 
                 {/* Basic Info */}
                 <TabsContent value="basic" className="space-y-6 py-4">
+                  {/* Tip contextual - Pestaña Básica */}
+                  <div className="flex items-start gap-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/40 px-4 py-3">
+                    <span className="text-xl flex-shrink-0 mt-0.5">📋</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">Información Básica</p>
+                      <p className="text-[11px] text-blue-700/80 dark:text-blue-400/80 leading-relaxed">
+                        El <strong>SKU</strong> es el código único que identifica al producto en tu sistema.
+                        Usá el botón <span className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-white/80 dark:bg-slate-800/80 rounded border border-blue-200 dark:border-blue-700 text-[10px] font-mono">✦ auto</span> para generar uno automáticamente.
+                        La <strong>Categoría</strong> ayuda a organizar tu catálogo y mejora la búsqueda en tu tienda.
+                      </p>
+                    </div>
+                  </div>
+
                   <Card className="border-0 shadow-none bg-transparent md:border md:border-blue-100 md:dark:border-blue-900/50 md:bg-gradient-to-br md:from-white md:to-blue-50/30 md:dark:from-slate-800 md:dark:to-slate-800/50">
                     <CardHeader className="pb-3 px-0 md:px-6">
                       <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-gray-100">
@@ -860,14 +918,14 @@ export function ProductModal({
                             <FormItem>
                               <FormLabel>Marca <FieldRequirement /></FormLabel>
                               <div className="flex gap-2">
-                                <Select 
+                                <Select
                                   onValueChange={(value) => {
                                     field.onChange(value)
                                     const selectedBrand = localBrands.find(b => b.id === value)
                                     if (selectedBrand) {
                                       setValue('brand', selectedBrand.name, { shouldDirty: true })
                                     }
-                                  }} 
+                                  }}
                                   value={field.value || ""}
                                 >
                                   <FormControl>
@@ -936,9 +994,9 @@ export function ProductModal({
                                 <FormLabel>Código de Barras <FieldRequirement /></FormLabel>
                                 <div className="flex gap-2">
                                   <FormControl>
-                                    <Input 
-                                      placeholder="Ej: 7501234567890" 
-                                      {...field} 
+                                    <Input
+                                      placeholder="Ej: 7501234567890 (o escaneá con pistola USB)"
+                                      {...field}
                                       value={field.value || ""}
                                     />
                                   </FormControl>
@@ -953,6 +1011,9 @@ export function ProductModal({
                                     <Sparkles className="h-4 w-4" />
                                   </Button>
                                 </div>
+                                <FormDescription className="text-[11px]">
+                                  💡 Si el producto físico ya tiene código de barras, podés posicionar el cursor aquí y <strong>disparar con tu lector láser</strong>.
+                                </FormDescription>
                                 <FormMessage />
                                 {field.value && !errors.barcode && (
                                   <FormDescription className="text-green-600 dark:text-green-400">
@@ -970,13 +1031,39 @@ export function ProductModal({
                         name="description"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Descripción <FieldRequirement /></FormLabel>
+                            <div className="flex items-center justify-between flex-wrap gap-1">
+                              <FormLabel>Descripción <FieldRequirement /></FormLabel>
+                              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <span className="font-semibold text-primary">Plantillas rápidas:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setValue('description', '• Características principales:\n• Material / Composición:\n• Medidas / Dimensiones:\n• Incluye en el paquete:\n• Recomendaciones de uso:', { shouldDirty: true })}
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                  📦 General
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setValue('description', '• Confección y tela:\n• Calce y estilo:\n• Cuidados: Lavar con agua fría, no planchar sobre estampas.\n• Talles disponibles:', { shouldDirty: true })}
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                  👕 Ropa
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setValue('description', '• Marca y Modelo:\n• Especificaciones técnicas:\n• Conectividad / Puertos:\n• Batería / Autonomía:\n• Contenido de la caja:', { shouldDirty: true })}
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                  📱 Tecnología
+                                </button>
+                              </div>
+                            </div>
                             <FormControl>
-                              <Textarea 
-                                placeholder="Descripción detallada del producto..." 
-                                className="resize-none" 
+                              <Textarea
+                                placeholder="Descripción detallada del producto..."
+                                className="resize-none"
                                 rows={6}
-                                {...field} 
+                                {...field}
                                 value={field.value || ""}
                               />
                             </FormControl>
@@ -1126,6 +1213,20 @@ export function ProductModal({
 
                 {/* Pricing */}
                 <TabsContent value="pricing" className="space-y-6 py-4">
+                  {/* Tip contextual - Pestaña Precios */}
+                  <div className="flex items-start gap-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 px-4 py-3">
+                    <span className="text-xl flex-shrink-0 mt-0.5">💰</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 mb-1">Precios y Ofertas</p>
+                      <ul className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 leading-relaxed space-y-0.5">
+                        <li>• <strong>Precio de venta</strong>: el que ven tus clientes en la tienda. Es obligatorio.</li>
+                        <li>• <strong>Precio mayorista</strong>: se aplica automáticamente a clientes mayoristas.</li>
+                        <li>• <strong>Oferta</strong>: activala y ponele un precio especial por tiempo limitado.</li>
+                        <li>• <strong>Cuotas</strong>: mostrá planes de financiación en la ficha del producto.</li>
+                      </ul>
+                    </div>
+                  </div>
+
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-3">
                       <div className="h-8 w-1 bg-blue-500 rounded-full" />
@@ -1167,9 +1268,9 @@ export function ProductModal({
                               Precio de Venta al Público <FieldRequirement required />
                             </FormLabel>
                             <FormControl>
-                              <Input 
-                                type="number" 
-                                step="0.01" 
+                              <Input
+                                type="number"
+                                step="0.01"
                                 className="text-lg font-semibold"
                                 {...field}
                               />
@@ -1181,6 +1282,36 @@ export function ProductModal({
                                 <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                                   {calculateMarginValue()}%
                                 </Badge>
+                              </div>
+                            )}
+                            {/* ── Sugerencias rápidas de precio de venta ── */}
+                            {canViewCost && Number(purchasePrice) > 0 && (
+                              <div className="mt-2 space-y-1.5">
+                                <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                  💡 Sugerencias sobre el costo:
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {[10, 20, 30, 40, 50, 70, 100].map(pct => {
+                                    const suggested = Number((Number(purchasePrice) * (1 + pct / 100)).toFixed(2))
+                                    const isActive = Math.abs(Number(salePrice) - suggested) < 0.01
+                                    return (
+                                      <button
+                                        key={pct}
+                                        type="button"
+                                        onClick={() => setValue('sale_price', suggested, { shouldDirty: true, shouldValidate: true })}
+                                        className={`inline-flex flex-col items-center rounded-lg border px-2 py-1 text-[10px] font-semibold transition-all shadow-2xs select-none ${
+                                          isActive
+                                            ? 'border-green-500 bg-green-500 text-white shadow-green-200 dark:shadow-none'
+                                            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:border-green-400 hover:text-green-700 dark:hover:border-green-600'
+                                        }`}
+                                        title={`+${pct}% sobre el costo`}
+                                      >
+                                        <span className="font-bold">+{pct}%</span>
+                                        <span className="text-[9px] opacity-80">{formatCurrency(suggested)}</span>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
                               </div>
                             )}
                           </FormItem>
@@ -1211,8 +1342,8 @@ export function ProductModal({
                             render={({ field }) => (
                               <FormItem>
                                 <FormControl>
-                                  <Input 
-                                    type="number" 
+                                  <Input
+                                    type="number"
                                     step="0.01"
                                     className="text-lg"
                                     {...field}
@@ -1220,6 +1351,39 @@ export function ProductModal({
                                   />
                                 </FormControl>
                                 <FormMessage />
+                                {/* ── Sugerencias precio mayorista ── */}
+                                {Number(salePrice) > 0 && (
+                                  <div className="space-y-1.5">
+                                    <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+                                      💡 Descuento sobre precio público:
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {[5, 10, 15, 20, 25, 30].map(disc => {
+                                        const suggested = Number((Number(salePrice) * (1 - disc / 100)).toFixed(2))
+                                        const isActive = Math.abs(Number(wholesalePrice) - suggested) < 0.01
+                                        return (
+                                          <button
+                                            key={disc}
+                                            type="button"
+                                            onClick={() => setValue('wholesale_price', suggested, { shouldDirty: true, shouldValidate: true })}
+                                            className={`inline-flex flex-col items-center rounded-lg border px-2 py-1 text-[10px] font-semibold transition-all shadow-2xs select-none ${
+                                              isActive
+                                                ? 'border-blue-500 bg-blue-500 text-white'
+                                                : 'border-blue-100 dark:border-blue-800/60 bg-blue-50/50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                                            }`}
+                                            title={`${disc}% descuento sobre precio público`}
+                                          >
+                                            <span className="font-bold">-{disc}%</span>
+                                            <span className="text-[9px] opacity-80">{formatCurrency(suggested)}</span>
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                    <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70 leading-snug">
+                                      El precio mayorista se aplica automáticamente a clientes con perfil mayorista. Si no lo cargás, estos clientes ven el precio público normal.
+                                    </p>
+                                  </div>
+                                )}
                               </FormItem>
                             )}
                           />
@@ -1262,8 +1426,8 @@ export function ProductModal({
                             render={({ field }) => (
                               <FormItem>
                                 <FormControl>
-                                  <Input 
-                                    type="number" 
+                                  <Input
+                                    type="number"
                                     step="0.01"
                                     disabled={!hasOffer}
                                     className={`text-lg ${!hasOffer ? 'opacity-50 cursor-not-allowed' : 'font-semibold text-red-600'}`}
@@ -1272,6 +1436,54 @@ export function ProductModal({
                                   />
                                 </FormControl>
                                 <FormMessage />
+
+                                {/* ── Sugerencias rápidas de precio de oferta ── */}
+                                {hasOffer && Number(salePrice) > 0 && (
+                                  <div className="space-y-1.5">
+                                    <p className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wide">
+                                      🔥 Descuento sobre precio público:
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {[5, 10, 15, 20, 25, 30, 40, 50].map(disc => {
+                                        const suggested = Number((Number(salePrice) * (1 - disc / 100)).toFixed(2))
+                                        const isActive = Math.abs(Number(offerPrice) - suggested) < 0.01
+                                        return (
+                                          <button
+                                            key={disc}
+                                            type="button"
+                                            onClick={() => setValue('offer_price', suggested, { shouldDirty: true, shouldValidate: true })}
+                                            className={`inline-flex flex-col items-center rounded-lg border px-2 py-1 text-[10px] font-semibold transition-all shadow-2xs select-none ${
+                                              isActive
+                                                ? 'border-rose-500 bg-rose-500 text-white'
+                                                : 'border-rose-200 dark:border-rose-800/60 bg-rose-50/60 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 hover:border-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30'
+                                            }`}
+                                            title={`${disc}% descuento sobre precio público`}
+                                          >
+                                            <span className="font-bold">-{disc}%</span>
+                                            <span className="text-[9px] opacity-80">{formatCurrency(suggested)}</span>
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* ── Letra chica: Cómo funciona el precio de oferta ── */}
+                                <div className={`mt-2 rounded-lg border px-3 py-2 transition-all ${hasOffer
+                                  ? 'border-rose-200/80 bg-rose-50/50 dark:border-rose-800/40 dark:bg-rose-950/20'
+                                  : 'border-gray-200/60 bg-gray-50/50 dark:border-gray-700/40 dark:bg-gray-900/20'
+                                }`}>
+                                  <p className={`text-[10px] font-semibold mb-1 ${hasOffer ? 'text-rose-700 dark:text-rose-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    ℹ️ Cómo funciona el precio de oferta:
+                                  </p>
+                                  <ul className={`text-[10px] leading-relaxed space-y-0.5 ${hasOffer ? 'text-rose-700/80 dark:text-rose-400/80' : 'text-gray-500/80 dark:text-gray-500/80'}`}>
+                                    <li>• Al activar la oferta, el <strong>precio de oferta reemplaza al precio público</strong> en tu tienda online.</li>
+                                    <li>• El precio público original se muestra <strong>tachado</strong> junto al precio de oferta para que el cliente vea el ahorro.</li>
+                                    <li>• En el POS y reportes internos se usa siempre el precio de oferta mientras esté activo.</li>
+                                    <li>• Si activás cuotas, las cuotas se calculan sobre el <strong>precio de oferta</strong> (no sobre el precio público).</li>
+                                    <li>• Para desactivar la oferta, simplemente apagá el switch. El precio de oferta queda guardado para cuando quieras reactivarlo.</li>
+                                  </ul>
+                                </div>
                               </FormItem>
                             )}
                           />
@@ -1806,6 +2018,18 @@ export function ProductModal({
 
                 {/* Inventory */}
                 <TabsContent value="inventory" className="space-y-4">
+                  {/* Tip contextual - Inventario */}
+                  <div className="flex items-start gap-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40 px-4 py-3">
+                    <span className="text-xl flex-shrink-0 mt-0.5">📦</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">Control de Inventario</p>
+                      <ul className="text-[11px] text-amber-700/80 dark:text-amber-400/80 leading-relaxed space-y-0.5">
+                        <li>• <strong>Stock actual</strong>: cuántas unidades tenés disponibles hoy.</li>
+                        <li>• <strong>Stock mínimo</strong>: recibirás alertas cuando baje de este valor.</li>
+                        <li>• <strong>Stock máximo</strong>: referencia para reordenar stock (opcional).</li>
+                      </ul>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
                       <CardHeader className="pb-3 px-0 md:px-6">
@@ -1821,8 +2045,8 @@ export function ProductModal({
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                <Input 
-                                  type="number" 
+                                <Input
+                                  type="number"
                                   {...field}
                                   value={field.value ?? ""}
                                 />
@@ -1848,8 +2072,8 @@ export function ProductModal({
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                <Input 
-                                  type="number" 
+                                <Input
+                                  type="number"
                                   {...field}
                                   value={field.value ?? ""}
                                 />
@@ -1878,8 +2102,8 @@ export function ProductModal({
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                <Input 
-                                  type="number" 
+                                <Input
+                                  type="number"
                                   {...field}
                                     value={field.value ?? ""}
                                   />
@@ -1897,6 +2121,17 @@ export function ProductModal({
                 </TabsContent>
 
                 <TabsContent value="variants" className="space-y-5 py-4">
+                  {/* Tip contextual - Variantes */}
+                  <div className="flex items-start gap-3 rounded-xl bg-violet-50/80 dark:bg-violet-950/30 border border-violet-200/60 dark:border-violet-800/40 px-4 py-3">
+                    <span className="text-xl flex-shrink-0 mt-0.5">🎨</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-violet-800 dark:text-violet-300 mb-1">Variantes del Producto</p>
+                      <p className="text-[11px] text-violet-700/80 dark:text-violet-400/80 leading-relaxed">
+                        Usá variantes para manejar <strong>colores, talles, tamaños</strong> u otras opciones sin crear un producto separado por cada una.
+                        Cada variante tiene su propio stock, precio y SKU derivado. Activá la opción solo si el producto tiene opciones distintas.
+                      </p>
+                    </div>
+                  </div>
                   <ProductVariantsEditor
                     businessVertical={businessVertical}
                     value={variantValue}
@@ -1918,6 +2153,17 @@ export function ProductModal({
 
                 {/* Post-Sale */}
                 <TabsContent value="post-sale" className="space-y-4 py-4">
+                  {/* Tip contextual - Postventa */}
+                  <div className="flex items-start gap-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-800/40 px-4 py-3">
+                    <span className="text-xl flex-shrink-0 mt-0.5">🛡️</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-rose-800 dark:text-rose-300 mb-1">Garantía y Política Postventa</p>
+                      <p className="text-[11px] text-rose-700/80 dark:text-rose-400/80 leading-relaxed">
+                        Esta información se muestra en la ficha pública del producto y genera <strong>confianza en el comprador</strong>.
+                        Configurá la garantía en meses, los días de devolución y las políticas de cambio. Son <em>completamente opcionales</em> pero recomendados.
+                      </p>
+                    </div>
+                  </div>
                   <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
                     <CardHeader className="pb-3 px-0 md:px-6">
                       <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
@@ -1936,17 +2182,41 @@ export function ProductModal({
                               <FormControl>
                                 <Input type="number" min={0} max={60} {...field} value={field.value ?? 0} />
                               </FormControl>
-                              <FormDescription>
-                                0 = sin garantia
-                              </FormDescription>
+                              {/* ── Chips rápidos de meses ── */}
+                              <div className="flex flex-wrap gap-1.5 pt-1">
+                                {[
+                                  { label: 'Sin garantía', val: 0 },
+                                  { label: '1 mes', val: 1 },
+                                  { label: '3 meses', val: 3 },
+                                  { label: '6 meses', val: 6 },
+                                  { label: '12 meses (1 año)', val: 12 },
+                                  { label: '24 meses (2 años)', val: 24 },
+                                ].map((item) => (
+                                  <button
+                                    key={item.val}
+                                    type="button"
+                                    onClick={() => setValue('warranty_months', item.val, { shouldDirty: true })}
+                                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all ${
+                                      Number(field.value) === item.val
+                                        ? 'bg-rose-500 text-white border-rose-500'
+                                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-rose-400'
+                                    }`}
+                                  >
+                                    {item.label}
+                                  </button>
+                                ))}
+                              </div>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                        <div className="rounded-lg border p-4 bg-muted/20">
-                          <p className="text-sm text-muted-foreground">Resumen</p>
-                          <p className="text-lg font-semibold mt-1">
-                            {warrantyMonths > 0 ? `${warrantyMonths} meses de garantia` : 'Sin garantia'}
+                        <div className="rounded-xl border p-4 bg-rose-50/50 dark:bg-rose-950/20 border-rose-100 dark:border-rose-900/40 flex flex-col justify-center">
+                          <p className="text-xs font-semibold text-rose-800 dark:text-rose-300">Resumen en ficha pública</p>
+                          <p className="text-lg font-bold text-rose-900 dark:text-rose-100 mt-0.5">
+                            {warrantyMonths > 0 ? `🛡️ ${warrantyMonths} meses de garantía oficial` : '⚠️ Sin garantía'}
+                          </p>
+                          <p className="text-[10px] text-rose-700/70 dark:text-rose-300/70 mt-1">
+                            Aparece destacado en la página de compra para generar seguridad.
                           </p>
                         </div>
                       </div>
@@ -1956,10 +2226,36 @@ export function ProductModal({
                         name="warranty_info"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Condiciones de garantía <FieldRequirement /></FormLabel>
+                            <div className="flex items-center justify-between flex-wrap gap-1">
+                              <FormLabel>Condiciones de garantía <FieldRequirement /></FormLabel>
+                              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <span className="font-semibold text-primary">Plantillas:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setValue('warranty_info', 'Garantía oficial por fallas o defectos de fabricación durante el período establecido. No cubre roturas por golpes, caídas, humedad, sobretensión eléctrica o manipulación indebida.', { shouldDirty: true })}
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                  ⚡ Electrónica
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setValue('warranty_info', 'Garantía por defectos de confección o costura. El producto debe presentarse con etiqueta original y no presentar signos de uso ni lavado.', { shouldDirty: true })}
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                  👕 Ropa/Calzado
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setValue('warranty_info', 'Cubre defectos o vicios de fabricación presentando el comprobante o factura de compra correspondiente y empaque original.', { shouldDirty: true })}
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                  📦 Estándar
+                                </button>
+                              </div>
+                            </div>
                             <FormControl>
                               <Textarea
-                                rows={4}
+                                rows={3}
                                 placeholder="Ej: Cubre fallas de fabrica. No cubre golpes, humedad o manipulacion."
                                 {...field}
                                 value={field.value || ""}
@@ -1990,9 +2286,29 @@ export function ProductModal({
                               <FormControl>
                                 <Input type="number" min={0} max={90} {...field} value={field.value ?? 0} />
                               </FormControl>
-                              <FormDescription>
-                                0 = no permite devolucion
-                              </FormDescription>
+                              {/* ── Chips rápidos días de devolución ── */}
+                              <div className="flex flex-wrap gap-1.5 pt-1">
+                                {[
+                                  { label: 'No permite (0d)', val: 0 },
+                                  { label: '7 días', val: 7 },
+                                  { label: '10 días', val: 10 },
+                                  { label: '15 días', val: 15 },
+                                  { label: '30 días', val: 30 },
+                                ].map((item) => (
+                                  <button
+                                    key={item.val}
+                                    type="button"
+                                    onClick={() => setValue('return_window_days', item.val, { shouldDirty: true })}
+                                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all ${
+                                      Number(field.value) === item.val
+                                        ? 'bg-blue-500 text-white border-blue-500'
+                                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-blue-400'
+                                    }`}
+                                  >
+                                    {item.label}
+                                  </button>
+                                ))}
+                              </div>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -2006,20 +2322,42 @@ export function ProductModal({
                               <FormControl>
                                 <Input type="number" min={0} max={90} {...field} value={field.value ?? 0} />
                               </FormControl>
-                              <FormDescription>
-                                0 = no permite cambios
-                              </FormDescription>
+                              {/* ── Chips rápidos días de cambio ── */}
+                              <div className="flex flex-wrap gap-1.5 pt-1">
+                                {[
+                                  { label: 'No permite (0d)', val: 0 },
+                                  { label: '7 días', val: 7 },
+                                  { label: '15 días', val: 15 },
+                                  { label: '30 días', val: 30 },
+                                  { label: '60 días', val: 60 },
+                                ].map((item) => (
+                                  <button
+                                    key={item.val}
+                                    type="button"
+                                    onClick={() => setValue('exchange_window_days', item.val, { shouldDirty: true })}
+                                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all ${
+                                      Number(field.value) === item.val
+                                        ? 'bg-indigo-500 text-white border-indigo-500'
+                                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                                    }`}
+                                  >
+                                    {item.label}
+                                  </button>
+                                ))}
+                              </div>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
                       </div>
 
-                      <div className="rounded-lg border p-4 bg-muted/20 text-sm">
-                        <p className="font-medium">Ventanas activas</p>
-                        <p className="text-muted-foreground mt-1">
-                          Devolucion: {returnWindowDays} dias | Cambio: {exchangeWindowDays} dias
-                        </p>
+                      <div className="rounded-xl border p-4 bg-muted/20 text-sm">
+                        <p className="font-semibold text-slate-800 dark:text-slate-200">Ventanas activas en la tienda:</p>
+                        <div className="flex items-center gap-4 mt-1.5 text-xs text-muted-foreground">
+                          <span>🔄 Devolución: <strong className="text-foreground">{returnWindowDays > 0 ? `${returnWindowDays} días` : 'No disponible'}</strong></span>
+                          <span>·</span>
+                          <span>🔁 Cambio: <strong className="text-foreground">{exchangeWindowDays > 0 ? `${exchangeWindowDays} días` : 'No disponible'}</strong></span>
+                        </div>
                       </div>
 
                       <FormField
@@ -2027,10 +2365,19 @@ export function ProductModal({
                         name="return_policy"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Política de devolución <FieldRequirement /></FormLabel>
+                            <div className="flex items-center justify-between flex-wrap gap-1">
+                              <FormLabel>Política de devolución <FieldRequirement /></FormLabel>
+                              <button
+                                type="button"
+                                onClick={() => setValue('return_policy', 'Devolución aceptada dentro del plazo establecido. El producto debe encontrarse sin uso, en su empaque y caja original con todos los accesorios y factura de compra.', { shouldDirty: true })}
+                                className="text-[11px] text-primary hover:underline font-semibold"
+                              >
+                                💡 Insertar política estándar
+                              </button>
+                            </div>
                             <FormControl>
                               <Textarea
-                                rows={4}
+                                rows={3}
                                 placeholder="Ej: Producto sin uso, con caja y factura, dentro del plazo."
                                 {...field}
                                 value={field.value || ""}
@@ -2046,10 +2393,19 @@ export function ProductModal({
                         name="exchange_policy"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Política de cambio <FieldRequirement /></FormLabel>
+                            <div className="flex items-center justify-between flex-wrap gap-1">
+                              <FormLabel>Política de cambio <FieldRequirement /></FormLabel>
+                              <button
+                                type="button"
+                                onClick={() => setValue('exchange_policy', 'Cambio directo por talle, modelo o equivalente dentro del plazo indicado, sujeto a stock disponible. El producto debe conservar su embalaje original.', { shouldDirty: true })}
+                                className="text-[11px] text-primary hover:underline font-semibold"
+                              >
+                                💡 Insertar política de cambio
+                              </button>
+                            </div>
                             <FormControl>
                               <Textarea
-                                rows={4}
+                                rows={3}
                                 placeholder="Ej: Cambio por mismo producto o equivalente sujeto a stock."
                                 {...field}
                                 value={field.value || ""}
@@ -2065,6 +2421,18 @@ export function ProductModal({
 
                 {/* Images */}
                 <TabsContent value="images" className="space-y-4 py-4">
+                  {/* Tip contextual - Imágenes */}
+                  <div className="flex items-start gap-3 rounded-xl bg-sky-50/80 dark:bg-sky-950/30 border border-sky-200/60 dark:border-sky-800/40 px-4 py-3">
+                    <span className="text-xl flex-shrink-0 mt-0.5">📸</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-sky-800 dark:text-sky-300 mb-1">Imágenes del Producto</p>
+                      <ul className="text-[11px] text-sky-700/80 dark:text-sky-400/80 leading-relaxed space-y-0.5">
+                        <li>• Subí hasta <strong>5 imágenes</strong>. La primera será la imagen principal de la ficha.</li>
+                        <li>• Formatos soportados: <strong>JPG, PNG y WebP</strong>. Tamaño máximo 5 MB por imagen.</li>
+                        <li>• 💡 <em>Tip</em>: fotos con fondo blanco y buena luz aumentan las conversiones.</li>
+                      </ul>
+                    </div>
+                  </div>
                   <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
                     <CardHeader className="px-0 md:px-6">
                       <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">

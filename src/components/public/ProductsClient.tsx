@@ -3,16 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import {
   ArrowDownAZ,
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
   ArrowUpDown,
+  ArrowRight,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
+  Eye,
   Flame,
   FolderTree,
   LayoutGrid,
@@ -24,11 +27,13 @@ import {
   Tag,
   X,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import type { MarketplaceProduct, MarketplaceCategory, MarketplaceBrand } from '@/lib/public/marketplace'
 import { MarketplaceProductModal } from './MarketplaceProductModal'
+import { getCategoryIcon } from './CategoryCarousel'
 import { cn } from '@/lib/utils'
 
 type SortKey = 'default' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newest' | 'name_asc'
@@ -310,42 +315,67 @@ export function ProductsClient({
 
   return (
     <>
-      {/* ── TOOLBAR DE BÚSQUEDA Y FILTROS (STICKY AL HACER SCROLL) ── */}
-      <div className="sticky top-[68px] z-30 mb-8 space-y-4 rounded-2xl border border-border/80 bg-background/95 p-4 sm:p-5 shadow-md backdrop-blur-xl transition-shadow">
+      {/* ── TOOLBAR DE BÚSQUEDA Y FILTROS EN 1 SOLA LÍNEA ULTRA COMPACTA (STICKY) ── */}
+      <div className="sticky top-16 z-30 mb-3 sm:mb-5 space-y-1.5 rounded-xl sm:rounded-2xl border border-border/80 bg-background/95 p-1.5 sm:p-2.5 shadow-sm backdrop-blur-xl transition-all">
         
-        {/* Fila 1: Búsqueda + Selector de Marca + Toggle de Vista */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        {/* ── FILA ÚNICA: Buscador + Ofertas + Marca + Orden + Vista ── */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Input de Búsqueda */}
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative flex-1 min-w-0">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por producto, descripción o código..."
-              className="h-10 rounded-xl pl-10 pr-9 text-xs sm:text-sm bg-background border-border/80 focus-visible:ring-primary"
+              placeholder="Buscar productos..."
+              className="h-8 sm:h-9 rounded-lg sm:rounded-xl pl-8 pr-7 text-xs bg-background border-border/80 focus-visible:ring-primary"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
                 aria-label="Limpiar búsqueda"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3 w-3" />
               </button>
             )}
           </div>
 
+          {/* Botón Ofertas (al lado del buscador) */}
+          {offersCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setOnlyOffers((v) => !v)}
+              className={cn(
+                'shrink-0 flex items-center gap-1 rounded-lg sm:rounded-xl border px-2 sm:px-2.5 h-8 sm:h-9 text-[11px] sm:text-xs font-bold transition-all shadow-2xs select-none',
+                onlyOffers
+                  ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800/40 dark:bg-rose-950/30 dark:text-rose-400'
+                  : 'border-border/80 bg-background text-muted-foreground hover:text-foreground hover:border-primary/40'
+              )}
+            >
+              <Tag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-rose-500" />
+              <span className="hidden xs:inline">Ofertas</span>
+              <span className={cn(
+                'rounded-full px-1.5 py-px text-[9px] font-bold tabular-nums',
+                onlyOffers
+                  ? 'bg-rose-200 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300'
+                  : 'bg-muted text-muted-foreground'
+              )}>
+                {offersCount}
+              </span>
+            </button>
+          )}
+
           {/* Selector de Marca (Dropdown) */}
-          <div className="flex items-center gap-2">
+          {contextBrands.length > 0 && (
             <div className="relative shrink-0">
               <select
                 value={initialBrand}
                 onChange={(e) => updateUrlParam('marca', e.target.value)}
-                className="h-10 rounded-xl border border-border/80 bg-background px-3 py-1 text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50"
+                className="h-8 sm:h-9 max-w-[90px] xs:max-w-[120px] sm:max-w-none rounded-lg sm:rounded-xl border border-border/80 bg-background px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50"
                 aria-label="Filtrar por marca"
               >
-                <option value="">Todas las marcas</option>
+                <option value="">Marcas</option>
                 {contextBrands.map((b) => (
                   <option key={b.name} value={b.name}>
                     {b.name} ({b.count})
@@ -353,165 +383,163 @@ export function ProductsClient({
                 ))}
               </select>
             </div>
+          )}
 
-            {/* Toggle de Vista */}
-            <div className="flex items-center rounded-xl border border-border/80 bg-muted/60 p-1">
-              <button
-                type="button"
-                onClick={() => setView('grid')}
-                className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-lg transition-all',
-                  view === 'grid'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-                aria-label="Vista cuadrícula"
-                aria-pressed={view === 'grid'}
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setView('compact')}
-                className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-lg transition-all',
-                  view === 'compact'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-                aria-label="Vista compacta"
-                aria-pressed={view === 'compact'}
-              >
-                <LayoutList className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
+          {/* Selector de Orden */}
+          <div ref={sortRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setSortOpen((v) => !v)}
+              className={cn(
+                'flex items-center gap-1 rounded-lg sm:rounded-xl border bg-background px-2 sm:px-2.5 h-8 sm:h-9 text-[11px] sm:text-xs font-semibold transition-all shadow-2xs select-none',
+                sort !== 'default'
+                  ? 'border-primary/60 text-primary ring-1 ring-primary/20'
+                  : 'border-border/80 text-foreground hover:border-primary/40'
+              )}
+              aria-haspopup="listbox"
+              aria-expanded={sortOpen}
+              aria-label="Criterio de ordenamiento"
+            >
+              <CurrentSortIcon className={cn(
+                'h-3 w-3 sm:h-3.5 sm:w-3.5',
+                sort !== 'default' ? 'text-primary' : 'text-muted-foreground'
+              )} />
+              <span className="hidden md:inline truncate max-w-[110px]">{currentSortOption.shortLabel}</span>
+              <ChevronDown className={cn(
+                'h-3 w-3 opacity-60 transition-transform duration-200',
+                sortOpen && 'rotate-180'
+              )} />
+            </button>
 
-        {/* Fila 2: Selector de Relevancia Mejorado, Ofertas y Conteo */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border/60 text-xs">
-          <div className="flex flex-wrap items-center gap-2">
-            
-            {/* ── SELECTOR DE RELEVANCIA / ORDEN MODERNO Y PREMIUM ── */}
-            <div ref={sortRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setSortOpen((v) => !v)}
-                className={cn(
-                  'flex items-center gap-2 rounded-xl border bg-background px-3 py-1.5 font-semibold transition-all shadow-xs select-none',
-                  sort !== 'default'
-                    ? 'border-primary/60 text-primary ring-1 ring-primary/20'
-                    : 'border-border/80 text-foreground hover:border-primary/40'
-                )}
-                aria-haspopup="listbox"
-                aria-expanded={sortOpen}
-                aria-label="Criterio de ordenamiento"
-              >
-                <CurrentSortIcon className={cn(
-                  'h-3.5 w-3.5',
-                  sort !== 'default' ? 'text-primary' : 'text-muted-foreground'
-                )} />
-                <span>{currentSortOption.label}</span>
-                <ChevronDown className={cn(
-                  'h-3.5 w-3.5 opacity-60 transition-transform duration-200',
-                  sortOpen && 'rotate-180'
-                )} />
-              </button>
-
-              {/* Menú Desplegable Flotante */}
-              {sortOpen && (
-                <div className="absolute left-0 top-full z-30 mt-1.5 w-60 overflow-hidden rounded-2xl border border-border/80 bg-popover p-1.5 text-popover-foreground shadow-xl animate-in fade-in-0 zoom-in-95">
-                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Ordenar productos por:
-                  </div>
-                  {SORT_OPTIONS.map((option) => {
-                    const OptionIcon = option.icon
-                    const isSelected = sort === option.id
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => {
-                          setSort(option.id)
-                          setSortOpen(false)
-                        }}
-                        className={cn(
-                          'flex w-full items-center justify-between gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold transition-colors',
-                          isSelected
-                            ? 'bg-primary text-primary-foreground font-bold'
-                            : 'text-foreground hover:bg-muted'
-                        )}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <OptionIcon className={cn(
-                            'h-4 w-4 shrink-0',
-                            isSelected ? 'text-primary-foreground' : 'text-muted-foreground'
-                          )} />
-                          <span className="truncate">{option.label}</span>
-                        </div>
-                        {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary-foreground" />}
-                      </button>
-                    )
-                  })}
+            {/* Menú Desplegable Flotante */}
+            {sortOpen && (
+              <div className="absolute right-0 top-full z-40 mt-1 w-52 sm:w-60 overflow-hidden rounded-xl border border-border/80 bg-popover p-1 text-popover-foreground shadow-xl animate-in fade-in-0 zoom-in-95">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Ordenar por:
                 </div>
-              )}
-            </div>
-
-            {/* Solo Ofertas */}
-            {offersCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setOnlyOffers((v) => !v)}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-xl border px-3 py-1.5 font-semibold transition-all shadow-xs',
-                  onlyOffers
-                    ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800/40 dark:bg-rose-950/30 dark:text-rose-400'
-                    : 'border-border/80 bg-background text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <Tag className="h-3.5 w-3.5 text-rose-500" />
-                Ofertas
-                <span className={cn(
-                  'rounded-full px-1.5 py-0.2 text-[10px] font-bold tabular-nums',
-                  onlyOffers
-                    ? 'bg-rose-200 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300'
-                    : 'bg-muted text-muted-foreground'
-                )}>
-                  {offersCount}
-                </span>
-              </button>
+                {SORT_OPTIONS.map((option) => {
+                  const OptionIcon = option.icon
+                  const isSelected = sort === option.id
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => {
+                        setSort(option.id)
+                        setSortOpen(false)
+                      }}
+                      className={cn(
+                        'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-colors',
+                        isSelected
+                          ? 'bg-primary text-primary-foreground font-bold'
+                          : 'text-foreground hover:bg-muted'
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <OptionIcon className={cn(
+                          'h-3.5 w-3.5 shrink-0',
+                          isSelected ? 'text-primary-foreground' : 'text-muted-foreground'
+                        )} />
+                        <span className="truncate">{option.label}</span>
+                      </div>
+                      {isSelected && <Check className="h-3 w-3 shrink-0 text-primary-foreground" />}
+                    </button>
+                  )
+                })}
+              </div>
             )}
           </div>
 
-          <div className="flex items-center gap-4">
-            <p className="text-xs font-medium text-muted-foreground">
-              {filtered.length > 0 && (
-                <span className="font-bold text-foreground tabular-nums">
-                  {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filtered.length)}{' '}
-                </span>
+          {/* Toggle de Vista */}
+          <div className="hidden xs:flex items-center rounded-lg sm:rounded-xl border border-border/80 bg-muted/60 p-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setView('grid')}
+              className={cn(
+                'flex h-7 w-7 sm:h-7.5 sm:w-7.5 items-center justify-center rounded-md transition-all',
+                view === 'grid'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
               )}
-              de <strong className="text-foreground">{filtered.length}</strong> productos
-            </p>
-
-            {hasAnyFilter && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="flex items-center gap-1 rounded-full border border-border/80 bg-background px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:bg-muted hover:text-foreground shadow-xs"
-              >
-                <X className="h-3.5 w-3.5" />
-                Limpiar filtros
-              </button>
-            )}
+              aria-label="Vista cuadrícula"
+              aria-pressed={view === 'grid'}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('compact')}
+              className={cn(
+                'flex h-7 w-7 sm:h-7.5 sm:w-7.5 items-center justify-center rounded-md transition-all',
+                view === 'compact'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+              aria-label="Vista compacta"
+              aria-pressed={view === 'compact'}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
+
+        {/* ── Franja de Categorías Compacta Directo Abajo del Buscador ── */}
+        {categories.length > 0 && (
+          <div className="pt-1 border-t border-border/50">
+            <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs">
+              {/* Pill "Todas" */}
+              <button
+                type="button"
+                onClick={() => updateUrlParam('categoria', '')}
+                className={cn(
+                  'shrink-0 flex items-center gap-1 rounded-md sm:rounded-lg px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold transition-all shadow-2xs select-none',
+                  !initialCategory
+                    ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                    : 'border border-border/80 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                )}
+              >
+                <span>Todas</span>
+              </button>
+
+              {/* Categorías individuales */}
+              {categories.map((cat) => {
+                const isActive = initialCategory === cat.id
+                const Icon = getCategoryIcon(cat.name)
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => updateUrlParam('categoria', isActive ? '' : cat.id)}
+                    className={cn(
+                      'shrink-0 flex items-center gap-1 sm:gap-1.5 rounded-md sm:rounded-lg border px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold transition-all shadow-2xs select-none',
+                      isActive
+                        ? 'border-primary bg-primary text-primary-foreground font-bold shadow-xs'
+                        : 'border-border/80 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                    )}
+                  >
+                    <Icon className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 opacity-80" />
+                    <span className="max-w-[120px] truncate">{cat.name}</span>
+                    {cat.product_count > 0 && (
+                      <span className={cn(
+                        'rounded-full px-1.5 py-px text-[9px] tabular-nums',
+                        isActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
+                      )}>
+                        {cat.product_count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Subcategorías / Ramas Hijas (si la categoría seleccionada tiene hijos) ── */}
         {initialCategory && childSubcategories.length > 0 && (
-          <div className="pt-1.5 border-t border-border/60">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs">
-              <span className="shrink-0 flex items-center gap-1 font-bold text-muted-foreground mr-1">
-                <FolderTree className="h-3.5 w-3.5 text-primary" />
+          <div className="pt-1 border-t border-border/60">
+            <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs">
+              <span className="shrink-0 flex items-center gap-1 font-bold text-muted-foreground mr-1 text-[11px] sm:text-xs">
+                <FolderTree className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-primary" />
                 <span>Ramas:</span>
               </span>
 
@@ -519,7 +547,7 @@ export function ProductsClient({
                 type="button"
                 onClick={() => updateUrlParam('subcategoria', '')}
                 className={cn(
-                  'shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shadow-2xs',
+                  'shrink-0 rounded-md sm:rounded-lg px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold transition-all shadow-2xs',
                   !initialSubcategory
                     ? 'bg-primary text-primary-foreground'
                     : 'border border-border/80 bg-background text-muted-foreground hover:text-foreground'
@@ -536,7 +564,7 @@ export function ProductsClient({
                     type="button"
                     onClick={() => updateUrlParam('subcategoria', isSubActive ? '' : sub.id)}
                     className={cn(
-                      'shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all border shadow-2xs',
+                      'shrink-0 flex items-center gap-1 sm:gap-1.5 rounded-md sm:rounded-lg px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold transition-all border shadow-2xs',
                       isSubActive
                         ? 'border-primary bg-primary text-primary-foreground'
                         : 'border-border/80 bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
@@ -544,7 +572,7 @@ export function ProductsClient({
                   >
                     <span>{sub.name}</span>
                     <span className={cn(
-                      'rounded-full px-1.5 py-px text-[10px]',
+                      'rounded-full px-1.5 py-px text-[9px] sm:text-[10px]',
                       isSubActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
                     )}>
                       {sub.product_count}
@@ -556,88 +584,22 @@ export function ProductsClient({
           </div>
         )}
 
-        {/* ── Franja Compacta de Marcas Rápidas ── */}
-        {contextBrands.length > 0 && (
-          <div className="pt-1.5 border-t border-border/60">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs">
-              <span className="shrink-0 flex items-center gap-1 font-bold text-muted-foreground mr-1">
-                <Tag className="h-3.5 w-3.5 text-primary" />
-                <span>Marcas:</span>
-              </span>
 
-              <button
-                type="button"
-                onClick={() => updateUrlParam('marca', '')}
-                className={cn(
-                  'shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shadow-2xs',
-                  !initialBrand
-                    ? 'bg-primary text-primary-foreground'
-                    : 'border border-border/80 bg-background text-muted-foreground hover:text-foreground'
-                )}
-              >
-                Todas
-              </button>
-
-              {contextBrands.map((brand) => {
-                const isBrandActive = initialBrand.toLowerCase() === brand.name.toLowerCase()
-                return (
-                  <button
-                    key={brand.name}
-                    type="button"
-                    onClick={() => updateUrlParam('marca', isBrandActive ? '' : brand.name)}
-                    className={cn(
-                      'group shrink-0 flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all shadow-2xs',
-                      isBrandActive
-                        ? 'border-violet-500 bg-violet-600 text-white ring-1 ring-violet-400/40'
-                        : 'border-border/80 bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                    )}
-                  >
-                    {brand.logo_url ? (
-                      <div className="relative h-3.5 w-3.5 shrink-0 overflow-hidden rounded-sm bg-white p-0.5">
-                        <Image
-                          src={brand.logo_url}
-                          alt=""
-                          fill
-                          unoptimized
-                          className="object-contain"
-                        />
-                      </div>
-                    ) : (
-                      <span className={cn(
-                        'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-[9px] font-bold uppercase',
-                        isBrandActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
-                      )}>
-                        {brand.name.charAt(0)}
-                      </span>
-                    )}
-                    <span>{brand.name}</span>
-                    <span className={cn(
-                      'rounded-full px-1.5 py-px text-[10px] tabular-nums',
-                      isBrandActive ? 'bg-white/25 text-white' : 'bg-muted text-muted-foreground'
-                    )}>
-                      {brand.count}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
 
         {/* ── Chips de Filtros Activos (Mostrados juntos al lado) ── */}
         {hasAnyFilter && (
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/60">
-            <span className="text-[11px] font-semibold text-muted-foreground">Filtros activos:</span>
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1 sm:pt-2 border-t border-border/60">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">Filtros activos:</span>
 
             {/* Chip de Categoría */}
             {initialCategory && (
               <button
                 type="button"
                 onClick={() => updateUrlParam('categoria', '')}
-                className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+                className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold text-primary transition-colors hover:bg-primary/20"
               >
                 <span>Categoría: {activeCategory?.name ?? products.find((p) => p.category?.id === initialCategory)?.category?.name ?? 'Seleccionada'}</span>
-                <X className="h-3 w-3" />
+                <X className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
               </button>
             )}
 
@@ -646,10 +608,10 @@ export function ProductsClient({
               <button
                 type="button"
                 onClick={() => updateUrlParam('subcategoria', '')}
-                className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+                className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold text-primary transition-colors hover:bg-primary/20"
               >
                 <span>Subcategoría: {categories.find((c) => c.id === initialSubcategory)?.name ?? 'Seleccionada'}</span>
-                <X className="h-3 w-3" />
+                <X className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
               </button>
             )}
 
@@ -658,10 +620,10 @@ export function ProductsClient({
               <button
                 type="button"
                 onClick={() => updateUrlParam('marca', '')}
-                className="flex items-center gap-1.5 rounded-full border border-violet-300 bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-800/40 dark:bg-violet-950/40 dark:text-violet-300"
+                className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-violet-300 bg-violet-50 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-800/40 dark:bg-violet-950/40 dark:text-violet-300"
               >
                 <span>Marca: {initialBrand}</span>
-                <X className="h-3 w-3" />
+                <X className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
               </button>
             )}
 
@@ -670,10 +632,10 @@ export function ProductsClient({
               <button
                 type="button"
                 onClick={() => setQuery('')}
-                className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-bold text-foreground transition-colors hover:bg-muted/80"
+                className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-border bg-muted px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold text-foreground transition-colors hover:bg-muted/80"
               >
                 <span>Texto: &ldquo;{query}&rdquo;</span>
-                <X className="h-3 w-3" />
+                <X className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
               </button>
             )}
 
@@ -682,10 +644,10 @@ export function ProductsClient({
               <button
                 type="button"
                 onClick={() => setOnlyOffers(false)}
-                className="flex items-center gap-1.5 rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 dark:border-rose-800/40 dark:bg-rose-950/40 dark:text-rose-300"
+                className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-rose-300 bg-rose-50 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 dark:border-rose-800/40 dark:bg-rose-950/40 dark:text-rose-300"
               >
                 <span>Solo ofertas</span>
-                <X className="h-3 w-3" />
+                <X className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
               </button>
             )}
 
@@ -694,10 +656,10 @@ export function ProductsClient({
               <button
                 type="button"
                 onClick={() => setSort('default')}
-                className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-muted/80"
+                className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-border bg-muted px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold text-foreground transition-colors hover:bg-muted/80"
               >
                 <span>Orden: {currentSortOption.shortLabel}</span>
-                <X className="h-3 w-3" />
+                <X className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
               </button>
             )}
           </div>
@@ -722,18 +684,22 @@ export function ProductsClient({
             const isCompact = view === 'compact'
 
             return (
-              <button
+              <div
                 key={`${product.organization_slug}-${product.id}`}
-                type="button"
-                onClick={() => setSelected(product)}
-                aria-label={`Ver ${product.name}`}
                 className={cn(
-                  'group relative flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-card text-left transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg',
+                  'group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card text-left transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg shadow-2xs',
                   isCompact ? 'p-3' : 'p-4'
                 )}
               >
-                {/* Imagen */}
-                <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-muted/40">
+                {/* Imagen (clic abre modal de detalle) */}
+                <div
+                  onClick={() => setSelected(product)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelected(product) }}
+                  aria-label={`Ver detalle de ${product.name}`}
+                  className="relative aspect-square w-full overflow-hidden rounded-xl bg-muted/40 cursor-pointer"
+                >
                   <Image
                     src={imageSrc}
                     alt={product.name}
@@ -744,7 +710,7 @@ export function ProductsClient({
                   />
 
                   {/* Badges superiores */}
-                  <div className="absolute left-2 top-2 z-10 flex flex-col gap-1">
+                  <div className="absolute left-2 top-2 z-10 flex flex-col gap-1 pointer-events-none">
                     {hasOffer && discountPct > 0 && (
                       <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
                         <Tag className="h-2.5 w-2.5" />
@@ -772,10 +738,13 @@ export function ProductsClient({
                 <div className="mt-3 flex flex-1 flex-col justify-between">
                   <div>
                     {/* Tienda */}
-                    <div className="flex items-center gap-1 text-[11px] font-semibold text-primary">
+                    <Link
+                      href={`/${product.organization_slug}/inicio`}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                    >
                       <Store className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{product.organization_name}</span>
-                    </div>
+                      <span className="truncate max-w-[160px]">{product.organization_name}</span>
+                    </Link>
 
                     {/* Categoría / Marca */}
                     <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground truncate">
@@ -788,16 +757,22 @@ export function ProductsClient({
                     </div>
 
                     {/* Nombre del Producto */}
-                    <h3 className={cn(
-                      'mt-1.5 font-semibold leading-snug text-foreground transition-colors group-hover:text-primary',
-                      isCompact ? 'line-clamp-1 text-xs' : 'line-clamp-2 text-sm'
-                    )}>
+                    <h3
+                      onClick={() => setSelected(product)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelected(product) }}
+                      className={cn(
+                        'mt-1.5 font-semibold leading-snug text-foreground transition-colors hover:text-primary cursor-pointer',
+                        isCompact ? 'line-clamp-1 text-xs' : 'line-clamp-2 text-sm'
+                      )}
+                    >
                       {product.name}
                     </h3>
                   </div>
 
-                  {/* Precios */}
-                  <div className="mt-3 flex items-baseline justify-between border-t border-border/60 pt-2">
+                  {/* Precios y Botones */}
+                  <div className="mt-3 space-y-2.5 border-t border-border/60 pt-2">
                     <div>
                       <p className="text-base font-bold tabular-nums text-foreground">
                         {formatPrice(displayPrice)}
@@ -809,12 +784,34 @@ export function ProductsClient({
                       )}
                     </div>
 
-                    <span className="text-[11px] font-semibold text-primary opacity-0 transition-opacity group-hover:opacity-100 hidden sm:inline">
-                      Ver →
-                    </span>
+                    {/* Acciones directas: Detalle + Ir a tienda */}
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setSelected(product)}
+                        className="h-8 rounded-xl text-xs font-semibold gap-1 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
+                      >
+                        <Eye className="h-3 w-3" />
+                        <span>Detalle</span>
+                      </Button>
+
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-xl text-xs font-semibold gap-1 px-2 border-border/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-colors"
+                      >
+                        <Link href={`/${product.organization_slug}/productos/${product.id}`}>
+                          <span>Ir a tienda</span>
+                          <ArrowRight className="h-3 w-3" />
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>

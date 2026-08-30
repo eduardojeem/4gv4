@@ -7,7 +7,7 @@ import { MarketplaceProductCarousel } from '@/components/public/MarketplaceProdu
 import { CategoryCarouselSection } from '@/components/public/CategoryCarouselSection'
 import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { MarketplaceOffersSection, type MarketplaceOfferGroup } from '@/components/public/MarketplaceOffersSection'
-import { getMarketplaceOrganizations, getMarketplaceProductsPage, getMarketplaceBrands } from '@/lib/public/marketplace'
+import { getMarketplaceOrganizations, getMarketplaceProductsPage, getMarketplaceBrands, getMarketplaceOffers } from '@/lib/public/marketplace'
 import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsSection'
 import { getPlatformBranding } from '@/lib/platform/branding'
 import { MarketplaceOrgProductGrid } from '@/components/public/MarketplaceOrgProductGrid'
@@ -23,10 +23,11 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic'
 
 export default async function MarketplacePage() {
-  const [organizations, marketplacePage, brands] = await Promise.all([
+  const [organizations, marketplacePage, brands, marketplaceOffers] = await Promise.all([
     getMarketplaceOrganizations(),
     getMarketplaceProductsPage(48),
     getMarketplaceBrands(30),
+    getMarketplaceOffers(100),
   ])
   const marketplaceProducts = marketplacePage.products
 
@@ -35,7 +36,7 @@ export default async function MarketplacePage() {
   const carouselProducts = [...featuredProducts, ...restProducts].slice(0, 24)
   const offerGroupsMap = new Map<string, MarketplaceOfferGroup>()
 
-  marketplaceProducts
+  marketplaceOffers
     .filter((product) => product.has_offer && product.offer_price && product.offer_price < product.sale_price)
     .forEach((product) => {
       const existing = offerGroupsMap.get(product.organization_id) ?? {

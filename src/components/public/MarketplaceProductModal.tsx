@@ -340,20 +340,20 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
             <Link
               href={productHref}
               onClick={onClose}
-              className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-sm font-bold text-white shadow-lg shadow-cyan-500/10 hover:from-cyan-600 hover:to-blue-700 hover:shadow-cyan-500/20 transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-primary to-primary/90 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:opacity-95 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0"
             >
               <ExternalLink className="h-4 w-4" />
-              Ver detalle completo
+              <span>Ver detalle en la tienda</span>
             </Link>
 
             <Link
               href={storeHref}
               onClick={onClose}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white/50 text-sm font-semibold text-slate-700 transition-all hover:border-slate-350 hover:bg-slate-50 active:scale-[0.98] dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300 dark:hover:border-slate-700"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-border/80 bg-muted/40 text-sm font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98]"
             >
-              <Building2 className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-              Ir a la tienda
-              <ArrowRight className="ml-auto h-4 w-4 text-slate-400 dark:text-slate-500" />
+              <Store className="h-4 w-4 text-primary" />
+              <span>Visitar tienda ({product.organization_name})</span>
+              <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" />
             </Link>
           </div>
         </div>

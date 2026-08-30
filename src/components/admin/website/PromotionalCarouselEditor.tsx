@@ -7,6 +7,8 @@ import {
   GalleryHorizontalEnd, ImagePlus, Link2, Loader2,
   Monitor, MoonStar, Pencil, Plus, Save, Smartphone, SunMedium,
   Trash2, Type, Upload, X,
+  ChevronDown, ChevronUp, HelpCircle, Sparkles, Lightbulb, Flame,
+  Shirt, ShoppingBag, Truck, Tag, ExternalLink, Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -37,6 +39,43 @@ const EDITOR_SECTIONS: Array<{ value: EditorSection; label: string; icon: React.
   { value: 'cta', label: 'Botón', icon: Link2 },
   { value: 'appearance', label: 'Diseño', icon: Monitor },
   { value: 'template', label: 'Plantillas', icon: ImagePlus },
+]
+
+const TITLE_SUGGESTIONS = [
+  '🔥 30% OFF en Seleccionados',
+  '🚚 Envíos Gratis a Todo el País',
+  '✨ Nueva Colección de Temporada',
+  '⚡ Liquidación de Temporada',
+  '💳 Hasta 6 Cuotas Sin Interés',
+  '⭐ Los Productos Más Vendidos',
+  '🎉 Ofertas Exclusivas de la Semana',
+  '📱 Renovación de Equipos al Mejor Precio',
+]
+
+const MESSAGE_SUGGESTIONS = [
+  'Aprovechá precios especiales y descuentos por tiempo limitado.',
+  'Stock inmediato con despacho en 24 horas a todo el país.',
+  'Descubrí las últimas tendencias con la mejor calidad garantizada.',
+  'Consultá nuestro catálogo y hacé tu pedido directo por WhatsApp.',
+  'Diagnóstico claro, repuestos originales y atención técnica especializada.',
+  'Comprá con seguridad y recibí en la puerta de tu casa o trabajo.',
+]
+
+const CTA_TEXT_SUGGESTIONS = [
+  'Ver ofertas',
+  'Comprar ahora',
+  'Ver catálogo',
+  'Pedir por WhatsApp',
+  'Ver colección',
+  'Consultar stock',
+  'Pedir cotización',
+  'Ver productos',
+]
+
+const CTA_HREF_SHORTCUTS = [
+  { label: '📦 Catálogo (/productos)', href: '/productos' },
+  { label: '🔥 Ofertas (/productos?ofertas=true)', href: '/productos?ofertas=true' },
+  { label: '💼 Servicios (/servicios)', href: '/servicios' },
 ]
 
 async function readImageDimensions(file: File) {
@@ -91,13 +130,17 @@ function CharCount({ value, max }: { value: string; max: number }) {
 
 const CAROUSEL_EXAMPLES: Array<{
   name: string
+  category: string
+  badgeIcon?: string
   slide: Omit<PromotionalCarouselSlide, 'id' | 'active'>
 }> = [
   {
-    name: 'Accesorios',
+    name: 'Accesorios Tech',
+    category: 'Tecnología',
+    badgeIcon: '📱',
     slide: {
       title: 'Todo para acompañar tu celular',
-      message: 'Descubrí cargadores, cables, auriculares y fundas seleccionadas.',
+      message: 'Descubrí cargadores, cables, auriculares y fundas seleccionadas con garantía.',
       imageUrl: '/images/promotional-carousel/accesorios.webp',
       imageAlt: 'Cargadores, cables, auriculares y fundas para celulares',
       ctaText: 'Ver accesorios',
@@ -107,10 +150,12 @@ const CAROUSEL_EXAMPLES: Array<{
     },
   },
   {
-    name: 'Renovación',
+    name: 'Renovación de Celulares',
+    category: 'Tecnología',
+    badgeIcon: '📱',
     slide: {
       title: 'Encontrá tu próximo celular',
-      message: 'Conocé los equipos disponibles y elegí el que mejor se adapta a vos.',
+      message: 'Conocé los equipos disponibles y elegí el que mejor se adapta a vos con financiación.',
       imageUrl: '/images/promotional-carousel/renovacion.webp',
       imageAlt: 'Tres celulares modernos exhibidos en una tienda',
       ctaText: 'Ver celulares',
@@ -120,16 +165,93 @@ const CAROUSEL_EXAMPLES: Array<{
     },
   },
   {
-    name: 'Servicio técnico',
+    name: 'Servicio Técnico Especializado',
+    category: 'Tecnología',
+    badgeIcon: '🔧',
     slide: {
       title: 'Tu equipo en manos expertas',
-      message: 'Diagnóstico claro y reparación profesional para tu celular.',
+      message: 'Diagnóstico claro, repuestos originales y reparación profesional con seguimiento online.',
       imageUrl: '/images/promotional-carousel/reparacion.webp',
       imageAlt: 'Técnico revisando un celular en una mesa de reparación',
       ctaText: 'Ver servicios',
       ctaHref: '/servicios',
       textTone: 'dark',
       contentAlign: 'left',
+    },
+  },
+  {
+    name: 'Nueva Colección de Ropa',
+    category: 'Moda & Ropa',
+    badgeIcon: '👗',
+    slide: {
+      title: 'Nueva Colección de Temporada',
+      message: 'Renová tu estilo con las últimas tendencias en prendas y calzados exclusivos.',
+      imageUrl: '/images/promotional-carousel/accesorios.webp',
+      imageAlt: 'Prendas de vestir y ropa de moda',
+      ctaText: 'Ver colección',
+      ctaHref: '/productos',
+      textTone: 'light',
+      contentAlign: 'left',
+    },
+  },
+  {
+    name: 'Liquidación de Temporada',
+    category: 'Moda & Ropa',
+    badgeIcon: '🔥',
+    slide: {
+      title: 'Liquidación con hasta 40% OFF',
+      message: 'Aprovechá descuentos imperdibles en prendas seleccionadas hasta agotar stock.',
+      imageUrl: '/images/promotional-carousel/renovacion.webp',
+      imageAlt: 'Ofertas de temporada en ropa y calzado',
+      ctaText: 'Ver liquidación',
+      ctaHref: '/productos?ofertas=true',
+      textTone: 'dark',
+      contentAlign: 'center',
+    },
+  },
+  {
+    name: 'Cuidado Facial & Belleza',
+    category: 'Cosmética',
+    badgeIcon: '💄',
+    slide: {
+      title: 'Cuidado Personal & Skincare',
+      message: 'Productos 100% originales para realzar tu belleza y cuidar tu piel día a día.',
+      imageUrl: '/images/promotional-carousel/accesorios.webp',
+      imageAlt: 'Productos de cosmética y cuidado personal',
+      ctaText: 'Explorar catálogo',
+      ctaHref: '/productos',
+      textTone: 'light',
+      contentAlign: 'left',
+    },
+  },
+  {
+    name: 'Herramientas Profesionales',
+    category: 'Ferretería',
+    badgeIcon: '🔨',
+    slide: {
+      title: 'Herramientas & Materiales',
+      message: 'Equipate con las mejores marcas, asesoramiento técnico y garantía de fábrica.',
+      imageUrl: '/images/promotional-carousel/reparacion.webp',
+      imageAlt: 'Herramientas profesionales de trabajo y construcción',
+      ctaText: 'Ver herramientas',
+      ctaHref: '/productos',
+      textTone: 'dark',
+      contentAlign: 'left',
+    },
+  },
+  {
+    name: 'Envíos Gratis a Todo el País',
+    category: 'Promociones',
+    badgeIcon: '🚚',
+    slide: {
+      title: 'Envíos Gratis a Todo el País',
+      message: 'Hacé tu pedido hoy y recibilo en la comodidad de tu hogar sin costo de envío.',
+      imageUrl: '/images/promotional-carousel/renovacion.webp',
+      imageAlt: 'Paquete de envío a domicilio',
+      ctaText: 'Comprar ahora',
+      ctaHref: '/productos',
+      textTone: 'light',
+      contentAlign: 'center',
     },
   },
 ]
@@ -394,6 +516,8 @@ export function PromotionalCarouselEditor({
   const [uploading, setUploading] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<SlideFieldErrors>({})
   const [activeEditorSection, setActiveEditorSection] = useState<EditorSection>('content')
+  const [showCarouselGuide, setShowCarouselGuide] = useState(false)
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState<string>('all')
   const current = draft ?? settings?.[settingKey] ?? defaults
   const hasChanges = draft !== null
   const dirtyContext = useWebsiteEditorDirty()
@@ -672,6 +796,31 @@ export function PromotionalCarouselEditor({
         description={description}
       >
         <div className="space-y-6">
+
+          {/* Guía Desplegable Carrusel */}
+          <div className="border-b border-border/60 pb-3">
+            <button
+              type="button"
+              onClick={() => setShowCarouselGuide((prev) => !prev)}
+              className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span>{showCarouselGuide ? 'Ocultar guía de diseño' : '¿Cómo diseñar banners de alto impacto para tu portada?'}</span>
+              {showCarouselGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+
+            {showCarouselGuide && (
+              <div className="mt-3 rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs space-y-2.5 animate-in fade-in-50 duration-200">
+                <p className="font-bold text-foreground">💡 Claves para banners promocionales exitosos:</p>
+                <ul className="space-y-1.5 text-muted-foreground list-disc list-inside leading-relaxed">
+                  <li><strong className="text-foreground">Dimensiones recomendadas:</strong> 1200 × 500 px (formato horizontal 16:7 o 12:5). Mantiene nitidez en pantallas Retina y computadoras.</li>
+                  <li><strong className="text-foreground">Tono del texto vs Imagen:</strong> Si tu imagen es clara o brillante, elegí tono de texto <em>&quot;Oscuro&quot;</em>. Si es oscura o contrastada, elegí tono <em>&quot;Claro&quot;</em>.</li>
+                  <li><strong className="text-foreground">Llamado a la acción:</strong> Usá botones directos como <em>&quot;Ver ofertas&quot;</em> o <em>&quot;Comprar ahora&quot;</em> para aumentar los clics.</li>
+                </ul>
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex-1">
               <PublicVisibilityCard
@@ -838,35 +987,64 @@ export function PromotionalCarouselEditor({
 
                 {/* Templates */}
                 <div id="carousel-panel-template" role="tabpanel" aria-labelledby="carousel-tab-template" className={editorPanelClass('template', 'xl:order-5 xl:col-span-2')}>
-                <FormSection icon={ImagePlus} label="Inicio rápido con plantilla">
-                  <div className="grid gap-2.5 sm:grid-cols-3">
-                    {CAROUSEL_EXAMPLES.map((example) => (
+                <FormSection icon={ImagePlus} label="Inicio rápido con plantillas por rubro">
+                  {/* Filtro por Categorías */}
+                  <div className="flex flex-wrap gap-1.5 pb-2">
+                    {['all', 'Tecnología', 'Moda & Ropa', 'Cosmética', 'Ferretería', 'Promociones'].map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setTemplateCategoryFilter(cat)}
+                        className={cn(
+                          'rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer',
+                          templateCategoryFilter === cat
+                            ? 'bg-primary text-primary-foreground shadow-xs'
+                            : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                        )}
+                      >
+                        {cat === 'all' ? 'Todas' : cat}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">
+                    {CAROUSEL_EXAMPLES
+                      .filter((ex) => templateCategoryFilter === 'all' || ex.category === templateCategoryFilter)
+                      .map((example) => (
                       <button
                         key={example.name}
                         type="button"
                         onClick={() => applyTemplate(example)}
                         aria-pressed={editingSlide.imageUrl === example.slide.imageUrl}
                         className={cn(
-                          'group overflow-hidden rounded-md border bg-background text-left transition-all hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          'group overflow-hidden rounded-xl border bg-background text-left transition-all hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer',
                           editingSlide.imageUrl === example.slide.imageUrl
-                            ? 'border-primary ring-2 ring-primary/30'
-                            : 'border-border/70 hover:shadow-sm',
+                            ? 'border-primary ring-2 ring-primary/30 shadow-sm'
+                            : 'border-border/70 hover:shadow-xs',
                         )}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={example.slide.imageUrl} alt="" className="aspect-[16/6] w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
-                        <div className="flex items-center justify-between px-3 py-2">
-                          <span className="text-xs font-semibold">{example.name}</span>
-                          {editingSlide.imageUrl === example.slide.imageUrl && (
-                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary">
-                              <Check className="h-2.5 w-2.5 text-primary-foreground" />
-                            </span>
-                          )}
+                        <div className="relative aspect-[16/7] w-full overflow-hidden bg-muted">
+                          <img src={example.slide.imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+                          <span className="absolute left-2 top-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">
+                            {example.badgeIcon} {example.category}
+                          </span>
+                        </div>
+                        <div className="p-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-foreground">{example.name}</span>
+                            {editingSlide.imageUrl === example.slide.imageUrl && (
+                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary">
+                                <Check className="h-2.5 w-2.5 text-primary-foreground" />
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-[11px] text-muted-foreground line-clamp-1">{example.slide.title}</p>
                         </div>
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">Elegí una plantilla y después personalizá el texto, enlace o imagen.</p>
+                  <p className="text-xs text-muted-foreground">Elegí una plantilla para autocompletar título, mensaje, imagen y botón en 1 toque.</p>
                 </FormSection>
                 </div>
 
@@ -874,21 +1052,74 @@ export function PromotionalCarouselEditor({
                 <div id="carousel-panel-content" role="tabpanel" aria-labelledby="carousel-tab-content" className={editorPanelClass('content', 'xl:order-1')}>
                 <FormSection icon={Type} label="Contenido principal" step={1}>
                   <div className="grid gap-4">
+                    {/* Título */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="promotion-title" className="text-xs">Título <span className="text-destructive">*</span></Label>
+                        <Label htmlFor="promotion-title" className="text-xs font-bold text-foreground">Título del banner <span className="text-destructive">*</span></Label>
                         <CharCount value={editingSlide.title} max={100} />
                       </div>
-                      <Input id="promotion-title" required aria-invalid={Boolean(fieldErrors.title)} aria-describedby={fieldErrors.title ? 'promotion-title-error' : undefined} value={editingSlide.title} onChange={(e) => updateSlideField('title', e.target.value)} maxLength={100} placeholder="Semana de accesorios" className="h-10 text-sm" />
+                      <Input id="promotion-title" required aria-invalid={Boolean(fieldErrors.title)} aria-describedby={fieldErrors.title ? 'promotion-title-error' : undefined} value={editingSlide.title} onChange={(e) => updateSlideField('title', e.target.value)} maxLength={100} placeholder="Ej: 🔥 30% OFF en Seleccionados" className="h-10 text-sm font-semibold" />
                       <FieldError id="promotion-title-error" message={fieldErrors.title} />
+
+                      {/* Sugerencias Rápidas de Título */}
+                      <div className="pt-1">
+                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                          <Lightbulb className="h-3 w-3 text-amber-500" />
+                          Sugerencias de títulos comerciales:
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {TITLE_SUGGESTIONS.map((sug, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => updateSlideField('title', sug)}
+                              className={cn(
+                                'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer text-left',
+                                editingSlide.title === sug
+                                  ? 'border-primary bg-primary/10 font-bold text-primary'
+                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                              )}
+                            >
+                              {sug}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
+
+                    {/* Mensaje */}
+                    <div className="space-y-1.5 pt-2 border-t border-border/40">
                       <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="promotion-message" className="text-xs">Mensaje <span className="text-destructive">*</span></Label>
+                        <Label htmlFor="promotion-message" className="text-xs font-bold text-foreground">Mensaje descriptivo <span className="text-destructive">*</span></Label>
                         <CharCount value={editingSlide.message} max={240} />
                       </div>
-                      <Textarea id="promotion-message" required aria-invalid={Boolean(fieldErrors.message)} aria-describedby={fieldErrors.message ? 'promotion-message-error' : undefined} value={editingSlide.message} onChange={(e) => updateSlideField('message', e.target.value)} maxLength={240} rows={3} placeholder="Aprovechá precios especiales por tiempo limitado." className="min-h-24 resize-none text-sm" />
+                      <Textarea id="promotion-message" required aria-invalid={Boolean(fieldErrors.message)} aria-describedby={fieldErrors.message ? 'promotion-message-error' : undefined} value={editingSlide.message} onChange={(e) => updateSlideField('message', e.target.value)} maxLength={240} rows={3} placeholder="Aprovechá precios especiales por tiempo limitado." className="min-h-20 resize-none text-sm" />
                       <FieldError id="promotion-message-error" message={fieldErrors.message} />
+
+                      {/* Sugerencias Rápidas de Mensaje */}
+                      <div className="pt-1">
+                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                          <Lightbulb className="h-3 w-3 text-amber-500" />
+                          Sugerencias de mensajes:
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {MESSAGE_SUGGESTIONS.map((sug, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => updateSlideField('message', sug)}
+                              className={cn(
+                                'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer text-left',
+                                editingSlide.message === sug
+                                  ? 'border-primary bg-primary/10 font-bold text-primary'
+                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                              )}
+                            >
+                              {sug.slice(0, 42)}...
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </FormSection>
@@ -911,38 +1142,90 @@ export function PromotionalCarouselEditor({
                   <FieldError id="promotion-image-error" message={fieldErrors.imageUrl} />
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="promotion-alt" className="text-xs">Descripción de la imagen <span className="text-destructive">*</span></Label>
+                      <Label htmlFor="promotion-alt" className="text-xs font-semibold text-foreground">Descripción para accesibilidad (Alt) <span className="text-destructive">*</span></Label>
                       <CharCount value={editingSlide.imageAlt} max={160} />
                     </div>
                     <Input id="promotion-alt" required aria-invalid={Boolean(fieldErrors.imageAlt)} aria-describedby={fieldErrors.imageAlt ? 'promotion-alt-error' : 'promotion-alt-help'} value={editingSlide.imageAlt} onChange={(e) => updateSlideField('imageAlt', e.target.value)} maxLength={160} placeholder="Cargadores y cables incluidos en la promoción" className="text-sm" />
                     <FieldError id="promotion-alt-error" message={fieldErrors.imageAlt} />
-                    <p id="promotion-alt-help" className="text-[11px] text-muted-foreground">Usada por lectores de pantalla y SEO.</p>
+                    <p id="promotion-alt-help" className="text-[11px] text-muted-foreground">Requerido para buscadores y lectores de pantalla.</p>
                   </div>
                 </FormSection>
                 </div>
 
                 {/* CTA */}
                 <div id="carousel-panel-cta" role="tabpanel" aria-labelledby="carousel-tab-cta" className={editorPanelClass('cta', 'xl:order-3')}>
-                <FormSection icon={Link2} label="Botón de acción (opcional)" step={3}>
-                  <div className="grid gap-3 2xl:grid-cols-2">
+                <FormSection icon={Link2} label="Botón de acción (Llamado al clic)" step={3}>
+                  <div className="grid gap-4">
+                    {/* Texto del Botón */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="promotion-cta" className="text-xs">Texto del botón</Label>
+                        <Label htmlFor="promotion-cta" className="text-xs font-bold text-foreground">Texto del botón</Label>
                         <CharCount value={editingSlide.ctaText || ''} max={50} />
                       </div>
-                      <Input id="promotion-cta" aria-invalid={Boolean(fieldErrors.ctaText)} aria-describedby={fieldErrors.ctaText ? 'promotion-cta-error' : undefined} value={editingSlide.ctaText || ''} onChange={(e) => updateSlideField('ctaText', e.target.value)} maxLength={50} placeholder="Ver productos" className="text-sm" />
+                      <Input id="promotion-cta" aria-invalid={Boolean(fieldErrors.ctaText)} aria-describedby={fieldErrors.ctaText ? 'promotion-cta-error' : undefined} value={editingSlide.ctaText || ''} onChange={(e) => updateSlideField('ctaText', e.target.value)} maxLength={50} placeholder="Ej: Ver ofertas, Comprar ahora" className="text-sm font-semibold" />
                       <FieldError id="promotion-cta-error" message={fieldErrors.ctaText} />
+
+                      {/* Sugerencias Botón */}
+                      <div className="pt-1">
+                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                          <Lightbulb className="h-3 w-3 text-amber-500" />
+                          Sugerencias de botón:
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {CTA_TEXT_SUGGESTIONS.map((sug, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => updateSlideField('ctaText', sug)}
+                              className={cn(
+                                'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer',
+                                editingSlide.ctaText === sug
+                                  ? 'border-primary bg-primary/10 font-bold text-primary'
+                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                              )}
+                            >
+                              {sug}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
+
+                    {/* Enlace del Botón */}
+                    <div className="space-y-1.5 pt-2 border-t border-border/40">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="promotion-href" className="text-xs">Enlace del botón</Label>
+                        <Label htmlFor="promotion-href" className="text-xs font-bold text-foreground">Enlace o destino</Label>
                         <CharCount value={editingSlide.ctaHref || ''} max={500} />
                       </div>
-                      <Input id="promotion-href" aria-invalid={Boolean(fieldErrors.ctaHref)} aria-describedby={fieldErrors.ctaHref ? 'promotion-href-error' : undefined} value={editingSlide.ctaHref || ''} onChange={(e) => updateSlideField('ctaHref', e.target.value)} maxLength={500} placeholder="/productos" className="text-sm" />
+                      <Input id="promotion-href" aria-invalid={Boolean(fieldErrors.ctaHref)} aria-describedby={fieldErrors.ctaHref ? 'promotion-href-error' : undefined} value={editingSlide.ctaHref || ''} onChange={(e) => updateSlideField('ctaHref', e.target.value)} maxLength={500} placeholder="/productos" className="text-sm font-mono" />
                       <FieldError id="promotion-href-error" message={fieldErrors.ctaHref} />
+
+                      {/* Atajos de Destino */}
+                      <div className="pt-1">
+                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                          <ExternalLink className="h-3 w-3 text-primary" />
+                          Destinos rápidos:
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {CTA_HREF_SHORTCUTS.map((shortcut, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => updateSlideField('ctaHref', shortcut.href)}
+                              className={cn(
+                                'rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer',
+                                editingSlide.ctaHref === shortcut.href
+                                  ? 'border-primary bg-primary/10 text-primary'
+                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                              )}
+                            >
+                              {shortcut.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">Dejá ambos vacíos para no mostrar el botón.</p>
                 </FormSection>
                 </div>
 

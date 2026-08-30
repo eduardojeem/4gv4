@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
-import { ChevronLeft, ChevronRight, Pause, Play, Sparkles, Store, Tag } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronLeft, ChevronRight, Eye, Pause, Play, Sparkles, Store, Tag, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
@@ -159,14 +160,11 @@ export function MarketplaceProductCarousel({
               : 0
 
             return (
-              <button
+              <div
                 key={`${product.organization_slug}-${product.id}`}
-                type="button"
                 data-carousel-card
-                onClick={() => setSelected(product)}
-                aria-label={`Ver ${product.name}`}
                 className={cn(
-                  'group relative flex w-[78vw] max-w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 sm:w-64 bg-card',
+                  'group relative flex w-[78vw] max-w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 sm:w-64 bg-card shadow-2xs',
                   isOffers
                     ? 'border-rose-200/70 hover:border-rose-300 hover:shadow-xl hover:shadow-rose-500/10 dark:border-rose-900/40 dark:hover:border-rose-700'
                     : isFeatured
@@ -174,10 +172,15 @@ export function MarketplaceProductCarousel({
                       : 'border-border/80 hover:border-cyan-300 hover:shadow-lg hover:shadow-cyan-500/5 dark:hover:border-cyan-800'
                 )}
               >
-                {/* Imagen */}
+                {/* Imagen (clic abre el detalle) */}
                 <div
+                  onClick={() => setSelected(product)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelected(product) }}
+                  aria-label={`Ver detalle de ${product.name}`}
                   className={cn(
-                    'relative aspect-square overflow-hidden',
+                    'relative aspect-square overflow-hidden cursor-pointer',
                     isOffers
                       ? 'bg-gradient-to-br from-rose-50/80 to-rose-100/40 dark:from-rose-950/20 dark:to-rose-900/10'
                       : isFeatured
@@ -188,7 +191,7 @@ export function MarketplaceProductCarousel({
                   <ProductImage product={product} />
 
                   {/* Badges superiores */}
-                  <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1.5">
+                  <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1.5 pointer-events-none">
                     {hasOffer && discountPct > 0 && (
                       <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
                         <Tag className="h-2.5 w-2.5" />
@@ -214,31 +217,42 @@ export function MarketplaceProductCarousel({
                 </div>
 
                 {/* Info */}
-                <div className="flex flex-1 flex-col p-4">
-                  <div className="flex items-center gap-1.5">
-                    <Store className={cn(
-                      'h-3.5 w-3.5 shrink-0',
-                      isOffers ? 'text-rose-500' : isFeatured ? 'text-amber-600 dark:text-amber-400' : 'text-cyan-600 dark:text-cyan-400'
-                    )} />
-                    <span className={cn(
-                      'truncate text-xs font-semibold',
-                      isOffers ? 'text-rose-700 dark:text-rose-400' : isFeatured ? 'text-amber-800 dark:text-amber-300' : 'text-cyan-700 dark:text-cyan-400'
-                    )}>
-                      {product.organization_name}
-                    </span>
+                <div className="flex flex-1 flex-col p-4 justify-between">
+                  <div>
+                    <Link
+                      href={`/${product.organization_slug}/inicio`}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold hover:underline"
+                    >
+                      <Store className={cn(
+                        'h-3.5 w-3.5 shrink-0',
+                        isOffers ? 'text-rose-500' : isFeatured ? 'text-amber-600 dark:text-amber-400' : 'text-cyan-600 dark:text-cyan-400'
+                      )} />
+                      <span className={cn(
+                        'truncate max-w-[170px]',
+                        isOffers ? 'text-rose-700 dark:text-rose-400' : isFeatured ? 'text-amber-800 dark:text-amber-300' : 'text-cyan-700 dark:text-cyan-400'
+                      )}>
+                        {product.organization_name}
+                      </span>
+                    </Link>
+
+                    {product.category && (
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                        {product.category.name}
+                      </p>
+                    )}
+
+                    <h3
+                      onClick={() => setSelected(product)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelected(product) }}
+                      className="mt-1.5 line-clamp-2 text-sm font-semibold leading-snug text-foreground transition-colors hover:text-primary cursor-pointer"
+                    >
+                      {product.name}
+                    </h3>
                   </div>
 
-                  {product.category && (
-                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                      {product.category.name}
-                    </p>
-                  )}
-
-                  <h3 className="mt-1.5 line-clamp-2 flex-1 text-sm font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
-                    {product.name}
-                  </h3>
-
-                  <div className="mt-3.5 flex items-baseline justify-between gap-2 border-t border-border/40 pt-2.5">
+                  <div className="mt-3.5 space-y-3 border-t border-border/40 pt-2.5">
                     <div className="flex items-baseline gap-2">
                       <p
                         className={cn(
@@ -259,12 +273,34 @@ export function MarketplaceProductCarousel({
                       )}
                     </div>
 
-                    <span className="text-[11px] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100 hidden sm:inline">
-                      Ver detalle →
-                    </span>
+                    {/* Botones de acción: Ver detalle + Ir a tienda */}
+                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setSelected(product)}
+                        className="h-8 rounded-xl text-xs font-semibold gap-1 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>Detalle</span>
+                      </Button>
+
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-xl text-xs font-semibold gap-1 px-2 border-border/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-colors"
+                      >
+                        <Link href={`/${product.organization_slug}/productos/${product.id}`}>
+                          <span>Ir a tienda</span>
+                          <ArrowRight className="h-3 w-3" />
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>

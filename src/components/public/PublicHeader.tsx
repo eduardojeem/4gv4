@@ -284,17 +284,33 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
         {/* Right side: Theme toggle + CTA + User */}
         <div className="flex items-center gap-2.5">
           {tenantPrefix && (
-            <Button
-              asChild
-              variant="default"
-              size="sm"
-              className="hidden gap-2 rounded-lg border border-cyan-500/80 bg-cyan-600 font-semibold text-white shadow-sm shadow-cyan-600/20 transition-colors hover:bg-cyan-500 hover:text-white lg:inline-flex"
-            >
-              <Link href="/marketplace" aria-label="Volver al marketplace">
-                <Store className="h-4 w-4" />
-                Marketplace
-              </Link>
-            </Button>
+            <>
+              {/* Desktop Marketplace button */}
+              <Button
+                asChild
+                variant="default"
+                size="sm"
+                className="hidden gap-2 rounded-lg border border-cyan-500/80 bg-cyan-600 font-semibold text-white shadow-sm shadow-cyan-600/20 transition-colors hover:bg-cyan-500 hover:text-white lg:inline-flex"
+              >
+                <Link href="/marketplace" aria-label="Volver al marketplace">
+                  <Store className="h-4 w-4" />
+                  <span>Marketplace</span>
+                </Link>
+              </Button>
+
+              {/* Mobile Marketplace compact button */}
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="inline-flex lg:hidden h-8 gap-1 rounded-lg border-cyan-500/40 bg-cyan-50/70 dark:bg-cyan-950/40 px-2 py-1 text-[11px] font-bold text-cyan-700 dark:text-cyan-300 shadow-2xs hover:bg-cyan-100"
+              >
+                <Link href="/marketplace" aria-label="Volver al marketplace">
+                  <Store className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Marketplace</span>
+                </Link>
+              </Button>
+            </>
           )}
 
           <PublicCartButton />

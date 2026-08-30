@@ -96,29 +96,43 @@ export function addPublicProductToCart({
   product,
   unitPrice,
   quantity = 1,
+  variant,
 }: {
   tenantSlug: string | null | undefined
   product: PublicProduct
   unitPrice: number
   quantity?: number
+  variant?: {
+    id: string
+    variant_name: string
+    sku?: string | null
+    stock_quantity?: number | null
+  } | null
 }) {
   const current = getPublicCartItems(tenantSlug)
-  const existing = current.find((item) => item.productId === product.id)
-  const availableStock = normalizeAvailableStock(product.stock_quantity) ?? 0
+  const cartItemId = variant ? `${product.id}:${variant.id}` : product.id
+  const displayName = variant ? `${product.name} (${variant.variant_name})` : product.name
+  const displaySku = variant?.sku || product.sku || null
+  const rawStock = variant && typeof variant.stock_quantity === 'number'
+    ? variant.stock_quantity
+    : product.stock_quantity
+  const availableStock = normalizeAvailableStock(rawStock) ?? 0
+
+  const existing = current.find((item) => item.productId === cartItemId)
   const requestedQuantity = (existing?.quantity ?? 0) + quantity
   const nextQuantity = clampPublicCartQuantity(requestedQuantity, availableStock)
   const next = existing
     ? current.map((item) =>
-        item.productId === product.id
+        item.productId === cartItemId
           ? { ...item, quantity: nextQuantity, availableStock, unitPrice }
           : item
       )
     : [
         ...current,
         {
-          productId: product.id,
-          name: product.name,
-          sku: product.sku || null,
+          productId: cartItemId,
+          name: displayName,
+          sku: displaySku,
           image: product.image || null,
           unitPrice,
           quantity: nextQuantity,

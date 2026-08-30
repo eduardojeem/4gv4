@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -35,13 +35,12 @@ export function FeaturedProducts() {
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )
 
-  const isMounted = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false
-  )
+  const [isMounted, setIsMounted] = useState(false)
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
-  const products = data ?? []
+  const products = isMounted ? (data ?? []) : []
   const effectiveIsLoading = !isMounted || isLoading
 
   // Filtro por pestaña

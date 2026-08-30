@@ -13,6 +13,7 @@ export function isPublicServicesPageAvailable(
   services: Service[] | null | undefined
 ): boolean {
   if (servicesPageEnabled === false) return false
+  if (servicesPageEnabled === true) return true
   const activeServices = getActivePublicServices(services)
   return activeServices.length > 0
 }

@@ -141,6 +141,7 @@ export interface Service {
   ctaUrl?: string     // optional link override per service
   featured?: boolean
   category?: string
+  source?: 'catalog' | 'inventory' | 'template'
 }
 
 export interface Testimonial {

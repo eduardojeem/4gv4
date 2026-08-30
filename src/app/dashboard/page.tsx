@@ -836,7 +836,7 @@ export default function DashboardPage() {
           { href: '/dashboard/customers', icon: ClipboardList, label: 'Clientes', sub: 'CRM y contactos' },
           { href: '/dashboard/after-sales', icon: RotateCcw, label: 'Posventa y Devoluciones', sub: 'Garantías y reclamos' },
           { href: '/marketplace', icon: Globe, label: 'Marketplace', sub: 'Explorar empresas y productos' },
-          { href: orgSlug ? `/${orgSlug}/inicio` : '/marketplace/empresas', icon: Store, label: 'Mi tienda pública', sub: 'Ver cómo te ven los clientes' },
+          { href: organization?.slug ? `/${organization.slug}/inicio` : '/marketplace/empresas', icon: Store, label: 'Mi tienda pública', sub: 'Ver cómo te ven los clientes' },
         ].map(({ href, icon: Icon, label, sub }) => (
           <Link
             key={href}

@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, Building2, Package } from 'lucide-react'
+import { ArrowRight, Building2, Eye, Package, Store } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import type { PublicProduct } from '@/types/public'
@@ -73,37 +74,79 @@ export function MarketplaceOrgProductGrid({ organizations }: Props) {
                   organization_slug: org.slug,
                 }
                 return (
-                  <button
+                  <div
                     key={product.id}
-                    type="button"
-                    onClick={() => setSelected(asMarketplace)}
-                    aria-label={`Ver ${product.name}`}
-                    className="group overflow-hidden rounded-lg border border-slate-200 bg-white text-left transition-all hover:border-cyan-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:hover:border-cyan-700"
+                    className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card text-left transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md shadow-2xs p-3"
                   >
-                    <div className="relative aspect-square overflow-hidden bg-slate-100 dark:bg-slate-900">
+                    {/* Imagen (clic abre el detalle) */}
+                    <div
+                      onClick={() => setSelected(asMarketplace)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelected(asMarketplace) }}
+                      aria-label={`Ver detalle de ${product.name}`}
+                      className="relative aspect-square w-full overflow-hidden rounded-xl bg-muted/40 cursor-pointer"
+                    >
                       {imageSrc ? (
                         <Image
                           src={imageSrc}
                           alt={product.name}
                           fill
-                          className="object-contain p-3 transition-transform duration-300 group-hover:scale-105"
+                          className="object-contain p-2 transition-transform duration-300 group-hover:scale-105"
                           sizes="200px"
                         />
                       ) : (
                         <div className="flex h-full items-center justify-center">
-                          <Package className="h-7 w-7 text-slate-300 dark:text-slate-600" />
+                          <Package className="h-7 w-7 text-muted-foreground/30" />
                         </div>
                       )}
                     </div>
-                    <div className="p-3">
-                      <p className="line-clamp-2 text-xs font-medium text-slate-800 dark:text-slate-200">
-                        {product.name}
-                      </p>
-                      <p className="mt-1.5 text-sm font-bold text-slate-900 dark:text-slate-50">
-                        {formatPrice(product.sale_price)}
-                      </p>
+
+                    <div className="mt-2.5 flex flex-1 flex-col justify-between">
+                      <div>
+                        <h4
+                          onClick={() => setSelected(asMarketplace)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelected(asMarketplace) }}
+                          className="line-clamp-2 text-xs font-semibold leading-snug text-foreground transition-colors hover:text-primary cursor-pointer"
+                        >
+                          {product.name}
+                        </h4>
+                      </div>
+
+                      <div className="mt-2 space-y-2 border-t border-border/50 pt-2">
+                        <p className="text-sm font-bold tabular-nums text-foreground">
+                          {formatPrice(product.sale_price)}
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-1">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setSelected(asMarketplace)}
+                            className="h-7 rounded-lg text-[11px] font-semibold gap-1 px-1.5 hover:bg-primary/10 hover:text-primary"
+                          >
+                            <Eye className="h-3 w-3" />
+                            <span>Detalle</span>
+                          </Button>
+
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="h-7 rounded-lg text-[11px] font-semibold gap-1 px-1.5 border-border/80 hover:bg-primary/10 hover:text-primary"
+                          >
+                            <Link href={`/${org.slug}/productos/${product.id}`}>
+                              <span>Tienda</span>
+                              <ArrowRight className="h-2.5 w-2.5" />
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  </button>
+                  </div>
                 )
               })}
             </div>

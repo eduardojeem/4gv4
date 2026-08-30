@@ -66,6 +66,12 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
   const address = typeof page.companyInfo?.address === 'string' ? page.companyInfo.address : ''
   const email = typeof page.companyInfo?.email === 'string' ? page.companyInfo.email : ''
   const website = typeof page.companyInfo?.website === 'string' ? page.companyInfo.website : ''
+  const mapsUrl =
+    typeof page.companyInfo?.mapsUrl === 'string' && page.companyInfo.mapsUrl
+      ? page.companyInfo.mapsUrl
+      : address
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+      : ''
   const plan = org.plan ?? 'FREE'
   const planClass = planStyles[plan] ?? planStyles.FREE
   const tenantUrl = `/${org.slug}/inicio`
@@ -79,22 +85,31 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
         <div className="h-1 w-full bg-gradient-to-r from-cyan-400 via-cyan-500 to-cyan-400" />
         <div className="absolute inset-0 top-1 bg-[radial-gradient(ellipse_70%_60%_at_50%_0%,rgba(6,182,212,0.06),transparent)]" />
 
-        <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          {/* Breadcrumb */}
-          <nav className="mb-6 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-            <Link href="/marketplace" className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-300">
-              <Store className="h-3 w-3" />
-              Marketplace
-            </Link>
-            <ChevronRight className="h-3 w-3" />
-            <Link href="/marketplace/empresas" className="hover:text-slate-700 dark:hover:text-slate-300">
-              Empresas
-            </Link>
-            <ChevronRight className="h-3 w-3" />
-            <span className="max-w-[180px] truncate font-medium text-slate-700 dark:text-slate-200">{org.name}</span>
-          </nav>
+        <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          {/* Breadcrumb & Volver al Marketplace */}
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <nav className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <Link href="/marketplace" className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-300">
+                <Store className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                Marketplace
+              </Link>
+              <ChevronRight className="h-3 w-3" />
+              <Link href="/marketplace/empresas" className="hover:text-slate-700 dark:hover:text-slate-300">
+                Empresas
+              </Link>
+              <ChevronRight className="h-3 w-3" />
+              <span className="max-w-[180px] truncate font-medium text-slate-700 dark:text-slate-200">{org.name}</span>
+            </nav>
 
-          <div className="grid gap-8 lg:grid-cols-[1fr_320px] lg:items-start">
+            <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-xl border-cyan-500/40 text-xs font-semibold text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 shadow-2xs">
+              <Link href="/marketplace">
+                <Store className="h-3.5 w-3.5" />
+                <span>Volver al Marketplace</span>
+              </Link>
+            </Button>
+          </div>
+
+          <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-start">
             {/* Left: info */}
             <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
               {/* Logo */}
@@ -106,12 +121,12 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
                 )}
               </div>
 
-              <div>
+              <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${planClass}`}>{plan}</span>
                   <Badge variant="outline" className="gap-1.5 text-xs">
                     <Store className="h-3 w-3" />
-                    Empresa publicada
+                    Empresa verificada
                   </Badge>
                 </div>
                 <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-slate-50">
@@ -122,7 +137,7 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
                 <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
                   <span className="flex items-center gap-1.5">
                     <Package className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-                    {page.products.length} productos públicos
+                    {page.products.length} productos publicados
                   </span>
                   <span className="flex items-center gap-1.5">
                     <Globe className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
@@ -130,88 +145,132 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
                   </span>
                 </div>
 
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <Button asChild size="sm" className="gap-2 bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600">
+                <div className="mt-6 flex flex-wrap items-center gap-2.5">
+                  <Button asChild size="sm" className="h-9 gap-2 bg-cyan-600 hover:bg-cyan-700 font-bold dark:bg-cyan-600 shadow-sm">
                     <Link href={tenantUrl}>
-                      Ir a la tienda
+                      <span>Ir a la tienda oficial</span>
                       <ExternalLink className="h-3.5 w-3.5" />
                     </Link>
                   </Button>
-                  <Button asChild size="sm" variant="outline">
+                  <Button asChild size="sm" variant="outline" className="h-9 gap-1.5 rounded-xl text-xs font-semibold">
                     <Link href="/marketplace/empresas">
-                      <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-                      Volver
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      <span>Ver todas las tiendas</span>
                     </Link>
                   </Button>
                 </div>
               </div>
             </div>
 
-            {/* Right: contact card */}
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Contacto</h2>
+            {/* Right: contact & location card */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/60 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                  <span>Contacto y Ubicación</span>
+                </h2>
+                <span className="rounded-full bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-bold px-2 py-0.5">
+                  Oficial
+                </span>
+              </div>
+
               {hasContact ? (
-                <ul className="mt-4 space-y-3">
+                <ul className="space-y-3 text-sm">
+                  {address && (
+                    <li className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-3 space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-cyan-100/80 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300">
+                          <MapPin className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Dirección de la tienda
+                          </p>
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
+                            {address}
+                          </p>
+                        </div>
+                      </div>
+
+                      {mapsUrl && (
+                        <div className="pt-1">
+                          <a
+                            href={mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-300/60 bg-cyan-50 dark:border-cyan-800 dark:bg-cyan-950/40 px-2.5 py-1 text-[11px] font-bold text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100 transition-colors"
+                          >
+                            <MapPin className="h-3 w-3" />
+                            <span>Abrir en Google Maps</span>
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        </div>
+                      )}
+                    </li>
+                  )}
+
                   {phone && (
                     <li>
                       <a
                         href={`tel:${phone.replace(/\D/g, '')}`}
-                        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                        className="flex items-center gap-3 rounded-xl p-2.5 text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
                       >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-50 dark:bg-cyan-950/30">
-                          <Phone className="h-4 w-4 text-cyan-700 dark:text-cyan-400" />
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-cyan-50 dark:bg-cyan-950/30">
+                          <Phone className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" />
                         </span>
-                        {phone}
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase">Teléfono de atención</p>
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{phone}</p>
+                        </div>
                       </a>
                     </li>
                   )}
+
                   {email && (
                     <li>
                       <a
                         href={`mailto:${email}`}
-                        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                        className="flex items-center gap-3 rounded-xl p-2.5 text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
                       >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-50 dark:bg-cyan-950/30">
-                          <Mail className="h-4 w-4 text-cyan-700 dark:text-cyan-400" />
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-cyan-50 dark:bg-cyan-950/30">
+                          <Mail className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" />
                         </span>
-                        {email}
+                        <div className="min-w-0 truncate">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase">Correo electrónico</p>
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{email}</p>
+                        </div>
                       </a>
                     </li>
                   )}
-                  {address && (
-                    <li>
-                      <div className="flex items-start gap-3 px-3 py-2 text-sm text-slate-600 dark:text-slate-400">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-50 dark:bg-cyan-950/30">
-                          <MapPin className="h-4 w-4 text-cyan-700 dark:text-cyan-400" />
-                        </span>
-                        {address}
-                      </div>
-                    </li>
-                  )}
+
                   {website && (
                     <li>
                       <a
                         href={website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                        className="flex items-center gap-3 rounded-xl p-2.5 text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
                       >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-50 dark:bg-cyan-950/30">
-                          <Globe className="h-4 w-4 text-cyan-700 dark:text-cyan-400" />
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-cyan-50 dark:bg-cyan-950/30">
+                          <Globe className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" />
                         </span>
-                        {website}
+                        <div className="min-w-0 truncate">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase">Sitio web externo</p>
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{website}</p>
+                        </div>
                       </a>
                     </li>
                   )}
                 </ul>
               ) : (
-                <p className="mt-3 text-sm text-slate-400 dark:text-slate-500">
-                  La empresa aún no cargó datos de contacto.
+                <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
+                  La empresa aún no cargó datos de contacto adicionales.
                 </p>
               )}
-              <Button asChild className="mt-5 w-full gap-2 bg-cyan-600 hover:bg-cyan-700">
+
+              <Button asChild className="w-full gap-2 bg-cyan-600 hover:bg-cyan-700 font-bold shadow-xs">
                 <Link href={tenantUrl}>
-                  Ver tienda completa
+                  <span>Ver catálogo completo</span>
                   <ExternalLink className="h-4 w-4" />
                 </Link>
               </Button>

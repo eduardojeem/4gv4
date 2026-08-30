@@ -37,14 +37,12 @@ interface ServicesPageProps {
 export default async function ServicesPage({ organizationId, organizationName }: ServicesPageProps = {}) {
   const settings = await fetchWebsiteSettings()
 
-  const services = getActivePublicServices(settings?.services)
+  const services: Service[] = getActivePublicServices(settings?.services).map(s => ({
+    ...s,
+    source: s.source || 'catalog',
+  }))
 
   // Cargar servicios dinámicos de la organización desde la tabla products.
-  // Heurística: no hay una columna is_service en products, así que se
-  // detectan por unit_measure='servicio' o por nombre. Un producto físico
-  // que contenga "servicio" en el nombre (ej. "Kit de servicio técnico")
-  // podría colarse acá — vale la pena una columna dedicada si esto da falsos
-  // positivos en la práctica.
   if (organizationId) {
     try {
       const supabase = createAdminSupabase()
@@ -63,9 +61,10 @@ export default async function ServicesPage({ organizationId, organizationName }:
           price: s.sale_price || 0,
           icon: 'wrench',
           color: 'blue',
-          benefits: ['Garantía escrita', 'Atención rápida'],
-          category: extractCategoryName(s.category) || 'Servicios',
-          active: true
+          benefits: ['Garantía escrita', 'Atención profesional'],
+          category: extractCategoryName(s.category) || 'Servicios Técnicos',
+          active: true,
+          source: 'inventory',
         }))
 
         const existingTitles = new Set(services.map(s => (s.title || '').toLowerCase()))
@@ -84,7 +83,7 @@ export default async function ServicesPage({ organizationId, organizationName }:
   const phone = settings?.company_info?.phone || ''
   const whatsapp = settings?.company_info?.whatsapp || phone
 
-  if (services.length === 0 && !isPublicServicesPageAvailable(settings?.company_info?.servicesPageEnabled, settings?.services)) {
+  if (settings?.company_info?.servicesPageEnabled === false) {
     notFound()
   }
 

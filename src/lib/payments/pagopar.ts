@@ -2,6 +2,8 @@ import { createHash } from 'crypto'
 
 const PAGOPAR_API_BASE_URL = 'https://api.pagopar.com/api'
 const PAGOPAR_CHECKOUT_BASE_URL = 'https://www.pagopar.com/pagos'
+const PAGOPAR_ORDER_QUERY_URL = `${PAGOPAR_API_BASE_URL}/pedidos/1.1/traer`
+const PAGOPAR_QUERY_TIMEOUT_MS = 10_000
 
 export type PagoparPaymentMethod = 'card' | 'qr'
 
@@ -36,6 +38,35 @@ type PagoparCreateResponse = {
   raw: unknown
 }
 
+type PagoparOrderQueryItem = {
+  pagado?: boolean
+  cancelado?: boolean
+  fecha_pago?: string | null
+  fecha_maxima_pago?: string | null
+  forma_pago?: string | null
+  hash_pedido?: string | null
+  monto?: string | number | null
+  numero_pedido?: string | number | null
+  ultimo_mensaje_error?: string | null
+  mensaje_resultado_pago?: {
+    titulo?: string | null
+    descripcion?: string | null
+  } | null
+}
+
+export type PagoparOrderDisplayStatus = 'approved' | 'pending' | 'rejected' | 'cancelled' | 'processing'
+
+export type PagoparOrderStatusResult = {
+  hash: string
+  amount: number
+  providerOrderId: string | null
+  paymentMethod: string | null
+  paidAt: string | null
+  maximumPaymentDate: string | null
+  message: string | null
+  status: PagoparOrderDisplayStatus
+}
+
 function requiredEnv(name: string) {
   const value = process.env[name]
   if (!value) throw new Error(`${name} is not configured`)
@@ -44,6 +75,22 @@ function requiredEnv(name: string) {
 
 function sha1(value: string) {
   return createHash('sha1').update(value).digest('hex')
+}
+
+export function isValidPagoparOrderHash(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9]{40,128}$/.test(value)
+}
+
+export function getPagoparOrderDisplayStatus(
+  item: Pick<PagoparOrderQueryItem, 'pagado' | 'cancelado' | 'ultimo_mensaje_error' | 'mensaje_resultado_pago'>,
+): PagoparOrderDisplayStatus {
+  if (item.pagado === true) return 'approved'
+  if (item.cancelado === true) return 'cancelled'
+  if (item.ultimo_mensaje_error?.trim()) return 'rejected'
+
+  const resultTitle = item.mensaje_resultado_pago?.titulo?.toLocaleLowerCase() || ''
+  if (resultTitle.includes('pendiente')) return 'pending'
+  return 'processing'
 }
 
 function normalizePhone(value?: string | null) {
@@ -113,6 +160,71 @@ export function parsePagoparNotificationAmount(value: unknown): number | null {
 
   const amount = Number(normalized)
   return Number.isFinite(amount) && amount >= 0 ? amount : null
+}
+
+export async function queryPagoparOrder(hash: string): Promise<PagoparOrderStatusResult> {
+  if (!isValidPagoparOrderHash(hash)) {
+    throw new Error('El hash de Pagopar no tiene un formato válido.')
+  }
+
+  const publicKey = requiredEnv('PAGOPAR_PUBLIC_KEY')
+  const privateKey = requiredEnv('PAGOPAR_PRIVATE_KEY')
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), PAGOPAR_QUERY_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(PAGOPAR_ORDER_QUERY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        hash_pedido: hash,
+        token: sha1(`${privateKey}CONSULTA`),
+        token_publico: publicKey,
+      }),
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+
+    const payload = await response.json().catch(() => null) as {
+      respuesta?: boolean
+      resultado?: PagoparOrderQueryItem[] | string
+    } | null
+    const item = payload?.respuesta === true && Array.isArray(payload.resultado)
+      ? payload.resultado[0]
+      : null
+
+    if (!response.ok || !item) {
+      throw new Error('Pagopar no pudo confirmar el estado del pedido.')
+    }
+    if (item.hash_pedido !== hash) {
+      throw new Error('La respuesta no corresponde al pedido solicitado.')
+    }
+
+    const amount = parsePagoparNotificationAmount(item.monto)
+    if (amount === null) {
+      throw new Error('Pagopar devolvió un monto inválido.')
+    }
+
+    return {
+      hash,
+      amount,
+      providerOrderId: item.numero_pedido == null ? null : String(item.numero_pedido),
+      paymentMethod: item.forma_pago?.trim() || null,
+      paidAt: item.fecha_pago || null,
+      maximumPaymentDate: item.fecha_maxima_pago || null,
+      message: item.ultimo_mensaje_error?.trim()
+        || item.mensaje_resultado_pago?.titulo?.trim()
+        || null,
+      status: getPagoparOrderDisplayStatus(item),
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Pagopar tardó demasiado en responder.')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 function normalizePagoparError(message: string) {

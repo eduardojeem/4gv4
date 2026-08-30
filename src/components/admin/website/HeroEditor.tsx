@@ -11,12 +11,198 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
-import { Loader2, Save, Sparkles, TrendingUp, Check, Eye, EyeOff } from 'lucide-react'
+import {
+  Loader2,
+  Save,
+  Sparkles,
+  TrendingUp,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  EyeOff,
+  Flame,
+  HelpCircle,
+  Lightbulb,
+  Plus,
+  RefreshCw,
+  Store,
+  Tag,
+  Wand2,
+  Wrench,
+  Smartphone,
+  ShoppingBag,
+  Monitor,
+  ShieldCheck,
+  Truck,
+  CreditCard,
+  MessageCircle,
+  ExternalLink,
+  Zap,
+  Award,
+  ThumbsUp,
+  Clock,
+  ArrowRight,
+  Package,
+  Search,
+  MapPin,
+} from 'lucide-react'
+import Image from 'next/image'
 import { HeroContent, HeroStats } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
+import { cn } from '@/lib/utils'
+
+export interface HeroPreset {
+  id: string
+  label: string
+  icon: string
+  badge: string
+  title: string
+  subtitle: string
+  ctaPrimaryText: string
+  ctaSecondaryText: string
+  trustBadges: [string, string, string]
+  stats: { repairs: string; satisfaction: string; avgTime: string }
+}
+
+export const HERO_PRESETS: HeroPreset[] = [
+  {
+    id: 'tech',
+    label: 'Tecnología & Celulares',
+    icon: '📱',
+    badge: '✨ Especialistas en Tecnología & Celulares',
+    title: 'Lo último en tecnología y servicio técnico garantizado',
+    subtitle: 'Equipos nuevos, accesorios originales y reparación profesional con garantía escrita.',
+    ctaPrimaryText: 'Ver productos',
+    ctaSecondaryText: 'Escribinos por WhatsApp',
+    trustBadges: ['Garantía escrita', 'Repuestos originales', 'Envíos a todo el país'],
+    stats: { repairs: '10K+', satisfaction: '99%', avgTime: '24-48h' },
+  },
+  {
+    id: 'fashion',
+    label: 'Moda, Calzado & Accesorios',
+    icon: '👗',
+    badge: '🔥 Nueva Temporada & Tendencias',
+    title: 'Estilo, calidad y las mejores marcas para vos',
+    subtitle: 'Encontrá las últimas novedades, ofertas exclusivas y envíos rápidos a tu puerta.',
+    ctaPrimaryText: 'Ver colección',
+    ctaSecondaryText: 'Consultar talles',
+    trustBadges: ['100% Calidad', 'Cambio fácil', 'Cuotas y Envíos'],
+    stats: { repairs: '5K+', satisfaction: '99%', avgTime: '24h' },
+  },
+  {
+    id: 'electro',
+    label: 'Electro, Hogar & Bazar',
+    icon: '🏠',
+    badge: '🏆 Ofertas Directas para tu Hogar',
+    title: 'Todo lo que tu hogar necesita al mejor precio',
+    subtitle: 'Grandes descuentos en electrodomésticos, bazar y equipamiento con despacho inmediato.',
+    ctaPrimaryText: 'Ver catálogo',
+    ctaSecondaryText: 'Pedir cotización',
+    trustBadges: ['Stock inmediato', 'Garantía oficial', 'Precios especiales'],
+    stats: { repairs: '8K+', satisfaction: '98%', avgTime: '24h' },
+  },
+  {
+    id: 'repairs',
+    label: 'Servicio Técnico & Reparaciones',
+    icon: '🔧',
+    badge: '🔧 Laboratorio Técnico Especializado',
+    title: 'Reparamos tu equipo en tiempo récord con total confianza',
+    subtitle: 'Diagnóstico sin costo, repuestos certificados y seguimiento online de tu reparación.',
+    ctaPrimaryText: 'Ver servicios',
+    ctaSecondaryText: 'Consultar falla',
+    trustBadges: ['Diagnóstico sin costo', 'Garantía escrita', 'Técnicos certificados'],
+    stats: { repairs: '15K+', satisfaction: '99%', avgTime: '1-3 horas' },
+  },
+  {
+    id: 'general',
+    label: 'Comercio General / Multi-rubro',
+    icon: '🏪',
+    badge: '⭐ Tienda Oficial & Stock Garantizado',
+    title: 'Los mejores productos con atención personalizada',
+    subtitle: 'Explorá nuestro catálogo online con stock actualizado, promociones exclusivas y envíos rápidos.',
+    ctaPrimaryText: 'Explorar tienda',
+    ctaSecondaryText: 'Contactar',
+    trustBadges: ['Atención directa', 'Stock permanente', 'Envíos a todo el país'],
+    stats: { repairs: '100%', satisfaction: '4.9★', avgTime: 'Despacho 24h' },
+  },
+]
+
+const BADGE_SUGGESTIONS = [
+  '✨ Tienda Oficial',
+  '🔥 Ofertas de Temporada',
+  '🚚 Envíos a todo el país',
+  '⭐ Calidad Garantizada',
+  '⚡ Stock Inmediato',
+  '🏆 Más de 10 años de experiencia',
+  '💎 Productos 100% Originales',
+]
+
+const TITLE_SUGGESTIONS = [
+  'Lo último en tecnología y servicio técnico garantizado',
+  'Los mejores productos con atención personalizada y garantía',
+  'Tu tienda de confianza con precios imbatibles y envíos rápidos',
+  'Ofertas exclusivas y lanzamientos de temporada al mejor precio',
+  'Todo lo que buscás en un solo lugar con despacho inmediato',
+]
+
+const SUBTITLE_SUGGESTIONS = [
+  'Stock 100% actualizado • Envíos a todo el país • Atención directa por WhatsApp',
+  'Garantía escrita • Repuestos originales • Técnicos certificados',
+  'Precios mayoristas y minoristas • Pagos en efectivo, transferencias y tarjetas',
+  'Comprá fácil y seguro desde tu celular con entrega rápida a domicilio',
+]
+
+const CTA_PRIMARY_SUGGESTIONS = [
+  'Ver productos',
+  'Explorar catálogo',
+  'Ver ofertas activas',
+  'Comprar ahora',
+  'Ver colección',
+  'Explorar tienda',
+]
+
+const CTA_SECONDARY_SUGGESTIONS = [
+  'Escribinos por WhatsApp',
+  'Consultar stock',
+  'Pedir cotización',
+  'Asesoramiento gratis',
+  'Contactar vendedor',
+  'Consultar falla',
+]
+
+const TRACK_REPAIR_SUGGESTIONS = [
+  '¿Tenés una reparación? Rastreá tu equipo',
+  '¿Hiciste un pedido? Rastreá tu compra',
+  'Consultar estado de orden en vivo',
+  'Rastrear equipo con número de orden',
+]
+
+const TRUST_BADGE_CATEGORIES = [
+  {
+    category: 'Garantía & Calidad',
+    icon: '🛡️',
+    items: ['Garantía escrita', 'Repuestos originales', '100% Calidad', 'Técnicos certificados', 'Productos oficiales'],
+  },
+  {
+    category: 'Envíos & Stock',
+    icon: '🚚',
+    items: ['Envíos a todo el país', 'Entrega en el día', 'Stock inmediato', 'Despacho en 24h', 'Retiro en local'],
+  },
+  {
+    category: 'Atención & Beneficios',
+    icon: '💳',
+    items: ['Atención directa', 'Pago 100% seguro', 'Cuotas sin interés', 'Precios de fábrica', 'Cambio fácil'],
+  },
+]
+
+const STAT_REPAIRS_SUGGESTIONS = ['10K+', '5.000+', '15K+', '50K+', '100%', '10+ Años', '1.000+']
+const STAT_SATISFACTION_SUGGESTIONS = ['99%', '98%', '100%', '4.9★', '⭐ 5 Estrellas', '99.5%']
+const STAT_AVG_TIME_SUGGESTIONS = ['24-48h', '1-3 horas', 'En el día', 'Despacho 24h', 'Inmediato', '6 Meses']
 
 interface HeroEditorProps {
   initialContent?: HeroContent
@@ -59,6 +245,35 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
       })
     }
     setHeroContentDraft((c) => ({ ...(c ?? heroContent), [field]: value }))
+  }
+
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
+  const [showHeroGuide, setShowHeroGuide] = useState(false)
+  const [showButtonsGuide, setShowButtonsGuide] = useState(false)
+  const [showBadgesGuide, setShowBadgesGuide] = useState(false)
+  const [showStatsGuide, setShowStatsGuide] = useState(false)
+
+  const applyHeroPreset = (preset: HeroPreset) => {
+    setHeroContentDraft((c) => ({
+      ...(c ?? heroContent),
+      badge: preset.badge,
+      title: preset.title,
+      subtitle: preset.subtitle,
+      ctaPrimaryText: preset.ctaPrimaryText,
+      ctaSecondaryText: preset.ctaSecondaryText,
+      trustBadges: [...preset.trustBadges],
+    }))
+    setHeroStatsDraft((s) => ({
+      ...(s ?? heroStats),
+      repairs: preset.stats.repairs,
+      satisfaction: preset.stats.satisfaction,
+      avgTime: preset.stats.avgTime,
+    }))
+    setErrors({})
+    toast.success(`Plantilla "${preset.label}" aplicada`, {
+      icon: <Check className="h-4 w-4 text-emerald-500" />,
+      description: 'Podés personalizar cualquier campo antes de guardar.',
+    })
   }
 
   const updateStat = <K extends keyof HeroStats>(field: K, value: HeroStats[K]) => {
@@ -129,97 +344,264 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
       />
 
       {/* Live preview */}
-      <Card className="relative overflow-hidden">
-        <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2">
-          <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            <Eye className="h-3.5 w-3.5" />
-            Vista previa
-          </span>
-          <span className={`text-xs font-semibold ${heroContent.enabled !== false ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-            {heroContent.enabled !== false ? 'Visible' : 'No publicado'}
+      <Card className="relative overflow-hidden shadow-md">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <Eye className="h-3.5 w-3.5 text-primary" />
+              Vista previa en vivo
+            </span>
+
+            {/* Selector de Dispositivo */}
+            <div className="flex items-center rounded-lg border border-border/80 bg-background p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setPreviewDevice('desktop')}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold transition-all cursor-pointer',
+                  previewDevice === 'desktop'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Monitor className="h-3.5 w-3.5" />
+                <span>Escritorio</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewDevice('mobile')}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold transition-all cursor-pointer',
+                  previewDevice === 'mobile'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Smartphone className="h-3.5 w-3.5" />
+                <span>Celular</span>
+              </button>
+            </div>
+          </div>
+
+          <span className={`text-xs font-bold flex items-center gap-1.5 ${heroContent.enabled !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+            <span className={cn('h-2 w-2 rounded-full', heroContent.enabled !== false ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground')} />
+            {heroContent.enabled !== false ? 'Visible en tu web' : 'Oculto al público'}
           </span>
         </div>
-        <div
-          className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} px-6 py-10 text-white transition-opacity ${heroContent.enabled !== false ? '' : 'opacity-45'}`}
-          data-custom-brand={hasValidCustomBrand ? '' : undefined}
-          style={customBrandStyle}
-        >
-          <div className="mx-auto max-w-5xl">
-            <div className="grid gap-8 md:grid-cols-2 md:items-center">
-              {/* Left Column */}
-              <div className="text-left">
-                <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur-sm">
-                  {heroContent.badge || 'Tu badge'}
-                </span>
-                <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
-                  {heroContent.title || 'Título principal del hero'}
-                </h2>
-                <p className={`mt-3 max-w-xl text-sm ${brand.text200}`}>
-                  {heroContent.subtitle || 'Subtítulo con tu propuesta de valor.'}
-                </p>
-                
-                {/* Trust Badges */}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {(heroContent.trustBadges || ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados']).map((label, i) => (
-                    <div key={i} className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-medium text-white/80 ring-1 ring-white/15">
-                      {label}
+
+        {/* Contenedor del Preview */}
+        <div className={cn(
+          'transition-all duration-300',
+          previewDevice === 'mobile' ? 'bg-muted/30 p-4 sm:p-6 flex justify-center' : ''
+        )}>
+          <div
+            className={cn(
+              'relative overflow-hidden transition-opacity',
+              'border-b border-border/80 bg-gradient-to-b from-primary/[0.06] via-background to-background',
+              heroContent.enabled !== false ? '' : 'opacity-45',
+              previewDevice === 'mobile'
+                ? 'w-full max-w-[390px] rounded-3xl border-4 border-slate-800 shadow-2xl p-5 text-center'
+                : 'px-6 py-10 sm:px-8'
+            )}
+            data-custom-brand={hasValidCustomBrand ? '' : undefined}
+            style={customBrandStyle}
+          >
+            {/* Luces de ambiente sutiles */}
+            <div className="pointer-events-none absolute -left-10 -top-10 h-60 w-60 rounded-full bg-primary/10 blur-3xl" />
+            <div className="pointer-events-none absolute right-0 top-1/4 h-72 w-72 rounded-full bg-primary/5 blur-3xl" />
+
+            <div className="mx-auto max-w-5xl relative">
+              <div className={cn(
+                'grid items-center gap-8',
+                previewDevice === 'mobile' ? 'grid-cols-1' : 'lg:grid-cols-12 lg:gap-10'
+              )}>
+                {/* ── Columna Izquierda: Mensaje Comercial ── */}
+                <div className={cn(
+                  'flex flex-col',
+                  previewDevice === 'mobile' ? 'items-center text-center' : 'items-start text-left lg:col-span-7'
+                )}>
+                  {/* Badges superiores */}
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary shadow-xs">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {heroContent.badge || 'Catálogo Oficial'}
+                    </span>
+
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Abierto hoy
+                    </span>
+                  </div>
+
+                  {/* Título Principal */}
+                  <h2 className={cn(
+                    'font-extrabold tracking-tight text-foreground',
+                    previewDevice === 'mobile' ? 'text-xl sm:text-2xl leading-snug' : 'text-2xl sm:text-4xl lg:text-5xl lg:leading-[1.15]'
+                  )}>
+                    {heroContent.title || 'Los mejores productos al mejor precio'}
+                  </h2>
+
+                  {/* Subtítulo */}
+                  <p className={cn(
+                    'mt-3 text-muted-foreground leading-relaxed',
+                    previewDevice === 'mobile' ? 'text-xs max-w-xs' : 'text-sm sm:text-base max-w-xl'
+                  )}>
+                    {heroContent.subtitle || 'Explorá nuestro catálogo con stock actualizado, promociones exclusivas y atención personalizada.'}
+                  </p>
+
+                  {/* Insignias de Confianza (Pills) */}
+                  <div className={cn(
+                    'mt-3.5 flex flex-wrap gap-1.5',
+                    previewDevice === 'mobile' ? 'justify-center' : ''
+                  )}>
+                    {(heroContent.trustBadges || ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados']).map((label, i) => (
+                      <div key={i} className="rounded-full bg-muted border border-border/70 px-2.5 py-0.5 text-[11px] font-semibold text-foreground shadow-2xs">
+                        ✓ {label}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Buscador Simulado ── */}
+                  <div className="mt-5 flex w-full max-w-md items-center gap-2 rounded-2xl border border-border/80 bg-card p-1.5 shadow-md">
+                    <div className="relative flex-1 flex items-center pl-3">
+                      <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="ml-2 text-xs text-muted-foreground truncate">
+                        ¿Qué estás buscando hoy?...
+                      </span>
                     </div>
-                  ))}
-                </div>
-
-                {/* CTAs */}
-                <div className="mt-6 flex flex-wrap gap-2">
-                  <div className={`rounded-lg bg-white ${brand.ctaBtn} px-4 py-2 text-xs font-bold`}>
-                    {heroContent.ctaPrimaryText || 'Ver productos'}
+                    <div className="rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground shadow-xs flex items-center gap-1">
+                      <span>Buscar</span>
+                      <ArrowRight className="h-3 w-3" />
+                    </div>
                   </div>
-                  <div className="rounded-lg border border-white/25 bg-white/10 px-4 py-2 text-xs font-medium backdrop-blur-sm">
-                    {heroContent.ctaSecondaryText || 'Escribinos'}
+
+                  {/* CTAs Principales */}
+                  <div className={cn(
+                    'mt-4 flex flex-wrap items-center gap-2.5',
+                    previewDevice === 'mobile' ? 'w-full flex-col items-stretch' : ''
+                  )}>
+                    <div className="rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2 cursor-pointer hover:bg-primary/90">
+                      <ShoppingBag className="h-4 w-4" />
+                      <span>{heroContent.ctaPrimaryText || 'Ver productos'}</span>
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-card text-foreground px-4 py-2.5 text-xs font-bold shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:bg-muted">
+                      <MessageCircle className="h-4 w-4 text-emerald-600" />
+                      <span>{heroContent.ctaSecondaryText || 'Escribinos'}</span>
+                    </div>
+                  </div>
+
+                  {/* Track Repair */}
+                  <div className="mt-3.5 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+                    <Wrench className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="underline underline-offset-2">
+                      {heroContent.trackRepairText || '¿Tenés una reparación? Rastreá tu equipo'}
+                    </span>
+                    <ArrowRight className="h-3 w-3 opacity-60" />
                   </div>
                 </div>
 
-                {/* Track Repair */}
-                <div className="mt-4 text-[11px] underline underline-offset-2 opacity-80">
-                  {heroContent.trackRepairText || '¿Tenés una reparación? Rastreá tu equipo'}
-                </div>
-              </div>
+                {/* ── Columna Derecha: Tarjeta Comercial Destacada ── */}
+                <div className={cn(
+                  'flex',
+                  previewDevice === 'mobile' ? 'justify-center w-full mt-3' : 'lg:col-span-5 justify-center lg:justify-end'
+                )}>
+                  <div className="w-full max-w-sm rounded-3xl border border-border/80 bg-card p-5 sm:p-6 shadow-xl space-y-4 text-left">
 
-              {/* Right Column: Stats Panel */}
-              <div className="flex justify-center md:justify-end">
-                <div className="rounded-2xl bg-white/10 p-6 shadow-xl ring-1 ring-white/20 backdrop-blur-md w-full max-w-[280px]">
-                  {heroStats.enabled !== false && (
-                    <div className="grid grid-cols-3 gap-2 border-b border-white/15 pb-4 text-center">
-                      {[
-                        { v: heroStats.repairs, l: 'Reparaciones' },
-                        { v: heroStats.satisfaction, l: 'Satisfacción' },
-                        { v: heroStats.avgTime, l: 'Tiempo prom.' },
-                      ].map((s, i) => (
-                        <div key={i}>
-                          <div className="text-lg font-bold">{s.v || '—'}</div>
-                          <div className={`mt-1 text-[9px] ${brand.text200}`}>{s.l}</div>
+                    {/* Header: Logo + Nombre de la Tienda */}
+                    <div className="flex items-center gap-3 pb-3 border-b border-border/60">
+                      {settings?.company_info?.logoUrl ? (
+                        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl border border-border bg-background p-1">
+                          <Image
+                            src={settings.company_info.logoUrl}
+                            alt="Logo"
+                            fill
+                            unoptimized
+                            className="object-contain"
+                          />
                         </div>
-                      ))}
+                      ) : (
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-extrabold text-xs shadow-xs">
+                          {settings?.company_info?.name?.slice(0, 2).toUpperCase() || '4G'}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate font-bold text-sm text-foreground">
+                          {settings?.company_info?.name || 'Tienda Oficial'}
+                        </h3>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {settings?.company_info?.address || 'Ubicación y atención personalizada'}
+                        </p>
+                      </div>
                     </div>
-                  )}
-                  <div className={`mt-4 space-y-2 opacity-80 ${heroStats.enabled === false ? 'mt-0' : ''}`}>
-                    <div className="rounded-lg bg-white/10 px-3 py-2 text-[10px] font-semibold flex justify-between">
-                      <span>Ver catálogo de productos</span><span>→</span>
+
+                    {/* Estadísticas */}
+                    {heroStats.enabled !== false && (
+                      <div className="grid grid-cols-3 gap-1.5 rounded-2xl bg-muted/40 p-3 text-center border border-border/40">
+                        <div>
+                          <div className="text-sm sm:text-base font-extrabold text-foreground">{heroStats.repairs || '100%'}</div>
+                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">Reparaciones</div>
+                        </div>
+                        <div>
+                          <div className="text-sm sm:text-base font-extrabold text-foreground">{heroStats.satisfaction || '4.9★'}</div>
+                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">Satisfacción</div>
+                        </div>
+                        <div>
+                          <div className="text-sm sm:text-base font-extrabold text-foreground">{heroStats.avgTime || '24h'}</div>
+                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">Tiempo prom.</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Accesos Rápidos */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between rounded-xl border border-border/70 bg-background p-2.5 text-xs font-bold text-foreground">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <Package className="h-3.5 w-3.5" />
+                          </div>
+                          <span>Ver catálogo completo</span>
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50/50 p-2.5 text-xs font-bold text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-300">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-200 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200">
+                            <Sparkles className="h-3.5 w-3.5" />
+                          </div>
+                          <span>Ofertas y promociones</span>
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 text-rose-500" />
+                      </div>
                     </div>
-                    <div className="rounded-lg bg-white/10 px-3 py-2 text-[10px] font-semibold flex justify-between">
-                      <span>Ofertas activas</span><span>→</span>
+
+                    {/* Horarios */}
+                    <div className="flex items-center justify-between pt-2 text-[10px] text-muted-foreground border-t border-border/60">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Horario:
+                      </span>
+                      <span className="font-semibold text-foreground">
+                        {settings?.company_info?.hours?.weekdays || 'Lunes a Sábados'}
+                      </span>
                     </div>
+
                   </div>
                 </div>
+
               </div>
             </div>
           </div>
         </div>
+
         {heroContent.enabled === false && (
-          <div className="absolute inset-x-0 bottom-0 top-9 z-20 flex items-center justify-center bg-background/45 p-6 backdrop-blur-[1px]">
-            <div className="flex items-center gap-3 rounded-md border bg-background px-4 py-3 shadow-lg">
-              <EyeOff className="h-5 w-5 text-muted-foreground" />
+          <div className="absolute inset-x-0 bottom-0 top-12 z-20 flex items-center justify-center bg-background/50 p-6 backdrop-blur-[2px]">
+            <div className="flex items-center gap-3 rounded-2xl border border-border bg-background p-4 shadow-xl">
+              <EyeOff className="h-6 w-6 text-muted-foreground shrink-0" />
               <div>
-                <p className="text-sm font-semibold">Hero oculto</p>
-                <p className="text-xs text-muted-foreground">La vista pública comenzará con la siguiente sección activa.</p>
+                <p className="text-sm font-bold text-foreground">Hero actualmente oculto</p>
+                <p className="text-xs text-muted-foreground">La página principal comenzará con la siguiente sección activa.</p>
               </div>
             </div>
           </div>
@@ -228,9 +610,98 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
 
       {/* Hero content */}
       <SectionCard icon={Sparkles} title="Contenido del hero" description="Textos principales de la sección hero">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="badge" className="text-sm font-medium">Badge superior</Label>
+        <div className="space-y-6">
+
+          {/* ── Plantillas por Rubro ── */}
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Wand2 className="h-4 w-4 text-primary" />
+                <span className="text-sm font-bold text-foreground">
+                  Plantillas Rápidas por Rubro
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                Hacé clic en tu rubro para auto-completar todo el hero
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-1">
+              {HERO_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => applyHeroPreset(preset)}
+                  className="flex flex-col items-center justify-center p-3 rounded-xl border border-border/80 bg-background/80 hover:bg-primary/10 hover:border-primary/40 transition-all text-center group cursor-pointer shadow-2xs"
+                >
+                  <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">{preset.icon}</span>
+                  <span className="text-xs font-bold text-foreground group-hover:text-primary leading-tight line-clamp-2">
+                    {preset.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Guía Visual Desplegable ── */}
+          <div className="border-b border-border/60 pb-4">
+            <button
+              type="button"
+              onClick={() => setShowHeroGuide((prev) => !prev)}
+              className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span>{showHeroGuide ? 'Ocultar guía de redacción' : '¿Cómo redactar un Hero que aumente tus ventas? (Guía y Tips)'}</span>
+              {showHeroGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+
+            {showHeroGuide && (
+              <div className="mt-3 rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs space-y-3 animate-in fade-in-50 duration-200">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <p className="font-bold text-foreground flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                      1. Badge Superior
+                    </p>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Debe ser breve (2 a 5 palabras). Resalta tu autoridad, temporada o beneficio principal (ej: <em>&quot;✨ Tienda Oficial&quot;</em> o <em>&quot;🚚 Envíos a todo el país&quot;</em>).
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="font-bold text-foreground flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-primary" />
+                      2. Título Principal
+                    </p>
+                    <p className="text-muted-foreground leading-relaxed">
+                      La promesa central de tu negocio. Explicá qué vendés y por qué deben elegirte de forma clara y atractiva.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="font-bold text-foreground flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      3. Subtítulo & Garantías
+                    </p>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Detalla beneficios clave: medios de pago, tiempos de entrega, garantía escrita y atención directa.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Campo 1: Badge Superior ── */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="badge" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                Badge superior
+              </Label>
+              <span className="text-xs text-muted-foreground">{heroContent.badge.length}/100</span>
+            </div>
+
             <Input
               id="badge"
               value={heroContent.badge}
@@ -240,14 +711,44 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               aria-invalid={!!errors.badge}
               className="h-11"
             />
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className={errors.badge ? 'text-destructive' : 'text-muted-foreground'}>{errors.badge || 'Etiqueta breve sobre el título.'}</span>
-              <span className="shrink-0 text-muted-foreground">{heroContent.badge.length}/100</span>
+            {errors.badge && <p className="text-xs text-destructive">{errors.badge}</p>}
+
+            {/* Sugerencias rápidas Badge */}
+            <div className="pt-1">
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                <Lightbulb className="h-3 w-3 text-amber-500" />
+                Sugerencias para Badge (tocá para aplicar):
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {BADGE_SUGGESTIONS.map((sug, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => updateContent('badge', sug)}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors cursor-pointer',
+                      heroContent.badge === sug
+                        ? 'border-primary bg-primary/10 font-bold text-primary'
+                        : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                    )}
+                  >
+                    <span>{sug}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="title" className="text-sm font-medium">Título principal</Label>
+          {/* ── Campo 2: Título Principal ── */}
+          <div className="space-y-2.5 pt-2 border-t border-border/40">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="title" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <Tag className="h-4 w-4 text-primary" />
+                Título principal
+              </Label>
+              <span className="text-xs text-muted-foreground">{heroContent.title.length}/150</span>
+            </div>
+
             <Input
               id="title"
               value={heroContent.title}
@@ -257,37 +758,120 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               aria-invalid={!!errors.title}
               className="h-11"
             />
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className={errors.title ? 'text-destructive' : 'text-muted-foreground'}>{errors.title || 'Explicá la propuesta principal en una frase.'}</span>
-              <span className="shrink-0 text-muted-foreground">{heroContent.title.length}/150</span>
-            </div>
-          </div>
+            {errors.title && <p className="text-xs text-destructive">{errors.title}</p>}
 
-            <div className="space-y-2">
-              <Label htmlFor="subtitle" className="text-sm font-medium">Subtítulo</Label>
-              <Textarea
-                id="subtitle"
-                value={heroContent.subtitle}
-                onChange={(e) => updateContent('subtitle', e.target.value)}
-                placeholder="Diagnóstico gratuito • Garantía de 6 meses • Técnicos certificados"
-                rows={2}
-                maxLength={300}
-                aria-invalid={!!errors.subtitle}
-                className="text-sm"
-              />
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <span className={errors.subtitle ? 'text-destructive' : 'text-muted-foreground'}>{errors.subtitle || 'Complementá el título con beneficios concretos.'}</span>
-                <span className="shrink-0 text-muted-foreground">{heroContent.subtitle.length}/300</span>
+            {/* Sugerencias rápidas Título */}
+            <div className="pt-1">
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                <Lightbulb className="h-3 w-3 text-amber-500" />
+                Sugerencias para Título (tocá para aplicar):
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {TITLE_SUGGESTIONS.map((sug, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => updateContent('title', sug)}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors text-left cursor-pointer',
+                      heroContent.title === sug
+                        ? 'border-primary bg-primary/10 font-bold text-primary'
+                        : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                    )}
+                  >
+                    <span>{sug}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
-        </SectionCard>
 
-        {/* Action Buttons & Links */}
-        <SectionCard icon={TrendingUp} title="Botones y Enlaces" description="Textos de los botones de llamada a la acción">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="ctaPrimaryText" className="text-sm font-medium">Botón principal</Label>
+          {/* ── Campo 3: Subtítulo ── */}
+          <div className="space-y-2.5 pt-2 border-t border-border/40">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="subtitle" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                Subtítulo
+              </Label>
+              <span className="text-xs text-muted-foreground">{heroContent.subtitle.length}/300</span>
+            </div>
+
+            <Textarea
+              id="subtitle"
+              value={heroContent.subtitle}
+              onChange={(e) => updateContent('subtitle', e.target.value)}
+              placeholder="Diagnóstico gratuito • Garantía de 6 meses • Técnicos certificados"
+              rows={2}
+              maxLength={300}
+              aria-invalid={!!errors.subtitle}
+              className="text-sm"
+            />
+            {errors.subtitle && <p className="text-xs text-destructive">{errors.subtitle}</p>}
+
+            {/* Sugerencias rápidas Subtítulo */}
+            <div className="pt-1">
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                <Lightbulb className="h-3 w-3 text-amber-500" />
+                Sugerencias para Subtítulo (tocá para aplicar):
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {SUBTITLE_SUGGESTIONS.map((sug, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => updateContent('subtitle', sug)}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors text-left cursor-pointer',
+                      heroContent.subtitle === sug
+                        ? 'border-primary bg-primary/10 font-bold text-primary'
+                        : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                    )}
+                  >
+                    <span>{sug}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </SectionCard>
+
+      {/* Action Buttons & Links */}
+      <SectionCard icon={TrendingUp} title="Botones y Enlaces" description="Textos de los botones de llamada a la acción y enlaces clave">
+        <div className="space-y-6">
+
+          {/* Guía Desplegable Botones */}
+          <div className="border-b border-border/60 pb-3">
+            <button
+              type="button"
+              onClick={() => setShowButtonsGuide((prev) => !prev)}
+              className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span>{showButtonsGuide ? 'Ocultar consejos de botones' : '¿Cómo elegir botones que conviertan visitas en compras?'}</span>
+              {showButtonsGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+
+            {showButtonsGuide && (
+              <div className="mt-3 rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs space-y-2.5 animate-in fade-in-50 duration-200">
+                <p className="font-bold text-foreground">💡 Consejos para tus llamados a la acción (CTAs):</p>
+                <ul className="space-y-1.5 text-muted-foreground list-disc list-inside leading-relaxed">
+                  <li><strong className="text-foreground">Botón Principal:</strong> Dirige al catálogo o tienda online. Usá verbos de acción claros (ej: <em>&quot;Ver productos&quot;</em> o <em>&quot;Explorar catálogo&quot;</em>).</li>
+                  <li><strong className="text-foreground">Botón Secundario:</strong> Abre la comunicación directa (WhatsApp / Contacto). Ideal para consultas de stock, fallas o presupuestos personalizados.</li>
+                  <li><strong className="text-foreground">Enlace de Rastreo:</strong> Permite a clientes con órdenes de servicio o envíos consultar su estado en tiempo real con su código.</li>
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Botón Principal */}
+            <div className="space-y-2.5">
+              <Label htmlFor="ctaPrimaryText" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <ShoppingBag className="h-4 w-4 text-primary" />
+                Botón principal (Catálogo / Tienda)
+              </Label>
               <Input
                 id="ctaPrimaryText"
                 value={heroContent.ctaPrimaryText ?? 'Ver productos'}
@@ -296,9 +880,38 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 maxLength={40}
                 className="h-11"
               />
+              {/* Sugerencias Botón Principal */}
+              <div className="pt-1">
+                <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                  <Lightbulb className="h-3 w-3 text-amber-500" />
+                  Sugerencias:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {CTA_PRIMARY_SUGGESTIONS.map((sug, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => updateContent('ctaPrimaryText', sug)}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors cursor-pointer',
+                        heroContent.ctaPrimaryText === sug
+                          ? 'border-primary bg-primary/10 font-bold text-primary'
+                          : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                      )}
+                    >
+                      <span>{sug}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="ctaSecondaryText" className="text-sm font-medium">Botón secundario</Label>
+
+            {/* Botón Secundario */}
+            <div className="space-y-2.5">
+              <Label htmlFor="ctaSecondaryText" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <MessageCircle className="h-4 w-4 text-emerald-500" />
+                Botón secundario (Contacto / WhatsApp)
+              </Label>
               <Input
                 id="ctaSecondaryText"
                 value={heroContent.ctaSecondaryText ?? 'Escribinos'}
@@ -307,77 +920,350 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 maxLength={40}
                 className="h-11"
               />
+              {/* Sugerencias Botón Secundario */}
+              <div className="pt-1">
+                <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                  <Lightbulb className="h-3 w-3 text-amber-500" />
+                  Sugerencias:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {CTA_SECONDARY_SUGGESTIONS.map((sug, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => updateContent('ctaSecondaryText', sug)}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors cursor-pointer',
+                        heroContent.ctaSecondaryText === sug
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                          : 'border-border/60 bg-background text-muted-foreground hover:border-emerald-400 hover:text-foreground'
+                      )}
+                    >
+                      <span>{sug}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="trackRepairText" className="text-sm font-medium">Enlace de rastreo de reparación</Label>
+
+            {/* Enlace de Rastreo */}
+            <div className="space-y-2.5 md:col-span-2 pt-2 border-t border-border/40">
+              <Label htmlFor="trackRepairText" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <ArrowRight className="h-4 w-4 text-primary" />
+                Texto del enlace inferior (Rastreo / Seguimiento)
+              </Label>
               <Input
                 id="trackRepairText"
                 value={heroContent.trackRepairText ?? '¿Tenés una reparación? Rastreá tu equipo'}
                 onChange={(e) => updateContent('trackRepairText', e.target.value)}
-                placeholder="Ej: Rastrear el estado de mi reparación"
+                placeholder="Ej: ¿Tenés una reparación? Rastreá tu equipo"
                 maxLength={100}
                 className="h-11"
               />
+              {/* Sugerencias Enlace de Rastreo */}
+              <div className="pt-1">
+                <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                  <Lightbulb className="h-3 w-3 text-amber-500" />
+                  Sugerencias:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {TRACK_REPAIR_SUGGESTIONS.map((sug, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => updateContent('trackRepairText', sug)}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors cursor-pointer',
+                        heroContent.trackRepairText === sug
+                          ? 'border-primary bg-primary/10 font-bold text-primary'
+                          : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                      )}
+                    >
+                      <span>{sug}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
-        </SectionCard>
 
-        {/* Trust Badges */}
-        <SectionCard icon={Check} title="Insignias de Confianza" description="Atributos clave que se muestran en el Hero">
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Textos de las 3 insignias</Label>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[0, 1, 2].map((idx) => {
-                  const badges = heroContent.trustBadges || ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados']
-                  return (
+        </div>
+      </SectionCard>
+
+      {/* Trust Badges */}
+      <SectionCard icon={ShieldCheck} title="Insignias de Confianza" description="Sellos de garantía y beneficios que disipan dudas de los clientes">
+        <div className="space-y-6">
+
+          {/* Guía Desplegable Insignias */}
+          <div className="border-b border-border/60 pb-3">
+            <button
+              type="button"
+              onClick={() => setShowBadgesGuide((prev) => !prev)}
+              className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span>{showBadgesGuide ? 'Ocultar guía de insignias' : '¿Por qué las insignias de confianza aumentan tus ventas?'}</span>
+              {showBadgesGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+
+            {showBadgesGuide && (
+              <div className="mt-3 rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs space-y-2.5 animate-in fade-in-50 duration-200">
+                <p className="font-bold text-foreground">🛡️ Impacto de las insignias de confianza:</p>
+                <p className="text-muted-foreground leading-relaxed">
+                  Los nuevos visitantes tardan menos de 3 segundos en decidir si confían en una tienda. Mostrar sellos como <strong>Garantía escrita</strong>, <strong>Envíos a todo el país</strong> o <strong>Repuestos originales</strong> reduce la fricción y aumenta la conversión hasta un 25%.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 3 Slots de Insignias */}
+          <div className="space-y-3">
+            <Label className="text-sm font-bold text-foreground">Tus 3 Insignias de Portada</Label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[0, 1, 2].map((idx) => {
+                const badges = heroContent.trustBadges || ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados']
+                return (
+                  <div key={idx} className="space-y-1.5">
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                      Insignia {idx + 1}
+                    </span>
                     <Input
-                      key={idx}
                       value={badges[idx] || ''}
                       onChange={(e) => {
                         const newBadges = [...badges]
                         newBadges[idx] = e.target.value
                         updateContent('trustBadges', newBadges)
                       }}
-                      placeholder={`Insignia ${idx + 1}`}
+                      placeholder={`Ej: Insignia ${idx + 1}`}
                       maxLength={30}
-                      className="h-11 text-sm"
+                      className="h-11 text-sm font-semibold"
                     />
-                  )
-                })}
-              </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
-        </SectionCard>
+
+          {/* Banco Categorizado de Insignias */}
+          <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <Award className="h-4 w-4 text-primary" />
+              <span className="text-xs font-bold text-foreground">
+                Banco de Insignias Recomendadas (tocá para asignar a tus slots):
+              </span>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              {TRUST_BADGE_CATEGORIES.map((cat, catIdx) => (
+                <div key={catIdx} className="space-y-2">
+                  <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <span>{cat.icon}</span>
+                    <span>{cat.category}</span>
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {cat.items.map((badgeSug, i) => {
+                      const currentBadges = heroContent.trustBadges || ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados']
+                      const isSelected = currentBadges.includes(badgeSug)
+
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            const newBadges = [...currentBadges]
+                            const emptyIndex = newBadges.findIndex((b) => !b?.trim())
+                            if (emptyIndex !== -1) {
+                              newBadges[emptyIndex] = badgeSug
+                            } else {
+                              newBadges[0] = badgeSug
+                            }
+                            updateContent('trustBadges', newBadges)
+                          }}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors cursor-pointer',
+                            isSelected
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                              : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                          )}
+                        >
+                          <Plus className="h-3 w-3 opacity-60" />
+                          <span>{badgeSug}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </SectionCard>
 
       {/* Stats */}
-      <SectionCard icon={TrendingUp} title="Estadísticas" description="Números mostrados en la sección hero">
-        <div className="mb-6">
+      <SectionCard icon={TrendingUp} title="Estadísticas de Confianza" description="Métricas numéricas de impacto mostradas en la portada">
+        <div className="space-y-6">
+
           <PublicVisibilityCard
             title="Visualización de Estadísticas"
             badgeLabel="Métricas de Confianza"
-            description="Muestra los 3 contadores numéricos (Reparaciones, Satisfacción y Tiempo promedio) en la portada."
+            description="Muestra los 3 contadores numéricos (Reparaciones/Clientes, Satisfacción y Tiempo promedio) en la portada."
             enabled={heroStats.enabled !== false}
             onToggle={(checked) => updateStat('enabled', checked)}
             compact
           />
+
+          {heroStats.enabled !== false && (
+            <>
+              {/* Guía Desplegable Estadísticas */}
+              <div className="border-b border-border/60 pb-3">
+                <button
+                  type="button"
+                  onClick={() => setShowStatsGuide((prev) => !prev)}
+                  className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
+                >
+                  <HelpCircle className="h-4 w-4" />
+                  <span>{showStatsGuide ? 'Ocultar guía de métricas' : '¿Qué números generan mayor impacto y credibilidad?'}</span>
+                  {showStatsGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+
+                {showStatsGuide && (
+                  <div className="mt-3 rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs space-y-2.5 animate-in fade-in-50 duration-200">
+                    <p className="font-bold text-foreground">📊 Consejos para tus contadores:</p>
+                    <ul className="space-y-1.5 text-muted-foreground list-disc list-inside leading-relaxed">
+                      <li><strong className="text-foreground">Métrica 1 (Volumen o Trayectoria):</strong> Muestra experiencia acumulada (ej: <em>&quot;10K+&quot;</em>, <em>&quot;5.000+&quot;</em> o <em>&quot;10+ Años&quot;</em>).</li>
+                      <li><strong className="text-foreground">Métrica 2 (Satisfacción):</strong> Transmite calidad garantizada (ej: <em>&quot;99%&quot;</em> o <em>&quot;4.9★&quot;</em>).</li>
+                      <li><strong className="text-foreground">Métrica 3 (Velocidad o Garantía):</strong> Da certeza de entrega o soporte (ej: <em>&quot;24-48h&quot;</em>, <em>&quot;En el día&quot;</em> o <em>&quot;6 Meses&quot;</em>).</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-3">
+                {/* Métrica 1 */}
+                <div className="space-y-2.5">
+                  <Label htmlFor="repairs" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                    <Award className="h-4 w-4 text-primary" />
+                    Métrica 1 (Volumen / Casos)
+                  </Label>
+                  <Input
+                    id="repairs"
+                    value={heroStats.repairs}
+                    onChange={(e) => updateStat('repairs', e.target.value)}
+                    placeholder="10K+"
+                    maxLength={20}
+                    className="h-11 font-extrabold text-base"
+                  />
+                  {/* Sugerencias Métrica 1 */}
+                  <div className="pt-1">
+                    <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                      <Lightbulb className="h-3 w-3 text-amber-500" />
+                      Sugerencias:
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {STAT_REPAIRS_SUGGESTIONS.map((sug, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => updateStat('repairs', sug)}
+                          className={cn(
+                            'rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer',
+                            heroStats.repairs === sug
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40'
+                          )}
+                        >
+                          {sug}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Métrica 2 */}
+                <div className="space-y-2.5">
+                  <Label htmlFor="satisfaction" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                    <ThumbsUp className="h-4 w-4 text-emerald-500" />
+                    Métrica 2 (Satisfacción / Score)
+                  </Label>
+                  <Input
+                    id="satisfaction"
+                    value={heroStats.satisfaction}
+                    onChange={(e) => updateStat('satisfaction', e.target.value)}
+                    placeholder="98%"
+                    maxLength={20}
+                    className="h-11 font-extrabold text-base"
+                  />
+                  {/* Sugerencias Métrica 2 */}
+                  <div className="pt-1">
+                    <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                      <Lightbulb className="h-3 w-3 text-amber-500" />
+                      Sugerencias:
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {STAT_SATISFACTION_SUGGESTIONS.map((sug, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => updateStat('satisfaction', sug)}
+                          className={cn(
+                            'rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer',
+                            heroStats.satisfaction === sug
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                              : 'border-border/60 bg-background text-muted-foreground hover:border-emerald-400'
+                          )}
+                        >
+                          {sug}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Métrica 3 */}
+                <div className="space-y-2.5">
+                  <Label htmlFor="avgTime" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                    <Clock className="h-4 w-4 text-amber-500" />
+                    Métrica 3 (Velocidad / Tiempo)
+                  </Label>
+                  <Input
+                    id="avgTime"
+                    value={heroStats.avgTime}
+                    onChange={(e) => updateStat('avgTime', e.target.value)}
+                    placeholder="24-48h"
+                    maxLength={20}
+                    className="h-11 font-extrabold text-base"
+                  />
+                  {/* Sugerencias Métrica 3 */}
+                  <div className="pt-1">
+                    <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                      <Lightbulb className="h-3 w-3 text-amber-500" />
+                      Sugerencias:
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {STAT_AVG_TIME_SUGGESTIONS.map((sug, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => updateStat('avgTime', sug)}
+                          className={cn(
+                            'rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer',
+                            heroStats.avgTime === sug
+                              ? 'border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300'
+                              : 'border-border/60 bg-background text-muted-foreground hover:border-amber-400'
+                          )}
+                        >
+                          {sug}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
         </div>
-        {heroStats.enabled !== false && (
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="repairs" className="text-sm font-medium">Reparaciones</Label>
-              <Input id="repairs" value={heroStats.repairs} onChange={(e) => updateStat('repairs', e.target.value)} placeholder="10K+" maxLength={20} className="h-11" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="satisfaction" className="text-sm font-medium">Satisfacción</Label>
-              <Input id="satisfaction" value={heroStats.satisfaction} onChange={(e) => updateStat('satisfaction', e.target.value)} placeholder="98%" maxLength={20} className="h-11" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="avgTime" className="text-sm font-medium">Tiempo promedio</Label>
-              <Input id="avgTime" value={heroStats.avgTime} onChange={(e) => updateStat('avgTime', e.target.value)} placeholder="24-48h" maxLength={20} className="h-11" />
-            </div>
-          </div>
-        )}
       </SectionCard>
 
       {/* Save bar */}

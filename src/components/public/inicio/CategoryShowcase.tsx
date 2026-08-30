@@ -1,6 +1,6 @@
 'use client'
 
-import { useSyncExternalStore } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -190,11 +190,10 @@ function getCategoryPreset(name: string): CategoryPreset {
 }
 
 export function CategoryShowcase() {
-  const mounted = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false
-  )
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''

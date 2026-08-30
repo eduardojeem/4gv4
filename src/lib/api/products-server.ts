@@ -503,8 +503,8 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
 
   // Typed as string to avoid TS2590 with long string literal unions
   const selectFields: string = isWholesale
-    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
-    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
+    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let queryBuilder = (supabase as any)
@@ -530,7 +530,31 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
   if (error || !data) return null
 
   // Transform
-  const p = data as unknown as { id: string; name: string; sku: string; description: string; brand: string; sale_price: number; wholesale_price?: number; has_offer?: boolean; offer_price?: number | null; installments_enabled?: boolean; installments_public?: boolean; installments_plans?: { count: number; rate: number }[] | null; stock_quantity: number; is_active: boolean; featured: boolean; image_url: string | null; images: string[] | null; unit_measure: string | null; barcode: string | null; category: { id: string; name: string } | { id: string; name: string }[] | null; brand_details: { name: string }[] | null }
+  const p = data as unknown as {
+    id: string
+    name: string
+    sku: string
+    description: string
+    brand: string
+    sale_price: number
+    wholesale_price?: number
+    has_offer?: boolean
+    offer_price?: number | null
+    installments_enabled?: boolean
+    installments_public?: boolean
+    installments_plans?: { count: number; rate: number }[] | null
+    has_variants?: boolean
+    variant_attribute_config?: any
+    stock_quantity: number
+    is_active: boolean
+    featured: boolean
+    image_url: string | null
+    images: string[] | null
+    unit_measure: string | null
+    barcode: string | null
+    category: { id: string; name: string } | { id: string; name: string }[] | null
+    brand_details: { name: string }[] | null
+  }
   const category = Array.isArray(p.category) ? p.category[0] : p.category
   const cat = category as { id: string; name: string } | null
   const { data: automaticPromotionRows } = await supabase
@@ -547,6 +571,30 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     offer_price: p.offer_price,
   }, (automaticPromotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>)))
 
+  // Si tiene variantes, traer las combinaciones activas
+  let productVariants: PublicProduct['variants'] = []
+  if (p.has_variants) {
+    const { data: variantRows } = await supabase
+      .from('product_variants')
+      .select('id, product_id, variant_name, attributes, sku, sale_price, wholesale_price, stock_quantity, is_active')
+      .eq('product_id', p.id)
+      .eq('organization_id', organization.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+
+    productVariants = (variantRows ?? []).map((v: any) => ({
+      id: v.id,
+      product_id: v.product_id,
+      variant_name: v.variant_name,
+      attributes: (typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : {}) as Record<string, string>,
+      sku: v.sku || null,
+      sale_price: Number(v.sale_price ?? p.sale_price),
+      wholesale_price: isWholesale && v.wholesale_price ? Number(v.wholesale_price) : null,
+      stock_quantity: Number(v.stock_quantity ?? 0),
+      is_active: Boolean(v.is_active ?? true),
+    }))
+  }
+
   const product: PublicProduct = {
     id: p.id,
     name: p.name,
@@ -562,6 +610,9 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     installments_enabled: p.installments_enabled || false,
     installments_public: p.installments_public ?? true,
     installments_plans: Array.isArray(p.installments_plans) ? p.installments_plans : [],
+    has_variants: Boolean(p.has_variants),
+    variant_attribute_config: Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : [],
+    variants: productVariants,
     stock_quantity: (p.stock_quantity as number) ?? 0,
     in_stock: ((p.stock_quantity as number) ?? 0) > 0,
     is_active: p.is_active,

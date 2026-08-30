@@ -38,7 +38,6 @@ import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
 import type { OffersSectionSettings, PublicCommerceMode, WebsiteSettings } from '@/types/website-settings'
 import { usePublicCart } from '@/hooks/use-public-cart'
-import { useCartDrawer } from '@/contexts/cart-drawer-context'
 import type { PublicProduct } from '@/types/public'
 import { toast } from 'sonner'
 import useSWR from 'swr'
@@ -286,7 +285,6 @@ function OfferCard({
   contactPhone: string
 }) {
   const { addProduct } = usePublicCart()
-  const { open: openCart } = useCartDrawer()
   const [addedToCart, setAddedToCart] = useState(false)
   const discount = calcDiscount(offer.sale_price, offer.offer_price)
   const savings = Math.max(0, offer.sale_price - offer.offer_price)
@@ -319,7 +317,6 @@ function OfferCard({
     toast.success('¡Agregado al carrito!')
     setAddedToCart(true)
     setTimeout(() => setAddedToCart(false), 2000)
-    openCart()
   }
 
   return (
@@ -608,7 +605,7 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
         accent.heroGlow
       )}>
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          
+
           {/* Eyebrow Pill */}
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3.5 py-1 text-xs font-extrabold text-rose-600 dark:text-rose-400 shadow-xs">
             <Flame className="h-4 w-4 fill-current animate-pulse text-rose-600 dark:text-rose-400" />
@@ -706,10 +703,10 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
       {/* ── Toolbar Sticky de Búsqueda y Filtros Rápidos ── */}
       <div className="sticky top-16 z-30 border-b border-border/80 bg-background/95 backdrop-blur-xl shadow-xs">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-2.5">
-          
+
           {/* Fila 1: Buscador + Tiers Rápidos + Ordenador */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            
+
             {/* Buscador de ofertas */}
             <div className="relative flex-1 max-w-md">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -740,7 +737,7 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
 
             {/* Quick Tier Chips & Sort */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-              
+
               {/* Tiers de Descuento */}
               <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border/80 shrink-0">
                 <button
@@ -868,7 +865,7 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
 
       {/* ── Grilla de Ofertas & Resultados ── */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        
+
         {/* Error Alert */}
         {offersError && (
           <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs sm:text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100" role="alert">
@@ -1045,25 +1042,104 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
 
       </div>
 
-      {/* ── Bottom CTA ── */}
+      {/* ── Modern Banner: ¿Buscás otros modelos o novedades? ── */}
       {filteredOffers.length > 0 && (
-        <section className="border-t border-border/80 bg-muted/30 py-14 sm:py-20">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center max-w-xl">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-4">
-              <Sparkles className="h-6 w-6" />
+        <section className="border-t border-border/80 bg-gradient-to-b from-background via-muted/20 to-muted/40 py-12 sm:py-16">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-6 sm:p-10 lg:p-12 shadow-sm transition-all duration-300 hover:shadow-xl hover:border-primary/30">
+
+              {/* Background ambient glow */}
+              <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+              <div className="pointer-events-none absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-rose-500/10 blur-3xl" />
+
+              <div className="relative z-10 grid gap-8 lg:grid-cols-[1.4fr_1fr] lg:items-center">
+
+                {/* Left Column: Heading + Value Props */}
+                <div className="space-y-4">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1 text-xs font-extrabold text-primary shadow-2xs">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>Catálogo & Asesoramiento</span>
+                  </div>
+
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-foreground leading-[1.2]">
+                    ¿Buscás otros modelos, marcas o novedades?
+                  </h2>
+
+                  <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-xl">
+                    Además de nuestras ofertas de liquidación, contamos con un catálogo completo de productos con garantía oficial, stock actualizado y financiación en cuotas.
+                  </p>
+
+                  {/* Feature Badges */}
+                  <div className="pt-2 flex flex-wrap items-center gap-3">
+                    <div className="inline-flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground">
+                      <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>Stock y reposición constante</span>
+                    </div>
+
+                    <div className="inline-flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground">
+                      <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                      <span>Garantía oficial y soporte</span>
+                    </div>
+
+                    {contactPhone && (
+                      <div className="inline-flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground">
+                        <MessageCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>Atención personalizada</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column: Interactive CTAs */}
+                <div className="flex flex-col sm:flex-row lg:flex-col gap-3 justify-center lg:items-end">
+                  <Button
+                    asChild
+                    size="lg"
+                    className="h-12 w-full sm:w-auto lg:w-full max-w-xs justify-center rounded-2xl font-bold shadow-md shadow-primary/20 gap-2 text-xs sm:text-sm"
+                  >
+                    <Link href={`${tenantPrefix}/productos`}>
+                      <span>Explorar todo el catálogo</span>
+                      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                    </Link>
+                  </Button>
+
+                  {contactPhone ? (
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="lg"
+                      className="h-12 w-full sm:w-auto lg:w-full max-w-xs justify-center rounded-2xl border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-bold gap-2 text-xs sm:text-sm"
+                    >
+                      <a
+                        href={getWhatsAppLink({
+                          phone: contactPhone,
+                          message: 'Hola, estoy viendo las ofertas y quiero consultar por otros modelos disponibles.',
+                        })}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Consultar por WhatsApp sobre otros productos"
+                      >
+                        <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>Consultar por WhatsApp</span>
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="lg"
+                      className="h-12 w-full sm:w-auto lg:w-full max-w-xs justify-center rounded-2xl font-bold border-border/80 hover:bg-muted text-xs sm:text-sm"
+                    >
+                      <Link href={`${tenantPrefix}/inicio`}>
+                        <span>Volver al inicio</span>
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+
+              </div>
+
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
-              ¿Buscás otros modelos o novedades?
-            </h2>
-            <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              Explorá nuestro catálogo completo con cientos de productos, novedades y formas de pago personalizadas.
-            </p>
-            <Button asChild size="lg" className="mt-6 rounded-xl font-bold shadow-md shadow-primary/20 gap-2">
-              <Link href={`${tenantPrefix}/productos`}>
-                <span>Explorar todo el catálogo</span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
           </div>
         </section>
       )}

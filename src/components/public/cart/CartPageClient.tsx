@@ -6,7 +6,8 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft, Building2, CheckCircle2, CreditCard, Loader2,
   LogIn, Minus, Package, Phone, Plus, ShoppingCart, Store,
-  Tag, Trash2, Truck, User, Wallet, X,
+  Tag, Trash2, Truck, User, Wallet, X, Copy, Check, Info,
+  HelpCircle, ChevronDown, ChevronUp, Sparkles, Receipt, FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -46,62 +47,161 @@ const PM_KEY_MAP: Record<PaymentMethod, 'cash' | 'card' | 'transfer' | 'digital_
 const checkoutSteps = [
   {
     icon: ShoppingCart,
-    title: 'Revisa tu carrito',
-    description: 'Ajusta cantidades o elimina productos antes de confirmar.',
+    title: '1. Armás tu carrito',
+    description: 'Elegís productos, cantidades y verificás el stock disponible en tiempo real.',
+    example: 'Ej: 1 Smartphone + 1 Funda protectora',
   },
   {
     icon: User,
-    title: 'Completa tus datos',
-    description: 'Deja nombre y WhatsApp para que el negocio pueda contactarte.',
+    title: '2. Completás tus datos',
+    description: 'Indicás si es para vos (Personal) o tu empresa (Factura RUC) y dejás tu WhatsApp.',
+    example: 'Ej: Juan Pérez · +595 981 123456',
   },
   {
     icon: Truck,
-    title: 'Elige la entrega',
-    description: 'Selecciona retiro en local o delivery si esta disponible.',
+    title: '3. Elegís la entrega',
+    description: 'Seleccionás retiro en el local sin costo o delivery directo a tu dirección.',
+    example: 'Ej: Delivery a Asunción · Av. San Martín 123',
   },
   {
     icon: CreditCard,
-    title: 'Confirma el pedido',
-    description: 'El negocio recibe tu solicitud y coordina el pago o la entrega.',
+    title: '4. Confirmás y coordinás',
+    description: 'Obtenés tu código de tracking (#SC-XXXXXX) y la tienda prepara tu despacho.',
+    example: 'Ej: Pagás al recibir o transferís con comprobante',
+  },
+]
+
+const realExamples = [
+  {
+    badge: 'Uso Particular',
+    badgeColor: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+    title: 'Ejemplo 1: Compra Personal a Domicilio',
+    scenario: 'Lucas necesita unos auriculares para uso propio en su casa.',
+    flow: [
+      '1. Selecciona "Pedido Personal".',
+      '2. Coloca su nombre y número de WhatsApp.',
+      '3. Elige "Delivery" e ingresa su dirección con referencias.',
+      '4. Confirma su pedido #SC-1049 y abona por transferencia con el Alias de la tienda.',
+    ],
+  },
+  {
+    badge: 'Empresas & Negocios',
+    badgeColor: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+    title: 'Ejemplo 2: Compra Corporativa con Factura RUC',
+    scenario: 'Laura es administradora en una empresa y compra insumos para la oficina.',
+    flow: [
+      '1. Selecciona "Pedido Empresarial".',
+      '2. Ingresa la Razón Social (Innova SRL) y el RUC (80012345-6).',
+      '3. Elige "Retiro en local" para pasar a buscar con remito oficial.',
+      '4. Recibe la Factura con Crédito Fiscal para deducir IVA y gastos de la empresa.',
+    ],
+  },
+  {
+    badge: 'Retiro Express',
+    badgeColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+    title: 'Ejemplo 3: Retiro Inmediato en Sucursal',
+    scenario: 'Martín pasa cerca de la tienda y quiere llevarse su producto ya.',
+    flow: [
+      '1. Agrega el producto en oferta al carrito.',
+      '2. Elige "Retiro en local" (Costo $0 · Listo en minutos).',
+      '3. Pasa por el mostrador, abona en efectivo o tarjeta física y retira.',
+    ],
   },
 ]
 
 function CheckoutHowItWorks() {
+  const [activeTab, setActiveTab] = useState<'steps' | 'examples'>('steps')
+
   return (
     <section
       aria-labelledby="checkout-how-it-works-title"
-      className="rounded-3xl border bg-muted/20 p-4 sm:p-5"
+      className="rounded-3xl border border-border/80 bg-card p-4 sm:p-6 shadow-xs"
     >
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <CheckCircle2 className="h-4 w-4" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <div>
+            <h2 id="checkout-how-it-works-title" className="text-sm font-bold text-foreground">
+              ¿Cómo funciona este pedido?
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Proceso transparente: confirmás stock y coordinás entrega directamente con la tienda.
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 id="checkout-how-it-works-title" className="text-sm font-bold text-foreground">
-            Como funciona este pedido
-          </h2>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            El carrito no cobra automaticamente: primero envia tu pedido al negocio para confirmar stock, entrega y pago.
-          </p>
+
+        {/* Tab switch */}
+        <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border/80 shrink-0 text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setActiveTab('steps')}
+            className={cn(
+              'px-3 py-1 rounded-lg transition-all',
+              activeTab === 'steps'
+                ? 'bg-background text-foreground shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            4 Pasos
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('examples')}
+            className={cn(
+              'px-3 py-1 rounded-lg transition-all',
+              activeTab === 'examples'
+                ? 'bg-background text-foreground shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Ejemplos Reales
+          </button>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {checkoutSteps.map(({ icon: Icon, title, description }, index) => (
-          <div key={title} className="flex gap-3 rounded-2xl border bg-background px-3 py-3">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
-              {index + 1}
-            </span>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
-                <p className="text-xs font-bold text-foreground">{title}</p>
+      {/* Tab 1: Pasos */}
+      {activeTab === 'steps' ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {checkoutSteps.map(({ icon: Icon, title, description, example }, index) => (
+            <div key={title} className="flex gap-3 rounded-2xl border border-border/70 bg-muted/30 p-3.5 transition-all hover:bg-muted/50">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-primary text-xs font-black text-primary-foreground shadow-2xs">
+                {index + 1}
+              </span>
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <p className="text-xs font-bold text-foreground">{title}</p>
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">{description}</p>
+                <p className="text-[10px] font-semibold text-primary/80 dark:text-primary/90 italic">{example}</p>
               </div>
-              <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{description}</p>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        /* Tab 2: Ejemplos */
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {realExamples.map((ex) => (
+            <div key={ex.title} className="flex flex-col justify-between rounded-2xl border border-border/70 bg-muted/30 p-4 space-y-3">
+              <div className="space-y-2">
+                <span className={cn('inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-extrabold', ex.badgeColor)}>
+                  {ex.badge}
+                </span>
+                <h3 className="text-xs font-bold text-foreground leading-snug">{ex.title}</h3>
+                <p className="text-[11px] text-muted-foreground leading-relaxed italic">{ex.scenario}</p>
+              </div>
+
+              <div className="pt-2 border-t border-border/50 space-y-1 text-[11px] text-muted-foreground">
+                {ex.flow.map((step, idx) => (
+                  <p key={idx} className="leading-tight">{step}</p>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
@@ -128,6 +228,15 @@ export function CartPageClient({
 
   // ── Checkout mode ─────────────────────────────────────────────────────────
   const [orderMode, setOrderMode] = useState<OrderMode>('personal')
+  const [showModeComparison, setShowModeComparison] = useState(false)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+
+  const copyToClipboard = (text: string, fieldKey: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedField(fieldKey)
+    toast.success(`${label} copiado al portapapeles`)
+    setTimeout(() => setCopiedField(null), 2000)
+  }
 
   // ── Customer fields ───────────────────────────────────────────────────────
   const [customerName,    setCustomerName]    = useState('')
@@ -139,7 +248,7 @@ export function CartPageClient({
 
   // ── Business fields (empresarial mode) ────────────────────────────────────
   const [companyName, setCompanyName] = useState('')
-  const [taxId,       setTaxId]       = useState('')   // RUC / NIT / CUIT
+  const [taxId,       setTaxId]       = useState('')   // RUC
 
   // ── Order fields ──────────────────────────────────────────────────────────
   const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('PICKUP')
@@ -280,7 +389,7 @@ export function CartPageClient({
       if (notes.trim()) notesParts.push(notes.trim())
       if (orderMode === 'empresarial') {
         if (companyName) notesParts.push(`Empresa: ${companyName}`)
-        if (taxId) notesParts.push(`RUC/NIT: ${taxId}`)
+        if (taxId) notesParts.push(`RUC: ${taxId}`)
       }
 
       let finalAddress: string | null = null;
@@ -524,31 +633,148 @@ export function CartPageClient({
             <div className="space-y-5">
 
               {/* Mode toggle: Personal vs Empresarial */}
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Tipo de pedido</p>
-                <div className="flex overflow-hidden rounded-xl border">
-                  {(['personal', 'empresarial'] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setOrderMode(mode)}
-                      className={cn(
-                        'flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-semibold transition-colors',
-                        orderMode === mode
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-card text-muted-foreground hover:bg-muted'
-                      )}
-                    >
-                      {mode === 'personal'
-                        ? <><User className="h-3.5 w-3.5" /> Personal</>
-                        : <><Building2 className="h-3.5 w-3.5" /> Empresarial</>}
-                    </button>
-                  ))}
-                </div>
-                {orderMode === 'empresarial' && (
-                  <p className="mt-1.5 text-[11px] text-muted-foreground">
-                    Usá este modo para facturar a nombre de tu empresa (RUC/NIT).
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <span>Tipo de pedido & Facturación</span>
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowModeComparison((v) => !v)}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline transition-colors"
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" />
+                    <span>{showModeComparison ? 'Ocultar diferencias' : '¿Cuál elegir? Ver diferencias y ejemplos'}</span>
+                  </button>
+                </div>
+
+                {/* Interactive Mode Cards */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {/* Card 1: Personal */}
+                  <button
+                    type="button"
+                    onClick={() => setOrderMode('personal')}
+                    className={cn(
+                      'relative flex flex-col justify-between p-4 rounded-2xl border-2 text-left transition-all duration-200',
+                      orderMode === 'personal'
+                        ? 'border-primary bg-primary/[0.04] ring-2 ring-primary/20 shadow-xs'
+                        : 'border-border/80 bg-card hover:bg-muted/40'
+                    )}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            'flex h-8 w-8 items-center justify-center rounded-xl transition-colors',
+                            orderMode === 'personal' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                          )}>
+                            <User className="h-4 w-4" />
+                          </div>
+                          <span className="font-bold text-sm text-foreground">Pedido Personal</span>
+                        </div>
+                        <span className="rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 text-[10px] font-bold">
+                          Consumidor Final
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Para vos, tu familia o compras particulares. No requiere datos fiscales complejos.
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      <span>Solo nombre y WhatsApp</span>
+                    </div>
+                  </button>
+
+                  {/* Card 2: Empresarial */}
+                  <button
+                    type="button"
+                    onClick={() => setOrderMode('empresarial')}
+                    className={cn(
+                      'relative flex flex-col justify-between p-4 rounded-2xl border-2 text-left transition-all duration-200',
+                      orderMode === 'empresarial'
+                        ? 'border-primary bg-primary/[0.04] ring-2 ring-primary/20 shadow-xs'
+                        : 'border-border/80 bg-card hover:bg-muted/40'
+                    )}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            'flex h-8 w-8 items-center justify-center rounded-xl transition-colors',
+                            orderMode === 'empresarial' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                          )}>
+                            <Building2 className="h-4 w-4" />
+                          </div>
+                          <span className="font-bold text-sm text-foreground">Pedido Empresarial</span>
+                        </div>
+                        <span className="rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 px-2 py-0.5 text-[10px] font-bold">
+                          Factura con RUC
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Para empresas, pymes, oficinas o profesionales que necesitan factura con crédito fiscal.
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <Receipt className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+                      <span>Razón Social, RUC y Responsable</span>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Expandable Comparison Details */}
+                {showModeComparison && (
+                  <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-4 sm:p-5 text-xs text-foreground space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center justify-between pb-3 border-b border-border/60">
+                      <div className="flex items-center gap-2 font-bold text-sm text-primary">
+                        <FileText className="h-4 w-4" />
+                        <span>Comparativa: ¿Cuándo usar cada tipo de pedido?</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowModeComparison(false)}
+                        className="text-muted-foreground hover:text-foreground p-1"
+                        aria-label="Cerrar comparativa"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {/* Personal Details */}
+                      <div className="rounded-xl border border-blue-500/20 bg-background/80 p-3.5 space-y-2">
+                        <div className="flex items-center gap-2 font-bold text-blue-600 dark:text-blue-400 text-xs">
+                          <User className="h-3.5 w-3.5" />
+                          <span>Pedido Personal (Consumidor Final)</span>
+                        </div>
+                        <ul className="space-y-1.5 text-[11px] text-muted-foreground">
+                          <li>• <strong>Comprobante emitido:</strong> Ticket o factura simple a consumidor final.</li>
+                          <li>• <strong>Datos solicitados:</strong> Nombre y WhatsApp para coordinar despacho.</li>
+                          <li>• <strong>Destinado a:</strong> Personas particulares, compras para el hogar o uso propio.</li>
+                          <li>• <strong>Ejemplo real:</strong> <em>"Compro un cargador para mi teléfono personal y pido que me lo envíen a mi casa."</em></li>
+                        </ul>
+                      </div>
+
+                      {/* Empresarial Details */}
+                      <div className="rounded-xl border border-purple-500/20 bg-background/80 p-3.5 space-y-2">
+                        <div className="flex items-center gap-2 font-bold text-purple-600 dark:text-purple-400 text-xs">
+                          <Building2 className="h-3.5 w-3.5" />
+                          <span>Pedido Empresarial (Crédito Fiscal)</span>
+                        </div>
+                        <ul className="space-y-1.5 text-[11px] text-muted-foreground">
+                          <li>• <strong>Comprobante emitido:</strong> Factura oficial con RUC a nombre de la empresa.</li>
+                          <li>• <strong>Datos solicitados:</strong> Razón Social, RUC, y nombre del responsable de compras.</li>
+                          <li>• <strong>Destinado a:</strong> Empresas, pymes, estudios, comercios o profesionales que deducen gastos e IVA.</li>
+                          <li>• <strong>Ejemplo real:</strong> <em>"Compramos 3 notebooks para el equipo comercial a nombre de Innova SRL con RUC 80012345-6."</em></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -572,7 +798,7 @@ export function CartPageClient({
                       {companyError && <p className="text-[11px] text-destructive">{companyError}</p>}
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs">RUC / NIT / CUIT</Label>
+                      <Label className="text-xs">RUC</Label>
                       <Input value={taxId} onChange={(e) => setTaxId(e.target.value)}
                         placeholder="Ej. 80123456-7"
                         className="h-9 rounded-xl" />
@@ -852,27 +1078,89 @@ export function CartPageClient({
                     {checkout.payment[PM_KEY_MAP[paymentMethod]]?.instructions}
                     {/* Bank details for transfer */}
                     {paymentMethod === 'TRANSFER' && transferOptions.length > 0 && (
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
                         {transferOptions.map((option) => (
-                          <div key={option.id} className="rounded-lg border bg-background p-3 text-foreground">
-                            <p className="font-bold">{option.bankName}</p>
-                            {option.accountHolder && <p className="mt-1 text-[11px] text-muted-foreground">Titular: {option.accountHolder}</p>}
-                            {option.alias && <p className="mt-1">Alias: <strong>{option.alias}</strong></p>}
-                            {option.accountNumber && <p>Cuenta: <strong>{option.accountNumber}</strong></p>}
+                          <div key={option.id} className="rounded-xl border border-border/80 bg-background p-3.5 text-foreground space-y-2 shadow-2xs">
+                            <p className="font-bold text-xs">{option.bankName}</p>
+                            {option.accountHolder && <p className="text-[11px] text-muted-foreground">Titular: <span className="font-medium text-foreground">{option.accountHolder}</span></p>}
+
+                            {option.alias && (
+                              <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs">
+                                <span>Alias: <strong className="font-mono">{option.alias}</strong></span>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(option.alias!, `alias-${option.id}`, 'Alias bancario')}
+                                  className="inline-flex items-center gap-1 rounded-md bg-background px-2 py-0.5 text-[10px] font-bold text-primary shadow-2xs border border-border/60 hover:bg-muted"
+                                >
+                                  {copiedField === `alias-${option.id}` ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                                  <span>{copiedField === `alias-${option.id}` ? 'Copiado' : 'Copiar'}</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {option.accountNumber && (
+                              <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs">
+                                <span>Cuenta: <strong className="font-mono">{option.accountNumber}</strong></span>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(option.accountNumber!, `acc-${option.id}`, 'Número de cuenta')}
+                                  className="inline-flex items-center gap-1 rounded-md bg-background px-2 py-0.5 text-[10px] font-bold text-primary shadow-2xs border border-border/60 hover:bg-muted"
+                                >
+                                  {copiedField === `acc-${option.id}` ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                                  <span>{copiedField === `acc-${option.id}` ? 'Copiado' : 'Copiar'}</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
                     )}
                     {paymentMethod === 'TRANSFER' && transferOptions.length === 0 && (checkout.payment.transfer.bankAlias || checkout.payment.transfer.bankCbu) && (
-                      <div className="mt-2 space-y-0.5 font-medium text-foreground">
-                        {checkout.payment.transfer.bankAlias && <p>Alias: <strong>{checkout.payment.transfer.bankAlias}</strong></p>}
-                        {checkout.payment.transfer.bankCbu   && <p>CBU: <strong>{checkout.payment.transfer.bankCbu}</strong></p>}
-                        {checkout.payment.transfer.bankName  && <p>Banco: {checkout.payment.transfer.bankName}</p>}
+                      <div className="mt-3 space-y-2">
+                        {checkout.payment.transfer.bankName && <p className="font-bold text-xs text-foreground">{checkout.payment.transfer.bankName}</p>}
+
+                        {checkout.payment.transfer.bankAlias && (
+                          <div className="flex items-center justify-between gap-2 rounded-lg bg-background p-2 text-xs border">
+                            <span>Alias: <strong className="font-mono">{checkout.payment.transfer.bankAlias}</strong></span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(checkout.payment.transfer.bankAlias!, 'default-alias', 'Alias bancario')}
+                              className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold text-primary hover:bg-muted/80"
+                            >
+                              {copiedField === 'default-alias' ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                              <span>{copiedField === 'default-alias' ? 'Copiado' : 'Copiar'}</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {checkout.payment.transfer.bankCbu && (
+                          <div className="flex items-center justify-between gap-2 rounded-lg bg-background p-2 text-xs border">
+                            <span>CBU/CVU: <strong className="font-mono">{checkout.payment.transfer.bankCbu}</strong></span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(checkout.payment.transfer.bankCbu!, 'default-cbu', 'CBU/CVU')}
+                              className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold text-primary hover:bg-muted/80"
+                            >
+                              {copiedField === 'default-cbu' ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                              <span>{copiedField === 'default-cbu' ? 'Copiado' : 'Copiar'}</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                     {/* Wallet alias */}
                     {paymentMethod === 'DIGITAL_WALLET' && checkout.payment.digital_wallet.walletAlias && (
-                      <p className="mt-1 font-medium text-foreground">Alias: <strong>{checkout.payment.digital_wallet.walletAlias}</strong></p>
+                      <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-background p-2 text-xs border">
+                        <span>Alias / CVU billetera: <strong className="font-mono">{checkout.payment.digital_wallet.walletAlias}</strong></span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(checkout.payment.digital_wallet.walletAlias!, 'wallet-alias', 'Alias de billetera')}
+                          className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold text-primary hover:bg-muted/80"
+                        >
+                          {copiedField === 'wallet-alias' ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                          <span>{copiedField === 'wallet-alias' ? 'Copiado' : 'Copiar'}</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}

@@ -36,7 +36,11 @@ describe('public services state', () => {
     expect(isPublicServicesPageAvailable(false, services)).toBe(false)
   })
 
-  it('hides the page when every service is inactive', () => {
-    expect(isPublicServicesPageAvailable(true, services.map((service) => ({ ...service, active: false })))).toBe(false)
+  it('enables the page when explicitly enabled by organization', () => {
+    expect(isPublicServicesPageAvailable(true, [])).toBe(true)
+  })
+
+  it('hides the page when every service is inactive and not explicitly enabled', () => {
+    expect(isPublicServicesPageAvailable(undefined, services.map((service) => ({ ...service, active: false })))).toBe(false)
   })
 })

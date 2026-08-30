@@ -31,7 +31,12 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
 
   const brands = categoria && categoryBrands.length > 0 ? categoryBrands : allBrands
   const offerProducts = products.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price)
-  const featuredProducts = products.filter((p) => p.featured && !(p.has_offer && p.offer_price))
+
+  const explicitFeatured = products.filter((p) => p.featured)
+  const nonFeatured = products.filter((p) => !p.featured)
+  const featuredProducts = explicitFeatured.length >= 6
+    ? explicitFeatured
+    : [...explicitFeatured, ...nonFeatured].slice(0, Math.min(12, products.length))
 
   return (
     <div className="min-h-screen">
@@ -180,14 +185,7 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
         </section>
       )}
 
-      {/* ── Barra de categorías sticky ─────────────────────────────────────── */}
-      <div className="sticky top-16 z-20 border-b border-border/80 bg-background/95 py-2.5 backdrop-blur-md">
-        <CategoryCarouselSection
-          activeId={categoria}
-          showViewAll={false}
-          showCount
-        />
-      </div>
+
 
       {/* ── Catálogo completo con Filtros por Categoría, Subcategoría y Marca ── */}
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">

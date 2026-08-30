@@ -1,4 +1,4 @@
-import { MapPin, Phone, Clock, MessageCircle } from 'lucide-react'
+import { MapPin, Phone, Clock, MessageCircle, ExternalLink, Navigation } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
 
@@ -68,7 +68,14 @@ export function BranchLocations({ branches, brand }: BranchLocationsProps) {
                   {branch.address && (
                     <div className="flex items-start gap-2.5 text-sm">
                       <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                      <span className="text-muted-foreground">{branch.address}</span>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([branch.address, branch.city].filter(Boolean).join(', '))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-foreground transition-colors hover:underline"
+                      >
+                        {branch.address}
+                      </a>
                     </div>
                   )}
                   {branch.phone && (
@@ -84,21 +91,40 @@ export function BranchLocations({ branches, brand }: BranchLocationsProps) {
                   )}
                 </div>
 
-                {whatsappUrl && (
-                  <div className="mt-4 pt-4 border-t border-border/50">
+                <div className="mt-4 pt-4 border-t border-border/50 flex flex-col gap-2">
+                  {branch.address && (
+                    <Button
+                      asChild
+                      variant="secondary"
+                      size="sm"
+                      className="w-full rounded-xl gap-1.5 font-semibold text-xs"
+                    >
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([branch.address, branch.city].filter(Boolean).join(', '))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <MapPin className="h-3.5 w-3.5 text-rose-500" />
+                        <span>Abrir en Google Maps</span>
+                        <ExternalLink className="h-3 w-3 ml-auto opacity-70" />
+                      </a>
+                    </Button>
+                  )}
+
+                  {whatsappUrl && (
                     <Button
                       asChild
                       variant="outline"
                       size="sm"
-                      className="w-full rounded-xl gap-2"
+                      className="w-full rounded-xl gap-2 font-semibold text-xs"
                     >
                       <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
-                        <MessageCircle className="h-4 w-4" />
-                        Escribir a esta sucursal
+                        <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Escribir a esta sucursal</span>
                       </a>
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )
           })}

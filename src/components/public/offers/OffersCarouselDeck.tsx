@@ -20,7 +20,6 @@ import { Button } from '@/components/ui/button'
 import type { OffersSectionSettings } from '@/types/website-settings'
 import { cn } from '@/lib/utils'
 import { usePublicCart } from '@/hooks/use-public-cart'
-import { useCartDrawer } from '@/contexts/cart-drawer-context'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getWhatsAppLink } from '@/lib/whatsapp'
 import { toast } from 'sonner'
@@ -157,7 +156,6 @@ export function OffersCarouselDeck({
   const [addedItemIds, setAddedItemIds] = useState<Record<string, boolean>>({})
 
   const { addProduct } = usePublicCart()
-  const { open: openCartDrawer } = useCartDrawer()
   const { settings: websiteSettings } = useWebsiteSettings()
 
   const commerceMode = websiteSettings?.checkout.commerceMode ?? 'cart'
@@ -294,7 +292,6 @@ export function OffersCarouselDeck({
     setTimeout(() => {
       setAddedItemIds((prev) => ({ ...prev, [offer.id]: false }))
     }, 2000)
-    openCartDrawer()
   }
 
   if (offers.length === 0) return null

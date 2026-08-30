@@ -11,7 +11,31 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Loader2, Save, Phone, Mail, MapPin, Clock, Check, Sparkles, MessageCircle, Building2, Upload, Info, Globe, ExternalLink } from 'lucide-react'
+import {
+  Loader2,
+  Save,
+  Phone,
+  Mail,
+  MapPin,
+  Clock,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clipboard,
+  Compass,
+  Sparkles,
+  MessageCircle,
+  Building2,
+  Upload,
+  Info,
+  Globe,
+  ExternalLink,
+  HelpCircle,
+  Navigation,
+  Search,
+  Trash2,
+} from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
@@ -20,6 +44,7 @@ import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
+import { cn } from '@/lib/utils'
 
 // ── Brand-color catalog — single source of truth for swatches and live preview ──
 const BRAND_COLORS: Array<{ key: string; name: string; swatch: string }> = [
@@ -156,6 +181,31 @@ export function CompanyInfoForm() {
       setLogoUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  const [showMapsGuide, setShowMapsGuide] = useState(false)
+
+  const handlePasteMapsUrl = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text && text.trim()) {
+        handleChange('mapsUrl', text.trim())
+        toast.success('Enlace de Google Maps pegado')
+      } else {
+        toast.error('El portapapeles está vacío')
+      }
+    } catch {
+      toast.error('No se pudo acceder al portapapeles. Pegá el enlace directamente con Ctrl+V.')
+    }
+  }
+
+  const searchAddressOnGoogle = () => {
+    if (!formData.address?.trim()) {
+      toast.error('Escribí primero tu dirección en el campo de arriba.')
+      return
+    }
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.address.trim())}`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -722,29 +772,141 @@ export function CompanyInfoForm() {
             {errors.address && <p className="text-xs text-destructive">{errors.address}</p>}
           </div>
 
-          <div className="col-span-full space-y-2">
-            <Label htmlFor="mapsUrl" className="flex items-center gap-2 text-sm font-medium">
-              <ExternalLink className="h-4 w-4 text-muted-foreground" />
-              Enlace de Google Maps <span className="text-xs font-normal text-muted-foreground">- opcional</span>
-            </Label>
-            <Input
-              id="mapsUrl"
-              type="url"
-              inputMode="url"
-              value={formData.mapsUrl || ''}
-              onChange={(e) => handleChange('mapsUrl', e.target.value)}
-              placeholder="https://maps.app.goo.gl/..."
-              maxLength={1000}
-              aria-invalid={!!errors.mapsUrl}
-              aria-describedby="mapsUrl-help"
-              className="h-11"
-            />
-            {errors.mapsUrl ? (
-              <p className="text-xs text-destructive">{errors.mapsUrl}</p>
-            ) : (
-              <p id="mapsUrl-help" className="text-xs leading-relaxed text-muted-foreground">
-                Pegá el enlace de compartir de Google Maps para abrir la ubicación exacta. Si lo dejás vacío, se buscará la dirección escrita arriba.
-              </p>
+          {/* ── Gestor Avanzado de Ubicación & Google Maps ── */}
+          <div className="col-span-full rounded-2xl border border-border/80 bg-muted/20 p-4 sm:p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                  <MapPin className="h-4 w-4" />
+                </div>
+                <div>
+                  <Label htmlFor="mapsUrl" className="text-sm font-bold text-foreground">
+                    Enlace de Google Maps (Ubicación Exacta)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Vincula el pin oficial de tu local con GPS y botón &quot;Cómo llegar&quot;.
+                  </p>
+                </div>
+              </div>
+
+              {/* Badges de Estado */}
+              {formData.mapsUrl?.trim() ? (
+                isValidGoogleMapsUrl(formData.mapsUrl) ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800/40 dark:text-emerald-300">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Enlace verificado
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:bg-amber-950/40 dark:border-amber-800/40 dark:text-amber-300">
+                    <Info className="h-3.5 w-3.5" />
+                    Enlace no reconocido
+                  </span>
+                )
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted border border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                  Opcional (Usa dirección)
+                </span>
+              )}
+            </div>
+
+            {/* Input + Botones Rápidos */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id="mapsUrl"
+                  type="url"
+                  inputMode="url"
+                  value={formData.mapsUrl || ''}
+                  onChange={(e) => handleChange('mapsUrl', e.target.value)}
+                  placeholder="https://maps.app.goo.gl/... o https://www.google.com/maps/place/..."
+                  maxLength={1000}
+                  aria-invalid={!!errors.mapsUrl}
+                  className={cn(
+                    'h-11 rounded-xl pl-3 pr-9',
+                    errors.mapsUrl && 'border-destructive'
+                  )}
+                />
+                {formData.mapsUrl && (
+                  <button
+                    type="button"
+                    onClick={() => handleChange('mapsUrl', '')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1"
+                    title="Limpiar enlace"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Botón Pegar Portapapeles */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handlePasteMapsUrl}
+                className="h-11 rounded-xl font-semibold gap-1.5 shrink-0"
+              >
+                <Clipboard className="h-4 w-4 text-primary" />
+                <span>Pegar enlace</span>
+              </Button>
+
+              {/* Botón Probar Enlace si existe */}
+              {formData.mapsUrl && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  asChild
+                  className="h-11 rounded-xl font-semibold gap-1.5 shrink-0"
+                >
+                  <a href={formData.mapsUrl} target="_blank" rel="noopener noreferrer">
+                    <span>Probar en Maps</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              )}
+            </div>
+
+            {errors.mapsUrl && (
+              <p className="text-xs text-destructive font-medium">{errors.mapsUrl}</p>
+            )}
+
+            {/* Accesos Útiles y Guía */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowMapsGuide((prev) => !prev)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline cursor-pointer"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+                <span>{showMapsGuide ? 'Ocultar guía' : '¿Cómo obtener el enlace de mi local en Google Maps?'}</span>
+                {showMapsGuide ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </button>
+
+              {formData.address && (
+                <button
+                  type="button"
+                  onClick={searchAddressOnGoogle}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                >
+                  <Search className="h-3.5 w-3.5 text-primary" />
+                  <span>Buscar &ldquo;{formData.address.slice(0, 28)}{formData.address.length > 28 ? '...' : ''}&rdquo; en Maps</span>
+                </button>
+              )}
+            </div>
+
+            {/* Guía Desplegable Paso a Paso */}
+            {showMapsGuide && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs space-y-2.5 animate-in fade-in-50 duration-200">
+                <p className="font-bold text-foreground flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  3 Pasos para obtener tu enlace exacto:
+                </p>
+                <ol className="space-y-1.5 text-muted-foreground list-decimal list-inside leading-relaxed">
+                  <li>Abrí <strong className="text-foreground">Google Maps</strong> en tu celular o computadora.</li>
+                  <li>Buscá tu negocio o tocá el punto exacto de tu local en el mapa para que aparezca el pin rojo 📍.</li>
+                  <li>Tocá <strong className="text-foreground">&quot;Compartir&quot;</strong> y luego <strong className="text-foreground">&quot;Copiar enlace&quot;</strong>.</li>
+                  <li>Hacé clic arriba en <strong className="text-foreground">&quot;Pegar enlace&quot;</strong> y guardá los cambios.</li>
+                </ol>
+              </div>
             )}
           </div>
         </div>

@@ -1,4 +1,242 @@
 import type { WebsiteSettings } from '@/types/website-settings'
+import type { BusinessVertical, OperatingModel } from '@/lib/organization/business-profile'
+
+export function getWebsiteDefaultsForVertical(
+  vertical: BusinessVertical = 'general',
+  operatingModel: OperatingModel = 'retail',
+  legacyBusinessType?: string
+): Partial<WebsiteSettings> {
+  const isRepairOrTech =
+    vertical === 'electronics' ||
+    operatingModel === 'repair' ||
+    operatingModel === 'mixed' ||
+    (legacyBusinessType && /reparaci|tecnic|taller|celular/i.test(legacyBusinessType))
+
+  const isServiceOnly = operatingModel === 'service'
+
+  if (vertical === 'clothing') {
+    return {
+      company_info: {
+        servicesPageEnabled: false,
+        repairTrackingEnabled: false,
+        processSectionEnabled: true,
+      } as any,
+      hero_content: {
+        enabled: true,
+        badge: 'Nueva Colección & Tendencias',
+        title: 'Tu estilo, tu mejor versión',
+        subtitle: 'Prendas de alta calidad, envíos a todo el país y las últimas tendencias en moda.',
+        trustBadges: ['Envíos a todo el país', 'Cambio fácil', 'Calidad 100% garantizada'],
+        ctaPrimaryText: 'Ver colección',
+        ctaSecondaryText: 'Consultar talles',
+        trackRepairText: '¿Hiciste una compra? Rastreá el estado de tu pedido',
+      },
+      hero_stats: {
+        enabled: true,
+        repairs: '5.000+',
+        satisfaction: '99%',
+        avgTime: '24-48h',
+      },
+      process_steps: [
+        { id: 'step-1', number: 1, title: 'Elegí tus prendas', description: 'Explorá nuestros modelos, talles y colores disponibles.' },
+        { id: 'step-2', number: 2, title: 'Confirmá tu pedido', description: 'Coordinamos el medio de pago más cómodo para vos.' },
+        { id: 'step-3', number: 3, title: 'Despacho rápido', description: 'Preparamos tu paquete con el máximo cuidado.' },
+        { id: 'step-4', number: 4, title: 'Recibí en tu puerta', description: 'Entrega a domicilio o retiro directo en sucursal.' },
+      ],
+    }
+  }
+
+  if (vertical === 'cosmetics') {
+    return {
+      company_info: {
+        servicesPageEnabled: false,
+        repairTrackingEnabled: false,
+        processSectionEnabled: true,
+      } as any,
+      hero_content: {
+        enabled: true,
+        badge: 'Cuidado & Belleza',
+        title: 'Realzá tu belleza con productos de confianza',
+        subtitle: 'Cosmética y cuidado personal 100% originales con asesoramiento y envíos rápidos.',
+        trustBadges: ['Productos 100% originales', 'Asesoría personalizada', 'Envíos a todo el país'],
+        ctaPrimaryText: 'Ver catálogo',
+        ctaSecondaryText: 'Asesoramiento',
+        trackRepairText: '¿Hiciste una compra? Rastreá tu pedido',
+      },
+      hero_stats: {
+        enabled: true,
+        repairs: '10K+',
+        satisfaction: '99.5%',
+        avgTime: 'En el día',
+      },
+      process_steps: [
+        { id: 'step-1', number: 1, title: 'Explorá el catálogo', description: 'Encontrá los mejores productos para tu rutina.' },
+        { id: 'step-2', number: 2, title: 'Asesoría directa', description: 'Te orientamos para elegir la opción ideal para vos.' },
+        { id: 'step-3', number: 3, title: 'Pago 100% seguro', description: 'Transferencia, QR, tarjeta o contra entrega.' },
+        { id: 'step-4', number: 4, title: 'Entrega en tu casa', description: 'Despacho rápido y embalaje protegido.' },
+      ],
+    }
+  }
+
+  if (vertical === 'food') {
+    return {
+      company_info: {
+        servicesPageEnabled: false,
+        repairTrackingEnabled: false,
+        processSectionEnabled: true,
+      } as any,
+      hero_content: {
+        enabled: true,
+        badge: 'Sabores Únicos & Frescos',
+        title: 'Platos y sabores listos para disfrutar',
+        subtitle: 'Ingredientes seleccionados, frescura garantizada y entrega rápida a tu mesa.',
+        trustBadges: ['100% Fresco y artesanal', 'Delivery express', 'Pago contra entrega'],
+        ctaPrimaryText: 'Ver menú online',
+        ctaSecondaryText: 'Pedir por WhatsApp',
+        trackRepairText: '¿Hiciste un pedido? Consultá el estado de tu delivery',
+      },
+      hero_stats: {
+        enabled: true,
+        repairs: '15K+',
+        satisfaction: '4.9★',
+        avgTime: '30-45 min',
+      },
+      process_steps: [
+        { id: 'step-1', number: 1, title: 'Elegí tu menú', description: 'Descubrí nuestras opciones, combos y promociones.' },
+        { id: 'step-2', number: 2, title: 'Hacé tu pedido', description: 'Confirmación directa y personalizada.' },
+        { id: 'step-3', number: 3, title: 'Preparación express', description: 'Elaborado en el momento con ingredientes frescos.' },
+        { id: 'step-4', number: 4, title: 'Delivery o Retiro', description: 'Llega caliente y listo a tu ubicación.' },
+      ],
+    }
+  }
+
+  if (vertical === 'hardware') {
+    return {
+      company_info: {
+        servicesPageEnabled: false,
+        repairTrackingEnabled: false,
+        processSectionEnabled: true,
+      } as any,
+      hero_content: {
+        enabled: true,
+        badge: 'Herramientas & Materiales',
+        title: 'Todo para tus proyectos, obras y refacciones',
+        subtitle: 'Herramientas profesionales, asesoramiento técnico y stock inmediato al mejor precio.',
+        trustBadges: ['Garantía de fábrica', 'Stock permanente', 'Envíos a obras y talleres'],
+        ctaPrimaryText: 'Ver catálogo',
+        ctaSecondaryText: 'Pedir cotización',
+        trackRepairText: '¿Tenés un pedido? Rastreá el estado de tu despacho',
+      },
+      hero_stats: {
+        enabled: true,
+        repairs: '8.000+',
+        satisfaction: '98%',
+        avgTime: '24h',
+      },
+      process_steps: [
+        { id: 'step-1', number: 1, title: 'Consultá tu lista', description: 'Buscá tus herramientas o envianos tu lista de materiales.' },
+        { id: 'step-2', number: 2, title: 'Presupuesto rápido', description: 'Cotización con los mejores precios y descuentos por cantidad.' },
+        { id: 'step-3', number: 3, title: 'Pago flexible', description: 'Facturación legal, transferencias y tarjetas.' },
+        { id: 'step-4', number: 4, title: 'Despacho o retiro', description: 'Envíos directos a tu obra o retiro en sucursal.' },
+      ],
+    }
+  }
+
+  if (isRepairOrTech) {
+    return {
+      company_info: {
+        servicesPageEnabled: true,
+        repairTrackingEnabled: true,
+        processSectionEnabled: true,
+      } as any,
+      hero_content: {
+        enabled: true,
+        badge: 'Servicio Técnico & Tecnología',
+        title: 'Reparación profesional y equipos garantizados',
+        subtitle: 'Diagnóstico claro, repuestos originales, técnicos certificados y seguimiento online.',
+        trustBadges: ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados'],
+        ctaPrimaryText: 'Ver productos',
+        ctaSecondaryText: 'Consultar falla',
+        trackRepairText: '¿Tenés una reparación? Rastreá tu equipo',
+      },
+      hero_stats: {
+        enabled: true,
+        repairs: '10K+',
+        satisfaction: '99%',
+        avgTime: '24-48h',
+      },
+      process_steps: [
+        { id: 'step-1', number: 1, title: 'Diagnóstico', description: 'Evaluamos tu dispositivo de forma rápida y transparente.' },
+        { id: 'step-2', number: 2, title: 'Presupuesto', description: 'Te damos un precio claro y sin sorpresas antes de avanzar.' },
+        { id: 'step-3', number: 3, title: 'Reparación especializada', description: 'Técnicos certificados con repuestos garantizados.' },
+        { id: 'step-4', number: 4, title: 'Entrega con garantía', description: 'Retirás tu equipo probado y con garantía escrita.' },
+      ],
+    }
+  }
+
+  if (isServiceOnly) {
+    return {
+      company_info: {
+        servicesPageEnabled: true,
+        repairTrackingEnabled: false,
+        processSectionEnabled: true,
+      } as any,
+      hero_content: {
+        enabled: true,
+        badge: 'Atención Profesional',
+        title: 'Soluciones profesionales a tu medida',
+        subtitle: 'Servicios de alta calidad, atención personalizada y resultados garantizados.',
+        trustBadges: ['Atención directa', 'Presupuestos claros', '100% Garantía'],
+        ctaPrimaryText: 'Nuestros servicios',
+        ctaSecondaryText: 'Solicitar presupuesto',
+        trackRepairText: '¿Tenés un servicio activo? Rastreá tu orden',
+      },
+      hero_stats: {
+        enabled: true,
+        repairs: '1.500+',
+        satisfaction: '100%',
+        avgTime: 'Inmediato',
+      },
+      process_steps: [
+        { id: 'step-1', number: 1, title: 'Contacto inicial', description: 'Contanos qué necesidad o proyecto tenés.' },
+        { id: 'step-2', number: 2, title: 'Propuesta a medida', description: 'Evaluación y cotización clara y transparente.' },
+        { id: 'step-3', number: 3, title: 'Ejecución del servicio', description: 'Trabajo profesional con altos estándares de calidad.' },
+        { id: 'step-4', number: 4, title: 'Entrega y soporte', description: 'Revisión final y acompañamiento continuo.' },
+      ],
+    }
+  }
+
+  // Default: General Store / Multirubro
+  return {
+    company_info: {
+      servicesPageEnabled: false,
+      repairTrackingEnabled: false,
+      processSectionEnabled: true,
+    } as any,
+    hero_content: {
+      enabled: true,
+      badge: 'Catálogo Oficial',
+      title: 'Los mejores productos al mejor precio',
+      subtitle: 'Explorá nuestro catálogo con stock actualizado, promociones exclusivas y atención personalizada.',
+      trustBadges: ['Envíos a todo el país', 'Atención personalizada', 'Compra 100% segura'],
+      ctaPrimaryText: 'Explorar catálogo',
+      ctaSecondaryText: 'Escribinos',
+      trackRepairText: '¿Hiciste una compra? Rastreá el estado de tu pedido',
+    },
+    hero_stats: {
+      enabled: true,
+      repairs: '5.000+',
+      satisfaction: '99%',
+      avgTime: '24h',
+    },
+    process_steps: [
+      { id: 'step-1', number: 1, title: 'Elegí tus productos', description: 'Navegá por nuestras categorías y seleccioná lo que necesitás.' },
+      { id: 'step-2', number: 2, title: 'Confirmá tu pedido', description: 'Completá tus datos y método de entrega preferido.' },
+      { id: 'step-3', number: 3, title: 'Pago seguro', description: 'Aboná por transferencia, tarjeta, billetera o al recibir.' },
+      { id: 'step-4', number: 4, title: 'Recibí en tu puerta', description: 'Envíos a todo el país o retiro en local.' },
+    ],
+  }
+}
 
 export function getWebsiteSettingsDefaults(): WebsiteSettings {
   return {
@@ -14,24 +252,25 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       headerStyle: 'glass',
       headerColor: '',
       showTopBar: true,
-      servicesPageEnabled: true,
-      processSectionEnabled: false,
+      servicesPageEnabled: false,
+      repairTrackingEnabled: false,
+      processSectionEnabled: true,
       marketplacePublic: true
     },
     hero_content: {
       enabled: true,
-      badge: 'Servicio técnico especializado',
-      title: 'Reparación profesional para tu equipo',
-      subtitle: 'Diagnóstico claro, repuestos de calidad y seguimiento en línea.',
-      trustBadges: ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados'],
-      ctaPrimaryText: 'Ver productos',
+      badge: 'Catálogo Oficial',
+      title: 'Los mejores productos al mejor precio',
+      subtitle: 'Explorá nuestro catálogo con stock actualizado, promociones exclusivas y atención personalizada.',
+      trustBadges: ['Envíos a todo el país', 'Atención personalizada', 'Compra 100% segura'],
+      ctaPrimaryText: 'Explorar productos',
       ctaSecondaryText: 'Escribinos',
-      trackRepairText: '¿Tenés una reparación? Rastreá tu equipo',
+      trackRepairText: '¿Hiciste una compra? Rastreá el estado de tu pedido',
     },
     hero_stats: {
       enabled: true,
-      repairs: '0+',
-      satisfaction: '0%',
+      repairs: '5.000+',
+      satisfaction: '99%',
       avgTime: '24h'
     },
     offers_section: {

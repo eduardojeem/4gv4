@@ -560,3 +560,82 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
     })
     .filter((product) => Boolean(product.has_offer && product.offer_price && product.offer_price < product.sale_price))
 }
+
+export async function getMarketplaceOffers(limit = 100): Promise<MarketplaceProduct[]> {
+  const supabase = createAdminSupabase()
+
+  // 1. Obtener todas las organizaciones públicas en el marketplace
+  const { data: organizations } = await supabase
+    .from('organizations')
+    .select('id, name, slug')
+    .eq('marketplace_public', true)
+
+  if (!organizations || organizations.length === 0) return []
+
+  const organizationIds = organizations.map((o) => o.id)
+  const orgMap = new Map(organizations.map((o) => [o.id, o]))
+
+  // 2. Obtener promociones automáticas vigentes de estas organizaciones
+  const { data: promotionRows } = await supabase
+    .from('promotions')
+    .select('*')
+    .in('organization_id', organizationIds)
+    .eq('public_mode', 'automatic')
+    .eq('is_active', true)
+
+  const automaticPromotions = (promotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
+  const promotionsByOrg = new Map<string, ReturnType<typeof mapPublicPromotion>[]>()
+  ;(promotionRows ?? []).forEach((row) => {
+    const orgId = String(row.organization_id)
+    const list = promotionsByOrg.get(orgId) ?? []
+    list.push(mapPublicPromotion(row as Record<string, unknown>))
+    promotionsByOrg.set(orgId, list)
+  })
+
+  const offerCandidateFilter = buildPublicOfferCandidateFilter(automaticPromotions)
+
+  // 3. Consultar todos los productos con oferta directa o promociones automáticas
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, created_at, categories(id, name)')
+    .in('organization_id', organizationIds)
+    .eq('is_active', true)
+    .eq('visibility', 'public')
+    .gt('stock_quantity', 0)
+    .or(offerCandidateFilter)
+    .order('featured', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error || !data) return []
+
+  const rows = data as unknown as ProductRow[]
+
+  return rows
+    .map<MarketplaceProduct | null>((product) => {
+      const org = orgMap.get(product.organization_id)
+      if (!org) return null
+
+      const category = Array.isArray(product.categories) ? product.categories[0] : product.categories
+      const cat = category ? { id: category.id, name: category.name } : undefined
+      const publicProduct = toPublicProduct(product)
+      const orgPromos = promotionsByOrg.get(product.organization_id) ?? []
+      const priced = applyAutomaticPromotionToProduct({
+        ...publicProduct,
+        category_id: cat?.id ?? null,
+      }, orgPromos)
+
+      return {
+        ...publicProduct,
+        category: cat,
+        has_offer: priced.has_offer,
+        offer_price: priced.offer_price,
+        promotion_name: priced.promotion_name,
+        organization_id: org.id,
+        organization_name: org.name,
+        organization_slug: org.slug,
+        created_at: product.created_at ?? null,
+      }
+    })
+    .filter((product): product is MarketplaceProduct => Boolean(product && product.has_offer && product.offer_price && product.offer_price < product.sale_price))
+}

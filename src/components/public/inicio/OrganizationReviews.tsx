@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useSyncExternalStore } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import { Star, Send, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -267,11 +267,10 @@ function RatingSummary({ average, count }: { average: number; count: number }) {
 export function OrganizationReviews() {
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
-  const mounted = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false
-  )
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const { data, mutate } = useSWR<ReviewsResponse>(
     withOrgQuery('/api/public/reviews?limit=6', tenantSlug),

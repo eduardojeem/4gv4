@@ -6,6 +6,7 @@ import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { isPublicServicesPageAvailable, isPublicRepairsAvailable } from '@/lib/website/services'
+import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import type { WebsiteSettings } from '@/types/website-settings'
 
 export function PublicFooter({ initialSettings = null }: { initialSettings?: WebsiteSettings | null }) {
@@ -20,6 +21,7 @@ export function PublicFooter({ initialSettings = null }: { initialSettings?: Web
   const emailDisplay = company?.email || ''
   const addressDisplay = company?.address || ''
   const companyName = company?.name || 'Tienda'
+  const mapsHref = getCompanyMapsHref(company?.mapsUrl, company?.address)
 
   const servicesEnabled = isPublicServicesPageAvailable(
     company?.servicesPageEnabled,
@@ -138,7 +140,18 @@ export function PublicFooter({ initialSettings = null }: { initialSettings?: Web
               {addressDisplay && (
                 <li className="flex items-start gap-2.5">
                   <MapPin className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-                  <span className="text-muted-foreground">{addressDisplay}</span>
+                  {mapsHref ? (
+                    <a
+                      href={mapsHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-muted-foreground hover:text-foreground transition-colors hover:underline"
+                    >
+                      {addressDisplay}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">{addressDisplay}</span>
+                  )}
                 </li>
               )}
             </ul>

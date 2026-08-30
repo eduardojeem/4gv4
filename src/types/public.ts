@@ -22,6 +22,25 @@ export interface InstallmentPlanOption {
   rate: number
 }
 
+export interface PublicVariantAttributeConfig {
+  key: string
+  label: string
+  control: 'text' | 'number' | 'select' | 'color'
+  options: string[]
+}
+
+export interface PublicProductVariant {
+  id: string
+  product_id: string
+  variant_name: string
+  attributes: Record<string, string>
+  sku: string | null
+  sale_price: number
+  wholesale_price?: number | null
+  stock_quantity: number
+  is_active: boolean
+}
+
 export interface PublicProduct {
   id: string
   name: string
@@ -44,6 +63,9 @@ export interface PublicProduct {
   installments_enabled?: boolean
   installments_public?: boolean
   installments_plans?: InstallmentPlanOption[]
+  has_variants?: boolean
+  variant_attribute_config?: PublicVariantAttributeConfig[]
+  variants?: PublicProductVariant[]
   image: string | null
   images: string[] | null
   unit_measure: string

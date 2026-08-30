@@ -151,12 +151,76 @@ interface ProductActionsProps {
   isInStock: boolean
 }
 
-export function ProductActions({ product, isInStock }: ProductActionsProps) {
+export function ProductActions({ product, isInStock: initialIsInStock }: ProductActionsProps) {
   const { settings, isLoading: isLoadingWebsiteSettings } = useWebsiteSettings()
   const pathname = usePathname()
   const { addProduct } = usePublicCart()
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
+
+  const hasVariants = Boolean(
+    product.has_variants &&
+    Array.isArray(product.variants) &&
+    product.variants.length > 0
+  )
+
+  const attributeConfigs = product.variant_attribute_config || []
+  const variants = product.variants || []
+
+  // Pre-seleccionar la primera variante disponible con stock, o la primera activa
+  const defaultVariant = useMemo(() => {
+    if (!hasVariants || variants.length === 0) return null
+    return variants.find((v) => v.stock_quantity > 0) || variants[0] || null
+  }, [hasVariants, variants])
+
+  const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>(() => {
+    if (defaultVariant?.attributes) {
+      return { ...defaultVariant.attributes }
+    }
+    const initial: Record<string, string> = {}
+    attributeConfigs.forEach((attr) => {
+      if (attr.options.length > 0) {
+        initial[attr.key] = attr.options[0]
+      }
+    })
+    return initial
+  })
+
+  // Variante actualmente seleccionada
+  const selectedVariant = useMemo(() => {
+    if (!hasVariants || variants.length === 0) return null
+    return variants.find((v) => {
+      return Object.entries(selectedAttributes).every(
+        ([key, val]) => v.attributes[key] === val
+      )
+    }) || null
+  }, [hasVariants, variants, selectedAttributes])
+
+  const handleSelectOption = (attrKey: string, optionValue: string) => {
+    setSelectedAttributes((prev) => ({
+      ...prev,
+      [attrKey]: optionValue,
+    }))
+  }
+
+  // Estado de stock y precio según la variante seleccionada
+  const isInStock = hasVariants
+    ? Boolean(selectedVariant && selectedVariant.stock_quantity > 0)
+    : initialIsInStock
+
+  const currentStockQuantity = hasVariants
+    ? (selectedVariant?.stock_quantity ?? 0)
+    : (product.stock_quantity ?? 0)
+
+  const currentSku = hasVariants && selectedVariant?.sku
+    ? selectedVariant.sku
+    : product.sku
+
+  const displayPrice = hasVariants && selectedVariant
+    ? (product.has_offer && product.offer_price && product.offer_price < selectedVariant.sale_price
+        ? product.offer_price
+        : selectedVariant.sale_price)
+    : Number(product.offer_price || product.sale_price || 0)
 
   const companyInfo = settings?.company_info
   const envSupportPhone = (
@@ -171,25 +235,29 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
   const phoneDisplay = companyInfo?.whatsapp || companyInfo?.phone || envSupportPhone
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
   const emailDisplay = companyInfo?.email || envSupportEmail
-  const displayPrice = Number(product.offer_price || product.sale_price || 0)
 
   const handleAddToCart = () => {
     if (commerceMode !== 'cart') return
     if (!isInStock) {
-      toast.error('Producto sin stock')
+      toast.error('Esta combinación no tiene stock disponible')
       return
     }
 
-    const result = addProduct(product, displayPrice, 1)
+    const result = addProduct(product, displayPrice, 1, selectedVariant)
     if (result.limited) {
       toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
       return
     }
-    toast.success('Producto agregado al carrito')
+    toast.success(
+      selectedVariant
+        ? `"${product.name} (${selectedVariant.variant_name})" agregado al carrito`
+        : 'Producto agregado al carrito'
+    )
   }
 
   const handleContact = (method: 'whatsapp' | 'email' | 'phone') => {
-    const message = `Hola, me interesa el producto: ${product.name} (SKU: ${product.sku})`
+    const variantSuffix = selectedVariant ? ` · Variante: ${selectedVariant.variant_name}` : ''
+    const message = `Hola, me interesa el producto: ${product.name}${variantSuffix} (SKU: ${currentSku})`
 
     switch (method) {
       case 'whatsapp':
@@ -200,7 +268,7 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
             'noopener,noreferrer'
           )
         } else if (emailDisplay) {
-          window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${product.sku}&body=${encodeURIComponent(
+          window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${currentSku}&body=${encodeURIComponent(
             message
           )}`
         } else {
@@ -209,7 +277,7 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
         break
       case 'email':
         if (emailDisplay) {
-          window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${product.sku}&body=${encodeURIComponent(
+          window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${currentSku}&body=${encodeURIComponent(
             message
           )}`
         } else {
@@ -231,66 +299,168 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
   }
 
   return (
-    <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
-      <h3 className="font-semibold text-foreground">
-        {isInStock ? 'Te interesa este producto?' : 'Producto temporalmente agotado'}
-      </h3>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {isInStock
-          ? 'Contactanos para disponibilidad, pedidos o consultas.'
-          : 'Contactanos para consultar reposicion o alternativas disponibles.'}
-      </p>
-      <div className="mt-4 flex flex-col gap-2">
-        {commerceMode === 'cart' && (
+    <div className="space-y-4">
+      {/* ── SELECTOR DE VARIANTES INTERACTIVO ── */}
+      {hasVariants && attributeConfigs.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 p-4 sm:p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Opciones del Producto
+            </h3>
+            {selectedVariant && (
+              <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                SKU: {currentSku}
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-3.5">
+            {attributeConfigs.map((attr) => {
+              const selectedValue = selectedAttributes[attr.key]
+              return (
+                <div key={attr.key} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      {attr.label}:
+                    </span>
+                    {selectedValue && (
+                      <span className="font-medium text-primary">
+                        {selectedValue}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {attr.options.map((option) => {
+                      const isSelected = selectedValue === option
+
+                      // Verificar si existe una combinación válida con stock para esta opción
+                      const matchingVar = variants.find((v) => {
+                        const testAttrs = { ...selectedAttributes, [attr.key]: option }
+                        return Object.entries(testAttrs).every(([k, val]) => v.attributes[k] === val)
+                      })
+                      const optionHasStock = matchingVar ? matchingVar.stock_quantity > 0 : true
+
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => handleSelectOption(attr.key, option)}
+                          className={`relative inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all select-none ${
+                            isSelected
+                              ? 'bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/20 scale-[1.02]'
+                              : optionHasStock
+                              ? 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-primary/40 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                              : 'border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 dark:text-slate-500 line-through opacity-70'
+                          }`}
+                        >
+                          {isSelected && <span className="text-[10px]">✓</span>}
+                          {option}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Resumen de la variante activa */}
+          {selectedVariant ? (
+            <div className="mt-2 flex items-center justify-between rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3.5 py-2.5 text-xs border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {selectedVariant.variant_name}
+                </span>
+              </div>
+              <div>
+                {isInStock ? (
+                  <Badge variant="secondary" className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium text-[11px]">
+                    ✓ {currentStockQuantity} en stock
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive" className="text-[11px]">
+                    ✕ Sin stock
+                  </Badge>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Seleccioná una combinación de opciones para continuar.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── CARD DE ACCIONES DE COMPRA / CONTACTO ── */}
+      <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
+        <h3 className="font-semibold text-foreground">
+          {isInStock ? '¿Te interesa este producto?' : 'Combinación temporalmente agotada'}
+        </h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {isInStock
+            ? 'Contactanos para disponibilidad, pedidos o consultas.'
+            : 'Contactanos para consultar reposición o alternativas disponibles.'}
+        </p>
+
+        <div className="mt-4 flex flex-col gap-2">
+          {commerceMode === 'cart' && (
+            <Button
+              size="lg"
+              className="w-full gap-2 rounded-xl"
+              onClick={handleAddToCart}
+              disabled={!isInStock}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              {isInStock ? 'Agregar al carrito' : 'Combinación sin stock'}
+            </Button>
+          )}
+
           <Button
             size="lg"
-            className="w-full gap-2 rounded-xl"
-            onClick={handleAddToCart}
-            disabled={!isInStock}
+            variant={commerceMode === 'whatsapp' ? 'default' : 'outline'}
+            className={cn(
+              'w-full gap-2 rounded-xl',
+              commerceMode === 'whatsapp' && 'bg-emerald-600 text-white hover:bg-emerald-700'
+            )}
+            onClick={() => handleContact('whatsapp')}
           >
-            <ShoppingCart className="h-4 w-4" />
-            Agregar al carrito
+            <MessageCircle className="h-4 w-4" />
+            {isInStock ? 'Consultar por WhatsApp' : 'Consultar reposición por WhatsApp'}
           </Button>
-        )}
-        <Button
-          size="lg"
-          variant={commerceMode === 'whatsapp' ? 'default' : 'outline'}
-          className={cn(
-            'w-full gap-2 rounded-xl',
-            commerceMode === 'whatsapp' && 'bg-emerald-600 text-white hover:bg-emerald-700'
+
+          {commerceMode === 'cart' && (
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                className="gap-2 rounded-xl"
+                onClick={() => handleContact('email')}
+                disabled={!emailDisplay}
+              >
+                <Mail className="h-4 w-4" />
+                Email
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2 rounded-xl"
+                onClick={() => handleContact('phone')}
+                disabled={!phoneClean}
+              >
+                <Phone className="h-4 w-4" />
+                Llamar
+              </Button>
+            </div>
           )}
-          onClick={() => handleContact('whatsapp')}
-        >
-          <MessageCircle className="h-4 w-4" />
-          {isInStock ? 'Consultar por WhatsApp' : 'Consultar reposicion por WhatsApp'}
-        </Button>
-        {commerceMode === 'cart' && <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="outline"
-            className="gap-2 rounded-xl"
-            onClick={() => handleContact('email')}
-            disabled={!emailDisplay}
-          >
-            <Mail className="h-4 w-4" />
-            Email
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2 rounded-xl"
-            onClick={() => handleContact('phone')}
-            disabled={!phoneClean}
-          >
-            <Phone className="h-4 w-4" />
-            Llamar
-          </Button>
-        </div>}
-        {!isInStock && (
-          <Button asChild variant="secondary" className="w-full rounded-xl">
-            <Link href={product.category ? `${tenantPrefix}/productos?category_id=${product.category.id}` : `${tenantPrefix}/productos`}>
-              Ver productos similares
-            </Link>
-          </Button>
-        )}
+
+          {!isInStock && (
+            <Button asChild variant="secondary" className="w-full rounded-xl">
+              <Link href={product.category ? `${tenantPrefix}/productos?category_id=${product.category.id}` : `${tenantPrefix}/productos`}>
+                Ver productos similares
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )

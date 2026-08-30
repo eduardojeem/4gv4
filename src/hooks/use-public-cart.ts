@@ -59,9 +59,22 @@ export function usePublicCart() {
 
   const clear = useCallback(() => clearPublicCart(tenantSlug), [tenantSlug])
 
-  const addProduct = useCallback((product: PublicProduct, unitPrice: number, quantity = 1) => {
-    return addPublicProductToCart({ tenantSlug, product, unitPrice, quantity })
-  }, [tenantSlug])
+  const addProduct = useCallback(
+    (
+      product: PublicProduct,
+      unitPrice: number,
+      quantity = 1,
+      variant?: {
+        id: string
+        variant_name: string
+        sku?: string | null
+        stock_quantity?: number | null
+      } | null
+    ) => {
+      return addPublicProductToCart({ tenantSlug, product, unitPrice, quantity, variant })
+    },
+    [tenantSlug]
+  )
 
   return { tenantSlug, items, count, subtotal, addProduct, setQuantity, setAvailableStock, removeItem, clear }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { isPublicRepairsAvailable } from '@/lib/website/services'
+import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import type { CompanyInfo, HeroStats, HeroContent } from '@/types/website-settings'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
 
@@ -75,8 +76,6 @@ function AnimatedStat({ value, label }: { value: string; label: string }) {
   )
 }
 
-const noopSubscribe = () => () => {}
-
 export function HeroSection({
   companyInfo,
   heroStats,
@@ -92,22 +91,26 @@ export function HeroSection({
   const tenantPrefix =
     pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
 
-  const [searchQuery, setSearchQuery] = useState('')
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  const closedToday = useSyncExternalStore(
-    noopSubscribe,
-    () => {
-      const dayIdx = new Date().getDay()
-      const todayHours =
-        dayIdx === 0
-          ? companyInfo.hours?.sunday
-          : dayIdx === 6
-          ? companyInfo.hours?.saturday
-          : companyInfo.hours?.weekdays
-      return !todayHours || /cerrad/i.test(todayHours)
-    },
-    () => false
-  )
+  const [searchQuery, setSearchQuery] = useState('')
+  const mapsHref = getCompanyMapsHref(companyInfo.mapsUrl, companyInfo.address)
+
+  const closedToday = mounted
+    ? (() => {
+        const dayIdx = new Date().getDay()
+        const todayHours =
+          dayIdx === 0
+            ? companyInfo.hours?.sunday
+            : dayIdx === 6
+            ? companyInfo.hours?.saturday
+            : companyInfo.hours?.weekdays
+        return !todayHours || /cerrad/i.test(todayHours)
+      })()
+    : false
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -269,9 +272,20 @@ export function HeroSection({
                     <h2 className="truncate font-bold text-base text-foreground">
                       {companyInfo.name || 'Tienda Oficial'}
                     </h2>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {companyInfo.address || 'Atención personalizada y envíos'}
-                    </p>
+                    {mapsHref ? (
+                      <a
+                        href={mapsHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate text-xs text-muted-foreground hover:text-primary transition-colors hover:underline block"
+                      >
+                        {companyInfo.address || 'Ver ubicación en Google Maps'}
+                      </a>
+                    ) : (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {companyInfo.address || 'Atención personalizada y envíos'}
+                      </p>
+                    )}
                   </div>
                 </div>
 
