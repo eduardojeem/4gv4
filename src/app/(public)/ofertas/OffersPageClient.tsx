@@ -667,19 +667,24 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
         </div>
       </section>
 
-      {/* ── Carrusel de Destacados Top Deals ── */}
+      {/* ── Carrusel de Destacados Top Deals (Destacados de la semana) ── */}
       {carouselSettings.enabled && carouselSlides.length > 0 && (
-        <section className={cn('border-b py-10 sm:py-14', carouselAccent.section)}>
+        <section className={cn('relative overflow-hidden border-b py-8 sm:py-12 bg-muted/20', carouselAccent.section)}>
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className={cn('flex items-center gap-2 text-xs font-bold uppercase tracking-wider', carouselAccent.eyebrow)}>
-                  <Sparkles className="h-4 w-4" />
-                  <span>Destacados de la semana</span>
-                </p>
-                <h2 className="mt-1 text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-                  {carouselSettings.title}
+            <div className="mb-5 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-0.5 text-xs font-extrabold text-amber-600 dark:text-amber-400 shadow-2xs">
+                  <Flame className="h-3.5 w-3.5 fill-current animate-pulse text-amber-500" />
+                  <span>Selección Especial</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+                  {carouselSettings.title || 'Destacados de la semana'}
                 </h2>
+                {carouselSettings.subtitle && (
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    {carouselSettings.subtitle}
+                  </p>
+                )}
               </div>
             </div>
 

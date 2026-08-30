@@ -3,18 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Package, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
+import { Package, ChevronLeft, ChevronRight, Pause, Play, Flame, ArrowRight, Star, Sparkles, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { OffersSectionSettings } from '@/types/website-settings'
 import { cn } from '@/lib/utils'
-
-/**
- * Carrusel de ofertas: la pista, las tarjetas y los controles.
- *
- * Vive aparte para que el inicio público (OffersCarousel) y la página /ofertas
- * compartan exactamente el mismo diseño. El que fetchea los datos y pone el
- * marco de la sección es cada consumidor; acá sólo se renderiza la pista.
- */
 
 export interface OfferSlide {
   id: string
@@ -39,72 +31,88 @@ export type OffersAccent = {
 
 export const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], OffersAccent> = {
   brand: {
-    section: 'border-primary/30 bg-gradient-to-b from-primary/10 to-background',
+    section: 'border-primary/20 bg-gradient-to-b from-primary/[0.04] via-background to-background',
     eyebrow: 'text-primary',
     price: 'text-primary',
-    button: 'bg-primary text-primary-foreground hover:bg-primary/90',
+    button: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20',
     activeDot: 'bg-primary',
   },
   rose: {
-    section: 'border-rose-200 bg-gradient-to-b from-rose-50/90 to-background dark:border-rose-900/40 dark:from-rose-950/25',
-    eyebrow: 'text-rose-700 dark:text-rose-300',
-    price: 'text-rose-700 dark:text-rose-300',
-    button: 'bg-rose-600 text-white hover:bg-rose-700',
+    section: 'border-rose-500/20 bg-gradient-to-b from-rose-500/[0.04] via-background to-background dark:border-rose-900/30',
+    eyebrow: 'text-rose-600 dark:text-rose-400',
+    price: 'text-rose-600 dark:text-rose-400',
+    button: 'bg-rose-600 text-white hover:bg-rose-500 shadow-md shadow-rose-600/25',
     activeDot: 'bg-rose-600',
   },
   amber: {
-    section: 'border-amber-200 bg-gradient-to-b from-amber-50/90 to-background dark:border-amber-900/40 dark:from-amber-950/25',
-    eyebrow: 'text-amber-700 dark:text-amber-300',
-    price: 'text-amber-700 dark:text-amber-300',
-    button: 'bg-amber-600 text-white hover:bg-amber-700',
+    section: 'border-amber-500/20 bg-gradient-to-b from-amber-500/[0.04] via-background to-background dark:border-amber-900/30',
+    eyebrow: 'text-amber-600 dark:text-amber-400',
+    price: 'text-amber-600 dark:text-amber-400',
+    button: 'bg-amber-600 text-white hover:bg-amber-500 shadow-md shadow-amber-600/25',
     activeDot: 'bg-amber-600',
   },
   orange: {
-    section: 'border-orange-200 bg-gradient-to-b from-orange-50/90 to-background dark:border-orange-900/40 dark:from-orange-950/25',
-    eyebrow: 'text-orange-700 dark:text-orange-300',
-    price: 'text-orange-700 dark:text-orange-300',
-    button: 'bg-orange-600 text-white hover:bg-orange-700',
+    section: 'border-orange-500/20 bg-gradient-to-b from-orange-500/[0.04] via-background to-background dark:border-orange-900/30',
+    eyebrow: 'text-orange-600 dark:text-orange-400',
+    price: 'text-orange-600 dark:text-orange-400',
+    button: 'bg-orange-600 text-white hover:bg-orange-500 shadow-md shadow-orange-600/25',
     activeDot: 'bg-orange-600',
   },
   emerald: {
-    section: 'border-emerald-200 bg-gradient-to-b from-emerald-50/90 to-background dark:border-emerald-900/40 dark:from-emerald-950/25',
-    eyebrow: 'text-emerald-700 dark:text-emerald-300',
-    price: 'text-emerald-700 dark:text-emerald-300',
-    button: 'bg-emerald-600 text-white hover:bg-emerald-700',
+    section: 'border-emerald-500/20 bg-gradient-to-b from-emerald-500/[0.04] via-background to-background dark:border-emerald-900/30',
+    eyebrow: 'text-emerald-600 dark:text-emerald-400',
+    price: 'text-emerald-600 dark:text-emerald-400',
+    button: 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-md shadow-emerald-600/25',
     activeDot: 'bg-emerald-600',
   },
   blue: {
-    section: 'border-blue-200 bg-gradient-to-b from-blue-50/90 to-background dark:border-blue-900/40 dark:from-blue-950/25',
-    eyebrow: 'text-blue-700 dark:text-blue-300', price: 'text-blue-700 dark:text-blue-300', button: 'bg-blue-600 text-white hover:bg-blue-700', activeDot: 'bg-blue-600',
+    section: 'border-blue-500/20 bg-gradient-to-b from-blue-500/[0.04] via-background to-background dark:border-blue-900/30',
+    eyebrow: 'text-blue-600 dark:text-blue-400',
+    price: 'text-blue-600 dark:text-blue-400',
+    button: 'bg-blue-600 text-white hover:bg-blue-500 shadow-md shadow-blue-600/25',
+    activeDot: 'bg-blue-600',
   },
   sky: {
-    section: 'border-sky-200 bg-gradient-to-b from-sky-50/90 to-background dark:border-sky-900/40 dark:from-sky-950/25',
-    eyebrow: 'text-sky-700 dark:text-sky-300', price: 'text-sky-700 dark:text-sky-300', button: 'bg-sky-600 text-white hover:bg-sky-700', activeDot: 'bg-sky-600',
+    section: 'border-sky-500/20 bg-gradient-to-b from-sky-500/[0.04] via-background to-background dark:border-sky-900/30',
+    eyebrow: 'text-sky-600 dark:text-sky-400',
+    price: 'text-sky-600 dark:text-sky-400',
+    button: 'bg-sky-600 text-white hover:bg-sky-500 shadow-md shadow-sky-600/25',
+    activeDot: 'bg-sky-600',
   },
   violet: {
-    section: 'border-violet-200 bg-gradient-to-b from-violet-50/90 to-background dark:border-violet-900/40 dark:from-violet-950/25',
-    eyebrow: 'text-violet-700 dark:text-violet-300', price: 'text-violet-700 dark:text-violet-300', button: 'bg-violet-600 text-white hover:bg-violet-700', activeDot: 'bg-violet-600',
+    section: 'border-violet-500/20 bg-gradient-to-b from-violet-500/[0.04] via-background to-background dark:border-violet-900/30',
+    eyebrow: 'text-violet-600 dark:text-violet-400',
+    price: 'text-violet-600 dark:text-violet-400',
+    button: 'bg-violet-600 text-white hover:bg-violet-500 shadow-md shadow-violet-600/25',
+    activeDot: 'bg-violet-600',
   },
   fuchsia: {
-    section: 'border-fuchsia-200 bg-gradient-to-b from-fuchsia-50/90 to-background dark:border-fuchsia-900/40 dark:from-fuchsia-950/25',
-    eyebrow: 'text-fuchsia-700 dark:text-fuchsia-300', price: 'text-fuchsia-700 dark:text-fuchsia-300', button: 'bg-fuchsia-600 text-white hover:bg-fuchsia-700', activeDot: 'bg-fuchsia-600',
+    section: 'border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-500/[0.04] via-background to-background dark:border-fuchsia-900/30',
+    eyebrow: 'text-fuchsia-600 dark:text-fuchsia-400',
+    price: 'text-fuchsia-600 dark:text-fuchsia-400',
+    button: 'bg-fuchsia-600 text-white hover:bg-fuchsia-500 shadow-md shadow-fuchsia-600/25',
+    activeDot: 'bg-fuchsia-600',
   },
   red: {
-    section: 'border-red-200 bg-gradient-to-b from-red-50/90 to-background dark:border-red-900/40 dark:from-red-950/25',
-    eyebrow: 'text-red-700 dark:text-red-300', price: 'text-red-700 dark:text-red-300', button: 'bg-red-600 text-white hover:bg-red-700', activeDot: 'bg-red-600',
+    section: 'border-red-500/20 bg-gradient-to-b from-red-500/[0.04] via-background to-background dark:border-red-900/30',
+    eyebrow: 'text-red-600 dark:text-red-400',
+    price: 'text-red-600 dark:text-red-400',
+    button: 'bg-red-600 text-white hover:bg-red-500 shadow-md shadow-red-600/25',
+    activeDot: 'bg-red-600',
   },
   teal: {
-    section: 'border-teal-200 bg-gradient-to-b from-teal-50/90 to-background dark:border-teal-900/40 dark:from-teal-950/25',
-    eyebrow: 'text-teal-700 dark:text-teal-300', price: 'text-teal-700 dark:text-teal-300', button: 'bg-teal-600 text-white hover:bg-teal-700', activeDot: 'bg-teal-600',
+    section: 'border-teal-500/20 bg-gradient-to-b from-teal-500/[0.04] via-background to-background dark:border-teal-900/30',
+    eyebrow: 'text-teal-600 dark:text-teal-400',
+    price: 'text-teal-600 dark:text-teal-400',
+    button: 'bg-teal-600 text-white hover:bg-teal-500 shadow-md shadow-teal-600/25',
+    activeDot: 'bg-teal-600',
   },
 }
 
 interface OffersCarouselDeckProps {
   offers: OfferSlide[]
   accent: OffersAccent
-  /** Marca que se muestra cuando el producto no tiene una propia. */
   fallbackBrand: string
-  /** Prefijo de tenant para los links (`/slug` o vacío). */
   tenantPrefix: string
   autoplay?: boolean
   intervalSeconds?: number
@@ -210,18 +218,81 @@ export function OffersCarouselDeck({
     return target.startsWith('/productos') ? `${tenantPrefix}${target}` : target
   }
 
+  if (offers.length === 0) return null
+
   return (
     <div
       ref={containerRef}
-      className="relative"
+      className="relative space-y-4"
       onMouseEnter={() => setIsCarouselPaused(true)}
       onMouseLeave={() => setIsCarouselPaused(false)}
       onTouchStart={() => setIsCarouselPaused(true)}
       onTouchEnd={() => setIsCarouselPaused(false)}
     >
+      {/* ── Controles Superiores de Navegación ── */}
+      <div className="flex items-center justify-between gap-3">
+        {/* Indicadores de Progreso */}
+        <div className="flex items-center gap-1.5" role="tablist" aria-label="Indicadores de oferta">
+          {offers.map((offer, idx) => (
+            <button
+              key={offer.id}
+              type="button"
+              role="tab"
+              aria-selected={idx === activeOfferIndex}
+              onClick={() => goToOffer(idx)}
+              className={cn(
+                'h-2 rounded-full transition-all duration-300',
+                idx === activeOfferIndex
+                  ? `w-7 ${accent.activeDot}`
+                  : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'
+              )}
+              aria-label={`Ir a oferta ${idx + 1}`}
+            />
+          ))}
+
+          {autoplay && (
+            <button
+              type="button"
+              onClick={() => setIsUserPaused((p) => !p)}
+              className="ml-2 flex h-6 w-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={isUserPaused ? 'Reanudar carrusel' : 'Pausar carrusel'}
+            >
+              {isUserPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+            </button>
+          )}
+        </div>
+
+        {/* Flechas de Navegación */}
+        {offers.length > 1 && (
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-xl border-border/80 bg-card hover:bg-muted shadow-2xs"
+              onClick={() => goToOffer(activeOfferIndex - 1)}
+              aria-label="Oferta anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-xl border-border/80 bg-card hover:bg-muted shadow-2xs"
+              onClick={() => goToOffer(activeOfferIndex + 1)}
+              aria-label="Siguiente oferta"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Pista Deslizable de Tarjetas Premium ── */}
       <div
         ref={trackRef}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 scroll-smooth scrollbar-none"
         tabIndex={0}
         role="region"
         aria-label={ariaLabel}
@@ -244,103 +315,97 @@ export function OffersCarouselDeck({
           <article
             key={offer.id}
             aria-labelledby={`offer-title-${offer.id}`}
-            className="min-w-[88%] snap-start overflow-hidden rounded-2xl border bg-card sm:min-w-[62%] lg:min-w-[36%]"
+            className="group relative flex flex-col justify-between min-w-[85%] sm:min-w-[48%] lg:min-w-[32%] xl:min-w-[30%] snap-start overflow-hidden rounded-3xl border border-border/80 bg-card p-4 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-primary/50"
           >
-            <div className="relative h-40 overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200">
-              {offer.image ? (
-                <Image
-                  src={offer.image}
-                  alt={offer.title || 'Imagen de oferta'}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 768px) 88vw, (max-width: 1200px) 62vw, 36vw"
-                  priority={idx === 0}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center">
-                  <Package className="h-12 w-12 text-slate-500/60" />
-                </div>
-              )}
-              <span className="absolute left-3 top-3 rounded-full bg-black/75 px-3 py-1 text-xs font-semibold text-white">
-                {offer.tag}
-              </span>
-            </div>
-            <div className="space-y-3 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 id={`offer-title-${offer.id}`} className="line-clamp-1 text-lg font-semibold">{offer.title}</h3>
-                  <p className="text-xs text-muted-foreground">{offer.brand || fallbackBrand}</p>
-                </div>
-                <div className="text-right">
-                  {offer.originalPriceLabel && (
-                    <p className="text-xs text-muted-foreground line-through">{offer.originalPriceLabel}</p>
+            <div>
+              {/* Imagen del Producto con Badges */}
+              <div className="relative aspect-4/3 w-full overflow-hidden rounded-2xl bg-muted/40 p-3 mb-3">
+                <Link href={resolveHref(offer.ctaHref)} className="relative block h-full w-full">
+                  {offer.image ? (
+                    <Image
+                      src={offer.image}
+                      alt={offer.title || 'Imagen de oferta destacada'}
+                      fill
+                      unoptimized
+                      className="object-contain transition-transform duration-500 group-hover:scale-105"
+                      sizes="(max-width: 640px) 85vw, (max-width: 1024px) 48vw, 32vw"
+                      priority={idx === 0}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <Package className="h-12 w-12 text-muted-foreground/30" />
+                    </div>
                   )}
-                  <p className={cn('text-lg font-bold', accent.price)}>{offer.priceLabel}</p>
+                </Link>
+
+                {/* Badge de Descuento */}
+                <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
+                  <span className={cn(
+                    'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold shadow-sm',
+                    accent.button
+                  )}>
+                    <Flame className="h-3.5 w-3.5 fill-current animate-pulse" />
+                    <span>{offer.tag}</span>
+                  </span>
                 </div>
+
+                {/* Badge Destacado */}
+                <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                    <Star className="h-3 w-3 fill-white" />
+                    <span>Top Semana</span>
+                  </span>
+                </div>
+
+                {!offer.inStock && (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 backdrop-blur-[2px]">
+                    <span className="rounded-full bg-slate-900/90 px-3.5 py-1.5 text-xs font-bold text-white shadow-md">
+                      Sin stock
+                    </span>
+                  </div>
+                )}
               </div>
-              <p className="line-clamp-2 text-sm text-muted-foreground">{offer.description}</p>
-              <div className="flex items-center justify-between">
-                <span className={`text-xs font-medium ${offer.inStock ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {offer.inStock ? 'Disponible' : 'Sin stock'}
-                </span>
-                <Button asChild size="sm" className={accent.button}>
-                  <Link href={resolveHref(offer.ctaHref)}>Ver detalle</Link>
-                </Button>
+
+              {/* Marca & Título */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {offer.brand || fallbackBrand}
+                </p>
+                <Link href={resolveHref(offer.ctaHref)} className="group-hover:text-primary transition-colors">
+                  <h3 id={`offer-title-${offer.id}`} className="line-clamp-2 text-sm font-bold leading-snug text-foreground" title={offer.title}>
+                    {offer.title}
+                  </h3>
+                </Link>
               </div>
+            </div>
+
+            {/* Precios & Botón de Acción */}
+            <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+              <div>
+                {offer.originalPriceLabel && (
+                  <p className="text-xs font-semibold text-muted-foreground line-through tabular-nums leading-none">
+                    {offer.originalPriceLabel}
+                  </p>
+                )}
+                <p className={cn('text-lg font-black tracking-tight tabular-nums mt-0.5', accent.price)}>
+                  {offer.priceLabel}
+                </p>
+              </div>
+
+              <Button
+                asChild
+                size="sm"
+                className={cn('rounded-xl font-bold text-xs gap-1.5 px-3.5 shadow-xs', accent.button)}
+              >
+                <Link href={resolveHref(offer.ctaHref)}>
+                  <span>Aprovechar</span>
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              </Button>
             </div>
           </article>
         ))}
       </div>
-
-      {offers.length > 1 && (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="absolute left-2 top-1/2 hidden -translate-y-1/2 bg-background/90 sm:flex"
-            onClick={() => goToOffer(activeOfferIndex - 1)}
-            aria-label="Oferta anterior"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="absolute right-2 top-1/2 hidden -translate-y-1/2 bg-background/90 sm:flex"
-            onClick={() => goToOffer(activeOfferIndex + 1)}
-            aria-label="Siguiente oferta"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <div className="mt-3 flex items-center justify-center gap-3">
-            {autoplay && (
-              <button
-                type="button"
-                onClick={() => setIsUserPaused((p) => !p)}
-                className="flex h-7 w-7 items-center justify-center rounded-full border bg-background text-muted-foreground transition-colors hover:text-foreground"
-                aria-label={isUserPaused ? 'Reanudar carrusel' : 'Pausar carrusel'}
-              >
-                {isUserPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-              </button>
-            )}
-            <div className="flex gap-2" role="tablist" aria-label="Indicadores de oferta">
-              {offers.map((offer, idx) => (
-                <button
-                  key={offer.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={idx === activeOfferIndex}
-                  onClick={() => goToOffer(idx)}
-                  className={cn('h-2.5 rounded-full transition-all', idx === activeOfferIndex ? `w-8 ${accent.activeDot}` : 'w-2.5 bg-muted-foreground/30')}
-                  aria-label={`Ir a oferta ${idx + 1}`}
-                />
-              ))}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   )
 }
