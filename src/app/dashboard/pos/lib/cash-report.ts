@@ -1,4 +1,5 @@
 import type { CashMovement, CashPaymentMethod } from '../types'
+import { normalizeCashMovementType } from '../types'
 
 export type CanonicalCashPaymentMethod = 'cash' | 'card' | 'transfer' | 'mixed'
 
@@ -31,8 +32,8 @@ export function summarizeCashMovements(movements: Array<Pick<CashMovement, 'type
 
   for (const movement of movements) {
     const amount = Number(movement.amount) || 0
-    const type = String(movement.type).toLowerCase()
-    if (type === 'sale' || type === 'venta') {
+    const canonical = normalizeCashMovementType(movement.type)
+    if (canonical === 'sale') {
       const method = normalizeCashPaymentMethod(movement.payment_method)
       totals.totalSales += amount
       totals.incomes += amount
@@ -42,9 +43,9 @@ export function summarizeCashMovements(movements: Array<Pick<CashMovement, 'type
       if (method === 'mixed') totals.mixedSales += amount
       const current = methods.get(method) || { amount: 0, count: 0 }
       methods.set(method, { amount: current.amount + amount, count: current.count + 1 })
-    } else if (type === 'cash_in' || type === 'in' || type === 'ingreso') {
+    } else if (canonical === 'cash_in') {
       totals.incomes += amount
-    } else if (type === 'cash_out' || type === 'out' || type === 'egreso') {
+    } else if (canonical === 'cash_out') {
       totals.expenses += amount
     }
   }

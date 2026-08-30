@@ -411,14 +411,6 @@ class OfflineManager {
     // TODO: Implement actual API call to Supabase
     // This is a placeholder that simulates the API call
 
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 500))
-
-    // Simulate 10% failure rate for testing
-    if (Math.random() < 0.1) {
-      throw new Error('Network error')
-    }
-
     // In production, this would be:
     // const { error } = await supabase.from('sales').insert({
     //   items: sale.items,

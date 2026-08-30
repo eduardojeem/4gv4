@@ -1,13 +1,14 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ChevronRight, Grid3X3, Store } from 'lucide-react'
+import { ArrowRight, ChevronRight, Grid3X3, Package, Sparkles, Store } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { getMarketplaceCategories, getMarketplaceBrands } from '@/lib/public/marketplace'
 import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsSection'
 import { CategoriesClient } from '@/components/public/CategoriesClient'
 
 export const metadata: Metadata = {
   title: 'Categorías | Marketplace MiPOS',
-  description: 'Explora todos los productos del marketplace por categoría.',
+  description: 'Explora todos los productos del marketplace por categoría comercial.',
 }
 
 // Configurar ISR (Incremental Static Regeneration) con revalidación de 10 minutos (600 segundos)
@@ -19,68 +20,91 @@ export default async function MarketplaceCategoriesPage() {
     getMarketplaceBrands(48),
   ])
 
+  const totalProducts = categories.reduce((sum, c) => sum + c.product_count, 0)
+  const totalOrganizations = new Set(categories.map((c) => c.organization_count)).size
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-      
-      {/* ── Header Hero Premium con Mesh Gradients ── */}
-      <section className="relative overflow-hidden border-b border-slate-200/60 bg-white/70 backdrop-blur-md dark:border-slate-800/50 dark:bg-slate-900/60 py-14 sm:py-16">
-        
-        {/* Orbes Decorativos Difuminados (Mesh Gradients) */}
-        <div className="pointer-events-none absolute -left-20 -top-20 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl dark:bg-cyan-500/5 animate-pulse duration-[6000ms]" />
-        <div className="pointer-events-none absolute right-10 top-0 h-96 w-96 rounded-full bg-violet-500/10 blur-3xl dark:bg-violet-500/5" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(6,182,212,0.05),transparent)]" />
-        
+    <div className="min-h-screen">
+      {/* ── Hero Header Limpio y Moderno ── */}
+      <section className="relative overflow-hidden border-b border-border/80 bg-gradient-to-b from-primary/[0.04] via-card to-background py-10 sm:py-14">
+        {/* Glow sutil */}
+        <div className="pointer-events-none absolute -left-12 -top-12 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+        <div className="pointer-events-none absolute right-4 top-0 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
+
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          
-          {/* Breadcrumbs con diseño mejorado */}
-          <nav aria-label="Breadcrumb" className="mb-6 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-            <Link href="/marketplace" className="flex items-center gap-1 hover:text-slate-800 dark:hover:text-slate-200 transition-colors font-medium">
+          {/* Breadcrumbs */}
+          <nav aria-label="Breadcrumb" className="mb-6 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Link
+              href="/marketplace"
+              className="flex items-center gap-1 hover:text-foreground transition-colors font-medium"
+            >
               <Store className="h-3.5 w-3.5" />
               Marketplace
             </Link>
             <ChevronRight className="h-3 w-3 opacity-60" />
-            <span className="font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-md">
-              Directorio de Categorías
+            <span className="font-semibold text-foreground bg-muted px-2 py-0.5 rounded-md">
+              Categorías
             </span>
           </nav>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-            <div className="flex items-center gap-5">
-              
-              {/* Contenedor del ícono principal con brillo */}
-              <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-xl shadow-cyan-500/25 dark:shadow-cyan-900/30">
-                <Grid3X3 className="h-7 w-7" />
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
+                <Grid3X3 className="h-6 w-6" />
               </div>
-              
+
               <div>
-                {/* Título con degradado de texto moderno */}
-                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-700 bg-clip-text text-transparent dark:from-white dark:via-slate-200 dark:to-cyan-400">
-                  Explorar Categorías
+                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
+                  Categorías de productos
                 </h1>
-                <p className="mt-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
-                  Directorio comercial categorizado para búsquedas rápidas y efectivas.
+                <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+                  Explorá los rubros de todas las tiendas y encontrá rápidamente lo que necesitás.
                 </p>
+
+                {/* Badges de estadísticas */}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-semibold text-foreground shadow-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    {categories.length} categorías activas
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-semibold text-foreground shadow-xs">
+                    <Package className="h-3 w-3 text-primary" />
+                    {totalProducts} productos catalogados
+                  </span>
+                </div>
               </div>
             </div>
+
+            {/* CTA */}
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="w-fit shrink-0 gap-2 rounded-xl border-border/80 bg-card shadow-xs hover:bg-muted"
+            >
+              <Link href="/marketplace/productos">
+                Ver todos los productos
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
           </div>
         </div>
       </section>
 
-      {/* ── Grid Directory con Búsqueda e Interacciones ── */}
-      <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      {/* ── Contenido Principal de Categorías con Búsqueda ── */}
+      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <CategoriesClient categories={categories} />
       </section>
 
-      {/* ── Sección de Marcas con Margen Refinado ── */}
+      {/* ── Sección de Marcas Relacionadas ── */}
       {brands.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8">
-          <div className="mb-12 border-t border-slate-200/60 dark:border-slate-800/60 pt-12" />
+          <div className="mb-10 border-t border-border/80 pt-10" />
           <MarketplaceBrandsSection
             brands={brands}
             variant="grid"
             title="Explorar por Marca"
-            subtitle="Buscá productos de tus marcas favoritas"
+            subtitle="Encontrá productos de las principales marcas del catálogo"
             showViewAll={false}
           />
         </section>

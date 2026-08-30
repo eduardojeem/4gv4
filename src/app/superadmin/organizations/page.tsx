@@ -12,6 +12,9 @@ type OrganizationRow = {
   owner_id: string | null
   created_at: string | null
   updated_at: string | null
+  business_vertical: string | null
+  operating_model: string | null
+  enabled_modules: string[] | null
 }
 
 type MemberRow = {
@@ -43,7 +46,7 @@ export default async function SuperAdminOrganizationsPage() {
   const organizations = await fetchAllRows<OrganizationRow>((from, to) =>
     admin
       .from('organizations')
-      .select('id, name, slug, plan, logo_url, owner_id, created_at, updated_at')
+      .select('id, name, slug, plan, logo_url, owner_id, created_at, updated_at, business_vertical, operating_model, enabled_modules')
       .order('created_at', { ascending: false })
       .range(from, to)
   )
@@ -125,6 +128,9 @@ export default async function SuperAdminOrganizationsPage() {
       staff_invited: memberSummary.staffInvited,
       staff_suspended: memberSummary.staffSuspended,
       customers_total: memberSummary.customersTotal,
+      business_vertical: organization.business_vertical || 'general',
+      operating_model: organization.operating_model || 'retail',
+      enabled_modules: organization.enabled_modules || [],
     }
   })
 

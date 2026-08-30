@@ -8,6 +8,9 @@ export type MarketplaceOrganization = {
   slug: string
   plan: string | null
   logo_url: string | null
+  business_vertical?: string | null
+  operating_model?: string | null
+  rubro?: string | null
   created_at: string | null
   products_count: number
   featured_products: PublicProduct[]
@@ -25,12 +28,14 @@ export type MarketplaceProduct = PublicProduct & {
 export type MarketplaceCategory = {
   id: string
   name: string
+  parent_id?: string | null
   organization_count: number
   product_count: number
 }
 
 export type MarketplaceBrand = {
   name: string
+  logo_url?: string | null
   product_count: number
   organization_count: number
 }
@@ -41,6 +46,8 @@ type OrganizationRow = {
   slug: string
   plan: string | null
   logo_url: string | null
+  business_vertical?: string | null
+  operating_model?: string | null
   created_at: string | null
   review_rating_avg?: number | null
   review_count?: number | null
@@ -101,12 +108,46 @@ function getProductOrganization(product: ProductRow) {
   return Array.isArray(product.organizations) ? product.organizations[0] : product.organizations
 }
 
+export function resolveOrganizationRubro(
+  org: { business_vertical?: string | null; name?: string },
+  products: ProductRow[] = []
+): string {
+  const vertical = (org.business_vertical ?? '').toLowerCase().trim()
+  if (vertical) {
+    if (vertical.includes('tecno') || vertical.includes('celular') || vertical.includes('comput') || vertical.includes('electr')) return 'tecnologia'
+    if (vertical.includes('indum') || vertical.includes('ropa') || vertical.includes('calzad') || vertical.includes('moda')) return 'indumentaria'
+    if (vertical.includes('gastro') || vertical.includes('comida') || vertical.includes('restaur') || vertical.includes('alimento') || vertical.includes('super')) return 'alimentos'
+    if (vertical.includes('ferret') || vertical.includes('herram') || vertical.includes('constr')) return 'ferreteria'
+    if (vertical.includes('belleza') || vertical.includes('cosmet') || vertical.includes('estet') || vertical.includes('peluq')) return 'belleza'
+    if (vertical.includes('hogar') || vertical.includes('mueble') || vertical.includes('bazar') || vertical.includes('decor')) return 'hogar'
+    if (vertical.includes('salud') || vertical.includes('farma')) return 'salud'
+    if (vertical.includes('auto') || vertical.includes('moto') || vertical.includes('repuesto')) return 'automotor'
+    return vertical
+  }
+
+  // Inferir desde las categorías de sus productos
+  for (const p of products) {
+    const cat = getProductCategory(p)
+    const catName = (cat?.name ?? '').toLowerCase()
+    if (catName.includes('tecno') || catName.includes('celular') || catName.includes('comput') || catName.includes('electr')) return 'tecnologia'
+    if (catName.includes('ropa') || catName.includes('indum') || catName.includes('calzad') || catName.includes('moda')) return 'indumentaria'
+    if (catName.includes('alimento') || catName.includes('comida') || catName.includes('bebida') || catName.includes('super')) return 'alimentos'
+    if (catName.includes('ferret') || catName.includes('herram') || catName.includes('constr')) return 'ferreteria'
+    if (catName.includes('belleza') || catName.includes('cosmet') || catName.includes('peluq')) return 'belleza'
+    if (catName.includes('hogar') || catName.includes('mueble') || catName.includes('jardin')) return 'hogar'
+    if (catName.includes('salud') || catName.includes('farma')) return 'salud'
+    if (catName.includes('auto') || catName.includes('moto')) return 'automotor'
+  }
+
+  return 'comercio'
+}
+
 export async function getMarketplaceOrganizations(limit = 24): Promise<MarketplaceOrganization[]> {
   const supabase = createAdminSupabase()
 
   const { data: organizations, error: organizationError } = await supabase
     .from('organizations')
-    .select('id, name, slug, plan, logo_url, created_at, review_rating_avg, review_count')
+    .select('id, name, slug, plan, logo_url, business_vertical, operating_model, created_at, review_rating_avg, review_count')
     .eq('marketplace_public', true)
     .limit(limit)
 
@@ -135,9 +176,11 @@ export async function getMarketplaceOrganizations(limit = 24): Promise<Marketpla
 
   return organizationRows.map((organization) => {
     const organizationProducts = productsByOrganization.get(organization.id) ?? []
+    const resolvedRubro = resolveOrganizationRubro(organization, organizationProducts)
 
     return {
       ...organization,
+      rubro: resolvedRubro,
       products_count: organizationProducts.length,
       featured_products: organizationProducts.slice(0, 3).map(toPublicProduct),
       review_rating_avg: organization.review_rating_avg ?? null,
@@ -159,20 +202,42 @@ export async function getMarketplaceOrganizations(limit = 24): Promise<Marketpla
 
 export async function getMarketplaceProducts(
   limit = 48,
-  options?: { q?: string; categoria?: string }
+  options?: { q?: string; categoria?: string; subcategoria?: string; marca?: string }
 ): Promise<MarketplaceProduct[]> {
   const supabase = createAdminSupabase()
 
   let query = supabase
     .from('products')
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name), organizations!inner(id, name, slug)')
+    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name, parent_id), organizations!inner(id, name, slug)')
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
     .gt('stock_quantity', 0)
 
-  if (options?.categoria) {
-    query = query.eq('category_id', options.categoria)
+  // Filtro por marca
+  if (options?.marca) {
+    const marcaClean = options.marca.trim()
+    if (marcaClean) {
+      query = query.ilike('brand', marcaClean)
+    }
+  }
+
+  // Filtro por subcategoría específica
+  if (options?.subcategoria) {
+    query = query.eq('category_id', options.subcategoria)
+  } else if (options?.categoria) {
+    // Si se pasa una categoría padre, buscar todos los hijos/subcategorías para incluir sus productos
+    const { data: relatedCats } = await supabase
+      .from('categories')
+      .select('id')
+      .or(`id.eq.${options.categoria},parent_id.eq.${options.categoria},global_category_id.eq.${options.categoria}`)
+
+    const categoryIds = (relatedCats ?? []).map((c) => c.id)
+    if (categoryIds.length > 0) {
+      query = query.in('category_id', categoryIds)
+    } else {
+      query = query.eq('category_id', options.categoria)
+    }
   }
 
   if (options?.q) {
@@ -234,7 +299,7 @@ export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]>
     .from('products')
     .select(`
       organization_id,
-      categories(id, name, global_category_id, global_categories:global_category_id(id, name, slug)),
+      categories(id, name, parent_id, global_category_id, global_categories:global_category_id(id, name, slug, parent_id)),
       organizations!inner(id)
     `)
     .eq('is_active', true)
@@ -252,14 +317,16 @@ export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]>
     if (!tenantCategory) return
 
     // Preferir la categoría global si existe
-    const globalCategoryRelation = (tenantCategory as { global_categories?: { id: string; name: string } | { id: string; name: string }[] | null }).global_categories
+    const globalCategoryRelation = (tenantCategory as { parent_id?: string | null; global_categories?: { id: string; name: string; parent_id?: string | null } | { id: string; name: string; parent_id?: string | null }[] | null }).global_categories
     const globalCat = Array.isArray(globalCategoryRelation) ? globalCategoryRelation[0] : globalCategoryRelation
     const displayId   = globalCat?.id   ?? tenantCategory.id
     const displayName = globalCat?.name ?? tenantCategory.name
+    const parentId    = globalCat?.parent_id ?? (tenantCategory as { parent_id?: string | null }).parent_id ?? null
 
     const existing = categories.get(displayId) ?? {
       id: displayId,
       name: displayName,
+      parent_id: parentId,
       product_count: 0,
       organization_count: 0,
       organizationIds: new Set<string>(),
@@ -275,55 +342,75 @@ export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]>
     .map((category) => ({
       id: category.id,
       name: category.name,
+      parent_id: category.parent_id ?? null,
       product_count: category.product_count,
       organization_count: category.organization_count,
     }))
     .sort((a, b) => b.product_count - a.product_count)
 }
 
-export async function getMarketplaceBrands(limit = 50): Promise<MarketplaceBrand[]> {
+export async function getMarketplaceBrands(
+  limit = 50,
+  options?: { categoria?: string }
+): Promise<MarketplaceBrand[]> {
   const supabase = createAdminSupabase()
 
-  // Incluye brand_id con join a brands para obtener nombre canónico
-  const { data, error } = await supabase
+  let query = supabase
     .from('products')
-    .select('organization_id, brand, brand_id, brands:brand_id(name), organizations!inner(id)')
+    .select('organization_id, brand, brand_id, category_id, brands:brand_id(name, logo_url), organizations!inner(id)')
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
     .gt('stock_quantity', 0)
-    .limit(20000)
+
+  if (options?.categoria) {
+    const { data: relatedCats } = await supabase
+      .from('categories')
+      .select('id')
+      .or(`id.eq.${options.categoria},parent_id.eq.${options.categoria},global_category_id.eq.${options.categoria}`)
+
+    const categoryIds = (relatedCats ?? []).map((c) => c.id)
+    if (categoryIds.length > 0) {
+      query = query.in('category_id', categoryIds)
+    } else {
+      query = query.eq('category_id', options.categoria)
+    }
+  }
+
+  const { data, error } = await query.limit(20000)
 
   if (error || !data) return []
 
-  type BrandRow = { organization_id: string; brand: string | null; brands: { name: string } | null }
+  type BrandRow = { organization_id: string; brand: string | null; brands: { name: string; logo_url?: string | null } | null }
   const brands = new Map<string, MarketplaceBrand & { organizationIds: Set<string>; nameCounts: Map<string, number> }>()
 
   ;((data ?? []) as unknown as BrandRow[]).forEach((row) => {
-    // Preferir nombre canónico del registro brands si existe
     const rawName = (row.brands?.name ?? row.brand ?? '').trim()
     if (!rawName) return
 
-    // Clave siempre en minúsculas para agrupar variantes ("samsung" = "SAMSUNG")
     const key = rawName.toLowerCase()
+    const brandLogo = row.brands?.logo_url || null
 
     const existing = brands.get(key) ?? {
       name: rawName,
+      logo_url: brandLogo,
       product_count: 0,
       organization_count: 0,
       organizationIds: new Set<string>(),
       nameCounts: new Map<string, number>(),
     }
 
+    if (brandLogo && !existing.logo_url) {
+      existing.logo_url = brandLogo
+    }
+
     existing.product_count += 1
     existing.organizationIds.add(row.organization_id)
     existing.organization_count = existing.organizationIds.size
 
-    // Registra cuántas veces aparece cada capitalización para elegir la más usada
     const count = existing.nameCounts.get(rawName) ?? 0
     existing.nameCounts.set(rawName, count + 1)
 
-    // Usar la capitalización más frecuente como nombre display
     let best = existing.name
     let bestCount = existing.nameCounts.get(best) ?? 0
     for (const [n, c] of existing.nameCounts) {
@@ -335,8 +422,10 @@ export async function getMarketplaceBrands(limit = 50): Promise<MarketplaceBrand
   })
 
   return Array.from(brands.values())
+    .filter((brand) => brand.product_count > 0)
     .map((brand) => ({
       name: brand.name,
+      logo_url: brand.logo_url ?? null,
       product_count: brand.product_count,
       organization_count: brand.organization_count,
     }))

@@ -13,6 +13,15 @@ interface ProfitStatsCardsProps {
 export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
     const { profitStats } = stats
 
+    // El hook va antes que cualquier return: `costUnavailable` se recalcula
+    // cada vez que llega el costo real del periodo y puede pasar de false a
+    // true (o al reves) en la MISMA instancia montada -por ejemplo al
+    // cambiar el rango de fechas-. Un useState despues de un return
+    // condicional viola las Reglas de los Hooks aunque hoy no truene: alcanza
+    // con que alguien agregue otro hook mas arriba en el futuro para que deje
+    // de ser inofensivo.
+    const [taxMode, setTaxMode] = useState<TaxMode>('with-tax')
+
     // Sin costo no hay ganancia que afirmar: se avisa en lugar de mostrar
     // numeros que parecerian calculados.
     if (profitStats.costUnavailable) {
@@ -42,7 +51,6 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
     // Con IVA por defecto: el negocio cuenta el IVA cobrado como parte de su
     // ganancia. El interruptor no vuelve a consultar: ambas bases ya vienen
     // calculadas.
-    const [taxMode, setTaxMode] = useState<TaxMode>('with-tax')
     const figures = figuresForMode(profitStats, taxMode)
     const isLoss = figures.salesProfit < 0
     const withoutTax = taxMode === 'without-tax'

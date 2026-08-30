@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowRight, ChevronRight, Package, Sparkles, Store, Tag } from 'lucide-react'
+import { ArrowRight, ChevronRight, Flame, Package, Sparkles, Star, Store, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MarketplaceProductCarousel } from '@/components/public/MarketplaceProductCarousel'
 import { ProductsClient } from '@/components/public/ProductsClient'
 import { CategoryCarouselSection } from '@/components/public/CategoryCarouselSection'
-import { getMarketplaceProducts } from '@/lib/public/marketplace'
+import { getMarketplaceProducts, getMarketplaceCategories, getMarketplaceBrands } from '@/lib/public/marketplace'
 
 export const metadata: Metadata = {
   title: 'Productos | Marketplace MiPOS',
@@ -15,65 +15,72 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 type PageProps = {
-  searchParams: Promise<{ q?: string; categoria?: string }>
+  searchParams: Promise<{ q?: string; categoria?: string; subcategoria?: string; marca?: string }>
 }
 
 export default async function MarketplaceProductsPage({ searchParams }: PageProps) {
-  const { q, categoria } = await searchParams
-  const products = await getMarketplaceProducts(120, { q, categoria })
+  const { q, categoria, subcategoria, marca } = await searchParams
 
+  const [products, categories, categoryBrands, allBrands] = await Promise.all([
+    getMarketplaceProducts(120, { q, categoria, subcategoria, marca }),
+    getMarketplaceCategories(),
+    categoria ? getMarketplaceBrands(30, { categoria }) : Promise.resolve([]),
+    getMarketplaceBrands(60),
+  ])
+
+  const brands = categoria && categoryBrands.length > 0 ? categoryBrands : allBrands
   const offerProducts = products.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price)
   const featuredProducts = products.filter((p) => p.featured && !(p.has_offer && p.offer_price))
 
   return (
     <div className="min-h-screen">
-
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden border-b border-slate-200 dark:border-slate-800">
-        {/* Gradiente de fondo */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_20%_50%,rgba(6,182,212,0.07),transparent)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_80%_at_80%_20%,rgba(139,92,246,0.04),transparent)]" />
+      <section className="relative overflow-hidden border-b border-border/80 bg-gradient-to-b from-primary/[0.04] via-card to-background">
+        <div className="pointer-events-none absolute -left-12 -top-12 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+        <div className="pointer-events-none absolute right-4 top-0 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
 
         <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
           {/* Breadcrumb */}
-          <nav aria-label="Breadcrumb" className="mb-6 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+          <nav aria-label="Breadcrumb" className="mb-6 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Link
               href="/marketplace"
-              className="flex items-center gap-1 transition-colors hover:text-slate-700 dark:hover:text-slate-300"
+              className="flex items-center gap-1 transition-colors hover:text-foreground"
             >
-              <Store className="h-3 w-3" />
+              <Store className="h-3.5 w-3.5" />
               Marketplace
             </Link>
-            <ChevronRight className="h-3 w-3 text-slate-300 dark:text-slate-600" />
-            <span className="font-medium text-slate-700 dark:text-slate-200">Productos</span>
+            <ChevronRight className="h-3 w-3 opacity-60" />
+            <span className="font-semibold text-foreground bg-muted px-2 py-0.5 rounded-md">
+              Productos
+            </span>
           </nav>
 
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             {/* Título + stats */}
             <div>
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-cyan-600 text-white shadow-sm shadow-cyan-500/30">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
                   <Package className="h-5 w-5" />
                 </div>
-                <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-50 sm:text-4xl">
-                  Productos
+                <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+                  Catálogo de Productos
                 </h1>
               </div>
 
               {/* Pills de stats */}
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-semibold text-foreground shadow-xs">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   {products.length} producto{products.length !== 1 ? 's' : ''} disponibles
                 </span>
                 {offerProducts.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 shadow-xs dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400">
                     <Tag className="h-3 w-3" />
                     {offerProducts.length} en oferta
                   </span>
                 )}
                 {featuredProducts.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 shadow-xs dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-400">
                     <Sparkles className="h-3 w-3" />
                     {featuredProducts.length} destacados
                   </span>
@@ -86,10 +93,11 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
               asChild
               size="sm"
               variant="outline"
-              className="shrink-0 gap-2 rounded-xl"
+              className="w-fit shrink-0 gap-2 rounded-xl border-border/80 bg-card shadow-xs hover:bg-muted"
             >
-              <Link href="/marketplace/empresas">
-                Ver empresas
+              <Link href="/marketplace/tiendas">
+                <Store className="h-4 w-4" />
+                Ver todas las tiendas
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -97,60 +105,77 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
         </div>
       </section>
 
-      {/* ── Carrusel ofertas ───────────────────────────────────────────────── */}
-      {offerProducts.length > 0 && (
-        <section className="relative overflow-hidden border-b border-rose-100/80 bg-gradient-to-b from-rose-50/50 via-rose-50/20 to-white py-10 dark:border-rose-950/30 dark:from-rose-950/10 dark:to-slate-950">
-          {/* Subtle warm glow behind section */}
-          <div className="pointer-events-none absolute -left-4 top-0 h-40 w-40 rounded-full bg-rose-500/5 blur-3xl" />
-          
+      {/* ── Carrusel ofertas ─────────────────────────────────────────────────── */}
+      {offerProducts.length > 0 && !categoria && !marca && (
+        <section className="border-b border-rose-100 bg-gradient-to-b from-rose-50/50 via-rose-50/20 to-white py-8 dark:border-rose-900/20 dark:from-rose-950/20 dark:via-slate-950 dark:to-slate-950">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mb-6 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-orange-500 text-white shadow-md shadow-rose-500/20">
-                  <Tag className="h-5 w-5 animate-pulse" />
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500 text-white shadow-sm shadow-rose-500/30">
+                  <Flame className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-slate-50">
-                    Ofertas imperdibles
+                  <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50">
+                    Ofertas destacadas
                   </h2>
-                  <p className="text-xs font-medium text-rose-600 dark:text-rose-400">
-                    {offerProducts.length} producto{offerProducts.length !== 1 ? 's' : ''} en promoción por tiempo limitado
+                  <p className="text-xs text-rose-600 dark:text-rose-400">
+                    Precios promocionales por tiempo limitado
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                  ⚡ SUPER PRECIO
-                </span>
-              </div>
+
+              <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                {offerProducts.length} ofertas
+              </span>
             </div>
+
             <MarketplaceProductCarousel products={offerProducts} variant="offers" />
           </div>
         </section>
       )}
 
-      {/* ── Carrusel destacados ────────────────────────────────────────────── */}
-      {featuredProducts.length > 0 && (
-        <section className="border-b border-slate-100 py-8 dark:border-slate-800/60">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mb-4 flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 text-white shadow-sm shadow-cyan-500/30">
-                <Sparkles className="h-4 w-4" />
+      {/* ── Carrusel destacados con Pasarela Automática ──────────────────────── */}
+      {featuredProducts.length > 0 && !categoria && !marca && (
+        <section className="relative overflow-hidden border-b border-amber-200/50 bg-gradient-to-b from-amber-50/60 via-amber-50/20 to-white py-10 dark:border-amber-900/30 dark:from-amber-950/20 dark:via-slate-950/50 dark:to-slate-950">
+          <div className="pointer-events-none absolute -right-6 top-0 h-48 w-48 rounded-full bg-amber-500/10 blur-3xl dark:bg-amber-500/5" />
+
+          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 text-white shadow-md shadow-amber-500/25 ring-2 ring-amber-400/20">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-extrabold tracking-tight text-foreground">
+                      Productos destacados
+                    </h2>
+                    <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-amber-100/90 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shadow-xs border border-amber-300/40">
+                      <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                      RECOMENDADOS
+                    </span>
+                  </div>
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mt-0.5">
+                    {featuredProducts.length} producto{featuredProducts.length !== 1 ? 's' : ''} seleccionados por calidad y popularidad
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">Destacados</h2>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Seleccionados por cada empresa
-                </p>
+
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/60 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 shadow-xs dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-300">
+                  <Sparkles className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                  Top Selección
+                </span>
               </div>
             </div>
-            <MarketplaceProductCarousel products={featuredProducts} />
+
+            <MarketplaceProductCarousel products={featuredProducts} variant="featured" />
           </div>
         </section>
       )}
 
       {/* ── Barra de categorías sticky ─────────────────────────────────────── */}
-      <div className="sticky top-16 z-20 border-b border-slate-200/80 bg-white/95 py-2.5 backdrop-blur-md dark:border-slate-800/60 dark:bg-slate-950/95">
+      <div className="sticky top-16 z-20 border-b border-border/80 bg-background/95 py-2.5 backdrop-blur-md">
         <CategoryCarouselSection
           activeId={categoria}
           showViewAll={false}
@@ -158,12 +183,16 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
         />
       </div>
 
-      {/* ── Catálogo completo ──────────────────────────────────────────────── */}
+      {/* ── Catálogo completo con Filtros por Categoría, Subcategoría y Marca ── */}
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <ProductsClient
           products={products}
+          categories={categories}
+          brands={brands}
           initialQuery={q ?? ''}
           initialCategory={categoria ?? ''}
+          initialSubcategory={subcategoria ?? ''}
+          initialBrand={marca ?? ''}
         />
       </section>
     </div>

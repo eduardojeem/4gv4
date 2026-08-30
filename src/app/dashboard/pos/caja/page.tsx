@@ -58,10 +58,8 @@ export default function CashRegisterPage() {
     }
   })
 
-  // Adjust state during render based on prop/context changes
-  const [prevIsAdmin, setPrevIsAdmin] = useState(isAdmin)
-  if (isAdmin !== prevIsAdmin) {
-    setPrevIsAdmin(isAdmin)
+  // Sync viewMode when isAdmin changes
+  useEffect(() => {
     if (!isAdmin) {
       setViewMode('simple')
     } else {
@@ -72,7 +70,7 @@ export default function CashRegisterPage() {
         setViewMode('advanced')
       }
     }
-  }
+  }, [isAdmin])
 
   const [isOpenRegisterDialogOpen, setIsOpenRegisterDialogOpen] = useState(false)
   const [openingAmount, setOpeningAmount] = useState('')
@@ -149,10 +147,12 @@ export default function CashRegisterPage() {
   // Fix #12: incluir openMovementDialog en deps (ahora estabilizado con useCallback)
   }, [openMovementDialog])
 
-  // Adjust activeTab during render if permissions restrict it
-  if (!canAccessAudit && activeTab === 'audit') {
-    setActiveTab('overview')
-  }
+  // Reset activeTab to 'overview' when audit access is revoked
+  useEffect(() => {
+    if (!canAccessAudit && activeTab === 'audit') {
+      setActiveTab('overview')
+    }
+  }, [canAccessAudit, activeTab])
 
   useEffect(() => {
     if (!isAdmin) return

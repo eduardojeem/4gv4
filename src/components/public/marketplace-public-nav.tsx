@@ -1,8 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
+  Building2,
+  ChevronRight,
   Grid3X3,
   Home,
   LayoutDashboard,
@@ -16,6 +18,8 @@ import {
   Store,
   User,
   X,
+  Layers,
+  Sparkles,
 } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -43,14 +47,30 @@ const navItems = [
   { href: '/marketplace/empresas', label: 'Tiendas', icon: Store, exact: false },
 ]
 
-// ─── Main Nav ─────────────────────────────────────────────────────────────────
 export function MarketplacePublicNav() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, signOut } = useAuth()
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const { branding } = usePlatformBranding()
+
+  // Cerrar drawer al cambiar de ruta
+  useEffect(() => {
+    setMobileDrawerOpen(false)
+  }, [pathname])
+
+  // Bloquear scroll cuando el drawer está abierto
+  useEffect(() => {
+    if (mobileDrawerOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [mobileDrawerOpen])
 
   const canAccessDashboard =
     user?.role === 'super_admin' ||
@@ -73,14 +93,14 @@ export function MarketplacePublicNav() {
 
   async function handleLogout() {
     await signOut()
-    setMobileOpen(false)
+    setMobileDrawerOpen(false)
     router.push('/marketplace')
     router.refresh()
   }
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90">
+      <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
 
           {/* Logo */}
@@ -115,17 +135,17 @@ export function MarketplacePublicNav() {
                 )}
               </div>
             ) : (
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-600 text-white shadow-sm">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs">
                 <LayoutGrid className="h-5 w-5" />
               </div>
             )}
             {!branding.hideNavBrandText && (
               <div className="hidden sm:block">
-                <div className="text-sm font-bold leading-none text-slate-900 dark:text-slate-50">
+                <div className="text-sm font-bold leading-none text-foreground">
                   {branding.marketplaceName}
                 </div>
                 {!branding.hideNavTagline && (
-                  <div className="mt-0.5 text-[11px] text-slate-400">{branding.marketplaceTagline}</div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">{branding.marketplaceTagline}</div>
                 )}
               </div>
             )}
@@ -146,10 +166,10 @@ export function MarketplacePublicNav() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    'flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
                     active
-                      ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -166,7 +186,7 @@ export function MarketplacePublicNav() {
             {/* SaaS CTA — desktop */}
             <Link
               href="/saas"
-              className="hidden items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700 transition-colors hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-950/70 lg:flex"
+              className="hidden items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 lg:flex"
             >
               <Rocket className="h-3.5 w-3.5" />
               ¿Tenés un negocio?
@@ -177,12 +197,12 @@ export function MarketplacePublicNav() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
-                    <Avatar className="h-8 w-8 border border-slate-200 dark:border-slate-700">
+                    <Avatar className="h-8 w-8 border border-border">
                       <AvatarImage
                         src={user.profile?.avatar_url || ''}
                         alt={user.profile?.name || 'Usuario'}
                       />
-                      <AvatarFallback className="bg-cyan-50 text-xs font-semibold text-cyan-700 dark:bg-cyan-950 dark:text-cyan-200">
+                      <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                         {userInitials}
                       </AvatarFallback>
                     </Avatar>
@@ -222,153 +242,185 @@ export function MarketplacePublicNav() {
                     className="cursor-pointer text-destructive focus:text-destructive"
                   >
                     <LogOut className="mr-2 h-4 w-4" />
-                    Cerrar sesion
+                    Cerrar sesión
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
               <>
-                {/* Botón "Acceder" — desktop */}
+                {/* Botón "Mi cuenta" — desktop */}
                 <Button
                   type="button"
                   size="sm"
                   onClick={() => setAuthOpen(true)}
-                  className="group hidden gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 pl-1.5 pr-4 text-white shadow-md shadow-cyan-600/25 transition-all duration-200 hover:from-cyan-500 hover:to-sky-500 hover:shadow-lg hover:shadow-cyan-500/30 focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 active:scale-[0.97] dark:focus-visible:ring-offset-slate-950 sm:inline-flex"
+                  className="group hidden gap-2 rounded-full bg-primary text-primary-foreground shadow-xs transition-all hover:bg-primary/90 sm:inline-flex"
                 >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 transition-transform duration-200 group-hover:scale-110">
-                    <User className="h-3.5 w-3.5" />
-                  </span>
+                  <User className="h-3.5 w-3.5" />
                   Mi cuenta
-                </Button>
-                {/* Icono acceder — mobile */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setAuthOpen(true)}
-                  className="h-9 w-9 rounded-full border border-cyan-200 bg-cyan-50 text-cyan-700 transition-colors hover:bg-cyan-100 hover:text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-950/70 sm:hidden"
-                  aria-label="Mi cuenta"
-                >
-                  <User className="h-4 w-4" />
                 </Button>
               </>
             )}
 
-            {/* Search icon — mobile */}
-            <Button asChild variant="outline" size="icon" className="lg:hidden">
-              <Link href="/marketplace/buscar" aria-label="Buscar en marketplace">
-                <Search className="h-4 w-4" />
-              </Link>
-            </Button>
-
-            {/* Hamburger */}
+            {/* Botón de Menú Drawer para Mobile y Tablet */}
             <button
-              onClick={() => setMobileOpen((v) => !v)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 lg:hidden"
-              aria-label="Abrir menú"
+              type="button"
+              onClick={() => setMobileDrawerOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/80 bg-background text-foreground hover:bg-muted transition-colors lg:hidden"
+              aria-label="Abrir menú de navegación"
             >
-              {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              <Menu className="h-4 w-4" />
             </button>
           </div>
         </div>
+      </header>
 
-        {/* Mobile menu */}
-        {mobileOpen && (
-          <div className="border-t border-slate-200 bg-white px-4 pb-4 pt-2 dark:border-slate-800 dark:bg-slate-950 lg:hidden">
-            <nav className="flex flex-col gap-1">
-              <MarketplaceSearchBox compact className="mb-2" buttonClassName="hidden" />
+      {/* ── MODAL / DRAWER LATERAL OFF-CANVAS (SHEET) ─────────────────────────── */}
+      {mobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop Difuminado */}
+          <div
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
+            onClick={() => setMobileDrawerOpen(false)}
+          />
+
+          {/* Panel Deslizante Lateral Derecho */}
+          <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xs flex-col bg-card p-6 shadow-2xl border-l border-border/80 transition-transform duration-300 animate-in slide-in-from-right">
+            
+            {/* Cabecera del Drawer con Logo y Botón Cerrar */}
+            <div className="flex items-center justify-between pb-5 border-b border-border/60">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs">
+                  <LayoutGrid className="h-4 w-4" />
+                </div>
+                <span className="font-bold text-sm text-foreground">
+                  {branding.marketplaceName}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Cerrar menú"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Sección de Usuario / Cuenta */}
+            <div className="py-4 border-b border-border/60">
+              {user ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10 border border-border">
+                      <AvatarImage src={user.profile?.avatar_url || ''} />
+                      <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                        {userInitials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-foreground">
+                        {user.profile?.name || 'Usuario'}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                  </div>
+
+                  {canAccessDashboard && (
+                    <Button asChild variant="outline" size="sm" className="w-full justify-start gap-2 rounded-xl">
+                      <Link href="/dashboard" onClick={() => setMobileDrawerOpen(false)}>
+                        <LayoutDashboard className="h-4 w-4 text-primary" />
+                        Panel administrativo
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Accedé a tu cuenta o registrate para comprar:</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full gap-2 rounded-xl bg-primary text-primary-foreground font-semibold shadow-xs"
+                    onClick={() => {
+                      setMobileDrawerOpen(false)
+                      setAuthOpen(true)
+                    }}
+                  >
+                    <User className="h-4 w-4" />
+                    Iniciar sesión / Registro
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Enlaces de Navegación Principal */}
+            <nav className="flex-1 overflow-y-auto py-4 space-y-1">
+              <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Secciones del Marketplace
+              </p>
+
               {navItems.map((item) => {
-                const active = isActive(item.href, item.exact)
                 const Icon = item.icon
+                const active = isActive(item.href, item.exact)
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={() => setMobileOpen(false)}
+                    onClick={() => setMobileDrawerOpen(false)}
                     className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                      'flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',
                       active
-                        ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300'
-                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-foreground hover:bg-muted'
                     )}
                   >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </div>
+                    <ChevronRight className="h-4 w-4 opacity-50" />
                   </Link>
                 )
               })}
 
-              <div className="mt-2 border-t border-slate-200 pt-2 dark:border-slate-800">
-                {user ? (
-                  <div className="space-y-2">
-                    <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-                      <p className="font-semibold">{user.profile?.name || 'Usuario'}</p>
-                      <p className="break-all text-xs text-slate-500 dark:text-slate-400">
-                        {user.email}
-                      </p>
-                    </div>
-                    {canAccessDashboard && (
-                      <Button asChild variant="outline" size="sm" className="w-full justify-start gap-2">
-                        <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
-                          <LayoutDashboard className="h-4 w-4" />
-                          Panel administrativo
-                        </Link>
-                      </Button>
-                    )}
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start gap-2 border-cyan-200 text-cyan-700 hover:bg-cyan-50 dark:border-cyan-800 dark:text-cyan-300"
-                    >
-                      <Link href="/saas" onClick={() => setMobileOpen(false)}>
-                        <Rocket className="h-4 w-4" />
-                        Planes SaaS
-                      </Link>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start gap-2 text-destructive"
-                      onClick={handleLogout}
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Cerrar sesion
-                    </Button>
+              <div className="pt-3">
+                <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Para Comerciantes
+                </p>
+                <Link
+                  href="/saas"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/[0.04] px-3 py-2.5 text-sm font-semibold text-primary hover:bg-primary/[0.08] transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Rocket className="h-4 w-4" />
+                    <span>Publicar mi tienda SaaS</span>
                   </div>
-                ) : (
-                  <div className="grid gap-2">
-                    {/* Botón único que abre modal — también en mobile */}
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="w-full gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md shadow-cyan-600/20 transition-all hover:from-cyan-500 hover:to-sky-500 active:scale-[0.99]"
-                      onClick={() => { setMobileOpen(false); setAuthOpen(true) }}
-                    >
-                      <User className="h-4 w-4" />
-                      Mi cuenta
-                    </Button>
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="w-full gap-2 border-cyan-200 text-cyan-700 hover:bg-cyan-50 dark:border-cyan-800 dark:text-cyan-300"
-                    >
-                      <Link href="/saas" onClick={() => setMobileOpen(false)}>
-                        <Rocket className="h-4 w-4" />
-                        ¿Tenés un negocio?
-                      </Link>
-                    </Button>
-                  </div>
-                )}
+                  <ChevronRight className="h-4 w-4 opacity-70" />
+                </Link>
               </div>
             </nav>
-          </div>
-        )}
-      </header>
 
-      {/* Auth modal — fuera del header para no tener z-index issues */}
+            {/* Pie del Drawer */}
+            <div className="pt-4 border-t border-border/60 space-y-3">
+              {user && (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Cerrar sesión
+                </button>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Auth modal */}
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </>
   )

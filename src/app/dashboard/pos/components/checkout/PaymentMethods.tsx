@@ -17,7 +17,12 @@ import { CreditStatusPanel } from './CreditStatusPanel'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { formatThousands, parseThousands } from '@/lib/currency'
 import { ProductCreditPlanPicker } from './ProductCreditPlanPicker'
-import { buildProductCreditPayments, getProductCreditAllocation, type CartProductCreditPlan } from '../../lib/cart-credit-plans'
+import {
+  buildManualDownPaymentSplit,
+  buildProductCreditPayments,
+  getProductCreditAllocation,
+  type CartProductCreditPlan,
+} from '../../lib/cart-credit-plans'
 
 /**
  * Genera sugerencias inteligentes de billetes basadas en el monto total
@@ -66,6 +71,12 @@ interface PaymentMethodsProps {
   formatCurrency: (amount: number) => string
   currency: string
   productCreditPlans?: CartProductCreditPlan[]
+
+  // Cobrar una cuota de un credito ya activo (no de esta venta). Ya existe
+  // el dialogo -CheckoutModal lo abre desde el paso 1, Cliente- pero no
+  // habia forma de llegar a el desde el paso de "Como paga", que es donde
+  // el cajero esta parado cuando elige Credito.
+  setShowCreditHistory?: (show: boolean) => void
 }
 
 export function PaymentMethods({
@@ -75,6 +86,7 @@ export function PaymentMethods({
   formatCurrency,
   currency,
   productCreditPlans = [],
+  setShowCreditHistory,
 }: PaymentMethodsProps) {
   
   const {
@@ -113,6 +125,28 @@ export function PaymentMethods({
   const [isEnablingCredit, setIsEnablingCredit] = React.useState(false)
   const [customCreditLimit, setCustomCreditLimit] = React.useState('')
   const [showCustomLimitInput, setShowCustomLimitInput] = React.useState(false)
+
+  // Adelanto manual sobre el credito general del cliente: distinto del
+  // adelanto automatico de ProductCreditPlanPicker, que lo dicta un plan
+  // predefinido por producto. Aca lo elige la persona en el momento.
+  const [downPaymentInput, setDownPaymentInput] = React.useState('')
+  const [downPaymentMethod, setDownPaymentMethod] = React.useState<'cash' | 'card' | 'transfer'>('cash')
+  const downPaymentAmount = parseThousands(downPaymentInput)
+
+  const handleApplyDownPayment = React.useCallback(() => {
+    if (downPaymentAmount <= 0) return
+    setPaymentSplit(buildManualDownPaymentSplit(cartTotal, downPaymentAmount, downPaymentMethod, () => crypto.randomUUID()))
+    setIsMixedPayment(true)
+    setPaymentMethod('')
+    setSplitAmount(0)
+    setDownPaymentInput('')
+    const financedAmount = Math.max(0, cartTotal - downPaymentAmount)
+    toast.info('Adelanto aplicado', {
+      description: financedAmount > 0
+        ? `${formatCurrency(downPaymentAmount)} ahora y ${formatCurrency(financedAmount)} a crédito.`
+        : `${formatCurrency(downPaymentAmount)} cubre el total: no queda nada por financiar.`,
+    })
+  }, [cartTotal, downPaymentAmount, downPaymentMethod, formatCurrency, setIsMixedPayment, setPaymentMethod, setPaymentSplit, setSplitAmount])
 
   const handleEnableCredit = async (amount: number) => {
     if (!activeCustomer?.id) {
@@ -306,6 +340,22 @@ export function PaymentMethods({
             ))}
           </div>
           
+          {/* Cobrar una cuota de un credito ya activo, sin depender de esta
+              venta -por ejemplo si vino solo a pagar, o si de paso quiere
+              pagar antes de llevarse algo nuevo-. Es el mismo dialogo que
+              ya existe en el paso 1 (Cliente); esto solo lo hace alcanzable
+              desde donde el cajero esta parado. */}
+          {paymentMethod === 'credit' && activeCustomer && setShowCreditHistory && creditSummary && creditSummary.usedCredit > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowCreditHistory(true)}
+              className="mt-2 flex w-full items-center justify-between rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2 text-left text-xs font-medium text-blue-800 transition-colors hover:bg-blue-100 dark:border-blue-800/60 dark:bg-blue-950/20 dark:text-blue-300 dark:hover:bg-blue-950/40"
+            >
+              <span>¿Vino a pagar una cuota de su crédito? Cobrala acá.</span>
+              <span className="shrink-0 font-semibold underline">Cobrar cuota</span>
+            </button>
+          )}
+
           {/* Información adicional para venta a crédito */}
           {paymentMethod === 'credit' && (
             <ProductCreditPlanPicker
@@ -318,16 +368,67 @@ export function PaymentMethods({
           )}
 
           {paymentMethod === 'credit' && canUseCredit && creditSummary && (
-            <CreditStatusPanel
-              cartTotal={cartTotal}
-              creditSummary={creditSummary}
-              terms={creditTerms}
-              suggestion={creditPlanSuggestion}
-              onTermsChange={setCreditTerms}
-              formatCurrency={formatCurrency}
-            />
+            <>
+              <CreditStatusPanel
+                cartTotal={cartTotal}
+                creditSummary={creditSummary}
+                terms={creditTerms}
+                suggestion={creditPlanSuggestion}
+                onTermsChange={setCreditTerms}
+                formatCurrency={formatCurrency}
+              />
+
+              {/* Adelanto manual: cobrar una parte ahora y financiar el resto.
+                  Arma el mismo split de Pago Mixto, pero guiado desde el
+                  boton de Credito en vez de requerir que el cajero sepa
+                  cambiar a Pago Mixto por su cuenta. */}
+              <div className="mt-3 rounded-lg border border-dashed border-blue-300/60 bg-blue-50/40 p-3 dark:border-blue-800/60 dark:bg-blue-950/20">
+                <label className="text-xs font-semibold text-blue-800 dark:text-blue-300">
+                  ¿El cliente va a dar un adelanto?
+                </label>
+                <p className="mt-0.5 text-[11px] text-blue-700/80 dark:text-blue-400/80">
+                  Cobrá una parte ahora y financiá el resto a crédito.
+                </p>
+                <div className="mt-2 grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_auto_auto]">
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">₲</span>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder={`Ej: ${formatCurrency(Math.round(cartTotal * 0.3))}`}
+                      value={formatThousands(downPaymentInput)}
+                      onChange={(e) => setDownPaymentInput(parseThousands(e.target.value) > 0 ? String(parseThousands(e.target.value)) : '')}
+                      onFocus={(e) => e.target.select()}
+                      className="pl-7 font-bold font-mono"
+                    />
+                  </div>
+                  <Select value={downPaymentMethod} onValueChange={(value) => setDownPaymentMethod(value as 'cash' | 'card' | 'transfer')}>
+                    <SelectTrigger className="w-full sm:w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Efectivo</SelectItem>
+                      <SelectItem value="card">Tarjeta</SelectItem>
+                      <SelectItem value="transfer">Transferencia</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="col-span-2 sm:col-span-1"
+                    disabled={downPaymentAmount <= 0}
+                    onClick={handleApplyDownPayment}
+                  >
+                    Aplicar adelanto
+                  </Button>
+                </div>
+                {downPaymentAmount > 0 && (
+                  <p className="mt-2 text-[11px] text-blue-800 dark:text-blue-300">
+                    Financia <strong>{formatCurrency(Math.max(0, cartTotal - downPaymentAmount))}</strong> a crédito.
+                  </p>
+                )}
+              </div>
+            </>
           )}
-          
+
           {/* Advertencia y opciones para habilitar crédito si no tiene crédito suficiente */}
           {paymentMethod === 'credit' && !canUseCredit && (
             <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-3">

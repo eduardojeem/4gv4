@@ -1,4 +1,5 @@
 import { MarketplacePublicNav } from '@/components/public/marketplace-public-nav'
+import { MarketplaceMobileBottomNav } from '@/components/public/MarketplaceMobileBottomNav'
 
 export default function MarketplaceLayout({
   children,
@@ -6,9 +7,10 @@ export default function MarketplaceLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen bg-white text-slate-950 dark:bg-slate-950 dark:text-slate-50">
+    <div className="min-h-screen bg-background text-foreground pb-20 lg:pb-0">
       <MarketplacePublicNav />
       {children}
+      <MarketplaceMobileBottomNav />
     </div>
   )
 }

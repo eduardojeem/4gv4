@@ -87,4 +87,32 @@ describe('ProfitStatsCards', () => {
     // 1.100.000 − 2.000.000 = -900.000
     expect(screen.getByText(/-900\.000|−900\.000/)).toBeInTheDocument()
   })
+
+  // `useState(taxMode)` estaba declarado despues del
+  // `if (costUnavailable) return (...)`, violando las Reglas de los Hooks.
+  // `usePosStats` recalcula `costUnavailable` cuando llega el costo real del
+  // periodo -puede pasar de false a true, por ejemplo al cambiar el rango de
+  // fechas-, asi que la MISMA instancia podia transicionar entre ambos
+  // renders. Con un solo hook y nada antes del `if`, React 19 no llega a
+  // tronar en este caso puntual -lo verifique con una reproduccion aislada-,
+  // pero el patron queda frágil: alcanza con que se agregue otro hook mas
+  // arriba del `if` para que empiece a fallar. Estas pruebas guardan el
+  // contrato de que la transicion nunca debe romper el render.
+  it('no revienta al pasar de costo disponible a no disponible en la misma instancia', () => {
+    const { rerender } = render(<ProfitStatsCards stats={statsWith()} />)
+    expect(screen.getByRole('button', { name: 'Con IVA' })).toBeInTheDocument()
+
+    rerender(<ProfitStatsCards stats={statsWith({ totalCost: 0, costUnavailable: true })} />)
+    expect(screen.getByText(/No se pudo calcular el costo/i)).toBeInTheDocument()
+  })
+
+  it('no revienta al pasar de costo no disponible a disponible en la misma instancia', () => {
+    const { rerender } = render(
+      <ProfitStatsCards stats={statsWith({ totalCost: 0, costUnavailable: true })} />
+    )
+    expect(screen.getByText(/No se pudo calcular el costo/i)).toBeInTheDocument()
+
+    rerender(<ProfitStatsCards stats={statsWith()} />)
+    expect(screen.getByRole('button', { name: 'Con IVA' })).toBeInTheDocument()
+  })
 })

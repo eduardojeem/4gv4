@@ -65,6 +65,42 @@ export function buildProductCreditPayments(
   ]
 }
 
+/**
+ * Adelanto manual sobre el credito general del cliente (no un plan por
+ * producto): el cajero escribe cuanto cobra ahora y el resto se financia.
+ *
+ * Separado de `buildProductCreditPayments` porque ahi el "dueNow" lo dicta un
+ * plan predefinido por producto; aca lo elige la persona en el momento, asi
+ * que el monto se acota entre 0 y el total en vez de derivarse de una
+ * proporcion.
+ */
+export function buildManualDownPaymentSplit(
+  cartTotal: number,
+  downPayment: number,
+  downPaymentMethod: 'cash' | 'card' | 'transfer',
+  createId: () => string,
+): PaymentSplit[] {
+  const normalizedTotal = Math.max(0, roundMoney(Number(cartTotal) || 0))
+  const normalizedDownPayment = Math.min(
+    normalizedTotal,
+    Math.max(0, roundMoney(Number(downPayment) || 0)),
+  )
+  const financedAmount = roundMoney(normalizedTotal - normalizedDownPayment)
+
+  return [
+    ...(normalizedDownPayment > 0 ? [{
+      id: createId(),
+      method: downPaymentMethod,
+      amount: normalizedDownPayment,
+    }] : []),
+    ...(financedAmount > 0 ? [{
+      id: createId(),
+      method: 'credit' as const,
+      amount: financedAmount,
+    }] : []),
+  ]
+}
+
 export function getCartProductCreditPlans(
   items: CartCreditSource[],
   catalogItems: CartCreditSource[] = [],

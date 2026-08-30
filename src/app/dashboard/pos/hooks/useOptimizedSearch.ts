@@ -70,25 +70,29 @@ export function useOptimizedSearch({
     }
   }, [query, optimizer])
 
-  // Realizar búsqueda
-  const results = useMemo(() => {
-    if (products.length === 0) return []
+  // Realizar búsqueda — resultado puro sin side-effects en memo
+  const searchResult = useMemo(() => {
+    if (products.length === 0) return { products: [] as Product[], elapsed: 0 }
 
-    setIsSearching(true)
     const startTime = performance.now()
-
     const productIds = optimizer.search(debouncedQuery, {})
     const foundProducts = productIds
       .map(id => products.find(p => p.id === id))
       .filter((p): p is Product => p !== undefined)
       .slice(0, maxResults)
+    const elapsed = performance.now() - startTime
 
-    const endTime = performance.now()
-    setSearchTime(endTime - startTime)
-    setIsSearching(false)
-
-    return foundProducts
+    return { products: foundProducts, elapsed }
   }, [debouncedQuery, products, optimizer, maxResults])
+
+  // Sincronizar estado de búsqueda y tiempo una vez calculado el resultado
+  const results = searchResult.products
+  useEffect(() => {
+    setIsSearching(true)
+    // El memo ya corrió; marcamos done en el mismo microtask
+    setIsSearching(false)
+    setSearchTime(searchResult.elapsed)
+  }, [searchResult])
 
   // Estadísticas
   const stats = useMemo(() => {

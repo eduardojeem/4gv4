@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
+  Boxes,
   Building2,
   CalendarDays,
   CheckCircle2,
@@ -41,6 +42,7 @@ import { cn } from '@/lib/utils'
 import { SortIndicator } from '@/components/superadmin/sort-indicator'
 import { countOrganizationsWithoutSubscription, getSubscriptionTiming } from '@/lib/superadmin/organization-directory'
 import { MonitoringRobotMascot, type RobotMood } from '../MonitoringRobotMascot'
+import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,11 +74,85 @@ export type SuperAdminOrganization = {
   staff_invited: number
   staff_suspended: number
   customers_total: number
+  business_vertical?: string | null
+  operating_model?: string | null
+  enabled_modules?: string[] | null
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers & Metadatos de Rubros y Módulos
 // ---------------------------------------------------------------------------
+
+export const VERTICAL_META: Record<string, { label: string; icon: string; badge: string }> = {
+  electronics: { label: 'Tecnología & Celulares', icon: '📱', badge: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800' },
+  clothing: { label: 'Ropa & Moda', icon: '👗', badge: 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300 border-pink-200 dark:border-pink-800' },
+  general: { label: 'Comercio General', icon: '🏬', badge: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700' },
+  food: { label: 'Alimentos & Gastronomía', icon: '🍔', badge: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
+  cosmetics: { label: 'Cosmética & Belleza', icon: '💄', badge: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800' },
+  hardware: { label: 'Ferretería & Construcción', icon: '🔨', badge: 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border-orange-200 dark:border-orange-800' },
+  other: { label: 'Otros Rubros', icon: '🏷️', badge: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700' },
+}
+
+export const MODULE_META: Record<string, { label: string; short: string; color: string }> = {
+  pos: { label: 'Punto de Venta', short: 'POS', color: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300' },
+  inventory: { label: 'Inventario', short: 'Stock', color: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300' },
+  inventory_admin: { label: 'Stock Pro', short: 'Stock+', color: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300' },
+  crm: { label: 'Clientes CRM', short: 'CRM', color: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300' },
+  orders: { label: 'Pedidos', short: 'Pedidos', color: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300' },
+  ecommerce: { label: 'Tienda Online', short: 'Tienda', color: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300' },
+  repairs: { label: 'Taller & SAT', short: 'Taller', color: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300' },
+  services: { label: 'Servicios', short: 'Servicios', color: 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300' },
+  credits: { label: 'Créditos', short: 'Cuotas', color: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300' },
+  delivery: { label: 'Delivery', short: 'Delivery', color: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300' },
+  analytics: { label: 'Analítica', short: 'KPIs', color: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300' },
+  promotions: { label: 'Promociones', short: 'Promos', color: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300' },
+  security: { label: 'Seguridad', short: 'Auditoría', color: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300' },
+}
+
+function RubroBadge({ vertical, model }: { vertical?: string | null; model?: string | null }) {
+  const meta = VERTICAL_META[vertical || 'general'] || VERTICAL_META.general
+  return (
+    <div className="space-y-0.5 min-w-0">
+      <Badge variant="outline" className={cn('rounded-lg px-2 py-0.5 text-[10px] font-extrabold shadow-2xs gap-1 max-w-full truncate', meta.badge)}>
+        <span>{meta.icon}</span>
+        <span className="truncate">{meta.label}</span>
+      </Badge>
+      {model && model !== 'retail' && (
+        <p className="text-[9px] text-slate-400 font-medium capitalize truncate pl-1">
+          {model === 'wholesale' ? 'Mayorista' : model === 'repair' ? 'Taller' : model === 'service' ? 'Servicios' : model}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ModulesPreview({ modules }: { modules?: string[] | null }) {
+  const list = modules && modules.length > 0 ? modules : ['pos', 'inventory', 'crm', 'ecommerce']
+  const visible = list.slice(0, 3)
+  const remaining = list.length - visible.length
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 max-w-[200px]">
+      {visible.map((m) => {
+        const meta = MODULE_META[m] || { label: m, short: m, color: 'bg-slate-100 text-slate-600 border-slate-200' }
+        return (
+          <span
+            key={m}
+            className={cn('inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-extrabold border shadow-2xs', meta.color)}
+            title={meta.label || m}
+          >
+            {meta.short}
+          </span>
+        )
+      })}
+      {remaining > 0 && (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+          +{remaining}
+        </span>
+      )}
+    </div>
+  )
+}
 
 function formatDate(value: string | null) {
   if (!value) return '—'
@@ -198,10 +274,12 @@ function OrganizationFocusPanel({
   organization,
   onCopyUrl,
   onClearFilter,
+  onEdit,
 }: {
   organization: SuperAdminOrganization
   onCopyUrl: (slug: string) => Promise<void>
   onClearFilter: () => void
+  onEdit?: () => void
 }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'billing'>('overview')
   const timing = getSubscriptionTiming(
@@ -286,6 +364,23 @@ function OrganizationFocusPanel({
           {/* Action Toolbar */}
           <div className="flex flex-wrap items-center gap-2">
             <EnterSupportButton organizationId={organization.id} organizationName={organization.name} />
+            {onEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onEdit}
+                className="gap-1.5 rounded-xl text-xs font-bold border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40 cursor-pointer"
+              >
+                <Wrench className="h-3.5 w-3.5 text-violet-600" />
+                Editar Organización
+              </Button>
+            )}
+            <Button asChild size="sm" className="gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer">
+              <Link href={`/superadmin/organizations/${encodeURIComponent(organization.slug)}`}>
+                <Building2 className="h-3.5 w-3.5" />
+                Expediente Completo
+              </Link>
+            </Button>
             <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer">
               <a href={`/${organization.slug}/inicio`} target="_blank" rel="noreferrer">
                 <Globe className="h-3.5 w-3.5 text-cyan-600" />
@@ -296,13 +391,13 @@ function OrganizationFocusPanel({
             <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer">
               <Link href={`/superadmin/users?organization=${organization.id}`}>
                 <Users className="h-3.5 w-3.5 text-violet-600" />
-                Gestionar Usuarios
+                Usuarios
               </Link>
             </Button>
             <Button asChild size="sm" className="gap-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 cursor-pointer">
               <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(organization.slug)}`}>
                 <CreditCard className="h-3.5 w-3.5 text-amber-500" />
-                Ver Suscripción
+                Suscripción
               </Link>
             </Button>
           </div>
@@ -389,6 +484,60 @@ function OrganizationFocusPanel({
 
           {activeTab === 'overview' && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 pt-2">
+              {/* Rubro & Módulos Habilitados Card */}
+              <div className="rounded-3xl border border-violet-200/90 bg-gradient-to-br from-violet-50/60 via-white to-cyan-50/40 p-5 dark:border-violet-900/60 dark:from-violet-950/30 dark:via-slate-900 dark:to-cyan-950/20 space-y-4 sm:col-span-2 lg:col-span-3 shadow-2xs">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white dark:bg-slate-800 text-2xl shadow-sm border border-violet-200/80 dark:border-violet-900/50">
+                      {VERTICAL_META[organization.business_vertical || 'general']?.icon || '🏬'}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                          {VERTICAL_META[organization.business_vertical || 'general']?.label || 'Comercio General'}
+                        </span>
+                        <Badge variant="outline" className="text-[10px] font-bold">
+                          Modelo: {organization.operating_model === 'wholesale' ? 'Mayorista' : organization.operating_model === 'repair' ? 'Taller' : organization.operating_model === 'service' ? 'Servicios' : 'Minorista'}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Configuración vertical de catálogo, flujos de venta y módulos operativos del negocio.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs font-extrabold px-3 py-1 bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                      {(organization.enabled_modules || ['pos', 'inventory', 'crm', 'ecommerce']).length} módulos activos
+                    </Badge>
+                    <Button asChild size="sm" variant="outline" className="h-8 rounded-xl text-xs font-bold gap-1 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800 hover:bg-violet-50">
+                      <Link href={`/superadmin/organizations/${encodeURIComponent(organization.slug)}`}>
+                        <Boxes className="h-3.5 w-3.5" />
+                        Ver Matriz Completa
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                  {(organization.enabled_modules && organization.enabled_modules.length > 0
+                    ? organization.enabled_modules
+                    : ['pos', 'inventory', 'crm', 'ecommerce']
+                  ).map((m) => {
+                    const meta = MODULE_META[m] || { label: m, short: m, color: 'bg-slate-100 text-slate-700 border-slate-200' }
+                    return (
+                      <span
+                        key={m}
+                        className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold border shadow-2xs', meta.color)}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        {meta.label || m}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+
               <div className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/40 space-y-1">
                 <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Fecha de Creación</span>
                 <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatDate(organization.created_at)}</p>
@@ -531,6 +680,7 @@ export function OrganizationsDashboard({
 }) {
   const router = useRouter()
   const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const [editingOrg, setEditingOrg] = useState<EditableOrganization | null>(null)
   const { state, setValue } = useUrlListState({
     q: '',
     plan: 'ALL',
@@ -721,6 +871,17 @@ export function OrganizationsDashboard({
           organization={focusedOrganization}
           onCopyUrl={copyUrl}
           onClearFilter={() => setQuery('')}
+          onEdit={() => setEditingOrg({
+            id: focusedOrganization.id,
+            name: focusedOrganization.name,
+            slug: focusedOrganization.slug,
+            plan: focusedOrganization.plan,
+            subscription_status: focusedOrganization.subscription_status,
+            business_vertical: focusedOrganization.business_vertical,
+            operating_model: focusedOrganization.operating_model,
+            enabled_modules: focusedOrganization.enabled_modules,
+            cancel_at_period_end: focusedOrganization.cancel_at_period_end,
+          })}
         />
       )}
 
@@ -874,6 +1035,8 @@ export function OrganizationsDashboard({
                         Empresa <SortIndicator active={sortKey === 'name'} direction={sortDir} />
                       </button>
                     </th>
+                    <th className={thClass}>Rubro Comercial</th>
+                    <th className={thClass}>Módulos</th>
                     <th className={thClass}>
                       <button className={thBtn} onClick={() => toggleSort('plan')}>
                         Plan <SortIndicator active={sortKey === 'plan'} direction={sortDir} />
@@ -901,7 +1064,7 @@ export function OrganizationsDashboard({
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-20 text-center">
+                      <td colSpan={9} className="py-20 text-center">
                         <Minus className="mx-auto h-8 w-8 text-slate-300" />
                         <p className="mt-3 text-xs font-bold text-slate-500">No se encontraron organizaciones con estos filtros</p>
                       </td>
@@ -944,6 +1107,16 @@ export function OrganizationsDashboard({
                           </div>
                         </td>
 
+                        {/* Rubro Comercial */}
+                        <td className="px-4 py-3.5">
+                          <RubroBadge vertical={org.business_vertical} model={org.operating_model} />
+                        </td>
+
+                        {/* Módulos Habilitados */}
+                        <td className="px-4 py-3.5">
+                          <ModulesPreview modules={org.enabled_modules} />
+                        </td>
+
                         {/* Plan */}
                         <td className="px-4 py-3.5">
                           <Badge variant="outline" className={cn('rounded-full text-[11px] font-bold', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
@@ -958,7 +1131,7 @@ export function OrganizationsDashboard({
 
                         {/* Owner */}
                         <td className="px-4 py-3.5">
-                          <div className="max-w-[200px]">
+                          <div className="max-w-[180px]">
                             <p className="truncate text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
                               {org.owner_name || (org.owner_email?.split('@')[0]) || '—'}
                             </p>
@@ -982,6 +1155,31 @@ export function OrganizationsDashboard({
                         <td className="py-3.5 pl-3 pr-6">
                           <div className="flex items-center justify-end gap-1">
                             <EnterSupportButton iconOnly organizationId={org.id} organizationName={org.name} />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400"
+                              title="Editar organización"
+                              aria-label={`Editar ${org.name}`}
+                              onClick={() => setEditingOrg({
+                                id: org.id,
+                                name: org.name,
+                                slug: org.slug,
+                                plan: org.plan,
+                                subscription_status: org.subscription_status,
+                                business_vertical: org.business_vertical,
+                                operating_model: org.operating_model,
+                                enabled_modules: org.enabled_modules,
+                                cancel_at_period_end: org.cancel_at_period_end,
+                              })}
+                            >
+                              <Wrench className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400" title="Ver detalle completo">
+                              <Link href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`} aria-label={`Ver detalle de ${org.name}`}>
+                                <Building2 className="h-3.5 w-3.5" />
+                              </Link>
+                            </Button>
                             <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer" title="Abrir tienda pública">
                               <a href={`/${org.slug}/inicio`} target="_blank" rel="noreferrer" aria-label={`Abrir tienda de ${org.name}`}>
                                 <Globe className="h-3.5 w-3.5 text-slate-500" />
@@ -1026,7 +1224,7 @@ export function OrganizationsDashboard({
                         </div>
                         <div className="min-w-0">
                           <Link
-                            href={`/superadmin/organizations?q=${encodeURIComponent(org.slug)}`}
+                            href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`}
                             className="truncate text-sm font-extrabold text-slate-900 dark:text-slate-100 hover:text-cyan-600 transition-colors block"
                           >
                             {org.name}
@@ -1034,9 +1232,16 @@ export function OrganizationsDashboard({
                           <p className="truncate text-xs text-slate-400 font-mono">/{org.slug}</p>
                         </div>
                       </div>
-                      <Badge variant="outline" className={cn('rounded-full text-[10px] font-bold px-2 py-0.5', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
-                        {org.plan}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge variant="outline" className={cn('rounded-full text-[10px] font-bold px-2 py-0.5', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
+                          {org.plan}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 pt-2.5">
+                      <RubroBadge vertical={org.business_vertical} model={org.operating_model} />
+                      <ModulesPreview modules={org.enabled_modules} />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 pt-1 text-xs border-t border-slate-100 dark:border-slate-800">
@@ -1059,9 +1264,28 @@ export function OrganizationsDashboard({
 
                     <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                       <EnterSupportButton organizationId={org.id} organizationName={org.name} />
-                      <Button asChild variant="outline" size="sm" className="h-8 text-xs font-bold rounded-xl flex-1">
-                        <Link href={`/superadmin/organizations?q=${encodeURIComponent(org.slug)}`}>
-                          Ver Ficha
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs font-bold rounded-xl gap-1 text-slate-700 dark:text-slate-300 cursor-pointer"
+                        onClick={() => setEditingOrg({
+                          id: org.id,
+                          name: org.name,
+                          slug: org.slug,
+                          plan: org.plan,
+                          subscription_status: org.subscription_status,
+                          business_vertical: org.business_vertical,
+                          operating_model: org.operating_model,
+                          enabled_modules: org.enabled_modules,
+                          cancel_at_period_end: org.cancel_at_period_end,
+                        })}
+                      >
+                        <Wrench className="h-3 w-3" />
+                        Editar
+                      </Button>
+                      <Button asChild size="sm" className="h-8 text-xs font-bold rounded-xl flex-1 bg-violet-600 text-white hover:bg-violet-700 cursor-pointer">
+                        <Link href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`}>
+                          Detalle
                         </Link>
                       </Button>
                     </div>
@@ -1088,6 +1312,13 @@ export function OrganizationsDashboard({
         </CardContent>
       </Card>
 
+      {/* Edit Organization Modal */}
+      <EditOrganizationDialog
+        organization={editingOrg}
+        open={Boolean(editingOrg)}
+        onClose={() => setEditingOrg(null)}
+        onSuccess={() => router.refresh()}
+      />
     </div>
   )
 }

@@ -15,7 +15,7 @@ import {
   FileText, TrendingUp, CreditCard, Banknote, RefreshCcw
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
-import { CashRegisterState, CashMovement } from '../types'
+import { CashRegisterState, CashMovement, normalizeCashMovementType } from '../types'
 
 interface CashReportData {
   periodStart: string
@@ -105,7 +105,10 @@ export function CashRegisterDetailsModal({
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-green-600">
-                    {formatCurrency(movements.filter(m => m.type === 'in' || m.type === 'sale').reduce((acc, m) => acc + m.amount, 0))}
+                    {formatCurrency(movements.filter(m => {
+                      const c = normalizeCashMovementType(m.type)
+                      return c === 'cash_in' || c === 'sale'
+                    }).reduce((acc, m) => acc + m.amount, 0))}
                   </div>
                 </CardContent>
               </Card>
@@ -116,7 +119,7 @@ export function CashRegisterDetailsModal({
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-red-600">
-                    {formatCurrency(movements.filter(m => m.type === 'out').reduce((acc, m) => acc + m.amount, 0))}
+                    {formatCurrency(movements.filter(m => normalizeCashMovementType(m.type) === 'cash_out').reduce((acc, m) => acc + m.amount, 0))}
                   </div>
                 </CardContent>
               </Card>
@@ -145,23 +148,29 @@ export function CashRegisterDetailsModal({
                       <div key={movement.id || i} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
                         <div className="flex items-center gap-4">
                           <div className={`p-2 rounded-full ${
-                            movement.type === 'sale' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' :
-                            movement.type === 'in' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' :
-                            movement.type === 'out' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' :
-                            'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                            (() => {
+                              const c = normalizeCashMovementType(movement.type)
+                              if (c === 'sale') return 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                              if (c === 'cash_in') return 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                              if (c === 'cash_out') return 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+                              return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                            })()
                           }`}>
-                            {movement.type === 'sale' && <DollarSign className="h-4 w-4" />}
-                            {movement.type === 'in' && <ArrowUpCircle className="h-4 w-4" />}
-                            {movement.type === 'out' && <ArrowDownCircle className="h-4 w-4" />}
-                            {(movement.type === 'opening' || movement.type === 'closing') && <History className="h-4 w-4" />}
+                            {normalizeCashMovementType(movement.type) === 'sale' && <DollarSign className="h-4 w-4" />}
+                            {normalizeCashMovementType(movement.type) === 'cash_in' && <ArrowUpCircle className="h-4 w-4" />}
+                            {normalizeCashMovementType(movement.type) === 'cash_out' && <ArrowDownCircle className="h-4 w-4" />}
+                            {(normalizeCashMovementType(movement.type) === 'opening' || normalizeCashMovementType(movement.type) === 'closing') && <History className="h-4 w-4" />}
                           </div>
                           <div>
                             <p className="text-sm font-medium capitalize">
-                              {movement.type === 'sale' ? 'Venta' :
-                               movement.type === 'in' ? 'Ingreso de Caja' :
-                               movement.type === 'out' ? 'Retiro de Caja' :
-                               movement.type === 'opening' ? 'Apertura de Caja' :
-                               'Cierre de Caja'}
+                              {(() => {
+                                const c = normalizeCashMovementType(movement.type)
+                                if (c === 'sale') return 'Venta'
+                                if (c === 'cash_in') return 'Ingreso de Caja'
+                                if (c === 'cash_out') return 'Retiro de Caja'
+                                if (c === 'opening') return 'Apertura de Caja'
+                                return 'Cierre de Caja'
+                              })()}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {new Date(movement.timestamp).toLocaleString()}
@@ -170,9 +179,9 @@ export function CashRegisterDetailsModal({
                           </div>
                         </div>
                         <div className={`font-bold ${
-                          movement.type === 'out' ? 'text-red-600' : 'text-green-600'
+                          normalizeCashMovementType(movement.type) === 'cash_out' ? 'text-red-600' : 'text-green-600'
                         }`}>
-                          {movement.type === 'out' ? '-' : '+'}{formatCurrency(movement.amount)}
+                          {normalizeCashMovementType(movement.type) === 'cash_out' ? '-' : '+'}{formatCurrency(movement.amount)}
                         </div>
                       </div>
                     ))}

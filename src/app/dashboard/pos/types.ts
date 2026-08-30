@@ -61,6 +61,47 @@ export interface PaymentMethodOption {
 export type CashMovementType = 'opening' | 'apertura' | 'sale' | 'venta' | 'in' | 'cash_in' | 'ingreso' | 'out' | 'cash_out' | 'egreso' | 'closing' | 'cierre'
 export type CashPaymentMethod = 'cash' | 'efectivo' | 'card' | 'tarjeta' | 'transfer' | 'transferencia' | 'qr' | 'sipap' | 'mixed' | 'mixto'
 
+/**
+ * Tipo canónico para los movimientos de caja.
+ * Todos los aliases en español/inglés se normalizan a este conjunto.
+ */
+export type CanonicalMovementType = 'opening' | 'sale' | 'cash_in' | 'cash_out' | 'closing'
+
+/**
+ * Normaliza cualquier variante de CashMovementType (español o inglés) al tipo canónico.
+ * Úsala siempre antes de comparar tipos de movimiento en cálculos o reportes.
+ *
+ * @example
+ * normalizeCashMovementType('venta')   // → 'sale'
+ * normalizeCashMovementType('ingreso') // → 'cash_in'
+ * normalizeCashMovementType('egreso')  // → 'cash_out'
+ * normalizeCashMovementType('cierre')  // → 'closing'
+ */
+export function normalizeCashMovementType(type: string | null | undefined): CanonicalMovementType {
+  switch (String(type || '').toLowerCase().trim()) {
+    case 'opening':
+    case 'apertura':
+      return 'opening'
+    case 'sale':
+    case 'venta':
+      return 'sale'
+    case 'cash_in':
+    case 'in':
+    case 'ingreso':
+      return 'cash_in'
+    case 'cash_out':
+    case 'out':
+    case 'egreso':
+      return 'cash_out'
+    case 'closing':
+    case 'cierre':
+      return 'closing'
+    default:
+      // Fallback conservador: tratar desconocidos como entrada para no perder importes
+      return 'cash_in'
+  }
+}
+
 export interface CashMovement {
   id: string
   type: CashMovementType

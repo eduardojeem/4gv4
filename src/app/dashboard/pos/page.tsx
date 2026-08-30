@@ -105,13 +105,15 @@ import {
   applyProductCreditFilter,
   type ProductCreditSort,
 } from './lib/product-credit-filter'
+// Hooks extraídos por la refactorización de page.tsx
+import { usePOSRepairs, type PosCartRepair } from './hooks/usePOSRepairs'
+import { usePOSSearch } from './hooks/usePOSSearch'
+import { usePOSSaleProcessor } from './hooks/usePOSSaleProcessor'
 
-/** Lo minimo que necesita el carrito para armar la linea de una reparacion. */
-type PosCartRepair = ChargeableRepair & {
-  id: string
-  device_brand?: string | null
-  device_model?: string | null
-}
+/** Lo minimo que necesita el carrito para armar la linea de una reparacion.
+ * @deprecated Usa PosCartRepair desde './hooks/usePOSRepairs'
+ */
+type _PosCartRepair = PosCartRepair
 
 const getErrorMessage = (e: unknown) => {
   if (!e) return 'Unknown error'
@@ -187,9 +189,7 @@ function POSPageContent() {
   // Monitoreo de tiempo de renderizado
   useRenderTimeMonitor('POSPage')
 
-  // Estados principales
-  const [searchTerm, setSearchTerm] = useState('')
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+  // Estados principales — búsqueda gestionada por usePOSSearch (ver abajo)
   // Cart state managed by useOptimizedCart hook
 
   // Use centralized customer state
@@ -239,13 +239,28 @@ function POSPageContent() {
   
 
 
-  const [customerRepairs, setCustomerRepairs] = useState<any[]>([])
-  // Reparaciones sumadas desde el buscador del POS. Ese modal lista todas las
-  // del taller, no solo las del cliente activo, asi que hay que conservar sus
-  // datos: `customerRepairs` no las tiene y la linea del carrito no se podia
-  // construir.
-  const [manualRepairs, setManualRepairs] = useState<PosCartRepair[]>([])
-  const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([])
+  // ── Reparaciones (extraído a usePOSRepairs) ──────────────────────────────
+  const {
+    customerRepairs,
+    setCustomerRepairs,
+    manualRepairs,
+    setManualRepairs,
+    selectedRepairIds,
+    setSelectedRepairIds,
+    selectedRepairs,
+    markRepairDelivered,
+    setMarkRepairDelivered,
+    deliveryOutcome,
+    setDeliveryOutcome,
+    repairTotals,
+    addRepairToCart: handleAddRepairToCart,
+    removeRepair: removeRepairById,
+    clearRepairs,
+  } = usePOSRepairs({
+    selectedCustomer,
+    isCheckoutOpen,
+    taxPercentage,
+  })
 
   const { heldSales, heldSalesCount, parkSale, deleteSale, clearAllSales } = useHeldSales()
   const [isHeldSalesModalOpen, setIsHeldSalesModalOpen] = useState(false)
@@ -265,67 +280,24 @@ function POSPageContent() {
   // Only run once on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  
-  const [paymentAttempts, setPaymentAttempts] = useState<Array<{ time: string; status: 'processing' | 'success' | 'failed'; method: 'single' | 'mixed'; amount: number; message?: string }>>([])
-  const addPaymentAttempt = useCallback((attempt: { status: 'processing' | 'success' | 'failed'; method: 'single' | 'mixed'; amount: number; message?: string }) => {
-    setPaymentAttempts(prev => [{ ...attempt, time: new Date().toISOString() }, ...prev].slice(0, 50))
-  }, [])
-  const normalizePaymentError = useCallback((err: any): string => {
-    try {
-      if (!err) return 'Error desconocido'
-      const msg = typeof err === 'string' ? err : (err.message || err.error_description || err.details || err.hint || 'Error desconocido')
-      const lower = (msg || '').toLowerCase()
-      if (lower.includes('network') || lower.includes('fetch')) return 'Error de red: verifique la conexión.'
-      if (lower.includes('permission') || lower.includes('auth') || lower.includes('jwt')) return 'Permisos insuficientes o sesión inválida.'
-      if (lower.includes('duplicate key') || lower.includes('unique constraint')) return 'Registro duplicado.'
-      if (lower.includes('timeout')) return 'Tiempo de espera agotado.'
-      if (lower.includes('not null')) return 'Faltan datos requeridos.'
-      return msg
-    } catch {
-      return 'Error desconocido'
-    }
-  }, [])
-  // Reiniciar estado de pago al abrir/cerrar el modal
+
+  // ── Procesador de ventas (extraído a usePOSSaleProcessor) ─────────────────
+  const {
+    paymentAttempts,
+    addPaymentAttempt,
+    clearPaymentAttempts,
+    normalizePaymentError,
+    processSale: processSaleBase,
+    processMixedPayment: processMixedPaymentBase,
+  } = usePOSSaleProcessor()
+
+  // Reiniciar estado de pago al abrir el modal
   useEffect(() => {
     if (isCheckoutOpen) {
       setPaymentStatus('idle')
       setPaymentError('')
     }
   }, [isCheckoutOpen, setPaymentError, setPaymentStatus])
-  const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  // Opciones de vinculación de reparación
-  const [markRepairDelivered, setMarkRepairDelivered] = useState(false)
-  const [deliveryOutcome, setDeliveryOutcome] = useState<'repaired' | 'withdrawn' | 'unrepairable'>('repaired')
-  const selectedRepairs = useMemo(() => {
-    // `customerRepairs` manda cuando existe —viene de Supabase y se mantiene al
-    // dia—; el resto sale de lo que se sumo a mano desde el buscador.
-    const byId = new Map<string, any>()
-    for (const repair of manualRepairs) byId.set(repair.id, repair)
-    for (const repair of customerRepairs) byId.set(repair.id, repair)
-    return selectedRepairIds
-      .map(id => byId.get(id))
-      .filter(Boolean)
-  }, [customerRepairs, manualRepairs, selectedRepairIds])
-  const supabaseStatusToLabel: Record<string, string> = {
-    recibido: 'Recibido',
-    'diagnostico': 'En diagnóstico',
-    'reparacion': 'En reparación',
-    listo: 'Listo para entrega',
-    entregado: 'Entregado',
-  }
-  useEffect(() => {
-    // Resetear toggles al cerrar checkout o al cambiar de reparación
-    if (!isCheckoutOpen) {
-      setMarkRepairDelivered(false)
-      setDeliveryOutcome('repaired')
-    }
-  }, [isCheckoutOpen, selectedRepairIds])
-
-  useEffect(() => {
-    if (!isCheckoutOpen) return
-    setMarkRepairDelivered(selectedRepairIds.length > 0)
-  }, [selectedRepairIds, isCheckoutOpen])
-  const [showFeatured, setShowFeatured] = useState(false)
   const [showPosGuide, setShowPosGuide] = useState(true)
 
   useEffect(() => {
@@ -359,7 +331,16 @@ function POSPageContent() {
   const [barcodeInput, setBarcodeInput] = useState('')
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showAccessibilitySettings, setShowAccessibilitySettings] = useState(false)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+
+  const supabaseStatusToLabel: Record<string, string> = {
+    recibido: 'Recibido',
+    diagnostico: 'En diagnóstico',
+    reparacion: 'En reparación',
+    listo: 'Listo para entrega',
+    entregado: 'Entregado',
+  }
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showCartDialog, setShowCartDialog] = useState(false)
@@ -573,431 +554,38 @@ function POSPageContent() {
   }, [inventoryProducts])
 
   // Smart search integration (after inventoryProducts is available)
-  const { 
-    query: smartSearchQuery, 
-    setQuery: setSmartSearchQuery,
-    searchResults: smartSearchResults,
-    suggestions: smartSearchSuggestions,
-    isSearching: isSmartSearching,
-    addToRecentSearches
-  } = useSmartSearch({
-    products: (inventoryProducts || []) as any[],
-    maxResults: 20,
-    enableFuzzySearch: true,
-    enableSemanticSearch: true
-  })
+  // NOTA: useSmartSearch y todo el estado de búsqueda/filtros/paginación
+  // están ahora encapsulados en usePOSSearch.
+  const posSearch = usePOSSearch({ products: inventoryProducts as Product[] })
+  const {
+    searchTerm, setSearchTerm, handleSearchChange, handleSearchKeyDown,
+    debouncedSearchTerm,
+    showSuggestions, setShowSuggestions, searchSuggestions,
+    selectedSuggestionIndex, setSelectedSuggestionIndex, selectSuggestion, recentSearches,
+    selectedCategory, setSelectedCategory,
+    showFeatured, setShowFeatured,
+    sortBy, setSortBy, sortOrder, setSortOrder,
+    priceRange, setPriceRange,
+    stockFilter, setStockFilter,
+    creditOnly, setCreditOnly,
+    minimumInstallments, setMinimumInstallments,
+    creditSort, setCreditSort,
+    activeFiltersCount, handleResetFilters,
+    currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPages,
+    categories, priceRangeLimits, financedProductsCount,
+    filteredProducts, paginatedProducts,
+    viewportWidth, viewportHeight, virtualizationThreshold,
+    smartSearchResults, isSmartSearching,
+  } = posSearch
 
   // Mantener compatibilidad con el inventoryManager existente
   const inventoryManager = useMemo(() => ({
     getProducts: () => inventoryProducts,
-    subscribe: (callback: (products: any[]) => void) => {
-      // Para compatibilidad, retornamos una función de desuscripción vacía
-      // ya que los productos se actualizan automáticamente con el hook
-      return () => { }
-    },
-    importData: (data: { products: any[] }) => {
-      // En modo demo, no necesitamos importar datos ya que usamos Supabase
+    subscribe: (_callback: (products: any[]) => void) => () => {},
+    importData: (_data: { products: any[] }) => {
       console.log('Modo Supabase: importData no necesario')
-    }
+    },
   }), [inventoryProducts])
-
-  // Cargar reparaciónes del cliente seleccionado y suscribirse a cambios
-  useEffect(() => {
-    // Cargar reparaciónes del cliente desde Supabase
-    if (!selectedCustomer) {
-      setCustomerRepairs([])
-      setSelectedRepairIds(prev => (prev.length ? [] : prev))
-      return
-    }
-
-    const supabase = createSupabaseClient()
-
-    let canSubscribe = true
-    const loadRepairs = async () => {
-      const { data, error }: any = await supabase
-        .from('repairs')
-        .select('id, device_brand, device_model, status, payment_status, paid_amount, created_at, final_cost, estimated_cost, notes:problem_description, customer_id')
-        .eq('customer_id', selectedCustomer)
-        .order('created_at', { ascending: false })
-      if (error) {
-        const msg = error.message || ''
-        const missingTable = msg.includes("Could not find the table 'public.repairs'") || msg.includes('relation "repairs" does not exist')
-        if (missingTable) {
-          console.warn('Tabla repairs no encontrada en Supabase; usando lista vacía para el cliente.')
-          canSubscribe = false
-          setCustomerRepairs([])
-        } else {
-          console.error('Error cargando reparaciónes del cliente:', msg)
-        }
-        return
-      }
-      setCustomerRepairs(data || [])
-    }
-
-    loadRepairs()
-    let channel: RealtimeChannel | null = null
-    if (canSubscribe) {
-      channel = supabase
-        .channel('repairs-sync-pos')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, (payload: any) => {
-          const row = (payload.new || payload.old)
-          if (!row || row.customer_id !== selectedCustomer) return
-
-          if (payload.eventType === 'DELETE') {
-            setCustomerRepairs(prev => prev.filter(r => r.id !== row.id))
-            setSelectedRepairIds(prev => prev.filter(id => id !== row.id))
-            return
-          }
-
-          setCustomerRepairs(prev => {
-            const idx = prev.findIndex(r => r.id === row.id)
-            const mapped = { ...row, notes: row.problem_description }
-            if (idx === -1) return [mapped, ...prev]
-            const copy = [...prev]
-            copy[idx] = mapped
-            return copy
-          })
-        })
-        .subscribe()
-    }
-
-    return () => {
-      if (channel) channel.unsubscribe()
-    }
-  }, [selectedCustomer])
-
-  // Estados para búsqueda avanzada
-  const [sortBy, setSortBy] = useState<'name' | 'price' | 'stock' | 'category'>('name')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  // Sin tope superior por defecto: un máximo fijo (p.ej. 1.000.000) ocultaba
-  // del POS cualquier producto más caro (celulares, etc.) sin que el usuario
-  // pudiera notarlo (no hay control de precio en esta vista).
-  const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: Number.POSITIVE_INFINITY })
-  const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all')
-  const [creditOnly, setCreditOnly] = useState(false)
-  const [minimumInstallments, setMinimumInstallments] = useState(1)
-  const [creditSort, setCreditSort] = useState<ProductCreditSort | null>(null)
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
-  const activeFiltersCount = useMemo(() => {
-    let count = 0
-    if (selectedCategory !== 'all') count += 1
-    if (showFeatured) count += 1
-    if (sortBy !== 'name' || sortOrder !== 'asc') count += 1
-    if (stockFilter !== 'all') count += 1
-    if (priceRange.min > 0 || (priceRange.max < Number.POSITIVE_INFINITY && priceRange.max > 0)) count += 1
-    if (creditOnly) count += 1
-    if (minimumInstallments > 1) count += 1
-    if (creditSort) count += 1
-    return count
-  }, [selectedCategory, showFeatured, sortBy, sortOrder, stockFilter, priceRange, creditOnly, minimumInstallments, creditSort])
-
-  const handleResetFilters = useCallback(() => {
-    setSelectedCategory('all')
-    setShowFeatured(false)
-    setStockFilter('all')
-    setSortBy('name')
-    setSortOrder('asc')
-    setPriceRange({ min: 0, max: Number.POSITIVE_INFINITY })
-    setCreditOnly(false)
-    setMinimumInstallments(1)
-    setCreditSort(null)
-    setSearchTerm('')
-    toast.info('Filtros restablecidos')
-  }, [setSearchTerm])
-
-  // Estados para paginación
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(24) // 24 items por página por defecto
-
-  // Resetear página al cambiar filtros
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy, creditOnly, minimumInstallments, creditSort])
-
-
-  // Persistencia en localStorage: restaurar preferencias (el carrito se maneja en el hook)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const savedPrefs = localStorage.getItem('pos.prefs')
-      if (savedPrefs) {
-        const prefs = JSON.parse(savedPrefs)
-        if (prefs.selectedCategory) setSelectedCategory(prefs.selectedCategory)
-        if (typeof prefs.showFeatured === 'boolean') setShowFeatured(prefs.showFeatured)
-        if (prefs.viewMode) setViewMode(prefs.viewMode)
-        if (prefs.sortBy) setSortBy(prefs.sortBy)
-        if (prefs.sortOrder) setSortOrder(prefs.sortOrder)
-        // No restauramos un tope superior heredado: si el valor guardado tiene
-        // un máximo finito (cap viejo de 1.000.000), lo ignoramos para no
-        // volver a ocultar productos caros. Solo respetamos un mínimo > 0.
-        if (prefs.priceRange && typeof prefs.priceRange.min === 'number') {
-          const min = prefs.priceRange.min > 0 ? prefs.priceRange.min : 0
-          const max = typeof prefs.priceRange.max === 'number' && prefs.priceRange.max > 1000000
-            ? prefs.priceRange.max
-            : Number.POSITIVE_INFINITY
-          setPriceRange({ min, max })
-        }
-        if (prefs.stockFilter) setStockFilter(prefs.stockFilter)
-        if (typeof prefs.creditOnly === 'boolean') setCreditOnly(prefs.creditOnly)
-        if ([1, 3, 6, 12, 18, 24, 36, 48, 60].includes(prefs.minimumInstallments)) {
-          setMinimumInstallments(prefs.minimumInstallments)
-        }
-        if (['installment_low', 'rate_low', 'installments_high', 'financed_total_low'].includes(prefs.creditSort)) {
-          setCreditSort(prefs.creditSort)
-        }
-        if (prefs.recentSearches) setRecentSearches(prefs.recentSearches)
-        if (typeof prefs.sidebarCollapsed === 'boolean') setSidebarCollapsed(prefs.sidebarCollapsed)
-        if (prefs.itemsPerPage) setItemsPerPage(prefs.itemsPerPage)
-      }
-    } catch (e) {
-      console.warn('No se pudo restaurar localStorage POS', e)
-    }
-  }, [])
-
-  // Estados para autocompletado (using smart search suggestions)
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
-  const [recentSearches, setRecentSearches] = useState<string[]>([])
-
-  // Use smart search suggestions instead of local ones
-  const searchSuggestions = smartSearchSuggestions.map(s => s.text)
-
-  // Guardar cambios de preferencias (después de declarar recentSearches)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const prefs = {
-        selectedCategory,
-        showFeatured,
-        viewMode,
-        sortBy,
-        sortOrder,
-        priceRange,
-        stockFilter,
-        creditOnly,
-        minimumInstallments,
-        creditSort,
-        recentSearches,
-        sidebarCollapsed,
-        itemsPerPage,
-      }
-      localStorage.setItem('pos.prefs', JSON.stringify(prefs))
-    } catch (e) {
-      console.error('Error saving preferences to localStorage:', e)
-    }
-  }, [selectedCategory, showFeatured, viewMode, sortBy, sortOrder, priceRange, stockFilter, creditOnly, minimumInstallments, creditSort, recentSearches, sidebarCollapsed, itemsPerPage])
-
-  // Medidas del viewport para virtualización dinámica
-  const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== 'undefined' ? window.innerWidth : 1024)
-  const [viewportHeight, setViewportHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 768)
-
-  useEffect(() => {
-    const updateViewport = () => {
-      setViewportWidth(window.innerWidth)
-      setViewportHeight(window.innerHeight)
-    }
-    updateViewport()
-    window.addEventListener('resize', updateViewport)
-    return () => window.removeEventListener('resize', updateViewport)
-  }, [])
-
-  const virtualizationThreshold = 100
-
-  // Efecto de debouncing para búsqueda optimizada
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm)
-    }, 300) // 300ms de delay para evitar búsquedas excesivas
-
-    return () => clearTimeout(timer)
-  }, [searchTerm])
-
-
-
-  // Helper para invocar handlers por ID de forma robusta
-  const triggerHandlerById = useCallback((id: string) => {
-    const el = document.getElementById(id) as HTMLElement | null
-    if (!el) return
-    // Intentar ejecutar handler directo si existiera como propiedad (poco común en React)
-    const anyEl = el as any
-    const handler = anyEl?.onclick
-    if (typeof handler === 'function') {
-      handler({})
-      return
-    }
-    // Fallback confiable: disparar evento click nativo (compatibile con React Synthetic Events)
-    el.click()
-  }, [])
-
-  // Categorías únicas (usar nombre de categoría)
-  const categories = useMemo(() => {
-    const names = inventoryProducts
-      .map(p => (typeof p.category === 'object' ? p.category?.name : p.category))
-      .filter((name): name is string => !!name && typeof name === 'string')
-    const uniqueNames = Array.from(new Set(names)).sort((a, b) => a.localeCompare(b))
-    return ['all', ...uniqueNames]
-  }, [inventoryProducts])
-
-  // Rango de precios dinámico
-  const priceRangeLimits = useMemo(() => {
-    const prices = inventoryProducts.map(p => p.sale_price)
-    return {
-      min: Math.min(...prices),
-      max: Math.max(...prices)
-    }
-  }, [inventoryProducts])
-
-  const financedProductsCount = useMemo(
-    () => inventoryProducts.filter(hasProductCredit).length,
-    [inventoryProducts],
-  )
-
-  // Generar sugerencias de búsqueda (now using smart search)
-  const generateSearchSuggestions = useCallback((term: string) => {
-    // Smart search handles suggestions automatically
-    // Just update the show state
-    setShowSuggestions(term.length > 0)
-  }, [])
-
-  // Manejar cambios en búsqueda
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchTerm(value)
-    setSmartSearchQuery(value) // Update smart search query
-    generateSearchSuggestions(value)
-    setShowSuggestions(value.length > 0)
-    setSelectedSuggestionIndex(-1)
-  }, [generateSearchSuggestions, setSmartSearchQuery])
-
-  // Seleccionar sugerencia
-  const selectSuggestion = useCallback((suggestion: string) => {
-    setSearchTerm(suggestion)
-    setSmartSearchQuery(suggestion) // Update smart search query
-    addToRecentSearches(suggestion) // Add to smart search recent searches
-    setShowSuggestions(false)
-    setSelectedSuggestionIndex(-1)
-
-    if (!recentSearches.includes(suggestion)) {
-      setRecentSearches(prev => [suggestion, ...prev.slice(0, 4)])
-    }
-  }, [recentSearches])
-
-  // Navegación por teclado en sugerencias
-  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!showSuggestions || searchSuggestions.length === 0) return
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault()
-        setSelectedSuggestionIndex(prev =>
-          prev < searchSuggestions.length - 1 ? prev + 1 : 0
-        )
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        setSelectedSuggestionIndex(prev =>
-          prev > 0 ? prev - 1 : searchSuggestions.length - 1
-        )
-        break
-      case 'Enter':
-        e.preventDefault()
-        if (selectedSuggestionIndex >= 0) {
-          selectSuggestion(searchSuggestions[selectedSuggestionIndex])
-        } else if (searchTerm.trim()) {
-          setShowSuggestions(false)
-          if (!recentSearches.includes(searchTerm)) {
-            setRecentSearches(prev => [searchTerm, ...prev.slice(0, 4)])
-          }
-        }
-        break
-      case 'Escape':
-        setShowSuggestions(false)
-        setSelectedSuggestionIndex(-1)
-        break
-    }
-  }, [showSuggestions, searchSuggestions, selectedSuggestionIndex, selectSuggestion, searchTerm, recentSearches])
-
-  // Productos filtrados (optimizado con debouncing)
-  const filteredList = useMemo(() => {
-    const startTime = performance.now()
-    const result = inventoryProducts.filter(product => {
-      const searchLower = debouncedSearchTerm.toLowerCase()
-      const categoryName = (typeof product.category === 'object' ? product.category?.name : product.category) || ''
-      const matchesSearch = !debouncedSearchTerm ||
-        product.name.toLowerCase().includes(searchLower) ||
-        categoryName.toLowerCase().includes(searchLower) ||
-        product.sku.toLowerCase().includes(searchLower) ||
-        (product.barcode && product.barcode.includes(debouncedSearchTerm)) ||
-        smartSearchResults.some(res => res.product.id === product.id)
-
-      const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory
-      const matchesFeatured = !showFeatured || Boolean((product as any).featured || (product as any).is_featured || (product as any).isFeatured)
-      const matchesPrice = product.sale_price >= priceRange.min && product.sale_price <= priceRange.max
-
-      let matchesStock = true
-      switch (stockFilter) {
-        case 'in_stock':
-          matchesStock = product.stock_quantity > 0  // CORREGIDO: > 0 en lugar de > 5
-          break
-        case 'low_stock':
-          matchesStock = product.stock_quantity <= 5 && product.stock_quantity > 0
-          break
-        case 'out_of_stock':
-          matchesStock = product.stock_quantity === 0
-          break
-      }
-
-      return matchesSearch && matchesCategory && matchesFeatured && matchesPrice && matchesStock
-    })
-
-    // Registrar métrica de búsqueda
-    // const endTime = performance.now()
-    // const searchTime = endTime - startTime
-    // if (searchTime > 0) {
-    //   recordMetric('product-search', searchTime)
-    // }
-
-    return result
-  }, [inventoryProducts, debouncedSearchTerm, smartSearchResults, selectedCategory, showFeatured, priceRange, stockFilter])
-
-  // Ordenar productos por separado para evitar recalcular filtrado
-  const filteredProducts = useMemo(() => {
-    const filtered = [...filteredList]
-    filtered.sort((a, b) => {
-      let comparison = 0
-      switch (sortBy) {
-        case 'name':
-          comparison = a.name.localeCompare(b.name)
-          break
-        case 'price':
-          comparison = a.sale_price - b.sale_price
-          break
-        case 'stock':
-          comparison = a.stock_quantity - b.stock_quantity
-          break
-        case 'category':
-          {
-            const aName = (typeof a.category === 'object' ? a.category?.name : a.category) || ''
-            const bName = (typeof b.category === 'object' ? b.category?.name : b.category) || ''
-            comparison = aName.localeCompare(bName)
-          }
-          break
-      }
-      return sortOrder === 'asc' ? comparison : -comparison
-    })
-    return applyProductCreditFilter(filtered, {
-      creditOnly,
-      minimumInstallments,
-      creditSort,
-    })
-  }, [filteredList, sortBy, sortOrder, creditOnly, minimumInstallments, creditSort])
-
-  // Productos paginados
-  const paginatedProducts = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage
-    return filteredProducts.slice(startIndex, startIndex + itemsPerPage)
-  }, [filteredProducts, currentPage, itemsPerPage])
-
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
 
   // Funciones del carrito
   const addToCart = useCallback((product: Product) => {
@@ -1041,71 +629,43 @@ function POSPageContent() {
   const roundToTwo = useCallback((num: number) => Math.round((num + Number.EPSILON) * 100) / 100, [])
 
   // Unified Cart + Repairs Calculations
+  // Los totales de reparaciones los provee usePOSRepairs; aquí solo combinamos.
   const unifiedCalculations = useMemo(() => {
-    // 1. Calculate Repair Costs
-    //
-    // Cobra el saldo pendiente (getRepairBalanceDue), no el costo bruto: el
-    // RPC process_pos_sale_atomic_v2 en el servidor recalcula el total de la
-    // misma forma (resta paid_amount), así que ambos lados coinciden.
-    const repairDetails = selectedRepairs.map(repair => {
-      // Saldo pendiente: no volver a cobrar lo que ya se pagó como anticipo
-      // (p.ej. desde "Cobrar Aquí" en Reparaciones, que acumula paid_amount).
-      const laborCost = getRepairBalanceDue(repair)
-      // Repairs in POS don't have separate parts cost in this context
-      return calculateRepairTotal({
-        laborCost,
-        partsCost: 0,
-        taxRate: taxPercentage,
-        pricesIncludeTax: true
-      })
-    })
+    const { total: repairTotal, subtotal: repairSubtotal, tax: repairTax } = repairTotals
 
-    const repairTotal = repairDetails.reduce((sum, calc) => sum + calc.total, 0)
-    const repairSubtotal = repairDetails.reduce((sum, calc) => sum + calc.subtotal, 0)
-    const repairTax = repairDetails.reduce((sum, calc) => sum + calc.taxAmount, 0)
-
-    // 2. Combine with Product Cart (from hook)
+    // Combine with Product Cart (from useOptimizedCart hook)
     const finalTotal = roundToTwo(cartTotal + repairTotal)
     const finalTax = roundToTwo(cartTax + repairTax)
     const finalSubtotalApplied = roundToTwo(subtotalApplied + repairSubtotal)
-    const finalSubtotalNonWholesale = roundToTwo(subtotalNonWholesale + repairSubtotal) // Repairs don't have wholesale discount usually
+    const finalSubtotalNonWholesale = roundToTwo(subtotalNonWholesale + repairSubtotal)
 
     const totalItemCount = cartItemCount + selectedRepairIds.length
 
     return {
-      // Combined Values for UI/Checkout
       total: finalTotal,
       tax: finalTax,
-      subtotal: finalSubtotalApplied, // For compatibility
+      subtotal: finalSubtotalApplied,
       subtotalApplied: finalSubtotalApplied,
       subtotalNonWholesale: finalSubtotalNonWholesale,
-      
-      // Breakdown
       repairCost: repairTotal,
       repairSubtotal,
       repairTax,
-      
-      // Hook passthrough (renamed or raw)
       generalDiscountAmount,
       wholesaleDiscountAmount,
       totalSavings,
       totalItemCount,
-      
-      // Flags
       hasDiscount: totalSavings > 0,
       isValidPayment: paymentMethod === 'cash' ? cashReceived >= finalTotal : true,
-      
-      // Missing properties for backward compatibility
       totalDiscount: totalSavings,
       averageItemPrice: totalItemCount > 0 ? subtotalApplied / totalItemCount : 0
     }
   }, [
-    selectedRepairs, 
-    cartTotal, 
-    cartTax, 
-    subtotalApplied, 
-    subtotalNonWholesale, 
-    cartItemCount, 
+    repairTotals,
+    cartTotal,
+    cartTax,
+    subtotalApplied,
+    subtotalNonWholesale,
+    cartItemCount,
     selectedRepairIds.length,
     generalDiscountAmount,
     wholesaleDiscountAmount,
@@ -1113,7 +673,6 @@ function POSPageContent() {
     paymentMethod,
     cashReceived,
     roundToTwo,
-    taxPercentage
   ])
 
   const getTotalPaid = useCallback(() => {
@@ -1226,13 +785,11 @@ function POSPageContent() {
   const handleRemoveItem = useCallback((id: string) => {
     const rawRepairId = id.startsWith('repair_') ? id.replace('repair_', '') : id
     if (selectedRepairIds.includes(rawRepairId) || selectedRepairIds.includes(id)) {
-      setSelectedRepairIds(prev => prev.filter(repairId => repairId !== rawRepairId && repairId !== id))
-      // Se suelta tambien la copia manual para no acumularlas entre ventas.
-      setManualRepairs(prev => prev.filter(repair => repair.id !== rawRepairId && repair.id !== id))
+      removeRepairById(id)
       toast.info('Reparación removida del cobro')
     }
     removeFromCart(id)
-  }, [selectedRepairIds, removeFromCart])
+  }, [selectedRepairIds, removeFromCart, removeRepairById])
 
   // Hold / Park sale handler
   const handleParkCurrentSale = useCallback(() => {
@@ -1252,10 +809,9 @@ function POSPageContent() {
     )
     if (success) {
       clearCart(true)
-      setSelectedRepairIds([])
-      setManualRepairs([])
+      clearRepairs()
     }
-  }, [combinedCartItems, isWholesale, generalDiscount, unifiedCalculations.total, customers, selectedCustomer, selectedRepairIds, parkSale, clearCart])
+  }, [combinedCartItems, isWholesale, generalDiscount, unifiedCalculations.total, customers, selectedCustomer, selectedRepairIds, parkSale, clearCart, clearRepairs])
 
   // Restore parked sale
   const handleRestoreHeldSale = useCallback((sale: HeldSale) => {
@@ -1278,24 +834,7 @@ function POSPageContent() {
     })
   }, [clearCart, addToCartHook, setIsWholesale, setGeneralDiscount, setSelectedCustomer])
 
-  const handleAddRepairToCart = useCallback((item: CartItem, repair?: PosCartRepair) => {
-    // Solo se registra el id de la reparacion. La linea del carrito la produce
-    // `combinedCartItems` a partir de `selectedRepairIds`; agregarla tambien con
-    // `addToCartHook` la duplicaba —una linea con id `repair_<uuid>` y otra con
-    // el uuid pelado— y con dos reparaciones se veian cuatro renglones.
-    //
-    // Ademas la linea derivada es la que vale: usa el saldo con el que el
-    // servidor cobra, mientras que la del modal traia su propio precio.
-    const rawRepairId = item.id.startsWith('repair_') ? item.id.replace('repair_', '') : item.id
-    if (!rawRepairId) return
-
-    if (repair) {
-      setManualRepairs(prev => prev.some(r => r.id === rawRepairId)
-        ? prev
-        : [...prev, { ...repair, id: rawRepairId }])
-    }
-    setSelectedRepairIds(prev => prev.includes(rawRepairId) ? prev : [...prev, rawRepairId])
-  }, [])
+  // handleAddRepairToCart viene de usePOSRepairs (ver desestructuración arriba)
 
   // Global Keyboard Shortcuts (F2, F3, F4, F8, F9)
   useEffect(() => {
@@ -1436,388 +975,85 @@ function POSPageContent() {
     return Math.floor(basePoints * bonusMultiplier)
   }, [])
 
-  // Procesar venta
-  const processSale = useCallback(async () => {
-    return measureSaleProcessing(async () => {
-      const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)
-      if (!getCurrentRegister.isOpen) {
-        toast.error('La caja está cerrada. No se pueden procesar ventas.')
-        return
-      }
-      if (!currentSessionId) {
-        toast.error('No se pudo identificar la sesión de caja abierta.')
-        return
-      }
+  // ── Wrappers de procesamiento de venta (delegan a usePOSSaleProcessor) ──────
+  //
+  // Construyen el objeto deps con el estado actual del componente y llaman al
+  // hook. Así page.tsx no contiene la lógica de pago, solo el ensamblado.
 
-      if (combinedCartItems.length === 0) {
-        const msg = 'El carrito está vacío'
-        toast.error(msg)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
-        return
-      }
-
-      // Evaluar promociones antes de procesar la venta
-      try {
-        const cartItems = combinedCartItems.filter(item => !item.isService).map(item => ({
-          id: item.id,
-          product_id: item.id,
-          variant_id: undefined,
-          sku: item.sku || item.id,
-          name: item.name,
-          quantity: item.quantity,
-          unit_price: item.price,
-          category_id: item.category,
-          total_price: item.price * item.quantity
-        }))
-        const result = calculateCartSummary(cartItems, [], [])
-        if (result.applied_promotions.length > 0) {
-          console.log('Promociones aplicadas:', result.applied_promotions)
-          console.log('Descuento total calculado:', result.discount_amount)
-        }
-      } catch (error) {
-        console.error('Error evaluando promociones:', error)
-      }
-
-      if (!paymentMethod) {
-        const msg = 'Seleccione un método de pago'
-        toast.error(msg)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
-        return
-      }
-
-      if (paymentMethod === 'cash' && cashReceived < amountDueAfterStoreCredit) {
-        const msg = 'Efectivo insuficiente'
-        toast.error(msg)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
-        return
-      }
-
-      // Crear datos del ticket
-      const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
-      const creditSummaryForReceipt = paymentMethod === 'credit'
-        ? buildPosCreditSummary(amountDueAfterStoreCredit, creditTerms)
-        : null
-      const receiptPaymentAmount = creditSummaryForReceipt?.financedTotal ?? amountDueAfterStoreCredit
-      const receiptCalculations = {
-        subtotal: cartCalculations.subtotal,
-        totalDiscount: cartCalculations.totalDiscount,
-        tax: cartCalculations.tax,
-        repairCost: cartCalculations.repairCost,
-        total: creditSummaryForReceipt
-          ? storeCreditApplied + creditSummaryForReceipt.financedTotal
-          : cartCalculations.total,
-        change: cartCalculations.change,
-        creditInfo: creditSummaryForReceipt
-          ? {
-              ...creditSummaryForReceipt,
-              interestRate: creditTerms.interestRate,
-            }
-          : undefined,
-      }
-      const payments = [
-        ...(storeCreditApplied > 0 ? [{
-          id: 'store-credit',
-          method: 'store_credit' as const,
-          amount: storeCreditApplied,
-        }] : []),
-        ...(receiptPaymentAmount > 0 ? [{
-        id: '1',
-        method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
-        amount: receiptPaymentAmount,
-        reference: paymentMethod === 'transfer' ? transferReference : undefined,
-        cardLast4: paymentMethod === 'card' && cardNumber ? cardNumber.slice(-4) : undefined
-        }] : []),
-      ]
-
-      const receiptData = createReceiptData(
-        combinedCartItems,
-        receiptCalculations,
-        payments,
-        customer,
-        cashierName
-      )
-
-      // Guardar datos de la última venta
-      // Procesar venta de inventario usando la API interna del POS.
-      setPaymentStatus('processing')
-      setPaymentError('')
-      addPaymentAttempt({ status: 'processing', method: 'single', amount: (cartCalculations as any).total, message: 'Procesando pago simple' })
-      let saleResult: any = null
-      try {
-        // Confirmar venta, pagos, stock, crédito, reparaciones y caja en una transacción.
-        const productItems = combinedCartItems.filter(item => !item.isService)
-        saleResult = await processInventorySale({
-          items: productItems.map(item => ({
-            id: item.id,
-            name: item.name,
-            sku: item.sku,
-            price: item.price,
-            quantity: item.quantity,
-            stock: item.stock,
-            discount_amount: (item as any).discount ? (item.price * item.quantity * ((item as any).discount / 100)) : 0,
-            subtotal: item.price * item.quantity
-          })),
-          total: (cartCalculations as any).total,
-          payment_method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
-          payments: amountDueAfterStoreCredit > 0 ? [{
-            payment_method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
-            amount: amountDueAfterStoreCredit,
-            reference: paymentMethod === 'transfer' ? transferReference : undefined,
-            card_last4: paymentMethod === 'card' && cardNumber ? cardNumber.slice(-4) : undefined,
-            provider: paymentMethod === 'card' || paymentMethod === 'transfer' ? electronicProvider || undefined : undefined,
-            institution: paymentMethod === 'card' || paymentMethod === 'transfer' ? electronicInstitution || undefined : undefined,
-            channel: paymentMethod === 'card' ? 'card_terminal' : paymentMethod === 'transfer' ? electronicChannel : undefined,
-            terminal_id: paymentMethod === 'card' ? terminalId || undefined : undefined,
-          }] : [],
-          session_id: currentSessionId,
-          price_mode: isWholesale ? 'wholesale' : 'retail',
-          order_discount_rate: generalDiscount,
-          customer_id: selectedCustomer || undefined,
-          notes: notes || undefined,
-          credit: paymentMethod === 'credit' ? {
-            interest_rate: creditTerms.interestRate,
-            installment_count: creditTerms.count,
-            frequency: creditTerms.frequency,
-          } : undefined,
-          repair_ids: selectedRepairIds,
-          mark_repairs_delivered: markRepairDelivered,
-          delivery_outcome: deliveryOutcome,
-          store_credit_amount: storeCreditApplied,
-        })
-
-        if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
-          throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta'))
-        }
-
-        const persistedReceipt = {
-          ...receiptData,
-          receiptNumber: saleResult?.saleId
-            ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
-            : receiptData.receiptNumber,
-          tax: Number.isFinite(Number(saleResult?.data?.tax))
-            ? Number(saleResult.data.tax)
-            : receiptData.tax,
-          totalDiscount: Number.isFinite(Number(saleResult?.data?.discount))
-            ? Number(saleResult.data.discount)
-            : receiptData.totalDiscount,
-        }
-        setLastSaleData(persistedReceipt)
-        setCurrentReceipt(persistedReceipt)
-        setPaymentStatus('success')
-        const receiptCode = persistedReceipt.receiptNumber || 'POS'
-        toast.success(`¡Venta completada! Comprobante #${receiptCode} generado (${formatCurrency(receiptCalculations.total)})`, {
-          duration: 4500,
-        })
-        addPaymentAttempt({ status: 'success', method: 'single', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
-        if (markRepairDelivered && selectedRepairIds.length > 0) {
-          setCustomerRepairs(prev => prev.map(r => (
+  /** Deps comunes a ambos procesadores */
+  const buildSaleDeps = useCallback(() => ({
+    isRegisterOpen: getCurrentRegister.isOpen,
+    currentSessionId,
+    combinedCartItems,
+    cartCalculations,
+    isWholesale,
+    generalDiscount,
+    paymentMethod,
+    cashReceived,
+    cardNumber,
+    transferReference,
+    electronicProvider,
+    electronicInstitution,
+    electronicChannel,
+    terminalId,
+    notes,
+    creditTerms,
+    paymentSplit,
+    storeCreditApplied,
+    selectedRepairIds,
+    markRepairDelivered,
+    deliveryOutcome,
+    selectedCustomer,
+    customers,
+    cashierName,
+    setPaymentStatus,
+    setPaymentError,
+    processInventorySale,
+    onSuccess: (receipt: any) => {
+      setLastSaleData(receipt)
+      setCurrentReceipt(receipt)
+      setShowReceiptModal(true)
+      if (markRepairDelivered && selectedRepairIds.length > 0) {
+        setCustomerRepairs(prev =>
+          prev.map(r =>
             selectedRepairIds.includes(r.id)
               ? { ...r, status: 'entregado', delivered_at: new Date().toISOString() }
               : r
-          )))
-        }
-      } catch (error) {
-        const msg = normalizePaymentError(error)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        toast.error(msg, { duration: 6000 })
-        addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
-        return
+          )
+        )
       }
-      // Mostrar modal de ticket
-      setShowReceiptModal(true)
-
-      // Limpiar formulario
+    },
+    onAfterSale: () => {
       clearCart(true)
       setSelectedCustomer('')
-      setSelectedRepairIds([])
-      setManualRepairs([])
+      clearRepairs()
+      setGeneralDiscount(0)
       resetCheckoutState()
-      
-      // Cerrar luego de una breve confirmación visual
-      setTimeout(() => {
-        setIsCheckoutOpen(false)
-        setPaymentStatus('idle')
-      }, 600)
-    })
-  }, [addPaymentAttempt, cardNumber, cartCalculations, cashReceived, calculateCartSummary, cashierName, clearCart, combinedCartItems, creditTerms, currentSessionId, customers, deliveryOutcome, electronicChannel, electronicInstitution, electronicProvider, generalDiscount, getCurrentRegister.isOpen, isWholesale, markRepairDelivered, measureSaleProcessing, normalizePaymentError, notes, paymentMethod, processInventorySale, resetCheckoutState, selectedCustomer, selectedRepairIds, setPaymentError, setPaymentStatus, setSelectedCustomer, storeCreditApplied, terminalId, transferReference])
-
-
-
-  const processMixedPayment = useCallback(async () => {
-    const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)
-    if (!getCurrentRegister.isOpen) {
-      toast.error('La caja está cerrada. No se pueden procesar ventas.')
-      return
-    }
-    if (!currentSessionId) {
-      toast.error('No se pudo identificar la sesión de caja abierta.')
-      return
-    }
-    const paymentValidation = getMixedPaymentValidation(amountDueAfterStoreCredit, paymentSplit)
-    if (!paymentValidation.valid) {
-      const msg = paymentValidation.code === 'PAYMENT_INCOMPLETE'
-        ? `Faltan ${formatCurrency(paymentValidation.remaining)} para completar el pago`
-        : paymentValidation.code === 'PAYMENT_EXCESS'
-          ? `Exceso de pago: ${formatCurrency(Math.abs(paymentValidation.remaining))}`
-          : paymentValidation.code === 'CARD_REFERENCE_REQUIRED'
-            ? 'Ingrese los últimos 4 dígitos de cada tarjeta'
-            : paymentValidation.code === 'TRANSFER_REFERENCE_REQUIRED'
-              ? 'Ingrese la referencia de cada transferencia'
-              : paymentValidation.code === 'PAYMENT_LIMIT_EXCEEDED'
-                ? 'Solo se permiten hasta 10 formas de pago por venta'
-                : paymentValidation.code === 'PAYMENTS_REQUIRED'
-                  ? 'Agregue al menos una forma de pago'
-                  : 'Cada pago debe tener un monto positivo'
-      toast.error(msg)
-      setPaymentStatus('failed')
-      setPaymentError(msg)
-      addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
-      return
-    }
-
-    // Crear datos del ticket para pago mixto
-    const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
-
-    const creditPrincipal = paymentSplit
-      .filter(split => split.method === 'credit')
-      .reduce((total, split) => total + split.amount, 0)
-    const mixedCreditSummary = creditPrincipal > 0
-      ? buildPosCreditSummary(creditPrincipal, creditTerms)
-      : null
-    const receiptPayments = [
-      ...(storeCreditApplied > 0 ? [{
-        id: 'store-credit',
-        method: 'store_credit' as const,
-        amount: storeCreditApplied,
-      }] : []),
-      ...paymentSplit,
-    ]
-    const receiptData = createReceiptData(
-      combinedCartItems,
-      mixedCreditSummary
-        ? {
-            ...cartCalculations,
-            creditInfo: {
-              ...mixedCreditSummary,
-              interestRate: creditTerms.interestRate,
-            },
-          }
-        : cartCalculations,
-      receiptPayments,
-      customer,
-      cashierName
-    )
-
-    // Guardar datos de la última venta
-    // Procesar venta en el inventario usando el hook de Supabase
-    setPaymentStatus('processing')
-    setPaymentError('')
-    addPaymentAttempt({ status: 'processing', method: 'mixed', amount: (cartCalculations as any).total, message: 'Procesando pago mixto' })
-    let saleResult: any = null
-    try {
-      // La misma transacción conserva cada medio de pago y su monto.
-      const productItems = combinedCartItems.filter(item => !item.isService)
-      saleResult = await processInventorySale({
-        items: productItems.map(item => ({
-          id: item.id,
-          name: item.name,
-          sku: item.sku,
-          price: item.price,
-          quantity: item.quantity,
-          stock: item.stock,
-          discount_amount: (item as any).discount ? (item.price * item.quantity * ((item as any).discount / 100)) : 0,
-          subtotal: item.price * item.quantity
-        })),
-        total: (cartCalculations as any).total,
-        payment_method: (paymentSplit[0]?.method || 'cash') as 'cash' | 'card' | 'transfer' | 'credit',
-        payments: paymentSplit.map(split => ({
-          payment_method: split.method,
-          amount: split.amount,
-          reference: split.reference,
-          card_last4: split.cardLast4,
-          provider: split.provider,
-          institution: split.institution,
-          channel: split.channel,
-          terminal_id: split.terminalId,
-        })),
-        session_id: currentSessionId,
-        price_mode: isWholesale ? 'wholesale' : 'retail',
-        order_discount_rate: generalDiscount,
-        customer_id: selectedCustomer || undefined,
-        notes: notes || undefined,
-        credit: paymentSplit.some(split => split.method === 'credit') ? {
-          interest_rate: creditTerms.interestRate,
-          installment_count: creditTerms.count,
-          frequency: creditTerms.frequency,
-        } : undefined,
-        repair_ids: selectedRepairIds,
-        mark_repairs_delivered: markRepairDelivered,
-        delivery_outcome: deliveryOutcome,
-        store_credit_amount: storeCreditApplied,
-      })
-
-      if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
-        throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta'))
-      }
-
-      const persistedReceipt = {
-        ...receiptData,
-        receiptNumber: saleResult?.saleId
-          ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
-          : receiptData.receiptNumber,
-        tax: Number.isFinite(Number(saleResult?.data?.tax))
-          ? Number(saleResult.data.tax)
-          : receiptData.tax,
-        totalDiscount: Number.isFinite(Number(saleResult?.data?.discount))
-          ? Number(saleResult.data.discount)
-          : receiptData.totalDiscount,
-      }
-      setLastSaleData(persistedReceipt)
-      setCurrentReceipt(persistedReceipt)
-      setPaymentStatus('success')
-      const receiptCode = persistedReceipt.receiptNumber || 'POS'
-      toast.success(`¡Venta completada! Comprobante #${receiptCode} generado (${formatCurrency(cartCalculations.total)})`, {
-        duration: 4500,
-      })
-      addPaymentAttempt({ status: 'success', method: 'mixed', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
-      if (markRepairDelivered && selectedRepairIds.length > 0) {
-        setCustomerRepairs(prev => prev.map(r => (
-          selectedRepairIds.includes(r.id)
-            ? { ...r, status: 'entregado', delivered_at: new Date().toISOString() }
-            : r
-        )))
-      }
-    } catch (error) {
-      const msg = normalizePaymentError(error)
-      setPaymentStatus('failed')
-      setPaymentError(msg)
-      toast.error(msg, { duration: 6000 })
-      addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
-      return
-    }
-
-    // Mostrar modal de ticket
-    setShowReceiptModal(true)
-
-    // Limpiar todo
-    clearCart(true)
-    setSelectedCustomer('')
-    setSelectedRepairIds([])
-    setGeneralDiscount(0)
-    resetCheckoutState()
-    // Cerrar luego de una breve confirmación visual
-    setTimeout(() => {
       setIsCheckoutOpen(false)
-      setPaymentStatus('idle')
-    }, 600)
-  }, [addPaymentAttempt, cartCalculations, cashierName, clearCart, combinedCartItems, creditTerms, currentSessionId, customers, deliveryOutcome, formatCurrency, generalDiscount, getCurrentRegister.isOpen, isWholesale, markRepairDelivered, normalizePaymentError, notes, paymentSplit, processInventorySale, resetCheckoutState, selectedCustomer, selectedRepairIds, setGeneralDiscount, setPaymentError, setPaymentStatus, setSelectedCustomer, storeCreditApplied])
+    },
+    formatCurrency,
+    measureSaleProcessing,
+  }), [
+    getCurrentRegister.isOpen, currentSessionId, combinedCartItems, cartCalculations,
+    isWholesale, generalDiscount, paymentMethod, cashReceived, cardNumber, transferReference,
+    electronicProvider, electronicInstitution, electronicChannel, terminalId, notes,
+    creditTerms, paymentSplit, storeCreditApplied, selectedRepairIds, markRepairDelivered,
+    deliveryOutcome, selectedCustomer, customers, cashierName,
+    setPaymentStatus, setPaymentError, processInventorySale,
+    clearCart, setSelectedCustomer, clearRepairs, setGeneralDiscount, resetCheckoutState,
+    setIsCheckoutOpen, formatCurrency, measureSaleProcessing,
+    setCustomerRepairs,
+  ])
+
+  const processSale = useCallback(
+    () => processSaleBase(buildSaleDeps()),
+    [processSaleBase, buildSaleDeps]
+  )
+
+  const processMixedPayment = useCallback(
+    () => processMixedPaymentBase(buildSaleDeps()),
+    [processMixedPaymentBase, buildSaleDeps]
+  )
 
 
   // Cerrar sugerencias al hacer clic fuera
@@ -2257,7 +1493,7 @@ function POSPageContent() {
                 <Button
                   variant={creditOnly ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setCreditOnly(current => !current)}
+                  onClick={() => setCreditOnly(!creditOnly)}
                   aria-pressed={creditOnly}
                   className="h-7.5 px-2.5 text-xs"
                 >
@@ -2312,7 +1548,7 @@ function POSPageContent() {
                 <Button
                   variant={creditOnly ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setCreditOnly(current => !current)}
+                  onClick={() => setCreditOnly(!creditOnly)}
                   aria-pressed={creditOnly}
                   className="hidden h-8 px-2.5 text-xs lg:inline-flex"
                 >
@@ -2675,7 +1911,7 @@ function POSPageContent() {
                           value={priceRange.min > 0 ? priceRange.min : ''}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 0
-                            setPriceRange(prev => ({ ...prev, min: val }))
+                            setPriceRange({ ...priceRange, min: val })
                           }}
                           className="h-8 text-xs"
                         />
@@ -2686,7 +1922,7 @@ function POSPageContent() {
                           value={priceRange.max < Number.POSITIVE_INFINITY && priceRange.max > 0 ? priceRange.max : ''}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || Number.POSITIVE_INFINITY
-                            setPriceRange(prev => ({ ...prev, max: val }))
+                            setPriceRange({ ...priceRange, max: val })
                           }}
                           className="h-8 text-xs"
                         />
@@ -2936,7 +2172,7 @@ function POSPageContent() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                         disabled={currentPage === 1}
                         className="h-7 px-2 text-xs shadow-xs"
                       >
@@ -2949,7 +2185,7 @@ function POSPageContent() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                         disabled={currentPage === totalPages}
                         className="h-7 px-2 text-xs shadow-xs"
                       >
@@ -3322,7 +2558,7 @@ function POSPageContent() {
         onCancel={() => {
           setIsCheckoutOpen(false)
           resetCheckoutState()
-          setPaymentAttempts([])
+          clearPaymentAttempts()
         }}
       />
 

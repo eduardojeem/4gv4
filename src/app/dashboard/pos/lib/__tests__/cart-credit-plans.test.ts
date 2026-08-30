@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildProductCreditPayments, getCartProductCreditPlans, getProductCreditAllocation } from '../cart-credit-plans'
+import {
+  buildManualDownPaymentSplit,
+  buildProductCreditPayments,
+  getCartProductCreditPlans,
+  getProductCreditAllocation,
+} from '../cart-credit-plans'
 
 describe('cart product credit plans', () => {
   it('returns the configured plans with their product source', () => {
@@ -101,3 +106,54 @@ describe('cart product credit plans', () => {
     ])
   })
 })
+
+describe('buildManualDownPaymentSplit', () => {
+  function makeCreateId() {
+    let counter = 0
+    return () => `id-${counter++}`
+  }
+
+  it('splits between the down payment method and credit for the rest', () => {
+    const split = buildManualDownPaymentSplit(1_000_000, 300_000, 'cash', makeCreateId())
+
+    expect(split).toEqual([
+      { id: 'id-0', method: 'cash', amount: 300_000 },
+      { id: 'id-1', method: 'credit', amount: 700_000 },
+    ])
+  })
+
+  it('accepts card or transfer as the down payment method', () => {
+    const split = buildManualDownPaymentSplit(1_000_000, 300_000, 'transfer', makeCreateId())
+
+    expect(split[0]).toMatchObject({ method: 'transfer', amount: 300_000 })
+  })
+
+  it('omits the down payment line when it is zero: financia todo', () => {
+    const split = buildManualDownPaymentSplit(1_000_000, 0, 'cash', makeCreateId())
+
+    expect(split).toEqual([{ id: 'id-0', method: 'credit', amount: 1_000_000 }])
+  })
+
+  // Adelantar el 100% no deja nada por financiar: la linea de credito no
+  // tiene sentido en cero.
+  it('omits the credit line when the down payment covers the whole total', () => {
+    const split = buildManualDownPaymentSplit(1_000_000, 1_000_000, 'cash', makeCreateId())
+
+    expect(split).toEqual([{ id: 'id-0', method: 'cash', amount: 1_000_000 }])
+  })
+
+  // Un cajero no puede adelantar mas de lo que cuesta la venta: se acota al
+  // total en vez de dejar un financiado negativo.
+  it('clamps a down payment larger than the total', () => {
+    const split = buildManualDownPaymentSplit(1_000_000, 5_000_000, 'cash', makeCreateId())
+
+    expect(split).toEqual([{ id: 'id-0', method: 'cash', amount: 1_000_000 }])
+  })
+
+  it('clamps a negative down payment to zero', () => {
+    const split = buildManualDownPaymentSplit(1_000_000, -500_000, 'cash', makeCreateId())
+
+    expect(split).toEqual([{ id: 'id-0', method: 'credit', amount: 1_000_000 }])
+  })
+})
+

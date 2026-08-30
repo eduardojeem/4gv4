@@ -601,6 +601,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               formatCurrency={formatCurrency}
               currency={currency}
               productCreditPlans={productCreditPlans}
+              setShowCreditHistory={setShowCreditHistory}
             />
 
             <details className="group rounded-lg border bg-muted/15">

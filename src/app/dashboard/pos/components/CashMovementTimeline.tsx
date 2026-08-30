@@ -8,6 +8,7 @@ import {
   Clock, FileText 
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
+import { normalizeCashMovementType } from '../types'
 
 interface CashMovementTimelineProps {
   movements: any[]
@@ -27,10 +28,11 @@ export function CashMovementTimeline({ movements }: CashMovementTimelineProps) {
     <ScrollArea className="h-[400px] w-full pr-4">
       <div className="relative border-l border-muted ml-4 space-y-6 py-2">
         {movements.map((movement, i) => {
-          const isSale = movement.type === 'sale'
-          const isIn = movement.type === 'in' || movement.type === 'cash_in'
-          const isOut = movement.type === 'out' || movement.type === 'cash_out'
-          const isSystem = movement.type === 'opening' || movement.type === 'closing'
+          const canonical = normalizeCashMovementType(movement.type)
+          const isSale = canonical === 'sale'
+          const isIn = canonical === 'cash_in'
+          const isOut = canonical === 'cash_out'
+          const isSystem = canonical === 'opening' || canonical === 'closing'
 
           return (
             <div key={movement.id || i} className="relative pl-6">
