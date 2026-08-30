@@ -44,17 +44,10 @@ begin
         'customer_credits', 'credit_installments', 'credit_payments'
       )
       and cmd in ('SELECT', 'ALL')
-      and (
-        regexp_replace(coalesce(qual, ''), '\\s', '', 'g') in (
-          'true',
-          '(true)',
-          '(auth.role()=''authenticated''::text)',
-          '((auth.role())::text=''authenticated''::text)'
-        )
-        or (
-          roles && array['authenticated'::name, 'public'::name]
-          and regexp_replace(coalesce(qual, ''), '\\s', '', 'g') ~ '^\\(*true\\)*$'
-        )
+      and translate(coalesce(qual, ''), E'() \n\r\t', '') in (
+        'true',
+        'auth.role=''authenticated''::text',
+        'auth.role::text=''authenticated''::text'
       )
   loop
     execute format(

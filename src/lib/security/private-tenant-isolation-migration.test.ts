@@ -41,4 +41,9 @@ describe('private tenant isolation migration', () => {
   it('never grants authenticated users an unconditional tenant-table read', () => {
     expect(sql).not.toMatch(/to authenticated[\s\S]{0,160}using\s*\(\s*true\s*\)/)
   })
+
+  it('detects legacy true predicates without an invalid regular expression', () => {
+    expect(sql).toContain("translate(coalesce(qual, ''), e'() \\n\\r\\t', '') in (")
+    expect(sql).not.toContain('regexp_replace(coalesce(qual')
+  })
 })
