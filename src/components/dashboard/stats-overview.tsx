@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { isCompletedSaleStatus, isPendingSaleStatus } from '@/lib/sales-status'
 import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useBranch } from '@/contexts/branch-context'
 // Tipos locales para evitar dependencias profundas de generics de Supabase
 type SaleRow = { id: string; total?: number | null; status?: string | null; created_at: string }
 type RepairRow = {
@@ -350,6 +352,8 @@ export function QuickActions() {
 }
 
 export function RecentActivity() {
+  const { organization } = useActiveOrganization()
+  const { selectedBranchId } = useBranch()
   const [windowHours, setWindowHours] = useState<24 | 48 | 72>(72)
   const recentSinceIso = useMemo(
     () => new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString(),
@@ -370,6 +374,10 @@ export function RecentActivity() {
   useEffect(() => {
     const load = async () => {
       try {
+        if (!organization?.id) {
+          setItems([])
+          return
+        }
         const { config } = await import('@/lib/config')
         if (!config.supabase.isConfigured) {
           setItems([])
@@ -380,6 +388,7 @@ export function RecentActivity() {
         const supabase = createClient()
         type SBQuery = {
           select: (...args: unknown[]) => SBQuery
+          eq: (...args: unknown[]) => SBQuery
           gte: (...args: unknown[]) => SBQuery
           order: (...args: unknown[]) => SBQuery
           limit: (...args: unknown[]) => unknown
@@ -387,10 +396,16 @@ export function RecentActivity() {
         const from = (table: string) =>
           ((supabase as unknown as { from: (t: string) => unknown }).from(table) as unknown as SBQuery)
         // Evitar TS2589 por generics profundos usando cast a unknown en el builder
+        let salesQuery = from('sales').select('id,total:total_amount,status,created_at').eq('organization_id', organization.id)
+        let repairsQuery = from('repairs').select('id,device_brand,device_model,status,created_at,final_cost').eq('organization_id', organization.id)
+        if (selectedBranchId) {
+          salesQuery = salesQuery.eq('branch_id', selectedBranchId)
+          repairsQuery = repairsQuery.eq('branch_id', selectedBranchId)
+        }
         const [{ data: sales }, { data: repairs }, { data: customers }] = await Promise.all([
-          from('sales').select('id,total:total_amount,status,created_at').gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>,
-          from('repairs').select('id,device_brand,device_model,status,created_at,final_cost').gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>,
-          from('customers').select('id,first_name,last_name,created_at').gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>
+          salesQuery.gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>,
+          repairsQuery.gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>,
+          from('customers').select('id,first_name,last_name,created_at').eq('organization_id', organization.id).gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>
         ])
 
         const toTime = (iso?: string): string => {
@@ -471,7 +486,7 @@ export function RecentActivity() {
       }
     }
     load()
-  }, [recentSinceIso])
+  }, [organization?.id, recentSinceIso, selectedBranchId])
   
   useEffect(() => {
     const subscribe = async () => {
@@ -480,6 +495,7 @@ export function RecentActivity() {
       const { createClient } = await import('@/lib/supabase/client')
       const { formatCurrency } = await import('@/lib/currency')
       const supabase = createClient()
+      if (!organization?.id) return
       
       const toTime = (iso?: string): string => {
         if (!iso) return ''
@@ -496,7 +512,7 @@ export function RecentActivity() {
       
       const channel = supabase
         .channel('dashboard-activity')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales' }, (payload: unknown) => {
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales', filter: `organization_id=eq.${organization.id}` }, (payload: unknown) => {
           const row = (payload as { new: SaleRow }).new
           const status: 'completed' | 'in_progress' | 'updated' =
             isCompletedSaleStatus(row.status) ? 'completed' : isPendingSaleStatus(row.status) ? 'in_progress' : 'updated'
@@ -512,7 +528,7 @@ export function RecentActivity() {
           }
           setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
         })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'repairs' }, (payload: unknown) => {
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'repairs', filter: `organization_id=eq.${organization.id}` }, (payload: unknown) => {
           const row = (payload as { new: RepairRow }).new
           const label = [row.device_brand || '', row.device_model || ''].filter(Boolean).join(' ')
           const status: 'completed' | 'in_progress' | 'updated' =
@@ -529,7 +545,7 @@ export function RecentActivity() {
           }
           setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
         })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers' }, (payload: unknown) => {
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers', filter: `organization_id=eq.${organization.id}` }, (payload: unknown) => {
           const row = (payload as { new: CustomerRow }).new
           const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
           const item = {
@@ -555,7 +571,7 @@ export function RecentActivity() {
         if (typeof cleanup === 'function') cleanup()
       })
     }
-  }, [])
+  }, [organization?.id])
 
   const getStatusConfig = (status: string) => {
     const statusConfig = {
