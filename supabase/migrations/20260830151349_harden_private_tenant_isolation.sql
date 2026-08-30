@@ -28,37 +28,44 @@ drop policy if exists "public can read active products" on public.products;
 drop policy if exists "public can read visible active products" on public.products;
 drop policy if exists "public can read public active products" on public.products;
 
--- Remove only policies whose predicate is an unconditional authenticated read.
--- Secure tenant policies and customer self-service policies are preserved.
-do $cleanup$
-declare
-  policy_record record;
-begin
-  for policy_record in
-    select schemaname, tablename, policyname
-    from pg_policies
-    where schemaname = 'public'
-      and tablename in (
-        'products', 'categories', 'customers', 'sales', 'repairs',
-        'cash_registers', 'cash_closures', 'cash_movements',
-        'customer_credits', 'credit_installments', 'credit_payments'
-      )
-      and cmd in ('SELECT', 'ALL')
-      and translate(coalesce(qual, ''), E'() \n\r\t', '') in (
-        'true',
-        'auth.role=''authenticated''::text',
-        'auth.role::text=''authenticated''::text'
-      )
-  loop
-    execute format(
-      'drop policy if exists %I on %I.%I',
-      policy_record.policyname,
-      policy_record.schemaname,
-      policy_record.tablename
-    );
-  end loop;
-end
-$cleanup$;
+-- Explicit cleanup is intentionally verbose. Avoid parsing pg_policies.qual:
+-- its rendered expression varies between PostgreSQL versions and older
+-- dynamic cleanup caused migration syntax/regex failures.
+drop policy if exists categories_read_all on public.categories;
+drop policy if exists "Enable read access for all users" on public.categories;
+drop policy if exists "Enable read access for authenticated users" on public.categories;
+drop policy if exists "Authenticated users can read categories" on public.categories;
+drop policy if exists "Authenticated users can manage categories" on public.categories;
+drop policy if exists "Allow all for authenticated users" on public.categories;
+
+drop policy if exists "Enable read access for all users" on public.customers;
+drop policy if exists "Enable read access for authenticated users" on public.customers;
+drop policy if exists "Authenticated users can read customers" on public.customers;
+drop policy if exists "Authenticated users can manage customers" on public.customers;
+drop policy if exists authenticated_select_customers on public.customers;
+
+drop policy if exists sales_select_authenticated_all on public.sales;
+drop policy if exists "Authenticated users can view sales" on public.sales;
+drop policy if exists "Enable read access for authenticated users" on public.sales;
+
+drop policy if exists "Authenticated users can view repairs" on public.repairs;
+drop policy if exists "Enable read access for authenticated users" on public.repairs;
+drop policy if exists "Allow authenticated read repairs" on public.repairs;
+
+drop policy if exists "Usuarios autenticados pueden ver cajas" on public.cash_registers;
+drop policy if exists "Authenticated users can view closures" on public.cash_closures;
+drop policy if exists "Enable select for authenticated users only" on public.cash_movements;
+drop policy if exists "Usuarios autenticados ven movimientos" on public.cash_movements;
+drop policy if exists "solo usuarios autenticados pueden leer" on public.cash_movements;
+
+drop policy if exists "Read credits" on public.customer_credits;
+drop policy if exists customer_credits_select_authenticated on public.customer_credits;
+drop policy if exists customer_credits_select_authenticated_all on public.customer_credits;
+drop policy if exists "Read installments" on public.credit_installments;
+drop policy if exists credit_installments_select_authenticated on public.credit_installments;
+drop policy if exists credit_installments_select_authenticated_all on public.credit_installments;
+drop policy if exists "Read payments" on public.credit_payments;
+drop policy if exists credit_payments_select_authenticated on public.credit_payments;
 
 -- Reassert the canonical tenant-scoped reads. Dropping first makes the
 -- migration idempotent and avoids combining multiple permissive policies.

@@ -42,8 +42,10 @@ describe('private tenant isolation migration', () => {
     expect(sql).not.toMatch(/to authenticated[\s\S]{0,160}using\s*\(\s*true\s*\)/)
   })
 
-  it('detects legacy true predicates without an invalid regular expression', () => {
-    expect(sql).toContain("translate(coalesce(qual, ''), e'() \\n\\r\\t', '') in (")
-    expect(sql).not.toContain('regexp_replace(coalesce(qual')
+  it('uses explicit idempotent policy cleanup instead of dynamic predicate parsing', () => {
+    expect(sql).toContain('drop policy if exists categories_read_all on public.categories')
+    expect(sql).toContain('drop policy if exists "read credits" on public.customer_credits')
+    expect(sql).not.toContain('do $cleanup$')
+    expect(sql).not.toContain('from pg_policies')
   })
 })
