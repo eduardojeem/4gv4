@@ -9,6 +9,7 @@ import { branchHeaders, withBranchFilter } from '@/lib/branches/client'
 import { calculateExpectedCashBalance, isPhysicalManualMovement } from '@/app/dashboard/pos/lib/cash-balance'
 import type { CashMovement } from '@/app/dashboard/pos/types'
 import { summarizeCashMovements } from '@/app/dashboard/pos/lib/cash-report'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 export type { CashMovement } from '@/app/dashboard/pos/types'
 
@@ -42,6 +43,7 @@ export function useCashRegister() {
     const [history, setHistory] = useState<CashRegisterSession[]>([])
     const [auditLog, setAuditLog] = useState<CashMovement[]>([])
     const { selectedBranchId } = useBranch()
+    const { organization } = useActiveOrganization()
 
     // Fix #4: memoize Supabase client — no instanciar en cada render
     const supabase = useMemo(() => {
@@ -64,7 +66,7 @@ export function useCashRegister() {
 
     // Load available registers
     const loadRegisters = useCallback(async () => {
-        if (!config.supabase.isConfigured || !supabase) {
+        if (!config.supabase.isConfigured || !supabase || !organization?.id) {
             setRegisters([])
             return []
         }
@@ -72,6 +74,7 @@ export function useCashRegister() {
         let query = supabase
             .from('cash_registers')
             .select('*')
+            .eq('organization_id', organization.id)
             .order('name')
 
         query = withBranchFilter(query, selectedBranchId)
@@ -87,11 +90,11 @@ export function useCashRegister() {
         }))
         setRegisters(nextRegisters)
         return nextRegisters
-    }, [selectedBranchId, supabase])
+    }, [organization?.id, selectedBranchId, supabase])
 
     // Fetch history (closed sessions)
     const fetchHistory = useCallback(async (limit = 20) => {
-        if (!config.supabase.isConfigured || !supabase) {
+        if (!config.supabase.isConfigured || !supabase || !organization?.id) {
             return []
         }
 
@@ -99,6 +102,7 @@ export function useCashRegister() {
         let sessionsQuery = supabase
             .from('cash_closures')
             .select('*')
+            .eq('organization_id', organization.id)
             .not('date', 'is', null) // Closed sessions
             .order('date', { ascending: false })
             .limit(limit)
@@ -121,6 +125,7 @@ export function useCashRegister() {
         let movementsQuery = supabase
             .from('cash_movements')
             .select('*')
+            .eq('organization_id', organization.id)
             .in('session_id', sessionIds)
             .order('created_at', { ascending: true })
 
@@ -210,17 +215,18 @@ export function useCashRegister() {
 
         setHistory(formatted)
         return formatted
-    }, [selectedBranchId, supabase])
+    }, [organization?.id, selectedBranchId, supabase])
 
     // Fetch audit log (all movements)
     const fetchAuditLog = useCallback(async (limit = 100) => {
-        if (!config.supabase.isConfigured || !supabase) {
+        if (!config.supabase.isConfigured || !supabase || !organization?.id) {
             return []
         }
 
         let query = supabase
             .from('cash_movements')
             .select('*')
+            .eq('organization_id', organization.id)
             .order('created_at', { ascending: false })
             .limit(limit)
 
@@ -274,7 +280,7 @@ export function useCashRegister() {
 
         setAuditLog(formatted)
         return formatted
-    }, [selectedBranchId, supabase])
+    }, [organization?.id, selectedBranchId, supabase])
 
     // Analytics — Fix #10: calcular datos reales desde movimientos
     const getDailyAnalytics = useCallback(async (date?: string) => {

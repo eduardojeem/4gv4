@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 export interface Sale {
     id: string
@@ -54,11 +55,13 @@ export function useSales() {
         top_products: []
     })
 
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
     const { selectedBranchId } = useBranch()
+    const { organization } = useActiveOrganization()
 
     // Fetch sales
     const fetchSales = useCallback(async (dateFilter?: { from: string; to: string }) => {
+        if (!organization?.id) return
         try {
             setLoading(true)
 
@@ -70,7 +73,8 @@ export function useSales() {
             *,
             products (name)
           )
-        `)
+                `)
+                .eq('organization_id', organization.id)
                 .order('created_at', { ascending: false })
 
             query = withBranchFilter(query, selectedBranchId)
@@ -107,7 +111,7 @@ export function useSales() {
         } finally {
             setLoading(false)
         }
-    }, [selectedBranchId, supabase])
+    }, [organization?.id, selectedBranchId, supabase])
 
     // Calculate stats
     const calculateStats = (salesData: Sale[]) => {
@@ -152,6 +156,7 @@ export function useSales() {
 
     // Get sale by ID
     const getSale = useCallback(async (saleId: string) => {
+        if (!organization?.id) return null
         try {
             let query = supabase
                 .from('sales')
@@ -162,8 +167,9 @@ export function useSales() {
             products (name)
           ),
           payments (*)
-        `)
+                `)
                 .eq('id', saleId)
+                .eq('organization_id', organization.id)
 
             query = withBranchFilter(query, selectedBranchId)
             const { data, error } = await query.single()
@@ -176,15 +182,17 @@ export function useSales() {
             toast.error('Error al cargar venta')
             return null
         }
-    }, [selectedBranchId, supabase])
+    }, [organization?.id, selectedBranchId, supabase])
 
     // Cancel sale
     const cancelSale = useCallback(async (saleId: string, reason: string) => {
+        if (!organization?.id) return false
         try {
             let saleQuery = supabase
                 .from('sales')
                 .select('*, sale_items (*)')
                 .eq('id', saleId)
+                .eq('organization_id', organization.id)
 
             saleQuery = withBranchFilter(saleQuery, selectedBranchId)
             const { data: sale, error: fetchError } = await saleQuery.single()
@@ -200,6 +208,7 @@ export function useSales() {
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', saleId)
+                .eq('organization_id', organization.id)
 
             updateQuery = withBranchFilter(updateQuery, selectedBranchId)
             const { error: updateError } = await updateQuery
@@ -212,6 +221,7 @@ export function useSales() {
                     .from('products')
                     .select('stock_quantity')
                     .eq('id', item.product_id)
+                    .eq('organization_id', organization.id)
                     .single()
 
                 if (product) {
@@ -221,6 +231,7 @@ export function useSales() {
                             stock_quantity: (product.stock_quantity || 0) + item.quantity
                         })
                         .eq('id', item.product_id)
+                        .eq('organization_id', organization.id)
 
                     if (selectedBranchId) {
                         const { data: branchInventory } = await supabase
@@ -251,7 +262,7 @@ export function useSales() {
             console.error('Error cancelling sale:', error)
             toast.error('Error al cancelar venta')
         }
-    }, [fetchSales, selectedBranchId, supabase])
+    }, [fetchSales, organization?.id, selectedBranchId, supabase])
 
     // Real-time subscription
     useEffect(() => {
@@ -264,7 +275,8 @@ export function useSales() {
                 {
                     event: '*',
                     schema: 'public',
-                    table: 'sales'
+                    table: 'sales',
+                    filter: organization?.id ? `organization_id=eq.${organization.id}` : 'organization_id=eq.__none__'
                 },
                 () => {
                     fetchSales()
@@ -275,7 +287,7 @@ export function useSales() {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [fetchSales, selectedBranchId, supabase])
+    }, [fetchSales, organization?.id, selectedBranchId, supabase])
 
     return {
         sales,

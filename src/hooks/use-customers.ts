@@ -5,6 +5,7 @@ import { AppError } from '@/lib/errors'
 import { Customer, CustomerFilters } from './use-customer-state'
 export type { Customer, CustomerFilters }
 import { useDebounce } from './use-debounce'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 interface UseCustomersOptions {
   initialFilters?: Partial<CustomerFilters>
@@ -21,6 +22,7 @@ interface PaginationState {
 }
 
 export function useCustomers(options: UseCustomersOptions = {}) {
+    const { organization } = useActiveOrganization()
     const {
         initialFilters = {},
         pageSize = 50,
@@ -173,6 +175,7 @@ export function useCustomers(options: UseCustomersOptions = {}) {
     }, [filteredCustomers.length, pagination.itemsPerPage])
 
     const fetchCustomers = useCallback(async () => {
+        if (!organization?.id) return
         setIsLoading(true)
         setError(null)
 
@@ -181,6 +184,7 @@ export function useCustomers(options: UseCustomersOptions = {}) {
             const { data, error: fetchError } = await supabase
                 .from('customers')
                 .select('*')
+                .eq('organization_id', organization.id)
                 .order('created_at', { ascending: false })
 
             if (fetchError) throw fetchError
@@ -237,7 +241,7 @@ export function useCustomers(options: UseCustomersOptions = {}) {
         } finally {
             setIsLoading(false)
         }
-    }, [])
+    }, [organization?.id])
 
     // Acciones
     const actions = {
@@ -297,11 +301,12 @@ export function useCustomers(options: UseCustomersOptions = {}) {
         refresh: fetchCustomers,
         
         createCustomer: async (customerData: Partial<Customer>) => {
+            if (!organization?.id) return { success: false, error: new Error('Organización activa no disponible') }
             try {
                 const supabase = createSupabaseClient()
                 const { data, error } = await supabase
                     .from('customers')
-                    .insert([customerData])
+                    .insert([{ ...customerData, organization_id: organization.id }])
                     .select()
                     .single()
 
@@ -318,12 +323,14 @@ export function useCustomers(options: UseCustomersOptions = {}) {
         },
 
         updateCustomer: async (id: string, customerData: Partial<Customer>) => {
+            if (!organization?.id) return { success: false, error: new Error('Organización activa no disponible') }
             try {
                 const supabase = createSupabaseClient()
                 const { data, error } = await supabase
                     .from('customers')
                     .update(customerData)
                     .eq('id', id)
+                    .eq('organization_id', organization.id)
                     .select()
                     .single()
 
@@ -341,12 +348,14 @@ export function useCustomers(options: UseCustomersOptions = {}) {
         },
 
         deleteCustomer: async (id: string) => {
+            if (!organization?.id) return { success: false, error: new Error('Organización activa no disponible') }
             try {
                 const supabase = createSupabaseClient()
                 const { error } = await supabase
                     .from('customers')
                     .delete()
                     .eq('id', id)
+                    .eq('organization_id', organization.id)
 
                 if (error) throw error
 

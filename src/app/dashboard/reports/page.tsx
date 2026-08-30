@@ -54,6 +54,7 @@ import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
 import { chunkQueryValues } from '@/lib/analytics/query-batches'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 // Sanitiza una celda CSV: previene inyección de fórmulas y escapa comas/comillas/saltos.
 function csvCell(value: unknown): string {
@@ -96,6 +97,7 @@ interface KpiDelta {
 
 export default function ReportsPage() {
   const { selectedBranchId } = useBranch()
+  const { organization } = useActiveOrganization()
   const { planCode, organizationName, effectiveModules } = useSubscriptionStatus()
   const hasRepairs = effectiveModules.includes('repairs')
   const canExport = canExportReports(planCode) // exportar/descargar: Basic en adelante
@@ -256,7 +258,9 @@ export default function ReportsPage() {
         .channel(`realtime-reports-${table}`)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: table },
+          table === 'sale_items'
+            ? { event: '*', schema: 'public', table }
+            : { event: '*', schema: 'public', table, filter: `organization_id=eq.${organization?.id ?? '__none__'}` },
           () => {
             logger.info(`[Reports] Cambio detectado en ${table}`)
             handleUpdate()
@@ -270,11 +274,12 @@ export default function ReportsPage() {
       if (timeout) clearTimeout(timeout)
       channels.forEach(channel => supabase.removeChannel(channel))
     }
-  }, [hasRepairs])
+  }, [hasRepairs, organization?.id])
 
   // Cargar datos reales de Supabase
   useEffect(() => {
     const fetchReportsData = async () => {
+      if (!organization?.id) return
       try {
         setLoading(true)
         setErrorMsg(null)
@@ -288,6 +293,7 @@ export default function ReportsPage() {
           supabase
             .from('sales')
             .select('id, created_at, total_amount, status, customer_id')
+            .eq('organization_id', organization.id)
             .gte('created_at', dateRange.from.toISOString())
             .lte('created_at', dateRange.to.toISOString())
             .order('created_at', { ascending: true }),
@@ -304,6 +310,7 @@ export default function ReportsPage() {
             supabase
               .from('sales')
               .select('id, total_amount, status')
+              .eq('organization_id', organization.id)
               .gte('created_at', previousFrom.toISOString())
               .lte('created_at', previousTo.toISOString()),
             selectedBranchId
@@ -311,11 +318,13 @@ export default function ReportsPage() {
           supabase
             .from('customers')
             .select('created_at')
+            .eq('organization_id', organization.id)
             .gte('created_at', dateRange.from.toISOString())
             .lte('created_at', dateRange.to.toISOString()),
           supabase
             .from('customers')
             .select('created_at')
+            .eq('organization_id', organization.id)
             .gte('created_at', previousFrom.toISOString())
             .lte('created_at', previousTo.toISOString())
         ])
@@ -355,6 +364,7 @@ export default function ReportsPage() {
           supabase
             .from('sales')
             .select('id, created_at, status')
+            .eq('organization_id', organization.id)
             .gte('created_at', itemsFrom.toISOString())
             .lte('created_at', itemsTo.toISOString()),
           selectedBranchId
@@ -451,6 +461,7 @@ export default function ReportsPage() {
           supabase
             .from('repairs')
             .select('id, created_at, received_at, completed_at, status, final_cost, labor_cost, parts_cost')
+            .eq('organization_id', organization.id)
             .gte('created_at', dateRange.from.toISOString())
             .lte('created_at', dateRange.to.toISOString()),
           selectedBranchId
@@ -608,7 +619,7 @@ export default function ReportsPage() {
     }
 
     fetchReportsData()
-  }, [categoryDateRange, dateRange, hasRepairs, refreshTrigger, selectedBranchId, toLocalDateKey])
+  }, [categoryDateRange, dateRange, hasRepairs, organization?.id, refreshTrigger, selectedBranchId, toLocalDateKey])
 
   useEffect(() => {
     const now = new Date()
@@ -1242,6 +1253,3 @@ function ReportsSkeleton() {
     </div>
   )
 }
-
-
-

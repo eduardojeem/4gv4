@@ -48,6 +48,7 @@ import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 // Datos mock eliminados
 
@@ -61,6 +62,7 @@ export default function ProductReportsPage() {
   // sin avisar — a diferencia de /dashboard/reports (la página principal),
   // que sí respeta la sucursal seleccionada en todas sus consultas.
   const { selectedBranchId } = useBranch()
+  const { organization } = useActiveOrganization()
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<any[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -83,6 +85,7 @@ export default function ProductReportsPage() {
   // Cargar datos reales desde Supabase
   useEffect(() => {
     const fetchData = async () => {
+      if (!organization?.id) return
       setLoading(true)
       setErrorMsg(null)
       try {
@@ -93,6 +96,7 @@ export default function ProductReportsPage() {
             category:categories(name),
             supplier:suppliers(name)
           `)
+          .eq('organization_id', organization.id)
 
         if (productsError) throw productsError
 
@@ -120,7 +124,8 @@ export default function ProductReportsPage() {
               subtotal,
               product:products(name, category:categories(name), sale_price, purchase_price),
               sale:sales!inner(created_at, status, branch_id)
-            `),
+            `)
+            .eq('sale.organization_id', organization.id),
           selectedBranchId,
           'sale.branch_id'
         )
@@ -226,7 +231,7 @@ export default function ProductReportsPage() {
       }
     }
     fetchData()
-  }, [supabase, dateRange, selectedBranchId])
+  }, [supabase, dateRange, organization?.id, selectedBranchId])
 
   // Filtrar datos basado en los filtros seleccionados
   const filteredData = useMemo(() => {

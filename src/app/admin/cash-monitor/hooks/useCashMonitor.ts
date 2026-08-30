@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import type {
   CashSession,
   CashMovementAdmin,
@@ -43,6 +44,7 @@ export function useCashMonitor() {
   const [filter, setFilter] = useState<SessionFilter>({ status: 'all', period: 'week', discrepancy: 'all' })
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null)
   const { selectedBranchId } = useBranch()
+  const { organization } = useActiveOrganization()
 
   let supabase: ReturnType<typeof createClient> | null = null
   try {
@@ -55,12 +57,13 @@ export function useCashMonitor() {
   // FETCH SESSIONS
   // =========================================================================
   const fetchSessions = useCallback(async () => {
-    if (!supabase) return
+    if (!supabase || !organization?.id) return
 
     try {
       let query = supabase
         .from('cash_closures')
         .select('*')
+        .eq('organization_id', organization.id)
         .order('created_at', { ascending: false })
         .limit(200)
 
@@ -322,13 +325,13 @@ export function useCashMonitor() {
       console.error('Error fetching sessions:', error)
       toast.error('Error al cargar sesiones de caja')
     }
-  }, [filter, selectedBranchId, supabase])
+  }, [filter, organization?.id, selectedBranchId, supabase])
 
   // =========================================================================
   // FETCH ALERTS
   // =========================================================================
   const fetchAlerts = useCallback(async () => {
-    if (!supabase) return
+    if (!supabase || !organization?.id) return
 
     try {
       let query = supabase
@@ -341,6 +344,7 @@ export function useCashMonitor() {
         const { data: branchSessions, error: sessionsError } = await supabase
           .from('cash_closures')
           .select('id')
+          .eq('organization_id', organization.id)
           .eq('branch_id', selectedBranchId)
           .limit(500)
 
@@ -362,13 +366,13 @@ export function useCashMonitor() {
     } catch (error) {
       console.error('Error fetching alerts:', error)
     }
-  }, [selectedBranchId, supabase])
+  }, [organization?.id, selectedBranchId, supabase])
 
   // =========================================================================
   // FETCH AUDIT LOG
   // =========================================================================
   const fetchAuditLog = useCallback(async () => {
-    if (!supabase) return
+    if (!supabase || !organization?.id) return
 
     try {
       let query = supabase
@@ -381,6 +385,7 @@ export function useCashMonitor() {
         const { data: branchSessions, error: sessionsError } = await supabase
           .from('cash_closures')
           .select('id')
+          .eq('organization_id', organization.id)
           .eq('branch_id', selectedBranchId)
           .limit(500)
 
@@ -430,7 +435,7 @@ export function useCashMonitor() {
     } catch (error) {
       console.error('Error fetching audit log:', error)
     }
-  }, [selectedBranchId, supabase])
+  }, [organization?.id, selectedBranchId, supabase])
 
   // =========================================================================
   // COMPUTE METRICS
@@ -599,12 +604,13 @@ export function useCashMonitor() {
   // FETCH SESSION MOVEMENTS (for detail view)
   // =========================================================================
   const fetchSessionMovements = useCallback(async (sessionId: string): Promise<CashMovementAdmin[]> => {
-    if (!supabase) return []
+    if (!supabase || !organization?.id) return []
 
     try {
       let query = supabase
         .from('cash_movements')
         .select('*')
+        .eq('organization_id', organization.id)
         .eq('session_id', sessionId)
         .order('created_at', { ascending: false })
 
@@ -650,7 +656,7 @@ export function useCashMonitor() {
       console.error('Error fetching movements:', error)
       return []
     }
-  }, [selectedBranchId, supabase])
+  }, [organization?.id, selectedBranchId, supabase])
 
   // =========================================================================
   // REALTIME SUBSCRIPTIONS
