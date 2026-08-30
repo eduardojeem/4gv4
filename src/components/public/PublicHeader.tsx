@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag } from 'lucide-react'
+import { Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag, ChevronRight } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
@@ -415,207 +415,216 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
         </div>
       </div>
 
-      {/* Mobile Drawer (Slide-Over Off-Canvas con Backdrop Blur) */}
+      {/* ── MODAL / DRAWER LATERAL OFF-CANVAS (SHEET) ESTILO MARKETPLACE ── */}
       {mobileMenuOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs transition-opacity md:hidden"
-          onClick={() => setMobileMenuOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      <aside
-        id="public-mobile-menu"
-        ref={mobileMenuRef}
-        aria-hidden={!mobileMenuOpen}
-        inert={!mobileMenuOpen}
-        className={cn(
-          'fixed inset-y-0 right-0 z-50 flex w-full max-w-[320px] flex-col justify-between border-l border-border/80 bg-background/98 p-5 shadow-2xl backdrop-blur-xl transition-transform duration-300 ease-in-out md:hidden',
-          mobileMenuOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
-        )}
-      >
-        {/* Cabecera del Drawer */}
-        <div className="flex items-center justify-between pb-4 border-b border-border/60">
-          <div className="flex items-center gap-2.5 min-w-0">
-            {companyLogoUrl ? (
-              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-xl border border-border/80 bg-background p-0.5">
-                <Image
-                  src={companyLogoUrl}
-                  alt={companyInfo?.name || 'Logo'}
-                  fill
-                  unoptimized
-                  className="object-contain"
-                />
-              </div>
-            ) : (
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-xs">
-                {companyInfo?.name?.slice(0, 2).toUpperCase() || '4G'}
-              </div>
-            )}
-            <span className="truncate text-sm font-bold text-foreground">
-              {companyInfo?.name || 'Tienda Oficial'}
-            </span>
-          </div>
-
-          <button
-            type="button"
+        <div className="fixed inset-0 z-50 md:hidden">
+          {/* Backdrop Difuminado */}
+          <div
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
             onClick={() => setMobileMenuOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            aria-label="Cerrar menú"
+            aria-hidden="true"
+          />
+
+          {/* Panel Deslizante Lateral Derecho */}
+          <div
+            id="public-mobile-menu"
+            ref={mobileMenuRef}
+            aria-hidden={!mobileMenuOpen}
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xs flex-col bg-card p-6 shadow-2xl border-l border-border/80 transition-transform duration-300 animate-in slide-in-from-right"
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Cuerpo del Drawer: Navegación & Cuenta */}
-        <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1 scrollbar-thin scrollbar-thumb-muted">
-          
-          {/* Tarjeta de Usuario / Mi Cuenta */}
-          {user ? (
-            <div className="rounded-2xl border border-border/80 bg-card p-3 shadow-xs">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10 border border-border shadow-xs">
-                  <AvatarImage src={user?.profile?.avatar_url || ''} alt={user?.profile?.name || 'Usuario'} />
-                  <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
-                    {userInitials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold text-foreground">
-                    {user?.profile?.name || 'Usuario'}
-                  </p>
-                  <p className="truncate text-[11px] text-muted-foreground">
-                    {user?.email || 'usuario@email.com'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-3 flex flex-col gap-1 pt-2 border-t border-border/60">
-                {canAccessDashboard && (
-                  <Link
-                    href="/dashboard"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
-                  >
-                    <LayoutDashboard className="h-3.5 w-3.5" />
-                    <span>Panel de Administración</span>
-                  </Link>
-                )}
-                <Link
-                  href={withTenantPrefix('/perfil')}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                >
-                  <User className="h-3.5 w-3.5" />
-                  <span>Mi Perfil</span>
-                </Link>
-                <Link
-                  href={withTenantPrefix('/perfil/autorizados')}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                >
-                  <Shield className="h-3.5 w-3.5" />
-                  <span>Personas Autorizadas</span>
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              className="w-full gap-2 rounded-xl bg-primary font-bold text-xs text-primary-foreground shadow-xs hover:bg-primary/90"
-              onClick={() => {
-                setMobileMenuOpen(false)
-                setAuthOpen(true)
-              }}
-            >
-              <User className="h-4 w-4" />
-              <span>Ingresar / Crear cuenta</span>
-            </Button>
-          )}
-
-          {/* Enlaces Principales de Navegación */}
-          <nav className="space-y-1" aria-label="Navegación móvil">
-            {navLinks.map((link) => {
-              const active = isActive(link.href)
-              const Icon = link.icon
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  aria-current={active ? 'page' : undefined}
-                  className={cn(
-                    'flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-colors',
-                    active
-                      ? 'bg-primary text-primary-foreground shadow-xs'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  )}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {Icon && <Icon className="h-4 w-4 shrink-0" />}
-                    <span className="truncate">{link.label}</span>
+            {/* Cabecera del Drawer con Logo y Botón Cerrar */}
+            <div className="flex items-center justify-between pb-5 border-b border-border/60">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {companyLogoUrl ? (
+                  <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-border/80 bg-background p-0.5 shadow-xs">
+                    <Image
+                      src={companyLogoUrl}
+                      alt={companyInfo?.name || 'Logo'}
+                      fill
+                      unoptimized
+                      className="object-contain"
+                    />
                   </div>
-                  {active && <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />}
-                </Link>
-              )
-            })}
-          </nav>
+                ) : (
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-xs">
+                    {companyInfo?.name?.slice(0, 2).toUpperCase() || '4G'}
+                  </div>
+                )}
+                <span className="font-bold text-sm text-foreground truncate">
+                  {companyInfo?.name || 'Tienda Oficial'}
+                </span>
+              </div>
 
-          {/* Horarios & Teléfono de Atención */}
-          {(weekdayHours || phoneDisplay) && (
-            <div className="rounded-2xl border border-border/60 bg-muted/40 p-3 space-y-2 text-xs">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                Atención y Contacto
-              </span>
-              {weekdayHours && (
-                <div className="flex items-center gap-2 text-muted-foreground text-[11px]">
-                  <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span>{weekdayHours}</span>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Cerrar menú"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Sección de Usuario / Cuenta */}
+            <div className="py-4 border-b border-border/60">
+              {user ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10 border border-border">
+                      <AvatarImage src={user.profile?.avatar_url || ''} />
+                      <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
+                        {userInitials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-foreground">
+                        {user.profile?.name || 'Usuario'}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                  </div>
+
+                  {canAccessDashboard && (
+                    <Button asChild variant="outline" size="sm" className="w-full justify-start gap-2 rounded-xl text-xs font-semibold text-primary">
+                      <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                        <LayoutDashboard className="h-4 w-4" />
+                        Panel administrativo
+                      </Link>
+                    </Button>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <Link
+                      href={withTenantPrefix('/perfil')}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-border/70 bg-background px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                      <User className="h-3.5 w-3.5" />
+                      <span>Mi Perfil</span>
+                    </Link>
+                    <Link
+                      href={withTenantPrefix('/perfil/autorizados')}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-border/70 bg-background px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                      <Shield className="h-3.5 w-3.5" />
+                      <span>Autorizados</span>
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Accedé a tu cuenta o registrate para comprar:</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full gap-2 rounded-xl bg-primary text-primary-foreground font-semibold shadow-xs"
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      setAuthOpen(true)
+                    }}
+                  >
+                    <User className="h-4 w-4" />
+                    Iniciar sesión / Registro
+                  </Button>
                 </div>
               )}
-              {phoneDisplay && (
-                <a
-                  href={`tel:${phoneClean}`}
-                  className="flex items-center gap-2 text-xs font-bold text-foreground hover:text-primary transition-colors"
+            </div>
+
+            {/* Enlaces de Navegación Principal */}
+            <nav className="flex-1 overflow-y-auto py-4 space-y-1 scrollbar-thin scrollbar-thumb-muted">
+              <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Secciones de la Tienda
+              </p>
+
+              {navLinks.map((link) => {
+                const Icon = link.icon
+                const active = isActive(link.href)
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={cn(
+                      'flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',
+                      active
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-foreground hover:bg-muted'
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      {Icon && <Icon className="h-4 w-4" />}
+                      <span>{link.label}</span>
+                    </div>
+                    <ChevronRight className="h-4 w-4 opacity-50" />
+                  </Link>
+                )
+              })}
+
+              {tenantPrefix && (
+                <div className="pt-3">
+                  <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Explorar
+                  </p>
+                  <Link
+                    href="/marketplace"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-between rounded-xl border border-cyan-500/30 bg-cyan-500/[0.05] px-3 py-2.5 text-sm font-semibold text-cyan-700 dark:text-cyan-400 hover:bg-cyan-500/[0.1] transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Store className="h-4 w-4" />
+                      <span>Volver al Marketplace</span>
+                    </div>
+                    <ChevronRight className="h-4 w-4 opacity-70" />
+                  </Link>
+                </div>
+              )}
+
+              {/* Horarios & Teléfono de Atención */}
+              {(weekdayHours || phoneDisplay) && (
+                <div className="mt-4 rounded-2xl border border-border/60 bg-muted/40 p-3 space-y-2 text-xs">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Atención y Contacto
+                  </span>
+                  {weekdayHours && (
+                    <div className="flex items-center gap-2 text-muted-foreground text-[11px]">
+                      <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span>{weekdayHours}</span>
+                    </div>
+                  )}
+                  {phoneDisplay && (
+                    <a
+                      href={`tel:${phoneClean}`}
+                      className="flex items-center gap-2 text-xs font-bold text-foreground hover:text-primary transition-colors"
+                    >
+                      <Phone className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span>{phoneDisplay}</span>
+                    </a>
+                  )}
+                </div>
+              )}
+            </nav>
+
+            {/* Pie del Drawer */}
+            <div className="pt-4 border-t border-border/60 space-y-3">
+              {user && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    setLogoutOpen(true)
+                  }}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
                 >
-                  <Phone className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span>{phoneDisplay}</span>
-                </a>
+                  <LogOut className="h-4 w-4" />
+                  Cerrar sesión
+                </button>
               )}
             </div>
-          )}
 
+          </div>
         </div>
-
-        {/* Pie del Drawer */}
-        <div className="pt-3 border-t border-border/60 space-y-2">
-          {tenantPrefix && (
-            <Link
-              href="/marketplace"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center justify-center gap-2 w-full rounded-xl border border-cyan-500/80 bg-cyan-600 px-3 py-2 text-xs font-bold text-white shadow-xs hover:bg-cyan-500 transition-colors"
-            >
-              <Store className="h-3.5 w-3.5" />
-              <span>Volver al Marketplace</span>
-            </Link>
-          )}
-
-          {user && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full justify-center rounded-xl text-xs font-bold text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={() => {
-                setMobileMenuOpen(false)
-                setLogoutOpen(true)
-              }}
-            >
-              <LogOut className="mr-1.5 h-3.5 w-3.5" />
-              <span>Cerrar Sesión</span>
-            </Button>
-          )}
-        </div>
-      </aside>
+      )}
 
       {/* Auth modal — login/registro del cliente, scopeado al tenant */}
       <AuthModal
