@@ -10,6 +10,7 @@ import { DashboardLayoutProvider } from '@/contexts/DashboardLayoutContext'
 import { RepairsProvider } from '@/contexts/RepairsContext'
 import { SessionTrackingProvider } from '@/components/providers/session-tracking-provider'
 import { DashboardGuard } from '@/components/dashboard/DashboardGuard'
+import { ActiveOrganizationProvider } from '@/contexts/ActiveOrganizationContext'
 
 export default function DashboardLayout({
   children,
@@ -18,8 +19,9 @@ export default function DashboardLayout({
 }) {
   return (
     <SubscriptionGate>
-      <SessionTrackingProvider>
-        <DashboardGuard>
+      <ActiveOrganizationProvider>
+        <SessionTrackingProvider>
+          <DashboardGuard>
           <DashboardLayoutProvider>
               <RepairsProvider>
                 <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
@@ -43,8 +45,9 @@ export default function DashboardLayout({
                 </div>
               </RepairsProvider>
           </DashboardLayoutProvider>
-        </DashboardGuard>
-      </SessionTrackingProvider>
+          </DashboardGuard>
+        </SessionTrackingProvider>
+      </ActiveOrganizationProvider>
     </SubscriptionGate>
   )
 }

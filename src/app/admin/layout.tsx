@@ -4,20 +4,23 @@ import { AdminGuard } from '@/components/admin/AdminGuard'
 import { RepairsProvider } from '@/contexts/RepairsContext'
 import { SubscriptionGate } from '@/components/admin/SubscriptionGate'
 import { SubscriptionBanner } from '@/components/admin/SubscriptionBanner'
+import { ActiveOrganizationProvider } from '@/contexts/ActiveOrganizationContext'
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <SubscriptionGate>
-      <AdminGuard>
-        <RepairsProvider>
+      <ActiveOrganizationProvider>
+        <AdminGuard>
+          <RepairsProvider>
           <AdminLayoutProvider>
             <AdminLayout>
               <SubscriptionBanner />
               {children}
             </AdminLayout>
           </AdminLayoutProvider>
-        </RepairsProvider>
-      </AdminGuard>
+          </RepairsProvider>
+        </AdminGuard>
+      </ActiveOrganizationProvider>
     </SubscriptionGate>
   )
 }
