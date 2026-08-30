@@ -78,54 +78,6 @@ type InstallmentFilters = {
 export const isInstallmentLate = (i: InstallmentRow): boolean =>
   i.status === 'late' || (i.status === 'pending' && startOfLocalDay(i.due_date) < startOfLocalDay(new Date()))
 
-const fetchData = async (supabase: SupabaseClient) => {
-  const [
-    creditsResult,
-    installmentsResult,
-    paymentsResult,
-    summaryResult,
-    installmentsProgressResult,
-    customersResult
-  ] = await Promise.all([
-    // Credits: all records (usually small dataset)
-    supabase.from('credit_details').select('*') as unknown as Promise<{ data?: unknown }>,
-
-    // Installments: all for active/defaulted credits — limited to 1000 rows as safety net
-    supabase
-      .from('credit_installments')
-      .select('*')
-      .order('due_date', { ascending: true })
-      .order('installment_number', { ascending: true })
-      .limit(1000) as unknown as Promise<{ data?: unknown }>,
-
-    // Payments: most recent 300 only — history tab paginates the rest
-    supabase
-      .from('credit_payments')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(300) as unknown as Promise<{ data?: unknown }>,
-
-    // Summary view: aggregated per credit — small dataset
-    supabase.from('credit_summary').select('*') as unknown as Promise<{ data?: unknown }>,
-
-    // Progress view: limited to 1000 rows matching the installments limit
-    supabase.from('credit_installments_progress').select('*').limit(1000) as unknown as Promise<{ data?: unknown }>,
-
-    // Customers: only id + code needed for display
-    supabase.from('customers').select('id, customer_code') as unknown as Promise<{ data?: unknown }>
-  ])
-  return {
-    dbCredits: creditsResult.data,
-    dbInstallments: installmentsResult.data,
-    dbPayments: paymentsResult.data,
-    dbSummary: summaryResult.data,
-    dbInstallmentsProgress: installmentsProgressResult.data,
-    dbCustomers: customersResult.data
-  }
-}
-
-void fetchData
-
 const emptyTenantCreditsData = {
     dbCredits: [],
     dbInstallments: [],
@@ -174,8 +126,8 @@ export function useCredits(enabled = true) {
     const [payments, setPayments] = useState<PaymentRow[]>([])
     const [summary, setSummary] = useState<Record<string, CreditSummaryRow>>({})
     const [installmentsProgress, setInstallmentsProgress] = useState<Record<string, InstallmentProgressRow>>({})
-    const [sales, setSales] = useState<any[]>([])
-    const [saleItems, setSaleItems] = useState<any[]>([])
+    const [sales, setSales] = useState<Array<Record<string, unknown>>>([])
+    const [saleItems, setSaleItems] = useState<Array<Record<string, unknown>>>([])
 
     // Keep these exposed if components need them, or wrap them in actions
     const [filterValues, setFilterValues] = useState<InstallmentFilters>({
@@ -405,7 +357,7 @@ export function useCredits(enabled = true) {
 
         await loadData()
         return { success: true, appliedAmount: selectedAmount, installmentId }
-    }, [installments, supabase, loadData])
+    }, [installments, loadData])
 
 
     // Derived Data Helpers
