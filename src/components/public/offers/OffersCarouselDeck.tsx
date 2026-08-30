@@ -3,10 +3,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Package, ChevronLeft, ChevronRight, Pause, Play, Flame, ArrowRight, Star, Sparkles, CheckCircle2 } from 'lucide-react'
+import {
+  Package,
+  ChevronLeft,
+  ChevronRight,
+  Pause,
+  Play,
+  Flame,
+  ArrowRight,
+  Star,
+  ShoppingCart,
+  Check,
+  MessageCircle,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { OffersSectionSettings } from '@/types/website-settings'
 import { cn } from '@/lib/utils'
+import { usePublicCart } from '@/hooks/use-public-cart'
+import { useCartDrawer } from '@/contexts/cart-drawer-context'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { getWhatsAppLink } from '@/lib/whatsapp'
+import { toast } from 'sonner'
+import type { PublicProduct } from '@/types/public'
 
 export interface OfferSlide {
   id: string
@@ -19,6 +37,8 @@ export interface OfferSlide {
   image: string | null
   brand: string | null
   inStock: boolean
+  offerPrice?: number
+  salePrice?: number
 }
 
 export type OffersAccent = {
@@ -134,6 +154,18 @@ export function OffersCarouselDeck({
   const [isSectionVisible, setIsSectionVisible] = useState(true)
   const [isDocumentVisible, setIsDocumentVisible] = useState(true)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+  const [addedItemIds, setAddedItemIds] = useState<Record<string, boolean>>({})
+
+  const { addProduct } = usePublicCart()
+  const { open: openCartDrawer } = useCartDrawer()
+  const { settings: websiteSettings } = useWebsiteSettings()
+
+  const commerceMode = websiteSettings?.checkout.commerceMode ?? 'cart'
+  const contactPhone =
+    websiteSettings?.company_info.whatsapp?.trim() ||
+    websiteSettings?.company_info.phone?.trim() ||
+    ''
+
   const trackRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -216,6 +248,53 @@ export function OffersCarouselDeck({
   const resolveHref = (href: string | undefined) => {
     const target = href ?? '/productos'
     return target.startsWith('/productos') ? `${tenantPrefix}${target}` : target
+  }
+
+  const handleAddToCart = (e: React.MouseEvent, offer: OfferSlide) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (commerceMode !== 'cart') return
+    if (!offer.inStock) {
+      toast.error('Producto sin stock')
+      return
+    }
+
+    // Extract price
+    const price = offer.offerPrice ?? (
+      Number(offer.priceLabel.replace(/[^0-9]/g, '')) || 0
+    )
+
+    const product: PublicProduct = {
+      id: offer.id,
+      name: offer.title,
+      brand: offer.brand,
+      description: offer.description,
+      sale_price: offer.salePrice ?? price,
+      offer_price: price,
+      has_offer: true,
+      in_stock: offer.inStock,
+      stock_quantity: 99,
+      featured: true,
+      image: offer.image,
+      images: offer.image ? [offer.image] : [],
+      sku: '',
+      wholesale_price: null,
+      is_active: true,
+      unit_measure: 'unidad',
+      barcode: null,
+    }
+
+    const result = addProduct(product, price, 1)
+    if (result.limited) {
+      toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
+      return
+    }
+    toast.success('¡Agregado al carrito!')
+    setAddedItemIds((prev) => ({ ...prev, [offer.id]: true }))
+    setTimeout(() => {
+      setAddedItemIds((prev) => ({ ...prev, [offer.id]: false }))
+    }, 2000)
+    openCartDrawer()
   }
 
   if (offers.length === 0) return null
@@ -381,27 +460,69 @@ export function OffersCarouselDeck({
 
             {/* Precios & Botón de Acción */}
             <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2">
-              <div>
+              <div className="min-w-0">
                 {offer.originalPriceLabel && (
-                  <p className="text-xs font-semibold text-muted-foreground line-through tabular-nums leading-none">
+                  <p className="text-xs font-semibold text-muted-foreground line-through tabular-nums leading-none truncate">
                     {offer.originalPriceLabel}
                   </p>
                 )}
-                <p className={cn('text-lg font-black tracking-tight tabular-nums mt-0.5', accent.price)}>
+                <p className={cn('text-base sm:text-lg font-black tracking-tight tabular-nums mt-0.5 truncate', accent.price)}>
                   {offer.priceLabel}
                 </p>
               </div>
 
-              <Button
-                asChild
-                size="sm"
-                className={cn('rounded-xl font-bold text-xs gap-1.5 px-3.5 shadow-xs', accent.button)}
-              >
-                <Link href={resolveHref(offer.ctaHref)}>
-                  <span>Aprovechar</span>
-                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                </Link>
-              </Button>
+              {/* Acciones */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  asChild
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl font-bold text-xs px-2.5 sm:px-3 h-8 sm:h-9 border-border/80 hover:bg-muted"
+                >
+                  <Link href={resolveHref(offer.ctaHref)}>
+                    <span>Ver</span>
+                    <ArrowRight className="h-3 w-3 ml-1 transition-transform group-hover:translate-x-0.5" />
+                  </Link>
+                </Button>
+
+                {commerceMode === 'cart' && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleAddToCart(e, offer)}
+                    disabled={!offer.inStock}
+                    aria-label={`Agregar ${offer.title} al carrito`}
+                    title={`Agregar ${offer.title} al carrito`}
+                    className={cn(
+                      'flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 shadow-xs disabled:cursor-not-allowed disabled:opacity-40',
+                      addedItemIds[offer.id]
+                        ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                        : accent.button
+                    )}
+                  >
+                    {addedItemIds[offer.id] ? (
+                      <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-in zoom-in" />
+                    ) : (
+                      <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform hover:scale-110" />
+                    )}
+                  </button>
+                )}
+
+                {commerceMode === 'whatsapp' && contactPhone && (
+                  <a
+                    href={getWhatsAppLink({
+                      phone: contactPhone,
+                      message: `Hola, quiero consultar por la oferta de ${offer.title} (${offer.priceLabel}).`,
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-95 shadow-emerald-600/20"
+                    aria-label={`Consultar por ${offer.title} en WhatsApp`}
+                    title={`Consultar por ${offer.title} en WhatsApp`}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </a>
+                )}
+              </div>
             </div>
           </article>
         ))}

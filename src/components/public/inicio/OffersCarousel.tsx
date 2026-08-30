@@ -61,6 +61,8 @@ export const mapProductsToOfferSlides = (products: unknown[]): OfferSlide[] => {
         inStock: typeof product.in_stock === 'boolean'
           ? product.in_stock
           : Number(product.stock_quantity ?? product.in_stock) > 0,
+        offerPrice: Number(product.offer_price || 0),
+        salePrice: Number(product.sale_price || 0),
       }
     })
 }

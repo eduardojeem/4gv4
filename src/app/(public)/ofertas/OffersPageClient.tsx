@@ -108,6 +108,8 @@ function toOfferSlides(offers: OfferProduct[], limit: number): OfferSlide[] {
         image: offer.image || (Array.isArray(offer.images) && offer.images.length > 0 ? offer.images[0] : null),
         brand: offer.brand,
         inStock: offer.in_stock,
+        offerPrice: offer.offer_price,
+        salePrice: offer.sale_price,
       }
     })
 }

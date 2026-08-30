@@ -12,6 +12,7 @@ import { formatPrice, cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
 import { resolvePublicUnitPrice } from '@/lib/orders/public-pricing'
 import { usePublicCart } from '@/hooks/use-public-cart'
+import { useCartDrawer } from '@/contexts/cart-drawer-context'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -45,6 +46,7 @@ export function ProductCard(props: ProductCardProps) {
       ? productBranches.map((branch) => branch.name).join(', ')
       : undefined
   const { addProduct } = usePublicCart()
+  const { open: openCartDrawer } = useCartDrawer()
   const { settings: websiteSettings, isLoading: isLoadingWebsiteSettings } = useWebsiteSettings()
   const pathname = usePathname()
   const [imageError, setImageError] = useState(false)
@@ -163,10 +165,11 @@ export function ProductCard(props: ProductCardProps) {
       toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
       return
     }
-    toast.success('Agregado al carrito')
+    toast.success('¡Agregado al carrito!')
     if (closeModal) setQuickViewOpen(false)
     setJustAdded(true)
     setTimeout(() => setJustAdded(false), 1500)
+    openCartDrawer()
   }
 
   return (
@@ -288,19 +291,19 @@ export function ProductCard(props: ProductCardProps) {
             )}
           </div>
 
-          {/* Action buttons — stopPropagation so card click (open modal) doesn't fire */}
+          {/* Action buttons */}
           <div
-            className="mt-3 flex gap-2"
+            className="mt-3 flex items-center gap-2"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
             <Link
               href={productHref}
-              className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-background text-xs font-semibold text-foreground transition-colors hover:border-border/80 hover:bg-muted"
+              className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background text-xs font-bold text-foreground transition-all hover:border-border hover:bg-muted active:scale-[0.98]"
               aria-label={`Ver detalle de ${product.name}`}
             >
-              <Eye className="h-3.5 w-3.5 shrink-0" />
-              Ver detalle
+              <Eye className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span>Ver detalle</span>
             </Link>
 
             {commerceMode === 'cart' && (
@@ -308,27 +311,33 @@ export function ProductCard(props: ProductCardProps) {
                 type="button"
                 onClick={() => addToCart(false)}
                 disabled={!isInStock}
-                className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-primary text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+                className={cn(
+                  'relative z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 shadow-xs disabled:cursor-not-allowed disabled:opacity-40',
+                  justAdded
+                    ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20'
+                )}
                 aria-label={`Agregar ${product.name} al carrito`}
+                title={`Agregar ${product.name} al carrito`}
               >
                 {justAdded ? (
-                  <Check className="h-3.5 w-3.5 shrink-0" />
+                  <Check className="h-4 w-4 animate-in zoom-in" />
                 ) : (
-                  <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
+                  <ShoppingCart className="h-4 w-4 transition-transform hover:scale-110" />
                 )}
-                {justAdded ? '¡Listo!' : 'Agregar'}
               </button>
             )}
+
             {commerceMode === 'whatsapp' && whatsappHref && (
               <a
                 href={whatsappHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-emerald-600 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
+                className="relative z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-95 shadow-emerald-600/20"
                 aria-label={`Consultar por ${product.name} en WhatsApp`}
+                title={`Consultar por ${product.name} en WhatsApp`}
               >
-                <MessageCircle className="h-3.5 w-3.5 shrink-0" />
-                Consultar
+                <MessageCircle className="h-4 w-4" />
               </a>
             )}
           </div>
