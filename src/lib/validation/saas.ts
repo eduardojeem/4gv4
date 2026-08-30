@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { slugifyTenantName } from '@/lib/saas/tenant'
 import { validatePassword } from '@/lib/auth/password-validation'
+import { captchaTokenSchema } from '@/lib/auth/captcha'
 
 const planTiers = ['free', 'basic', 'pro', 'enterprise'] as const
 
@@ -13,6 +14,7 @@ export const registerCompanySchema = z.object({
   companyName: z.string().trim().min(2, 'El nombre de la empresa es requerido').max(120),
   companySlug: z.string().trim().max(64).optional(),
   plan: z.enum(planTiers).optional().default('free'),
+  captchaToken: captchaTokenSchema,
 }).transform((value) => ({
   ...value,
   companySlug: slugifyTenantName(value.companySlug || value.companyName),

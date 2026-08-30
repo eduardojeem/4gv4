@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getPasswordChecks, sanitizeRedirectPath, validatePassword } from '@/lib/auth/password-validation'
+import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 
 function MarketplaceCustomerRegisterForm() {
   const router = useRouter()
@@ -20,6 +21,8 @@ function MarketplaceCustomerRegisterForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -47,6 +50,11 @@ function MarketplaceCustomerRegisterForm() {
       return
     }
 
+    if (!captchaToken || loading) {
+      setError('Completa la verificacion de seguridad para continuar.')
+      return
+    }
+
     try {
       setLoading(true)
       // No organizationSlug → creates a marketplace-wide customer identity.
@@ -58,6 +66,7 @@ function MarketplaceCustomerRegisterForm() {
           email: formData.email,
           phone: formData.phone,
           password: formData.password,
+          captchaToken,
         }),
       })
       const result = await response.json()
@@ -78,6 +87,8 @@ function MarketplaceCustomerRegisterForm() {
       setError('Error inesperado. Intenta de nuevo.')
     } finally {
       setLoading(false)
+      setCaptchaToken(null)
+      setCaptchaResetKey((current) => current + 1)
     }
   }
 
@@ -148,7 +159,13 @@ function MarketplaceCustomerRegisterForm() {
               </ul>
             </div>
             {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <TurnstileChallenge
+              action="marketplace_customer_register"
+              onTokenChange={setCaptchaToken}
+              resetKey={captchaResetKey}
+              disabled={loading}
+            />
+            <Button type="submit" className="w-full" disabled={loading || !captchaToken}>
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
               Crear cuenta
             </Button>

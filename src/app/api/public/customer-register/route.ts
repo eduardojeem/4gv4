@@ -6,6 +6,7 @@ import { validatePassword } from '@/lib/auth/password-validation'
 import { logger } from '@/lib/logger'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { linkPublicCustomerAccount } from '@/lib/customers/link-public-customer-account'
+import { captchaTokenSchema } from '@/lib/auth/captcha'
 
 const customerRegisterSchema = z.object({
   // Optional: when omitted the account is a marketplace-wide customer identity
@@ -18,6 +19,7 @@ const customerRegisterSchema = z.object({
   password: z.string().min(1).refine((value) => !validatePassword(value), {
     message: 'La contrasena no cumple los requisitos de seguridad',
   }),
+  captchaToken: captchaTokenSchema,
 })
 
 function getSupabaseErrorMessage(result: unknown) {
@@ -98,6 +100,7 @@ export async function POST(request: Request) {
       email: input.email,
       password: input.password,
       options: {
+        captchaToken: input.captchaToken,
         data: {
           full_name: input.fullName,
           registration_type: organization ? 'tenant_customer' : 'marketplace_customer',

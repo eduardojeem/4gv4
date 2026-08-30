@@ -134,6 +134,7 @@ export async function POST(request: Request) {
       email: input.email,
       password: input.password,
       options: {
+        captchaToken: input.captchaToken,
         emailRedirectTo: buildCompanyRegistrationRedirectUrl(request),
         data: {
           full_name: input.fullName,

@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
+import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 
 type AuthTab = 'login' | 'register'
 
@@ -105,6 +106,8 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const emailRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -114,6 +117,10 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
+    if (!captchaToken || loading) {
+      setError('Completa la verificacion de seguridad para continuar.')
+      return
+    }
     setLoading(true)
 
     try {
@@ -121,6 +128,7 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
       const { error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
+        options: { captchaToken },
       })
 
       if (authError) {
@@ -131,14 +139,16 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
         } else {
           setError(authError.message)
         }
-        setLoading(false)
         return
       }
 
       onSuccess()
     } catch {
       setError('Error de conexion. Intenta de nuevo.')
+    } finally {
       setLoading(false)
+      setCaptchaToken(null)
+      setCaptchaResetKey((current) => current + 1)
     }
   }
 
@@ -198,9 +208,16 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
           </div>
         )}
 
+        <TurnstileChallenge
+          action="marketplace_login"
+          onTokenChange={setCaptchaToken}
+          resetKey={captchaResetKey}
+          disabled={loading}
+        />
+
         <button
           type="submit"
-          disabled={loading || !email.trim() || !password}
+          disabled={loading || !email.trim() || !password || !captchaToken}
           className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-900 text-sm font-semibold text-white transition-all hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 dark:focus-visible:ring-white"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}

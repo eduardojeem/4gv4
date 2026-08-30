@@ -18,6 +18,7 @@ import { logAuthEventClient } from '@/lib/auth-event-client'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
 import { siteUrl } from '@/lib/site-url'
+import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -30,6 +31,10 @@ export default function LoginPage() {
   const [resetLoading, setResetLoading] = useState(false)
   const [unconfirmed, setUnconfirmed] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
+  const [resetCaptchaToken, setResetCaptchaToken] = useState<string | null>(null)
+  const [resetCaptchaKey, setResetCaptchaKey] = useState(0)
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -75,6 +80,10 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!captchaToken || loading) {
+      setError('Completa la verificacion de seguridad para continuar.')
+      return
+    }
     setLoading(true)
     setError('')
     setUnconfirmed(false)
@@ -85,6 +94,7 @@ export default function LoginPage() {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
+        options: { captchaToken },
       })
 
       if (error) {
@@ -140,6 +150,8 @@ export default function LoginPage() {
       setError('Ocurrio un error inesperado. Intenta de nuevo.')
     } finally {
       setLoading(false)
+      setCaptchaToken(null)
+      setCaptchaResetKey((current) => current + 1)
     }
   }
 
@@ -182,6 +194,10 @@ export default function LoginPage() {
       toast.error('Correo invalido')
       return
     }
+    if (!resetCaptchaToken || resetLoading) {
+      toast.error('Completa la verificacion de seguridad')
+      return
+    }
 
     try {
       setResetLoading(true)
@@ -191,6 +207,7 @@ export default function LoginPage() {
         // del servidor no puede leer el hash y rebota a /login. Usa la URL
         // canonica para no generar enlaces a localhost desde dev.
         redirectTo: siteUrl('/auth/reset-password'),
+        captchaToken: resetCaptchaToken,
       })
 
       if (error) {
@@ -203,6 +220,8 @@ export default function LoginPage() {
       toast.error('No se pudo enviar el correo de reseteo')
     } finally {
       setResetLoading(false)
+      setResetCaptchaToken(null)
+      setResetCaptchaKey((current) => current + 1)
     }
   }
 
@@ -405,10 +424,18 @@ export default function LoginPage() {
                   </div>
                 )}
 
+                <TurnstileChallenge
+                  action="login"
+                  onTokenChange={setCaptchaToken}
+                  resetKey={captchaResetKey}
+                  theme="dark"
+                  disabled={loading}
+                />
+
                 <Button
                   type="submit"
                   className="h-11 w-full bg-blue-600 font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500"
-                  disabled={loading}
+                  disabled={loading || !captchaToken}
                 >
                   {loading ? (
                     <>
@@ -481,11 +508,17 @@ export default function LoginPage() {
                 Te enviaremos un enlace para crear una nueva contrasena.
               </p>
             </div>
+            <TurnstileChallenge
+              action="password_reset"
+              onTokenChange={setResetCaptchaToken}
+              resetKey={resetCaptchaKey}
+              disabled={resetLoading}
+            />
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setResetOpen(false)} disabled={resetLoading}>
                 Cancelar
               </Button>
-              <Button onClick={handleResetPassword} disabled={!resetEmail.trim() || resetLoading}>
+              <Button onClick={handleResetPassword} disabled={!resetEmail.trim() || resetLoading || !resetCaptchaToken}>
                 {resetLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

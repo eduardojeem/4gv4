@@ -13,6 +13,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { validatePassword, getPasswordChecks } from '@/lib/auth/password-validation'
 import { slugifyTenantName } from '@/lib/saas/tenant'
+import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'FREE',
@@ -50,6 +51,8 @@ function RegisterForm() {
   const [error, setError] = useState('')
   // Per-field inline errors (from Zod or client-side validation).
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -114,6 +117,12 @@ function RegisterForm() {
       return
     }
 
+    if (!captchaToken) {
+      setError('Completa la verificacion de seguridad para continuar.')
+      setLoading(false)
+      return
+    }
+
     try {
       const response = await fetch('/api/auth/register-company', {
         method: 'POST',
@@ -125,6 +134,7 @@ function RegisterForm() {
           companyName: formData.companyName,
           companySlug: previewSlug,
           plan: selectedPlan,
+          captchaToken,
         }),
       })
 
@@ -171,6 +181,8 @@ function RegisterForm() {
       setError('Error inesperado. Intenta de nuevo.')
     } finally {
       setLoading(false)
+      setCaptchaToken(null)
+      setCaptchaResetKey((current) => current + 1)
     }
   }
 
@@ -415,10 +427,18 @@ function RegisterForm() {
                   )}
                 </AnimatePresence>
 
+                <TurnstileChallenge
+                  action="company_register"
+                  onTokenChange={setCaptchaToken}
+                  resetKey={captchaResetKey}
+                  theme="dark"
+                  disabled={loading}
+                />
+
                 <Button
                   type="submit"
                   className="h-11 w-full bg-gradient-to-r from-cyan-600 to-blue-600 font-semibold text-white hover:from-cyan-500 hover:to-blue-500 disabled:opacity-60"
-                  disabled={loading || (pwd.length > 0 && !allChecksOk)}
+                  disabled={loading || !captchaToken || (pwd.length > 0 && !allChecksOk)}
                 >
                   {loading ? (
                     <>

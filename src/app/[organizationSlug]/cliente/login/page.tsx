@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
+import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 
 export default function TenantCustomerLoginPage() {
   const params = useParams<{ organizationSlug: string }>()
@@ -21,6 +22,8 @@ export default function TenantCustomerLoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const [resetLoading, setResetLoading] = useState(false)
   const [linking, setLinking] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
@@ -117,6 +120,10 @@ export default function TenantCustomerLoginPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
+    if (!captchaToken || loading) {
+      setError('Completa la verificacion de seguridad para continuar.')
+      return
+    }
     setCanLinkCustomer(false)
     setIsStaffMember(false)
 
@@ -125,6 +132,7 @@ export default function TenantCustomerLoginPage() {
       const { error: loginError } = await supabase.auth.signInWithPassword({
         email,
         password,
+        options: { captchaToken },
       })
 
       if (loginError) {
@@ -137,6 +145,8 @@ export default function TenantCustomerLoginPage() {
       setError('Error inesperado. Intenta de nuevo.')
     } finally {
       setLoading(false)
+      setCaptchaToken(null)
+      setCaptchaResetKey((current) => current + 1)
     }
   }
 
@@ -191,11 +201,16 @@ export default function TenantCustomerLoginPage() {
       toast.error('Ingresá tu correo para recuperar la contraseña.')
       return
     }
+    if (!captchaToken || resetLoading) {
+      toast.error('Completa la verificacion de seguridad para continuar.')
+      return
+    }
 
     try {
       setResetLoading(true)
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo: `${window.location.origin}/auth/reset-password`,
+        captchaToken,
       })
       if (resetError) throw resetError
       toast.success('Te enviamos un enlace para restablecer tu contraseña.')
@@ -203,6 +218,8 @@ export default function TenantCustomerLoginPage() {
       toast.error('No se pudo enviar el enlace de recuperación.')
     } finally {
       setResetLoading(false)
+      setCaptchaToken(null)
+      setCaptchaResetKey((current) => current + 1)
     }
   }
 
@@ -274,7 +291,7 @@ export default function TenantCustomerLoginPage() {
                 <button
                   type="button"
                   onClick={handleResetPassword}
-                  disabled={resetLoading || loading}
+                  disabled={resetLoading || loading || !captchaToken}
                   className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
                 >
                   {resetLoading ? 'Enviando...' : '¿Olvidaste tu contraseña?'}
@@ -394,7 +411,13 @@ export default function TenantCustomerLoginPage() {
                 Usar otra cuenta
               </Button>
             )}
-            <Button type="submit" className="w-full" disabled={loading || checkingSession}>
+            <TurnstileChallenge
+              action="tenant_customer_login"
+              onTokenChange={setCaptchaToken}
+              resetKey={captchaResetKey}
+              disabled={loading || checkingSession}
+            />
+            <Button type="submit" className="w-full" disabled={loading || checkingSession || !captchaToken}>
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
               Iniciar sesión
             </Button>
