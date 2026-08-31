@@ -245,14 +245,18 @@ export function HeroSection({
             </div>
           </div>
 
-          {/* ── Columna Derecha: Tarjeta Comercial Destacada ── */}
+          {/* ── Columna Derecha: Tarjeta Comercial Destacada ──
+               En movil solo sobreviven las estadisticas y el horario: la identidad
+               de la tienda ya esta en el header y los accesos rapidos repiten los
+               CTA de arriba (ambos van a /productos), asi que ahi unicamente
+               empujaban los productos fuera de la pantalla. */}
           <div className="lg:col-span-5 flex justify-center lg:justify-end">
             <div className="relative w-full max-w-md">
               {/* Tarjeta de Resumen Comercial */}
-              <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-6 shadow-xl space-y-6">
-                
+              <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-4 shadow-xl space-y-4 lg:p-6 lg:space-y-6">
+
                 {/* Logo e Identidad de la Tienda */}
-                <div className="flex items-center gap-3.5 pb-4 border-b border-border/60">
+                <div className="hidden lg:flex items-center gap-3.5 pb-4 border-b border-border/60">
                   {companyInfo.logoUrl ? (
                     <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-border/80 bg-background p-1 shadow-xs">
                       <Image
@@ -298,8 +302,8 @@ export function HeroSection({
                   </div>
                 )}
 
-                {/* Accesos Rápidos de Compra */}
-                <div className="space-y-2">
+                {/* Accesos Rápidos de Compra (duplican los CTA del hero en movil) */}
+                <div className="hidden lg:block space-y-2">
                   <Link
                     href={`${tenantPrefix}/productos`}
                     className="flex items-center justify-between rounded-xl border border-border/70 bg-background p-3 text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-muted/50 hover:shadow-xs group"

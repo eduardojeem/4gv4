@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import { Star, Send, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -29,6 +29,10 @@ interface ReviewsResponse {
 }
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
+
+/** El estado "ya hidratado" nunca cambia despues del primer render del cliente,
+ *  asi que no hay nada a lo que suscribirse. */
+const subscribeToNothing = () => () => {}
 
 function StarRating({
   value,
@@ -267,10 +271,15 @@ function RatingSummary({ average, count }: { average: number; count: number }) {
 export function OrganizationReviews() {
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  // useSyncExternalStore en vez de useState+useEffect: con el efecto, el primer
+  // render del cliente pinta la seccion vacia y recien despues aparecen las
+  // resenas ya cacheadas, con un parpadeo visible. Aca el snapshot del cliente
+  // ya es `true` en el mismo render en que React hidrata.
+  const mounted = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  )
 
   const { data, mutate } = useSWR<ReviewsResponse>(
     withOrgQuery('/api/public/reviews?limit=6', tenantSlug),

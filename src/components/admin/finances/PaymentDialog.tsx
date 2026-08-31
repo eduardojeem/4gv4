@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Banknote,
   Building,
@@ -25,6 +25,12 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/currency'
+import { CashSessionSelect, type OpenCashSession } from './CashSessionSelect'
+
+function decimalPlaces(value: string) {
+  const dotIndex = value.indexOf('.')
+  return dotIndex === -1 ? 0 : value.length - dotIndex - 1
+}
 
 export function PaymentDialog({
   open,
@@ -47,6 +53,8 @@ export function PaymentDialog({
 }) {
   const [method, setMethod] = useState('bank_transfer')
   const [amountValue, setAmountValue] = useState('')
+  const [cashSessionId, setCashSessionId] = useState('')
+  const [openCashSessions, setOpenCashSessions] = useState<OpenCashSession[] | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const idempotencyKeyRef = useRef<string | null>(null)
@@ -55,11 +63,38 @@ export function PaymentDialog({
     ? `/api/admin/finances/payroll/${payrollEntryId}/payments`
     : `/api/admin/finances/obligations/${obligationId}/payments`
 
+  const noOpenCashSessions = method === 'cash' && openCashSessions !== null && openCashSessions.length === 0
+
+  // El diálogo permanece montado entre aperturas (solo cambia `open`), así que
+  // sin este reset el segundo pago heredaría el monto/método/caja del anterior.
+  useEffect(() => {
+    if (!open) return
+    setMethod('bank_transfer')
+    setAmountValue('')
+    setCashSessionId('')
+    setOpenCashSessions(null)
+    setError(null)
+    idempotencyKeyRef.current = null
+  }, [open, obligationId, payrollEntryId])
+
   async function submit(formData: FormData) {
     if (isSubmitting) return
-    const amount = Number(formData.get('amount'))
+    const rawAmount = String(formData.get('amount') ?? '').trim()
+    const amount = Number(rawAmount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Ingresá un monto mayor a 0.')
+      return
+    }
+    if (decimalPlaces(rawAmount) > 2) {
+      setError('El monto no puede tener más de dos decimales.')
+      return
+    }
     if (outstandingAmount !== undefined && amount > outstandingAmount) {
       setError(`El monto no puede superar el pendiente autorizado (${formatCurrency(outstandingAmount)}).`)
+      return
+    }
+    if (method === 'cash' && !cashSessionId) {
+      setError('Seleccioná la caja abierta a la que se registrará este pago.')
       return
     }
     setIsSubmitting(true)
@@ -73,7 +108,7 @@ export function PaymentDialog({
       amount,
       paymentMethod: method,
       paymentDate,
-      cashSessionId: method === 'cash' ? formData.get('cashSessionId') : undefined,
+      cashSessionId: method === 'cash' ? cashSessionId : undefined,
       reference: String(formData.get('reference')) || undefined,
     }
     const response = await fetch(`${target}?organizationId=${organizationId}`, {
@@ -170,7 +205,10 @@ export function PaymentDialog({
               id="payment-method"
               aria-label="Método de pago"
               value={method}
-              onChange={(event) => setMethod(event.target.value)}
+              onChange={(event) => {
+                setMethod(event.target.value)
+                if (event.target.value !== 'cash') setCashSessionId('')
+              }}
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <option value="bank_transfer">Transferencia bancaria</option>
@@ -185,13 +223,15 @@ export function PaymentDialog({
               <label htmlFor="cash-session-id" className="text-xs font-semibold uppercase tracking-wider text-primary">
                 Sesión de caja
               </label>
-              <Input
+              <CashSessionSelect
                 id="cash-session-id"
                 name="cashSessionId"
-                aria-label="Sesión de caja"
-                placeholder="ID o código de la sesión de caja"
-                required
-                className="bg-background"
+                organizationId={organizationId}
+                branchId={branchId}
+                value={cashSessionId}
+                onChange={setCashSessionId}
+                onSessionsLoaded={setOpenCashSessions}
+                refreshKey={obligationId ?? payrollEntryId ?? null}
               />
               <p className="text-[11px] text-muted-foreground">
                 Los egresos en efectivo requieren vincularse a una sesión de caja abierta.
@@ -239,7 +279,7 @@ export function PaymentDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isSubmitting} className="gap-1.5">
+            <Button type="submit" disabled={isSubmitting || noOpenCashSessions} className="gap-1.5">
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />

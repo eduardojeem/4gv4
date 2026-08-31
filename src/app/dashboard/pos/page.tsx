@@ -360,6 +360,9 @@ function POSPageContent() {
     Number(quickItemPurchasePrice) || 0,
     Number(quickItemPrice) || 0,
   )
+  // El costo se captura al vender y queda inmutable: si se crea el item sin
+  // costo, esa venta queda para siempre sin ganancia calculable en Finanzas.
+  const quickItemMissingCost = canViewCost && !(Number(quickItemPurchasePrice) > 0)
   const [quickItemError, setQuickItemError] = useState('')
   const [quickItemSaving, setQuickItemSaving] = useState(false)
 
@@ -2439,7 +2442,13 @@ function POSPageContent() {
                           Margen: {formatCurrency(quickItemMargin.profit)} ({quickItemMargin.percent}%)
                         </p>
                       ) : (
-                        <p className="text-xs text-muted-foreground">Dejalo vacio si no lleva costo.</p>
+                        // El costo se "fotografia" al vender y despues no se puede
+                        // corregir desde la app: si queda vacio, esta venta nunca
+                        // suma a la ganancia. Se avisa aca, no despues en Finanzas.
+                        <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span>Sin costo, esta venta no suma a la ganancia y no se puede corregir despues.</span>
+                        </p>
                       )}
                     </div>
                   )}
@@ -2506,6 +2515,15 @@ function POSPageContent() {
                       </p>
                     </div>
                   </div>
+                  {quickItemMissingCost && (
+                    <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-800 dark:text-amber-300">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>
+                        Vas a crear este item <strong>sin precio de compra</strong>. La ganancia de esta venta va a
+                        quedar como &quot;pendiente de costo&quot; en Finanzas y no se puede corregir desde la app.
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {quickItemError && (

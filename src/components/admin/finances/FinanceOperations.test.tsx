@@ -46,10 +46,13 @@ describe('finance operational dialogs', () => {
 
   it('requires a cash session only for cash payments', async () => {
     const user = userEvent.setup()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({
+      sessions: [{ id: uuid, registerName: 'Caja principal', openingBalance: 100000, openedAt: '2026-08-01T10:00:00.000Z' }],
+    })))
     render(<PaymentDialog open onOpenChange={vi.fn()} organizationId={uuid} obligationId={uuid} branchId={uuid} onSaved={vi.fn()} />)
     expect(screen.queryByLabelText('Sesión de caja')).not.toBeInTheDocument()
     await user.selectOptions(screen.getByLabelText('Método de pago'), 'cash')
-    expect(screen.getByLabelText('Sesión de caja')).toBeRequired()
+    expect(await screen.findByLabelText('Sesión de caja')).toBeRequired()
   })
 
   it('shows server payroll preview totals before creating a run', async () => {

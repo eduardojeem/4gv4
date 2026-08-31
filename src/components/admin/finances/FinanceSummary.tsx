@@ -437,7 +437,16 @@ function CostStructureBreakdown({
           <p className="mt-1 text-sm font-semibold">
             {directCosts === null ? 'Pendiente' : formatCurrency(directCosts)}
           </p>
-          <span className="text-[11px] text-muted-foreground font-mono">{costDirectPercent}% de ingresos</span>
+          {/* Puede quedar negativo cuando vuelve mas mercaderia por devoluciones
+              de lo que se vendio en el periodo. El numero es correcto, pero solo
+              se entiende con esta aclaracion. */}
+          {directCosts !== null && directCosts < 0 ? (
+            <span className="text-[11px] text-muted-foreground">
+              Volvió más mercadería por devoluciones que lo vendido en el período.
+            </span>
+          ) : (
+            <span className="text-[11px] text-muted-foreground font-mono">{costDirectPercent}% de ingresos</span>
+          )}
         </div>
 
         <div className="rounded-lg border border-border/50 bg-muted/20 p-2.5">
@@ -613,17 +622,107 @@ export function FinanceSummary({
       ? `${Math.round((summary.accrued.netProfit / summary.accrued.revenue) * 100)}% margen neto`
       : undefined
 
+  const isNetPositive = summary.accrued.netProfit !== null && summary.accrued.netProfit >= 0
+  const isCashPositive = summary.cash.netCashFlow >= 0
+
   return (
     <div className="space-y-6">
+      {/* ── HERO BANNER: BALANCE FINANCIERO INTEGRAL ── */}
+      <section className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-br from-card via-card to-primary/5 p-5 sm:p-6 shadow-sm">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          
+          {/* Bloque 1: Ganancia Neta */}
+          <div className="space-y-1.5 min-w-[220px]">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Resultado Económico
+              </span>
+              {netMarginPercent && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'text-[10px] font-bold',
+                    isNetPositive
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                      : 'bg-destructive/10 text-destructive border-destructive/30'
+                  )}
+                >
+                  {netMarginPercent}
+                </Badge>
+              )}
+            </div>
+            <p className={cn('text-3xl sm:text-4xl font-extrabold tracking-tight', isNetPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive')}>
+              {summary.accrued.netProfit === null ? 'Pendiente' : formatCurrency(summary.accrued.netProfit)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {summary.accrued.revenue > 0
+                ? `De ${formatCurrency(summary.accrued.revenue)} en ventas tras todos los costos`
+                : 'Sin ventas registradas en el período'}
+            </p>
+          </div>
+
+          <div className="hidden lg:block h-16 w-px bg-border/80" />
+
+          {/* Bloque 2: Flujo de Caja en Mano */}
+          <div className="space-y-1.5 min-w-[220px]">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Flujo de Caja Real
+              </span>
+              <Badge
+                variant="outline"
+                className={cn(
+                  'text-[10px] font-bold',
+                  isCashPositive
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                    : 'bg-destructive/10 text-destructive border-destructive/30'
+                )}
+              >
+                {isCashPositive ? '✓ Superávit' : '✕ Déficit'}
+              </Badge>
+            </div>
+            <p className={cn('text-3xl sm:text-4xl font-extrabold tracking-tight', isCashPositive ? 'text-foreground' : 'text-destructive')}>
+              {formatCurrency(summary.cash.netCashFlow)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {formatCurrency(summary.cash.collected)} cobrados vs {formatCurrency(summary.cash.paid)} pagados
+            </p>
+          </div>
+
+          <div className="hidden lg:block h-16 w-px bg-border/80" />
+
+          {/* Bloque 3: Acciones Rápidas */}
+          <div className="flex flex-wrap lg:flex-col gap-2">
+            <button
+              type="button"
+              onClick={onViewExpenses}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-xs hover:bg-primary/90 transition-all active:scale-95 select-none"
+            >
+              <span>+ Registrar Gasto</span>
+            </button>
+            <button
+              type="button"
+              onClick={onViewPayroll}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-all active:scale-95 select-none"
+            >
+              <span>👥 Liquidar Nómina</span>
+            </button>
+          </div>
+
+        </div>
+      </section>
+
       {/* Sección 1: Prioridades y Acciones Urgentes */}
-      <section aria-labelledby="finance-priorities-heading" className="rounded-xl border border-border/70 bg-muted/20 p-4">
-        <div className="mb-3 flex items-center justify-between">
+      <section aria-labelledby="finance-priorities-heading" className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5 shadow-xs">
+        <div className="mb-4 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Siguiente acción</p>
-            <h2 id="finance-priorities-heading" className="text-base font-semibold">Qué requiere atención hoy</h2>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Siguiente acción</p>
+            <h2 id="finance-priorities-heading" className="text-sm sm:text-base font-bold text-foreground">
+              Qué requiere atención hoy
+            </h2>
           </div>
           {summary.complete ? (
-            <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs gap-1 hidden sm:flex">
+            <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs gap-1 hidden sm:flex font-semibold">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Costos completos
             </Badge>
@@ -632,10 +731,10 @@ export function FinanceSummary({
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <PriorityAction
             title="Pagos vencidos"
-            description="Regularizá obligaciones atrasadas para evitar recargos."
+            description="Regularizá obligaciones atrasadas para evitar recargos o cortes."
             count={summary.overdue.length}
             tone={summary.overdue.length > 0 ? 'urgent' : 'default'}
-            action="Ver gastos"
+            action="Ver gastos vencidos"
             onClick={onViewExpenses}
             icon={CircleAlert}
           />
@@ -643,22 +742,22 @@ export function FinanceSummary({
             title="Próximos vencimientos"
             description="Planificá los pagos y compromisos de los próximos días."
             count={summary.upcomingDue.length}
-            action="Ver gastos"
+            action="Ver calendario de gastos"
             onClick={onViewExpenses}
             icon={CalendarClock}
           />
           <PriorityAction
             title="Datos pendientes"
-            description="Completá costos para medir la ganancia real sin desvíos."
+            description="Completá costos unitarios para medir la ganancia real sin desvíos."
             count={coverageWarnings.length}
             tone={coverageWarnings.length > 0 ? 'urgent' : 'default'}
-            action="Revisar rentabilidad"
+            action="Auditar rentabilidad"
             onClick={onViewProfitability}
             icon={AlertTriangle}
           />
           <PriorityAction
             title="Nómina del equipo"
-            description="Prepará, aprobá y registrá pagos al personal y comisiones."
+            description="Revisá comisiones de venta y generá la liquidación salarial."
             action="Administrar nómina"
             onClick={onViewPayroll}
             icon={Users}

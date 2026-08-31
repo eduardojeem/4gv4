@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   Building2,
@@ -309,7 +309,10 @@ export function FinanceSettingsPanel({
     }
   }, [organizationId])
 
+  const loadSeqRef = useRef(0)
+
   const load = useCallback(async () => {
+    const requestId = ++loadSeqRef.current
     setIsLoading(true)
     const params = new URLSearchParams({ organizationId })
     if (branchId) params.set('branchId', branchId)
@@ -319,6 +322,9 @@ export function FinanceSettingsPanel({
     ])
     const ep = (await employeeResponse.json().catch(() => null)) as { employees?: Employee[]; error?: string } | null
     const rp = (await ruleResponse.json().catch(() => null)) as { rules?: Rule[]; error?: string } | null
+
+    // Ignora respuestas de una sucursal/organización que ya no es la seleccionada.
+    if (requestId !== loadSeqRef.current) return
 
     if (!employeeResponse.ok || !ruleResponse.ok) {
       setError(ep?.error ?? rp?.error ?? 'No se pudo cargar la configuración.')

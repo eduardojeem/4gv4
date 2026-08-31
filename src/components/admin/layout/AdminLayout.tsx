@@ -39,6 +39,7 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { cn } from '@/lib/utils'
 
 interface AdminLayoutProps {
@@ -53,6 +54,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
   const [loading, setLoading] = useState(false)
   const { sidebarCollapsed: collapsed, toggleSidebar } = useAdminLayout()
   const { hasPermission, isAdmin, isSuperAdmin, user, signOut } = useAuth()
+  const { modules: planModules } = useSubscriptionStatus()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -60,9 +62,11 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
   const active = searchParams.get('tab') ?? 'overview'
   const currentItem = useMemo(() => getNavItemByKey(active), [active])
 
+  // Oculta del menú las secciones cuyo módulo no está incluido en el plan activo
+  // (ej. Analytics, Inventario avanzado, Seguridad si el plan no las trae).
   const visibleCategories = useMemo(
-    () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin, isSuperAdmin),
-    [hasPermission, isAdmin, isSuperAdmin]
+    () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin, isSuperAdmin, planModules),
+    [hasPermission, isAdmin, isSuperAdmin, planModules]
   )
 
   const searchableItems = useMemo(

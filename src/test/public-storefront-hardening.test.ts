@@ -41,6 +41,10 @@ const organizationReviews = readFileSync(
   resolve(workspace, 'src/components/public/inicio/OrganizationReviews.tsx'),
   'utf8'
 )
+const productCard = readFileSync(
+  resolve(workspace, 'src/components/public/ProductCard.tsx'),
+  'utf8'
+)
 const servicesPage = readFileSync(
   resolve(workspace, 'src/app/(public)/servicios/ServicesPageClient.tsx'),
   'utf8'
@@ -106,8 +110,14 @@ describe('public storefront hardening', () => {
 
   it('keeps one main landmark and hides the closed mobile menu from assistive technology', () => {
     expect(publicLayout).not.toContain('<main id="main-content"')
-    expect(publicHeader).toContain('inert={!mobileMenuOpen}')
-    expect(publicHeader).toContain('aria-hidden={!mobileMenuOpen}')
+    // El panel dejo de estar siempre montado con `inert`: ahora se renderiza
+    // solo cuando el menu esta abierto, asi que cerrado no existe en el DOM
+    // para nadie. Es una garantia mas fuerte que la anterior.
+    expect(publicHeader).toContain('{mobileMenuOpen && (')
+    expect(publicHeader).toContain('id="public-mobile-menu"')
+    // Sin el panel siempre montado, estos atributos quedarian fijos en false.
+    expect(publicHeader).not.toContain('inert={!mobileMenuOpen}')
+    expect(publicHeader).not.toContain('aria-hidden={!mobileMenuOpen}')
   })
 
   it('keeps the category skeleton stable through the first client render', () => {
@@ -115,13 +125,20 @@ describe('public storefront hardening', () => {
   })
 
   it('keeps home product cards readable on narrow screens', () => {
-    expect(featuredProducts).toContain('grid grid-cols-1 gap-4 sm:grid-cols-2')
-    expect(featuredProducts).not.toContain('grid grid-cols-2 gap-4')
+    // Dos columnas en movil es deliberado (estandar en comercio movil y muestra
+    // el doble de productos por pantalla). Lo que hace falta cuidar es que la
+    // tarjeta aguante ~138px de ancho a 320px sin desbordarse.
+    expect(featuredProducts).toContain('grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4')
+    expect(productCard).toContain('line-clamp-2')
+    expect(productCard).toContain('truncate')
   })
 
-  it('keeps the secondary hero panel out of the mobile first viewport', () => {
-    expect(heroSection).toContain('hidden lg:flex')
-    expect(heroSection).toContain('py-10 text-white sm:py-14 lg:py-16')
+  it('keeps the duplicated hero panel content out of the mobile viewport', () => {
+    // La tarjeta comercial se muestra en movil, pero sin la identidad de la
+    // tienda (ya esta en el header) ni los accesos rapidos (repiten los CTA del
+    // hero): en movil solo quedan las estadisticas y el horario.
+    expect(heroSection).toContain('hidden lg:flex items-center gap-3.5')
+    expect(heroSection).toContain('hidden lg:block space-y-2')
   })
 
   it('keeps cached reviews stable during hydration', () => {

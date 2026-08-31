@@ -445,7 +445,8 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
           <div
             id="public-mobile-menu"
             ref={mobileMenuRef}
-            aria-hidden={!mobileMenuOpen}
+            // Sin aria-hidden: este panel solo se monta cuando el menu esta
+            // abierto, asi que cerrado no existe en el DOM para nadie.
             className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xs flex-col bg-card p-6 shadow-2xl border-l border-border/80 transition-transform duration-300 animate-in slide-in-from-right"
           >
             {/* Cabecera del Drawer con Logo y Botón Cerrar */}

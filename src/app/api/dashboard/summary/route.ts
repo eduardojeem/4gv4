@@ -4,6 +4,7 @@ import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolveBranchScopeForUser } from '@/lib/branches/server'
 import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
+import type { RepairStatus } from '@/types/repairs'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
 
 type SaleRow = { id: string; total_amount: number | null; status: string; created_at: string }
@@ -144,7 +145,9 @@ export async function GET(request: NextRequest) {
     customersNew: { count: customers.length, trend: trendFor(customers, () => 1) },
     catalog: { total: products.length, products: physicalProducts.length, services: services.length, lowStock: physicalProducts.filter((item) => Number(item.stock_quantity ?? 0) <= Number(item.min_stock ?? 5)).length },
     repairs: {
-      active: repairs.filter((item) => ACTIVE_REPAIR_STATUSES.includes(item.status as never)).length,
+      // ACTIVE_REPAIR_STATUSES es un Set: `.includes` no existe y tiraba
+      // TypeError en tiempo de ejecucion. El resto del codigo ya usa `.has`.
+      active: repairs.filter((item) => ACTIVE_REPAIR_STATUSES.has(item.status as RepairStatus)).length,
       today: { count: repairsToday.length, amount: repairsToday.reduce((sum, item) => sum + repairAmount(item), 0) },
       delivered: { count: repairsDelivered.length, amount: repairsDelivered.reduce((sum, item) => sum + repairAmount(item), 0) },
       ready: { count: repairsReady.length, amount: repairsReady.reduce((sum, item) => sum + repairAmount(item), 0) },

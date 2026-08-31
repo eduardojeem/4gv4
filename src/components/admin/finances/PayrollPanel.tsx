@@ -703,6 +703,7 @@ export function PayrollPanel({
   const [confirmingRunId, setConfirmingRunId] = useState<string | null>(null)
   const [isOrganizationWide, setIsOrganizationWide] = useState(false)
   const prevBranchIdRef = useRef(branchId)
+  const loadRunsSeqRef = useRef(0)
 
   useEffect(() => {
     if (prevBranchIdRef.current !== branchId) {
@@ -729,6 +730,7 @@ export function PayrollPanel({
     : 1
 
   const loadRuns = useCallback(async () => {
+    const requestId = ++loadRunsSeqRef.current
     const params = new URLSearchParams({
       organizationId,
       periodFrom: filters.startDate,
@@ -737,6 +739,9 @@ export function PayrollPanel({
     if (activeBranchId) params.set('branchId', activeBranchId)
     const response = await fetch(`/api/admin/finances/payroll/runs?${params.toString()}`)
     const payload = (await response.json().catch(() => null)) as { runs?: PayrollRun[]; error?: string } | null
+    // Ignorar si mientras tanto se disparó un pedido más nuevo (cambio rápido de
+    // sucursal/alcance): evita que una respuesta vieja pise el estado actual.
+    if (requestId !== loadRunsSeqRef.current) return
     if (!response.ok) {
       setError(payload?.error ?? 'No se pudieron cargar las nóminas.')
       return

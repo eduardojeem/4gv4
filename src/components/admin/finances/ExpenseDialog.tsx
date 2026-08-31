@@ -37,6 +37,24 @@ function getTodayIso() {
 }
 const TODAY_ISO = getTodayIso()
 
+function decimalPlaces(value: string) {
+  const dotIndex = value.indexOf('.')
+  return dotIndex === -1 ? 0 : value.length - dotIndex - 1
+}
+
+/** Mismo rango que valida el servidor (daysBetween): entre 0 y 366 días. Se
+ *  valida acá también para avisar en el momento, no después de un viaje al servidor. */
+function validateDueDate(accountingDate: string, dueDate: string): string | null {
+  if (!dueDate) return null
+  const start = Date.parse(`${accountingDate}T00:00:00Z`)
+  const end = Date.parse(`${dueDate}T00:00:00Z`)
+  if (Number.isNaN(start) || Number.isNaN(end)) return null
+  const days = Math.round((end - start) / 86_400_000)
+  if (days < 0) return 'La fecha de vencimiento no puede ser anterior a la fecha contable.'
+  if (days > 366) return 'La fecha de vencimiento no puede superar los 366 días desde la fecha contable.'
+  return null
+}
+
 export type EditableObligation = {
   id: string
   concept: string | null
@@ -90,9 +108,11 @@ export function ExpenseDialog({
     const formData = new FormData(event.currentTarget)
 
     const concept = String(formData.get('concept') ?? '').trim()
-    const amount = Number(formData.get('amount'))
+    const rawAmount = String(formData.get('amount') ?? '').trim()
+    const amount = Number(rawAmount)
     const categoryId = String(formData.get('categoryId') ?? '')
     const accountingDate = String(formData.get('accountingDate') ?? '')
+    const dueDate = String(formData.get('dueDate') ?? '')
 
     if (!concept) {
       setError('Ingresá un concepto para el gasto.')
@@ -100,6 +120,10 @@ export function ExpenseDialog({
     }
     if (!Number.isFinite(amount) || amount <= 0) {
       setError('Ingresá un monto mayor a 0.')
+      return
+    }
+    if (decimalPlaces(rawAmount) > 2) {
+      setError('El importe no puede tener más de dos decimales.')
       return
     }
     if (!categoryId) {
@@ -112,6 +136,11 @@ export function ExpenseDialog({
     }
     if (!accountingDate) {
       setError('Indicá la fecha contable.')
+      return
+    }
+    const dueDateError = validateDueDate(accountingDate, dueDate)
+    if (dueDateError) {
+      setError(dueDateError)
       return
     }
     if (recurring && !String(formData.get('recurrenceStartsOn') ?? '')) {
@@ -511,7 +540,8 @@ export function EditExpenseDialog({
 
     const formData = new FormData(event.currentTarget)
     const concept = String(formData.get('concept') ?? '').trim()
-    const amount = Number(formData.get('amount'))
+    const rawAmount = String(formData.get('amount') ?? '').trim()
+    const amount = Number(rawAmount)
     const categoryId = String(formData.get('categoryId') ?? '')
     const accountingDate = String(formData.get('accountingDate') ?? '')
     const dueDate = String(formData.get('dueDate') ?? '') || null
@@ -520,8 +550,11 @@ export function EditExpenseDialog({
 
     if (!concept) return setError('Ingresá un concepto para el gasto.')
     if (!Number.isFinite(amount) || amount <= 0) return setError('Ingresá un monto mayor a 0.')
+    if (decimalPlaces(rawAmount) > 2) return setError('El importe no puede tener más de dos decimales.')
     if (!categoryId) return setError('Elegí una categoría.')
     if (!accountingDate) return setError('Indicá la fecha contable.')
+    const dueDateError = validateDueDate(accountingDate, dueDate ?? '')
+    if (dueDateError) return setError(dueDateError)
 
     setIsSubmitting(true)
     setError(null)

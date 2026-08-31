@@ -89,6 +89,13 @@ export const paymentInputSchema = paymentDetailsSchema
 
 export const payrollRunIdSchema = uuidSchema
 
+/**
+ * Tope del periodo de nomina. La vista previa recorre dia por dia y por cada
+ * empleado, asi que un rango abierto (ej. 1900 a 2100) es trabajo cuadratico
+ * sin ningun caso de uso real: una corrida cubre a lo sumo un par de meses.
+ */
+const MAX_PAYROLL_PERIOD_DAYS = 366
+
 export const payrollPreviewQuerySchema = z
   .object({
     periodFrom: accountingDateSchema,
@@ -99,6 +106,15 @@ export const payrollPreviewQuerySchema = z
     message: 'El periodo de nómina es inválido.',
     path: ['periodTo'],
   })
+  .refine(
+    (input) =>
+      (Date.parse(`${input.periodTo}T00:00:00Z`) - Date.parse(`${input.periodFrom}T00:00:00Z`))
+        / 86_400_000 <= MAX_PAYROLL_PERIOD_DAYS,
+    {
+      message: `El periodo de nómina no puede superar los ${MAX_PAYROLL_PERIOD_DAYS} días.`,
+      path: ['periodTo'],
+    },
+  )
 
 export const payrollGenerationInputSchema = payrollPreviewQuerySchema
 

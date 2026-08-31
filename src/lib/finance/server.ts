@@ -367,6 +367,41 @@ export async function listFinanceCategories(
   return data ?? []
 }
 
+/**
+ * Sesiones de caja abiertas de una sucursal. Se usa para que el usuario elija
+ * la sesión desde una lista en vez de tener que copiar/pegar un UUID a mano.
+ */
+export async function listOpenCashSessions(organizationId: string, branchId: string) {
+  const admin = createAdminSupabase()
+  const { data: sessions, error } = await admin
+    .from('cash_closures')
+    .select('id, register_id, opening_balance, created_at')
+    .eq('organization_id', organizationId)
+    .eq('branch_id', branchId)
+    .is('date', null)
+    .order('created_at', { ascending: false })
+
+  if (error) throw toFinanceApiError(error)
+  const rows = sessions ?? []
+  if (!rows.length) return []
+
+  const registerIds = [...new Set(rows.map((row) => row.register_id))]
+  const { data: registers } = await admin
+    .from('cash_registers')
+    .select('id, name')
+    .eq('organization_id', organizationId)
+    .in('id', registerIds)
+
+  const registerNameById = new Map((registers ?? []).map((register) => [register.id, register.name]))
+
+  return rows.map((row) => ({
+    id: row.id as string,
+    registerName: registerNameById.get(row.register_id) ?? 'Caja',
+    openingBalance: Number(row.opening_balance) || 0,
+    openedAt: row.created_at as string,
+  }))
+}
+
 async function loadFinanceCategory(organizationId: string, categoryId: string) {
   const admin = createAdminSupabase()
   const { data, error } = await admin
@@ -404,6 +439,41 @@ function daysBetween(start: string, end?: string) {
   }
 
   return days
+}
+
+export const DEFAULT_FINANCE_TIMEZONE = 'America/Asuncion'
+
+/**
+ * Dia calendario de un instante en la zona horaria del negocio.
+ *
+ * Las fechas contables y de vencimiento son dias sueltos (`yyyy-MM-dd`), no
+ * instantes: compararlas contra el dia UTC marca una obligacion como vencida
+ * horas antes de que termine el dia local en zonas al oeste de Greenwich.
+ */
+export function toOrganizationDay(date: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const value = (type: string) => parts.find((part) => part.type === type)?.value
+  return `${value('year')}-${value('month')}-${value('day')}`
+}
+
+async function loadOrganizationTimezone(organizationId: string): Promise<string> {
+  const admin = createAdminSupabase()
+  const { data } = await admin
+    .from('organization_settings')
+    .select('timezone')
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+  return data?.timezone || DEFAULT_FINANCE_TIMEZONE
+}
+
+/** Hoy segun el calendario del negocio, para decidir si algo esta vencido. */
+async function resolveOrganizationToday(organizationId: string): Promise<string> {
+  return toOrganizationDay(new Date(), await loadOrganizationTimezone(organizationId))
 }
 
 export async function createObligation(params: {
@@ -451,7 +521,7 @@ export async function createObligation(params: {
   }
 
   const status =
-    input.dueDate && input.dueDate < new Date().toISOString().slice(0, 10)
+    input.dueDate && input.dueDate < (await resolveOrganizationToday(organizationId))
       ? 'overdue'
       : 'pending'
   const { data, error } = await admin
@@ -571,7 +641,7 @@ export async function updateUnpaidObligation(params: {
     ...buildUnpaidObligationUpdate(
       current as CurrentUnpaidObligation,
       input,
-      new Date().toISOString().slice(0, 10),
+      await resolveOrganizationToday(organizationId),
     ),
     updated_by: userId,
   }
@@ -666,14 +736,16 @@ export async function assertFinanceEmployeeMembership(params: {
 
 export async function listFinanceEmployees(organizationId: string) {
   const admin = createAdminSupabase()
-  const { data: members, error } = await admin
+  const { data: members, error, count } = await admin
     .from('organization_members')
-    .select('user_id, role, status, created_at')
+    .select('user_id, role, status, created_at', { count: 'exact' })
     .eq('organization_id', organizationId)
     .neq('role', 'customer')
     .order('created_at', { ascending: true })
+    .limit(FINANCE_REPORT_QUERY_LIMIT)
 
   if (error) throw toFinanceApiError(error)
+  assertBoundedFinanceRows(members as unknown[] | null, 'empleados', count)
   if (!members?.length) return []
 
   const userIds = members.map((m) => m.user_id)
@@ -700,13 +772,18 @@ export async function listEmployeeCompensation(
   const admin = createAdminSupabase()
   let query = admin
     .from('employee_compensation')
-    .select('id, organization_id, employee_id, base_salary, pay_frequency, effective_from, effective_to, created_at, updated_at')
+    .select(
+      'id, organization_id, employee_id, base_salary, pay_frequency, effective_from, effective_to, created_at, updated_at',
+      { count: 'exact' },
+    )
     .eq('organization_id', organizationId)
     .order('effective_from', { ascending: false })
+    .limit(FINANCE_REPORT_QUERY_LIMIT)
 
   if (employeeId) query = query.eq('employee_id', employeeId)
-  const { data, error } = await query
+  const { data, error, count } = await query
   if (error) throw toFinanceApiError(error)
+  assertBoundedFinanceRows(data as unknown[] | null, 'compensaciones', count)
   return data ?? []
 }
 
@@ -749,22 +826,29 @@ export async function updateEmployeeCompensation(params: {
     employeeId: params.input.employeeId,
   })
   const admin = createAdminSupabase()
+  // El empleado de una compensación es inmutable: se filtra por `employee_id`
+  // en vez de escribirlo, para que un PATCH no pueda mover el historial salarial
+  // de un empleado a otro. Corregir de empleado exige borrar y volver a crear.
   const { data, error } = await admin
     .from('employee_compensation')
     .update({
-      employee_id: params.input.employeeId,
       base_salary: params.input.baseSalary,
       effective_from: params.input.effectiveFrom,
       effective_to: params.input.effectiveTo ?? null,
     })
     .eq('organization_id', params.organizationId)
     .eq('id', params.id)
+    .eq('employee_id', params.input.employeeId)
     .select('*')
     .maybeSingle()
 
   if (error) throw toFinanceApiError(error)
   if (!data) {
-    throw new FinanceApiError('La compensación no existe.', 404, 'PAYROLL_COMPENSATION_NOT_FOUND')
+    throw new FinanceApiError(
+      'La compensación no existe o pertenece a otro empleado.',
+      404,
+      'PAYROLL_COMPENSATION_NOT_FOUND',
+    )
   }
   return data
 }
@@ -793,14 +877,19 @@ export async function listCommissionRules(
   const admin = createAdminSupabase()
   let query = admin
     .from('commission_rules')
-    .select('id, organization_id, branch_id, scope_type, role, employee_id, source_type, source_reference_id, accrual_status, calculation_type, value, status, effective_from, effective_to, approved_by, approved_at, created_at, updated_at')
+    .select(
+      'id, organization_id, branch_id, scope_type, role, employee_id, source_type, source_reference_id, accrual_status, calculation_type, value, status, effective_from, effective_to, approved_by, approved_at, created_at, updated_at',
+      { count: 'exact' },
+    )
     .eq('organization_id', organizationId)
     .order('effective_from', { ascending: false })
+    .limit(FINANCE_REPORT_QUERY_LIMIT)
 
   if (filters.employeeId) query = query.eq('employee_id', filters.employeeId)
   if (filters.branchId) query = query.eq('branch_id', filters.branchId)
-  const { data, error } = await query
+  const { data, error, count } = await query
   if (error) throw toFinanceApiError(error)
+  assertBoundedFinanceRows(data as unknown[] | null, 'reglas de comision', count)
   return data ?? []
 }
 
@@ -1068,17 +1157,9 @@ export async function getPayrollPreview(
     (record) => !claimedCommissionIds.has(record.id),
   )
   const payrollDays = eachDay(input.periodFrom, input.periodTo)
-  const timezone = settingsResult.data?.timezone ?? 'America/Asuncion'
-  const payrollDayForEvent = (occurredAt: string) => {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(new Date(occurredAt))
-    const value = (type: string) => parts.find((part) => part.type === type)?.value
-    return `${value('year')}-${value('month')}-${value('day')}`
-  }
+  const timezone = settingsResult.data?.timezone || DEFAULT_FINANCE_TIMEZONE
+  const payrollDayForEvent = (occurredAt: string) =>
+    toOrganizationDay(new Date(occurredAt), timezone)
   const employmentByEmployee = new Map<string, typeof employmentResult.data>()
   for (const event of employmentResult.data ?? []) {
     const events = employmentByEmployee.get(event.employee_id) ?? []

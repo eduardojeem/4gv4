@@ -14,6 +14,7 @@ import {
     WalletCards,
     type LucideIcon
 } from 'lucide-react'
+import type { OrganizationModule } from '@/lib/organization/business-profile'
 
 /**
  * Configuración de navegación del panel de administración
@@ -29,6 +30,8 @@ export interface NavItem {
     description?: string
     /** If true, only super_admin users can see and access this item */
     superAdminOnly?: boolean
+    /** Módulo del plan requerido para ver este item. Si el plan activo (efectivo) no lo incluye, se oculta. */
+    module?: OrganizationModule
 }
 
 export interface NavCategory {
@@ -56,12 +59,21 @@ export const adminNavCategories: NavCategory[] = [
                 permissions: [] // Accesible para todos los admins
             },
             {
+                key: 'finances',
+                label: 'Finanzas',
+                icon: WalletCards,
+                href: '/admin/finances',
+                description: 'Gestión de gastos, nómina y rentabilidad',
+                permissions: ['finances.read']
+            },
+            {
                 key: 'analytics',
                 label: 'Analytics',
                 icon: BarChart3,
                 href: '/admin/analytics',
                 description: 'Análisis avanzado de datos',
-                permissions: ['analytics.read']
+                permissions: ['analytics.read'],
+                module: 'analytics'
             }
         ]
     },
@@ -83,7 +95,8 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Package,
                 href: '/admin/inventory',
                 description: 'Gestión de productos y stock',
-                permissions: ['inventory.read']
+                permissions: ['inventory.read'],
+                module: 'inventory_admin'
             },
             {
                 key: 'reports',
@@ -116,14 +129,6 @@ export const adminNavCategories: NavCategory[] = [
                 permissions: ['settings.read']
             },
             {
-                key: 'finances',
-                label: 'Finanzas',
-                icon: WalletCards,
-                href: '/admin/finances',
-                description: 'Gestión de gastos, nómina y rentabilidad',
-                permissions: ['finances.read']
-            },
-            {
                 key: 'subscriptions',
                 label: 'Suscripción',
                 icon: CreditCard,
@@ -153,7 +158,8 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Shield,
                 href: '/admin/security',
                 description: 'Logs de seguridad y auditoría',
-                permissions: ['settings.read']
+                permissions: ['settings.read'],
+                module: 'security'
             },
             {
                 key: 'settings',
@@ -192,16 +198,25 @@ export function getCategoryByItemKey(key: string): NavCategory | undefined {
 
 /**
  * Filtra items de navegación por permisos del usuario
+ * @param effectiveModules Módulos que el plan activo (ya descontada la selección de la
+ *   organización) habilita realmente. Si se omite, no se aplica filtro por plan.
  */
 export function filterNavItemsByPermissions(
     items: NavItem[],
     hasPermission: (permission: string) => boolean,
     isAdmin: boolean,
-    isSuperAdmin: boolean = false
+    isSuperAdmin: boolean = false,
+    effectiveModules?: readonly string[]
 ): NavItem[] {
     return items.filter(item => {
         // Super-admin-only items: only visible to super_admin
         if (item.superAdminOnly && !isSuperAdmin) {
+            return false
+        }
+
+        // Items atados a un módulo del plan: ocultar si el plan activo no lo incluye,
+        // sin importar el rol (un admin tampoco debería ver secciones fuera de su plan).
+        if (item.module && effectiveModules && !effectiveModules.includes(item.module)) {
             return false
         }
 
@@ -228,12 +243,13 @@ export function filterCategoriesByPermissions(
     categories: NavCategory[],
     hasPermission: (permission: string) => boolean,
     isAdmin: boolean,
-    isSuperAdmin: boolean = false
+    isSuperAdmin: boolean = false,
+    effectiveModules?: readonly string[]
 ): NavCategory[] {
     return categories
         .map(category => ({
             ...category,
-            items: filterNavItemsByPermissions(category.items, hasPermission, isAdmin, isSuperAdmin)
+            items: filterNavItemsByPermissions(category.items, hasPermission, isAdmin, isSuperAdmin, effectiveModules)
         }))
         .filter(category => category.items.length > 0)
 }

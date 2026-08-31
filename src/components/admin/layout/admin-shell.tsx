@@ -14,6 +14,7 @@ import { Menu, MoreVertical, Download, Upload, PlusCircle, RefreshCw, ChevronDow
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useAuth } from '@/contexts/auth-context'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
 import { cn } from '@/lib/utils'
 
@@ -32,11 +33,12 @@ export function AdminShell({ active, onNavigate, topRightActions, onContextActio
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration'])
   const { hasPermission, isAdmin } = useAuth()
   const { sidebarCollapsed: collapsed, toggleSidebar } = useAdminLayout()
+  const { modules: planModules } = useSubscriptionStatus()
 
-  // Filtrar categorías basado en permisos del usuario
+  // Filtrar categorías basado en permisos del usuario y en los módulos del plan activo
   const visibleCategories = useMemo(
-    () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin),
-    [hasPermission, isAdmin]
+    () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin, false, planModules),
+    [hasPermission, isAdmin, planModules]
   )
 
   const currentItem = useMemo(() => getNavItemByKey(active), [active])

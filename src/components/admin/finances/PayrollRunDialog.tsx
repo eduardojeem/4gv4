@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Calendar, CheckCircle2, Coins, Loader2, Sparkles, User, Users } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -63,6 +63,19 @@ export function PayrollRunDialog({
   const query = new URLSearchParams({ organizationId, periodFrom, periodTo })
   if (branchId) query.set('branchId', branchId)
 
+  // El diálogo queda montado entre aperturas (solo cambia `open`), así que sin
+  // este resync el período quedaría "congelado" en el filtro vigente quando se
+  // montó la primera vez, aunque el usuario después haya cambiado el rango de
+  // fechas arriba en Finanzas.
+  useEffect(() => {
+    if (!open) return
+    setPeriodFrom(filters.startDate)
+    setPeriodTo(filters.endDate)
+    setPreview(null)
+    setError(null)
+    idempotencyKeyRef.current = null
+  }, [open, filters.startDate, filters.endDate])
+
   async function loadPreview() {
     setIsLoadingPreview(true)
     setError(null)
@@ -115,6 +128,9 @@ export function PayrollRunDialog({
         </DialogHeader>
 
         <div className="p-6 space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Por defecto usa el período seleccionado arriba en Finanzas. Podés ajustarlo acá para esta nómina en particular.
+          </p>
           {/* Selector de Rango de Período */}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">

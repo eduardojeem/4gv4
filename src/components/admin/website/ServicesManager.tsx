@@ -20,7 +20,7 @@ import {
   Tag, Timer, ExternalLink, Star, ChevronDown, ChevronUp, Globe2,
   ListTodo, LayoutGrid, Rocket, Lightbulb
 } from 'lucide-react'
-import { Service, ServicesSectionSettings } from '@/types/website-settings'
+import { Service, ServicesSectionSettings, type WebsiteSettings } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getActivePublicServices } from '@/lib/website/services'
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'

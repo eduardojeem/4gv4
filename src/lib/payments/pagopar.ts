@@ -1,9 +1,10 @@
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 
 const PAGOPAR_API_BASE_URL = 'https://api.pagopar.com/api'
 const PAGOPAR_CHECKOUT_BASE_URL = 'https://www.pagopar.com/pagos'
 const PAGOPAR_ORDER_QUERY_URL = `${PAGOPAR_API_BASE_URL}/pedidos/1.1/traer`
 const PAGOPAR_QUERY_TIMEOUT_MS = 10_000
+const PAGOPAR_CREATE_TIMEOUT_MS = 15_000
 
 export type PagoparPaymentMethod = 'card' | 'qr'
 
@@ -29,6 +30,7 @@ type CreatePagoparOrderInput = {
   externalReference: string
   itemId: number
   paymentMethod: PagoparPaymentMethod
+  correlationId?: string
 }
 
 type PagoparCreateResponse = {
@@ -36,6 +38,35 @@ type PagoparCreateResponse = {
   providerOrderId: string | null
   hash: string
   raw: unknown
+}
+
+export class PagoparOrderCreationError extends Error {
+  constructor(
+    message: string,
+    readonly correlationId: string,
+  ) {
+    super(message)
+    this.name = 'PagoparOrderCreationError'
+  }
+}
+
+type PagoparCreatePayload = {
+  respuesta?: boolean
+  resultado?: unknown
+}
+
+type PagoparCreateLog = {
+  correlationId: string
+  event: 'success' | 'http_error' | 'timeout' | 'network_error'
+  httpStatus: number | null
+  contentType: string | null
+  respuesta: boolean | null
+  resultType: string
+  resultMessage: string | null
+  paymentMethodId: number
+  amountPyg: number
+  externalReference: string
+  durationMs: number
 }
 
 type PagoparOrderQueryItem = {
@@ -235,6 +266,66 @@ function normalizePagoparError(message: string) {
   return message
 }
 
+function redactKnownSecrets(value: string) {
+  const secrets = [process.env.PAGOPAR_PRIVATE_KEY, process.env.PAGOPAR_PUBLIC_KEY]
+    .filter((secret): secret is string => Boolean(secret && secret.length >= 4))
+  return secrets.reduce((sanitized, secret) => sanitized.split(secret).join('[REDACTED]'), value)
+}
+
+function sanitizeProviderMessage(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const withoutControlCharacters = value.replace(/[\u0000-\u001F\u007F]/g, ' ').trim()
+  if (!withoutControlCharacters || /<\/?[a-z][\s\S]*>/i.test(withoutControlCharacters)) return null
+  return redactKnownSecrets(withoutControlCharacters)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]')
+    .replace(/\+?\d[\d\s().-]{5,}\d/g, '[REDACTED_NUMBER]')
+    .slice(0, 300)
+}
+
+function getResultType(result: unknown, rawBody: string, contentType: string | null) {
+  if (!rawBody.trim()) return 'empty'
+  if (contentType?.toLowerCase().includes('text/html') || /^\s*</.test(rawBody)) return 'html'
+  if (result === undefined) return 'missing'
+  if (result === null) return 'null'
+  if (Array.isArray(result)) return 'array'
+  return typeof result
+}
+
+function getResultMessage(result: unknown, resultType: string) {
+  if (resultType === 'html') return 'Respuesta HTML de Pagopar'
+  if (resultType === 'empty') return 'Respuesta vacía de Pagopar'
+  if (resultType === 'invalid_json') return 'Respuesta JSON inválida de Pagopar'
+  if (typeof result === 'string') return sanitizeProviderMessage(result)
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    const record = result as Record<string, unknown>
+    return sanitizeProviderMessage(record.mensaje)
+      || sanitizeProviderMessage(record.message)
+      || sanitizeProviderMessage(record.error)
+      || sanitizeProviderMessage(record.descripcion)
+  }
+  if (Array.isArray(result)) {
+    return result
+      .map((item) => {
+        if (typeof item === 'string') return sanitizeProviderMessage(item)
+        if (!item || typeof item !== 'object') return null
+        const record = item as Record<string, unknown>
+        return sanitizeProviderMessage(record.mensaje)
+          || sanitizeProviderMessage(record.message)
+          || sanitizeProviderMessage(record.error)
+          || sanitizeProviderMessage(record.descripcion)
+      })
+      .find(Boolean) || null
+  }
+  return null
+}
+
+function logPagoparCreation(level: 'info' | 'error', log: PagoparCreateLog) {
+  console[level](
+    level === 'info' ? 'Pagopar order creation completed' : 'Pagopar order creation failed',
+    log,
+  )
+}
+
 export async function createPagoparOrder(input: CreatePagoparOrderInput): Promise<PagoparCreateResponse> {
   const publicKey = requiredEnv('PAGOPAR_PUBLIC_KEY')
   const privateKey = requiredEnv('PAGOPAR_PRIVATE_KEY')
@@ -242,6 +333,9 @@ export async function createPagoparOrder(input: CreatePagoparOrderInput): Promis
   const token = sha1(`${privateKey}${input.externalReference}${String(Number(amount))}`)
   const buyerName = input.buyer.name || input.buyer.businessName || 'Cliente'
   const buyerDocument = normalizeDocument(input.buyer.document || input.buyer.ruc)
+  const correlationId = input.correlationId || randomUUID()
+  const startedAt = Date.now()
+  const paymentMethodId = getPagoparPaymentMethodId(input.paymentMethod)
 
   if (!buyerDocument) {
     throw new Error('Completa el RUC o CI en datos de facturacion antes de pagar con Pagopar.')
@@ -285,32 +379,89 @@ export async function createPagoparOrder(input: CreatePagoparOrderInput): Promis
     fecha_maxima_pago: maxPaymentDate(),
     id_pedido_comercio: input.externalReference,
     descripcion_resumen: input.description,
-    forma_pago: getPagoparPaymentMethodId(input.paymentMethod),
+    forma_pago: paymentMethodId,
   }
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), PAGOPAR_CREATE_TIMEOUT_MS)
 
-  const response = await fetch(`${PAGOPAR_API_BASE_URL}/comercios/2.0/iniciar-transaccion`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  try {
+    const response = await fetch(`${PAGOPAR_API_BASE_URL}/comercios/2.0/iniciar-transaccion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+    const contentType = response.headers.get('content-type')
+    const rawBody = await response.text()
+    let payload: PagoparCreatePayload | null = null
+    let invalidJson = false
 
-  const payload = await response.json().catch(() => null) as {
-    respuesta?: boolean
-    resultado?: Array<{ data?: string; pedido?: string | number }> | string
-  } | null
+    if (rawBody.trim() && !contentType?.toLowerCase().includes('text/html') && !/^\s*</.test(rawBody)) {
+      try {
+        payload = JSON.parse(rawBody) as PagoparCreatePayload
+      } catch {
+        invalidJson = true
+      }
+    }
 
-  if (!response.ok || !payload?.respuesta || !Array.isArray(payload.resultado) || !payload.resultado[0]?.data) {
-    const message = typeof payload?.resultado === 'string' ? payload.resultado : 'Pagopar rejected the transaction'
-    throw new Error(normalizePagoparError(message))
-  }
+    const resultType = invalidJson
+      ? 'invalid_json'
+      : getResultType(payload?.resultado, rawBody, contentType)
+    const resultMessage = getResultMessage(payload?.resultado, resultType)
+    const log: PagoparCreateLog = {
+      correlationId,
+      event: response.ok ? 'success' : 'http_error',
+      httpStatus: response.status,
+      contentType,
+      respuesta: typeof payload?.respuesta === 'boolean' ? payload.respuesta : null,
+      resultType,
+      resultMessage,
+      paymentMethodId,
+      amountPyg: amount,
+      externalReference: input.externalReference,
+      durationMs: Date.now() - startedAt,
+    }
+    const result = Array.isArray(payload?.resultado) ? payload.resultado[0] : null
+    const hash = result && typeof result === 'object' && typeof result.data === 'string' ? result.data : null
 
-  const hash = payload.resultado[0].data
+    if (!response.ok || payload?.respuesta !== true || !hash) {
+      logPagoparCreation('error', { ...log, event: 'http_error' })
+      const safeProviderMessage = resultMessage ? normalizePagoparError(resultMessage) : null
+      throw new PagoparOrderCreationError(
+        safeProviderMessage || `No se pudo iniciar el pago. Código: ${correlationId}`,
+        correlationId,
+      )
+    }
 
-  return {
-    checkoutUrl: getPagoparCheckoutUrl(hash, input.paymentMethod),
-    providerOrderId: payload.resultado[0].pedido ? String(payload.resultado[0].pedido) : null,
-    hash,
-    raw: payload,
+    logPagoparCreation('info', log)
+    return {
+      checkoutUrl: getPagoparCheckoutUrl(hash, input.paymentMethod),
+      providerOrderId: result.pedido ? String(result.pedido) : null,
+      hash,
+      raw: payload,
+    }
+  } catch (error) {
+    if (error instanceof PagoparOrderCreationError) throw error
+    const isTimeout = controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')
+    logPagoparCreation('error', {
+      correlationId,
+      event: isTimeout ? 'timeout' : 'network_error',
+      httpStatus: null,
+      contentType: null,
+      respuesta: null,
+      resultType: 'unavailable',
+      resultMessage: isTimeout ? 'Tiempo de espera agotado' : 'Error de red al conectar con Pagopar',
+      paymentMethodId,
+      amountPyg: amount,
+      externalReference: input.externalReference,
+      durationMs: Date.now() - startedAt,
+    })
+    throw new PagoparOrderCreationError(
+      `No se pudo iniciar el pago. Código: ${correlationId}`,
+      correlationId,
+    )
+  } finally {
+    clearTimeout(timeout)
   }
 }
 

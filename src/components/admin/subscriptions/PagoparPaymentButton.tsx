@@ -13,6 +13,15 @@ type PagoparPaymentButtonProps = {
   planAmount: string
 }
 
+type PagoparCheckoutErrorPayload = { error?: string; correlationId?: string } | null
+
+export function getPagoparCheckoutErrorMessage(
+  payload: PagoparCheckoutErrorPayload,
+  requestCorrelationId: string,
+) {
+  return payload?.error || `No se pudo iniciar el pago. Código: ${payload?.correlationId || requestCorrelationId}`
+}
+
 export function PagoparPaymentButton({ missingFields = [], isPaidPlan, planName, planAmount }: PagoparPaymentButtonProps) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
@@ -31,16 +40,20 @@ export function PagoparPaymentButton({ missingFields = [], isPaidPlan, planName,
     setMessage(null)
 
     try {
+      const correlationId = crypto.randomUUID()
       const response = await fetch('/api/admin/subscriptions/payments/pagopar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Correlation-ID': correlationId,
+        },
         body: JSON.stringify({ paymentMethod }),
       })
-      const payload = await response.json().catch(() => null) as { checkoutUrl?: string; error?: string } | null
+      const payload = await response.json().catch(() => null) as ({ checkoutUrl?: string } & PagoparCheckoutErrorPayload) | null
 
       if (!response.ok || !payload?.checkoutUrl) {
         setStatus('error')
-        setMessage(payload?.error || 'No se pudo iniciar el pago con Pagopar.')
+        setMessage(getPagoparCheckoutErrorMessage(payload, correlationId))
         return
       }
 

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { getCategoryByItemKey, getNavItemByKey } from '@/config/admin-navigation'
 
 describe('admin finance navigation', () => {
-  it('exposes Finanzas under Administracion to finance readers', () => {
+  it('exposes Finanzas under Analisis (between Resumen and Analytics) to finance readers', () => {
     const item = getNavItemByKey('finances')
 
     expect(item).toMatchObject({
@@ -13,7 +13,7 @@ describe('admin finance navigation', () => {
       href: '/admin/finances',
       permissions: ['finances.read'],
     })
-    expect(getCategoryByItemKey('finances')?.id).toBe('administration')
+    expect(getCategoryByItemKey('finances')?.id).toBe('analytics')
   })
 
   it('uses the finance icon instead of reusing an operational navigation item', () => {

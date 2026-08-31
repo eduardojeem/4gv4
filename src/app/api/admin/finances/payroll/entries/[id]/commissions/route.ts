@@ -3,10 +3,14 @@ import { z } from 'zod'
 
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import {
+  assertFinanceBranchAccess,
+  getPayrollEntryBranch,
   getPayrollEntryCommissions,
   resolveFinanceOrganizationId,
   toFinanceApiError,
 } from '@/lib/finance/server'
+
+const payrollEntryIdSchema = z.uuid()
 
 const organizationSelectionSchema = z
   .object({ organizationId: z.uuid().optional(), organizationHeader: z.uuid().optional() })
@@ -28,9 +32,11 @@ async function getHandler(
   paramsPromise?: Promise<{ id: string }> | { id: string },
 ) {
   const resolvedParams = paramsPromise instanceof Promise ? await paramsPromise : paramsPromise
-  const entryId = resolvedParams?.id
-  if (!entryId) {
-    return NextResponse.json({ error: 'Falta el identificador de la entrada de nómina.' }, { status: 400 })
+  // Se valida como uuid igual que en las rutas hermanas: sin esto un id con
+  // formato invalido llega a Postgres y vuelve como 500 en vez de 422.
+  const entryId = payrollEntryIdSchema.safeParse(resolvedParams?.id)
+  if (!entryId.success) {
+    return NextResponse.json({ error: 'Identificador de entrada de nómina inválido.' }, { status: 422 })
   }
 
   const selection = organizationSelectionSchema.safeParse(selectionFromRequest(request))
@@ -43,7 +49,13 @@ async function getHandler(
       context,
       selection.data.organizationHeader ?? selection.data.organizationId,
     )
-    const data = await getPayrollEntryCommissions(organizationId, entryId)
+    // Mismo alcance por sucursal que la ruta hermana de pagos: leer el desglose
+    // de comisiones de un empleado es tan sensible como pagarle.
+    const entry = await getPayrollEntryBranch(organizationId, entryId.data)
+    if (entry.branch_id) {
+      await assertFinanceBranchAccess({ context, organizationId, branchId: entry.branch_id })
+    }
+    const data = await getPayrollEntryCommissions(organizationId, entryId.data)
     return NextResponse.json(data)
   } catch (error) {
     const financeError = toFinanceApiError(error)
