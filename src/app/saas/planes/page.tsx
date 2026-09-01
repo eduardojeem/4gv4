@@ -22,7 +22,7 @@ export default async function SaaSPlansPage() {
   // Obtenemos los planes desde la DB, solo los activos, ordenados por precio
   const { data: plans } = await supabase
     .from('subscription_plans')
-    .select('id, tier, name, price, price_note, description, is_popular, is_active, limits, highlights, features, color_config')
+    .select('id, tier, public_slug, name, price, price_note, description, is_popular, is_active, limits, highlights, features, color_config, trial_days')
     .eq('is_active', true)
     .order('price', { ascending: true })
 

@@ -81,37 +81,37 @@ export function RepairCostSummary({
       </div>
 
       <div className="grid gap-3 md:grid-cols-[1fr_1fr_1.2fr]">
-        <dl className="space-y-2 rounded-lg border bg-card p-4 text-sm">
+        <div className="order-1 md:order-3 flex min-h-28 sm:min-h-36 flex-col justify-center rounded-2xl border border-emerald-300 bg-emerald-50 p-4 sm:p-5 dark:border-emerald-900 dark:bg-emerald-950/30 shadow-xs">
+          <p className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-emerald-900 dark:text-emerald-100">Total final</p>
+          <p aria-live="polite" className="mt-1 text-2xl sm:text-3xl font-extrabold tabular-nums text-emerald-700 dark:text-emerald-300">
+            {formatCurrency(summary.finalTotal)}
+          </p>
+          <p className="mt-1 text-[11px] text-emerald-800 dark:text-emerald-200">IVA incluido · no se suma nuevamente</p>
+        </div>
+
+        <dl className="order-2 md:order-1 space-y-2 rounded-2xl border bg-card p-4 text-xs sm:text-sm shadow-xs">
           <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Servicios</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.servicesSubtotal ?? 0)}</dd></div>
           <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Repuestos cobrados</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.chargedPartsSubtotal ?? summary.partsSubtotal)}</dd></div>
           {summary.laborAmount > 0 && <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Mano de obra adicional</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.laborAmount)}</dd></div>}
-          {canViewCost && (summary.includedMaterialsInternalCost ?? 0) > 0 && <div className="rounded-md bg-amber-50 px-2 py-1.5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200"><div className="flex justify-between gap-3"><dt>Material incluido · interno</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.includedMaterialsInternalCost ?? 0)}</dd></div><p className="text-[11px]">Gs. 0 adicionales al cliente</p></div>}
+          {canViewCost && (summary.includedMaterialsInternalCost ?? 0) > 0 && <div className="rounded-xl bg-amber-50 px-2.5 py-1.5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200"><div className="flex justify-between gap-3"><dt>Material incluido · interno</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.includedMaterialsInternalCost ?? 0)}</dd></div><p className="text-[10px]">Gs. 0 adicionales al cliente</p></div>}
           {summary.additionalCharges > 0 && <div className="flex justify-between gap-3"><dt>Cargos adicionales</dt><dd>{formatCurrency(summary.additionalCharges)}</dd></div>}
           <Separator />
-          <div className="flex justify-between gap-3"><dt>Subtotal</dt><dd className="font-semibold">{formatCurrency(summary.subtotalBeforeDiscount)}</dd></div>
-          {(summary.discountAmount + summary.deductions) > 0 && <div className="flex justify-between gap-3 text-rose-600"><dt>Descuentos y deducciones</dt><dd>- {formatCurrency(summary.discountAmount + summary.deductions)}</dd></div>}
+          <div className="flex justify-between gap-3 font-semibold"><dt>Subtotal</dt><dd>{formatCurrency(summary.subtotalBeforeDiscount)}</dd></div>
+          {(summary.discountAmount + summary.deductions) > 0 && <div className="flex justify-between gap-3 text-rose-600 font-semibold"><dt>Descuentos y deducciones</dt><dd>- {formatCurrency(summary.discountAmount + summary.deductions)}</dd></div>}
         </dl>
 
-        <dl className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
-          <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Pagado</dt><dd className="font-semibold text-emerald-700 dark:text-emerald-300">{formatCurrency(summary.paidAmount)}</dd></div>
-          <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Pendiente</dt><dd className="font-semibold text-amber-700 dark:text-amber-300">{formatCurrency(summary.balance)}</dd></div>
+        <dl className="order-3 md:order-2 space-y-2 rounded-2xl border bg-muted/30 p-4 text-xs sm:text-sm shadow-xs">
+          <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Pagado</dt><dd className="font-semibold text-emerald-700 dark:text-emerald-300 tabular-nums">{formatCurrency(summary.paidAmount)}</dd></div>
+          <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Pendiente</dt><dd className="font-semibold text-amber-700 dark:text-amber-300 tabular-nums">{formatCurrency(summary.balance)}</dd></div>
           <Separator />
           {summary.taxBreakdown.length === 0 ? (
-            <p className="text-xs text-muted-foreground">El desglose de IVA se guardará en la próxima revisión.</p>
+            <p className="text-[11px] text-muted-foreground">El desglose de IVA se guardará en la próxima revisión.</p>
           ) : summary.taxBreakdown.map((tax) => (
             <div key={tax.rate} className="flex justify-between gap-3 text-xs">
-              <dt>IVA incluido {tax.rate}%</dt><dd>{formatCurrency(tax.taxAmount)}</dd>
+              <dt className="text-muted-foreground">IVA incluido {tax.rate}%</dt><dd className="tabular-nums font-medium">{formatCurrency(tax.taxAmount)}</dd>
             </div>
           ))}
         </dl>
-
-        <div className="flex min-h-36 flex-col justify-center rounded-lg border border-emerald-300 bg-emerald-50 p-5 dark:border-emerald-900 dark:bg-emerald-950/30">
-          <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">Total final</p>
-          <p aria-live="polite" className="mt-1 text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-            {formatCurrency(summary.finalTotal)}
-          </p>
-          <p className="mt-2 text-xs text-emerald-800 dark:text-emerald-200">IVA incluido · no se suma nuevamente</p>
-        </div>
       </div>
 
       {history.length > 0 && (

@@ -159,16 +159,16 @@ export function DeviceHistoryTimeline({
   return (
     <div className="space-y-4">
       {/* Selector de Vistas del Historial */}
-      <div className="flex items-center gap-2 border-b pb-2 flex-wrap">
+      <div className="flex items-center gap-2 border-b pb-2 overflow-x-auto no-scrollbar whitespace-nowrap -mx-1 px-1">
         <Button
           type="button"
           variant={activeTab === 'timeline' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setActiveTab('timeline')}
-          className="h-8 rounded-xl text-xs font-semibold gap-1.5 cursor-pointer"
+          className="h-8 shrink-0 rounded-xl text-xs font-semibold gap-1.5 cursor-pointer"
         >
           <History className="h-3.5 w-3.5" />
-          <span>Línea de Tiempo del Servicio</span>
+          <span>Línea de Tiempo</span>
         </Button>
 
         <Button
@@ -176,12 +176,12 @@ export function DeviceHistoryTimeline({
           variant={activeTab === 'previous_visits' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setActiveTab('previous_visits')}
-          className="h-8 rounded-xl text-xs font-semibold gap-1.5 cursor-pointer"
+          className="h-8 shrink-0 rounded-xl text-xs font-semibold gap-1.5 cursor-pointer"
         >
           <Smartphone className="h-3.5 w-3.5" />
-          <span>Visitas Anteriores del Celular</span>
+          <span>Visitas Anteriores</span>
           {previousRepairs.length > 0 && (
-            <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0 h-4">
+            <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0 h-4 ml-0.5">
               {previousRepairs.length}
             </Badge>
           )}
@@ -192,10 +192,10 @@ export function DeviceHistoryTimeline({
           variant={activeTab === 'notes' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setActiveTab('notes')}
-          className="h-8 rounded-xl text-xs font-semibold gap-1.5 cursor-pointer"
+          className="h-8 shrink-0 rounded-xl text-xs font-semibold gap-1.5 cursor-pointer"
         >
           <FileText className="h-3.5 w-3.5" />
-          <span>Bitácora Técnica ({localNotes.length})</span>
+          <span>Bitácora ({localNotes.length})</span>
         </Button>
       </div>
 

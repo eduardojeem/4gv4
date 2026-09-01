@@ -26,7 +26,7 @@ import {
   Edit, Printer, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
   PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown,
-  Loader2, Sparkles, History, FileCheck2
+  Loader2, Sparkles, History, FileCheck2, User
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -405,50 +405,63 @@ export function RepairDetailDialog({
             ? "sm:w-[98vw] sm:max-w-[98vw] sm:h-[96vh] sm:max-h-[96vh]"
             : "sm:w-[92vw] sm:max-w-5xl sm:h-[85vh] sm:max-h-[85vh]"
         )}>
-        <DialogHeader data-testid="repair-detail-header" className="border-b bg-muted/20 px-2 py-1.5 sm:px-6 sm:py-3.5 shrink-0">
-          <div className="flex justify-between items-start gap-2 sm:gap-4">
-            <div className="flex items-start gap-2 sm:gap-4 min-w-0">
+        <DialogHeader data-testid="repair-detail-header" className="border-b bg-muted/20 dark:bg-muted/10 backdrop-blur-md px-2.5 py-1.5 sm:px-6 sm:py-2.5 shrink-0">
+          <div className="flex justify-between items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               <div className={cn(
-                "hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm",
+                "hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-xs",
                 statusConfig[repair.status]?.bgColor || 'bg-slate-500'
               )}>
-                <DeviceIcon className="h-6 w-6" />
+                <DeviceIcon className="h-5 w-5" />
               </div>
-              <div className="min-w-0 space-y-1 sm:space-y-1.5">
+              <div className="min-w-0 space-y-0.5">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <Badge variant="outline" className="bg-background font-mono text-xs">
+                  <Badge variant="outline" className="bg-background/90 font-mono text-[10px] sm:text-xs rounded-md px-1.5 py-0 border-border/70">
                     #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
                   </Badge>
-                  <Badge className={cn("gap-1", statusConfig[repair.status]?.color || 'bg-slate-100 text-slate-800')}>
-                    <StatusIcon className="h-3.5 w-3.5" />
+                  {repair.customer?.name && (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 text-[10px] sm:text-xs font-bold px-2 py-0 max-w-[150px] sm:max-w-[240px] truncate bg-primary/10 text-primary border-primary/30 dark:bg-primary/20 dark:text-sky-300 dark:border-primary/40 shadow-xs"
+                      title={`Cliente: ${repair.customer.name}`}
+                    >
+                      <User className="h-3 w-3 text-primary shrink-0" />
+                      <span className="truncate">{repair.customer.name}</span>
+                    </Badge>
+                  )}
+                  <Badge className={cn("gap-1 text-[10px] sm:text-xs rounded-md font-semibold px-2 py-0", statusConfig[repair.status]?.color || 'bg-slate-100 text-slate-800')}>
+                    <StatusIcon className="h-3 w-3" />
                     {statusConfig[repair.status]?.label || repair.status || 'En Proceso'}
                   </Badge>
                   {(repair.priority ? priorityConfig[repair.priority] : null) ? (
-                    <Badge variant="outline" className={cn('max-sm:hidden', priorityConfig[repair.priority]?.color)}>
-                      Prioridad {priorityConfig[repair.priority]?.label}
+                    <Badge variant="outline" className={cn('max-sm:hidden rounded-md text-[11px] font-semibold py-0', priorityConfig[repair.priority]?.color)}>
+                      {priorityConfig[repair.priority]?.label}
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="max-sm:hidden bg-slate-50 text-slate-600 border-slate-200">
-                      Prioridad Normal
+                    <Badge variant="outline" className="max-sm:hidden bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 rounded-md text-[11px] py-0">
+                      Normal
                     </Badge>
                   )}
                   {repair.urgency && urgencyConfig[repair.urgency] && (
-                    <Badge className={cn('max-sm:hidden', urgencyConfig[repair.urgency]?.color)}>
+                    <Badge className={cn('max-sm:hidden rounded-md text-[11px] font-semibold py-0', urgencyConfig[repair.urgency]?.color)}>
                       {urgencyConfig[repair.urgency]?.label}
                     </Badge>
                   )}
+                  <span className="sm:hidden text-xs text-muted-foreground font-medium truncate max-w-[120px]">
+                    · {repair.brand} {repair.model}
+                  </span>
                 </div>
-                <DialogTitle className="truncate text-base font-bold tracking-tight sm:text-xl">
+                <DialogTitle className="truncate text-sm sm:text-lg font-bold tracking-tight text-foreground leading-snug">
                   {repair.device}
                 </DialogTitle>
-                <DialogDescription data-testid="repair-detail-device-description" className="flex items-center gap-1.5 text-xs max-sm:hidden sm:gap-2 sm:text-sm flex-wrap">
-                  <span>{deviceTypeConfig[repair.deviceType]?.label || repair.deviceType}</span>
-                  <span className="text-muted-foreground/50">•</span>
+                <DialogDescription data-testid="repair-detail-device-description" className="flex items-center gap-1.5 text-xs max-sm:hidden sm:gap-2 sm:text-xs flex-wrap text-muted-foreground">
+                  <span className="font-semibold text-foreground/90">{deviceTypeConfig[repair.deviceType]?.label || repair.deviceType}</span>
+                  <span className="text-muted-foreground/40">•</span>
                   <span>{repair.brand} {repair.model}</span>
                   {(repair.serialNumber || repair.imei) && (
                     <>
-                      <span className="text-muted-foreground/50">•</span>
-                      <span className="max-sm:hidden font-mono text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">
+                      <span className="text-muted-foreground/40">•</span>
+                      <span className="max-sm:hidden font-mono text-[11px] bg-muted/60 px-1.5 py-0.5 rounded border border-border/50 text-foreground/80">
                         IMEI/SN: {repair.serialNumber || repair.imei}
                       </span>
                     </>
@@ -456,20 +469,73 @@ export function RepairDetailDialog({
                 </DialogDescription>
               </div>
             </div>
-            <div className="flex gap-1 sm:gap-2 shrink-0">
+            <div className="flex gap-1 sm:gap-1.5 shrink-0 items-center">
+              {/* Acciones Rápidas en Móvil */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11 max-sm:hidden sm:h-9 sm:min-h-9 sm:w-9 sm:min-w-9" aria-label="Compartir" title="Compartir reparación">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="sm:hidden h-8 w-8 min-h-8 min-w-8 rounded-lg border-border/80 shadow-xs"
+                    aria-label="Acciones y opciones móviles"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-64 rounded-2xl shadow-xl">
+                  <DropdownMenuItem onClick={() => handleShare('whatsapp')}>
+                    <MessageCircle className="mr-2 h-4 w-4 text-emerald-600" />
+                    Enviar texto por WhatsApp
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleShare('whatsapp-pdf')}>
+                    <FileText className="mr-2 h-4 w-4 text-rose-500" />
+                    PDF para WhatsApp
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handlePrint('customer')}>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Imprimir comprobante
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handlePrint('technician')}>
+                    <Wrench className="mr-2 h-4 w-4" />
+                    Ficha de taller
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {activeRepair.status === 'entregado' && (
+                    <DropdownMenuItem onClick={() => setWarrantyClaimOpen(true)}>
+                      <Shield className="mr-2 h-4 w-4 text-amber-600" />
+                      Procesar Garantía
+                    </DropdownMenuItem>
+                  )}
+                  {onEdit && (
+                    <DropdownMenuItem onClick={() => {
+                      if (activeRepair.status === 'entregado') setDeliveredEditWarningOpen(true)
+                      else onEdit(activeRepair)
+                    }}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Editar datos de orden
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => handleShare('copy')}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copiar resumen
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11 max-sm:hidden sm:h-8 sm:min-h-8 sm:w-8 sm:min-w-8 rounded-lg" aria-label="Compartir" title="Compartir reparación">
                     <Share2 className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-64">
+                <DropdownMenuContent align="end" className="min-w-64 rounded-2xl shadow-xl">
                   <DropdownMenuItem onClick={() => handleShare('whatsapp')}>
-                    <MessageCircle className="mr-2 h-4 w-4" />
+                    <MessageCircle className="mr-2 h-4 w-4 text-emerald-600" />
                     Enviar Texto por WhatsApp
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleShare('whatsapp-pdf')}>
-                    <FileText className="mr-2 h-4 w-4" />
+                    <FileText className="mr-2 h-4 w-4 text-rose-500" />
                     PDF para WhatsApp
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -489,7 +555,7 @@ export function RepairDetailDialog({
                 size="icon"
                 onClick={() => setIsMaximized(!isMaximized)}
                 title={isMaximized ? "Restaurar tamaño" : "Maximizar"}
-                className="max-sm:hidden"
+                className="max-sm:hidden h-8 w-8 rounded-lg"
               >
                 {isMaximized ? (
                   <Minimize2 className="h-4 w-4" />
@@ -499,26 +565,26 @@ export function RepairDetailDialog({
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="max-sm:hidden" title="Imprimir documentos de la reparación">
-                    <Printer className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Imprimir</span>
-                    <ChevronDown className="h-3.5 w-3.5 ml-1 hidden sm:block opacity-60" />
+                  <Button variant="outline" size="sm" className="max-sm:hidden h-8 rounded-lg shadow-xs text-xs" title="Imprimir documentos de la reparación">
+                    <Printer className="h-3.5 w-3.5 sm:mr-1.5" />
+                    <span className="hidden sm:inline font-semibold">Imprimir</span>
+                    <ChevronDown className="h-3 w-3 ml-1 hidden sm:block opacity-60" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-72">
+                <DropdownMenuContent align="end" className="min-w-72 rounded-2xl shadow-xl">
                   <DropdownMenuItem onClick={() => handlePrint('customer')} className="items-start gap-3 py-2.5">
-                    <FileText className="h-4 w-4 mt-0.5 shrink-0" />
+                    <FileText className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
                     <div>
-                      <p className="font-medium">Comprobante para el cliente</p>
+                      <p className="font-semibold">Comprobante para el cliente</p>
                       <p className="text-xs text-muted-foreground">
                         Recibo con datos del equipo, costo y garantía
                       </p>
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handlePrint('technician')} className="items-start gap-3 py-2.5">
-                    <Wrench className="h-4 w-4 mt-0.5 shrink-0" />
+                    <Wrench className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
                     <div>
-                      <p className="font-medium">Ficha técnica simple (taller)</p>
+                      <p className="font-semibold">Ficha técnica simple (taller)</p>
                       <p className="text-xs text-muted-foreground">
                         Resumen para pegar en el equipo
                       </p>
@@ -527,7 +593,7 @@ export function RepairDetailDialog({
                   <DropdownMenuItem onClick={() => handlePrint('technician_detailed')} className="items-start gap-3 py-2.5">
                     <FileCheck2 className="h-4 w-4 mt-0.5 shrink-0 text-indigo-600" />
                     <div>
-                      <p className="font-medium">Ficha de laboratorio (completa)</p>
+                      <p className="font-semibold">Ficha de laboratorio (completa)</p>
                       <p className="text-xs text-muted-foreground">
                         Incluye PIN/Patrón, checklist de banco y notas técnicas
                       </p>
@@ -540,17 +606,17 @@ export function RepairDetailDialog({
                   type="button"
                   size="sm"
                   onClick={() => setWarrantyClaimOpen(true)}
-                  className="max-sm:hidden bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs gap-1.5 shadow-xs"
+                  className="max-sm:hidden bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs gap-1 shadow-xs rounded-lg h-8"
                 >
                   <Shield className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Procesar Garantía</span>
+                  <span className="hidden sm:inline">Garantía</span>
                 </Button>
               )}
               {onEdit && (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="max-sm:hidden"
+                  className="max-sm:hidden rounded-lg shadow-xs font-semibold h-8 text-xs"
                   onClick={() => {
                     if (activeRepair.status === 'entregado') {
                       setDeliveredEditWarningOpen(true)
@@ -559,11 +625,11 @@ export function RepairDetailDialog({
                     }
                   }}
                 >
-                  <Edit className="h-4 w-4 sm:mr-2" />
+                  <Edit className="h-3.5 w-3.5 sm:mr-1.5" />
                   <span className="hidden sm:inline">Editar</span>
                 </Button>
               )}
-              <Button variant="ghost" size="icon" onClick={onClose} className="min-h-11 min-w-11 sm:h-9 sm:min-h-9 sm:w-9 sm:min-w-9" aria-label="Cerrar detalle de reparación">
+              <Button variant="ghost" size="icon" onClick={onClose} className="min-h-11 min-w-11 sm:min-h-8 sm:min-w-8 sm:h-8 sm:w-8 rounded-lg" aria-label="Cerrar detalle de reparación">
                 <span className="sr-only">Cerrar detalle de reparación</span>
                 <X className="h-4 w-4" />
               </Button>
@@ -572,11 +638,11 @@ export function RepairDetailDialog({
         </DialogHeader>
 
         {/* Stepper de progreso */}
-        <div data-testid="repair-detail-progress" className="border-b bg-background px-3 py-1.5 max-sm:hidden sm:px-6 sm:py-2 shrink-0">
+        <div data-testid="repair-detail-progress" className="border-b bg-background/50 backdrop-blur-xs px-3 py-1.5 max-sm:hidden sm:px-6 sm:py-2 shrink-0">
           {isCancelled ? (
-            <div className="flex items-center gap-3 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 px-4 py-2.5">
-              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0" />
-              <p className="text-sm font-medium text-red-800 dark:text-red-300">
+            <div className="flex items-center gap-3 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 px-3 py-1.5">
+              <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+              <p className="text-xs font-medium text-red-800 dark:text-red-300">
                 Esta reparación fue cancelada.
               </p>
             </div>
@@ -595,20 +661,20 @@ export function RepairDetailDialog({
                         i <= currentStepIndex ? "bg-emerald-400" : "bg-border"
                       )} />
                     )}
-                    <div className="flex flex-col items-center gap-1 shrink-0">
+                    <div className="flex flex-col items-center gap-0.5 shrink-0">
                       <div className={cn(
-                        "h-7 w-7 rounded-full flex items-center justify-center border-2 transition-colors",
+                        "h-6 w-6 rounded-full flex items-center justify-center border-2 transition-colors",
                         done && "bg-emerald-500 border-emerald-500 text-white",
-                        current && !isPaused && cn(cfg.bgColor, "border-transparent text-white shadow-md"),
+                        current && !isPaused && cn(cfg.bgColor, "border-transparent text-white shadow-xs"),
                         current && isPaused && "bg-purple-500 border-purple-500 text-white",
                         !done && !current && "bg-muted border-border text-muted-foreground"
                       )}>
-                        {done ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                        {done ? <Check className="h-3.5 w-3.5" /> : <Icon className="h-3 w-3" />}
                       </div>
                       <span className={cn(
                         "text-[10px] font-medium leading-none",
                         current ? 'block' : 'hidden sm:block',
-                        current ? "text-foreground" : "text-muted-foreground"
+                        current ? "text-foreground font-semibold" : "text-muted-foreground"
                       )}>
                         {current && isPaused ? 'Pausado' : STATUS_FLOW_LABELS[step]}
                       </span>
@@ -622,12 +688,12 @@ export function RepairDetailDialog({
 
         {/* Quick status transitions container */}
         {repair && onStatusChange && !isCancelled && (
-          <div className="border-b bg-slate-50/50 px-3 py-2 dark:bg-slate-900/10 flex items-center gap-2 shrink-0 sm:flex-wrap sm:justify-between sm:px-6 sm:py-2.5">
+          <div className="border-b bg-slate-50/50 dark:bg-slate-900/10 px-2.5 py-1.5 flex items-center gap-1.5 shrink-0 sm:flex-wrap sm:justify-between sm:px-6 sm:py-2">
             <span className="max-sm:hidden text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
-              Cambio rápido de estado:
+              Cambio rápido:
             </span>
-            <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto overscroll-x-contain sm:flex-wrap">
+            <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto no-scrollbar sm:flex-wrap">
               {getAvailableTransitions(repair.status).map((nextStatus) => {
                 const cfg = statusConfig[nextStatus]
                 if (!cfg) return null
@@ -639,16 +705,11 @@ export function RepairDetailDialog({
                     size="sm"
                     variant="outline"
                     className={cn(
-                      "h-11 shrink-0 rounded-xl text-xs font-bold gap-1.5 transition-all active:scale-95 sm:h-7",
+                      "h-8 shrink-0 rounded-lg text-xs font-bold gap-1 transition-all shadow-xs active:scale-95 px-2.5",
                       cfg.color,
-                      "hover:bg-slate-100 dark:hover:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                      "hover:bg-slate-100 dark:hover:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
                     )}
                     onClick={async () => {
-                      // "Entregado" nunca se hace con un cambio de estado plano:
-                      // así no se preguntaba si funcionó ni se ofrecía cobrar,
-                      // y la reparación quedaba entregada (y hasta sin fecha de
-                      // garantía) en un solo click sin querer. Se redirige al
-                      // mismo flujo del botón "Entregar".
                       if (nextStatus === 'entregado') {
                         if (onDeliver) {
                           onClose()
@@ -671,21 +732,20 @@ export function RepairDetailDialog({
                     disabled={isUpdatingStatus}
                   >
                     {isUpdatingStatus ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
-                      <NextIcon className="h-3.5 w-3.5" />
+                      <NextIcon className="h-3 w-3" />
                     )}
                     {cfg.label}
                   </Button>
                 )
               })}
               
-              {/* Optional: Cancel option if not cancelado or entregado */}
               {repair.status !== 'entregado' && repair.status !== 'cancelado' && !getAvailableTransitions(repair.status).includes('cancelado') && (
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-11 shrink-0 rounded-xl text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 sm:h-7"
+                  className="h-8 shrink-0 rounded-lg text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 px-2"
                   onClick={async () => {
                     setIsUpdatingStatus(true)
                     try {
@@ -701,7 +761,7 @@ export function RepairDetailDialog({
                   }}
                   disabled={isUpdatingStatus}
                 >
-                  <XCircle className="h-3.5 w-3.5 mr-1" />
+                  <XCircle className="h-3 w-3 mr-1" />
                   Cancelar
                 </Button>
               )}
@@ -994,12 +1054,12 @@ export function RepairDetailDialog({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full gap-2"
+                      className="w-full h-10 gap-2 font-bold text-xs rounded-xl bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition-all active:scale-[0.98]"
                       onClick={handleSendStatusByWhatsApp}
                       disabled={isSendingStatusWhatsApp}
                     >
-                      <MessageCircle className="h-4 w-4 text-emerald-600" />
-                      {isSendingStatusWhatsApp ? 'Enviando estado...' : 'Avisar estado por WhatsApp'}
+                      <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      {isSendingStatusWhatsApp ? 'Abriendo WhatsApp...' : 'Avisar estado por WhatsApp'}
                     </Button>
                   )}
                 </div>
@@ -1126,18 +1186,21 @@ export function RepairDetailDialog({
               {/* ─── Área principal: detalle por pestañas ─── */}
               <main data-testid="repair-detail-sections" className="order-1 w-full min-w-0 flex-1 lg:order-2">
                 <Tabs defaultValue="diagnostic" className="w-full">
-                  <TabsList className="sticky top-0 z-10 h-auto w-full justify-start overflow-x-auto bg-background/95 p-1 backdrop-blur">
-                    <TabsTrigger value="diagnostic" className="min-h-11 shrink-0 text-xs sm:min-h-9 sm:text-sm">
+                  <TabsList className="sticky top-0 z-10 h-auto w-full justify-start overflow-x-auto no-scrollbar bg-muted/60 dark:bg-muted/30 p-1.5 backdrop-blur-md rounded-2xl border border-border/60 shadow-xs gap-1">
+                    <TabsTrigger value="diagnostic" className="min-h-10 shrink-0 text-xs sm:min-h-9 sm:text-sm rounded-xl font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all">
+                      <Wrench className="h-3.5 w-3.5 mr-1.5 opacity-70" />
                       Diagnóstico
                     </TabsTrigger>
-                    <TabsTrigger value="finance" className="min-h-11 shrink-0 text-xs sm:min-h-9 sm:text-sm">
+                    <TabsTrigger value="finance" className="min-h-10 shrink-0 text-xs sm:min-h-9 sm:text-sm rounded-xl font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 transition-all">
+                      <DollarSign className="h-3.5 w-3.5 mr-1.5 opacity-70" />
                       Costos y Piezas
                     </TabsTrigger>
-                    <TabsTrigger value="history" className="min-h-11 shrink-0 text-xs sm:min-h-9 sm:text-sm gap-1.5">
+                    <TabsTrigger value="history" className="min-h-10 shrink-0 text-xs sm:min-h-9 sm:text-sm rounded-xl font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-indigo-600 transition-all gap-1.5">
                       <History className="h-3.5 w-3.5" />
                       <span>Historial y Bitácora</span>
                     </TabsTrigger>
-                    <TabsTrigger value="images" className="min-h-11 shrink-0 text-xs sm:min-h-9 sm:text-sm">
+                    <TabsTrigger value="images" className="min-h-10 shrink-0 text-xs sm:min-h-9 sm:text-sm rounded-xl font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-sky-600 transition-all">
+                      <ImageIcon className="h-3.5 w-3.5 mr-1.5 opacity-70" />
                       Imágenes ({repair.images?.length || 0})
                     </TabsTrigger>
                   </TabsList>
@@ -1273,32 +1336,39 @@ export function RepairDetailDialog({
                     </h3>
 
                     {(!repair.images || repair.images.length === 0) ? (
-                      <div className="bg-muted/20 border border-dashed rounded-xl p-12 text-center text-muted-foreground">
-                        <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                        <p className="text-sm">No hay imágenes adjuntas a esta reparación.</p>
+                      <div className="bg-muted/20 border border-dashed rounded-2xl p-10 text-center text-muted-foreground">
+                        <ImageIcon className="h-10 w-10 mx-auto mb-3 opacity-30 text-primary" />
+                        <p className="text-xs sm:text-sm font-medium">No hay imágenes adjuntas a esta reparación.</p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {repair.images.map((image, index) => (
-                          <div key={index} className="group relative aspect-square rounded-xl overflow-hidden border bg-muted">
+                          <a
+                            key={index}
+                            href={image.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group relative aspect-square rounded-2xl overflow-hidden border bg-muted shadow-xs transition-all active:scale-[0.98]"
+                            title="Tocar para ver imagen completa"
+                          >
                             <img
                               src={image.url}
                               alt={image.description || `Imagen ${index + 1}`}
                               className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                              loading="lazy"
                             />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <Button variant="secondary" size="sm" asChild>
-                                <a href={image.url} target="_blank" rel="noopener noreferrer">
-                                  Ver Completa
-                                </a>
-                              </Button>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex flex-col justify-end p-2.5">
+                              {image.description ? (
+                                <p className="text-white text-[11px] font-medium truncate drop-shadow-sm">
+                                  {image.description}
+                                </p>
+                              ) : (
+                                <span className="text-[10px] text-white/90 font-medium">
+                                  Foto #{index + 1}
+                                </span>
+                              )}
                             </div>
-                            {image.description && (
-                              <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/60 text-white text-xs truncate">
-                                {image.description}
-                              </div>
-                            )}
-                          </div>
+                          </a>
                         ))}
                       </div>
                     )}

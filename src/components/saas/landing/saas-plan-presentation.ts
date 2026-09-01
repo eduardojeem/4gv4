@@ -9,6 +9,9 @@ export type PlanLimitValue = string | number | null | undefined
 export type SubscriptionPlan = {
   id: string
   tier: string
+  /** URL publica del plan. Es un campo propio y unico, no derivado del nombre:
+   *  "Pro" y "PRO+" se limpiarian al mismo texto y la URL seria ambigua. */
+  public_slug?: string | null
   name: string
   price: number
   price_note?: string | null
@@ -16,6 +19,7 @@ export type SubscriptionPlan = {
   is_popular?: boolean
   is_active: boolean
   custom?: boolean
+  trial_days?: number | null
   limits?: Record<string, PlanLimitValue>
   highlights?: string[]
   features?: PlanFeature[]

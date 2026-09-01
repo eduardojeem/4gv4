@@ -225,6 +225,7 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
   const [highlights, setHighlights] = useState('')
   const [price, setPrice]           = useState('0')
   const [priceNote, setPriceNote]   = useState('por mes')
+  const [publicSlug, setPublicSlug] = useState('')
   const [trialDays, setTrialDays]   = useState('14')
 
   // Limits tab
@@ -249,6 +250,7 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
     setHighlights((plan.highlights ?? []).join('\n'))
     setPrice(String(plan.price ?? 0))
     setPriceNote(plan.price_note ?? 'por mes')
+    setPublicSlug(plan.public_slug ?? '')
     setTrialDays(String(plan.trial_days ?? 14))
     setLimUsers(String(plan.limits?.users ?? '5'))
     setLimProducts(String(plan.limits?.products ?? '100'))
@@ -298,6 +300,7 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
         name:        name.trim(),
         price:       Number(price) || 0,
         price_note:  priceNote,
+        public_slug: publicSlug.trim(),
         description: description,
         is_active:   isActive,
         is_popular:  isPopular,
@@ -457,6 +460,23 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
                     />
                   </div>
                   <p className="text-[10px] text-slate-400">0 = plan gratuito</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-slug" className="text-xs">URL pública del plan</Label>
+                  <Input
+                    id="edit-slug"
+                    value={publicSlug}
+                    onChange={(e) => setPublicSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                    placeholder="lite"
+                    className="h-9 font-mono"
+                  />
+                  {/* Es un campo propio y no se deduce del nombre: "Pro" y "PRO+"
+                      se limpiarian al mismo texto y la URL apuntaria a dos planes
+                      de precios distintos. */}
+                  <p className="text-[10px] text-slate-400">
+                    /register?plan=<span className="font-mono text-cyan-600 dark:text-cyan-400">{publicSlug || '…'}</span> · debe ser único
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">

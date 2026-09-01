@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,13 +14,18 @@ import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { validatePassword, getPasswordChecks } from '@/lib/auth/password-validation'
 import { slugifyTenantName } from '@/lib/saas/tenant'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
+import { createClient } from '@/lib/supabase/client'
 
-const PLAN_LABELS: Record<string, string> = {
-  free: 'FREE',
-  basic: 'BASIC',
-  pro: 'PRO',
-  enterprise: 'ENTERPRISE',
-}
+/**
+ * Tiers que la API acepta. Se usan solo para validar lo que llega por la URL:
+ * el nombre que ve el usuario sale de la base, porque el codigo interno y el
+ * nombre comercial no coinciden (por ejemplo el tier `free` puede ser un plan
+ * pago llamado "Lite"). Mostrar el tier hacia que quien clickeaba "Lite"
+ * terminara leyendo "Plan seleccionado: FREE".
+ */
+const VALID_PLAN_TIERS = ['free', 'basic', 'pro', 'enterprise'] as const
+
+type SelectedPlanInfo = { tier: string; name: string; price: number; trialDays: number } | null
 
 // Maps API field names to friendly display labels for inline errors.
 const FIELD_LABELS: Record<string, string> = {
@@ -60,9 +65,52 @@ function RegisterForm() {
 
   const rawRedirect = searchParams.get('redirect') || ''
   const loginHref = rawRedirect ? `/login?redirect=${encodeURIComponent(rawRedirect)}` : '/login'
-  const planParam = searchParams.get('plan')?.toLowerCase() ?? ''
-  const selectedPlanLabel = PLAN_LABELS[planParam] ?? ''
-  const selectedPlan = selectedPlanLabel ? planParam : 'free'
+  const planParam = searchParams.get('plan')?.toLowerCase().trim() ?? ''
+
+  // El nombre comercial se lee de la base y no se deduce del tier: son cosas
+  // distintas (el tier `free` puede ser un plan pago llamado "Lite"), y mostrar
+  // el codigo interno hacia parecer que se habia elegido otro plan.
+  const [planInfo, setPlanInfo] = useState<SelectedPlanInfo>(null)
+
+  useEffect(() => {
+    // Formato de URL, no autorizacion: evita mandar basura a la consulta. Lo que
+    // decide el plan real es la fila que devuelve la base.
+    if (!planParam || !/^[a-z0-9][a-z0-9-]{0,47}$/.test(planParam)) {
+      setPlanInfo(null)
+      return
+    }
+
+    let cancelled = false
+    const supabase = createClient()
+
+    void supabase
+      .from('subscription_plans')
+      .select('tier, public_slug, name, price, trial_days')
+      .eq('is_active', true)
+      // Se busca por el slug publico y tambien por el tier, para que los enlaces
+      // viejos (/register?plan=free) sigan funcionando.
+      .or(`public_slug.eq.${planParam},tier.eq.${planParam}`)
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        setPlanInfo({
+          tier: data.tier,
+          name: data.name,
+          price: Number(data.price) || 0,
+          trialDays: Number(data.trial_days) || 0,
+        })
+      })
+
+    return () => { cancelled = true }
+  }, [planParam])
+
+  // El tier que se envia sale SIEMPRE de la fila encontrada, nunca de la URL:
+  // asi un parametro armado a mano no puede pedir un plan que no existe o esta
+  // desactivado. Sin plan resuelto se usa el de entrada, como antes.
+  const selectedPlan = planInfo && (VALID_PLAN_TIERS as readonly string[]).includes(planInfo.tier)
+    ? planInfo.tier
+    : 'free'
 
   // Always resolve slug: prefer what the user typed, fall back to slugified company name.
   const previewSlug = slugifyTenantName(formData.companySlug || formData.companyName)
@@ -75,14 +123,26 @@ function RegisterForm() {
     if (error) setError('')
 
     if (field === 'companyName' && !slugTouched) {
-      // Auto-mirror into slug preview without touching the slug input itself.
-      setFormData((prev) => ({ ...prev, companyName: value }))
+      // La sugerencia se escribe en el campo, no solo como placeholder: antes el
+      // subdominio quedaba vacio y el texto gris no dejaba claro que ese iba a
+      // ser el valor real, ni invitaba a ajustarlo antes de crear la empresa.
+      setFormData((prev) => ({
+        ...prev,
+        companyName: value,
+        companySlug: slugifyTenantName(value),
+      }))
       return
     }
     if (field === 'companySlug') {
-      // Slug field: track whether the user has typed anything (non-empty = touched).
-      // When cleared, reset to auto-mirror from companyName.
-      setSlugTouched(value.trim().length > 0)
+      const touched = value.trim().length > 0
+      setSlugTouched(touched)
+
+      // Al vaciarlo vuelve a sugerirse desde el nombre, en vez de quedar en
+      // blanco esperando que el usuario adivine que hacer.
+      if (!touched) {
+        setFormData((prev) => ({ ...prev, companySlug: slugifyTenantName(prev.companyName) }))
+        return
+      }
     }
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
@@ -210,12 +270,25 @@ function RegisterForm() {
                 <CardTitle className="text-2xl font-bold text-white">Crear empresa</CardTitle>
                 <CardDescription className="mt-1 text-slate-400">Registro SaaS para nuevos negocios</CardDescription>
               </div>
-              {selectedPlanLabel && (
+              {planInfo && (
                 <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-300">
                   <Sparkles className="h-4 w-4 shrink-0" />
                   <span>
-                    Plan seleccionado: <strong>{selectedPlanLabel}</strong>
-                    <span className="ml-1 text-xs text-cyan-400/70">· Empiezas con 14 días de prueba gratis</span>
+                    {/* Nombre y dias reales del plan: antes se mostraba el codigo
+                        interno del tier y una prueba fija de 14 dias, asi que
+                        quien elegia "Lite" leia "FREE" y una duracion que podia
+                        no ser la suya. */}
+                    Plan seleccionado: <strong>{planInfo.name}</strong>
+                    {planInfo.price > 0 && (
+                      <span className="ml-1 text-xs text-cyan-400/70">
+                        · {new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(planInfo.price)}/mes
+                      </span>
+                    )}
+                    {planInfo.trialDays > 0 && (
+                      <span className="ml-1 text-xs text-cyan-400/70">
+                        · {planInfo.trialDays} días de prueba gratis
+                      </span>
+                    )}
                   </span>
                 </div>
               )}
@@ -294,7 +367,10 @@ function RegisterForm() {
                 {/* Subdominio */}
                 <div className="space-y-1.5">
                   <Label htmlFor="companySlug" className="text-slate-200">
-                    Subdominio <span className="font-normal text-slate-500">(opcional)</span>
+                    Subdominio{' '}
+                    <span className="font-normal text-slate-500">
+                      {slugTouched ? '(podés volver a dejarlo vacío para sugerirlo)' : '(sugerido desde el nombre)'}
+                    </span>
                   </Label>
                   <Input
                     id="companySlug"

@@ -74,24 +74,24 @@ function TabButton({
 function HowItWorks({ tab }: { tab: AuthTab }) {
   const items = tab === 'login'
     ? [
-        { icon: LogIn, text: 'Ingresa con el email y la contrasena de tu cuenta.' },
-        { icon: ShoppingBag, text: 'Al entrar, podes comprar, revisar pedidos y continuar navegando el marketplace.' },
+        { icon: LogIn, text: 'Ingresá con el email y la contraseña de tu cuenta.' },
+        { icon: ShoppingBag, text: 'Al entrar, podés comprar, revisar pedidos y continuar navegando el marketplace.' },
       ]
     : [
-        { icon: UserPlus, text: 'Crea una cuenta gratuita de cliente para usar en el marketplace.' },
-        { icon: MailCheck, text: 'Despues confirma tu correo y accede con la misma cuenta en tiendas publicas.' },
+        { icon: UserPlus, text: 'Creá una cuenta gratuita de cliente para usar en el marketplace.' },
+        { icon: MailCheck, text: 'Confirmá tu correo y accedé con la misma cuenta en tiendas públicas.' },
       ]
 
   return (
-    <div className="rounded-lg border border-cyan-100 bg-cyan-50/80 p-3 text-cyan-950 dark:border-cyan-900/60 dark:bg-cyan-950/25 dark:text-cyan-100">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <HelpCircle className="h-4 w-4" />
-        Como funciona
+    <div className="rounded-xl border border-cyan-100 bg-cyan-50/80 p-3.5 text-cyan-950 dark:border-cyan-900/60 dark:bg-cyan-950/25 dark:text-cyan-100 shadow-xs">
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-cyan-800 dark:text-cyan-300">
+        <HelpCircle className="h-3.5 w-3.5" />
+        ¿Cómo funciona?
       </div>
-      <div className="mt-2 grid gap-2">
+      <div className="mt-2 grid gap-1.5">
         {items.map(({ icon: Icon, text }) => (
-          <div key={text} className="flex gap-2 text-xs leading-5 text-cyan-900/85 dark:text-cyan-100/80">
-            <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div key={text} className="flex gap-2 text-xs leading-relaxed text-cyan-900/85 dark:text-cyan-100/80">
+            <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-600 dark:text-cyan-400" />
             <span>{text}</span>
           </div>
         ))}
@@ -106,6 +106,8 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const emailRef = useRef<HTMLInputElement>(null)
@@ -114,11 +116,40 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
     window.setTimeout(() => emailRef.current?.focus(), 100)
   }, [])
 
+  const validateFields = () => {
+    let isValid = true
+    const cleanEmail = email.trim()
+
+    if (!cleanEmail) {
+      setEmailError('Ingresá tu correo electrónico.')
+      isValid = false
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setEmailError('Ingresá un formato de correo válido (ej: nombre@correo.com).')
+      isValid = false
+    } else {
+      setEmailError('')
+    }
+
+    if (!password) {
+      setPasswordError('Ingresá tu contraseña.')
+      isValid = false
+    } else {
+      setPasswordError('')
+    }
+
+    return isValid
+  }
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
+
+    if (!validateFields()) {
+      return
+    }
+
     if (!captchaToken || loading) {
-      setError('Completa la verificacion de seguridad para continuar.')
+      setError('Por favor, completá la verificación de seguridad para continuar.')
       return
     }
     setLoading(true)
@@ -132,19 +163,24 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
       })
 
       if (authError) {
-        if (/invalid.*credentials/i.test(authError.message) || /invalid login/i.test(authError.message)) {
-          setError('Email o contrasena incorrectos')
-        } else if (/email not confirmed/i.test(authError.message)) {
-          setError('Tu cuenta no esta confirmada. Revisa tu correo.')
+        const msg = authError.message || ''
+        if (/invalid.*credentials|invalid login/i.test(msg)) {
+          setError('El correo o la contraseña no son correctos. Verificá los datos e intentá de nuevo.')
+        } else if (/email not confirmed/i.test(msg)) {
+          setError('Tu cuenta aún no fue confirmada. Revisá tu casilla de correo o spam.')
+        } else if (/rate limit|too many requests/i.test(msg)) {
+          setError('Demasiados intentos fallidos. Esperá unos minutos antes de volver a intentar.')
+        } else if (/Failed to fetch|Network/i.test(msg)) {
+          setError('No se pudo conectar con el servidor. Comprobá tu conexión a internet.')
         } else {
-          setError(authError.message)
+          setError('El correo o la contraseña no coinciden con ninguna cuenta activa.')
         }
         return
       }
 
       onSuccess()
     } catch {
-      setError('Error de conexion. Intenta de nuevo.')
+      setError('Ocurrió un error inesperado al iniciar sesión. Intentá de nuevo.')
     } finally {
       setLoading(false)
       setCaptchaToken(null)
@@ -153,11 +189,11 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
   }
 
   return (
-    <div className="animate-in fade-in-0 duration-150">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="modal-email" className="text-sm font-medium">
-            Email
+    <div className="animate-in fade-in-0 duration-150 space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <div className="space-y-1.5">
+          <Label htmlFor="modal-email" className="text-xs font-semibold">
+            Correo electrónico
           </Label>
           <Input
             ref={emailRef}
@@ -165,46 +201,66 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
             type="email"
             placeholder="tu@email.com"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              setEmail(event.target.value)
+              if (emailError) setEmailError('')
+            }}
             required
             disabled={loading}
             autoComplete="email"
-            className="h-10"
+            className={`h-10 transition-all ${
+              emailError ? 'border-destructive focus-visible:ring-destructive/30' : ''
+            }`}
           />
+          {emailError && (
+            <p className="text-[11px] text-destructive font-medium pl-0.5 animate-in fade-in-50 duration-200">
+              {emailError}
+            </p>
+          )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="modal-password" className="text-sm font-medium">
-            Contrasena
+        <div className="space-y-1.5">
+          <Label htmlFor="modal-password" className="text-xs font-semibold">
+            Contraseña
           </Label>
           <div className="relative">
             <Input
               id="modal-password"
               type={showPassword ? 'text' : 'password'}
-              placeholder="********"
+              placeholder="••••••••"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => {
+                setPassword(event.target.value)
+                if (passwordError) setPasswordError('')
+              }}
               required
               disabled={loading}
               autoComplete="current-password"
-              className="h-10 pr-10"
+              className={`h-10 pr-10 transition-all ${
+                passwordError ? 'border-destructive focus-visible:ring-destructive/30' : ''
+              }`}
             />
             <button
               type="button"
               onClick={() => setShowPassword((value) => !value)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               tabIndex={-1}
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          {passwordError && (
+            <p className="text-[11px] text-destructive font-medium pl-0.5 animate-in fade-in-50 duration-200">
+              {passwordError}
+            </p>
+          )}
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            {error}
+          <div className="flex items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive leading-relaxed">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <span>{error}</span>
           </div>
         )}
 
@@ -217,20 +273,20 @@ function LoginTab({ onSuccess, onSwitchTab }: { onSuccess: () => void; onSwitchT
 
         <button
           type="submit"
-          disabled={loading || !email.trim() || !password || !captchaToken}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-900 text-sm font-semibold text-white transition-all hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 dark:focus-visible:ring-white"
+          disabled={loading || !captchaToken}
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-bold text-white transition-all hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 dark:focus-visible:ring-white shadow-md active:scale-[0.99]"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
-          Iniciar sesion
+          Iniciar sesión
         </button>
       </form>
 
       <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">
-        No tenes cuenta?{' '}
+        ¿No tenés cuenta?{' '}
         <button
           type="button"
           onClick={onSwitchTab}
-          className="font-semibold text-slate-900 underline-offset-2 hover:underline dark:text-white"
+          className="font-bold text-slate-900 underline-offset-2 hover:underline dark:text-white"
         >
           Crear cuenta
         </button>

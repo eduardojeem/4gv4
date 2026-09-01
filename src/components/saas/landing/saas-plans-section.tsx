@@ -16,6 +16,9 @@ import {
   Store,
   Users,
   Compass,
+  CreditCard,
+  Gift,
+  CheckCircle2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -35,25 +38,18 @@ export type { SubscriptionPlan } from './saas-plan-presentation'
 // Interactive Business Profiles
 const BUSINESS_PROFILES = [
   {
-    id: 'startup',
-    label: 'Emprendedor / 1 Usuario',
-    icon: Users,
-    recommendedTier: 'free',
-    reason: 'Ideal para comenzar sin costo con facturación en caja y catálogo básico.',
-  },
-  {
     id: 'store_workshop',
     label: 'Tienda o Taller Técnico',
     icon: Wrench,
     recommendedTier: 'basic',
-    reason: 'Perfecto para gestionar turnos de caja, inventario y hasta 100 órdenes de reparación al mes.',
+    reason: 'Perfecto para gestionar turnos de caja, inventario y órdenes de reparación.',
   },
   {
     id: 'multibranch_online',
     label: 'Multi-sucursal o Ecommerce',
     icon: Store,
     recommendedTier: 'pro',
-    reason: 'Recomendado para conectar hasta 5 sucursales, tienda online y analytics financieros.',
+    reason: 'Recomendado para conectar varias sucursales, tienda online y analytics financieros.',
   },
   {
     id: 'enterprise_chain',
@@ -67,25 +63,24 @@ const BUSINESS_PROFILES = [
 // FAQ Items
 const FAQ_ITEMS = [
   {
+    q: '¿Cómo funcionan los días de prueba gratis? ¿Piden tarjeta?',
+    a: 'No pedimos tarjeta de crédito ni ningún medio de pago para comenzar. Cada plan indica en su tarjeta cuántos días de prueba incluye. Podés registrarte y probar el 100% de las funciones al instante.',
+  },
+  {
+    q: '¿Qué ocurre al terminar los días de prueba gratis?',
+    a: 'Al finalizar el período de prueba podés activar tu suscripción para continuar operando sin perder ningún dato, producto ni configuración cargada.',
+  },
+  {
     q: '¿Puedo cambiar de plan o cancelar en cualquier momento?',
-    a: 'Sí, podés subir de plan (upgrade) o cambiar a facturación anual en cualquier momento desde tu panel de administración sin interrumpir tus ventas ni perder datos.',
+    a: 'Sí, podés subir o bajar de plan en cualquier momento desde tu panel de administración, sin contratos forzosos ni penalidades.',
   },
   {
     q: '¿Qué ocurre si supero el límite de productos o usuarios de mi plan?',
     a: 'El sistema te notificará cuando te acerques al límite. Podrás continuar operando normalmente con tus datos existentes y actualizar tu plan cuando desees agregar más usuarios o productos.',
   },
-  {
-    q: '¿Cómo funciona el descuento del 20% en el pago anual?',
-    a: 'Al elegir el pago anual, obtienes 12 meses de servicio completo por el costo de menos de 10 meses (ahorrás un 20% del total anual con una sola factura).',
-  },
-  {
-    q: '¿El plan FREE tiene límite de tiempo de prueba?',
-    a: 'No. El plan FREE es gratis de por vida para hasta 2 usuarios y 100 productos, perfecto para proyectos que recién inician.',
-  },
 ]
 
 export function SaaSPlansSection({ initialPlans }: { initialPlans?: SubscriptionPlan[] }) {
-  const [yearly, setYearly] = useState(false)
   const [showTable, setShowTable] = useState(false)
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null)
   const [openFaq, setOpenFaq] = useState<number | null>(null)
@@ -94,20 +89,34 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
   const limitRows = buildPlanLimitRows(activePlans)
   const featureRows = buildPlanFeatureRows(activePlans)
 
+  // Solo el plan a medida se cotiza. Un precio 0 es el plan gratuito y se
+  // anuncia como tal: antes caia en el mismo caso que enterprise y el plan de
+  // entrada aparecia como "A Medida", escondido detras de un supuesto contacto
+  // comercial, aunque su boton llevaba igual al registro.
   const getPrice = (price: number, isCustom?: boolean) => {
     if (isCustom) return 'A Medida'
     if (!price || price === 0) return 'Gratis'
-    const finalPrice = yearly ? Math.floor(price * 0.8) : price
-    return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(finalPrice)
+    return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(price)
   }
 
+  // Los tiers reales del sistema son free, basic, pro y enterprise: son los
+  // unicos que acepta la API al crear un plan. Antes se mapeaba a nombres
+  // inventados ('lite', 'pro_plus') y 'free' no coincidia con ninguno, asi que
+  // terminaba tratado como el plan pago mas bajo.
   const getTierKey = (tierName: string) => {
-    const t = tierName.toLowerCase()
-    if (t.includes('free')) return 'free'
-    if (t.includes('basic')) return 'basic'
-    if (t.includes('pro')) return 'pro'
+    const t = (tierName || '').toLowerCase()
+    if (t.includes('free') || t.includes('gratis')) return 'free'
+    if (t.includes('basic') || t.includes('lite')) return 'basic'
     if (t.includes('enterp')) return 'enterprise'
-    return 'free'
+    if (t.includes('pro')) return 'pro'
+    return 'basic'
+  }
+
+  // La base manda. Si el superadmin configuro 0 dias, la web no debe prometer
+  // una prueba: antes el 0 no pasaba el `> 0` y se caia a un valor inventado,
+  // asi que "sin prueba" se publicaba como "20 dias gratis".
+  const getPlanTrialDays = (plan: SubscriptionPlan) => {
+    return typeof plan.trial_days === 'number' && plan.trial_days > 0 ? plan.trial_days : 0
   }
 
   const availableProfiles = BUSINESS_PROFILES.filter((profile) =>
@@ -127,10 +136,10 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="inline-flex items-center gap-2 rounded-full border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/40 px-3.5 py-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300"
+            className="inline-flex items-center gap-2 rounded-full border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 shadow-xs"
           >
-            <Zap className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-            Planes Transparentes y Claros
+            <Gift className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>Prueba Gratis · 100% Sin Tarjeta de Crédito</span>
           </motion.div>
 
           <motion.h2 
@@ -150,8 +159,29 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
             transition={{ delay: 0.2 }}
             className="mx-auto mt-4 max-w-2xl text-sm sm:text-base text-slate-600 dark:text-slate-400 leading-relaxed"
           >
-            Sin costos ocultos ni contratos forzosos. Todos los planes incluyen control de productos físicos y servicios profesionales.
+            Probá el sistema con los días de prueba que incluye cada plan. Sin costos ocultos y sin necesidad de tarjeta.
           </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.25 }}
+            className="mt-4 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs font-semibold text-slate-600 dark:text-slate-300"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              Prueba gratis según el plan
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Gift className="h-4 w-4 text-emerald-500" />
+              Cancelás cuando quieras
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <CreditCard className="h-4 w-4 text-cyan-500" />
+              Sin tarjeta de crédito
+            </span>
+          </motion.div>
         </div>
 
         <SaaSBrandAssistant
@@ -212,48 +242,6 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
         </div>
         )}
 
-        {/* Toggle Mensual / Anual */}
-        {activePlans.length > 0 && (
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.3 }}
-          className="mt-8 flex justify-center"
-        >
-          <div className="relative flex items-center rounded-2xl border border-slate-200/80 bg-white p-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <button
-              type="button"
-              onClick={() => setYearly(false)}
-              className={cn(
-                "relative rounded-xl px-5 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer",
-                !yearly ? "text-slate-950 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-              )}
-            >
-              {!yearly && (
-                <motion.div layoutId="plan-billing-bubble" className="absolute inset-0 -z-10 rounded-xl bg-slate-100 dark:bg-slate-800 shadow-xs" />
-              )}
-              Pago Mensual
-            </button>
-            <button
-              type="button"
-              onClick={() => setYearly(true)}
-              className={cn(
-                "relative flex items-center gap-1.5 rounded-xl px-5 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer",
-                yearly ? "text-slate-950 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-              )}
-            >
-              {yearly && (
-                <motion.div layoutId="plan-billing-bubble" className="absolute inset-0 -z-10 rounded-xl bg-slate-100 dark:bg-slate-800 shadow-xs" />
-              )}
-              <span>Pago Anual</span>
-              <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 text-[10px] font-bold px-1.5 py-0">
-                -20% OFF
-              </Badge>
-            </button>
-          </div>
-        </motion.div>
-        )}
 
         {/* Pricing Cards Grid */}
         {activePlans.length > 0 ? (
@@ -262,6 +250,7 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
             const isPopular = Boolean(plan.is_popular)
             const isEnterprise = plan.custom || plan.tier === 'enterprise'
             const tierKey = getTierKey(plan.tier || plan.name)
+            const trialDays = getPlanTrialDays(plan)
 
             // Resaltar si el usuario seleccionó un perfil en el recomendador
             const isHighlightedByQuiz = selectedProfile && availableProfiles.find(p => p.id === selectedProfile)?.recommendedTier === tierKey
@@ -313,8 +302,23 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
                     </span>
                     {!isEnterprise && plan.price > 0 && (
                       <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                        {yearly ? '/mes (anual)' : '/mes'}
+                        /mes
                       </span>
+                    )}
+                  </div>
+
+                  {/* Badge de Prueba Gratis y Sin Tarjeta */}
+                  <div className="mt-3">
+                    {!isEnterprise ? (
+                      <div className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-1 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 w-full justify-center">
+                        <Gift className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>{trialDays > 0 ? `${trialDays} días gratis · Sin tarjeta` : 'Sin tarjeta requerida'}</span>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/60 px-2.5 py-1 text-[11px] font-bold text-violet-800 dark:text-violet-300 w-full justify-center">
+                        <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+                        <span>Demo y prueba a medida</span>
+                      </div>
                     )}
                   </div>
 
@@ -343,18 +347,31 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
                   </ul>
                 </div>
 
-                <Link
-                  href={isEnterprise ? '/saas#contacto' : `/register?plan=${plan.tier}`}
-                  className={cn(
-                    "mt-7 flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-center text-xs font-bold transition-all shadow-xs cursor-pointer",
-                    isPopular
-                      ? "bg-violet-600 text-white hover:bg-violet-700 shadow-md shadow-violet-500/20"
-                      : "bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
-                  )}
-                >
-                  <span>{plan.custom ? 'Contactar a Ventas' : 'Comenzar Ahora'}</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
+                <div className="mt-7 space-y-1.5">
+                  <Link
+                    href={isEnterprise ? '/saas#contacto' : `/register?plan=${plan.public_slug || plan.tier}`}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-center text-xs font-bold transition-all shadow-xs cursor-pointer",
+                      isPopular
+                        ? "bg-violet-600 text-white hover:bg-violet-700 shadow-md shadow-violet-500/20"
+                        : "bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
+                    )}
+                  >
+                    <span>
+                      {isEnterprise
+                        ? 'Contactar a Ventas'
+                        : trialDays > 0
+                        ? `Probar ${trialDays} Días Gratis`
+                        : 'Comenzar Ahora'}
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                  <p className="text-center text-[10px] text-muted-foreground font-medium">
+                    {isEnterprise
+                      ? 'Sin compromiso · Respuesta en 24hs'
+                      : 'Sin tarjeta de crédito · Activación instantánea'}
+                  </p>
+                </div>
               </motion.div>
             )
           })}

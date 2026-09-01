@@ -26,8 +26,11 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
   const [resetOpen, setResetOpen] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
+  const [resetEmailError, setResetEmailError] = useState('')
   const [resetLoading, setResetLoading] = useState(false)
   const [unconfirmed, setUnconfirmed] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
@@ -43,7 +46,7 @@ export default function LoginPage() {
   const { branding } = usePlatformBranding()
   const registeredCompany = searchParams.get('registered') === '1' ? searchParams.get('company') : null
   const callbackError = searchParams.get('error') === 'auth_callback_error'
-    ? 'No se pudo completar la verificacion del enlace. Solicita uno nuevo o inicia sesion nuevamente.'
+    ? 'No se pudo completar la verificación del enlace. Solicitá uno nuevo o iniciá sesión nuevamente.'
     : ''
   const visibleError = error || callbackError
 
@@ -71,19 +74,53 @@ export default function LoginPage() {
       })
 
       if (!response.ok && response.status !== 404) {
-        console.warn('No se pudo inicializar la organizacion activa:', response.status)
+        console.warn('No se pudo inicializar la organización activa:', response.status)
       }
     } catch (organizationError) {
-      console.warn('No se pudo inicializar la organizacion activa:', organizationError)
+      console.warn('No se pudo inicializar la organización activa:', organizationError)
     }
+  }
+
+  const validateFields = () => {
+    let isValid = true
+    const cleanEmail = email.trim()
+
+    if (!cleanEmail) {
+      setEmailError('Ingresá tu correo electrónico.')
+      isValid = false
+    } else if (!isValidEmail(cleanEmail)) {
+      setEmailError('Ingresá un formato de correo válido (ej: nombre@empresa.com).')
+      isValid = false
+    } else {
+      setEmailError('')
+    }
+
+    if (!password) {
+      setPasswordError('Ingresá tu contraseña de acceso.')
+      isValid = false
+    } else if (password.length < 4) {
+      setPasswordError('La contraseña debe tener al menos 4 caracteres.')
+      isValid = false
+    } else {
+      setPasswordError('')
+    }
+
+    return isValid
   }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!captchaToken || loading) {
-      setError('Completa la verificacion de seguridad para continuar.')
+    setError('')
+
+    if (!validateFields()) {
       return
     }
+
+    if (!captchaToken || loading) {
+      setError('Por favor, completá la verificación de seguridad para continuar.')
+      return
+    }
+
     setLoading(true)
     setError('')
     setUnconfirmed(false)
@@ -91,23 +128,26 @@ export default function LoginPage() {
     const normalizedEmail = email.trim().toLowerCase()
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
         options: { captchaToken },
       })
 
-      if (error) {
-        const msg = error.message || (typeof error === 'string' ? error : 'Error al iniciar sesion')
+      if (authError) {
+        const msg = authError.message || (typeof authError === 'string' ? authError : 'Error al iniciar sesión')
+        
         if (/email not confirmed/i.test(msg)) {
           setUnconfirmed(true)
-          setError('Credenciales incorrectas o cuenta no confirmada.')
-        } else if (msg.includes('Invalid login credentials')) {
-          setError('Credenciales incorrectas o cuenta no confirmada.')
+          setError('Tu cuenta aún no fue confirmada. Revisá tu bandeja de entrada o hacé clic abajo para reenviar el enlace.')
+        } else if (/invalid login credentials|invalid_grant/i.test(msg)) {
+          setError('El correo o la contraseña ingresados no son correctos. Verificá los datos e intentá de nuevo.')
+        } else if (/rate limit|too many requests|over_request_rate_limit/i.test(msg)) {
+          setError('Demasiados intentos fallidos. Por seguridad, esperá unos minutos antes de volver a intentar.')
         } else if (/Failed to fetch|Network|fetch/i.test(msg)) {
-          setError('No se pudo conectar con el servidor. Verifica tu conexion a internet.')
+          setError('No se pudo conectar con el servidor. Verificá tu conexión a internet.')
         } else {
-          setError('Credenciales incorrectas o cuenta no confirmada.')
+          setError('El correo o la contraseña no coinciden con ninguna cuenta activa.')
         }
       } else {
         if (data?.user) {
@@ -125,17 +165,17 @@ export default function LoginPage() {
           }
         }
 
-        toast.success('Bienvenido de nuevo')
+        toast.success('¡Bienvenido de nuevo!')
         await initializeActiveOrganization()
-        const rawRedirect = searchParams.get('redirect')
+        const rawRedirectParam = searchParams.get('redirect')
         let redirectTo = '/dashboard'
 
-        if (rawRedirect) {
-          const cleanRedirect = sanitizeRedirectPath(rawRedirect)
-          const redirectTenantSlug = getTenantSlugFromPathname(cleanRedirect)
+        if (rawRedirectParam) {
+          const cleanRedirect = sanitizeRedirectPath(rawRedirectParam)
+          const redirectSlug = getTenantSlugFromPathname(cleanRedirect)
           const isCustomerOrOtherSection =
             cleanRedirect.startsWith('/marketplace') ||
-            redirectTenantSlug !== ''
+            redirectSlug !== ''
 
           if (isCustomerOrOtherSection) {
             redirectTo = cleanRedirect
@@ -147,7 +187,7 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.error('Unexpected login error:', err)
-      setError('Ocurrio un error inesperado. Intenta de nuevo.')
+      setError('Ocurrió un error inesperado. Por favor, intentá de nuevo.')
     } finally {
       setLoading(false)
       setCaptchaToken(null)
@@ -158,30 +198,30 @@ export default function LoginPage() {
   const handleResendConfirmation = async () => {
     const targetEmail = email.trim()
     if (!targetEmail) {
-      toast.error('Ingresa tu correo para reenviar la confirmacion')
+      toast.error('Ingresá tu correo para reenviar la confirmación.')
       return
     }
     const emailValid = isValidEmail(targetEmail)
     if (!emailValid) {
-      toast.error('Correo invalido')
+      toast.error('El formato de correo no es válido.')
       return
     }
     try {
       setResendLoading(true)
       const origin = typeof window !== 'undefined' ? window.location.origin : undefined
-      const { error } = await supabase.auth.resend({
+      const { error: resendError } = await supabase.auth.resend({
         type: 'signup',
         email: targetEmail,
         options: origin ? { emailRedirectTo: `${origin}/auth/callback?next=/dashboard` } : undefined,
       })
-      if (error) {
-        toast.error(error.message)
+      if (resendError) {
+        toast.error(resendError.message)
       } else {
-        toast.success('Te enviamos nuevamente el correo de confirmacion')
+        toast.success('Te enviamos nuevamente el correo de confirmación.')
         setUnconfirmed(false)
       }
     } catch {
-      toast.error('No se pudo reenviar el correo de confirmacion')
+      toast.error('No se pudo reenviar el correo de confirmación.')
     } finally {
       setResendLoading(false)
     }
@@ -189,35 +229,36 @@ export default function LoginPage() {
 
   const handleResetPassword = async () => {
     const targetEmail = resetEmail.trim().toLowerCase()
-    if (!targetEmail) return
-    if (!isValidEmail(targetEmail)) {
-      toast.error('Correo invalido')
+    if (!targetEmail) {
+      setResetEmailError('Ingresá tu correo electrónico.')
       return
     }
+    if (!isValidEmail(targetEmail)) {
+      setResetEmailError('Ingresá un correo electrónico válido (ej: nombre@empresa.com).')
+      return
+    }
+    setResetEmailError('')
     if (!resetCaptchaToken || resetLoading) {
-      toast.error('Completa la verificacion de seguridad')
+      toast.error('Completá la verificación de seguridad para continuar.')
       return
     }
 
     try {
       setResetLoading(true)
-      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
-        // Apuntar directo a la pagina (client-side) para que el SDK del
-        // navegador pueda leer la sesion del hash (#access_token). El callback
-        // del servidor no puede leer el hash y rebota a /login. Usa la URL
-        // canonica para no generar enlaces a localhost desde dev.
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(targetEmail, {
         redirectTo: siteUrl('/auth/reset-password'),
         captchaToken: resetCaptchaToken,
       })
 
-      if (error) {
-        toast.error(error.message)
+      if (resetErr) {
+        toast.error(resetErr.message || 'No se pudo procesar la solicitud.')
       } else {
-        toast.success('Te enviamos un enlace para restablecer tu contrasena')
+        toast.success('Te enviamos un enlace para restablecer tu contraseña. Revisá tu bandeja de entrada.')
         setResetOpen(false)
+        setResetEmail('')
       }
     } catch {
-      toast.error('No se pudo enviar el correo de reseteo')
+      toast.error('No se pudo enviar el correo de recuperación. Intentá de nuevo.')
     } finally {
       setResetLoading(false)
       setResetCaptchaToken(null)
@@ -328,36 +369,48 @@ export default function LoginPage() {
                 </div>
               )}
 
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-200">
-                    Correo electronico
+              <form onSubmit={handleLogin} className="space-y-4" noValidate>
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" className="text-slate-200 text-xs font-semibold">
+                    Correo electrónico
                   </Label>
                   <Input
                     id="email"
                     type="email"
                     placeholder="nombre@empresa.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value)
+                      if (emailError) setEmailError('')
+                    }}
                     required
                     autoComplete="email"
                     autoFocus
-                    className="h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
+                    className={`h-11 bg-slate-950/60 text-white placeholder:text-slate-500 transition-all ${
+                      emailError
+                        ? 'border-red-500/80 focus-visible:ring-red-500/30'
+                        : 'border-slate-700 focus-visible:ring-cyan-500/60'
+                    }`}
                     disabled={loading}
                   />
+                  {emailError && (
+                    <p className="text-[11px] text-red-400 font-medium pl-0.5 animate-in fade-in-50 duration-200">
+                      {emailError}
+                    </p>
+                  )}
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="password" className="text-slate-200">
-                      Contrasena
+                    <Label htmlFor="password" className="text-slate-200 text-xs font-semibold">
+                      Contraseña
                     </Label>
                     <button
                       type="button"
                       className="text-xs font-medium text-slate-400 transition-colors hover:text-cyan-300 hover:underline"
                       onClick={() => setResetOpen(true)}
                     >
-                      Olvide mi contrasena
+                      ¿Olvidaste tu contraseña?
                     </button>
                   </div>
                   <div className="relative">
@@ -366,21 +419,33 @@ export default function LoginPage() {
                       type={showPassword ? 'text' : 'password'}
                       placeholder="••••••••"
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => {
+                        setPassword(e.target.value)
+                        if (passwordError) setPasswordError('')
+                      }}
                       required
                       autoComplete="current-password"
-                      className="h-11 border-slate-700 bg-slate-950/60 pr-11 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
+                      className={`h-11 bg-slate-950/60 pr-11 text-white placeholder:text-slate-500 transition-all ${
+                        passwordError
+                          ? 'border-red-500/80 focus-visible:ring-red-500/30'
+                          : 'border-slate-700 focus-visible:ring-cyan-500/60'
+                      }`}
                       disabled={loading}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition-colors hover:text-cyan-400"
-                      aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 transition-colors hover:text-cyan-400"
+                      aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  {passwordError && (
+                    <p className="text-[11px] text-red-400 font-medium pl-0.5 animate-in fade-in-50 duration-200">
+                      {passwordError}
+                    </p>
+                  )}
                 </div>
 
                 <AnimatePresence>
@@ -389,35 +454,35 @@ export default function LoginPage() {
                       initial={reduceMotion ? false : { opacity: 0, y: -8 }}
                       animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
                       exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
-                      className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+                      className="flex items-start gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 p-3.5 text-xs text-red-300 leading-relaxed"
                       role="alert"
                       aria-live="assertive"
                     >
-                      <Shield className="mt-0.5 h-4 w-4 shrink-0" />
+                      <Shield className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
                       <span>{visibleError}</span>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
                 {unconfirmed && (
-                  <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3">
+                  <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-3.5">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-xs text-cyan-200">
-                        Tu cuenta no esta verificada. Revisa entrada y spam.
+                        Tu cuenta aún no está confirmada. Revisá tu bandeja de entrada y la carpeta de spam.
                       </span>
                       <Button
                         type="button"
                         onClick={handleResendConfirmation}
                         disabled={loading || resendLoading}
-                        className="h-9 bg-cyan-600 hover:bg-cyan-500"
+                        className="h-8 text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 rounded-lg shrink-0"
                       >
                         {resendLoading ? (
                           <span className="inline-flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             Enviando...
                           </span>
                         ) : (
-                          'Reenviar verificacion'
+                          'Reenviar verificación'
                         )}
                       </Button>
                     </div>
@@ -434,17 +499,17 @@ export default function LoginPage() {
 
                 <Button
                   type="submit"
-                  className="h-11 w-full bg-blue-600 font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500"
+                  className="h-11 w-full bg-blue-600 font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500 transition-all rounded-xl active:scale-[0.99]"
                   disabled={loading || !captchaToken}
                 >
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Iniciando sesion...
+                      Iniciando sesión...
                     </>
                   ) : (
                     <>
-                      Iniciar sesion
+                      Iniciar sesión
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </>
                   )}
@@ -454,7 +519,7 @@ export default function LoginPage() {
               {isCustomerContext ? (
                 <div className="space-y-3 pt-1">
                   {/* Customer (shopper) sign-up — only in storefront/marketplace context */}
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-center">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3.5 text-center">
                     <p className="text-sm font-medium text-slate-200">¿Querés comprar como cliente?</p>
                     <Link
                       href={customerRegisterHref}
@@ -476,7 +541,7 @@ export default function LoginPage() {
                 /* SaaS context — only business sign-up, no customer option */
                 <div className="pt-1 text-center">
                   <p className="text-sm text-slate-400">
-                    No tienes cuenta?{' '}
+                    ¿No tenés cuenta?{' '}
                     <Link href={companyRegisterHref} className="font-semibold text-cyan-300 hover:text-cyan-200 hover:underline">
                       Registrá tu empresa
                     </Link>
@@ -489,24 +554,34 @@ export default function LoginPage() {
       </main>
 
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
-        <DialogContent className="sm:max-w-[440px]">
+        <DialogContent className="sm:max-w-[440px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Restablecer contrasena</DialogTitle>
+            <DialogTitle className="text-lg font-bold">Restablecer contraseña</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="resetEmail">Correo electronico</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="resetEmail" className="text-xs font-semibold">Correo electrónico</Label>
               <Input
                 id="resetEmail"
                 type="email"
                 placeholder="nombre@empresa.com"
                 value={resetEmail}
-                onChange={(e) => setResetEmail(e.target.value)}
+                onChange={(e) => {
+                  setResetEmail(e.target.value)
+                  if (resetEmailError) setResetEmailError('')
+                }}
                 disabled={resetLoading}
+                className={resetEmailError ? 'border-red-500/80' : ''}
               />
-              <p className="text-xs text-muted-foreground">
-                Te enviaremos un enlace para crear una nueva contrasena.
-              </p>
+              {resetEmailError ? (
+                <p className="text-[11px] text-red-500 font-medium pl-0.5">
+                  {resetEmailError}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Te enviaremos un enlace seguro para crear una nueva contraseña.
+                </p>
+              )}
             </div>
             <TurnstileChallenge
               action="password_reset"
@@ -514,11 +589,11 @@ export default function LoginPage() {
               resetKey={resetCaptchaKey}
               disabled={resetLoading}
             />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setResetOpen(false)} disabled={resetLoading}>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" onClick={() => setResetOpen(false)} disabled={resetLoading} className="rounded-xl">
                 Cancelar
               </Button>
-              <Button onClick={handleResetPassword} disabled={!resetEmail.trim() || resetLoading || !resetCaptchaToken}>
+              <Button onClick={handleResetPassword} disabled={!resetEmail.trim() || resetLoading || !resetCaptchaToken} className="rounded-xl">
                 {resetLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

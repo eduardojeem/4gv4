@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/client'
 export type SubscriptionPlan = {
   id: string
   tier: 'free' | 'basic' | 'pro' | 'enterprise'
+  /** URL publica del plan. Campo propio y unico: no se deduce del nombre porque
+   *  "Pro" y "PRO+" se limpiarian al mismo texto. */
+  public_slug?: string | null
   name: string
   price: number
   price_note: string | null

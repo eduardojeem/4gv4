@@ -543,6 +543,12 @@ export function PlansPageContent() {
   }
 
   async function handleToggleFeature(plan: SubscriptionPlan, featureKey: string, featureLabel: string, currentVal: boolean | string) {
+    // Sin esta guardia, dos clics seguidos en features distintos armaban ambos
+    // arrays desde el mismo estado local: el segundo pisaba al primero y el
+    // cambio se perdia sin ningun aviso.
+    if (togglingId) return
+
+    setTogglingId(plan.id)
     const newFeatures = (plan.features || []).filter((feature) => !isCommercialFeatureLabel(feature.label, featureKey))
     newFeatures.push({ label: featureLabel, value: !Boolean(currentVal) })
     try {
@@ -551,6 +557,8 @@ export function PlansPageContent() {
       await loadPlans()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al actualizar feature')
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -798,14 +806,23 @@ export function PlansPageContent() {
               <div className="flex justify-center p-12">
                 <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
               </div>
+            ) : filteredPlans.length === 0 ? (
+              <div className="p-12 text-center">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  Ningún plan coincide con el filtro
+                </p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Ajustá la búsqueda o el estado para volver a ver la comparación.
+                </p>
+              </div>
             ) : (
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40">
-                    <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <th className="sticky left-0 z-10 bg-slate-50/60 px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-900/40 dark:text-slate-400">
                       Funcionalidad
                     </th>
-                    {plans.map((p) => (
+                    {filteredPlans.map((p) => (
                       <FeatureTableHeader key={p.tier} plan={p} />
                     ))}
                   </tr>
@@ -821,7 +838,9 @@ export function PlansPageContent() {
                           i % 2 !== 0 && 'bg-slate-50/30 dark:bg-slate-900/10',
                         )}
                       >
-                        <td className="px-6 py-4">
+                        {/* Fondo opaco obligatorio: una celda sticky transparente
+                            deja ver las columnas pasando por debajo. */}
+                        <td className="sticky left-0 z-10 bg-white px-6 py-4 dark:bg-slate-950">
                           <div className="flex items-center gap-2.5">
                             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
                               <Icon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
@@ -831,7 +850,7 @@ export function PlansPageContent() {
                             </span>
                           </div>
                         </td>
-                        {plans.map((plan) => {
+                        {filteredPlans.map((plan) => {
                           const featureVal = getCommercialFeatureValue(plan.features, feat.key)
                           const isBool = typeof featureVal === 'boolean'
                           return (
