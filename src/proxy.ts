@@ -13,6 +13,8 @@ import {
   normalizeDefaultPublicOrgSlug,
 } from '@/lib/saas/tenant'
 import { ACTIVE_ORGANIZATION_COOKIE } from '@/lib/saas/active-organization'
+import { deriveAccessFromSnapshot, type MiddlewareAccessSnapshot } from '@/lib/auth/middleware-access'
+import { getCachedSlugAlias, setCachedSlugAlias } from '@/lib/saas/slug-alias-cache'
 
 const PROXY_AUTH_TIMEOUT_MS = 4000
 const PROXY_PROFILE_TIMEOUT_MS = 3000
@@ -69,6 +71,13 @@ async function redirectOrganizationSlugAlias(request: NextRequest) {
     return null
   }
 
+  // Antes esto consultaba la base en cada request a una tienda, aun sabiendo que
+  // el slug no tenia alias. Con el cache, el caso comun no toca la red.
+  const cached = getCachedSlugAlias(maybeSlug)
+  if (cached !== undefined) {
+    return cached ? buildSlugAliasRedirect(request, cached) : null
+  }
+
   try {
     const aliasUrl = new URL('/rest/v1/organization_slug_aliases', supabaseUrl)
     aliasUrl.searchParams.set('old_slug', `eq.${maybeSlug}`)
@@ -86,6 +95,8 @@ async function redirectOrganizationSlugAlias(request: NextRequest) {
       null
     )
 
+    // Un fallo puntual (timeout, red) no se cachea: cachearlo dejaria la tienda
+    // sin redireccion durante todo el TTL por un error transitorio.
     if (!response?.ok) {
       return null
     }
@@ -93,17 +104,23 @@ async function redirectOrganizationSlugAlias(request: NextRequest) {
     const aliases = await response.json().catch(() => []) as Array<{ new_slug?: string }>
     const newSlug = aliases[0]?.new_slug
     if (!newSlug || newSlug === maybeSlug) {
+      setCachedSlugAlias(maybeSlug, null)
       return null
     }
 
-    const url = request.nextUrl.clone()
-    const parts = url.pathname.split('/').filter(Boolean)
-    parts[0] = newSlug
-    url.pathname = `/${parts.join('/')}`
-    return NextResponse.redirect(url, 308)
+    setCachedSlugAlias(maybeSlug, newSlug)
+    return buildSlugAliasRedirect(request, newSlug)
   } catch {
     return null
   }
+}
+
+function buildSlugAliasRedirect(request: NextRequest, newSlug: string) {
+  const url = request.nextUrl.clone()
+  const parts = url.pathname.split('/').filter(Boolean)
+  parts[0] = newSlug
+  url.pathname = `/${parts.join('/')}`
+  return NextResponse.redirect(url, 308)
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
@@ -274,11 +291,29 @@ export async function proxy(request: NextRequest) {
     // Si falla la conexion, asumimos sin usuario
   }
 
-  // Obtener rol del usuario (una sola query) - solo si esta autenticado y lo necesitamos
+  // Obtener rol del usuario - solo si esta autenticado y lo necesitamos
   let normalizedRole: string | undefined
   let roleIsActive = true
   let profileIsActive = true
+  // Rol de organizacion que ya trajo la consulta unica, para no repetirla abajo.
+  let organizationRoleFromSnapshot: string | undefined
+  let resolvedFromSnapshot = false
+  const activeOrganizationIdForAccess = request.cookies.get(ACTIVE_ORGANIZATION_COOKIE)?.value ?? null
+
   if (user) {
+    const snapshot = await resolveAccessSnapshot(supabase, activeOrganizationIdForAccess)
+
+    if (snapshot) {
+      resolvedFromSnapshot = true
+      const derived = deriveAccessFromSnapshot(snapshot)
+      normalizedRole = derived.normalizedRole
+      roleIsActive = derived.roleIsActive
+      profileIsActive = derived.profileIsActive
+      organizationRoleFromSnapshot = derived.organizationRole
+    }
+  }
+
+  if (user && !resolvedFromSnapshot) {
     try {
       const roleWithStatusQuery = Promise.resolve(
         supabase
@@ -342,7 +377,16 @@ export async function proxy(request: NextRequest) {
   let isClientOrViewer = !isActiveUser || effectiveRole === 'cliente'
 
   // If profile says 'cliente' but user owns/manages an organization, grant dashboard access
-  if (isClientOrViewer && user && isActiveUser) {
+  if (isClientOrViewer && user && isActiveUser && resolvedFromSnapshot) {
+    // La consulta unica ya trajo la membresia: no hace falta ir de nuevo a la
+    // base ni instanciar un cliente admin aparte.
+    if (organizationRoleFromSnapshot) {
+      effectiveRole = mapOrganizationRoleToDashboardRole(
+        organizationRoleFromSnapshot as Parameters<typeof mapOrganizationRoleToDashboardRole>[0]
+      )
+      isClientOrViewer = false
+    }
+  } else if (isClientOrViewer && user && isActiveUser) {
     try {
       // Use direct DB query bypassing RLS — middleware runs before the user
       // has a "session context" that satisfies is_org_member policies.
@@ -442,6 +486,36 @@ export async function proxy(request: NextRequest) {
 /**
  * Fallback: obtener rol de la tabla profiles solo si user_roles no tiene dato.
  */
+/**
+ * Resuelve rol, estado y membresia en UNA sola consulta.
+ *
+ * Devuelve `null` cuando no se puede usar (la migracion todavia no esta
+ * aplicada, error, timeout). Ese null es deliberado: el llamador vuelve al
+ * camino de tres consultas. Si en cambio se asumiera "sin permisos" ante un
+ * fallo, un despliegue sin la migracion dejaria a todos afuera del panel.
+ */
+async function resolveAccessSnapshot(
+  supabase: ReturnType<typeof createServerClient>,
+  organizationId: string | null
+): Promise<MiddlewareAccessSnapshot | null> {
+  try {
+    const { data, error } = await withTimeout(
+      Promise.resolve(
+        supabase.rpc('resolve_middleware_access', {
+          p_organization_id: organizationId,
+        })
+      ) as unknown as Promise<{ data: MiddlewareAccessSnapshot | null; error: unknown }>,
+      PROXY_PROFILE_TIMEOUT_MS,
+      { data: null, error: null }
+    )
+
+    if (error || !data || typeof data !== 'object') return null
+    return data
+  } catch {
+    return null
+  }
+}
+
 async function getProfileState(
   supabase: ReturnType<typeof createServerClient>,
   userId: string

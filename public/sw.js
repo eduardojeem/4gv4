@@ -66,14 +66,27 @@ self.addEventListener('fetch', (event) => {
   if (isImmutableAsset(url)) {
     event.respondWith(
       (async () => {
-        const cached = await caches.match(request)
-        if (cached) return cached
+        // Todo el camino va dentro de un try: si el Cache Storage falla (cuota
+        // llena, modo privado, permisos), el asset debe seguir bajando de la red
+        // en vez de que la peticion quede rechazada y la pagina sin estilos.
+        try {
+          const cached = await caches.match(request)
+          if (cached) return cached
+        } catch {
+          return fetch(request)
+        }
 
         const response = await fetch(request)
-        if (response.ok) {
-          const cache = await caches.open(STATIC_CACHE)
-          cache.put(request, response.clone())
+
+        try {
+          if (response.ok) {
+            const cache = await caches.open(STATIC_CACHE)
+            await cache.put(request, response.clone())
+          }
+        } catch {
+          // Guardar en cache es opcional: si no se puede, se sirve igual.
         }
+
         return response
       })(),
     )

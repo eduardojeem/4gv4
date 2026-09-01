@@ -243,15 +243,15 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      {
-        source: '/_next/static/(.*)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
+      // Se quito el header propio para /_next/static/(.*).
+      //
+      // Next ya sirve esos archivos con `max-age=31536000, immutable` por su
+      // cuenta, porque llevan hash en el nombre: repetirlo no agregaba nada en
+      // produccion y en desarrollo hacia dano. Los chunks cambian con cada
+      // edicion, asi que marcarlos inmutables por un año dejaba al navegador
+      // sirviendo JavaScript viejo y el HMR parecia no andar. El propio build
+      // lo advertia: "Setting a custom Cache-Control header can break Next.js
+      // development behavior".
       {
         source: '/images/(.*)',
         headers: [

@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react'
 
+import { isServiceWorkerDisabled, unregisterServiceWorkers } from '@/lib/pwa/service-worker'
+
 /**
  * Registra el service worker.
  *
@@ -10,19 +12,19 @@ import { useEffect } from 'react'
  * ofrecian instalarla de forma confiable (Chrome pide un SW con handler de
  * fetch para disparar `beforeinstallprompt`).
  *
- * En desarrollo no se registra: un SW activo sirve assets cacheados por encima
- * de los que recompila el dev server y termina mostrando codigo viejo.
+ * Se desregistra en dos casos: en desarrollo, donde un SW activo serviria
+ * assets cacheados por encima de los que recompila el dev server; y cuando se
+ * activa el interruptor de apagado, que existe porque un service worker con un
+ * bug no se arregla solo con desplegar.
  */
 export function ServiceWorkerRegistration() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
 
-    if (process.env.NODE_ENV !== 'production') {
-      // Si quedo uno registrado de una sesion anterior, se da de baja para no
-      // arrastrar cache vieja mientras se desarrolla.
-      void navigator.serviceWorker.getRegistrations().then((registrations) => {
-        registrations.forEach((registration) => void registration.unregister())
-      })
+    const shouldDisable = process.env.NODE_ENV !== 'production' || isServiceWorkerDisabled()
+
+    if (shouldDisable) {
+      void unregisterServiceWorkers()
       return
     }
 
