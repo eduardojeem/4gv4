@@ -3,6 +3,19 @@
 import { useState, useMemo, useEffect } from 'react'
 import { toast } from 'sonner'
 import { downloadPdfDocument, printPdfDocument } from '@/lib/credits/print-receipt'
+import { buildCustomerStatement, toStatementPdfInput, toStatementTicketInput } from '@/lib/credits/customer-statement'
+import { createCreditHistoryPdf } from '@/lib/credits/credit-history-pdf'
+import { createCreditHistoryTicket } from '@/lib/credits/credit-history-ticket'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import type { CreditRow, InstallmentRow } from '@/hooks/use-credits'
 import { createClient } from '@/lib/supabase/client'
 import {
     Dialog,
@@ -15,7 +28,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
-import { getCreditDisplayInfo } from '@/lib/credits/display'
+import { getCreditDisplayInfo, resolveInstallmentStatus } from '@/lib/credits/display'
 import {
     Calendar, DollarSign, Percent, TrendingUp,
     Clock, CheckCircle, Receipt, FileText, FileDown, Printer,
@@ -71,6 +84,13 @@ interface CreditDetailDialogProps {
     sales?: any[]
     saleItems?: any[]
     onPayInstallment?: (installmentId: string) => void
+    /**
+     * Todos los creditos y cuotas de la tienda. El estado de cuenta abarca al
+     * cliente entero, no a un credito suelto, y la pagina ya los tiene cargados:
+     * se filtran aca en vez de pedirlos otra vez al servidor.
+     */
+    allCredits?: CreditRow[]
+    allInstallments?: InstallmentRow[]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -92,12 +112,9 @@ const METHOD_STYLE: Record<string, string> = {
     transfer: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
 }
 
-function getInstallmentStatus(inst: InstallmentItem): 'paid' | 'late' | 'overdue' | 'pending' {
-    if (inst.status === 'paid') return 'paid'
-    if (inst.status === 'late') return 'late'
-    if (new Date(inst.due_date) < new Date()) return 'overdue'
-    return 'pending'
-}
+// La regla vive en @/lib/credits/display para que la pantalla y los documentos
+// impresos no puedan mostrar estados distintos de la misma cuota.
+const getInstallmentStatus = (inst: InstallmentItem) => resolveInstallmentStatus(inst)
 
 const INST_STATUS_CONFIG = {
     paid:    { label: 'Pagada',    Icon: CheckCircle,   color: 'text-green-600 dark:text-green-400',  rowBg: '' },
@@ -124,8 +141,11 @@ export function CreditDetailDialog({
     paidAmount,
     sales = [],
     saleItems = [],
-    onPayInstallment
+    onPayInstallment,
+    allCredits = [],
+    allInstallments = []
 }: CreditDetailDialogProps) {
+    const { settings } = useSharedSettings()
     const [expandedSales, setExpandedSales] = useState<Record<string, boolean>>({})
     const [customerDetails, setCustomerDetails] = useState<any>(null)
 
@@ -347,6 +367,64 @@ export function CreditDetailDialog({
             notifyPdfFailure(error, 'imprimir')
         }
     }
+
+    // ─── Estado de cuenta del cliente ─────────────────────────────────────────
+    // Abarca todos los creditos del cliente, no solo el que esta abierto: es el
+    // documento que se le entrega para que vea cuanto debe en total.
+    const customerStatement = useMemo(() => {
+        if (!credit) return null
+        const own = allCredits.filter(c => c.customer_id === credit.customer_id)
+        // Si la pagina todavia no paso los datos completos, al menos el credito
+        // abierto entra: es preferible un estado de cuenta de un solo credito a
+        // un boton que no hace nada.
+        const source = own.length > 0 ? own : [credit as unknown as CreditRow]
+        const ids = new Set(source.map(c => c.id))
+        const rows = allInstallments.length > 0
+            ? allInstallments.filter(i => ids.has(i.credit_id))
+            : (installments as unknown as InstallmentRow[])
+        return buildCustomerStatement(source, rows)
+    }, [credit, allCredits, allInstallments, installments])
+
+    const statementCreditCount = customerStatement?.credits.length ?? 0
+
+    const statementParty = () => ({
+        customerName: credit?.customer_name ?? 'Cliente',
+        customerCode: credit?.customer_code || undefined,
+        customerPhone: customerDetails?.phone || undefined,
+        companyName: settings.companyName,
+        companyPhone: settings.companyPhone || undefined,
+        companyAddress: settings.companyAddress || undefined,
+    })
+
+    const notifyStatementFailure = (error: unknown, action: string) => {
+        toast.error(`No se pudo ${action} el estado de cuenta`, {
+            description: error instanceof Error ? error.message : 'Volvé a intentar en unos segundos.',
+        })
+    }
+
+    const runStatement = async (
+        action: 'imprimir' | 'descargar' | 'imprimir el ticket de',
+        run: (statement: NonNullable<typeof customerStatement>) => Promise<void>
+    ) => {
+        if (!customerStatement) return
+        try {
+            await run(customerStatement)
+        } catch (error) {
+            notifyStatementFailure(error, action)
+        }
+    }
+
+    const printStatementPdf = () => runStatement('imprimir', async (statement) =>
+        printPdfDocument(await createCreditHistoryPdf(toStatementPdfInput(statementParty(), statement))))
+
+    const exportStatementPdf = () => runStatement('descargar', async (statement) =>
+        downloadPdfDocument(
+            await createCreditHistoryPdf(toStatementPdfInput(statementParty(), statement)),
+            `estado_cuenta_${credit?.customer_code || credit?.customer_id}`
+        ))
+
+    const printStatementTicket = () => runStatement('imprimir el ticket de', async (statement) =>
+        printPdfDocument(await createCreditHistoryTicket(toStatementTicketInput(statementParty(), statement))))
 
     // ─── Render ───────────────────────────────────────────────────────────────
     return (
@@ -771,6 +849,32 @@ export function CreditDetailDialog({
                         <Button variant="outline" size="sm" className="h-8 gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400" onClick={printDetailPdf}>
                             <Printer className="h-3.5 w-3.5" /> Imprimir
                         </Button>
+                        {/* Estado de cuenta: agrupa las tres salidas en un menu para no
+                            sumar tres botones mas a una barra que ya esta llena. */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-8 gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400">
+                                    <History className="h-3.5 w-3.5" /> Estado de cuenta
+                                    <ChevronDown className="h-3 w-3 opacity-60" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-64">
+                                <DropdownMenuLabel className="font-normal text-xs text-muted-foreground">
+                                    Todos los créditos de {credit.customer_name}
+                                    {statementCreditCount > 0 && ` (${statementCreditCount})`}
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={printStatementPdf} className="gap-2">
+                                    <Printer className="h-3.5 w-3.5" /> Imprimir (A4)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={printStatementTicket} className="gap-2">
+                                    <Receipt className="h-3.5 w-3.5" /> Imprimir ticket (80mm)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={exportStatementPdf} className="gap-2">
+                                    <FileDown className="h-3.5 w-3.5" /> Descargar PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                         <Button size="sm" className="h-8 ml-auto" onClick={() => onOpenChange(false)}>
                             Cerrar
                         </Button>

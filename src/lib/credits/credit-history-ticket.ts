@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 
 /**
  * Credit History Ticket — 80mm thermal printer format
@@ -40,6 +40,7 @@ const STATUS_LABELS: Record<string, string> = {
   paid: 'Pagado',
   pending: 'Pend.',
   overdue: 'Vencido',
+  late: 'Atrasado',
   partial: 'Parcial',
 }
 
@@ -108,7 +109,7 @@ export async function createCreditHistoryTicket(input: CreditHistoryTicketInput)
   // Date
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
-  doc.text(`Fecha: ${now.toLocaleDateString('es-PY')} ${now.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })}`, MARGIN, y + 3)
+  doc.text(`Fecha: ${now.toLocaleDateString(getDisplayLocale())} ${now.toLocaleTimeString(getDisplayLocale(), { hour: '2-digit', minute: '2-digit' })}`, MARGIN, y + 3)
   y += 5
 
   // ─── CUSTOMER ───────────────────────────────────────────────────────
@@ -175,7 +176,7 @@ export async function createCreditHistoryTicket(input: CreditHistoryTicketInput)
         head: [['#', 'Venc.', 'Monto', 'Pagado', 'Estado']],
         body: credit.installments.map(inst => [
           String(inst.number),
-          new Date(inst.dueDate).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit' }),
+          new Date(inst.dueDate).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: '2-digit' }),
           formatCurrency(inst.amount),
           formatCurrency(inst.amountPaid),
           statusLabel(inst.status),

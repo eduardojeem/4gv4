@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 
 export interface CreditHistoryItem {
   id: string
@@ -40,6 +40,7 @@ const STATUS_LABELS: Record<string, string> = {
   paid: 'Pagado',
   pending: 'Pendiente',
   overdue: 'Vencido',
+  late: 'Atrasado',
   partial: 'Parcial',
 }
 
@@ -79,7 +80,7 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
   doc.setFontSize(10)
   doc.text('HISTORIAL DE CRÉDITO', pageW - margin, 12, { align: 'right' })
   doc.setFontSize(8)
-  doc.text(`Emitido: ${now.toLocaleDateString('es-PY', { day: '2-digit', month: 'long', year: 'numeric' })}`, pageW - margin, 18, { align: 'right' })
+  doc.text(`Emitido: ${now.toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: 'long', year: 'numeric' })}`, pageW - margin, 18, { align: 'right' })
 
   // ─── CUSTOMER INFO ────────────────────────────────────────────────────
   doc.setTextColor(0)
@@ -138,7 +139,7 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
     formatCurrency(credit.principal),
     `${credit.interestRate}%`,
     `${credit.termMonths} meses`,
-    new Date(credit.startDate).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+    new Date(credit.startDate).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: '2-digit', year: '2-digit' }),
     statusLabel(credit.status),
     formatCurrency(credit.remainingBalance ?? 0),
   ])
@@ -192,7 +193,7 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
 
     const installmentRows = credit.installments.map(inst => [
       `#${inst.number}`,
-      new Date(inst.dueDate).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+      new Date(inst.dueDate).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: '2-digit', year: '2-digit' }),
       formatCurrency(inst.amount),
       formatCurrency(inst.amountPaid),
       formatCurrency(Math.max(0, inst.amount - inst.amountPaid)),
@@ -232,7 +233,7 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
   doc.setFont('helvetica', 'italic')
   doc.setTextColor(150)
   doc.text(
-    `Documento generado el ${now.toLocaleString('es-PY')} — ${input.companyName}`,
+    `Documento generado el ${now.toLocaleString(getDisplayLocale())} — ${input.companyName}`,
     pageW / 2,
     pageH - 8,
     { align: 'center' }

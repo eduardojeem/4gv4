@@ -1179,6 +1179,8 @@ function CreditsDashboardContent() {
         paidAmount={detailCreditId ? paidByCredit[detailCreditId] || 0 : 0}
         sales={sales}
         saleItems={saleItems}
+        allCredits={credits}
+        allInstallments={installments}
         onPayInstallment={(installmentId) => {
           setIsDetailDialogOpen(false)
           handleMarkInstallmentPaidDirectly(installmentId)
