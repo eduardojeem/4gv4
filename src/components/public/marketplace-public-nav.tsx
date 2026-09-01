@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { useAuth } from '@/contexts/auth-context'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { InstallPrompt } from '@/components/pwa/install-prompt'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +38,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
+import { resolveLogoSize } from '@/lib/platform/logo-size'
 import { AuthModal } from '@/components/public/AuthModal'
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
@@ -91,6 +93,9 @@ export function MarketplacePublicNav() {
     return exact ? pathname === href : pathname.startsWith(href)
   }
 
+  // Tamaño del logo: definicion unica compartida con el nav de la landing.
+  const logoSize = resolveLogoSize(branding)
+
   async function handleLogout() {
     await signOut()
     setMobileDrawerOpen(false)
@@ -113,15 +118,17 @@ export function MarketplacePublicNav() {
                       src={branding.logoUrl}
                       alt={branding.platformName}
                       className={`${
-                        branding.logoHeight === 'sm' ? 'h-8 max-w-[160px]' : branding.logoHeight === 'lg' ? 'h-12 sm:h-14 max-w-[260px]' : branding.logoHeight === 'xl' ? 'h-14 sm:h-16 max-w-[300px]' : 'h-10 sm:h-11 max-w-[210px]'
+                        logoSize.className
                       } w-auto object-contain dark:hidden drop-shadow-xs`}
+                      style={logoSize.style}
                     />
                     <img
                       src={branding.logoDarkUrl}
                       alt={branding.platformName}
                       className={`${
-                        branding.logoHeight === 'sm' ? 'h-8 max-w-[160px]' : branding.logoHeight === 'lg' ? 'h-12 sm:h-14 max-w-[260px]' : branding.logoHeight === 'xl' ? 'h-14 sm:h-16 max-w-[300px]' : 'h-10 sm:h-11 max-w-[210px]'
+                        logoSize.className
                       } w-auto object-contain hidden dark:block ${branding.logoGlowDark !== false ? 'drop-shadow-[0_2px_14px_rgba(6,182,212,0.35)]' : ''}`}
+                      style={logoSize.style}
                     />
                   </>
                 ) : (
@@ -129,8 +136,9 @@ export function MarketplacePublicNav() {
                     src={branding.logoUrl || branding.logoDarkUrl}
                     alt={branding.platformName}
                     className={`${
-                      branding.logoHeight === 'sm' ? 'h-8 max-w-[160px]' : branding.logoHeight === 'lg' ? 'h-12 sm:h-14 max-w-[260px]' : branding.logoHeight === 'xl' ? 'h-14 sm:h-16 max-w-[300px]' : 'h-10 sm:h-11 max-w-[210px]'
+                      logoSize.className
                     } w-auto object-contain`}
+                    style={logoSize.style}
                   />
                 )}
               </div>
@@ -181,6 +189,7 @@ export function MarketplacePublicNav() {
 
           {/* Right actions */}
           <div className="flex items-center gap-2">
+            <InstallPrompt />
             <ThemeToggle />
 
             {/* SaaS CTA — desktop */}

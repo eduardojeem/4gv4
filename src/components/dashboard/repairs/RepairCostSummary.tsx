@@ -12,9 +12,12 @@ type HistoryRow = {
   id: string
   revision_number: number
   actor_role: string
+  actor_name?: string | null
   reason?: string | null
   final_total: number
   previous_snapshot?: { finalTotal?: number } | null
+  parts_internal_cost?: number | null
+  policy_snapshot?: { internalCostCorrection?: boolean; commercialPriceCorrection?: boolean } | null
   created_at: string
 }
 
@@ -23,11 +26,17 @@ export function RepairCostSummary({
   editable,
   repairId,
   onEdit,
+  correctable = false,
+  onCorrectInternalCost,
+  onCorrectFinalPrice,
 }: {
   summary: RepairCostSummaryType
   editable: boolean
   repairId?: string
   onEdit: () => void
+  correctable?: boolean
+  onCorrectInternalCost?: () => void
+  onCorrectFinalPrice?: () => void
 }) {
   const canViewCost = useCanViewCost()
   const [history, setHistory] = useState<HistoryRow[]>([])
@@ -55,6 +64,18 @@ export function RepairCostSummary({
           <Button type="button" variant="outline" size="sm" onClick={onEdit} aria-label="Editar costos y repuestos">
             <Edit className="mr-2 h-4 w-4" />
             Editar costos y repuestos
+          </Button>
+        )}
+        {!editable && correctable && onCorrectInternalCost && (
+          <Button type="button" variant="outline" size="sm" onClick={onCorrectInternalCost} aria-label="Corregir costo interno">
+            <Edit className="mr-2 h-4 w-4" />
+            Corregir costo interno
+          </Button>
+        )}
+        {!editable && correctable && onCorrectFinalPrice && (
+          <Button type="button" variant="outline" size="sm" onClick={onCorrectFinalPrice} aria-label="Corregir precio final">
+            <Edit className="mr-2 h-4 w-4" />
+            Corregir precio final
           </Button>
         )}
       </div>
@@ -102,7 +123,9 @@ export function RepairCostSummary({
             {history.map((entry) => (
               <li key={entry.id}>
                 <p className="font-medium">Revisión {entry.revision_number}: {formatCurrency(Number(entry.final_total))}</p>
-                <p className="text-muted-foreground">{new Date(entry.created_at).toLocaleString('es-PY')} · {entry.actor_role}</p>
+                {entry.policy_snapshot?.internalCostCorrection && canViewCost && <p className="text-amber-700 dark:text-amber-300">Corrección interna · costo {formatCurrency(Number(entry.parts_internal_cost || 0))}</p>}
+                {entry.policy_snapshot?.commercialPriceCorrection && <p className="text-sky-700 dark:text-sky-300">Corrección comercial del precio final</p>}
+                <p className="text-muted-foreground">{new Date(entry.created_at).toLocaleString('es-PY')} · {entry.actor_name || entry.actor_role}</p>
                 {entry.reason && <p>{entry.reason}</p>}
               </li>
             ))}

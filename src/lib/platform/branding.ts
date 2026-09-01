@@ -9,6 +9,8 @@ export type PlatformBranding = {
   hideNavBrandText?: boolean
   hideNavTagline?: boolean
   logoHeight?: 'sm' | 'md' | 'lg' | 'xl'
+  /** Alto exacto en px. Si esta definido, manda sobre `logoHeight`. */
+  logoHeightPx?: number
   logoGlowDark?: boolean
   marketplaceName: string
   marketplaceTagline: string
@@ -32,6 +34,7 @@ export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
   hideNavBrandText: false,
   hideNavTagline: false,
   logoHeight: 'md',
+  logoHeightPx: 0,
   logoGlowDark: true,
   marketplaceName: 'Marketplace',
   marketplaceTagline: 'Empresas y productos',
@@ -63,6 +66,15 @@ function readPath(value: unknown, fallback: string) {
   return path
 }
 
+/** 0 significa "sin tamaño personalizado": manda el preset. */
+function readLogoHeightPx(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+  // Mismos limites que el control del formulario, para que un valor manipulado
+  // no pueda romper la barra de navegacion con un logo gigante.
+  return Math.min(96, Math.max(24, Math.round(parsed)))
+}
+
 function readBoolean(value: unknown, fallback: boolean): boolean {
   if (typeof value === 'boolean') return value
   if (value === 'true' || value === 1) return true
@@ -85,6 +97,7 @@ export function normalizePlatformBranding(value: unknown): PlatformBranding {
     hideNavBrandText: readBoolean(source.hideNavBrandText, DEFAULT_PLATFORM_BRANDING.hideNavBrandText || false),
     hideNavTagline: readBoolean(source.hideNavTagline, DEFAULT_PLATFORM_BRANDING.hideNavTagline || false),
     logoHeight: validHeight,
+    logoHeightPx: readLogoHeightPx(source.logoHeightPx),
     logoGlowDark: readBoolean(source.logoGlowDark, DEFAULT_PLATFORM_BRANDING.logoGlowDark ?? true),
     marketplaceName: readString(source.marketplaceName, DEFAULT_PLATFORM_BRANDING.marketplaceName, 80),
     marketplaceTagline: readString(source.marketplaceTagline, DEFAULT_PLATFORM_BRANDING.marketplaceTagline, 140),

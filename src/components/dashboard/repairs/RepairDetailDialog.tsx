@@ -57,7 +57,10 @@ import { logger } from '@/lib/logger'
 import { formatWhatsAppPhone, getWhatsAppLink } from '@/lib/whatsapp'
 import { RepairCostSummary } from './RepairCostSummary'
 import { RepairCostsEditorDialog } from './RepairCostsEditorDialog'
+import { RepairInternalCostCorrectionDialog } from './RepairInternalCostCorrectionDialog'
+import { RepairFinalPriceCorrectionDialog } from './RepairFinalPriceCorrectionDialog'
 import { calculateRepairCost } from '@/lib/repairs/cost-breakdown'
+import { useAuth } from '@/contexts/auth-context'
 
 interface RepairDetailDialogProps {
   open: boolean
@@ -92,6 +95,7 @@ export function RepairDetailDialog({
   onStatusChange
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
+  const { isAdmin } = useAuth()
   const [warrantyClaimOpen, setWarrantyClaimOpen] = useState(false)
   // Al registrar un reclamo se remonta el bloque para que muestre el caso recien creado.
   const [warrantyCaseVersion, setWarrantyCaseVersion] = useState(0)
@@ -99,6 +103,8 @@ export function RepairDetailDialog({
   const [isSendingStatusWhatsApp, setIsSendingStatusWhatsApp] = useState(false)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [isCostsEditorOpen, setIsCostsEditorOpen] = useState(false)
+  const [isInternalCostCorrectionOpen, setIsInternalCostCorrectionOpen] = useState(false)
+  const [isFinalPriceCorrectionOpen, setIsFinalPriceCorrectionOpen] = useState(false)
   const { settings } = useSharedSettings()
   const [verificationHash, setVerificationHash] = useState<string | undefined>(undefined)
   const [deliveredEditWarningOpen, setDeliveredEditWarningOpen] = useState(false)
@@ -1227,6 +1233,9 @@ export function RepairDetailDialog({
                       editable={activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado'}
                       repairId={activeRepair.id}
                       onEdit={() => setIsCostsEditorOpen(true)}
+                      correctable={isAdmin && activeRepair.status === 'entregado'}
+                      onCorrectInternalCost={activeRepair.parts.some((part) => Boolean(part.databaseId)) ? () => setIsInternalCostCorrectionOpen(true) : undefined}
+                      onCorrectFinalPrice={() => setIsFinalPriceCorrectionOpen(true)}
                     />
                     {onQuickPay && financial.canCollect && (
                       <Button
@@ -1394,6 +1403,20 @@ export function RepairDetailDialog({
           onSaved={async () => {
             await onCostSaved?.()
           }}
+        />
+        <RepairInternalCostCorrectionDialog
+          open={isInternalCostCorrectionOpen}
+          repair={activeRepair}
+          onOpenChange={setIsInternalCostCorrectionOpen}
+          onSaved={async () => {
+            await onCostSaved?.()
+          }}
+        />
+        <RepairFinalPriceCorrectionDialog
+          open={isFinalPriceCorrectionOpen}
+          repair={activeRepair}
+          onOpenChange={setIsFinalPriceCorrectionOpen}
+          onSaved={async () => { await onCostSaved?.() }}
         />
       </DialogContent>
     </Dialog>

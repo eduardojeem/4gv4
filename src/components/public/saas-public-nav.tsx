@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
+import { resolveLogoSize } from '@/lib/platform/logo-size'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AuthModal } from '@/components/public/AuthModal'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -92,14 +93,9 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
     router.refresh()
   }
 
-  // Clases dinámicas según el tamaño del logo configurado
-  const heightClasses = {
-    sm: 'h-8 sm:h-9 max-w-[160px]',
-    md: 'h-10 sm:h-12 max-w-[220px]',
-    lg: 'h-12 sm:h-14 max-w-[270px]',
-    xl: 'h-14 sm:h-16 max-w-[320px]',
-  }
-  const currentHeight = heightClasses[branding.logoHeight || 'md']
+  // Tamaño del logo: definicion unica compartida con el nav del marketplace.
+  const logoSize = resolveLogoSize(branding)
+  const currentHeight = logoSize.className
   const darkGlowClass =
     branding.logoGlowDark !== false
       ? 'drop-shadow-[0_3px_18px_rgba(6,182,212,0.4)]'
@@ -131,6 +127,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
                       className={`${currentHeight} w-auto object-contain drop-shadow-xs ${
                         isDark ? 'hidden' : 'dark:hidden'
                       }`}
+                      style={logoSize.style}
                     />
                     <img
                       src={branding.logoDarkUrl}
@@ -138,6 +135,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
                       className={`${currentHeight} w-auto object-contain ${darkGlowClass} ${
                         isDark ? 'block' : 'hidden dark:block'
                       }`}
+                      style={logoSize.style}
                     />
                   </>
                 ) : (
@@ -147,6 +145,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
                     className={`${currentHeight} w-auto object-contain ${
                       isDark ? darkGlowClass : 'drop-shadow-xs'
                     }`}
+                    style={logoSize.style}
                   />
                 )}
               </div>

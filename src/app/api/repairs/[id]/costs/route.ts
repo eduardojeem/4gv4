@@ -91,7 +91,19 @@ export async function GET(request: NextRequest, context: RouteParams) {
       .eq('repair_id', id)
       .order('created_at', { ascending: false })
     if (error) throw error
-    return NextResponse.json({ success: true, revisions: data ?? [] })
+    const revisions = data ?? []
+    const actorIds = [...new Set(revisions.map((revision) => revision.actor_id).filter(Boolean))]
+    const { data: actors } = actorIds.length > 0
+      ? await ctx.supabase.from('profiles').select('id, full_name').in('id', actorIds)
+      : { data: [], error: null }
+    const actorNames = new Map((actors ?? []).map((actor) => [actor.id, actor.full_name]))
+    return NextResponse.json({
+      success: true,
+      revisions: revisions.map((revision) => ({
+        ...revision,
+        actor_name: revision.actor_id ? actorNames.get(revision.actor_id) || null : null,
+      })),
+    })
   } catch (error) {
     console.error('[repair-costs] Unexpected history failure', error)
     return NextResponse.json({ error: 'No se pudo cargar el historial de costos.' }, { status: 500 })

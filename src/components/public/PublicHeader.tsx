@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { InstallPrompt } from '@/components/pwa/install-prompt'
 import { PublicRepairReadyNotifications } from '@/components/public/PublicRepairReadyNotifications'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
 import { cn } from '@/lib/utils'
@@ -314,6 +315,8 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
           )}
 
           <PublicCartButton />
+
+          <InstallPrompt />
 
           {/* Theme toggle - visible on all screens */}
           {mounted && <ThemeToggle />}

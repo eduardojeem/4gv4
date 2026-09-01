@@ -306,9 +306,7 @@ export const Header = memo(function Header() {
           <div className="hidden lg:block">
             <BranchSelector compact={isCompact} />
           </div>
-          <div className="hidden sm:block">
-            <InstallPrompt />
-          </div>
+          <InstallPrompt />
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"

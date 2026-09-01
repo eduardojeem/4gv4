@@ -31,4 +31,23 @@ describe('RepairCostSummary', () => {
     expect(region).toHaveTextContent('Material incluido · interno')
     expect(screen.getByRole('button', { name: 'Editar costos y repuestos' })).toBeEnabled()
   })
+
+  it('offers an internal-cost correction separately from ordinary editing', () => {
+    const onCorrect = vi.fn()
+    render(<RepairCostSummary
+      summary={{ laborAmount: 0, partsSubtotal: 200_000, partsInternalCost: 95, additionalCharges: 0,
+        deductions: 0, discountAmount: 0, subtotalBeforeDiscount: 200_000, finalTotal: 200_000,
+        paidAmount: 200_000, balance: 0, taxBreakdown: [] }}
+      editable={false}
+      correctable
+      onEdit={vi.fn()}
+      onCorrectInternalCost={onCorrect}
+      onCorrectFinalPrice={vi.fn()}
+    />)
+
+    screen.getByRole('button', { name: 'Corregir costo interno' }).click()
+    expect(onCorrect).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: 'Editar costos y repuestos' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Corregir precio final' })).toBeEnabled()
+  })
 })

@@ -31,6 +31,8 @@ import {
   Search,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { BrandAssetHistory } from '@/components/superadmin/BrandAssetHistory'
+import { MAX_LOGO_HEIGHT_PX, MIN_LOGO_HEIGHT_PX } from '@/lib/platform/logo-size'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -61,6 +63,8 @@ interface BrandAssetUploaderProps {
   onChange: (field: keyof PlatformBranding, value: string) => void
   recommendedDimensions: string
   badgeText?: string
+  /** Avisa al formulario para que el historial vuelva a pedir la lista. */
+  onUploaded?: () => void
 }
 
 function BrandAssetUploader({
@@ -72,6 +76,7 @@ function BrandAssetUploader({
   onChange,
   recommendedDimensions,
   badgeText,
+  onUploaded,
 }: BrandAssetUploaderProps) {
   const [uploading, setUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
@@ -83,19 +88,21 @@ function BrandAssetUploader({
     if (!file) return
 
     // Validar tipo de archivo
+    // SVG queda fuera a proposito: puede contener <script> y estos archivos se
+    // sirven publicos. El servidor tambien lo rechaza, verificando los magic
+    // bytes en vez del tipo declarado, que se puede falsear.
     const validTypes = [
       'image/png',
       'image/jpeg',
       'image/webp',
-      'image/svg+xml',
       'image/x-icon',
       'image/vnd.microsoft.icon',
       'image/gif',
       'image/avif',
     ]
 
-    if (!validTypes.includes(file.type) && !file.name.endsWith('.svg') && !file.name.endsWith('.ico')) {
-      toast.error('Formato no soportado. Usa PNG, JPG, WebP, SVG o ICO.')
+    if (!validTypes.includes(file.type) && !file.name.endsWith('.ico')) {
+      toast.error('Formato no soportado. Usa PNG, JPG, WebP, GIF, AVIF o ICO.')
       return
     }
 
@@ -124,6 +131,7 @@ function BrandAssetUploader({
       }
 
       onChange(field, data.url)
+      onUploaded?.()
       toast.success(`${label} subido correctamente`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo subir la imagen.')
@@ -199,7 +207,7 @@ function BrandAssetUploader({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,image/gif"
+            accept="image/png,image/jpeg,image/webp,image/x-icon,image/vnd.microsoft.icon,image/gif,image/avif"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -391,6 +399,8 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
   const [saving, setSaving] = useState(false)
   const [previewMode, setPreviewMode] = useState<'navbar' | 'login' | 'browser' | 'marketplace'>('navbar')
   const [navbarThemePreview, setNavbarThemePreview] = useState<'light' | 'dark'>('light')
+  // Se incrementa tras cada subida para que el historial vuelva a pedir la lista.
+  const [assetsVersion, setAssetsVersion] = useState(0)
 
   const hasChanges = JSON.stringify(draft) !== JSON.stringify(savedState)
 
@@ -566,6 +576,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 field="logoUrl"
                 assetType="logo_light"
                 onChange={updateField}
+                onUploaded={() => setAssetsVersion((v) => v + 1)}
                 recommendedDimensions="Horizontal (200x50px o SVG)"
               />
 
@@ -577,6 +588,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 field="logoDarkUrl"
                 assetType="logo_dark"
                 onChange={updateField}
+                onUploaded={() => setAssetsVersion((v) => v + 1)}
                 recommendedDimensions="Horizontal (200x50px o SVG)"
               />
 
@@ -588,6 +600,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 field="faviconUrl"
                 assetType="favicon"
                 onChange={updateField}
+                onUploaded={() => setAssetsVersion((v) => v + 1)}
                 recommendedDimensions="Cuadrado (64x64px o 192x192px)"
               />
 
@@ -693,9 +706,61 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                         </button>
                       ))}
                     </div>
+
+                    {/* Tamaño exacto: los cuatro presets no siempre calzan con
+                        la proporcion de cada logo. */}
+                    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label htmlFor="logo-height-px" className="text-xs font-semibold">
+                          Tamaño personalizado
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id="logo-height-px"
+                            type="number"
+                            min={MIN_LOGO_HEIGHT_PX}
+                            max={MAX_LOGO_HEIGHT_PX}
+                            value={draft.logoHeightPx || ''}
+                            placeholder="auto"
+                            onChange={(event) => {
+                              const raw = event.target.value.trim()
+                              updateField('logoHeightPx', raw === '' ? 0 : Number(raw))
+                            }}
+                            className="h-8 w-24 text-xs"
+                          />
+                          <span className="text-[11px] text-slate-500">px</span>
+                          {Boolean(draft.logoHeightPx) && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => updateField('logoHeightPx', 0)}
+                            >
+                              Quitar
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="mt-1.5 text-[11px] text-slate-500">
+                        {draft.logoHeightPx
+                          ? `Se usa ${draft.logoHeightPx}px y se ignora el preset elegido arriba.`
+                          : `Vacío = manda el preset. Entre ${MIN_LOGO_HEIGHT_PX} y ${MAX_LOGO_HEIGHT_PX}px.`}
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
+
+              <BrandAssetHistory
+                refreshToken={assetsVersion}
+                onUse={(field, url) => {
+                  updateField(field, url)
+                  toast.success('Archivo asignado', {
+                    description: 'Acordate de guardar los cambios.',
+                  })
+                }}
+              />
             </TabsContent>
 
             {/* TAB 2: IDENTIDAD */}

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { PublicFooter } from '@/components/public/PublicFooter'
 import { MaintenanceGuard } from '@/components/public/MaintenanceGuard'
@@ -7,6 +8,17 @@ import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWit
 import { CustomerLinkBanner } from '@/components/public/CustomerLinkBanner'
 import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
+
+// Cada tienda declara su propio manifest, para que el icono instalado abra en
+// esa tienda y no en la raiz de la plataforma.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ organizationSlug: string }>
+}): Promise<Metadata> {
+  const { organizationSlug } = await params
+  return { manifest: `/${organizationSlug}/manifest.webmanifest` }
+}
 
 export default async function OrganizationPublicLayout({
   children,
