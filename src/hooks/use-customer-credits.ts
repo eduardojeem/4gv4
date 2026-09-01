@@ -378,6 +378,11 @@ export function useCustomersWithCredits(customers: Customer[]) {
   useEffect(() => {
     if (customers.length === 0) return
 
+    // La lista de clientes cambia al filtrar o paginar, y cada cambio dispara
+    // una consulta nueva. Sin esta bandera, una respuesta anterior mas lenta
+    // sobrescribe los resumenes ya cargados y se ven saldos de otros clientes.
+    let cancelled = false
+
     const loadCreditSummaries = async () => {
       setLoading(true)
       try {
@@ -508,15 +513,18 @@ export function useCustomersWithCredits(customers: Customer[]) {
             }
         })
         
+        if (cancelled) return
         setCreditSummaries(summaries)
       } catch (error) {
         console.error('Error loading credit summaries:', error)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     loadCreditSummaries()
+
+    return () => { cancelled = true }
   }, [customers, supabase])
 
   return {

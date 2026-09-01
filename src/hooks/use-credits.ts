@@ -140,7 +140,16 @@ export function useCredits(enabled = true) {
         customerName: ''
     })
 
+    /**
+     * Numero de la carga en curso. Hay refresco por realtime, por accion del
+     * usuario y por cambio de filtros, asi que puede haber varias en vuelo: sin
+     * este contador, una respuesta lenta anterior pisa a la mas reciente y la
+     * pantalla termina mostrando el credito de otro cliente.
+     */
+    const loadSeqRef = useRef(0)
+
     const loadData = useCallback(async () => {
+        const requestId = ++loadSeqRef.current
         if (!enabled) {
             setCredits([])
             setInstallments([])
@@ -157,6 +166,9 @@ export function useCredits(enabled = true) {
         setError(null)
         try {
             const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers, dbSales, dbSaleItems } = await fetchTenantCreditsData()
+
+            // Llego una carga mas nueva mientras esta viajaba: se descarta.
+            if (requestId !== loadSeqRef.current) return
 
             const customersMap = ((dbCustomers || []) as Array<{ id: string; customer_code?: string }>).reduce((acc, c) => {
                 acc[c.id] = c.customer_code ?? ''
@@ -225,11 +237,14 @@ export function useCredits(enabled = true) {
             setInstallmentsProgress(ip)
 
         } catch (err) {
+            if (requestId !== loadSeqRef.current) return
             const message = err instanceof Error ? err.message : 'Error al cargar los créditos.'
             console.error('[useCredits] loadData error:', err)
             setError(message)
         } finally {
-            setLoading(false)
+            // Solo la carga vigente apaga el indicador: si lo hiciera una vieja,
+            // la pantalla diria "listo" con una consulta todavia en curso.
+            if (requestId === loadSeqRef.current) setLoading(false)
         }
     }, [enabled])
 
