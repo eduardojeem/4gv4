@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { toast } from 'sonner'
+import { downloadPdfDocument, printPdfDocument } from '@/lib/credits/print-receipt'
 import { createClient } from '@/lib/supabase/client'
 import {
     Dialog,
@@ -324,8 +326,27 @@ export function CreditDetailDialog({
         return doc
     }
 
-    const exportDetailPdf = async () => { const doc = await generateDetailDoc(); doc.save(`credito_${credit.id}_detalle.pdf`) }
-    const printDetailPdf = async () => { const doc = await generateDetailDoc(); doc.autoPrint(); doc.output('dataurlnewwindow') }
+    const notifyPdfFailure = (error: unknown, action: 'imprimir' | 'descargar') => {
+        toast.error(`No se pudo ${action} el detalle del crédito`, {
+            description: error instanceof Error ? error.message : 'Volvé a intentar en unos segundos.',
+        })
+    }
+
+    const exportDetailPdf = async () => {
+        try {
+            downloadPdfDocument(await generateDetailDoc(), `credito_${credit.id}_detalle`)
+        } catch (error) {
+            notifyPdfFailure(error, 'descargar')
+        }
+    }
+
+    const printDetailPdf = async () => {
+        try {
+            await printPdfDocument(await generateDetailDoc())
+        } catch (error) {
+            notifyPdfFailure(error, 'imprimir')
+        }
+    }
 
     // ─── Render ───────────────────────────────────────────────────────────────
     return (

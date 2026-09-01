@@ -1,14 +1,20 @@
 import { formatCreditId } from '@/lib/utils'
 import type { CreditRow, InstallmentRow } from '@/hooks/use-credits'
 
-type SaleLike = {
+/**
+ * Lo minimo que la vista necesita de una venta. Se exporta para que el hook
+ * declare exactamente esta forma: antes guardaba las ventas como
+ * `Record<string, unknown>` y el compilador no podia verificar nada, asi que un
+ * cambio en la consulta solo se notaba cuando el credito ya se veia mal.
+ */
+export type SaleLike = {
   id: string
   code?: string | null
   created_at?: string | null
   total_amount?: number | null
 }
 
-type SaleItemLike = {
+export type SaleItemLike = {
   sale_id?: string | null
   quantity?: number | null
   product?: { name?: string | null } | null

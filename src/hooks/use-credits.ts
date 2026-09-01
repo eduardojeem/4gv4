@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useTransition, useCallback } from 'react'
+import type { SaleItemLike, SaleLike } from '@/lib/credits/display'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { config } from '@/lib/config'
@@ -126,8 +127,8 @@ export function useCredits(enabled = true) {
     const [payments, setPayments] = useState<PaymentRow[]>([])
     const [summary, setSummary] = useState<Record<string, CreditSummaryRow>>({})
     const [installmentsProgress, setInstallmentsProgress] = useState<Record<string, InstallmentProgressRow>>({})
-    const [sales, setSales] = useState<Array<Record<string, unknown>>>([])
-    const [saleItems, setSaleItems] = useState<Array<Record<string, unknown>>>([])
+    const [sales, setSales] = useState<SaleLike[]>([])
+    const [saleItems, setSaleItems] = useState<SaleItemLike[]>([])
 
     // Keep these exposed if components need them, or wrap them in actions
     const [filterValues, setFilterValues] = useState<InstallmentFilters>({

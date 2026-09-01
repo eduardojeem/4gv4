@@ -7,6 +7,8 @@ import { formatCurrency } from '@/lib/currency'
 import type { CreditRow, InstallmentRow, PaymentRow } from '@/hooks/use-credits'
 import { getCreditDisplayInfo } from '@/lib/credits/display'
 import { createCreditPaymentReceiptPdf, getCreditCurrentBalance } from '@/lib/credits/payment-receipt'
+import { printPdfDocument } from '@/lib/credits/print-receipt'
+import { toast } from 'sonner'
 
 const methodConfig: Record<string, { label: string; color: string; dot: string }> = {
   cash:     { label: 'Efectivo',     color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',   dot: 'bg-green-500' },
@@ -79,6 +81,7 @@ export function PaymentsTimeline({
   }, {})
 
   const printPaymentReceipt = async (payment: PaymentRow) => {
+    try {
     const credit = creditById[payment.credit_id]
     const installment = installments.find((row) => row.id === payment.installment_id)
     const creditInstallments = installments.filter((row) => row.credit_id === payment.credit_id)
@@ -115,8 +118,14 @@ export function PaymentsTimeline({
       nextDueAmount: nextPending?.amount,
     })
 
-    result.doc.autoPrint()
-    result.doc.output('dataurlnewwindow')
+      await printPdfDocument(result.doc)
+    } catch (error) {
+      // El pago YA quedo registrado en la base: el mensaje tiene que dejarlo
+      // claro para que nadie vuelva a cobrarlo creyendo que fallo el cobro.
+      toast.error('No se pudo imprimir el comprobante', {
+        description: `El pago quedó registrado. ${error instanceof Error ? error.message : 'Volvé a intentar desde el historial.'}`,
+      })
+    }
   }
 
   return (

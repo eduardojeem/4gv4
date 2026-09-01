@@ -145,15 +145,34 @@ function CreditsDashboardContent() {
   const portfolioTotals = useMemo(() => {
     let outstanding = 0
     let overdue = 0
+    let paid = 0
+
     for (const installment of installments) {
       const amount = Number(installment.amount || 0)
-      const paid = Math.max(0, Number(installment.amount_paid || 0))
-      const open = Math.max(0, amount - paid)
+      const paidAmt = Math.max(0, Number(installment.amount_paid || 0))
+      paid += Math.min(amount, paidAmt)
+      const open = Math.max(0, amount - paidAmt)
       if (open <= 0) continue
       outstanding += open
       if (isInstallmentLate(installment)) overdue += open
     }
-    return { outstanding, overdue }
+
+    const totalFinanced = paid + outstanding
+    const currentOnTime = Math.max(0, outstanding - overdue)
+    const recoveryRate = totalFinanced > 0 ? (paid / totalFinanced) * 100 : 0
+    const overdueRate = totalFinanced > 0 ? (overdue / totalFinanced) * 100 : 0
+    const currentRate = totalFinanced > 0 ? (currentOnTime / totalFinanced) * 100 : 0
+
+    return {
+      outstanding,
+      overdue,
+      paid,
+      currentOnTime,
+      totalFinanced,
+      recoveryRate,
+      overdueRate,
+      currentRate,
+    }
   }, [installments])
 
   const collectionSummary = useMemo(() => {
@@ -478,8 +497,17 @@ function CreditsDashboardContent() {
 
         {/* Cuotas en Mora / Vencidas */}
         <Card 
+          role="button"
+          tabIndex={0}
+          aria-label="Filtrar y ver las cuotas en mora o vencidas"
           onClick={handleFilterOverdue}
-          className="border border-rose-200 dark:border-rose-900/40 shadow-xs bg-rose-50/40 dark:bg-rose-950/20 rounded-2xl cursor-pointer hover:border-rose-400 transition-all group"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              handleFilterOverdue()
+            }
+          }}
+          className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 border border-rose-200 dark:border-rose-900/40 shadow-xs bg-rose-50/40 dark:bg-rose-950/20 rounded-2xl cursor-pointer hover:border-rose-400 transition-all group"
         >
           <CardContent className="p-4 flex items-center justify-between">
             <div>
@@ -507,8 +535,17 @@ function CreditsDashboardContent() {
 
         {/* Vencimientos de Hoy */}
         <Card 
+          role="button"
+          tabIndex={0}
+          aria-label="Filtrar y ver las cuotas que vencen hoy"
           onClick={handleFilterDueToday}
-          className="border border-amber-200 dark:border-amber-900/40 shadow-xs bg-amber-50/40 dark:bg-amber-950/20 rounded-2xl cursor-pointer hover:border-amber-400 transition-all group"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              handleFilterDueToday()
+            }
+          }}
+          className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 border border-amber-200 dark:border-amber-900/40 shadow-xs bg-amber-50/40 dark:bg-amber-950/20 rounded-2xl cursor-pointer hover:border-amber-400 transition-all group"
         >
           <CardContent className="p-4 flex items-center justify-between">
             <div>
@@ -529,8 +566,17 @@ function CreditsDashboardContent() {
 
         {/* Clientes Financiados */}
         <Card 
+          role="button"
+          tabIndex={0}
+          aria-label="Ver todos los créditos activos"
           onClick={() => setActiveTab('credits')}
-          className="border border-slate-200/80 dark:border-white/10 shadow-xs bg-white dark:bg-[#0d1117] rounded-2xl cursor-pointer hover:border-blue-300 transition-all group"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              setActiveTab('credits')
+            }
+          }}
+          className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 border border-slate-200/80 dark:border-white/10 shadow-xs bg-white dark:bg-[#0d1117] rounded-2xl cursor-pointer hover:border-blue-300 transition-all group"
         >
           <CardContent className="p-4 flex items-center justify-between">
             <div>
@@ -549,6 +595,58 @@ function CreditsDashboardContent() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Barra de Salud y Cobertura de Cartera */}
+      {portfolioTotals.totalFinanced > 0 && (
+        <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#0d1117] p-4 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                Estado y Cobertura de Cartera Financiada
+              </span>
+              <Badge variant="outline" className="text-[10px] font-semibold border-slate-200 dark:border-slate-800">
+                Total: {formatCurrency(portfolioTotals.totalFinanced)}
+              </Badge>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600 dark:text-slate-400">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span>Recuperado: <strong className="text-slate-900 dark:text-white">{portfolioTotals.recoveryRate.toFixed(1)}%</strong> ({formatCurrency(portfolioTotals.paid)})</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-blue-500" />
+                <span>Al Día: <strong className="text-slate-900 dark:text-white">{portfolioTotals.currentRate.toFixed(1)}%</strong> ({formatCurrency(portfolioTotals.currentOnTime)})</span>
+              </span>
+              {portfolioTotals.overdue > 0 && (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                  <span className="text-rose-600 dark:text-rose-400">En Mora: <strong>{portfolioTotals.overdueRate.toFixed(1)}%</strong> ({formatCurrency(portfolioTotals.overdue)})</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800/80 rounded-full overflow-hidden flex gap-0.5 p-0.5">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full transition-all duration-500"
+              style={{ width: `${Math.max(portfolioTotals.recoveryRate > 0 ? 2 : 0, portfolioTotals.recoveryRate)}%` }}
+              title={`Recuperado: ${formatCurrency(portfolioTotals.paid)} (${portfolioTotals.recoveryRate.toFixed(1)}%)`}
+            />
+            <div
+              className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500"
+              style={{ width: `${Math.max(portfolioTotals.currentRate > 0 ? 2 : 0, portfolioTotals.currentRate)}%` }}
+              title={`Al Día: ${formatCurrency(portfolioTotals.currentOnTime)} (${portfolioTotals.currentRate.toFixed(1)}%)`}
+            />
+            {portfolioTotals.overdue > 0 && (
+              <div
+                className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full transition-all duration-500"
+                style={{ width: `${Math.max(portfolioTotals.overdueRate > 0 ? 2 : 0, portfolioTotals.overdueRate)}%` }}
+                title={`En Mora: ${formatCurrency(portfolioTotals.overdue)} (${portfolioTotals.overdueRate.toFixed(1)}%)`}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Error Banner */}
       {error && (

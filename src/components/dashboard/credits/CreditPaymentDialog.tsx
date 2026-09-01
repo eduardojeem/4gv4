@@ -23,6 +23,8 @@ import { CreditCard, User, DollarSign, FileText, Calendar, AlertCircle, CheckCir
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
+import { downloadPdfDocument, printPdfDocument } from '@/lib/credits/print-receipt'
+import { toast } from 'sonner'
 
 export type PaymentMethod = 'cash' | 'card' | 'transfer'
 export type PaymentConfirmResult =
@@ -77,6 +79,7 @@ export function CreditPaymentDialog({
 }: CreditPaymentDialogProps) {
     const [method, setMethod] = useState<PaymentMethod>('cash')
     const [amount, setAmount] = useState<string>('')
+    const [cashTendered, setCashTendered] = useState<string>('')
     const [reference, setReference] = useState<string>('')
     const [notes, setNotes] = useState<string>('')
     const [error, setError] = useState<string>('')
@@ -86,6 +89,7 @@ export function CreditPaymentDialog({
     useEffect(() => {
         if (open && initialAmount !== undefined) {
             setAmount(String(initialAmount))
+            setCashTendered('')
             setError('')
             setReference('')
             setNotes('')
@@ -98,6 +102,11 @@ export function CreditPaymentDialog({
         const rawNumber = parseThousands(value)
         setAmount(rawNumber ? String(rawNumber) : '')
         setError('')
+    }
+
+    const handleCashTenderedChange = (value: string) => {
+        const rawNumber = parseThousands(value)
+        setCashTendered(rawNumber ? String(rawNumber) : '')
     }
 
     const handleQuickAmount = (percentage: number) => {
@@ -200,19 +209,34 @@ export function CreditPaymentDialog({
         return { doc: sharedReceipt.doc, receiptNum: sharedReceipt.receiptNumber }
     }
 
+    // El pago ya esta guardado cuando se llega aca, asi que un fallo al generar
+    // el comprobante no puede quedar en silencio: el usuario tiene que saber que
+    // el cobro se registro y lo que fallo fue el papel.
+    const notifyReceiptFailure = (error: unknown, action: 'imprimir' | 'descargar') => {
+        toast.error(`No se pudo ${action} el comprobante`, {
+            description: `El pago quedó registrado. ${error instanceof Error ? error.message : 'Podés reintentar desde el historial de pagos.'}`,
+        })
+    }
+
     const downloadReceipt = async () => {
-        const result = await generateReceiptDoc()
-        if (result) {
-            result.doc.save(`comprobante_${result.receiptNum}.pdf`)
+        try {
+            const result = await generateReceiptDoc()
+            if (result) {
+                downloadPdfDocument(result.doc, `comprobante_${result.receiptNum}`)
+            }
+        } catch (error) {
+            notifyReceiptFailure(error, 'descargar')
         }
     }
 
     const printReceipt = async () => {
-        const result = await generateReceiptDoc()
-        if (result) {
-            result.doc.autoPrint()
-            // En navegadores modernos esto abre una ventana nueva con el PDF listo para imprimir
-            result.doc.output('dataurlnewwindow')
+        try {
+            const result = await generateReceiptDoc()
+            if (result) {
+                await printPdfDocument(result.doc)
+            }
+        } catch (error) {
+            notifyReceiptFailure(error, 'imprimir')
         }
     }
 
@@ -432,9 +456,16 @@ export function CreditPaymentDialog({
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label htmlFor="amount" className="text-sm font-medium">
-                                            Monto a Pagar *
-                                        </Label>
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="amount" className="text-sm font-medium">
+                                                Monto a Pagar *
+                                            </Label>
+                                            {effectiveMaxAmount && effectiveMaxAmount > 0 && (
+                                                <span className="text-[11px] text-muted-foreground font-mono">
+                                                    Máx: {formatCurrency(effectiveMaxAmount)}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="relative">
                                             <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">₲</span>
                                             <Input
@@ -447,8 +478,34 @@ export function CreditPaymentDialog({
                                                 onChange={(e) => handleAmountChange(e.target.value)}
                                             />
                                         </div>
+
+                                        {/* Atajos de Porcentaje Rápido */}
+                                        {effectiveMaxAmount && effectiveMaxAmount > 0 && (
+                                            <div className="grid grid-cols-4 gap-1.5 pt-1">
+                                                {[0.25, 0.5, 0.75, 1].map((p) => {
+                                                    const label = p === 1 ? (allowFullDebtPayment ? '100% Total' : 'Total Cuota') : `${p * 100}%`
+                                                    const targetAmt = Math.round(effectiveMaxAmount * p)
+                                                    const isSelected = Number(amount) === targetAmt
+                                                    return (
+                                                        <button
+                                                            key={p}
+                                                            type="button"
+                                                            onClick={() => handleQuickAmount(p)}
+                                                            className={`text-[10px] font-semibold py-1 rounded-lg border transition-all cursor-pointer ${
+                                                                isSelected
+                                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                                                    : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                                                            }`}
+                                                        >
+                                                            {label}
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+
                                         {error && (
-                                            <p className="text-xs text-red-600 flex items-center gap-1">
+                                            <p className="text-xs text-red-600 flex items-center gap-1 mt-1">
                                                 <AlertCircle className="h-3 w-3" />
                                                 {error}
                                             </p>
@@ -458,15 +515,56 @@ export function CreditPaymentDialog({
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                className="h-8 w-full justify-between"
+                                                className="h-8 w-full justify-between mt-1 border-blue-200 text-blue-700 dark:border-blue-900 dark:text-blue-300"
                                                 onClick={() => handleAmountChange(String(totalDebtAmount))}
                                             >
-                                                <span>Pagar total deuda</span>
+                                                <span>Cancelar deuda completa</span>
                                                 <span className="font-semibold tabular-nums">{formatCurrency(totalDebtAmount)}</span>
                                             </Button>
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Calculadora de Vuelto para Efectivo */}
+                                {method === 'cash' && isValid && (
+                                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-2">
+                                        <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                            <span>Calculadora de Vuelto</span>
+                                            <span className="text-[10px] text-muted-foreground">Pago en Efectivo</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3 items-center">
+                                            <div>
+                                                <Label htmlFor="cashTendered" className="text-[11px] text-muted-foreground">
+                                                    Paga con (recibido):
+                                                </Label>
+                                                <div className="relative mt-1">
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₲</span>
+                                                    <Input
+                                                        id="cashTendered"
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        className="h-8 pl-6 text-xs font-mono font-bold"
+                                                        placeholder="Ej: 100.000"
+                                                        value={formatThousands(cashTendered)}
+                                                        onChange={(e) => handleCashTenderedChange(e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[11px] text-muted-foreground">Vuelto a entregar:</p>
+                                                <p className={`text-base font-bold font-mono mt-1 ${
+                                                    Number(cashTendered) >= parseFloat(amount)
+                                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                                        : 'text-muted-foreground'
+                                                }`}>
+                                                    {Number(cashTendered) >= parseFloat(amount)
+                                                        ? formatCurrency(Number(cashTendered) - parseFloat(amount))
+                                                        : '—'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="space-y-2">
                                     <Label htmlFor="reference" className="text-sm font-medium">
@@ -488,19 +586,19 @@ export function CreditPaymentDialog({
 
                             {/* Payment Summary preview */}
                             {isValid && (
-                                <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 p-4">
+                                <div className="rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-4">
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <p className="text-sm text-green-800 dark:text-green-200 font-medium">Resumen del Pago</p>
-                                            <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                            <p className="text-sm text-emerald-900 dark:text-emerald-200 font-bold">Resumen del Pago</p>
+                                            <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
                                                 {getMethodLabel(method)}{reference && ` • Ref: ${reference}`}
                                             </p>
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-2xl font-bold text-green-700 dark:text-green-300">{formatCurrency(parseFloat(amount))}</p>
+                                            <p className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-300">{formatCurrency(parseFloat(amount))}</p>
                                             {creditInfo && (
-                                                <p className="text-xs text-green-600 dark:text-green-400">
-                                                    Nuevo saldo: {formatCurrency(Math.max(0, (allowFullDebtPayment ? creditInfo.remainingBalance : (effectiveMaxAmount ?? creditInfo.remainingBalance)) - parseFloat(amount)))}
+                                                <p className="text-xs text-emerald-700/80 dark:text-emerald-400 mt-0.5">
+                                                    Nuevo saldo: <strong>{formatCurrency(Math.max(0, (allowFullDebtPayment ? creditInfo.remainingBalance : (effectiveMaxAmount ?? creditInfo.remainingBalance)) - parseFloat(amount)))}</strong>
                                                 </p>
                                             )}
                                         </div>
