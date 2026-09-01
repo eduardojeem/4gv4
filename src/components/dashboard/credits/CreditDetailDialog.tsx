@@ -6,7 +6,9 @@ import { downloadPdfDocument, printPdfDocument } from '@/lib/credits/print-recei
 import { buildCustomerStatement, toStatementPdfInput, toStatementTicketInput } from '@/lib/credits/customer-statement'
 import { createCreditHistoryPdf } from '@/lib/credits/credit-history-pdf'
 import { createCreditHistoryTicket } from '@/lib/credits/credit-history-ticket'
-import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { useCreditPrinting } from '@/hooks/use-credit-printing'
+import { CreditPaperPicker } from './CreditPaperPicker'
+import { isRollFormat } from '@/lib/credits/paper'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -145,7 +147,7 @@ export function CreditDetailDialog({
     allCredits = [],
     allInstallments = []
 }: CreditDetailDialogProps) {
-    const { settings } = useSharedSettings()
+    const { format, changeFormat, issuer } = useCreditPrinting()
     const [expandedSales, setExpandedSales] = useState<Record<string, boolean>>({})
     const [customerDetails, setCustomerDetails] = useState<any>(null)
 
@@ -352,9 +354,24 @@ export function CreditDetailDialog({
         })
     }
 
+    /**
+     * El detalle de un credito salia siempre en A4, sin importar el papel
+     * elegido: alguien con impresora de 58 mm apretaba "Imprimir" y recibia una
+     * hoja de oficina en un rollo de ticket. En rollo se reusa el generador de
+     * tira, que es el mismo documento acotado a este credito.
+     */
+    const buildDetailDoc = async () => {
+        if (!isRollFormat(format) || !customerStatement) return generateDetailDoc()
+        const soloEste = customerStatement.credits.filter(c => c.id === credit.id)
+        return createCreditHistoryTicket(
+            toStatementTicketInput(statementParty(), { ...customerStatement, credits: soloEste }),
+            { format }
+        )
+    }
+
     const exportDetailPdf = async () => {
         try {
-            downloadPdfDocument(await generateDetailDoc(), `credito_${credit.id}_detalle`)
+            downloadPdfDocument(await buildDetailDoc(), `credito_${credit.id}_detalle`)
         } catch (error) {
             notifyPdfFailure(error, 'descargar')
         }
@@ -362,7 +379,7 @@ export function CreditDetailDialog({
 
     const printDetailPdf = async () => {
         try {
-            await printPdfDocument(await generateDetailDoc())
+            await printPdfDocument(await buildDetailDoc())
         } catch (error) {
             notifyPdfFailure(error, 'imprimir')
         }
@@ -391,9 +408,10 @@ export function CreditDetailDialog({
         customerName: credit?.customer_name ?? 'Cliente',
         customerCode: credit?.customer_code || undefined,
         customerPhone: customerDetails?.phone || undefined,
-        companyName: settings.companyName,
-        companyPhone: settings.companyPhone || undefined,
-        companyAddress: settings.companyAddress || undefined,
+        companyName: issuer.businessName,
+        companyRuc: issuer.businessRuc,
+        companyPhone: issuer.businessPhone,
+        companyAddress: issuer.businessAddress,
     })
 
     const notifyStatementFailure = (error: unknown, action: string) => {
@@ -414,17 +432,22 @@ export function CreditDetailDialog({
         }
     }
 
-    const printStatementPdf = () => runStatement('imprimir', async (statement) =>
-        printPdfDocument(await createCreditHistoryPdf(toStatementPdfInput(statementParty(), statement))))
+    // Rollo y hoja son dos diseños distintos, no el mismo estirado: el rollo va
+    // en una tira continua sin paginar y la hoja lleva cabecera y numeracion en
+    // cada pagina. El formato elegido decide cual se genera.
+    const buildStatementDoc = async (statement: NonNullable<typeof customerStatement>) =>
+        isRollFormat(format)
+            ? createCreditHistoryTicket(toStatementTicketInput(statementParty(), statement), { format })
+            : createCreditHistoryPdf(toStatementPdfInput(statementParty(), statement))
+
+    const printStatement = () => runStatement('imprimir', async (statement) =>
+        printPdfDocument(await buildStatementDoc(statement)))
 
     const exportStatementPdf = () => runStatement('descargar', async (statement) =>
         downloadPdfDocument(
-            await createCreditHistoryPdf(toStatementPdfInput(statementParty(), statement)),
+            await buildStatementDoc(statement),
             `estado_cuenta_${credit?.customer_code || credit?.customer_id}`
         ))
-
-    const printStatementTicket = () => runStatement('imprimir el ticket de', async (statement) =>
-        printPdfDocument(await createCreditHistoryTicket(toStatementTicketInput(statementParty(), statement))))
 
     // ─── Render ───────────────────────────────────────────────────────────────
     return (
@@ -840,6 +863,10 @@ export function CreditDetailDialog({
 
                     {/* ── Actions ── */}
                     <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40">
+                        {/* El papel se elige en la barra, no dentro del menu: asi se ve
+                            cual esta activo sin abrir nada, y vale por igual para el
+                            credito abierto y para el estado de cuenta completo. */}
+                        <CreditPaperPicker value={format} onChange={changeFormat} className="mr-1" />
                         <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={exportDetailCsv}>
                             <FileText className="h-3.5 w-3.5" /> Excel
                         </Button>
@@ -864,11 +891,11 @@ export function CreditDetailDialog({
                                     {statementCreditCount > 0 && ` (${statementCreditCount})`}
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={printStatementPdf} className="gap-2">
-                                    <Printer className="h-3.5 w-3.5" /> Imprimir (A4)
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={printStatementTicket} className="gap-2">
-                                    <Receipt className="h-3.5 w-3.5" /> Imprimir ticket (80mm)
+                                <DropdownMenuItem onSelect={printStatement} className="gap-2">
+                                    {isRollFormat(format)
+                                        ? <Receipt className="h-3.5 w-3.5" />
+                                        : <Printer className="h-3.5 w-3.5" />}
+                                    Imprimir en {format}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onSelect={exportStatementPdf} className="gap-2">
                                     <FileDown className="h-3.5 w-3.5" /> Descargar PDF

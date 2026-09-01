@@ -24,6 +24,8 @@ import { formatCurrency, formatThousands, parseThousands, getDisplayLocale } fro
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
 import { downloadPdfDocument, printPdfDocument } from '@/lib/credits/print-receipt'
+import { useCreditPrinting } from '@/hooks/use-credit-printing'
+import { CreditPaperPicker } from './CreditPaperPicker'
 import { toast } from 'sonner'
 
 export type PaymentMethod = 'cash' | 'card' | 'transfer'
@@ -77,6 +79,7 @@ export function CreditPaymentDialog({
     totalDebtAmount,
     creditInfo,
 }: CreditPaymentDialogProps) {
+    const { format, changeFormat, issuer } = useCreditPrinting()
     const [method, setMethod] = useState<PaymentMethod>('cash')
     const [amount, setAmount] = useState<string>('')
     const [cashTendered, setCashTendered] = useState<string>('')
@@ -204,7 +207,8 @@ export function CreditPaymentDialog({
             currentCreditBalance: creditInfo ? Math.max(0, creditInfo.remainingBalance - paymentDone.amount) : null,
             nextDueDate: creditInfo?.nextDueDate,
             nextDueAmount: creditInfo?.nextDueAmount,
-        })
+            ...issuer,
+        }, { format })
 
         return { doc: sharedReceipt.doc, receiptNum: sharedReceipt.receiptNumber }
     }
@@ -319,7 +323,13 @@ export function CreditPaymentDialog({
                         </div>
 
                         {/* Footer éxito */}
-                        <div className="px-6 pb-6 pt-4 border-t border-border shrink-0 grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="px-6 pt-4 border-t border-border shrink-0 flex justify-end">
+                            {/* El formato se elige antes de imprimir y queda recordado: en una
+                                caja siempre es el mismo, y volver a elegirlo en cada cobro seria
+                                un paso de mas en la operacion mas repetida del dia. */}
+                            <CreditPaperPicker value={format} onChange={changeFormat} />
+                        </div>
+                        <div className="px-6 pb-6 pt-3 shrink-0 grid grid-cols-2 lg:grid-cols-3 gap-3">
                             <Button
                                 variant="outline"
                                 className="border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400"

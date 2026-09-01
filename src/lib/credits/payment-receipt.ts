@@ -1,5 +1,6 @@
 import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import { formatCreditId, formatCustomerId } from '@/lib/utils'
+import { CREDIT_PAPER_WIDTH_MM, type CreditPaperFormat } from './paper'
 
 export type CreditPaymentReceiptMethod = 'cash' | 'card' | 'transfer' | string | null | undefined
 
@@ -32,7 +33,15 @@ export type CreditPaymentReceiptInput = {
   currentCreditBalance?: number | null
   nextDueDate?: string | null
   nextDueAmount?: number | null
+  /**
+   * Datos del emisor. `businessName` ya existia en el tipo pero nunca se
+   * dibujaba: el comprobante salia sin decir quien lo emitio, que es lo primero
+   * que se le pide a un recibo cuando hay que reclamarlo.
+   */
   businessName?: string | null
+  businessRuc?: string | null
+  businessPhone?: string | null
+  businessAddress?: string | null
 }
 
 export const CREDIT_PAYMENT_RECEIPT_WIDTH_MM = 80
@@ -40,7 +49,9 @@ export const CREDIT_PAYMENT_RECEIPT_HEIGHT_MM = 220
 export const CREDIT_PAYMENT_RECEIPT_MAX_HEIGHT_MM = 950
 
 export type CreditPaymentReceiptPdfOptions = {
+  /** Ancho exacto del rollo, si se conoce. Ignorado cuando el formato es A4. */
   printerWidthMm?: number
+  format?: CreditPaperFormat
 }
 
 export function getCreditPaymentReceiptLayout(pageWidthMm: number) {
@@ -165,7 +176,9 @@ export function buildAccountStatusRows(input: CreditPaymentReceiptInput): Receip
   if (typeof input.currentCreditBalance === 'number') {
     const balance = Math.max(0, input.currentCreditBalance)
     if (balance === 0) {
-      rows.push(['SALDO PENDIENTE', 'Gs. 0 (TOTALMENTE SALDADO)'])
+      // El simbolo salia escrito a mano: en una tienda que factura en reales o
+      // en dolares el comprobante decia "Gs. 0".
+      rows.push(['SALDO PENDIENTE', `${formatCurrency(0)} (TOTALMENTE SALDADO)`])
     } else {
       rows.push(['SALDO PENDIENTE (FALTA)', formatCurrency(balance)])
     }
@@ -238,139 +251,241 @@ export function getCreditCurrentBalance(installments: Array<{ credit_id: string;
     }, 0)
 }
 
+export type CreditPaymentReceiptRenderTarget = {
+  pageWidthMm: number
+  pageHeightMm: number
+  contentLeftMm: number
+  contentWidthMm: number
+  labelColumnWidth: number
+  valueColumnWidth: number
+  titleFontSize: number
+  receiptFontSize: number
+  metaFontSize: number
+  tableHeaderFontSize: number
+  tableBodyFontSize: number
+  footerFontSize: number
+  cellPadding: number
+  sectionGap: number
+  footerBottom: number
+  isSheet: boolean
+}
+
+/**
+ * Traduce el formato de papel elegido a medidas concretas.
+ *
+ * En rollo el contenido ocupa el ancho util completo. En A4 no: una tabla de
+ * etiqueta y valor estirada a 180 mm deja la etiqueta contra un borde y el
+ * valor contra el otro, con un vacio en el medio. Se usa una columna centrada
+ * de 120 mm, que es lo que hace que el documento se lea como un recibo y no
+ * como una tira estirada sobre una hoja.
+ */
+export function getCreditPaymentReceiptTarget(
+  format: CreditPaperFormat,
+  printerWidthMm?: number
+): CreditPaymentReceiptRenderTarget {
+  if (format === 'A4') {
+    const pageWidthMm = 210
+    const contentWidthMm = 120
+    return {
+      pageWidthMm,
+      pageHeightMm: 297,
+      contentLeftMm: (pageWidthMm - contentWidthMm) / 2,
+      contentWidthMm,
+      labelColumnWidth: contentWidthMm * 0.38,
+      valueColumnWidth: contentWidthMm * 0.62,
+      titleFontSize: 14,
+      receiptFontSize: 10,
+      metaFontSize: 8.5,
+      tableHeaderFontSize: 9,
+      tableBodyFontSize: 8.5,
+      footerFontSize: 8,
+      cellPadding: 2.2,
+      sectionGap: 6,
+      footerBottom: 16,
+      isSheet: true,
+    }
+  }
+
+  const pageWidthMm = Math.max(48, Math.min(90, printerWidthMm ?? CREDIT_PAPER_WIDTH_MM[format]))
+  const layout = getCreditPaymentReceiptLayout(pageWidthMm)
+  return {
+    pageWidthMm,
+    pageHeightMm: 0, // en rollo la calcula el generador segun el contenido
+    contentLeftMm: layout.margin,
+    contentWidthMm: layout.usableWidth,
+    labelColumnWidth: layout.labelColumnWidth,
+    valueColumnWidth: layout.valueColumnWidth,
+    titleFontSize: layout.titleFontSize,
+    receiptFontSize: layout.receiptFontSize,
+    metaFontSize: layout.metaFontSize,
+    tableHeaderFontSize: layout.tableHeaderFontSize,
+    tableBodyFontSize: layout.tableBodyFontSize,
+    footerFontSize: layout.footerFontSize,
+    cellPadding: layout.cellPadding,
+    sectionGap: layout.sectionGap,
+    footerBottom: layout.footerBottom,
+    isSheet: false,
+  }
+}
+
 export async function createCreditPaymentReceiptPdf(
   input: CreditPaymentReceiptInput,
   options: CreditPaymentReceiptPdfOptions = {}
 ) {
   const { default: jsPDF } = await import('jspdf')
   const { default: autoTable } = await import('jspdf-autotable')
-  const printerWidthMm = Math.max(48, Math.min(90, options.printerWidthMm ?? CREDIT_PAYMENT_RECEIPT_WIDTH_MM))
-  const receiptHeightMm = getCreditPaymentReceiptHeight(input, printerWidthMm)
+
+  const format: CreditPaperFormat = options.format ?? '80mm'
+  const t = getCreditPaymentReceiptTarget(format, options.printerWidthMm)
 
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
-    format: [printerWidthMm, receiptHeightMm],
+    format: t.isSheet ? 'a4' : [t.pageWidthMm, getCreditPaymentReceiptHeight(input, t.pageWidthMm)],
   })
+
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
-  const layout = getCreditPaymentReceiptLayout(pageW)
+  const centro = pageW / 2
+  const izq = t.contentLeftMm
+  const der = pageW - t.contentLeftMm
+
   const receiptNumber = buildCreditPaymentReceiptNumber(input.paymentId)
   const paidAt = input.paymentDate ? new Date(input.paymentDate) : new Date()
   const creditRows = buildCreditInfoRows(input)
   const paymentRows = buildPaymentDetailRows(input)
   const statusRows = buildAccountStatusRows(input)
 
-  // 1. Cabecera Elegante
-  doc.setFillColor(15, 23, 42) // Slate 900
-  doc.rect(0, 0, pageW, layout.headerHeight, 'F')
-  doc.setTextColor(255)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(layout.titleFontSize)
-  doc.text('COMPROBANTE DE PAGO', pageW / 2, layout.headerHeight * 0.38, {
-    align: 'center',
-    maxWidth: layout.usableWidth,
-  })
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(layout.receiptFontSize)
-  doc.setTextColor(147, 197, 253) // Light Blue 300
-  doc.text(receiptNumber, pageW / 2, layout.headerHeight * 0.72, {
-    align: 'center',
-    maxWidth: layout.usableWidth,
-  })
-  doc.setTextColor(0)
+  const tablaMargen = { left: izq, right: pageW - izq - t.contentWidthMm }
 
-  // 2. Fecha de Emisión
+  // ─── Emisor ─────────────────────────────────────────────────────────────
+  // Antes la cabecera era un rectangulo negro con el titulo dentro. No decia de
+  // que comercio salia el comprobante — `businessName` llegaba en la entrada y
+  // se descartaba — y en termica esa mancha gasta cabezal y sale gris sucia.
+  // Ahora encabeza el negocio, y la jerarquia la dan el tamaño y una linea, que
+  // salen igual en termica, laser y tinta.
+  let y = t.isSheet ? 22 : 7
+
+  doc.setTextColor(0)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(t.titleFontSize)
+  const nombreEmisor = input.businessName?.trim() || 'Comprobante de pago'
+  const lineasNombre = doc.splitTextToSize(nombreEmisor, t.contentWidthMm)
+  doc.text(lineasNombre, centro, y, { align: 'center' })
+  y += lineasNombre.length * t.titleFontSize * 0.42 + 1
+
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(layout.metaFontSize)
-  doc.setTextColor(100)
-  doc.text(`Fecha y Hora: ${paidAt.toLocaleString(getDisplayLocale())}`, pageW / 2, layout.headerHeight + 5, {
-    align: 'center',
-    maxWidth: layout.usableWidth,
-  })
+  doc.setFontSize(t.metaFontSize)
+  doc.setTextColor(90)
+  const identidad = [
+    input.businessRuc ? `RUC ${input.businessRuc}` : '',
+    input.businessPhone || '',
+  ].filter(Boolean).join('   -   ')
+  if (identidad) {
+    doc.text(identidad, centro, y, { align: 'center', maxWidth: t.contentWidthMm })
+    y += t.metaFontSize * 0.42 + 1
+  }
+  if (input.businessAddress) {
+    const dir = doc.splitTextToSize(input.businessAddress, t.contentWidthMm)
+    doc.text(dir, centro, y, { align: 'center' })
+    y += dir.length * t.metaFontSize * 0.42 + 1
+  }
   doc.setTextColor(0)
 
-  // 3. Tabla 1: Cliente y Crédito
-  autoTable(doc, {
-    startY: layout.headerHeight + 9,
-    head: [['DATOS DEL CLIENTE Y VENTA', '']],
-    body: creditRows,
-    theme: 'grid',
-    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: layout.tableHeaderFontSize },
-    bodyStyles: { fontSize: layout.tableBodyFontSize },
-    styles: { cellPadding: layout.cellPadding, overflow: 'linebreak' },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: layout.labelColumnWidth, textColor: [71, 85, 105] },
-      1: { cellWidth: layout.valueColumnWidth, fontStyle: 'normal' },
-    },
-    margin: { left: layout.margin, right: layout.margin },
-  })
+  y += 2
+  doc.setDrawColor(30, 58, 138)
+  doc.setLineWidth(0.6)
+  doc.line(izq, y, der, y)
+  doc.setLineWidth(0.2)
+  y += t.isSheet ? 8 : 5
 
-  // 4. Tabla 2: Detalle del Pago (Cuota Pagada)
-  const afterCredit = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
-  autoTable(doc, {
-    startY: afterCredit + layout.sectionGap,
-    head: [['DETALLE DEL PAGO EFECTUADO', '']],
-    body: paymentRows,
-    theme: 'grid',
-    headStyles: { fillColor: [16, 115, 74], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: layout.tableHeaderFontSize },
-    bodyStyles: { fontSize: layout.tableBodyFontSize },
-    styles: { cellPadding: layout.cellPadding, overflow: 'linebreak' },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: layout.labelColumnWidth, textColor: [22, 101, 52] },
-      1: { cellWidth: layout.valueColumnWidth, fontStyle: 'bold' },
-    },
-    margin: { left: layout.margin, right: layout.margin },
-  })
+  // ─── Titulo del documento ───────────────────────────────────────────────
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(t.receiptFontSize + 1)
+  doc.text('COMPROBANTE DE PAGO', centro, y, { align: 'center' })
+  y += t.receiptFontSize * 0.48 + 2
 
-  // 5. Tabla 3: Estado de Cuenta (¿Cuánto Falta?)
-  let afterStatus = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
-  if (statusRows.length > 0) {
+  doc.setFontSize(t.receiptFontSize)
+  doc.setTextColor(30, 58, 138)
+  doc.text(receiptNumber, centro, y, { align: 'center' })
+  doc.setTextColor(0)
+  y += t.receiptFontSize * 0.48 + 1.5
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(t.metaFontSize)
+  doc.setTextColor(100)
+  doc.text(paidAt.toLocaleString(getDisplayLocale()), centro, y, { align: 'center', maxWidth: t.contentWidthMm })
+  doc.setTextColor(0)
+  y += t.metaFontSize * 0.42 + t.sectionGap
+
+  const seccion = (
+    titulo: string,
+    filas: ReceiptRow[],
+    color: [number, number, number],
+    valorEnNegrita: boolean,
+    startY: number
+  ) => {
     autoTable(doc, {
-      startY: afterStatus + layout.sectionGap,
-      head: [['ESTADO DE CUENTA (CUANTO FALTA)', '']],
-      body: statusRows,
+      startY,
+      head: [[titulo, '']],
+      body: filas,
       theme: 'grid',
-      headStyles: { fillColor: [71, 85, 105], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: layout.tableHeaderFontSize },
-      bodyStyles: { fontSize: layout.tableBodyFontSize },
-      styles: { cellPadding: layout.cellPadding, overflow: 'linebreak' },
-      columnStyles: {
-        0: { fontStyle: 'bold', cellWidth: layout.labelColumnWidth, textColor: [51, 65, 85] },
-        1: { cellWidth: layout.valueColumnWidth, fontStyle: 'bold' },
+      headStyles: {
+        fillColor: color,
+        textColor: 255,
+        fontStyle: 'bold',
+        halign: 'center',
+        fontSize: t.tableHeaderFontSize,
       },
-      margin: { left: layout.margin, right: layout.margin },
+      bodyStyles: { fontSize: t.tableBodyFontSize },
+      styles: { cellPadding: t.cellPadding, overflow: 'linebreak' },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: t.labelColumnWidth, textColor: [71, 85, 105] },
+        1: { cellWidth: t.valueColumnWidth, fontStyle: valorEnNegrita ? 'bold' : 'normal' },
+      },
+      margin: tablaMargen,
     })
-    afterStatus = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
+    return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
   }
 
-  // 6. Firma y Pie de Recibo
-  const signatureY = afterStatus + layout.sectionGap + 10
-  if (signatureY + 12 < pageH) {
-    doc.setDrawColor(180, 180, 180)
+  let fin = seccion('DATOS DEL CLIENTE Y VENTA', creditRows, [30, 58, 138], false, y)
+  fin = seccion('DETALLE DEL PAGO EFECTUADO', paymentRows, [16, 115, 74], true, fin + t.sectionGap)
+  if (statusRows.length > 0) {
+    fin = seccion('ESTADO DE CUENTA', statusRows, [71, 85, 105], true, fin + t.sectionGap)
+  }
+
+  // ─── Firma y pie ────────────────────────────────────────────────────────
+  // Van sobre la ultima pagina y solo si entran. El pie se ubicaba con un
+  // minimo contra el alto de pagina, asi que en un comprobante largo terminaba
+  // encima de la ultima tabla.
+  doc.setPage(doc.getNumberOfPages())
+
+  const firmaY = fin + t.sectionGap + (t.isSheet ? 16 : 10)
+  const pieY = firmaY + (t.isSheet ? 8 : 5)
+
+  if (pieY + t.footerFontSize < pageH - t.footerBottom + 6) {
+    doc.setDrawColor(170)
     doc.setLineDashPattern([1, 1], 0)
-    doc.line(layout.margin + 8, signatureY, pageW - layout.margin - 8, signatureY)
+    doc.line(izq + t.contentWidthMm * 0.15, firmaY, der - t.contentWidthMm * 0.15, firmaY)
     doc.setLineDashPattern([], 0)
 
-    doc.setFontSize(layout.footerFontSize)
+    doc.setFontSize(t.footerFontSize)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(100)
-    doc.text('Firma / Sello de Cobranza', pageW / 2, signatureY + 4, {
-      align: 'center',
-    })
+    doc.text('Firma / Sello de cobranza', centro, firmaY + (t.isSheet ? 5 : 3.5), { align: 'center' })
+    doc.setTextColor(0)
   }
 
-  doc.setFontSize(layout.footerFontSize)
+  doc.setFontSize(t.footerFontSize)
   doc.setFont('helvetica', 'italic')
   doc.setTextColor(120)
-  const footerY = Math.min(pageH - layout.footerBottom, afterStatus + layout.sectionGap + 18)
-  doc.text('¡Gracias por su pago puntual!', pageW / 2, footerY, {
+  const pieFinal = Math.min(pageH - t.footerBottom, pieY + (t.isSheet ? 10 : 6))
+  doc.text('Gracias por su pago. Conserve este comprobante.', centro, pieFinal, {
     align: 'center',
-    maxWidth: layout.usableWidth,
+    maxWidth: t.contentWidthMm,
   })
-  doc.text('Comprobante oficial de pago interno de cuota.', pageW / 2, footerY + 3.5, {
-    align: 'center',
-    maxWidth: layout.usableWidth,
-  })
+  doc.setTextColor(0)
+  doc.setFont('helvetica', 'normal')
 
   return { doc, receiptNumber }
 }

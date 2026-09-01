@@ -8,6 +8,7 @@ import type { CreditRow, InstallmentRow, PaymentRow } from '@/hooks/use-credits'
 import { getCreditDisplayInfo } from '@/lib/credits/display'
 import { createCreditPaymentReceiptPdf, getCreditCurrentBalance } from '@/lib/credits/payment-receipt'
 import { printPdfDocument } from '@/lib/credits/print-receipt'
+import { useCreditPrinting } from '@/hooks/use-credit-printing'
 import { toast } from 'sonner'
 
 const methodConfig: Record<string, { label: string; color: string; dot: string }> = {
@@ -62,6 +63,7 @@ export function PaymentsTimeline({
   isPending,
   onExportCSV,
 }: PaymentsTimelineProps) {
+  const { format, issuer } = useCreditPrinting()
   const [search, setSearch] = useState('')
 
   const filtered = search.trim()
@@ -116,7 +118,8 @@ export function PaymentsTimeline({
       currentCreditBalance: getCreditCurrentBalance(installments, payment.credit_id),
       nextDueDate: nextPending?.due_date,
       nextDueAmount: nextPending?.amount,
-    })
+      ...issuer,
+    }, { format })
 
       await printPdfDocument(result.doc)
     } catch (error) {

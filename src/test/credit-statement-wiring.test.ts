@@ -19,10 +19,32 @@ describe('cableado del estado de cuenta', () => {
     expect(dialog).toContain('createCreditHistoryTicket')
   })
 
-  it('ofrece las tres salidas: imprimir A4, ticket y descargar', () => {
-    expect(dialog).toMatch(/printStatementPdf/)
-    expect(dialog).toMatch(/printStatementTicket/)
+  it('ofrece imprimir y descargar, en el papel elegido', () => {
+    expect(dialog).toMatch(/const printStatement =/)
     expect(dialog).toMatch(/exportStatementPdf/)
+    // Rollo y hoja son dos diseños distintos, no el mismo estirado: el formato
+    // elegido decide cual de los dos generadores se usa.
+    expect(dialog).toContain('isRollFormat(format)')
+    expect(dialog).toContain('CreditPaperPicker')
+  })
+
+  it('el papel elegido tambien vale para el credito abierto', () => {
+    // Salia siempre en A4: con impresora de 58 mm se apretaba "Imprimir" y se
+    // recibia una hoja de oficina saliendo de un rollo de ticket.
+    expect(dialog).toMatch(/const buildDetailDoc =/)
+    expect(dialog).toMatch(/buildDetailDoc\(\)/)
+  })
+
+  it('todo lo que se imprime en creditos nombra al comercio', () => {
+    // El comprobante de pago salia sin emisor porque cada pantalla armaba su
+    // propia entrada y ninguna incluia el nombre. Ahora sale de un solo lugar.
+    for (const ruta of [
+      'src/components/dashboard/credits/CreditDetailDialog.tsx',
+      'src/components/dashboard/credits/CreditPaymentDialog.tsx',
+      'src/components/dashboard/credits/PaymentsTimeline.tsx',
+    ]) {
+      expect(leer(ruta), ruta).toContain('useCreditPrinting')
+    }
   })
 
   it('la pagina le pasa todos los creditos, no solo el abierto', () => {
