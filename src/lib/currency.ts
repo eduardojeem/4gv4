@@ -90,6 +90,15 @@ export const getLocaleConfig = () => {
   return { locale, currency, language }
 }
 
+/**
+ * Idioma con el que se muestran fechas y numeros.
+ *
+ * Existe para no repetir un locale fijo por el codigo: la plataforma admite
+ * espanol, ingles y portugues, asi que un 'es-AR' escrito a mano mostraba
+ * fechas en espanol argentino incluso en una instalacion brasilena.
+ */
+export const getDisplayLocale = (): string => getLocaleConfig().locale
+
 export type CurrencyFormatOptions = Omit<Intl.NumberFormatOptions, 'currency'> & {
   currency?: string
   language?: string

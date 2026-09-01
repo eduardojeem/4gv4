@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Search, CheckCircle, Receipt, Printer } from 'lucide-react'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import type { CreditRow, InstallmentRow, PaymentRow } from '@/hooks/use-credits'
 import { getCreditDisplayInfo } from '@/lib/credits/display'
 import { createCreditPaymentReceiptPdf, getCreditCurrentBalance } from '@/lib/credits/payment-receipt'
@@ -36,7 +36,7 @@ function getDateLabel(iso?: string) {
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
   if (d.getTime() === today.getTime()) return 'Hoy'
   if (d.getTime() === yesterday.getTime()) return 'Ayer'
-  return new Date(iso).toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  return new Date(iso).toLocaleDateString(getDisplayLocale(), { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 }
 
 interface PaymentsTimelineProps {
@@ -238,7 +238,7 @@ export function PaymentsTimeline({
                           </div>
                           <div className="hidden sm:block text-right shrink-0">
                             <p className="text-xs text-muted-foreground tabular-nums">
-                              {p.created_at ? new Date(p.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                              {p.created_at ? new Date(p.created_at).toLocaleTimeString(getDisplayLocale(), { hour: '2-digit', minute: '2-digit' }) : ''}
                             </p>
                           </div>
                           <div className="text-right shrink-0 min-w-[80px]">

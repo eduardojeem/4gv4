@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useState, useEffect } from 'react'
 import { CreditCard, User, DollarSign, FileText, Calendar, AlertCircle, CheckCircle2, Printer } from 'lucide-react'
-import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
+import { formatCurrency, formatThousands, parseThousands, getDisplayLocale } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
 import { downloadPdfDocument, printPdfDocument } from '@/lib/credits/print-receipt'
@@ -313,7 +313,7 @@ export function CreditPaymentDialog({
                                 )}
                                 <div className="flex justify-between text-xs pt-1 border-t border-green-200 dark:border-green-800">
                                     <span className="text-muted-foreground">Fecha</span>
-                                    <span>{paymentDone.date.toLocaleString('es-AR')}</span>
+                                    <span>{paymentDone.date.toLocaleString(getDisplayLocale())}</span>
                                 </div>
                             </div>
                         </div>
@@ -421,7 +421,7 @@ export function CreditPaymentDialog({
                                                 <div>
                                                     <p className="text-muted-foreground text-xs">Vencimiento</p>
                                                     <p className="font-semibold">
-                                                        {creditInfo.nextDueDate ? new Date(creditInfo.nextDueDate).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                                                        {creditInfo.nextDueDate ? new Date(creditInfo.nextDueDate).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                                                     </p>
                                                 </div>
                                             </>

@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import { formatCreditId, formatCustomerId } from '@/lib/utils'
 
 export type CreditPaymentReceiptMethod = 'cash' | 'card' | 'transfer' | string | null | undefined
@@ -137,7 +137,7 @@ export function buildPaymentDetailRows(input: CreditPaymentReceiptInput): Receip
   }
 
   if (input.installmentDueDate) {
-    rows.push(['Vencimiento Cuota', new Date(input.installmentDueDate).toLocaleDateString('es-AR')])
+    rows.push(['Vencimiento Cuota', new Date(input.installmentDueDate).toLocaleDateString(getDisplayLocale())])
   }
 
   if (typeof input.installmentAmount === 'number' && input.installmentAmount > 0) {
@@ -181,7 +181,7 @@ export function buildAccountStatusRows(input: CreditPaymentReceiptInput): Receip
 
   if (input.nextDueDate) {
     const nextAmountText = typeof input.nextDueAmount === 'number' && input.nextDueAmount > 0 ? ` (${formatCurrency(input.nextDueAmount)})` : ''
-    rows.push(['Próximo Vencimiento', `${new Date(input.nextDueDate).toLocaleDateString('es-AR')}${nextAmountText}`])
+    rows.push(['Próximo Vencimiento', `${new Date(input.nextDueDate).toLocaleDateString(getDisplayLocale())}${nextAmountText}`])
   }
 
   return rows
@@ -284,7 +284,7 @@ export async function createCreditPaymentReceiptPdf(
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(layout.metaFontSize)
   doc.setTextColor(100)
-  doc.text(`Fecha y Hora: ${paidAt.toLocaleString('es-AR')}`, pageW / 2, layout.headerHeight + 5, {
+  doc.text(`Fecha y Hora: ${paidAt.toLocaleString(getDisplayLocale())}`, pageW / 2, layout.headerHeight + 5, {
     align: 'center',
     maxWidth: layout.usableWidth,
   })

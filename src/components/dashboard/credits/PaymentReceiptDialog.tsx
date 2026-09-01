@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import { Building, User, CreditCard, Calendar, DollarSign, FileText, CheckCircle, Download, Printer } from 'lucide-react'
 
 interface PaymentReceipt {
@@ -73,7 +73,7 @@ export function PaymentReceiptDialog({
                             ¡Pago Registrado Exitosamente!
                         </p>
                         <p className="text-sm text-green-700 dark:text-green-300 mt-1 print:text-green-700">
-                            {new Date(receipt.date).toLocaleString('es-AR', {
+                            {new Date(receipt.date).toLocaleString(getDisplayLocale(), {
                                 weekday: 'long',
                                 year: 'numeric',
                                 month: 'long',

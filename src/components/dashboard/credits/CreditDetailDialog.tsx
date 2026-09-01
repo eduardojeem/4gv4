@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { getCreditDisplayInfo } from '@/lib/credits/display'
 import {
@@ -247,13 +247,13 @@ export function CreditDetailDialog({
         tsv += row('Principal', credit.principal)
         tsv += row('Tasa', `${credit.interest_rate}%`)
         tsv += row('Plazo', `${credit.term_months} meses`)
-        tsv += row('Inicio', new Date(credit.start_date).toLocaleDateString('es-AR'))
-        tsv += row('Fin estimado', endDate.toLocaleDateString('es-AR'))
+        tsv += row('Inicio', new Date(credit.start_date).toLocaleDateString(getDisplayLocale()))
+        tsv += row('Fin estimado', endDate.toLocaleDateString(getDisplayLocale()))
         tsv += row('Pagado', paidAmount)
         tsv += row('Pendiente', remainingBalance)
         tsv += row('Progreso', `${progressPct}%`)
         tsv += '\nCUOTAS\n' + row('N°','Vencimiento','Monto','Pagado','Estado')
-        installments.forEach(i => tsv += row(i.installment_number, new Date(i.due_date).toLocaleDateString('es-AR'), i.amount, i.amount_paid ?? 0, INST_STATUS_CONFIG[getInstallmentStatus(i)].label))
+        installments.forEach(i => tsv += row(i.installment_number, new Date(i.due_date).toLocaleDateString(getDisplayLocale()), i.amount, i.amount_paid ?? 0, INST_STATUS_CONFIG[getInstallmentStatus(i)].label))
         tsv += '\nPAGOS\n' + row('Fecha','Destino / Compra','Método','Monto')
         if (payments.length === 0) tsv += row('Sin pagos','','','')
         else {
@@ -265,7 +265,7 @@ export function CreditDetailDialog({
                     targetLabel = linkedSale ? `Cuota #${linkedInst.installment_number} - ${linkedSale.code}` : `Cuota #${linkedInst.installment_number} - Saldo Anterior`
                 }
                 tsv += row(
-                    p.created_at ? new Date(p.created_at).toLocaleString('es-AR') : '-',
+                    p.created_at ? new Date(p.created_at).toLocaleString(getDisplayLocale()) : '-',
                     targetLabel,
                     METHOD_LABEL[p.payment_method ?? ''] ?? p.payment_method ?? '-',
                     p.amount
@@ -286,15 +286,15 @@ export function CreditDetailDialog({
         doc.setFontSize(18); doc.setFont('helvetica','bold')
         doc.text('Detalle del Crédito', pageW / 2, 18, { align: 'center' })
         doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100)
-        doc.text(`Generado el ${new Date().toLocaleString('es-AR')}`, pageW / 2, 24, { align: 'center' })
+        doc.text(`Generado el ${new Date().toLocaleString(getDisplayLocale())}`, pageW / 2, 24, { align: 'center' })
         doc.setTextColor(0)
         autoTable(doc, { startY: 30, head:[['Campo','Valor']], body:[
             ['ID', formatCreditId(credit.id)],['Cliente', credit.customer_name],
             ['Estado', STATUS_LABEL[credit.status] ?? credit.status],
             ['Principal', formatCurrency(credit.principal)],['Tasa', `${credit.interest_rate}%`],
             ['Plazo', `${credit.term_months} meses`],
-            ['Inicio', new Date(credit.start_date).toLocaleDateString('es-AR')],
-            ['Fin estimado', endDate.toLocaleDateString('es-AR')],
+            ['Inicio', new Date(credit.start_date).toLocaleDateString(getDisplayLocale())],
+            ['Fin estimado', endDate.toLocaleDateString(getDisplayLocale())],
             ['Pagado', formatCurrency(paidAmount)],['Pendiente', formatCurrency(remainingBalance)],
             ['Progreso', `${progressPct}%`],
         ], theme:'grid', headStyles:{fillColor:[37,99,235],textColor:255,fontStyle:'bold'},
@@ -302,7 +302,7 @@ export function CreditDetailDialog({
         const y1 = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
         doc.setFontSize(12); doc.setFont('helvetica','bold'); doc.text('Cuotas', 14, y1)
         autoTable(doc, { startY: y1+4, head:[['N°','Vencimiento','Monto','Pagado','Estado']],
-            body: installments.map(i => [i.installment_number, new Date(i.due_date).toLocaleDateString('es-AR'),
+            body: installments.map(i => [i.installment_number, new Date(i.due_date).toLocaleDateString(getDisplayLocale()),
                 formatCurrency(i.amount), formatCurrency(i.amount_paid ?? 0), INST_STATUS_CONFIG[getInstallmentStatus(i)].label]),
             theme:'striped', headStyles:{fillColor:[234,88,12],textColor:255,fontStyle:'bold'}, margin:{left:14,right:14} })
         const y2 = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
@@ -316,7 +316,7 @@ export function CreditDetailDialog({
                     targetLabel = linkedSale ? `Cuota #${linkedInst.installment_number} - ${linkedSale.code}` : `Cuota #${linkedInst.installment_number} - Saldo Anterior`
                 }
                 return [
-                    p.created_at ? new Date(p.created_at).toLocaleString('es-AR') : '-',
+                    p.created_at ? new Date(p.created_at).toLocaleString(getDisplayLocale()) : '-',
                     targetLabel,
                     METHOD_LABEL[p.payment_method ?? ''] ?? p.payment_method ?? '-',
                     formatCurrency(p.amount)
@@ -499,7 +499,7 @@ export function CreditDetailDialog({
                                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Próxima cuota</p>
                                         <p className="mt-1 font-semibold">
                                             {nextPendingInstallment
-                                                ? `#${nextPendingInstallment.installment_number} · ${new Date(nextPendingInstallment.due_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                                                ? `#${nextPendingInstallment.installment_number} · ${new Date(nextPendingInstallment.due_date).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: 'short', year: 'numeric' })}`
                                                 : 'Sin cuotas pendientes'}
                                         </p>
                                     </div>
@@ -527,14 +527,14 @@ export function CreditDetailDialog({
                             <Calendar className="h-4 w-4 text-blue-600 shrink-0" />
                             <div>
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Inicio</p>
-                                <p className="text-sm font-semibold">{new Date(credit.start_date).toLocaleDateString('es-AR', { day:'2-digit', month:'long', year:'numeric' })}</p>
+                                <p className="text-sm font-semibold">{new Date(credit.start_date).toLocaleDateString(getDisplayLocale(), { day:'2-digit', month:'long', year:'numeric' })}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border/60 bg-muted/30">
                             <Clock className="h-4 w-4 text-orange-600 shrink-0" />
                             <div>
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Fin estimado</p>
-                                <p className="text-sm font-semibold">{endDate.toLocaleDateString('es-AR', { day:'2-digit', month:'long', year:'numeric' })}</p>
+                                <p className="text-sm font-semibold">{endDate.toLocaleDateString(getDisplayLocale(), { day:'2-digit', month:'long', year:'numeric' })}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border/60 bg-muted/30">
@@ -614,7 +614,7 @@ export function CreditDetailDialog({
                                                                 </span>
                                                             </div>
                                                             <p className="text-[10px] text-muted-foreground mt-0.5">
-                                                                {group.created_at ? new Date(group.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                                                                {group.created_at ? new Date(group.created_at).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                                                                 {group.isLegacy ? '' : ` · ${group.installments.length} cuotas`}
                                                             </p>
                                                             <p className="mt-1 text-[11px] text-muted-foreground">
@@ -669,7 +669,7 @@ export function CreditDetailDialog({
                                                                     return (
                                                                         <div key={inst.id} className="grid grid-cols-[60px_1fr_90px_90px_110px_90px] gap-2 items-center px-4 py-2.5 text-xs hover:bg-slate-50/30 dark:hover:bg-white/[0.01] transition-colors">
                                                                             <span className="text-center font-mono font-bold text-muted-foreground">#{inst.installment_number}</span>
-                                                                            <span className="font-medium text-left">{new Date(inst.due_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                                                            <span className="font-medium text-left">{new Date(inst.due_date).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                                                                             <span className="text-right font-semibold tabular-nums">{formatCurrency(inst.amount)}</span>
                                                                             <span className={`text-right tabular-nums ${paid > 0 ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}`}>
                                                                                 {formatCurrency(paid)}
@@ -740,7 +740,7 @@ export function CreditDetailDialog({
                                         return (
                                             <div key={p.id} className={`flex items-center gap-3 px-4 py-3 hover:bg-green-50/20 dark:hover:bg-green-900/10 transition-colors ${rowBg}`}>
                                                 <div className="flex-1 min-w-0 text-left">
-                                                    <p className="text-sm font-medium">{p.created_at ? new Date(p.created_at).toLocaleString('es-AR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'}</p>
+                                                    <p className="text-sm font-medium">{p.created_at ? new Date(p.created_at).toLocaleString(getDisplayLocale(), { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'}</p>
                                                     <p className="text-xs text-muted-foreground mt-0.5 font-medium">{targetLabel}</p>
                                                 </div>
                                                 <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${mStyle}`}>{mLabel}</span>
