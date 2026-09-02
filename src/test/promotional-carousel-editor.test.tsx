@@ -37,9 +37,9 @@ describe('PromotionalCarouselEditor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Nueva diapositiva' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Plantillas' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Accesorios' }))
+    fireEvent.click(screen.getByRole('button', { name: /Accesorios/i }))
     fireEvent.click(screen.getByRole('tab', { name: 'Botón' }))
-    fireEvent.change(screen.getByLabelText('Enlace del botón'), {
+    fireEvent.change(screen.getByLabelText('Enlace o destino'), {
       target: { value: 'javascript:alert(1)' },
     })
     fireEvent.click(screen.getByRole('tab', { name: 'Texto y mensaje' }))

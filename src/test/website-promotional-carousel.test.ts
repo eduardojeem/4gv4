@@ -28,6 +28,7 @@ describe('promotional carousel website setting', () => {
       enabled: false,
       autoplay: true,
       intervalSeconds: 6,
+      layoutMode: 'contained',
       slides: [],
     })
   })

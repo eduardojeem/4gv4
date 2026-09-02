@@ -91,6 +91,9 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
       settings.promotional_carousel.slides.some((slide) => slide.active)
   )
 
+  const trustBarPosition = settings.trust_bar?.position || 'above_carousel'
+  const trustBarVisible = settings.trust_bar?.enabled !== false
+
   return (
     <div className="flex flex-col min-h-screen">
       {!heroVisible && !promotionalCarouselVisible && (
@@ -110,14 +113,21 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
         />
       )}
 
-      {/* ── 2. Barra de Beneficios y Confianza de Compra (Envíos, Cuotas, Garantía) ── */}
-      <StoreTrustBar />
+      {/* ── 2. Barra de Beneficios (Si está configurada ARRIBA del carrusel) ── */}
+      {trustBarVisible && trustBarPosition === 'above_carousel' && (
+        <StoreTrustBar settings={settings.trust_bar} />
+      )}
 
       {/* ── 3. Banners Promocionales ── */}
       <PromotionalCarousel
         settings={settings.promotional_carousel}
         isPageLead={!heroVisible && promotionalCarouselVisible}
       />
+
+      {/* ── 3.1 Barra de Beneficios (Si está configurada DEBAJO del carrusel) ── */}
+      {trustBarVisible && trustBarPosition === 'below_carousel' && (
+        <StoreTrustBar settings={settings.trust_bar} />
+      )}
 
       {/* ── 4. Showcase de Categorías ── */}
       <CategoryShowcase />
@@ -145,6 +155,11 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
 
       {/* ── 9. Sucursales de la Tienda ── */}
       {branches.length > 0 && <BranchLocations branches={branches} brand={brand} />}
+
+      {/* ── 9.1 Barra de Beneficios (Si está configurada AL PIE DE PÁGINA) ── */}
+      {trustBarVisible && trustBarPosition === 'bottom' && (
+        <StoreTrustBar settings={settings.trust_bar} />
+      )}
 
       {/* ── 10. Reseñas y Opiniones de Clientes ── */}
       <OrganizationReviews />

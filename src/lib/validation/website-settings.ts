@@ -170,7 +170,22 @@ export const PromotionalCarouselSchema = z.object({
   enabled: z.boolean(),
   autoplay: z.boolean(),
   intervalSeconds: z.number().int().min(5).max(15),
+  layoutMode: z.enum(['contained', 'full', 'compact']).optional().default('contained'),
   slides: z.array(PromotionalCarouselSlideSchema).max(6, 'Máximo 6 diapositivas'),
+})
+
+export const TrustBarItemSchema = z.object({
+  id: z.string().optional(),
+  icon: z.string().optional().default('shield'),
+  title: z.string().min(1, 'El título es requerido').max(60, 'Máximo 60 caracteres'),
+  description: z.string().max(100, 'Máximo 100 caracteres').optional().default(''),
+  active: z.boolean().optional().default(true),
+})
+
+export const TrustBarSchema = z.object({
+  enabled: z.boolean().optional().default(true),
+  position: z.enum(['above_carousel', 'below_carousel', 'bottom']).optional().default('above_carousel'),
+  items: z.array(TrustBarItemSchema).max(6, 'Máximo 6 beneficios'),
 })
 
 export const CreditPlanDefaultSchema = z.object({
@@ -442,6 +457,7 @@ export const WebsiteSettingsSchema = z.object({
   offers_section: OffersSectionSchema.optional(),
   promotional_carousel: PromotionalCarouselSchema.optional(),
   offers_carousel: PromotionalCarouselSchema.optional(),
+  trust_bar: TrustBarSchema.optional(),
   product_credit_defaults: ProductCreditDefaultsSchema.optional(),
   services_section: ServicesSectionSchema.optional(),
   services: ServicesSchema,
@@ -463,6 +479,7 @@ export const SETTING_SCHEMAS = {
   offers_section: OffersSectionSchema,
   promotional_carousel: PromotionalCarouselSchema,
   offers_carousel: PromotionalCarouselSchema,
+  trust_bar: TrustBarSchema,
   product_credit_defaults: ProductCreditDefaultsSchema,
   services_section: ServicesSectionSchema,
   services: ServicesSchema,

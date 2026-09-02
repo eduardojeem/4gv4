@@ -118,6 +118,7 @@ export interface PromotionalCarouselSettings {
   enabled: boolean
   autoplay: boolean
   intervalSeconds: number
+  layoutMode?: 'contained' | 'full' | 'compact'
   slides: PromotionalCarouselSlide[]
 }
 
@@ -236,6 +237,20 @@ export interface CheckoutSettings {
   confirmationMessage?: string  // shown on success screen
 }
 
+export interface TrustBarItem {
+  id?: string
+  icon?: string
+  title: string
+  description: string
+  active?: boolean
+}
+
+export interface TrustBarSettings {
+  enabled: boolean
+  position: 'above_carousel' | 'below_carousel' | 'bottom'
+  items: TrustBarItem[]
+}
+
 export interface WebsiteSettings {
   company_info: CompanyInfo
   hero_content?: HeroContent
@@ -244,6 +259,7 @@ export interface WebsiteSettings {
   promotional_carousel?: PromotionalCarouselSettings
   /** Mismo banner que promotional_carousel, pero para la pagina /ofertas. */
   offers_carousel?: PromotionalCarouselSettings
+  trust_bar?: TrustBarSettings
   product_credit_defaults?: ProductCreditDefaults
   services_section?: ServicesSectionSettings
   services: Service[]

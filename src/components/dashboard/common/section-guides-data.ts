@@ -25,7 +25,16 @@ import {
   Trophy,
   ShieldAlert,
   History,
-  Dices
+  Dices,
+  Wallet,
+  Receipt,
+  BadgeDollarSign,
+  MessageCircle,
+  AlertTriangle,
+  FileText,
+  CheckCircle2,
+  TrendingUp,
+  Clock
 } from 'lucide-react'
 import type { SectionGuideData } from './SectionGuideModal'
 
@@ -145,26 +154,77 @@ export const SUPPLIERS_GUIDE: SectionGuideData = {
 }
 
 export const CREDITS_GUIDE: SectionGuideData = {
-  title: '¿Cómo funciona el Módulo de Créditos?',
-  subtitle: 'Gestiona ventas fiadas, cuotas pactadas, cobranzas y límites de saldo.',
-  badgeText: 'Créditos & Financiación',
+  title: '¿Cómo funciona el Módulo de Créditos y Financiación?',
+  subtitle: 'Guía integral para otorgar créditos, cobrar cuotas en caja, controlar vencimientos y gestionar la cartera de clientes.',
+  badgeText: 'Créditos, Cobranzas & Cartera',
   icon: CreditCard,
-  gradient: 'from-violet-600 via-purple-600 to-slate-900',
+  gradient: 'from-violet-600 via-indigo-600 to-slate-900',
   steps: [
     {
-      title: 'Emisión de Créditos',
-      description: 'Vende a plazos desde el POS definiendo número de cuotas, fechas de vencimiento y tasa de interés o recargo.'
+      title: '1. Otorgamiento y Financiación (POS o Manual)',
+      description: 'Al realizar una venta en el POS o desde el panel de créditos, seleccioná el cliente y elegí el plan de cuotas (semanal, quincenal o mensual). El sistema calcula el recargo de financiación o interés y programa las fechas de vencimiento de cada cuota.',
+      icon: Wallet
     },
     {
-      title: 'Cobranza de Cuotas',
-      description: 'Registra pagos parciales o totales de cuotas, emitiendo el correspondiente recibo de dinero que ingresa directo a caja.'
+      title: '2. Cobranza de Cuotas y Registro en Caja',
+      description: 'Cobrá cuotas completas o entregas parciales en efectivo, tarjeta o transferencia. Cada pago ingresa automáticamente a la sesión de caja abierta y emite un comprobante/recibo térmico (58mm/80mm) o PDF A4 con el saldo restante.',
+      icon: Receipt
     },
     {
-      title: 'Monitoreo de Morosidad',
-      description: 'Identifica al instante cuotas vencidas, clientes con límite excedido y genera extractos de cuenta.'
+      title: '3. Amortización Inteligente de Saldos',
+      description: 'Cuando un cliente entrega un monto global de dinero, el sistema distribuye el pago de forma inteligente cancelando primero las cuotas más antiguas o vencidas para reducir su mora de forma óptima.',
+      icon: BadgeDollarSign
+    },
+    {
+      title: '4. Semáforo de Vencimientos y Control de Mora',
+      description: 'Monitoreá el estado de la cartera en tiempo real: cuotas Al Día (verde), Próximas a Vencer en 7 días (azul), Vencidas Hoy (naranja) y En Mora (rojo). Podés filtrar y priorizar cobranzas fácilmente.',
+      icon: Clock
+    },
+    {
+      title: '5. Extracto Consolidado y WhatsApp',
+      description: 'Generá el Estado de Cuenta consolidado del cliente que unifica todas sus compras a crédito activas. Podés imprimir el extracto o enviar un recordatorio formal con el detalle de cuotas por WhatsApp en un clic.',
+      icon: MessageCircle
+    },
+    {
+      title: '6. Límites de Crédito y Seguridad Financiera',
+      description: 'Configurá el límite máximo de crédito por cliente en el CRM. Si el cliente supera su saldo asignado, el sistema emite una alerta visual antes de autorizar nuevas ventas a plazo o entregas de taller.',
+      icon: ShieldCheck
     }
   ],
-  tip: 'Revisa el límite de crédito antes de autorizar una entrega de reparación o venta a plazo.'
+  examples: [
+    {
+      goal: 'Financiar una venta en 6 cuotas con entrega inicial',
+      setup: [
+        'Venta en POS por valor de 1.800.000 Gs.',
+        'Seleccionar cliente registrado y método de pago "Crédito / Cuenta Corriente".',
+        'Ingresar Entrega Inicial al Contado de 300.000 Gs.',
+        'Configurar 5 cuotas restantes de 300.000 Gs. con vencimiento cada 30 días.'
+      ],
+      result: 'Se imprime el ticket de venta con el calendario de pagos. Las 5 cuotas quedan agendadas en el sistema y se monitorean mes a mes.',
+      icon: ShoppingBag
+    },
+    {
+      goal: 'Registrar un pago parcial de cuotas atrasadas',
+      setup: [
+        'Cliente adeuda 2 cuotas vencidas de 150.000 Gs. cada una (Total: 300.000 Gs.).',
+        'El cliente se acerca y entrega 200.000 Gs. en efectivo.',
+        'Hacer clic en "Cobrar" > Ingresar 200.000 Gs. > Confirmar pago.'
+      ],
+      result: 'El sistema cancela al 100% la cuota #1 (150.000 Gs.) y abona 50.000 Gs. a la cuota #2 (saldo restante de 100.000 Gs.). El dinero ingresa a caja y se emite el recibo.',
+      icon: CheckCircle2
+    },
+    {
+      goal: 'Enviar recordatorio de pago y Estado de Cuenta por WhatsApp',
+      setup: [
+        'Ingresar a la lista de Créditos o a la pestaña "Próximos Vencimientos".',
+        'Abrir el detalle del crédito del cliente.',
+        'Hacer clic en "Estado de Cuenta" > "Compartir por WhatsApp" o "Descargar PDF".'
+      ],
+      result: 'El cliente recibe un mensaje profesional con el desglose de su cuenta, saldo total pendiente y fechas de vencimiento para facilitar su pago.',
+      icon: MessageCircle
+    }
+  ],
+  tip: 'Mantené una sesión de caja abierta durante el cobro de cuotas para que cada pago genere su recibo y quede contabilizado en el arqueo del día.'
 }
 
 export const PROMOTIONS_GUIDE: SectionGuideData = {

@@ -10,20 +10,22 @@ import { ProcessStepsEditor } from '@/components/admin/website/ProcessStepsEdito
 import { CheckoutSettingsEditor } from '@/components/admin/website/CheckoutSettingsEditor'
 import { OffersSectionEditor } from '@/components/admin/website/OffersSectionEditor'
 import { PromotionalCarouselEditor } from '@/components/admin/website/PromotionalCarouselEditor'
+import { TrustBarEditor } from '@/components/admin/website/TrustBarEditor'
 import { SetupGuide } from '@/components/admin/website/SetupGuide'
 import { WebsiteHowItWorksDialog } from '@/components/admin/website/WebsiteHowItWorksDialog'
-import { Building2, Briefcase, Eye, Footprints, GalleryHorizontalEnd, Globe, ShoppingCart, Sparkles, Tag } from 'lucide-react'
+import { Building2, Briefcase, Eye, Footprints, GalleryHorizontalEnd, Globe, ShoppingCart, Sparkles, Tag, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
 const TABS = [
-  { value: 'company',  label: 'Empresa',   icon: Building2   },
-  { value: 'hero',     label: 'Hero',      icon: Sparkles    },
-  { value: 'carousel', label: 'Carrusel',  icon: GalleryHorizontalEnd },
-  { value: 'offers',   label: 'Ofertas',   icon: Tag         },
-  { value: 'services', label: 'Servicios', icon: Briefcase   },
-  { value: 'process',  label: 'Proceso',   icon: Footprints  },
-  { value: 'checkout', label: 'Pagos y entregas', icon: ShoppingCart },
+  { value: 'company',   label: 'Empresa',     icon: Building2   },
+  { value: 'hero',      label: 'Hero',        icon: Sparkles    },
+  { value: 'trust_bar', label: 'Beneficios',  icon: ShieldCheck },
+  { value: 'carousel',  label: 'Carrusel',    icon: GalleryHorizontalEnd },
+  { value: 'offers',    label: 'Ofertas',     icon: Tag         },
+  { value: 'services',  label: 'Servicios',   icon: Briefcase   },
+  { value: 'process',   label: 'Proceso',     icon: Footprints  },
+  { value: 'checkout',  label: 'Pagos y entregas', icon: ShoppingCart },
 ]
 
 export default function WebsiteAdminPage() {
@@ -134,9 +136,10 @@ export default function WebsiteAdminPage() {
           </TabsList>
         </div>
 
-        <TabsContent value="company"  className="mt-0"><CompanyInfoForm /></TabsContent>
-        <TabsContent value="hero"     className="mt-0"><HeroEditor /></TabsContent>
-        <TabsContent value="carousel" className="mt-0"><PromotionalCarouselEditor /></TabsContent>
+        <TabsContent value="company"   className="mt-0"><CompanyInfoForm /></TabsContent>
+        <TabsContent value="hero"      className="mt-0"><HeroEditor /></TabsContent>
+        <TabsContent value="trust_bar" className="mt-0"><TrustBarEditor /></TabsContent>
+        <TabsContent value="carousel"  className="mt-0"><PromotionalCarouselEditor /></TabsContent>
         <TabsContent value="offers"   className="mt-0"><OffersSectionEditor /></TabsContent>
         <TabsContent value="services" className="mt-0"><ServicesManager /></TabsContent>
         <TabsContent value="process"  className="mt-0"><ProcessStepsEditor /></TabsContent>

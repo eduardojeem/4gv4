@@ -292,6 +292,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       enabled: false,
       autoplay: true,
       intervalSeconds: 6,
+      layoutMode: 'contained',
       slides: [],
     },
     // Sin slides el banner no se dibuja, asi que arranca habilitado: aparece
@@ -300,7 +301,42 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       enabled: true,
       autoplay: true,
       intervalSeconds: 6,
+      layoutMode: 'contained',
       slides: [],
+    },
+    trust_bar: {
+      enabled: true,
+      position: 'above_carousel',
+      items: [
+        {
+          id: 'shipping',
+          icon: 'truck',
+          title: 'Envíos Rápidos',
+          description: 'A domicilio o retiro en tienda',
+          active: true,
+        },
+        {
+          id: 'payment',
+          icon: 'credit-card',
+          title: 'Medios de Pago',
+          description: 'Tarjetas, cuotas y transferencias',
+          active: true,
+        },
+        {
+          id: 'warranty',
+          icon: 'shield',
+          title: 'Compra Segura',
+          description: 'Garantía oficial en tus compras',
+          active: true,
+        },
+        {
+          id: 'support',
+          icon: 'message',
+          title: 'Atención Directa',
+          description: 'Asesoramiento personalizado',
+          active: true,
+        },
+      ],
     },
     product_credit_defaults: {
       enabled: true,
@@ -374,6 +410,7 @@ export function applyWebsiteSettingsDefaults(
   const offersSection = (settings.offers_section || {}) as Partial<WebsiteSettings['offers_section']>
   const promotionalCarousel = (settings.promotional_carousel || {}) as Partial<WebsiteSettings['promotional_carousel']>
   const offersCarousel = (settings.offers_carousel || {}) as Partial<WebsiteSettings['offers_carousel']>
+  const trustBar = (settings.trust_bar || {}) as Partial<WebsiteSettings['trust_bar']>
   const productCreditDefaults = (settings.product_credit_defaults || {}) as Partial<WebsiteSettings['product_credit_defaults']>
   const servicesSection = (settings.services_section || {}) as Partial<WebsiteSettings['services_section']>
   const maintenanceMode = (settings.maintenance_mode || {}) as Partial<WebsiteSettings['maintenance_mode']>
@@ -418,6 +455,13 @@ export function applyWebsiteSettingsDefaults(
       slides: Array.isArray(offersCarousel.slides)
         ? offersCarousel.slides
         : defaults.offers_carousel.slides,
+    },
+    trust_bar: {
+      ...defaults.trust_bar,
+      ...trustBar,
+      items: Array.isArray(trustBar.items)
+        ? trustBar.items
+        : defaults.trust_bar.items,
     },
     product_credit_defaults: {
       ...defaults.product_credit_defaults,

@@ -867,6 +867,57 @@ export function PromotionalCarouselEditor({
               </div>
             </div>
           </div>
+
+          {/* Formato y Ancho del Carrusel */}
+          <div className="border-t pt-5 space-y-3">
+            <div>
+              <Label className="text-sm font-semibold text-foreground">Formato y Ancho del Carrusel</Label>
+              <p className="text-xs text-muted-foreground">Elegí si el carrusel debe agarrar todo el ancho de la pantalla de borde a borde o mantenerse enmarcado/compacto.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => patch('layoutMode', 'contained')}
+                className={cn(
+                  'flex flex-col items-start gap-1.5 p-3.5 rounded-xl border text-left transition-all',
+                  (current.layoutMode || 'contained') === 'contained'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border/80 hover:bg-muted/50'
+                )}
+              >
+                <span className="text-xs font-bold text-foreground">📦 Enmarcado (Estándar)</span>
+                <span className="text-[11px] text-muted-foreground leading-tight">Centrado con bordes redondeados y márgenes elegantes.</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => patch('layoutMode', 'full')}
+                className={cn(
+                  'flex flex-col items-start gap-1.5 p-3.5 rounded-xl border text-left transition-all',
+                  current.layoutMode === 'full'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border/80 hover:bg-muted/50'
+                )}
+              >
+                <span className="text-xs font-bold text-foreground">🖼️ Borde a Borde (Full Width)</span>
+                <span className="text-[11px] text-muted-foreground leading-tight">Ocupa el 100% del ancho de la pantalla sin márgenes laterales.</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => patch('layoutMode', 'compact')}
+                className={cn(
+                  'flex flex-col items-start gap-1.5 p-3.5 rounded-xl border text-left transition-all',
+                  current.layoutMode === 'compact'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border/80 hover:bg-muted/50'
+                )}
+              >
+                <span className="text-xs font-bold text-foreground">📐 Compacto</span>
+                <span className="text-[11px] text-muted-foreground leading-tight">Formato más angosto y menor altura para ocupar menos espacio.</span>
+              </button>
+            </div>
+          </div>
         </div>
       </SectionCard>
 
