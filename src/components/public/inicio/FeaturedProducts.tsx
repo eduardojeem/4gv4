@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, Flame, Package, Sparkles, Tag, Layers } from 'lucide-react'
+import { ArrowRight, Flame, Package, Sparkles, Layers, Grid3X3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ProductCard } from '@/components/public/ProductCard'
 import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
@@ -21,16 +21,15 @@ const fetcher = async (url: string): Promise<PublicProduct[]> => {
   return products as PublicProduct[]
 }
 
-type FilterTab = 'all' | 'offers' | 'featured'
-
 export function FeaturedProducts() {
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
-  const [activeTab, setActiveTab] = useState<FilterTab>('all')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [activeSpecialTab, setActiveSpecialTab] = useState<'all' | 'offers' | 'featured'>('all')
 
   const { data, error, isLoading } = useSWR(
-    withOrgQuery('/api/public/products?per_page=16&sort=newest', tenantSlug),
+    withOrgQuery('/api/public/products?per_page=32&sort=newest', tenantSlug),
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )
@@ -43,21 +42,48 @@ export function FeaturedProducts() {
   const products = isMounted ? (data ?? []) : []
   const effectiveIsLoading = !isMounted || isLoading
 
-  // Filtro por pestaña
-  const displayedProducts = useMemo(() => {
-    if (activeTab === 'offers') {
-      return products.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price)
+  // Categorías presentes en los productos cargados
+  const availableCategories = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>()
+    for (const p of products) {
+      if (p.category?.id && p.category?.name) {
+        const existing = map.get(p.category.id)
+        if (existing) {
+          existing.count++
+        } else {
+          map.set(p.category.id, { id: p.category.id, name: p.category.name, count: 1 })
+        }
+      }
     }
-    if (activeTab === 'featured') {
-      return products.filter((p) => p.featured)
-    }
-    return products
-  }, [products, activeTab])
+    return Array.from(map.values()).sort((a, b) => b.count - a.count)
+  }, [products])
 
   const offersCount = useMemo(
     () => products.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price).length,
     [products]
   )
+
+  const featuredCount = useMemo(
+    () => products.filter((p) => p.featured).length,
+    [products]
+  )
+
+  // Filtro dinámico por categoría o pestañas especiales
+  const displayedProducts = useMemo(() => {
+    let result = products
+
+    if (activeSpecialTab === 'offers') {
+      result = result.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price)
+    } else if (activeSpecialTab === 'featured') {
+      result = result.filter((p) => p.featured)
+    }
+
+    if (selectedCategory !== 'all') {
+      result = result.filter((p) => p.category?.id === selectedCategory)
+    }
+
+    return result
+  }, [products, selectedCategory, activeSpecialTab])
 
   if (!effectiveIsLoading && (error || products.length === 0)) return null
 
@@ -73,44 +99,50 @@ export function FeaturedProducts() {
               Catálogo Destacado
             </span>
             <h2 className="mt-1.5 text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-              Productos Recomendados
+              Productos Disponibles
             </h2>
             <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-              Descubrí los artículos más buscados y las mejores oportunidades.
+              Descubrí los artículos en stock con garantía, opciones de financiación y entrega inmediata.
             </p>
           </div>
 
           <Button asChild variant="outline" className="hidden sm:inline-flex rounded-xl font-bold shadow-xs gap-1.5">
             <Link href={`${tenantPrefix}/productos`}>
-              <span>Ver catálogo completo</span>
+              <span>Ver catálogo completo ({products.length})</span>
               <ArrowRight className="h-4 w-4 text-primary" />
             </Link>
           </Button>
         </div>
 
-        {/* Pestañas de Filtro Rápido */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
+        {/* Pestañas de Filtro Rápido y Categorías */}
+        <div className="flex flex-wrap items-center gap-2 pb-2 mb-6">
           <button
             type="button"
-            onClick={() => setActiveTab('all')}
+            onClick={() => {
+              setActiveSpecialTab('all')
+              setSelectedCategory('all')
+            }}
             className={cn(
               'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all shadow-xs shrink-0',
-              activeTab === 'all'
+              activeSpecialTab === 'all' && selectedCategory === 'all'
                 ? 'bg-primary text-primary-foreground'
-                : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground'
+                : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
           >
             <Layers className="h-3.5 w-3.5" />
-            <span>Todos los destacados</span>
+            <span>Todos ({products.length})</span>
           </button>
 
           {offersCount > 0 && (
             <button
               type="button"
-              onClick={() => setActiveTab('offers')}
+              onClick={() => {
+                setActiveSpecialTab('offers')
+                setSelectedCategory('all')
+              }}
               className={cn(
                 'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all shadow-xs shrink-0',
-                activeTab === 'offers'
+                activeSpecialTab === 'offers'
                   ? 'border-rose-500 bg-rose-600 text-white'
                   : 'border border-rose-200 bg-rose-50/70 text-rose-700 hover:bg-rose-100 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300'
               )}
@@ -120,19 +152,46 @@ export function FeaturedProducts() {
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('featured')}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all shadow-xs shrink-0',
-              activeTab === 'featured'
-                ? 'bg-amber-600 text-white'
-                : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>Top Selección</span>
-          </button>
+          {featuredCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSpecialTab('featured')
+                setSelectedCategory('all')
+              }}
+              className={cn(
+                'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all shadow-xs shrink-0',
+                activeSpecialTab === 'featured'
+                  ? 'bg-amber-600 text-white'
+                  : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              )}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Top Selección ({featuredCount})</span>
+            </button>
+          )}
+
+          {/* Filtros por Categoría Comercial */}
+          {availableCategories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => {
+                setActiveSpecialTab('all')
+                setSelectedCategory(selectedCategory === cat.id ? 'all' : cat.id)
+              }}
+              className={cn(
+                'flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all shadow-xs shrink-0',
+                selectedCategory === cat.id
+                  ? 'bg-secondary text-secondary-foreground font-bold border border-primary/40'
+                  : 'border border-border/70 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/40'
+              )}
+            >
+              <Grid3X3 className="h-3 w-3 opacity-70" />
+              <span>{cat.name}</span>
+              <span className="text-[10px] opacity-60 bg-muted px-1.5 py-0.5 rounded-full">{cat.count}</span>
+            </button>
+          ))}
         </div>
 
         {/* Grid de Productos */}
@@ -144,8 +203,8 @@ export function FeaturedProducts() {
           </div>
         ) : displayedProducts.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 sm:gap-5">
-            {displayedProducts.slice(0, 8).map((product, index) => (
-              <ProductCard key={product.id} product={product} priority={index < 2} />
+            {displayedProducts.slice(0, 16).map((product, index) => (
+              <ProductCard key={product.id} product={product} priority={index < 4} />
             ))}
           </div>
         ) : (
@@ -154,7 +213,10 @@ export function FeaturedProducts() {
             <p className="text-sm font-semibold text-foreground">No hay productos en esta selección</p>
             <button
               type="button"
-              onClick={() => setActiveTab('all')}
+              onClick={() => {
+                setActiveSpecialTab('all')
+                setSelectedCategory('all')
+              }}
               className="mt-3 text-xs font-bold text-primary hover:underline"
             >
               Ver todos los productos
@@ -162,12 +224,12 @@ export function FeaturedProducts() {
           </div>
         )}
 
-        {/* Botón Ver Todo en Mobile */}
-        <div className="mt-8 text-center sm:hidden">
-          <Button asChild variant="outline" className="w-full gap-2 rounded-xl font-bold">
+        {/* Botón Ver Catálogo Completo */}
+        <div className="mt-10 text-center">
+          <Button asChild size="lg" variant="outline" className="rounded-2xl font-bold px-8 shadow-xs hover:border-primary/50">
             <Link href={`${tenantPrefix}/productos`}>
-              <span>Ver catálogo completo</span>
-              <ArrowRight className="h-4 w-4 text-primary" />
+              <span>Explorar los {products.length} productos en el catálogo</span>
+              <ArrowRight className="h-4 w-4 text-primary ml-2" />
             </Link>
           </Button>
         </div>

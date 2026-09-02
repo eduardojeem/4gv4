@@ -161,24 +161,24 @@ export function UpcomingInstallments({
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-start justify-between gap-2 mb-1">
                                                 <div>
-                                                    <p className="text-sm font-semibold truncate leading-tight">{customerName}</p>
+                                                    <p className="text-sm font-bold truncate leading-tight text-slate-900 dark:text-white">{customerName}</p>
                                                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                                                        <span className="font-mono">{display.creditCode}</span>
-                                                        <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px]">{display.originLabel}</span>
+                                                        <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{display.creditCode}</span>
+                                                        <span className="rounded-md border border-border bg-slate-50 dark:bg-slate-900 px-1.5 py-0.5 text-[10px] font-medium">{display.originLabel}</span>
                                                         {display.saleCode && <span className="font-mono">Ticket {display.saleCode}</span>}
                                                     </div>
                                                     <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">
                                                         {display.productSummary}
                                                     </p>
-                                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                                        Cuota <span className="font-mono font-bold">#{i.installment_number}</span>
-                                                        {' · '}
-                                                        {new Date(i.due_date).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">Cuota #{i.installment_number}</span>
+                                                        <span>•</span>
+                                                        <span>{new Date(i.due_date).toLocaleDateString('es-PY', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
                                                     </p>
                                                 </div>
                                                 <div className="text-right shrink-0">
-                                                    <p className="text-base font-bold tabular-nums">{formatCurrency(i.amount)}</p>
-                                                    {paid > 0 && <p className="text-[11px] text-green-600 dark:text-green-400 tabular-nums">{formatCurrency(paid)} pag.</p>}
+                                                    <p className="text-base font-bold tabular-nums text-slate-900 dark:text-white">{formatCurrency(i.amount)}</p>
+                                                    {paid > 0 && <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">{formatCurrency(paid)} pagado</p>}
                                                 </div>
                                             </div>
 
@@ -186,44 +186,44 @@ export function UpcomingInstallments({
                                             {pct > 0 && pct < 100 && (
                                                 <div className="mt-2 space-y-1">
                                                     <div className="flex items-center justify-between">
-                                                        <span className="text-[10px] text-muted-foreground">Progreso parcial</span>
-                                                        <span className="text-[10px] font-medium text-muted-foreground tabular-nums">{pct}%</span>
+                                                        <span className="text-[10px] font-medium text-muted-foreground">Saldo restante: {formatCurrency(outstanding)}</span>
+                                                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{pct}%</span>
                                                     </div>
-                                                    <div className="h-1.5 w-full bg-muted/60 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                                                    <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
 
                                         {/* Right: action */}
-                                        <div className="w-full lg:w-auto shrink-0">
+                                        <div className="w-full lg:w-auto shrink-0 pt-2 lg:pt-0">
                                             {isPaid ? (
-                                                <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 text-sm font-medium">
+                                                <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-sm font-semibold">
                                                     <CheckCircle className="h-4 w-4" />
                                                     Pagada
                                                 </div>
                                             ) : (
                                                 <div className="space-y-1.5">
-                                                    <div className="flex flex-wrap gap-2">
+                                                    <div className="flex flex-wrap items-center gap-2">
                                                         <Select
                                                             value={methodByInstallment[i.id] || 'cash'}
                                                             onValueChange={v => setMethodByInstallment(prev => ({ ...prev, [i.id]: v }))}
                                                         >
-                                                            <SelectTrigger className="w-[130px] h-8 text-xs">
+                                                            <SelectTrigger className="w-[120px] h-8 text-xs font-medium">
                                                                 <SelectValue placeholder="Método" />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                <SelectItem value="cash">Efectivo</SelectItem>
-                                                                <SelectItem value="card">Tarjeta</SelectItem>
-                                                                <SelectItem value="transfer">Transferencia</SelectItem>
+                                                                <SelectItem value="cash">💵 Efectivo</SelectItem>
+                                                                <SelectItem value="card">💳 Tarjeta</SelectItem>
+                                                                <SelectItem value="transfer">🏦 Transf.</SelectItem>
                                                             </SelectContent>
                                                         </Select>
                                                         <Input
                                                             type="number"
-                                                            min={0.01}
-                                                            step={0.01}
-                                                            className={`w-[110px] h-8 text-xs ${errorMsg ? 'border-red-400' : ''}`}
+                                                            min={1}
+                                                            step={1}
+                                                            className={`w-[110px] h-8 text-xs font-mono font-bold ${errorMsg ? 'border-red-400' : ''}`}
                                                             value={amountByInstallment[i.id] ?? ''}
                                                             placeholder={String(outstanding)}
                                                             onChange={e => {
@@ -233,14 +233,14 @@ export function UpcomingInstallments({
                                                         />
                                                         <Button
                                                             size="sm"
-                                                            className="h-8 px-4 bg-green-600 hover:bg-green-700 text-white text-xs"
+                                                            className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
                                                             onClick={() => handlePay(i)}
                                                         >
                                                             Cobrar
                                                         </Button>
                                                     </div>
                                                     {errorMsg && (
-                                                        <p className="text-[11px] text-red-500 dark:text-red-400">{errorMsg}</p>
+                                                        <p className="text-[11px] text-red-500 dark:text-red-400 font-medium">{errorMsg}</p>
                                                     )}
                                                 </div>
                                             )}

@@ -95,7 +95,7 @@ export async function GET(request: NextRequest, context: RouteParams) {
     const actorIds = [...new Set(revisions.map((revision) => revision.actor_id).filter(Boolean))]
     const { data: actors } = actorIds.length > 0
       ? await ctx.supabase.from('profiles').select('id, full_name').in('id', actorIds)
-      : { data: [], error: null }
+      : { data: [] }
     const actorNames = new Map((actors ?? []).map((actor) => [actor.id, actor.full_name]))
     return NextResponse.json({
       success: true,

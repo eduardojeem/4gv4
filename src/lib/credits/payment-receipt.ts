@@ -48,6 +48,18 @@ export const CREDIT_PAYMENT_RECEIPT_WIDTH_MM = 80
 export const CREDIT_PAYMENT_RECEIPT_HEIGHT_MM = 220
 export const CREDIT_PAYMENT_RECEIPT_MAX_HEIGHT_MM = 950
 
+/** Alto de la barra de avance mas el aire que lleva arriba y abajo. */
+export const ALTO_BARRA_AVANCE_MM = 9
+
+/**
+ * Debajo de este ancho las etiquetas largas se parten solas dentro de su celda
+ * y la seccion ocupa el doble de alto. Una sola regla para el estimador y para
+ * el dibujo: si difieren, el alto reservado no coincide con lo que se imprime.
+ */
+export function usesShortLabels(pageWidthMm: number) {
+  return pageWidthMm < 70
+}
+
 export type CreditPaymentReceiptPdfOptions = {
   /** Ancho exacto del rollo, si se conoce. Ignorado cuando el formato es A4. */
   printerWidthMm?: number
@@ -142,10 +154,8 @@ export function buildCreditInfoRows(input: CreditPaymentReceiptInput): ReceiptRo
 export function buildPaymentDetailRows(input: CreditPaymentReceiptInput): ReceiptRow[] {
   const rows: ReceiptRow[] = []
 
-  if (input.installmentNumber) {
-    const totalInstText = input.totalInstallments ? ` de ${input.totalInstallments}` : ''
-    rows.push(['Cuota Pagada', `Cuota #${input.installmentNumber}${totalInstText}`])
-  }
+  // La cuota que se abono y el avance del plan viven ahora en su propia
+  // seccion: repetirlos aca hacia que el comprobante dijera lo mismo dos veces.
 
   if (input.installmentDueDate) {
     rows.push(['Vencimiento Cuota', new Date(input.installmentDueDate).toLocaleDateString(getDisplayLocale())])
@@ -170,6 +180,152 @@ export function buildPaymentDetailRows(input: CreditPaymentReceiptInput): Receip
   return rows
 }
 
+/**
+ * Avance del plan de cuotas.
+ *
+ * `paidInstallmentsCount` llegaba en la entrada y no se dibujaba en ningun
+ * lado: el comprobante decia que cuota se abono y cuantas quedaban sueltas en
+ * otra seccion, pero nunca cuantas van pagadas del total. Con eso el cliente no
+ * podia responder de un vistazo "voy 3 de 12".
+ */
+export type CreditInstallmentProgress = {
+  /** Numero de la cuota que se acaba de abonar, si el pago fue a una sola. */
+  current: number | null
+  paid: number | null
+  total: number | null
+  pending: number | null
+  /** Entre 0 y 1. Null cuando no se conoce el total. */
+  ratio: number | null
+}
+
+export function getCreditInstallmentProgress(
+  input: Pick<
+    CreditPaymentReceiptInput,
+    'installmentNumber' | 'totalInstallments' | 'paidInstallmentsCount' | 'pendingInstallmentsCount'
+  >
+): CreditInstallmentProgress {
+  const total = typeof input.totalInstallments === 'number' && input.totalInstallments > 0
+    ? Math.floor(input.totalInstallments)
+    : null
+
+  const paidCrudo = typeof input.paidInstallmentsCount === 'number'
+    ? Math.max(0, Math.floor(input.paidInstallmentsCount))
+    : null
+
+  // Nunca mas cuotas pagadas que las que tiene el plan: un dato inconsistente no
+  // puede terminar impreso como "13 de 12" en el papel del cliente.
+  const paid = paidCrudo === null ? null : total === null ? paidCrudo : Math.min(paidCrudo, total)
+
+  // Si se conoce el total, lo pendiente se deriva de el en vez de tomar el otro
+  // contador: son dos consultas distintas y podrian no sumar.
+  const pending = total !== null && paid !== null
+    ? Math.max(0, total - paid)
+    : typeof input.pendingInstallmentsCount === 'number'
+      ? Math.max(0, Math.floor(input.pendingInstallmentsCount))
+      : null
+
+  return {
+    current: typeof input.installmentNumber === 'number' && input.installmentNumber > 0
+      ? Math.floor(input.installmentNumber)
+      : null,
+    paid,
+    total,
+    pending,
+    ratio: total !== null && paid !== null ? Math.min(1, paid / total) : null,
+  }
+}
+
+/**
+ * En 58 mm la columna de etiquetas no llega ni a 21 mm: "CUOTA ABONADA" se
+ * parte en dos lineas y la seccion ocupa el doble de alto por nada. En papel
+ * angosto se usan etiquetas cortas en vez de dejar que se quiebren solas.
+ */
+export function buildInstallmentPlanRows(
+  input: CreditPaymentReceiptInput,
+  opciones: { compacto?: boolean } = {}
+): ReceiptRow[] {
+  const p = getCreditInstallmentProgress(input)
+  const rows: ReceiptRow[] = []
+  const corto = opciones.compacto === true
+
+  // "Cuota 3 de 12": la posicion dentro del plan, que es lo primero que el
+  // cliente busca en el papel.
+  if (p.current !== null) {
+    rows.push([
+      corto ? 'CUOTA' : 'CUOTA ABONADA',
+      p.total !== null ? `${p.current} de ${p.total}` : `N° ${p.current}`,
+    ])
+  }
+
+  if (p.paid !== null && p.total !== null) {
+    const porcentaje = Math.round((p.paid / p.total) * 100)
+    rows.push([corto ? 'Pagadas' : 'Cuotas pagadas', `${p.paid} de ${p.total}  (${porcentaje}%)`])
+  } else if (p.paid !== null) {
+    rows.push([corto ? 'Pagadas' : 'Cuotas pagadas', String(p.paid)])
+  }
+
+  if (p.pending !== null) {
+    rows.push([
+      corto ? 'Faltan' : 'Cuotas que faltan',
+      p.pending === 0
+        ? (corto ? 'Ninguna' : 'Ninguna, plan completado')
+        : `${p.pending} cuota${p.pending !== 1 ? 's' : ''}`,
+    ])
+  }
+
+  return rows
+}
+
+/**
+ * Cuotas pagadas contando el pago que se acaba de registrar.
+ *
+ * La pantalla recibe los conteos como props, calculados sobre el estado que
+ * tenia la pagina antes del cobro. Imprimir ese numero le entrega al cliente un
+ * comprobante que no cuenta el pago que tiene en la mano: pago la cuota 4 y el
+ * papel dice "3 de 12". El saldo ya se corregia asi restando el importe; esto
+ * hace lo mismo con el conteo.
+ */
+export function projectPaidInstallments(entrada: {
+  paidBefore?: number | null
+  totalInstallments?: number | null
+  paymentAmount: number
+  /** Lo que faltaba de la cuota que se estaba pagando. */
+  installmentOutstanding?: number | null
+  /** Saldo del credito entero antes del pago. */
+  remainingBefore?: number | null
+  /** El cobro era por el credito completo, no por una cuota. */
+  paysWholeCredit?: boolean
+}): { paid: number | null; pending: number | null } {
+  const total = typeof entrada.totalInstallments === 'number' && entrada.totalInstallments > 0
+    ? Math.floor(entrada.totalInstallments)
+    : null
+  const antes = typeof entrada.paidBefore === 'number' ? Math.max(0, Math.floor(entrada.paidBefore)) : null
+
+  if (antes === null) return { paid: null, pending: null }
+
+  let paid = antes
+
+  if (
+    entrada.paysWholeCredit &&
+    typeof entrada.remainingBefore === 'number' &&
+    entrada.paymentAmount >= entrada.remainingBefore
+  ) {
+    // Se salda todo el credito: no queda ninguna cuota abierta.
+    paid = total ?? antes
+  } else if (
+    typeof entrada.installmentOutstanding === 'number' &&
+    entrada.installmentOutstanding > 0 &&
+    entrada.paymentAmount >= entrada.installmentOutstanding
+  ) {
+    paid = antes + 1
+  }
+  // Un pago parcial no cierra la cuota, asi que el conteo no se mueve.
+
+  if (total !== null) paid = Math.min(paid, total)
+
+  return { paid, pending: total !== null ? Math.max(0, total - paid) : null }
+}
+
 export function buildAccountStatusRows(input: CreditPaymentReceiptInput): ReceiptRow[] {
   const rows: ReceiptRow[] = []
 
@@ -181,14 +337,6 @@ export function buildAccountStatusRows(input: CreditPaymentReceiptInput): Receip
       rows.push(['SALDO PENDIENTE', `${formatCurrency(0)} (TOTALMENTE SALDADO)`])
     } else {
       rows.push(['SALDO PENDIENTE (FALTA)', formatCurrency(balance)])
-    }
-  }
-
-  if (typeof input.pendingInstallmentsCount === 'number') {
-    if (input.pendingInstallmentsCount === 0) {
-      rows.push(['Cuotas Restantes', '0 cuotas (Completado)'])
-    } else {
-      rows.push(['Cuotas por Pagar', `${input.pendingInstallmentsCount} cuota${input.pendingInstallmentsCount !== 1 ? 's' : ''} pendiente${input.pendingInstallmentsCount !== 1 ? 's' : ''}`])
     }
   }
 
@@ -205,6 +353,7 @@ export function getCreditPaymentReceiptHeight(input: CreditPaymentReceiptInput, 
   const layout = getCreditPaymentReceiptLayout(pageWidthMm)
   const creditRows = buildCreditInfoRows(input)
   const paymentRows = buildPaymentDetailRows(input)
+  const planRows = buildInstallmentPlanRows(input, { compacto: usesShortLabels(pageWidthMm) })
   const statusRows = buildAccountStatusRows(input)
 
   const estimatedHeight =
@@ -214,6 +363,9 @@ export function getCreditPaymentReceiptHeight(input: CreditPaymentReceiptInput, 
     layout.sectionGap +
     estimateTableHeight(paymentRows, layout) +
     layout.sectionGap +
+    // La seccion del plan incluye la barra de avance, que ocupa alto propio: sin
+    // contarla el rollo se corta justo donde el cliente busca cuanto le falta.
+    (planRows.length > 0 ? estimateTableHeight(planRows, layout) + ALTO_BARRA_AVANCE_MM + layout.sectionGap : 0) +
     (statusRows.length > 0 ? estimateTableHeight(statusRows, layout) + layout.sectionGap : 0) +
     32
 
@@ -354,6 +506,9 @@ export async function createCreditPaymentReceiptPdf(
   const paidAt = input.paymentDate ? new Date(input.paymentDate) : new Date()
   const creditRows = buildCreditInfoRows(input)
   const paymentRows = buildPaymentDetailRows(input)
+  const compacto = usesShortLabels(t.pageWidthMm)
+  const planRows = buildInstallmentPlanRows(input, { compacto })
+  const progreso = getCreditInstallmentProgress(input)
   const statusRows = buildAccountStatusRows(input)
 
   const tablaMargen = { left: izq, right: pageW - izq - t.contentWidthMm }
@@ -448,10 +603,48 @@ export async function createCreditPaymentReceiptPdf(
     return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
   }
 
-  let fin = seccion('DATOS DEL CLIENTE Y VENTA', creditRows, [30, 58, 138], false, y)
-  fin = seccion('DETALLE DEL PAGO EFECTUADO', paymentRows, [16, 115, 74], true, fin + t.sectionGap)
+  // Los titulos tambien se acortan en papel angosto: "DETALLE DEL PAGO
+  // EFECTUADO" se quebraba en tres lineas dentro de su propia cabecera.
+  const titulo = (largo: string, corto: string) => (compacto ? corto : largo)
+
+  let fin = seccion(titulo('DATOS DEL CLIENTE Y VENTA', 'CLIENTE'), creditRows, [30, 58, 138], false, y)
+  fin = seccion(titulo('DETALLE DEL PAGO EFECTUADO', 'PAGO'), paymentRows, [16, 115, 74], true, fin + t.sectionGap)
+
+  // ─── Plan de cuotas ─────────────────────────────────────────────────────
+  // Va entre lo que se acaba de pagar y lo que se sigue debiendo, que es el
+  // orden en que se lee: cuanto pague ahora, donde voy, cuanto me falta.
+  if (planRows.length > 0) {
+    fin = seccion(titulo('PLAN DE CUOTAS', 'CUOTAS'), planRows, [124, 45, 18], true, fin + t.sectionGap)
+
+    // Una casilla por cuota, llenas las pagadas. Es la misma pregunta del
+    // cliente respondida sin leer: cuantas van y cuantas faltan. Se dibuja en
+    // vez de una barra proporcional porque las casillas SON las cuotas.
+    if (progreso.total !== null && progreso.paid !== null && progreso.total <= 60) {
+      const barraY = fin + 3
+      const alto = t.isSheet ? 4 : 3
+      const ancho = t.contentWidthMm
+      const casilla = ancho / progreso.total
+
+      doc.setDrawColor(120)
+      doc.setLineWidth(0.2)
+
+      for (let i = 0; i < progreso.total; i++) {
+        const x = izq + i * casilla
+        if (i < progreso.paid) {
+          doc.setFillColor(30, 58, 138)
+          doc.rect(x, barraY, casilla, alto, 'FD')
+        } else {
+          doc.rect(x, barraY, casilla, alto, 'D')
+        }
+      }
+
+      doc.setDrawColor(0)
+      fin = barraY + alto
+    }
+  }
+
   if (statusRows.length > 0) {
-    fin = seccion('ESTADO DE CUENTA', statusRows, [71, 85, 105], true, fin + t.sectionGap)
+    fin = seccion(titulo('ESTADO DE CUENTA', 'SALDO'), statusRows, [71, 85, 105], true, fin + t.sectionGap)
   }
 
   // ─── Firma y pie ────────────────────────────────────────────────────────

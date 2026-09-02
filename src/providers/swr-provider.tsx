@@ -3,6 +3,8 @@
 import { SWRConfig } from 'swr'
 import { ReactNode } from 'react'
 
+import { clearPersistentCacheInBackground } from '@/lib/cache/background-cache-refresh'
+
 // Cache persistente mejorado
 class PersistentCache extends Map {
   private readonly STORAGE_KEY = 'swr_cache_v1'
@@ -194,8 +196,12 @@ export const cacheUtils = {
   // Limpiar todo el cache
   clearAll: () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('swr_cache_v1')
-      window.location.reload()
+      clearPersistentCacheInBackground(localStorage, () => {
+        // SWR escucha `online` y revalida los recursos activos mediante las
+        // reglas de reconnect, sin desmontar la aplicación ni perder el estado
+        // de formularios y modales abiertos.
+        window.dispatchEvent(new Event('online'))
+      })
     }
   },
   

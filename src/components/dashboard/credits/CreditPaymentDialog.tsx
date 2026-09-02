@@ -22,7 +22,7 @@ import { useState, useEffect } from 'react'
 import { CreditCard, User, DollarSign, FileText, Calendar, AlertCircle, CheckCircle2, Printer } from 'lucide-react'
 import { formatCurrency, formatThousands, parseThousands, getDisplayLocale } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
-import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
+import { createCreditPaymentReceiptPdf, projectPaidInstallments } from '@/lib/credits/payment-receipt'
 import { downloadPdfDocument, printPdfDocument } from '@/lib/credits/print-receipt'
 import { useCreditPrinting } from '@/hooks/use-credit-printing'
 import { CreditPaperPicker } from './CreditPaperPicker'
@@ -178,6 +178,20 @@ export function CreditPaymentDialog({
 
     const generateReceiptDoc = async () => {
         if (!paymentDone) return null
+
+        // Los conteos llegan por props, calculados sobre el estado que tenia la
+        // pagina antes de este cobro. Imprimirlos tal cual le entrega al cliente
+        // un comprobante que no cuenta el pago que tiene en la mano. El saldo ya
+        // se corregia restando el importe; el conteo se proyecta igual.
+        const cuotasTrasElPago = projectPaidInstallments({
+            paidBefore: creditInfo?.paidInstallmentsCount,
+            totalInstallments: creditInfo?.totalInstallments ?? creditInfo?.termMonths,
+            paymentAmount: paymentDone.amount,
+            installmentOutstanding: effectiveMaxAmount,
+            remainingBefore: creditInfo?.remainingBalance,
+            paysWholeCredit: allowFullDebtPayment,
+        })
+
         const sharedReceipt = await createCreditPaymentReceiptPdf({
             paymentId: `dialog-${paymentDone.date.getTime()}`,
             paymentDate: paymentDone.date,
@@ -199,8 +213,8 @@ export function CreditPaymentDialog({
             productSummary: creditInfo?.productSummary,
             totalCreditAmount: creditInfo?.totalCreditAmount ?? creditInfo?.principal,
             totalInstallments: creditInfo?.totalInstallments ?? creditInfo?.termMonths,
-            paidInstallmentsCount: creditInfo?.paidInstallmentsCount,
-            pendingInstallmentsCount: creditInfo?.pendingInstallmentsCount,
+            paidInstallmentsCount: cuotasTrasElPago.paid,
+            pendingInstallmentsCount: cuotasTrasElPago.pending,
             installmentNumber: allowFullDebtPayment ? null : creditInfo?.nextInstallmentNumber,
             installmentDueDate: allowFullDebtPayment ? null : creditInfo?.nextDueDate,
             installmentAmount: creditInfo?.installmentAmount,
