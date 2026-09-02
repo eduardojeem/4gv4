@@ -1,4 +1,5 @@
 import { formatCurrency, getDisplayLocale } from '@/lib/currency'
+import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { formatCreditId, formatCustomerId } from '@/lib/utils'
 import { CREDIT_PAPER_WIDTH_MM, type CreditPaperFormat } from './paper'
 
@@ -114,7 +115,11 @@ function estimateTableHeight(rows: ReceiptRow[], layout: ReturnType<typeof getCr
   return headerHeight + bodyHeight
 }
 
-export function buildCreditInfoRows(input: CreditPaymentReceiptInput): ReceiptRow[] {
+export function buildCreditInfoRows(
+  input: CreditPaymentReceiptInput,
+  opciones: { compacto?: boolean } = {}
+): ReceiptRow[] {
+  const corto = opciones.compacto === true
   const creditCode = input.creditCode || formatCreditId(input.creditId)
   const customerCode = input.customerRuc || input.customerCode || formatCustomerId(input.customerId)
 
@@ -123,58 +128,62 @@ export function buildCreditInfoRows(input: CreditPaymentReceiptInput): ReceiptRo
   ]
 
   if (customerCode) {
-    rows.push(['RUC / CI / ID', customerCode])
+    rows.push([corto ? 'RUC / CI' : 'RUC / CI / ID', customerCode])
   }
   if (input.customerPhone) {
     rows.push(['Teléfono', input.customerPhone])
   }
 
-  rows.push(['Crédito Nº', creditCode])
+  rows.push([corto ? 'Crédito' : 'Crédito Nº', creditCode])
 
   if (input.saleCode) {
-    rows.push(['Ticket Venta', input.saleCode])
+    rows.push([corto ? 'Ticket' : 'Ticket Venta', input.saleCode])
   } else if (input.originLabel) {
     rows.push(['Origen', input.originLabel])
   }
 
   if (input.productSummary) {
-    rows.push(['Detalle Venta', input.productSummary])
+    rows.push([corto ? 'Detalle' : 'Detalle Venta', input.productSummary])
   } else if (input.creditLabel) {
     rows.push(['Concepto', input.creditLabel])
   }
 
   if (typeof input.totalCreditAmount === 'number' && input.totalCreditAmount > 0) {
     const planText = input.totalInstallments ? ` (${input.totalInstallments} cuotas)` : ''
-    rows.push(['Total Financiado', `${formatCurrency(input.totalCreditAmount)}${planText}`])
+    rows.push([corto ? 'Financiado' : 'Total Financiado', `${formatCurrency(input.totalCreditAmount)}${planText}`])
   }
 
   return rows
 }
 
-export function buildPaymentDetailRows(input: CreditPaymentReceiptInput): ReceiptRow[] {
+export function buildPaymentDetailRows(
+  input: CreditPaymentReceiptInput,
+  opciones: { compacto?: boolean } = {}
+): ReceiptRow[] {
+  const corto = opciones.compacto === true
   const rows: ReceiptRow[] = []
 
   // La cuota que se abono y el avance del plan viven ahora en su propia
   // seccion: repetirlos aca hacia que el comprobante dijera lo mismo dos veces.
 
   if (input.installmentDueDate) {
-    rows.push(['Vencimiento Cuota', new Date(input.installmentDueDate).toLocaleDateString(getDisplayLocale())])
+    rows.push([corto ? 'Vence' : 'Vencimiento Cuota', formatDateOnlyDisplay(input.installmentDueDate, undefined, { day: '2-digit', month: '2-digit', year: 'numeric' })])
   }
 
   if (typeof input.installmentAmount === 'number' && input.installmentAmount > 0) {
-    rows.push(['Valor Cuota', formatCurrency(input.installmentAmount)])
+    rows.push([corto ? 'Valor' : 'Valor Cuota', formatCurrency(input.installmentAmount)])
   }
 
   // Monto pagado
-  rows.push(['MONTO ABONADO', formatCurrency(input.paymentAmount)])
-  rows.push(['Método de Pago', getCreditPaymentMethodLabel(input.paymentMethod)])
+  rows.push([corto ? 'ABONADO' : 'MONTO ABONADO', formatCurrency(input.paymentAmount)])
+  rows.push([corto ? 'Método' : 'Método de Pago', getCreditPaymentMethodLabel(input.paymentMethod)])
 
   if (input.reference) {
-    rows.push(['Referencia / N° Trans.', input.reference])
+    rows.push([corto ? 'Referencia' : 'Referencia / N° Trans.', input.reference])
   }
 
   if (input.notes) {
-    rows.push(['Observaciones', input.notes])
+    rows.push([corto ? 'Obs.' : 'Observaciones', input.notes])
   }
 
   return rows
@@ -326,7 +335,11 @@ export function projectPaidInstallments(entrada: {
   return { paid, pending: total !== null ? Math.max(0, total - paid) : null }
 }
 
-export function buildAccountStatusRows(input: CreditPaymentReceiptInput): ReceiptRow[] {
+export function buildAccountStatusRows(
+  input: CreditPaymentReceiptInput,
+  opciones: { compacto?: boolean } = {}
+): ReceiptRow[] {
+  const corto = opciones.compacto === true
   const rows: ReceiptRow[] = []
 
   if (typeof input.currentCreditBalance === 'number') {
@@ -336,13 +349,13 @@ export function buildAccountStatusRows(input: CreditPaymentReceiptInput): Receip
       // en dolares el comprobante decia "Gs. 0".
       rows.push(['SALDO PENDIENTE', `${formatCurrency(0)} (TOTALMENTE SALDADO)`])
     } else {
-      rows.push(['SALDO PENDIENTE (FALTA)', formatCurrency(balance)])
+      rows.push([corto ? 'SALDO' : 'SALDO PENDIENTE (FALTA)', formatCurrency(balance)])
     }
   }
 
   if (input.nextDueDate) {
     const nextAmountText = typeof input.nextDueAmount === 'number' && input.nextDueAmount > 0 ? ` (${formatCurrency(input.nextDueAmount)})` : ''
-    rows.push(['Próximo Vencimiento', `${new Date(input.nextDueDate).toLocaleDateString(getDisplayLocale())}${nextAmountText}`])
+    rows.push([corto ? 'Próx. venc.' : 'Próximo Vencimiento', `${formatDateOnlyDisplay(input.nextDueDate, undefined, { day: '2-digit', month: '2-digit', year: 'numeric' })}${nextAmountText}`])
   }
 
   return rows
@@ -351,10 +364,11 @@ export function buildAccountStatusRows(input: CreditPaymentReceiptInput): Receip
 export function getCreditPaymentReceiptHeight(input: CreditPaymentReceiptInput, printerWidthMm = CREDIT_PAYMENT_RECEIPT_WIDTH_MM) {
   const pageWidthMm = Math.max(48, Math.min(90, printerWidthMm))
   const layout = getCreditPaymentReceiptLayout(pageWidthMm)
-  const creditRows = buildCreditInfoRows(input)
-  const paymentRows = buildPaymentDetailRows(input)
-  const planRows = buildInstallmentPlanRows(input, { compacto: usesShortLabels(pageWidthMm) })
-  const statusRows = buildAccountStatusRows(input)
+  const compacto = usesShortLabels(pageWidthMm)
+  const creditRows = buildCreditInfoRows(input, { compacto })
+  const paymentRows = buildPaymentDetailRows(input, { compacto })
+  const planRows = buildInstallmentPlanRows(input, { compacto })
+  const statusRows = buildAccountStatusRows(input, { compacto })
 
   const estimatedHeight =
     layout.headerHeight +
@@ -504,12 +518,12 @@ export async function createCreditPaymentReceiptPdf(
 
   const receiptNumber = buildCreditPaymentReceiptNumber(input.paymentId)
   const paidAt = input.paymentDate ? new Date(input.paymentDate) : new Date()
-  const creditRows = buildCreditInfoRows(input)
-  const paymentRows = buildPaymentDetailRows(input)
   const compacto = usesShortLabels(t.pageWidthMm)
+  const creditRows = buildCreditInfoRows(input, { compacto })
+  const paymentRows = buildPaymentDetailRows(input, { compacto })
   const planRows = buildInstallmentPlanRows(input, { compacto })
   const progreso = getCreditInstallmentProgress(input)
-  const statusRows = buildAccountStatusRows(input)
+  const statusRows = buildAccountStatusRows(input, { compacto })
 
   const tablaMargen = { left: izq, right: pageW - izq - t.contentWidthMm }
 
@@ -582,7 +596,10 @@ export async function createCreditPaymentReceiptPdf(
   ) => {
     autoTable(doc, {
       startY,
-      head: [[titulo, '']],
+      // El titulo abarca las dos columnas. Sin colSpan quedaba encerrado en la
+      // columna de etiquetas —28 mm en 80 mm de papel— y "DETALLE DEL PAGO
+      // EFECTUADO" se partia en tres lineas dentro de su propia cabecera.
+      head: [[{ content: titulo, colSpan: 2, styles: { halign: 'center' } }]],
       body: filas,
       theme: 'grid',
       headStyles: {
@@ -644,7 +661,7 @@ export async function createCreditPaymentReceiptPdf(
   }
 
   if (statusRows.length > 0) {
-    fin = seccion(titulo('ESTADO DE CUENTA', 'SALDO'), statusRows, [71, 85, 105], true, fin + t.sectionGap)
+    fin = seccion(titulo('ESTADO DE CUENTA', 'CUENTA'), statusRows, [71, 85, 105], true, fin + t.sectionGap)
   }
 
   // ─── Firma y pie ────────────────────────────────────────────────────────

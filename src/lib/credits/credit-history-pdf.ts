@@ -1,4 +1,5 @@
 import { formatCurrency, getDisplayLocale } from '@/lib/currency'
+import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { formatCreditId } from '@/lib/utils'
 import { getCreditPaperMetrics } from './paper'
 import { findNextDueInstallment } from './credit-history-ticket'
@@ -136,7 +137,7 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
     {
       rotulo: 'PRÓXIMO VENCIMIENTO',
       valor: proxima
-        ? `${new Date(proxima.dueDate).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: '2-digit', year: '2-digit' })}  ${formatCurrency(proxima.amount)}`
+        ? `${formatDateOnlyDisplay(proxima.dueDate, undefined, { day: '2-digit', month: '2-digit', year: '2-digit' })}  ${formatCurrency(proxima.amount)}`
         : 'Sin cuotas pendientes',
       color: [120, 53, 15],
       fondo: [255, 251, 235],
@@ -181,7 +182,7 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
       formatCurrency(credit.principal),
       `${credit.interestRate}%`,
       `${credit.termMonths} meses`,
-      new Date(credit.startDate).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: '2-digit', year: '2-digit' }),
+      formatDateOnlyDisplay(credit.startDate, undefined, { day: '2-digit', month: '2-digit', year: '2-digit' }),
       statusLabel(credit.status),
       formatCurrency(credit.remainingBalance ?? 0),
     ]),
@@ -230,7 +231,7 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
       head: [['#', 'Vencimiento', 'Monto', 'Pagado', 'Pendiente', 'Estado']],
       body: credit.installments.map((inst) => [
         `#${inst.number}`,
-        new Date(inst.dueDate).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: '2-digit', year: '2-digit' }),
+        formatDateOnlyDisplay(inst.dueDate, undefined, { day: '2-digit', month: '2-digit', year: '2-digit' }),
         formatCurrency(inst.amount),
         formatCurrency(inst.amountPaid),
         formatCurrency(Math.max(0, inst.amount - inst.amountPaid)),

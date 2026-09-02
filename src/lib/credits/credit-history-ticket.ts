@@ -1,4 +1,5 @@
 import { formatCurrency, getDisplayLocale } from '@/lib/currency'
+import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { formatCreditId } from '@/lib/utils'
 import {
   getCreditPaperMetrics,
@@ -230,7 +231,7 @@ function dibujar(
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(m.bodySize)
     doc.text(
-      `${new Date(proxima.dueDate).toLocaleDateString(getDisplayLocale())}  ${formatCurrency(proxima.amount)}`,
+      `${formatDateOnlyDisplay(proxima.dueDate, undefined, { day: '2-digit', month: '2-digit', year: 'numeric' })}  ${formatCurrency(proxima.amount)}`,
       derecha, y, { align: 'right' }
     )
     y += m.lineGap
@@ -277,7 +278,7 @@ function dibujar(
         : [['#', 'Venc.', 'Monto', 'Pagado', 'Estado']]
 
       const body = credit.installments.map((inst) => {
-        const venc = new Date(inst.dueDate).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: '2-digit' })
+        const venc = formatDateOnlyDisplay(inst.dueDate, undefined, { day: '2-digit', month: '2-digit' })
         return angosto
           ? [String(inst.number), venc, formatCurrency(inst.amount), statusLabel(inst.status)]
           : [String(inst.number), venc, formatCurrency(inst.amount), formatCurrency(inst.amountPaid), statusLabel(inst.status)]

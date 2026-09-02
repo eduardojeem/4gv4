@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildCreditInfoRows,
+  buildPaymentDetailRows,
+  buildAccountStatusRows,
   buildInstallmentPlanRows,
   getCreditInstallmentProgress,
   projectPaidInstallments,
@@ -207,5 +210,60 @@ describe('la seccion sale impresa', () => {
     // pendientes en el estado de cuenta; ahora todo vive en una sola seccion.
     expect(texto).not.toContain('Cuota Pagada')
     expect(texto).not.toContain('Cuotas por Pagar')
+  })
+})
+
+describe('fechas de vencimiento impresas', () => {
+  // En America/Asuncion `new Date('2026-01-01')` cae el 31/12/2025 a las 21:00,
+  // asi que todo vencimiento se imprimia un dia antes del real. En un
+  // comprobante de credito eso es la fecha equivocada en el papel del cliente.
+  const casos: Array<[string, string]> = [
+    ['2026-01-01', '01/01/2026'],
+    ['2026-09-15', '15/09/2026'],
+    ['2026-12-31', '31/12/2026'],
+  ]
+
+  it.each(casos)('el vencimiento de la cuota %s se imprime %s', (fecha, esperado) => {
+    const filas = buildPaymentDetailRows({
+      paymentId: 'p', paymentAmount: 1, customerName: 'x', creditId: 'c',
+      installmentDueDate: fecha,
+    })
+    expect(filas.find(([k]) => k.startsWith('Vence') || k.startsWith('Vencimiento'))?.[1]).toBe(esperado)
+  })
+
+  it.each(casos)('el proximo vencimiento %s se imprime %s', (fecha, esperado) => {
+    const filas = buildAccountStatusRows({
+      paymentId: 'p', paymentAmount: 1, customerName: 'x', creditId: 'c',
+      nextDueDate: fecha,
+    })
+    expect(filas.find(([k]) => k.includes('venc') || k.includes('Venc'))?.[1]).toContain(esperado)
+  })
+})
+
+describe('etiquetas en papel angosto', () => {
+  it('acorta las que no entran en 58 mm', () => {
+    const entrada = {
+      paymentId: 'p', paymentAmount: 500_000, customerName: 'x', creditId: 'c',
+      customerId: 'cli', customerCode: 'CLI-1',
+      totalCreditAmount: 6_000_000, totalInstallments: 12,
+      installmentAmount: 500_000, paymentMethod: 'cash',
+    }
+    const largas = [
+      ...buildCreditInfoRows(entrada),
+      ...buildPaymentDetailRows(entrada),
+    ].map(([k]) => k)
+    const cortas = [
+      ...buildCreditInfoRows(entrada, { compacto: true }),
+      ...buildPaymentDetailRows(entrada, { compacto: true }),
+    ].map(([k]) => k)
+
+    expect(largas).toContain('Total Financiado')
+    expect(cortas).toContain('Financiado')
+    expect(largas).toContain('MONTO ABONADO')
+    expect(cortas).toContain('ABONADO')
+    // Ninguna etiqueta corta debe pasar de lo que entra en una linea de 58 mm.
+    for (const etiqueta of cortas) {
+      expect(etiqueta.length, etiqueta).toBeLessThanOrEqual(12)
+    }
   })
 })
