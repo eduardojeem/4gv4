@@ -227,6 +227,23 @@ export function CreditDetailDialog({
         return result
     }, [installments, sales, saleItems])
 
+    // ─── Estado de cuenta del cliente ─────────────────────────────────────────
+    // Abarca todos los creditos del cliente, no solo el que esta abierto: es el
+    // documento que se le entrega para que vea cuanto debe en total.
+    const customerStatement = useMemo(() => {
+        if (!credit) return null
+        const own = allCredits.filter(c => c.customer_id === credit.customer_id)
+        // Si la pagina todavia no paso los datos completos, al menos el credito
+        // abierto entra: es preferible un estado de cuenta de un solo credito a
+        // un boton que no hace nada.
+        const source = own.length > 0 ? own : [credit as unknown as CreditRow]
+        const ids = new Set(source.map(c => c.id))
+        const rows = allInstallments.length > 0
+            ? allInstallments.filter(i => ids.has(i.credit_id))
+            : (installments as unknown as InstallmentRow[])
+        return buildCustomerStatement(source, rows)
+    }, [credit, allCredits, allInstallments, installments])
+
     const toggleGroup = (id: string) => {
         setExpandedSales(prev => ({ ...prev, [id]: !prev[id] }))
     }
@@ -384,23 +401,6 @@ export function CreditDetailDialog({
             notifyPdfFailure(error, 'imprimir')
         }
     }
-
-    // ─── Estado de cuenta del cliente ─────────────────────────────────────────
-    // Abarca todos los creditos del cliente, no solo el que esta abierto: es el
-    // documento que se le entrega para que vea cuanto debe en total.
-    const customerStatement = useMemo(() => {
-        if (!credit) return null
-        const own = allCredits.filter(c => c.customer_id === credit.customer_id)
-        // Si la pagina todavia no paso los datos completos, al menos el credito
-        // abierto entra: es preferible un estado de cuenta de un solo credito a
-        // un boton que no hace nada.
-        const source = own.length > 0 ? own : [credit as unknown as CreditRow]
-        const ids = new Set(source.map(c => c.id))
-        const rows = allInstallments.length > 0
-            ? allInstallments.filter(i => ids.has(i.credit_id))
-            : (installments as unknown as InstallmentRow[])
-        return buildCustomerStatement(source, rows)
-    }, [credit, allCredits, allInstallments, installments])
 
     const statementCreditCount = customerStatement?.credits.length ?? 0
 
