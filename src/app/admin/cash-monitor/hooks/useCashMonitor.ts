@@ -334,26 +334,16 @@ export function useCashMonitor() {
     if (!supabase || !organization?.id) return
 
     try {
-      let sessionsQuery = supabase
-        .from('cash_closures')
-        .select('id')
-        .eq('organization_id', organization.id)
-        .limit(500)
-      sessionsQuery = withBranchFilter(sessionsQuery, selectedBranchId)
-      const { data: tenantSessions, error: sessionsError } = await sessionsQuery
-      if (sessionsError) throw sessionsError
-      const sessionIds = (tenantSessions || []).map((session) => session.id)
-      if (sessionIds.length === 0) {
-        setAlerts([])
-        return
-      }
-
-      const query = supabase
+      // La tienda se filtra contra la columna de la propia tabla. Antes habia
+      // que traer primero hasta 500 cierres y pasar sus ids: las alertas de
+      // sesiones mas viejas que ese corte desaparecian de la lista sin aviso.
+      let query = supabase
         .from('cash_alerts')
         .select('*')
-        .in('session_id', sessionIds)
+        .eq('organization_id', organization.id)
         .order('created_at', { ascending: false })
         .limit(50)
+      query = withBranchFilter(query, selectedBranchId)
 
       const { data, error } = await query
 
@@ -371,24 +361,10 @@ export function useCashMonitor() {
     if (!supabase || !organization?.id) return
 
     try {
-      let sessionsQuery = supabase
-        .from('cash_closures')
-        .select('id')
-        .eq('organization_id', organization.id)
-        .limit(500)
-      sessionsQuery = withBranchFilter(sessionsQuery, selectedBranchId)
-      const { data: tenantSessions, error: sessionsError } = await sessionsQuery
-      if (sessionsError) throw sessionsError
-      const sessionIds = (tenantSessions || []).map((session) => session.id)
-      if (sessionIds.length === 0) {
-        setAuditLog([])
-        return
-      }
-
       const query = supabase
         .from('cash_admin_audit')
         .select('*')
-        .in('session_id', sessionIds)
+        .eq('organization_id', organization.id)
         .order('created_at', { ascending: false })
         .limit(100)
 
@@ -654,14 +630,23 @@ export function useCashMonitor() {
   // REALTIME SUBSCRIPTIONS
   // =========================================================================
   useEffect(() => {
-    if (!supabase) return
+    if (!supabase || !organization?.id) return
 
+    // Cada suscripcion se acota a la organizacion. Sin esto, el camino de tiempo
+    // real no repetia ninguno de los filtros que si aplica la consulta inicial:
+    // entraban avisos de otras sucursales, y de otras tiendas, y quedaban en la
+    // lista hasta que un refresco los sacaba.
+    const deLaTienda = `organization_id=eq.${organization.id}`
+
+    // El nombre incluye la organizacion: un canal compartido entre tiendas
+    // mezcla suscriptores que no tienen nada que ver entre si.
     const channel = supabase
-      .channel('cash-admin-monitor')
+      .channel(`cash-admin-monitor:${organization.id}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
-        table: 'cash_closures'
+        table: 'cash_closures',
+        filter: deLaTienda,
       }, () => {
         // Refresh sessions on any change
         fetchSessions()
@@ -669,7 +654,8 @@ export function useCashMonitor() {
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'cash_movements'
+        table: 'cash_movements',
+        filter: deLaTienda,
       }, () => {
         // Refresh sessions to update movement counts
         fetchSessions()
@@ -677,11 +663,17 @@ export function useCashMonitor() {
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'cash_alerts'
+        table: 'cash_alerts',
+        filter: deLaTienda,
       }, (payload) => {
-        // Add new alert to state
         const newAlert = payload.new as CashAlert
-        setAlerts(prev => [newAlert, ...prev])
+
+        // La sucursal no se puede filtrar en el servidor junto con la tienda, asi
+        // que se descarta aca: la lista debe contener lo mismo que devolveria un
+        // refresco con el filtro puesto.
+        if (selectedBranchId && newAlert.branch_id && newAlert.branch_id !== selectedBranchId) return
+
+        setAlerts(prev => (prev.some(a => a.id === newAlert.id) ? prev : [newAlert, ...prev]))
         toast.warning(`Nueva alerta: ${newAlert.title}`, {
           duration: 8000
         })
@@ -695,7 +687,7 @@ export function useCashMonitor() {
         supabase!.removeChannel(channelRef.current)
       }
     }
-  }, [supabase, fetchSessions])
+  }, [supabase, fetchSessions, organization?.id, selectedBranchId])
 
   // =========================================================================
   // INITIAL LOAD

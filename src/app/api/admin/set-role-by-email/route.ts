@@ -49,9 +49,13 @@ async function handler(request: Request, context: AdminAuthContext) {
       return NextResponse.json({ error: `Rol invalido: ${uiRole}` }, { status: 400 })
     }
 
+    // `user_roles` tiene la clave primaria en `id` y un UNIQUE sobre `user_id`.
+    // Sin declarar el conflicto, el upsert apunta a la primaria, genera un id
+    // nuevo y termina siendo un INSERT que choca contra ese unico: fallaba para
+    // todo usuario que ya tuviera un rol, es decir para casi todos.
     const { error: upsertError } = await admin
       .from('user_roles')
-      .upsert({ user_id: targetUser.id, role: dbRole })
+      .upsert({ user_id: targetUser.id, role: dbRole }, { onConflict: 'user_id' })
 
     if (upsertError) {
       return NextResponse.json({ error: upsertError.message }, { status: 500 })

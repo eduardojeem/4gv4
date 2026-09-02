@@ -120,6 +120,13 @@ export interface CashAlert {
   id: string
   session_id: string | null
   register_id: string
+  /**
+   * Tienda y sucursal denormalizadas desde la sesion de caja. Sin ellas la
+   * unica forma de acotar una alerta era recorrer su sesion, cosa que el camino
+   * de tiempo real no puede hacer con el payload que recibe.
+   */
+  organization_id: string | null
+  branch_id: string | null
   alert_type: AlertType
   severity: AlertSeverity
   title: string
