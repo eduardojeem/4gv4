@@ -59,7 +59,7 @@ interface SaleData {
   order_discount_rate?: number
   customer_id?: string
   notes?: string
-  credit?: { interest_rate: number; installment_count: number; frequency: 'weekly' | 'biweekly' | 'monthly' }
+  credit?: { interest_rate: number; installment_count: number; frequency: 'weekly' | 'biweekly' | 'monthly'; first_installment_timing?: 'at_start' | 'next_cycle'; start_date?: string; first_payment?: import('@/lib/credits/first-payment').FirstInstallmentPayment }
   repair_ids?: string[]
   mark_repairs_delivered?: boolean
   delivery_outcome?: string

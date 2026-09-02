@@ -2,16 +2,13 @@
 import React from 'react'
 import { Clock, AlertCircle, Calendar } from 'lucide-react'
 import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
-import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { buildPosCreditSummary, type PosCreditTerms } from '@/lib/credits/pos-credit-summary'
+import { FirstInstallmentSelector } from './FirstInstallmentSelector'
 import type { CreditPlanSuggestion } from '../../contexts/CheckoutContext'
 
 export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
 
-export interface CreditTerms {
-  count: number
-  frequency: CreditFrequency
-  interestRate: number
-}
+export type CreditTerms = PosCreditTerms
 
 interface CreditStatusPanelProps {
   cartTotal: number
@@ -34,12 +31,7 @@ export function CreditStatusPanel({
   suggestion = null,
 }: CreditStatusPanelProps) {
   const installmentCount = Math.max(1, terms.count || 1)
-  const creditPlan = React.useMemo(() => buildCreditInstallmentPlan({
-    principalAmount: cartTotal,
-    interestRate: terms.interestRate,
-    installmentCount,
-    frequency: terms.frequency,
-  }), [cartTotal, installmentCount, terms.frequency, terms.interestRate])
+  const creditPlan = React.useMemo(() => buildPosCreditSummary(cartTotal, terms), [cartTotal, terms])
   const estimatedInstallment = creditPlan.installments[0]?.amount ?? 0
   const frequencyLabel: Record<CreditFrequency, string> = { weekly: 'semanal', biweekly: 'quincenal', monthly: 'mensual' }
   const totalCredit = creditSummary.availableCredit + creditSummary.usedCredit
@@ -199,6 +191,7 @@ export function CreditStatusPanel({
               />
             </label>
           </div>
+          <FirstInstallmentSelector value={terms.firstInstallmentTiming ?? 'at_start'} onChange={value => onTermsChange({ ...terms, firstInstallmentTiming: value, firstPayment: value === 'next_cycle' ? undefined : terms.firstPayment })} frequency={terms.frequency} />
           <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/80 p-3 text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div>
@@ -216,9 +209,9 @@ export function CreditStatusPanel({
             </div>
             <div className="mt-3 max-h-28 overflow-y-auto rounded-md border border-blue-200/80 bg-white/70 text-[11px] dark:border-blue-800/80 dark:bg-slate-950/30">
               {creditPlan.installments.slice(0, 6).map((installment) => (
-                <div key={installment.installmentNumber} className="grid grid-cols-[1fr_auto_auto] gap-2 border-b border-blue-100 px-2 py-1.5 last:border-b-0 dark:border-blue-900">
-                  <span>Cuota {installment.installmentNumber}</span>
-                  <span>{installment.dueDate.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                <div key={installment.number} className="grid grid-cols-[1fr_auto_auto] gap-2 border-b border-blue-100 px-2 py-1.5 last:border-b-0 dark:border-blue-900">
+                  <span>Cuota {installment.number}</span>
+                  <span>{installment.dueDate.split('-').reverse().join('/')}</span>
                   <span className="font-semibold">{formatCurrency(installment.amount)}</span>
                 </div>
               ))}

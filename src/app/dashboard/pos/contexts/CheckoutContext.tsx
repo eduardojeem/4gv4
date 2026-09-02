@@ -3,8 +3,9 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react'
 import { PaymentSplit } from '../types'
 import type { CreditTerms } from '../components/checkout/CreditStatusPanel'
+import { creditBusinessDate } from '@/lib/credits/installments'
 
-const DEFAULT_CREDIT_TERMS: CreditTerms = { count: 1, frequency: 'monthly', interestRate: 0 }
+const DEFAULT_CREDIT_TERMS: CreditTerms = { count: 1, frequency: 'monthly', interestRate: 0, firstInstallmentTiming: 'at_start' }
 
 export type CreditPlanSuggestion = {
   productId: string
@@ -95,16 +96,25 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   const [notes, setNotes] = useState('')
   const [discount, setDiscount] = useState<number>(0)
   const [storeCreditApplied, setStoreCreditApplied] = useState<number>(0)
-  const [creditTerms, setCreditTerms] = useState<CreditTerms>(DEFAULT_CREDIT_TERMS)
+  const [creditTerms, setCreditTerms] = useState<CreditTerms>(() => ({ ...DEFAULT_CREDIT_TERMS, startDate: creditBusinessDate() }))
   const [creditPlanSuggestion, setCreditPlanSuggestion] = useState<CreditPlanSuggestion | null>(null)
+
+  const handleCheckoutOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      const startDate = creditBusinessDate()
+      setCreditTerms(previous => previous.startDate === startDate ? previous : { ...previous, startDate })
+    }
+    setIsCheckoutOpen(open)
+  }, [])
 
   const applyProductCreditSuggestion = useCallback((suggestion: CreditPlanSuggestion) => {
     setCreditPlanSuggestion(suggestion)
-    setCreditTerms({
+    setCreditTerms(previous => ({
+      ...previous,
       count: suggestion.count,
       interestRate: suggestion.interestRate,
       frequency: suggestion.frequency,
-    })
+    }))
   }, [])
 
   const [paymentSplit, setPaymentSplit] = useState<PaymentSplit[]>([])
@@ -146,7 +156,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     setNotes('')
     setDiscount(0)
     setStoreCreditApplied(0)
-    setCreditTerms(DEFAULT_CREDIT_TERMS)
+    setCreditTerms({ ...DEFAULT_CREDIT_TERMS, startDate: creditBusinessDate() })
     setCreditPlanSuggestion(null)
     setPaymentSplit([])
   }, [])
@@ -154,7 +164,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   return (
     <CheckoutContext.Provider value={{
       isCheckoutOpen,
-      setIsCheckoutOpen,
+      setIsCheckoutOpen: handleCheckoutOpenChange,
       paymentStatus,
       setPaymentStatus,
       paymentError,

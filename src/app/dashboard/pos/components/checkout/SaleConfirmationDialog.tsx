@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { CalendarDays, Loader2, ReceiptText, ShieldCheck, User, Banknote, CreditCard, Wallet, Percent, ChevronRight, AlertCircle } from 'lucide-react'
+import { CalendarDays, Loader2, ReceiptText, ShieldCheck, User, Banknote, Wallet, Percent, ChevronRight } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +14,11 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Separator } from '@/components/ui/separator'
 import { formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'
+import type { PosCreditSummary } from '@/lib/credits/pos-credit-summary'
+import type { FirstInstallmentTiming } from '@/lib/credits/installments'
+import { FirstInstallmentSelector } from './FirstInstallmentSelector'
+import { FirstInstallmentPaymentFields } from './FirstInstallmentPaymentFields'
+import { firstPaymentError, type FirstInstallmentPayment } from '@/lib/credits/first-payment'
 
 type SaleConfirmationDialogProps = {
   open: boolean
@@ -29,6 +34,10 @@ type SaleConfirmationDialogProps = {
   installmentCount?: number
   installmentAmount?: number
   firstDueDate?: string
+  creditSummary?: PosCreditSummary
+  onFirstInstallmentTimingChange?: (value: FirstInstallmentTiming) => void
+  firstPayment?: FirstInstallmentPayment
+  onFirstPaymentChange?: (payment: FirstInstallmentPayment | undefined) => void
   formatCurrency: (amount: number) => string
   isProcessing: boolean
 }
@@ -47,16 +56,22 @@ export function SaleConfirmationDialog({
   installmentCount = 0,
   installmentAmount = 0,
   firstDueDate,
+  creditSummary,
+  onFirstInstallmentTimingChange,
+  firstPayment,
+  onFirstPaymentChange,
   formatCurrency,
   isProcessing,
 }: SaleConfirmationDialogProps) {
   const isCredit = mode === 'credit'
+  const paymentError = isCredit ? firstPaymentError(firstPayment, installmentAmount, creditSummary?.firstInstallmentTiming ?? 'at_start') : null
+  const firstPaymentAmount = firstPayment && !paymentError ? installmentAmount : 0
 
   return (
     <AlertDialog open={open} onOpenChange={(nextOpen) => {
       if (!isProcessing) onOpenChange(nextOpen)
     }}>
-      <AlertDialogContent className="w-[calc(100vw-2rem)] max-w-md gap-0 overflow-hidden p-0 border-0 shadow-2xl rounded-2xl">
+      <AlertDialogContent className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-xl flex-col gap-0 overflow-hidden p-0">
         <div className={`h-1.5 w-full ${isCredit ? 'bg-gradient-to-r from-blue-500 to-indigo-500' : 'bg-gradient-to-r from-emerald-400 to-emerald-600'}`} />
         
         <AlertDialogHeader className="bg-slate-50/50 dark:bg-slate-900/50 px-6 py-5 text-left border-b border-slate-100 dark:border-slate-800">
@@ -70,7 +85,7 @@ export function SaleConfirmationDialog({
             </div>
             <div className="flex-1">
               <AlertDialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                {isCredit ? 'Confirmar Crédito' : 'Confirmar Venta'}
+                {isCredit ? 'Confirmar venta a crédito' : 'Confirmar venta'}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-sm mt-1 text-slate-500 dark:text-slate-400">
                 Revisá los montos finales antes de emitir el comprobante.
@@ -79,7 +94,7 @@ export function SaleConfirmationDialog({
           </div>
         </AlertDialogHeader>
 
-        <div className="px-6 py-5 space-y-5 bg-white dark:bg-slate-950">
+        <div className="min-h-0 overflow-y-auto px-4 py-4 space-y-4 bg-background sm:px-6">
           
           <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/60">
             <div className="flex items-center gap-3">
@@ -107,7 +122,7 @@ export function SaleConfirmationDialog({
             {isCredit ? (
               <>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-500 flex items-center gap-2"><Banknote className="h-4 w-4" /> Pago inicial</span>
+                  <span className="text-slate-500 flex items-center gap-2"><Banknote className="h-4 w-4" /> Entrega inicial (no es una cuota)</span>
                   <strong className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{formatCurrency(immediateAmount)}</strong>
                 </div>
                 <div className="flex justify-between items-center text-sm">
@@ -127,13 +142,16 @@ export function SaleConfirmationDialog({
             )}
           </div>
 
+          {isCredit && creditSummary && onFirstInstallmentTimingChange && (
+            <FirstInstallmentSelector value={creditSummary.firstInstallmentTiming} onChange={onFirstInstallmentTimingChange} frequency={creditSummary.frequency} disabled={isProcessing} />
+          )}
           {isCredit && (
             <div className="relative overflow-hidden rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50/50 p-4 dark:border-blue-800/60 dark:from-blue-950/40 dark:to-indigo-950/20">
               <div className="absolute -right-4 -top-4 opacity-10">
                 <CalendarDays className="h-24 w-24 text-blue-600" />
               </div>
               <div className="relative flex items-center justify-between gap-3 text-blue-900 dark:text-blue-100">
-                <span className="text-sm font-medium">{installmentCount} cuotas de</span>
+                <span className="text-sm font-medium">{installmentCount} cuotas{creditSummary ? ` ${creditSummary.frequency === 'weekly' ? 'semanales' : creditSummary.frequency === 'biweekly' ? 'quincenales' : 'mensuales'}` : ''} desde</span>
                 <strong className="text-lg tabular-nums">{formatCurrency(installmentAmount)}</strong>
               </div>
               {firstDueDate && (
@@ -147,8 +165,31 @@ export function SaleConfirmationDialog({
                   </div>
                 </>
               )}
+              {creditSummary && (
+                <>
+                  <p className="mt-3 text-xs">Inicio: {formatPosCreditDueDate(creditSummary.startDate)}. Total de cuotas: {formatCurrency(creditSummary.financedTotal)}.</p>
+                  {creditSummary.lastInstallmentAmount !== installmentAmount && <p className="mt-1 text-xs font-medium">Última cuota: {formatCurrency(creditSummary.lastInstallmentAmount)} (ajuste de redondeo).</p>}
+                  <details className="mt-3 text-sm">
+                    <summary className="cursor-pointer rounded py-2 font-medium focus-visible:outline focus-visible:outline-2">Ver calendario completo ({installmentCount} cuotas)</summary>
+                    <ol className="mt-2 space-y-2" aria-label="Calendario de cuotas">
+                      {creditSummary.installments.map(i => <li key={i.number} className="flex flex-wrap justify-between gap-2 border-t pt-2"><span>Cuota {i.number} · {formatPosCreditDueDate(i.dueDate)}</span><strong>{formatCurrency(i.amount)}</strong></li>)}
+                    </ol>
+                  </details>
+                  <p className="mt-3 text-xs">{firstPayment ? 'La primera cuota se registrará pagada al confirmar. Las restantes seguirán pendientes.' : 'Las cuotas se registrarán pendientes. Esta confirmación no registra el cobro de la primera cuota.'}</p>
+                </>
+              )}
             </div>
           )}
+
+          {isCredit && creditSummary && onFirstPaymentChange && <>
+            <FirstInstallmentPaymentFields payment={firstPayment} onChange={onFirstPaymentChange} amount={installmentAmount} available={creditSummary.firstInstallmentTiming === 'at_start'} formatCurrency={formatCurrency} disabled={isProcessing} />
+            {paymentError && <p role="alert" className="text-sm text-destructive">{paymentError}</p>}
+            <div className="space-y-2 rounded-lg border p-3 text-sm" aria-live="polite">
+              <p className="flex justify-between gap-2"><span>Total a cobrar ahora</span><strong>{formatCurrency(immediateAmount + firstPaymentAmount)}</strong></p>
+              <p className="text-xs text-muted-foreground">Entrega inicial {formatCurrency(immediateAmount)} + primera cuota {formatCurrency(firstPaymentAmount)}. No se suma al precio de la venta.</p>
+              <p className="flex justify-between gap-2"><span>Saldo del crédito después del cobro</span><strong>{formatCurrency(creditSummary.financedTotal - firstPaymentAmount)}</strong></p>
+            </div>
+          </>}
 
           <div className={`flex items-end justify-between gap-4 rounded-xl p-4 ${
             isCredit 
@@ -160,15 +201,15 @@ export function SaleConfirmationDialog({
           </div>
         </div>
 
-        <AlertDialogFooter className="bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800/80 px-6 py-4 gap-3 sm:space-x-0">
+        <AlertDialogFooter className="shrink-0 bg-background border-t px-4 py-3 gap-2 sm:px-6 sm:space-x-0">
           <AlertDialogCancel 
             disabled={isProcessing} 
             className="h-12 rounded-xl text-sm font-semibold border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 sm:flex-1"
           >
-            Revisar de nuevo
+            Volver y revisar
           </AlertDialogCancel>
           <AlertDialogAction
-            disabled={isProcessing}
+            disabled={isProcessing || !!paymentError}
             className={`h-12 rounded-xl text-sm font-bold text-white sm:flex-1 ${
               isCredit 
                 ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700' 
@@ -177,7 +218,7 @@ export function SaleConfirmationDialog({
             aria-label={isProcessing ? 'Procesando venta' : (isCredit ? 'Confirmar venta a crédito' : 'Confirmar venta')}
             onClick={(event) => {
               event.preventDefault()
-              if (!isProcessing) onConfirm()
+              if (!isProcessing && !paymentError) onConfirm()
             }}
           >
             {isProcessing ? (

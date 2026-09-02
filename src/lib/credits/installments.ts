@@ -1,6 +1,24 @@
 import { getCurrencyFractionDigits, getLocaleConfig } from '@/lib/currency'
 
 export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
+export type FirstInstallmentTiming = 'at_start' | 'next_cycle'
+
+export function creditBusinessDate(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Asuncion', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
+  return ['year', 'month', 'day'].map(type => parts.find(part => part.type === type)?.value).join('-')
+}
+
+export const FIRST_INSTALLMENT_LABELS: Record<FirstInstallmentTiming, string> = {
+  at_start: 'Desde el inicio del crédito',
+  next_cycle: 'Desde el próximo ciclo',
+}
+
+export function isCreditInstallmentOverdue(dueDate: string, now: Date = new Date()): boolean {
+  const date = new Date(dueDate)
+  if (!Number.isFinite(date.getTime())) return false
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : creditBusinessDate(date)
+  return day < creditBusinessDate(now)
+}
 
 export type CreditInstallmentDraft = {
   installmentNumber: number
@@ -103,6 +121,7 @@ export function buildCreditInstallmentPlan(input: {
   installmentCount?: number
   frequency?: CreditFrequency
   firstDueDate?: Date | null
+  firstInstallmentTiming?: FirstInstallmentTiming
   startInstallmentNumber?: number
   now?: Date
   /** Decimales de la moneda. Por defecto, los de la moneda configurada. */
@@ -120,7 +139,7 @@ export function buildCreditInstallmentPlan(input: {
   const principalParts = splitAmount(principalAmount, installmentCount, fractionDigits)
   const interestParts = splitAmount(interestAmount, installmentCount, fractionDigits)
   const dueDateBase = input.firstDueDate ?? input.now ?? new Date()
-  const useProvidedBase = Boolean(input.firstDueDate)
+  const useProvidedBase = Boolean(input.firstDueDate) || input.firstInstallmentTiming !== 'next_cycle'
   const startInstallmentNumber = Math.max(1, Math.floor(Number(input.startInstallmentNumber) || 1))
 
   return {

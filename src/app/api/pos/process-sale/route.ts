@@ -3,6 +3,9 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { config } from '@/lib/config'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { creditBusinessDate } from '@/lib/credits/installments'
+import { getCurrencyFractionDigits } from '@/lib/currency'
+import { firstPaymentError, type FirstInstallmentPayment } from '@/lib/credits/first-payment'
 
 type JsonRecord = Record<string, unknown>
 
@@ -123,7 +126,20 @@ function normalizeCredit(value: unknown) {
   const frequency = row.frequency === 'weekly' || row.frequency === 'biweekly' ? row.frequency : 'monthly'
   if (interestRate === null || interestRate < 0 || interestRate > 100) return null
   if (installmentCount === null || !Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > 60) return null
-  return { interest_rate: interestRate, installment_count: installmentCount, frequency }
+  const timing = row.first_installment_timing ?? 'at_start'
+  if (timing !== 'at_start' && timing !== 'next_cycle') return null
+  if (row.start_date !== undefined && (typeof row.start_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(row.start_date))) return null
+  let firstPayment: FirstInstallmentPayment | undefined
+  if (row.first_payment !== undefined && row.first_payment !== null) {
+    if (typeof row.first_payment !== 'object' || Array.isArray(row.first_payment)) return null
+    const value = row.first_payment as JsonRecord
+    if (value.method !== 'cash' && value.method !== 'transfer') return null
+    firstPayment = value.method === 'cash'
+      ? { method: 'cash', cashReceived: finiteNumber(value.cashReceived) ?? undefined }
+      : { method: 'transfer', bank: typeof value.bank === 'string' ? value.bank.trim() : '', reference: typeof value.reference === 'string' ? value.reference.trim() : '' }
+    if ((firstPayment.bank?.length ?? 0) > 120 || (firstPayment.reference?.length ?? 0) > 120 || firstPaymentError(firstPayment, 0.01, timing)) return null
+  }
+  return { interest_rate: interestRate, installment_count: installmentCount, frequency, first_installment_timing: timing, start_date: row.start_date ?? creditBusinessDate(), fraction_digits: getCurrencyFractionDigits(config.currency), first_payment: firstPayment ?? null }
 }
 
 async function getTaxRate(
@@ -191,6 +207,12 @@ function errorResponse(error: { message?: string; details?: string; hint?: strin
   }
 
   const mappings: Array<[string, string, number]> = [
+    ['FIRST_INSTALLMENT_CASH_INSUFFICIENT', 'El efectivo recibido no cubre la primera cuota. Revisá el importe antes de confirmar.', 400],
+    ['FIRST_INSTALLMENT_TRANSFER_REQUIRED', 'Ingresá banco o cuenta receptora y referencia de la primera cuota.', 400],
+    ['FIRST_INSTALLMENT_REQUIRES_START', 'Para cobrar la primera cuota ahora, elegí inicio de cuotas desde hoy.', 400],
+    ['INVALID_FIRST_INSTALLMENT_PAYMENT', 'No se pudo validar el cobro de la primera cuota. No se procesó la venta.', 400],
+    ['CREDIT_PAYMENT_TRIGGER_REQUIRED', 'Falta actualizar el registro de pagos de créditos. No se procesó la venta.', 503],
+    ['CREDIT_START_DATE_CHANGED', 'Cambió la fecha de inicio. Cerrá y abrí el cobro para revisar los nuevos vencimientos.', 409],
     ['POS_PERMISSION_DENIED', 'No tenés permisos para procesar ventas en esta sucursal.', 403],
     ['INVALID_POS_BRANCH', 'La sucursal seleccionada no está disponible o está inactiva.', 400],
     ['CASH_REGISTER_NOT_OPEN', 'La caja registradora está cerrada o la sesión expiró. Abrí la caja para continuar.', 409],
@@ -307,6 +329,22 @@ export const POST = withTenantAuth(
     }
 
     const supabase = createAdminSupabase()
+    if (payments.some(payment => payment.payment_method === 'credit') && credit) {
+      if (credit.start_date !== creditBusinessDate()) return errorResponse({ message: 'CREDIT_START_DATE_CHANGED' })
+      // A missing migration must never silently save the old (next-cycle) schedule.
+      const readiness = await supabase.rpc('credit_schedule_due_date', {
+        p_start_date: credit.start_date, p_index: 0, p_frequency: credit.frequency, p_timing: credit.first_installment_timing,
+      })
+      if (readiness.error || !readiness.data) {
+        return NextResponse.json({ success: false, error: 'No se pudo verificar el calendario de crédito. Revisá la conexión y que la migración de inicio de cuotas esté aplicada. La venta no fue procesada.' }, { status: 503 })
+      }
+      if (credit.first_payment) {
+        const paymentReadiness = await supabase.rpc('pos_first_installment_payment_version')
+        if (paymentReadiness.error || paymentReadiness.data !== 1) {
+          return NextResponse.json({ success: false, error: 'Falta aplicar la migración de cobro de primera cuota. La venta no fue procesada.' }, { status: 503 })
+        }
+      }
+    }
     const taxRate = await getTaxRate(supabase, organization.id)
     const code = `POS-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
     
@@ -374,6 +412,7 @@ export const POST = withTenantAuth(
         discount: finiteNumber(result.discount),
         paymentMethod: result.payment_method,
         creditId: result.credit_id,
+        creditSchedule: result.credit_schedule,
       },
       idempotent: result.idempotent === true,
     })

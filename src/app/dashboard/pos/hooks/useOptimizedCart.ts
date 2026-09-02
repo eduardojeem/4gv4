@@ -186,6 +186,8 @@ export const useOptimizedCart = (
           wholesalePrice: inferredWholesale,
           originalPrice: itemPrice,
           category: typeof product.category === 'object' ? product.category?.id : product.category,
+          categoryName: product.category?.name,
+          brand: product.brand || undefined,
           isService: isService || Boolean((product as any).isService)
         }
         
@@ -217,7 +219,9 @@ export const useOptimizedCart = (
       image: cartItem.image || productRef?.image || productRef?.image_url || productRef?.images?.[0] || '',
       wholesalePrice: cartItem.wholesalePrice ?? cartItem.wholesale_price ?? productRef?.wholesale_price ?? undefined,
       originalPrice: Number(cartItem.price || productRef?.sale_price || 0),
-      category: typeof productRef?.category === 'object' ? productRef?.category?.id : productRef?.category
+      category: typeof productRef?.category === 'object' ? productRef?.category?.id : productRef?.category,
+      categoryName: productRef?.category?.name,
+      brand: productRef?.brand || undefined,
     }
 
     if (variantLabel) {

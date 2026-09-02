@@ -757,8 +757,13 @@ function POSPageContent() {
       }
     })
 
-    return [...cart, ...repairItems]
-  }, [cart, selectedRepairs])
+    const catalogById = new Map(inventoryProducts.map(product => [product.id, product]))
+    const enrichedCart = cart.map(item => {
+      const product = catalogById.get(item.id)
+      return { ...item, categoryName: product?.category?.name || item.categoryName, brand: product?.brand || item.brand, image: item.image || product?.image || product?.image_url || product?.images?.[0] || undefined }
+    })
+    return [...enrichedCart, ...repairItems]
+  }, [cart, selectedRepairs, inventoryProducts])
   const canCheckout = combinedCartItems.length > 0
   const checkoutProductCreditPlans = useMemo(() => getCartProductCreditPlans(
     combinedCartItems.map(item => {
@@ -2550,6 +2555,7 @@ function POSPageContent() {
 
       {/* Modal de checkout */}
       <CheckoutModal
+        onUpdateQuantity={updateQuantity}
         selectedRepairIds={selectedRepairIds}
         setSelectedRepairIds={setSelectedRepairIds}
         customerRepairs={customerRepairs}

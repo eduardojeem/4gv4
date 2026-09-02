@@ -23,10 +23,14 @@ describe('ProductCreditPlanPicker', () => {
     expect(screen.getAllByText('Teléfono')).toHaveLength(2)
     expect(screen.getByText('12 cuotas')).toBeInTheDocument()
     expect(screen.getByText((_, element) => element?.textContent === 'Interés 12% · Total Gs. 1344000')).toBeInTheDocument()
-    expect(screen.getAllByText('¿Cómo funcionan los créditos?')).toHaveLength(2)
-    expect(screen.getAllByText(/Solo se financia el producto asociado al plan/)).toHaveLength(2)
-    expect(screen.getAllByText(/Los demás productos se pagan en el momento/)).toHaveLength(2)
-    expect(screen.getAllByText(/línea de crédito suficiente/)).toHaveLength(2)
+    expect(screen.getAllByText('¿Cómo funcionan los créditos?')).toHaveLength(1)
+    const guide = screen.getByText('¿Cómo funcionan los créditos?').closest('details')!
+    expect(guide).not.toHaveAttribute('open')
+    fireEvent.click(guide.querySelector('summary')!)
+    expect(guide).toHaveAttribute('open')
+    expect(screen.getAllByText(/Solo se financia el producto asociado al plan/)).toHaveLength(1)
+    expect(screen.getAllByText(/Los demás productos se pagan en el momento/)).toHaveLength(1)
+    expect(screen.getAllByText(/línea de crédito suficiente/)).toHaveLength(1)
 
     fireEvent.click(screen.getByRole('button', { name: /Elegir 12 cuotas de Teléfono/i }))
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ count: 12, interestRate: 12 }))

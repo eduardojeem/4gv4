@@ -46,6 +46,7 @@ import { getMixedPaymentValidation } from '../lib/payment-validation'
 import { getRepairBalanceDue } from '../lib/repair-charge'
 import type { CartProductCreditPlan } from '../lib/cart-credit-plans'
 import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
+import { firstPaymentError } from '@/lib/credits/first-payment'
 
 import { useCheckout } from '../contexts/CheckoutContext'
 import { usePOSCustomer } from '../contexts/POSCustomerContext'
@@ -77,6 +78,7 @@ export interface CheckoutModalProps {
   
   // Cart & Calculations
   cart: CartItem[]
+  onUpdateQuantity?: (id: string, quantity: number) => void
   cartCalculations: {
     subtotal: number
     subtotalAfterAllDiscounts: number
@@ -126,6 +128,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   setDeliveryOutcome,
   supabaseStatusToLabel,
   cart,
+  onUpdateQuantity,
   cartCalculations,
   isWholesale,
   WHOLESALE_DISCOUNT_RATE,
@@ -154,6 +157,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     notes,
     setNotes,
     creditTerms,
+    setCreditTerms,
     paymentSplit,
     storeCreditApplied
   } = useCheckout()
@@ -211,7 +215,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   const mixedImmediateAmount = React.useMemo(() => paymentSplit
     .filter((split) => split.method !== 'credit')
     .reduce((total, split) => total + split.amount, 0), [paymentSplit])
-  const confirmationHasCredit = paymentMethod === 'credit' || (isMixedPayment && mixedCreditPrincipal > 0)
+  const confirmationHasCredit = isMixedPayment ? mixedCreditPrincipal > 0 : paymentMethod === 'credit'
   const confirmationCreditPrincipal = isMixedPayment ? mixedCreditPrincipal : amountDue
   const confirmationCreditSummary = React.useMemo(
     () => buildPosCreditSummary(confirmationCreditPrincipal, creditTerms),
@@ -221,6 +225,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     ? mixedImmediateAmount
     : paymentMethod === 'credit' ? 0 : amountDue
   const confirmationTotal = cartCalculations.total + (confirmationHasCredit ? confirmationCreditSummary.interestAmount : 0)
+  const initialPaymentError = confirmationHasCredit ? firstPaymentError(creditTerms.firstPayment, confirmationCreditSummary.installmentAmount, confirmationCreditSummary.firstInstallmentTiming) : null
   const paymentLabel = isMixedPayment
     ? confirmationHasCredit ? 'Pago mixto con crédito' : 'Pago mixto'
     : paymentMethod === 'cash' ? 'Efectivo'
@@ -656,6 +661,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               </div>
             </div>
             <SaleSummary
+              onUpdateQuantity={onUpdateQuantity}
               cart={cart}
               cartCalculations={cartCalculations}
               isWholesale={isWholesale}
@@ -675,7 +681,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                         !isRegisterOpen ||
                         paymentStatus === 'processing' ||
                         !activeCustomer ||
-                        !canUseCredit
+                        !canUseCredit || !!initialPaymentError
                       }
                     >
                       {paymentStatus === 'processing' ? (
@@ -723,7 +729,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <Button
                   className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
                   onClick={() => openSaleConfirmation('mixed')}
-                  disabled={!isRegisterOpen || paymentStatus === 'processing' || !mixedPaymentValidation.valid}
+                  disabled={!isRegisterOpen || paymentStatus === 'processing' || !mixedPaymentValidation.valid || !!initialPaymentError}
                 >
                   {paymentStatus === 'processing' ? (
                     <span className="flex items-center justify-center gap-2">
@@ -803,6 +809,10 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
         installmentCount={confirmationHasCredit ? confirmationCreditSummary.installmentCount : undefined}
         installmentAmount={confirmationHasCredit ? confirmationCreditSummary.installmentAmount : undefined}
         firstDueDate={confirmationHasCredit ? confirmationCreditSummary.firstDueDate : undefined}
+        creditSummary={confirmationHasCredit ? confirmationCreditSummary : undefined}
+        onFirstInstallmentTimingChange={(value) => setCreditTerms({ ...creditTerms, firstInstallmentTiming: value, firstPayment: value === 'next_cycle' ? undefined : creditTerms.firstPayment })}
+        firstPayment={confirmationHasCredit ? creditTerms.firstPayment : undefined}
+        onFirstPaymentChange={firstPayment => setCreditTerms({ ...creditTerms, firstPayment })}
         formatCurrency={formatCurrency}
         isProcessing={paymentStatus === 'processing'}
       />
@@ -852,5 +862,3 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
 })
 
 CheckoutModal.displayName = 'CheckoutModal'
-
-

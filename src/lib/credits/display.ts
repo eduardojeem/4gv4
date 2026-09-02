@@ -1,4 +1,5 @@
 import { formatCreditId } from '@/lib/utils'
+import { isCreditInstallmentOverdue } from './installments'
 import type { CreditRow, InstallmentRow } from '@/hooks/use-credits'
 
 /**
@@ -174,6 +175,6 @@ export function resolveInstallmentStatus(
   // `late` lo marca el sistema de forma explicita y pesa mas que la fecha:
   // significa que la cuota ya entro en mora, no solo que paso su vencimiento.
   if (installment.status === 'late') return 'late'
-  if (new Date(installment.due_date) < now) return 'overdue'
+  if (isCreditInstallmentOverdue(installment.due_date, now)) return 'overdue'
   return 'pending'
 }

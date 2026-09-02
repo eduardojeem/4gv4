@@ -37,18 +37,18 @@ export function ProductCreditPlanPicker({
   if (plans.length === 0) return null
 
   return (
-    <section className="mt-4 rounded-lg border border-sky-500/25 bg-sky-500/5 p-3" aria-labelledby="cart-credit-plans-title">
-      <div className="mb-3 flex items-start gap-2">
-        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-500/10 text-sky-700 dark:text-sky-300">
+    <section className="mt-3 rounded-lg border border-sky-500/25 bg-sky-500/5 p-2.5" aria-labelledby="cart-credit-plans-title">
+      <div className="mb-2 flex items-start gap-2">
+        <span className="mt-0.5 shrink-0 text-sky-700 dark:text-sky-300">
           <CreditCard className="h-4 w-4" aria-hidden="true" />
         </span>
         <div>
-          <h4 id="cart-credit-plans-title" className="text-sm font-semibold">Planes disponibles en el carrito</h4>
-          <p className="text-[11px] text-muted-foreground">Elegí un plan precargado. Se aplicará al total financiado de la venta.</p>
+          <h4 id="cart-credit-plans-title" className="text-xs font-semibold">Planes disponibles en el carrito</h4>
+          <p className="mt-0.5 text-xs text-muted-foreground">{plans.length} planes · Financiá el producto elegido; el resto se paga ahora.</p>
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div role="region" aria-label="Lista de planes de crédito" tabIndex={0} className="grid max-h-56 gap-1.5 overflow-y-auto overscroll-contain p-1 sm:grid-cols-2 [scrollbar-gutter:stable] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {plans.map(plan => {
           const allocation = getProductCreditAllocation(plan, cartTotal)
           const calculation = buildCreditInstallmentPlan({
@@ -71,24 +71,24 @@ export function ProductCreditPlanPicker({
               aria-pressed={isSelected}
               onClick={() => onSelect(plan)}
               className={cn(
-                'h-auto min-w-0 items-start justify-start gap-2 whitespace-normal px-3 py-2.5 text-left',
+                'h-auto min-h-11 min-w-0 items-start justify-start gap-1.5 whitespace-normal px-2 py-2 text-left',
                 isSelected && 'border-sky-600 bg-sky-500/10 ring-1 ring-sky-600/30',
               )}
             >
               <CheckCircle2 className={cn('mt-0.5 h-4 w-4 shrink-0', isSelected ? 'text-sky-600' : 'text-muted-foreground/50')} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[11px] font-medium text-muted-foreground">{plan.productName}</span>
+                <span className="block truncate text-xs font-medium text-muted-foreground" title={plan.productName}>{plan.productName}</span>
                 <span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="text-sm font-semibold">{plan.count} cuotas</span>
+                  <span className="text-xs font-semibold">{plan.count} cuotas</span>
                   <span className="text-xs font-medium text-sky-700 dark:text-sky-300">
                     {formatCurrency(calculation.installments[0]?.amount ?? 0)}/mes
                   </span>
                 </span>
-                <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                <span className="mt-0.5 block text-xs text-muted-foreground">
                   {plan.interestRate === 0 ? 'Sin interés' : `Interés ${plan.interestRate}%`} · Total {formatCurrency(calculation.financedTotal)}
                 </span>
                 {allocation.dueNow > 0 && (
-                  <span className="mt-1 block text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                  <span className="mt-0.5 block text-xs font-medium text-amber-700 dark:text-amber-300">
                     Financia {formatCurrency(allocation.financedPrincipal)} · Pagar ahora {formatCurrency(allocation.dueNow)}
                   </span>
                 )}
@@ -98,8 +98,8 @@ export function ProductCreditPlanPicker({
         })}
       </div>
 
-      <details className="group mt-3 rounded-md border bg-background/70 sm:hidden">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <details className="group mt-2 rounded-md border bg-background/70">
+        <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <span className="flex items-center gap-1.5">
             <Info className="h-3.5 w-3.5 text-sky-700 dark:text-sky-300" aria-hidden="true" />
             ¿Cómo funcionan los créditos?
@@ -111,13 +111,6 @@ export function ProductCreditPlanPicker({
         </div>
       </details>
 
-      <aside className="mt-3 hidden rounded-md border bg-background/70 p-3 sm:block" aria-labelledby="credit-guide-title">
-        <h5 id="credit-guide-title" className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
-          <Info className="h-3.5 w-3.5 text-sky-700 dark:text-sky-300" aria-hidden="true" />
-          ¿Cómo funcionan los créditos?
-        </h5>
-        <CreditGuideContent />
-      </aside>
     </section>
   )
 }

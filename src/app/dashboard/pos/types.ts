@@ -29,6 +29,8 @@ export interface CartItem {
   originalPrice?: number
   // Categoría del producto (para promociones basadas en categoría)
   category?: string
+  categoryName?: string
+  brand?: string
   // Identificador para servicios/reparaciones
   isService?: boolean
   promoCode?: string

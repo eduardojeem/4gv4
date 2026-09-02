@@ -21,6 +21,7 @@ describe('buildCreditInstallmentPlan', () => {
 
   it('calculates five monthly installments with ten percent interest', () => {
     const plan = buildCreditInstallmentPlan({
+      firstInstallmentTiming: 'next_cycle',
       principalAmount: 100000,
       interestRate: 10,
       installmentCount: 5,
@@ -36,6 +37,7 @@ describe('buildCreditInstallmentPlan', () => {
 
   it('builds the POS credit total used by summary and receipt', () => {
     const summary = buildPosCreditSummary(100000, {
+      firstInstallmentTiming: 'next_cycle',
       count: 5,
       frequency: 'monthly',
       interestRate: 10,
@@ -54,6 +56,7 @@ describe('buildCreditInstallmentPlan', () => {
     ['monthly', '2026-07-15'],
   ] as const)('exposes the first %s due date for the checkout and receipt', (frequency, expectedDate) => {
     const summary = buildPosCreditSummary(100000, {
+      firstInstallmentTiming: 'next_cycle',
       count: 3,
       frequency,
       interestRate: 0,

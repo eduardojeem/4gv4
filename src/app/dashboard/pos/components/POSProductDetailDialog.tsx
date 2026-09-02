@@ -5,6 +5,7 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -129,17 +130,17 @@ export function POSProductDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] overflow-hidden p-0 sm:max-w-4xl bg-card border-border/80 shadow-2xl">
-        <div className="grid max-h-[92vh] grid-cols-1 overflow-y-auto md:grid-cols-[220px_1fr]">
+      <DialogContent className="max-h-[88dvh] w-[calc(100vw-1rem)] overflow-hidden p-0 sm:max-w-2xl bg-card border-border/80 shadow-xl">
+        <div className="max-h-[88dvh] overflow-y-auto">
           {/* Columna Izquierda: Imagen & Badges */}
-          <div className="bg-muted/30 p-6 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-border/60 relative">
+          <div className="bg-muted/30 px-4 py-3 pr-12 flex items-center gap-3 border-b border-border/60 relative">
             {product.featured && (
-              <Badge className="absolute top-3 left-3 bg-amber-500 hover:bg-amber-600 text-white font-bold gap-1 text-[10px] shadow-sm">
+              <Badge className="order-last bg-amber-500 hover:bg-amber-600 text-white font-bold gap-1 text-[10px]">
                 <Star className="h-3 w-3 fill-white" /> Destacado
               </Badge>
             )}
 
-            <div className="w-44 h-44 rounded-xl bg-background border border-border/60 flex items-center justify-center overflow-hidden shadow-xs relative">
+            <div className="w-14 h-14 shrink-0 rounded-md bg-background border border-border/60 flex items-center justify-center overflow-hidden">
               {imageSrc ? (
                 <img
                   src={imageSrc}
@@ -147,15 +148,16 @@ export function POSProductDetailDialog({
                   className="w-full h-full object-contain p-2"
                 />
               ) : (
-                <Package className="h-16 w-16 text-muted-foreground/30" />
+                <Package className="h-7 w-7 text-muted-foreground/50" />
               )}
             </div>
 
             {/* Estado de Stock en Badge */}
-            <div className="mt-4 w-full text-center">
+            <div className="min-w-0 space-y-1">
+              <DialogTitle className="break-words text-base font-semibold leading-snug">{product.name}</DialogTitle>
               <Badge
                 variant="secondary"
-                className={`w-full justify-center py-1 text-xs font-semibold ${
+                className={`py-0.5 text-xs font-medium ${
                   isOutOfStock
                     ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300'
                     : stock <= minStock
@@ -173,8 +175,9 @@ export function POSProductDetailDialog({
           </div>
 
           {/* Columna Derecha: Detalles & Acción de Compra */}
-          <div className="p-6 flex flex-col justify-between space-y-5">
-            <div className="space-y-3">
+          <div className="px-3 pt-3 sm:px-4 flex flex-col space-y-3">
+            <div className="space-y-2">
+              <DialogDescription className="sr-only">Revisá el producto, compará sus planes de cuotas y agregalo a la venta.</DialogDescription>
               {/* Categoría & SKU */}
               <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
                 {product.category?.name && (
@@ -196,9 +199,6 @@ export function POSProductDetailDialog({
               </div>
 
               {/* Nombre del Producto */}
-              <DialogTitle className="text-lg sm:text-xl font-bold text-foreground leading-snug">
-                {product.name}
-              </DialogTitle>
 
               {/* Código de barras si existe */}
               {product.barcode && (
@@ -217,10 +217,10 @@ export function POSProductDetailDialog({
               )}
 
               {/* Tarjeta de Precios */}
-              <div className="bg-muted/30 p-3.5 rounded-xl border border-border/60 grid grid-cols-2 gap-3">
+              <div className="bg-muted/30 p-2 rounded-md border border-border/60 grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-[11px] font-medium text-muted-foreground block">Precio Minorista</span>
-                  <span className={`text-lg font-bold ${!isWholesale ? 'text-primary' : 'text-muted-foreground line-through text-sm'}`}>
+                  <span className={`text-base font-semibold ${!isWholesale ? 'text-primary' : 'text-muted-foreground line-through text-sm'}`}>
                     {formatCurrency(price)}
                   </span>
                 </div>
@@ -228,7 +228,7 @@ export function POSProductDetailDialog({
                   <span className="text-[11px] font-medium text-muted-foreground block flex items-center gap-1">
                     <Sparkles className="h-3 w-3 text-amber-500" /> Precio Mayorista
                   </span>
-                  <span className={`text-lg font-bold ${isWholesale ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
+                  <span className={`text-base font-semibold ${isWholesale ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
                     {formatCurrency(wholesalePrice)}
                   </span>
                 </div>
@@ -236,13 +236,11 @@ export function POSProductDetailDialog({
 
               {/* Descripción corta si existe */}
               {product.description && (
-                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-                  {product.description}
-                </p>
+                <details className="text-xs text-muted-foreground"><summary className="cursor-pointer py-1">Descripción del producto</summary><p className="mt-1 leading-relaxed">{product.description}</p></details>
               )}
 
               {creditPlans.length > 0 && (
-                <section className="space-y-2.5" aria-labelledby="product-credit-plans-title">
+                <section className="space-y-2" aria-labelledby="product-credit-plans-title">
                   <div>
                     <h3 id="product-credit-plans-title" className="flex items-center gap-1.5 text-sm font-semibold">
                       <CreditCard className="h-4 w-4 text-sky-600" aria-hidden="true" />
@@ -263,23 +261,25 @@ export function POSProductDetailDialog({
                       const ready = requirements.every(requirement => requirement.met)
 
                       return (
-                        <article key={`${plan.count}-${plan.rate}`} className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                        <article key={`${plan.count}-${plan.rate}`} className="rounded-md border border-sky-500/20 bg-sky-500/5 p-2.5">
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <h4 className="font-semibold text-sky-900 dark:text-sky-100">{plan.count} cuotas</h4>
-                              <p className="text-lg font-bold text-primary">{formatCurrency(plan.installmentAmount)}<span className="text-[10px] font-normal text-muted-foreground">/mes</span></p>
+                              <h4 className="text-xs font-semibold text-sky-900 dark:text-sky-100">{plan.count} cuotas</h4>
+                              <p className="text-base font-bold text-primary">{formatCurrency(plan.installmentAmount)}<span className="text-xs font-normal text-muted-foreground">/mes</span></p>
                             </div>
                             <Badge variant="outline" className="text-[10px]">
                               {plan.rate === 0 ? 'Sin interés' : `Tasa ${plan.rate}%`}
                             </Badge>
                           </div>
-                          <dl className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
+                          <dl className="mt-1.5 grid grid-cols-2 gap-1 text-xs">
                             <div><dt className="text-muted-foreground">Interés</dt><dd className="font-medium">{formatCurrency(plan.interestAmount)}</dd></div>
                             <div><dt className="text-muted-foreground">Total financiado</dt><dd className="font-medium">{formatCurrency(plan.financedTotal)}</dd></div>
                           </dl>
-                          <ul className="mt-2 space-y-1" aria-label={`Requisitos para ${plan.count} cuotas`}>
+                          <details className="mt-2 text-xs">
+                            <summary className={`cursor-pointer rounded py-1 font-medium ${ready ? 'text-muted-foreground' : 'text-amber-800 dark:text-amber-300'}`}>{ready ? 'Requisitos completos' : `${requirements.filter(requirement => !requirement.met).length} requisitos pendientes`}</summary>
+                          <ul className="mt-1 space-y-1" aria-label={`Requisitos para ${plan.count} cuotas`}>
                             {requirements.map(requirement => (
-                              <li key={requirement.id} className="flex items-start gap-1 text-[10px]">
+                              <li key={requirement.id} className="flex items-start gap-1 text-xs">
                                 {requirement.met
                                   ? <CircleCheck className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" aria-hidden="true" />
                                   : <CircleAlert className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" aria-hidden="true" />}
@@ -287,10 +287,11 @@ export function POSProductDetailDialog({
                               </li>
                             ))}
                           </ul>
+                          </details>
                           <Button
                             type="button"
                             variant={ready ? 'default' : 'outline'}
-                            className="mt-2 h-8 w-full text-xs"
+                            className="mt-2 h-10 sm:h-8 w-full text-xs"
                             disabled={isOutOfStock || quantity > stock}
                             onClick={() => handleUseCreditPlan(plan)}
                             aria-label={`Usar plan de ${plan.count} cuotas`}
@@ -306,7 +307,7 @@ export function POSProductDetailDialog({
             </div>
 
             {/* Selector de Cantidad & Botón Agregar */}
-            <div className="pt-4 border-t border-border/50 space-y-3">
+            <div className="sticky bottom-0 bg-card pt-2 pb-3 border-t border-border/50 space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs font-semibold text-foreground">Cantidad a cobrar:</span>
                 <div className="flex items-center gap-1.5">
@@ -315,6 +316,7 @@ export function POSProductDetailDialog({
                     variant="outline"
                     size="icon"
                     className="h-8 w-8 rounded-lg"
+                    aria-label="Reducir cantidad"
                     onClick={() => setQuantity(q => Math.max(1, q - 1))}
                     disabled={quantity <= 1 || isOutOfStock}
                   >
@@ -322,6 +324,7 @@ export function POSProductDetailDialog({
                   </Button>
                   <Input
                     type="number"
+                    aria-label="Cantidad a cobrar"
                     min={1}
                     max={stock > 0 ? stock : 1}
                     value={quantity}
@@ -337,6 +340,7 @@ export function POSProductDetailDialog({
                     variant="outline"
                     size="icon"
                     className="h-8 w-8 rounded-lg"
+                    aria-label="Aumentar cantidad"
                     onClick={() => setQuantity(q => Math.min(stock > 0 ? stock : 999, q + 1))}
                     disabled={isOutOfStock || (stock > 0 && quantity >= stock)}
                   >
@@ -359,7 +363,7 @@ export function POSProductDetailDialog({
                   onClick={handleAddToCart}
                   disabled={isOutOfStock}
                   size="sm"
-                  className="flex-1 h-10 gap-2 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md rounded-xl"
+                  className="flex-1 h-10 gap-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md"
                 >
                   <ShoppingCart className="h-4 w-4" />
                   Agregar al Carrito • {formatCurrency(activePrice * quantity)}

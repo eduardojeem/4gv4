@@ -62,6 +62,12 @@ interface ReceiptData {
     frequency: string
     interestRate: number
     firstDueDate: string
+    firstInstallmentTiming?: 'at_start' | 'next_cycle'
+    startDate?: string
+    lastInstallmentAmount?: number
+    firstPayment?: { amount: number; method: 'cash' | 'transfer'; bank?: string; reference?: string; cashReceived?: number; change?: number; paymentId: string }
+    remainingBalance?: number
+    installments?: Array<{ number: number; dueDate: string; amount: number }>
   }
 }
 
@@ -252,12 +258,23 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
               <span>{formatCurrency(receiptData.creditInfo.financedTotal)}</span>
             </div>
             <div className="mt-1 text-xs">
-              {receiptData.creditInfo.installmentCount} cuotas {receiptData.creditInfo.frequency} de {formatCurrency(receiptData.creditInfo.installmentAmount)}
+              {receiptData.creditInfo.installmentCount} cuotas {receiptData.creditInfo.frequency === 'weekly' ? 'semanales' : receiptData.creditInfo.frequency === 'biweekly' ? 'quincenales' : 'mensuales'} desde {formatCurrency(receiptData.creditInfo.installmentAmount)}
             </div>
             <div className="mt-1 flex justify-between border-t border-blue-200 pt-1 text-xs font-semibold dark:border-blue-800 print:border-black">
               <span>Primera cuota:</span>
               <span>{formatPosCreditDueDate(receiptData.creditInfo.firstDueDate)}</span>
             </div>
+            {receiptData.creditInfo.firstInstallmentTiming && <p className="mt-1 text-xs">Inicio de cuotas: {receiptData.creditInfo.firstInstallmentTiming === 'at_start' ? 'Desde el inicio del crédito' : 'Desde el próximo ciclo'}.</p>}
+            {receiptData.creditInfo.lastInstallmentAmount !== undefined && receiptData.creditInfo.lastInstallmentAmount !== receiptData.creditInfo.installmentAmount && <p className="text-xs">Última cuota: {formatCurrency(receiptData.creditInfo.lastInstallmentAmount)} (ajuste de redondeo).</p>}
+            {receiptData.creditInfo.installments && <div className="mt-2 border-t pt-1 text-xs">{receiptData.creditInfo.installments.map(i => <div key={i.number} className="flex justify-between gap-2"><span>#{i.number} · {formatPosCreditDueDate(i.dueDate)}</span><span>{formatCurrency(i.amount)}</span></div>)}</div>}
+            {receiptData.creditInfo.firstPayment ? <div className="mt-2 border-t pt-2 text-xs">
+              <p className="font-bold">Primera cuota PAGADA: {formatCurrency(receiptData.creditInfo.firstPayment.amount)}</p>
+              <p>Medio: {receiptData.creditInfo.firstPayment.method === 'cash' ? 'Efectivo' : 'Transferencia'}</p>
+              {receiptData.creditInfo.firstPayment.method === 'transfer' && <p>Banco/cuenta: {receiptData.creditInfo.firstPayment.bank}. Referencia: {receiptData.creditInfo.firstPayment.reference}</p>}
+              {receiptData.creditInfo.firstPayment.method === 'cash' && <p>Recibido para cuota: {formatCurrency(receiptData.creditInfo.firstPayment.cashReceived ?? 0)} · Vuelto: {formatCurrency(receiptData.creditInfo.firstPayment.change ?? 0)}</p>}
+              <p>Saldo del crédito al emitir: {formatCurrency(receiptData.creditInfo.remainingBalance ?? receiptData.creditInfo.financedTotal - receiptData.creditInfo.firstPayment.amount)}</p>
+              <p>Este cobro cancela la cuota 1; no es un cargo adicional.</p>
+            </div> : <p className="mt-2 text-xs">Cuotas pendientes de cobro. El vencimiento no acredita su pago.</p>}
           </div>
         )}
 

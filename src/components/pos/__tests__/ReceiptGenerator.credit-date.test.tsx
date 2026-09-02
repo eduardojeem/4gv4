@@ -12,6 +12,14 @@ vi.mock('@/hooks/useWebsiteSettings', () => ({
 }))
 
 describe('ReceiptGenerator credit details', () => {
+  it('distingue la primera cuota pagada del saldo financiado', () => {
+    const html = renderToStaticMarkup(<ReceiptGenerator receiptData={{ receiptNumber: 'V-002', date: '02/09/2026', time: '10:00', cashier: 'Caja', items: [], subtotal: 100000, totalDiscount: 0, tax: 0, total: 100000, payments: [{ id: 'credit', method: 'credit', amount: 100000 }], creditInfo: { baseTotal: 100000, interestAmount: 0, financedTotal: 100000, installmentCount: 2, installmentAmount: 50000, frequency: 'monthly', interestRate: 0, firstDueDate: '2026-09-02', remainingBalance: 50000, firstPayment: { amount: 50000, method: 'transfer', bank: 'Banco Test', reference: 'REF123', paymentId: 'payment-1' } } }} onPrint={() => undefined} onDownload={() => undefined} onShare={() => undefined} formatCurrency={amount => `Gs. ${amount}`} />)
+    expect(html).toContain('Primera cuota PAGADA: Gs. 50000')
+    expect(html).toContain('Banco Test')
+    expect(html).toContain('REF123')
+    expect(html).toContain('Saldo del crédito al emitir: Gs. 50000')
+    expect(html).not.toContain('Cuotas pendientes de cobro. El vencimiento no acredita su pago.')
+  })
   it('prints the first installment due date on a credit receipt', () => {
     const html = renderToStaticMarkup(
       <ReceiptGenerator

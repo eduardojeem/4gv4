@@ -52,6 +52,12 @@ export interface ReceiptData {
     frequency: string
     interestRate: number
     firstDueDate: string
+    firstInstallmentTiming?: 'at_start' | 'next_cycle'
+    startDate?: string
+    lastInstallmentAmount?: number
+    firstPayment?: { amount: number; method: 'cash' | 'transfer'; bank?: string; reference?: string; cashReceived?: number; change?: number; paymentId: string }
+    remainingBalance?: number
+    installments?: Array<{ number: number; dueDate: string; amount: number }>
   }
 }
 

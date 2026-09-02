@@ -6,6 +6,8 @@
  */
 
 import { useState, useCallback, useMemo } from 'react'
+import { isCreditInstallmentOverdue } from '@/lib/credits/installments'
+import { sumInstallmentsOutstanding } from '@/lib/credits/customer-outstanding'
 import { Customer } from './use-customer-state'
 import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
@@ -127,6 +129,7 @@ export interface UseCreditSystemReturn {
     items: Array<{ name: string; quantity: number; price: number }>
     repairIds?: string[]
     dueDate?: string
+    firstInstallmentTiming?: 'at_start' | 'next_cycle'
   }) => Promise<boolean>
   recordPayment: (customerId: string, amount: number, paymentMethod: string, reference?: string) => Promise<boolean>
   
@@ -318,6 +321,7 @@ export function useCreditSystem(): UseCreditSystemReturn {
       items: Array<{ name: string; quantity: number; price: number }>
       repairIds?: string[]
       dueDate?: string
+      firstInstallmentTiming?: 'at_start' | 'next_cycle'
       interestRate?: number
       installments?: {
         count: number
@@ -339,6 +343,7 @@ export function useCreditSystem(): UseCreditSystemReturn {
           amount: saleData.amount,
           interestRate: saleData.interestRate ?? 0,
           dueDate: saleData.dueDate,
+          firstInstallmentTiming: saleData.firstInstallmentTiming,
           installments: saleData.installments ?? { count: 1, frequency: 'monthly' },
         })
       })
@@ -479,14 +484,12 @@ export function useCreditSystem(): UseCreditSystemReturn {
     const pendingInstallments = customerInstallments.filter(i => 
       i.status === 'pending' || i.status === 'late'
     )
-    const usedCredit = pendingInstallments.reduce((sum, i) => sum + i.amount, 0)
+    const usedCredit = sumInstallmentsOutstanding(pendingInstallments)
     const availableCredit = totalCredit - usedCredit
     
     // Calcular cuotas vencidas
     const today = new Date()
-    const overdueAmount = pendingInstallments
-      .filter(i => new Date(i.due_date) < today)
-      .reduce((sum, i) => sum + i.amount, 0)
+    const overdueAmount = sumInstallmentsOutstanding(pendingInstallments.filter(i => isCreditInstallmentOverdue(i.due_date, today)))
     
     const pendingSales = customerCredits.filter(c => c.status === 'active').length
     const creditUtilization = totalCredit > 0 ? (usedCredit / totalCredit) * 100 : 0
@@ -495,8 +498,7 @@ export function useCreditSystem(): UseCreditSystemReturn {
     const activeCredits = customerCredits.filter(c => c.status === 'active').length
     const completedCredits = customerCredits.filter(c => c.status === 'completed').length
     
-    const paidInstallments = customerInstallments.filter(i => i.status === 'paid')
-    const totalPaid = paidInstallments.reduce((sum, i) => sum + (i.amount_paid || i.amount), 0)
+    const totalPaid = customerInstallments.reduce((sum, i) => sum + Math.min(i.amount, Math.max(0, i.amount_paid ?? (i.status === 'paid' ? i.amount : 0))), 0)
     
     // Próximo pago
     const nextInstallment = pendingInstallments
@@ -509,7 +511,7 @@ export function useCreditSystem(): UseCreditSystemReturn {
       const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       
       nextPayment = {
-        amount: nextInstallment.amount,
+        amount: sumInstallmentsOutstanding([nextInstallment]),
         due_date: nextInstallment.due_date,
         days_until_due: daysUntilDue,
         is_overdue: daysUntilDue < 0

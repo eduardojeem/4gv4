@@ -38,6 +38,10 @@ describe('POSProductDetailDialog financing', () => {
     expect(screen.getByText('12 cuotas')).toBeInTheDocument()
     expect(screen.getAllByText('Seleccionar un cliente')).toHaveLength(2)
     expect(screen.getAllByText('Asignar una línea de crédito')).toHaveLength(2)
+    const requirements = screen.getAllByLabelText(/Requisitos para/)
+    expect(requirements[0].closest('details')).not.toHaveAttribute('open')
+    fireEvent.click(requirements[0].closest('details')!.querySelector('summary')!)
+    expect(requirements[0].closest('details')).toHaveAttribute('open')
   })
 
   it('selects a plan for the current quantity and closes the dialog', () => {
@@ -59,9 +63,11 @@ describe('POSProductDetailDialog financing', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Aumentar cantidad' }))
+    expect(screen.getByRole('spinbutton', { name: 'Cantidad a cobrar' })).toHaveValue(2)
     fireEvent.click(screen.getAllByRole('button', { name: /Usar plan de 12 cuotas/i })[0])
 
-    expect(onUseCreditPlan).toHaveBeenCalledWith(product, 1, expect.objectContaining({ count: 12, rate: 12 }))
+    expect(onUseCreditPlan).toHaveBeenCalledWith(product, 2, expect.objectContaining({ count: 12, rate: 12, financedTotal: 2688000 }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 })

@@ -13,9 +13,10 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { createReceiptData } from '@/lib/receipt-utils'
-import { buildPosCreditSummary, type PosCreditTerms } from '@/lib/credits/pos-credit-summary'
+import { buildPosCreditSummary, withPersistedCreditSchedule, type PosCreditTerms } from '@/lib/credits/pos-credit-summary'
 import { getMixedPaymentValidation } from '../lib/payment-validation'
 import type { CartItem } from '../types'
+import { firstPaymentError } from '@/lib/credits/first-payment'
 
 // ─── Tipos auxiliares ────────────────────────────────────────────────────────
 
@@ -212,6 +213,12 @@ export function usePOSSaleProcessor() {
         const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
         const creditSummary =
           paymentMethod === 'credit' ? buildPosCreditSummary(amountDue, creditTerms) : null
+        const firstPaymentValidation = creditSummary ? firstPaymentError(creditTerms.firstPayment, creditSummary.installmentAmount, creditSummary.firstInstallmentTiming) : null
+        if (firstPaymentValidation) {
+          setPaymentError(firstPaymentValidation)
+          setPaymentStatus('failed')
+          return
+        }
         const receiptPaymentAmount = creditSummary?.financedTotal ?? amountDue
 
         const receiptCalculations = {
@@ -318,6 +325,9 @@ export function usePOSSaleProcessor() {
                     interest_rate: creditTerms.interestRate,
                     installment_count: creditTerms.count,
                     frequency: creditTerms.frequency,
+                    first_installment_timing: creditSummary?.firstInstallmentTiming,
+                    start_date: creditSummary?.startDate,
+                    first_payment: creditTerms.firstPayment,
                   }
                 : undefined,
             repair_ids: selectedRepairIds,
@@ -339,6 +349,7 @@ export function usePOSSaleProcessor() {
 
           const persistedReceipt = {
             ...receiptData,
+            creditInfo: receiptData.creditInfo ? withPersistedCreditSchedule(receiptData.creditInfo, saleResult?.data?.creditSchedule) : undefined,
             receiptNumber: saleResult?.saleId
               ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
               : receiptData.receiptNumber,
@@ -452,6 +463,12 @@ export function usePOSSaleProcessor() {
         .reduce((t, s) => t + s.amount, 0)
       const mixedCreditSummary =
         creditPrincipal > 0 ? buildPosCreditSummary(creditPrincipal, creditTerms) : null
+      const firstPaymentValidation = mixedCreditSummary ? firstPaymentError(creditTerms.firstPayment, mixedCreditSummary.installmentAmount, mixedCreditSummary.firstInstallmentTiming) : null
+      if (firstPaymentValidation) {
+        setPaymentError(firstPaymentValidation)
+        setPaymentStatus('failed')
+        return
+      }
 
       const receiptPayments = [
         ...(storeCreditApplied > 0
@@ -523,6 +540,9 @@ export function usePOSSaleProcessor() {
                 interest_rate: creditTerms.interestRate,
                 installment_count: creditTerms.count,
                 frequency: creditTerms.frequency,
+                first_installment_timing: mixedCreditSummary?.firstInstallmentTiming,
+                start_date: mixedCreditSummary?.startDate,
+                first_payment: creditTerms.firstPayment,
               }
             : undefined,
           repair_ids: selectedRepairIds,
@@ -544,6 +564,7 @@ export function usePOSSaleProcessor() {
 
         const persistedReceipt = {
           ...receiptData,
+          creditInfo: receiptData.creditInfo ? withPersistedCreditSchedule(receiptData.creditInfo, saleResult?.data?.creditSchedule) : undefined,
           receiptNumber: saleResult?.saleId
             ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
             : receiptData.receiptNumber,

@@ -11,6 +11,7 @@ export type PosProductRow = {
   category_id: string | null
   categories?: { name: string } | Array<{ name: string }> | null
   description?: string | null
+  brand?: string | null
   image_url?: string | null
   images?: string[] | null
   unit_measure?: string | null
@@ -52,6 +53,7 @@ export function mapProductForPOS(row: PosProductRow): Product {
       ? { id: row.category_id, name: category.name }
       : undefined,
     description: row.description || null,
+    brand: row.brand || null,
     image: (Array.isArray(row.images) && row.images.length > 0 ? row.images[0] : undefined) || row.image_url || undefined,
     image_url: row.image_url || null,
     images: row.images || null,
