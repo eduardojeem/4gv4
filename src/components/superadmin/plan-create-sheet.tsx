@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { checkPlanPriceNote } from '@/lib/saas/plan-price-note'
 import {
   Dialog,
   DialogContent,
@@ -178,6 +179,12 @@ export function PlanCreateSheet({ open, onOpenChange, onSuccess, existingTiers }
   const [price, setPrice]           = useState('0')
   const [priceNote, setPriceNote]   = useState('por mes')
   const [trialDays, setTrialDays]   = useState('14')
+
+  // La nota del precio es el sufijo del periodo, no una frase suelta: un plan
+  // pago con nota "Siempre gratis" se publica asi en la pagina de planes y en el
+  // registro. Avisa, no bloquea.
+  const revisionNota = checkPlanPriceNote(Number(price) || 0, priceNote)
+  const avisoNota = revisionNota.ok === false ? revisionNota : null
   const [limits, setLimits]         = useState({ users: '5', products: '100', branches: '1', repairs: '20/mes' })
 
   // Step 3
@@ -346,6 +353,18 @@ export function PlanCreateSheet({ open, onOpenChange, onSuccess, existingTiers }
                     <div className="space-y-1.5">
                       <Label htmlFor="c-note" className="text-xs">Nota del precio</Label>
                       <Input id="c-note" value={priceNote} onChange={(e) => setPriceNote(e.target.value)} placeholder="por mes" className="h-9" />
+                      {avisoNota && (
+                        <div className="flex flex-wrap items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" role="alert">
+                          <span className="flex-1">{avisoNota.mensaje}</span>
+                          <button
+                            type="button"
+                            onClick={() => setPriceNote(avisoNota.sugerencia)}
+                            className="shrink-0 rounded border border-amber-400 px-1.5 py-0.5 font-medium transition-colors hover:bg-amber-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-700 dark:hover:bg-amber-900/40"
+                          >
+                            Usar «{avisoNota.sugerencia}»
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="c-trial" className="flex items-center gap-1 text-xs">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { checkPlanPriceNote } from '@/lib/saas/plan-price-note'
 import {
   Dialog,
   DialogContent,
@@ -326,6 +327,10 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
   }
 
   const priceNum = Number(price) || 0
+  // Se extrae el caso con problema para que TypeScript lo estreche: dentro de
+  // una expresion JSX, `!x.ok &&` no alcanza para acceder a los campos.
+  const revisionNota = checkPlanPriceNote(priceNum, priceNote)
+  const avisoNota = revisionNota.ok === false ? revisionNota : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -488,6 +493,22 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
                     placeholder="por mes"
                     className="h-9"
                   />
+                  {/* Cambiar el precio no revisa esta nota y el formulario la
+                      precarga, asi que sobrevive a cualquier edicion sin que
+                      nadie la mire. Avisa, no bloquea: "primer mes gratis" es
+                      legitimo en un plan pago. */}
+                  {avisoNota && (
+                    <div className="flex flex-wrap items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" role="alert">
+                      <span className="flex-1">{avisoNota.mensaje}</span>
+                      <button
+                        type="button"
+                        onClick={() => setPriceNote(avisoNota.sugerencia)}
+                        className="shrink-0 rounded border border-amber-400 px-1.5 py-0.5 font-medium transition-colors hover:bg-amber-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-700 dark:hover:bg-amber-900/40"
+                      >
+                        Usar «{avisoNota.sugerencia}»
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
