@@ -26,6 +26,30 @@ const ALIGNMENT = {
   right: 'sm:items-end sm:text-right',
 } as const
 
+function getOverlayGradient(tone: 'light' | 'dark', align: 'left' | 'center' | 'right' = 'left') {
+  if (tone === 'light') {
+    switch (align) {
+      case 'right':
+        return 'bg-gradient-to-t from-black/95 via-black/85 to-black/45 sm:bg-gradient-to-l sm:from-black/95 sm:via-black/80 sm:to-black/25'
+      case 'center':
+        return 'bg-gradient-to-t from-black/95 via-black/85 to-black/50 sm:bg-black/60 sm:bg-radial sm:from-black/90 sm:via-black/75 sm:to-black/45'
+      case 'left':
+      default:
+        return 'bg-gradient-to-t from-black/95 via-black/85 to-black/45 sm:bg-gradient-to-r sm:from-black/95 sm:via-black/80 sm:to-black/25'
+    }
+  } else {
+    switch (align) {
+      case 'right':
+        return 'bg-gradient-to-t from-white/98 via-white/92 to-white/50 sm:bg-gradient-to-l sm:from-white/98 sm:via-white/88 sm:to-transparent'
+      case 'center':
+        return 'bg-gradient-to-t from-white/98 via-white/92 to-white/60 sm:bg-white/75 sm:bg-radial sm:from-white/98 sm:via-white/88 sm:to-white/45'
+      case 'left':
+      default:
+        return 'bg-gradient-to-t from-white/98 via-white/92 to-white/50 sm:bg-gradient-to-r sm:from-white/98 sm:via-white/88 sm:to-transparent'
+    }
+  }
+}
+
 export function PromotionalCarousel({
   settings,
   isPageLead = false,
@@ -47,7 +71,7 @@ export function PromotionalCarousel({
   const safeIndex = slides.length > 0 ? activeIndex % slides.length : 0
   const activeSlide = slides[safeIndex]
   const canRotate = slides.length > 1
-  const intervalSeconds = settings?.intervalSeconds || 5
+  const intervalSeconds = Math.min(15, Math.max(5, settings?.intervalSeconds || 6))
 
   const goTo = useCallback((index: number) => {
     setActiveIndex((index + slides.length) % slides.length)
@@ -120,12 +144,12 @@ export function PromotionalCarousel({
           tabIndex={0}
           onKeyDown={handleKeyDown}
           className={cn(
-            'group relative overflow-hidden bg-card transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            'group relative overflow-hidden bg-slate-950 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
             isFullBleed
-              ? 'w-full max-w-none rounded-none border-x-0 border-y border-border/80 shadow-none sm:min-h-[460px] md:min-h-[500px]'
+              ? 'w-full max-w-none rounded-none border-x-0 border-y border-border/80 shadow-none min-h-[380px] sm:min-h-[460px] md:min-h-[500px]'
               : isCompact
-              ? 'mx-auto max-w-5xl rounded-2xl border border-border/80 shadow-md sm:min-h-[340px] md:min-h-[380px]'
-              : 'mx-auto max-w-7xl rounded-3xl border border-border/80 shadow-lg sm:min-h-[440px] md:min-h-[480px]'
+              ? 'mx-auto max-w-5xl rounded-2xl border border-border/80 shadow-md min-h-[320px] sm:min-h-[340px] md:min-h-[380px]'
+              : 'mx-auto max-w-7xl rounded-3xl border border-border/80 shadow-lg min-h-[380px] sm:min-h-[440px] md:min-h-[480px]'
           )}
           role="region"
           aria-roledescription="carrusel"
@@ -159,9 +183,12 @@ export function PromotionalCarousel({
           }}
         >
           {/* ── Capas de Imágenes con Crossfade ── */}
-          <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-950 sm:absolute sm:inset-0 sm:aspect-auto">
+          <div className="absolute inset-0 w-full h-full overflow-hidden bg-slate-950">
             {slides.map((slide, idx) => {
               const isCurrent = idx === safeIndex
+              const tone = slide.textTone || 'light'
+              const align = slide.contentAlign || 'left'
+
               return (
                 <div
                   key={slide.id || idx}
@@ -179,20 +206,18 @@ export function PromotionalCarousel({
                     className="object-cover object-center"
                   />
 
-                  {/* Gradiente direccional con desenfoque elegante para legibilidad */}
+                  {/* Gradiente direccional con alto contraste para máxima legibilidad */}
                   <div
                     className={cn(
-                      'absolute inset-0',
-                      slide.textTone === 'light'
-                        ? 'bg-gradient-to-t from-black/90 via-black/50 to-black/20 sm:bg-gradient-to-r sm:from-black/85 sm:via-black/50 sm:to-black/20'
-                        : 'bg-gradient-to-t from-white/95 via-white/80 to-transparent sm:bg-gradient-to-r sm:from-white/95 sm:via-white/70 sm:to-transparent'
+                      'absolute inset-0 transition-opacity duration-700',
+                      getOverlayGradient(tone, align)
                     )}
                   />
                 </div>
               )
             })}
 
-            {/* Flechas de Navegación Flotantes con Glassmorphism */}
+            {/* Flechas de Navegación Flotantes con Glassmorphism (en desktop) */}
             {canRotate && (
               <>
                 <button
@@ -201,7 +226,7 @@ export function PromotionalCarousel({
                     e.stopPropagation()
                     prevSlide()
                   }}
-                  className="absolute left-3 top-1/2 z-30 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-2xl bg-black/40 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all duration-200 hover:scale-110 hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:opacity-0 sm:group-hover:opacity-100 sm:left-5"
+                  className="hidden sm:flex absolute left-3 top-1/2 z-30 h-11 w-11 -translate-y-1/2 items-center justify-center rounded-2xl bg-black/40 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all duration-200 hover:scale-110 hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:opacity-0 sm:group-hover:opacity-100 sm:left-5 cursor-pointer"
                   aria-label="Promoción anterior"
                 >
                   <ChevronLeft className="h-5 w-5" />
@@ -212,7 +237,7 @@ export function PromotionalCarousel({
                     e.stopPropagation()
                     nextSlide()
                   }}
-                  className="absolute right-3 top-1/2 z-30 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-2xl bg-black/40 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all duration-200 hover:scale-110 hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:opacity-0 sm:group-hover:opacity-100 sm:right-5"
+                  className="hidden sm:flex absolute right-3 top-1/2 z-30 h-11 w-11 -translate-y-1/2 items-center justify-center rounded-2xl bg-black/40 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all duration-200 hover:scale-110 hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:opacity-0 sm:group-hover:opacity-100 sm:right-5 cursor-pointer"
                   aria-label="Siguiente promoción"
                 >
                   <ChevronRight className="h-5 w-5" />
@@ -224,39 +249,42 @@ export function PromotionalCarousel({
           {/* ── Textos y Botón de Acción ── */}
           <div
             className={cn(
-              'relative z-20 flex min-h-[240px] flex-col justify-center px-6 py-8 sm:min-h-[440px] md:min-h-[480px] sm:px-14 sm:py-16 lg:px-18 transition-all duration-500',
+              'relative z-20 flex min-h-[340px] sm:min-h-[440px] md:min-h-[480px] flex-col justify-center px-5 py-8 pb-14 sm:px-14 sm:py-16 sm:pb-16 lg:px-18 transition-all duration-500',
               ALIGNMENT[activeSlide.contentAlign],
-              activeSlide.textTone === 'light' ? 'text-white' : 'text-zinc-900'
+              activeSlide.textTone === 'light' ? 'text-white' : 'text-zinc-950'
             )}
           >
-            {/* Badge de Promoción */}
-            <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-primary/90 px-3.5 py-1 text-xs font-bold text-primary-foreground shadow-sm backdrop-blur-xs">
-              <Sparkles className="h-3 w-3 animate-pulse" />
-              <span>Destacado 4G</span>
-            </div>
-
-            <Heading className="max-w-2xl text-2xl font-black tracking-tight sm:text-4xl md:text-5xl leading-[1.15]">
+            <Heading
+              className={cn(
+                'max-w-2xl text-xl sm:text-4xl md:text-5xl font-black tracking-tight leading-snug sm:leading-[1.15]',
+                activeSlide.textTone === 'light'
+                  ? 'text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] [text-shadow:_0_2px_14px_rgb(0_0_0_/_90%)]'
+                  : 'text-zinc-950 drop-shadow-[0_1px_3px_rgba(255,255,255,0.9)]'
+              )}
+            >
               {activeSlide.title}
             </Heading>
 
             <p
               className={cn(
-                'mt-3 max-w-xl text-sm font-medium leading-relaxed sm:mt-4 sm:text-base md:text-lg',
-                activeSlide.textTone === 'light' ? 'text-slate-200/90' : 'text-zinc-700'
+                'mt-2.5 max-w-xl text-xs sm:text-base md:text-lg font-semibold leading-relaxed sm:mt-4 line-clamp-3 sm:line-clamp-none',
+                activeSlide.textTone === 'light'
+                  ? 'text-slate-100 drop-shadow-[0_1px_6px_rgba(0,0,0,0.95)] [text-shadow:_0_1px_8px_rgb(0_0_0_/_90%)]'
+                  : 'text-zinc-800 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]'
               )}
             >
               {activeSlide.message}
             </p>
 
             {activeSlide.ctaText && activeSlide.ctaHref && (
-              <div className="mt-6 flex items-center gap-3">
+              <div className="mt-4 sm:mt-6 flex items-center gap-3">
                 <Button
                   asChild
                   size="lg"
                   className={cn(
-                    'h-12 rounded-2xl px-6 font-bold shadow-md transition-all duration-200 hover:scale-105 group/btn gap-2',
+                    'h-10 sm:h-12 rounded-xl sm:rounded-2xl px-5 sm:px-6 text-xs sm:text-sm font-bold shadow-md transition-all duration-200 hover:scale-105 group/btn gap-2',
                     activeSlide.textTone === 'light'
-                      ? 'bg-white text-zinc-950 hover:bg-slate-100 shadow-white/20'
+                      ? 'bg-white text-zinc-950 hover:bg-slate-100 shadow-black/30'
                       : 'bg-zinc-950 text-white hover:bg-zinc-800 shadow-zinc-950/25'
                   )}
                 >
@@ -278,18 +306,18 @@ export function PromotionalCarousel({
 
           {/* ── Indicadores de Progreso Estilo Story / Barra Interactiva ── */}
           {canRotate && (
-            <div className="relative z-30 mx-auto mb-4 flex w-fit items-center gap-2 rounded-2xl bg-black/50 px-3 py-1.5 backdrop-blur-md border border-white/10 sm:absolute sm:bottom-6 sm:left-1/2 sm:mb-0 sm:-translate-x-1/2">
+            <div className="absolute bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 rounded-full bg-black/60 px-2.5 py-1 sm:px-3 sm:py-1.5 backdrop-blur-md border border-white/15">
               <button
                 type="button"
                 onClick={() => setUserPaused((paused) => !paused)}
-                className="flex h-6 w-6 items-center justify-center rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none"
+                className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none cursor-pointer"
                 aria-label={userPaused ? 'Reanudar carrusel' : 'Pausar carrusel'}
                 title={userPaused ? 'Reanudar' : 'Pausar'}
               >
                 {userPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
               </button>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 sm:gap-1.5">
                 {slides.map((slide, index) => {
                   const isCurrent = index === safeIndex
                   const isAnimating = isCurrent && !userPaused && !interactionPaused && settings?.autoplay

@@ -1,6 +1,7 @@
 export interface CompanyInfo {
   name?: string
   slogan?: string
+  description?: string
   phone: string
   email: string
   address: string

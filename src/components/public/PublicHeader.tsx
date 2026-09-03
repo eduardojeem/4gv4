@@ -11,6 +11,7 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
 import { PublicRepairReadyNotifications } from '@/components/public/PublicRepairReadyNotifications'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
+import { PublicFavorites } from '@/components/public/Favorites'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -226,32 +227,35 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
       <div className="container flex h-16 items-center justify-between gap-4">
         {/* Logo */}
         <Link href={withTenantPrefix('/inicio')} className="group flex items-center gap-3 shrink-0" aria-label="Ir a inicio">
-          <div className={`relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl p-1 shadow-md shadow-primary/10 transition-all duration-300 group-hover:scale-105 group-hover:rotate-3 ${
-            companyInfo?.headerStyle === 'accent'
-              ? 'bg-white text-primary'
-              : 'bg-primary text-primary-foreground'
-          }`}>
-            {companyLogoUrl ? (
-              <Image
+          {companyLogoUrl ? (
+            <div className="relative flex h-10 max-w-[180px] sm:max-w-[220px] items-center justify-start overflow-hidden transition-all duration-300 group-hover:scale-[1.02]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={companyLogoUrl}
                 alt={companyInfo?.name || 'Logo'}
-                fill
-                sizes="40px"
-                className="object-contain p-0.5"
+                className="h-10 w-auto max-h-10 max-w-full object-contain"
               />
-            ) : (
+            </div>
+          ) : (
+            <div className={`relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl p-1 shadow-md shadow-primary/10 transition-all duration-300 group-hover:scale-105 group-hover:rotate-3 ${
+              companyInfo?.headerStyle === 'accent'
+                ? 'bg-white text-primary'
+                : 'bg-primary text-primary-foreground'
+            }`}>
               <Store className="h-5.5 w-5.5" />
-            )}
-          </div>
+            </div>
+          )}
           <div className="hidden sm:block">
             <span className="block text-base font-extrabold leading-tight tracking-tight">
               {companyInfo?.name || 'Tienda'}
             </span>
-            <span className={`block text-[10px] font-medium leading-tight ${
-              companyInfo?.headerStyle === 'accent' ? 'text-white/80' : 'text-muted-foreground'
-            }`}>
-              {companyInfo?.slogan || 'Reparación y Servicios'}
-            </span>
+            {companyInfo?.slogan && (
+              <span className={`block text-[10px] font-medium leading-tight ${
+                companyInfo?.headerStyle === 'accent' ? 'text-white/80' : 'text-muted-foreground'
+              }`}>
+                {companyInfo.slogan}
+              </span>
+            )}
           </div>
         </Link>
 
@@ -315,6 +319,7 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
           )}
 
           <PublicCartButton />
+          <PublicFavorites />
 
           <InstallPrompt />
 
@@ -456,13 +461,12 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
             <div className="flex items-center justify-between pb-5 border-b border-border/60">
               <div className="flex items-center gap-2.5 min-w-0">
                 {companyLogoUrl ? (
-                  <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-border/80 bg-background p-0.5 shadow-xs">
-                    <Image
+                  <div className="relative h-8 max-w-[120px] shrink-0 flex items-center justify-start">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
                       src={companyLogoUrl}
                       alt={companyInfo?.name || 'Logo'}
-                      fill
-                      unoptimized
-                      className="object-contain"
+                      className="h-8 w-auto max-h-8 max-w-full object-contain"
                     />
                   </div>
                 ) : (

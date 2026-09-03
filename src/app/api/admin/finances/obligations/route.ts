@@ -28,6 +28,8 @@ const obligationQuerySchema = z
     endDate: z.iso.date().optional(),
     branchId: z.uuid().optional(),
     categoryId: z.uuid().optional(),
+    search: z.string().trim().max(120).optional(),
+    dueView: z.enum(['overdue', 'upcoming']).optional(),
     status: z
       .enum(['draft', 'pending', 'partially_paid', 'paid', 'overdue', 'voided'])
       .optional(),
@@ -54,6 +56,8 @@ function parseQuery(request: NextRequest) {
     endDate: request.nextUrl.searchParams.get('endDate') ?? undefined,
     branchId: request.nextUrl.searchParams.get('branchId') ?? undefined,
     categoryId: request.nextUrl.searchParams.get('categoryId') ?? undefined,
+    search: request.nextUrl.searchParams.get('search') ?? undefined,
+    dueView: request.nextUrl.searchParams.get('dueView') ?? undefined,
     status: request.nextUrl.searchParams.get('status') ?? undefined,
     page: request.nextUrl.searchParams.get('page') ?? undefined,
     pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,

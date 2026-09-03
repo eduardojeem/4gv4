@@ -1,6 +1,7 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import type { PublicProduct } from '@/types/public'
 import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapPublicPromotion } from '@/lib/public-promotions'
+import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 
 export type MarketplaceOrganization = {
   id: string
@@ -11,6 +12,26 @@ export type MarketplaceOrganization = {
   business_vertical?: string | null
   operating_model?: string | null
   rubro?: string | null
+  city?: string | null
+  address?: string | null
+  maps_url?: string | null
+  slogan?: string | null
+  description?: string | null
+  brand_color?: string | null
+  custom_brand_color?: string | null
+  phone?: string | null
+  email?: string | null
+  whatsapp?: string | null
+  instagram?: string | null
+  facebook?: string | null
+  tiktok?: string | null
+  hours?: {
+    weekdays?: string
+    saturday?: string
+    sunday?: string
+  } | null
+  ruc?: string | null
+  business_type?: string | null
   created_at: string | null
   products_count: number
   featured_products: PublicProduct[]
@@ -156,16 +177,37 @@ export async function getMarketplaceOrganizations(limit = 24): Promise<Marketpla
   const organizationRows = organizations as OrganizationRow[]
   const organizationIds = organizationRows.map((organization) => organization.id)
 
-  const { data: products } = await supabase
-    .from('products')
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)')
-    .in('organization_id', organizationIds)
-    .eq('is_active', true)
-    .eq('visibility', 'public')
-    .gt('stock_quantity', 0)
-    .order('featured', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(limit * 4)
+  const [
+    { data: products },
+    { data: orgSettings },
+    { data: branches },
+    { data: websiteSettings },
+  ] = await Promise.all([
+    supabase
+      .from('products')
+      .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)')
+      .in('organization_id', organizationIds)
+      .eq('is_active', true)
+      .eq('visibility', 'public')
+      .gt('stock_quantity', 0)
+      .order('featured', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(limit * 4),
+    supabase
+      .from('organization_settings')
+      .select('organization_id, city, company_address')
+      .in('organization_id', organizationIds),
+    supabase
+      .from('branches')
+      .select('organization_id, city, address, is_default, is_active')
+      .in('organization_id', organizationIds)
+      .eq('is_active', true),
+    supabase
+      .from('website_settings')
+      .select('organization_id, key, value')
+      .in('organization_id', organizationIds)
+      .in('key', ['company_info', 'hero_content']),
+  ])
 
   const productsByOrganization = new Map<string, ProductRow[]>()
   ;((products ?? []) as unknown as ProductRow[]).forEach((product) => {
@@ -174,13 +216,79 @@ export async function getMarketplaceOrganizations(limit = 24): Promise<Marketpla
     productsByOrganization.set(product.organization_id, rows)
   })
 
+  const settingsByOrganization = new Map<string, { city?: string | null; company_address?: string | null }>()
+  ;(orgSettings ?? []).forEach((s) => {
+    settingsByOrganization.set(s.organization_id, s)
+  })
+
+  const branchesByOrganization = new Map<string, Array<{ city?: string | null; address?: string | null; is_default?: boolean }>>()
+  ;(branches ?? []).forEach((b) => {
+    const list = branchesByOrganization.get(b.organization_id) ?? []
+    list.push(b)
+    branchesByOrganization.set(b.organization_id, list)
+  })
+
+  const webSettingsByOrganization = new Map<string, Map<string, Record<string, unknown>>>()
+  ;(websiteSettings ?? []).forEach((w) => {
+    if (w.value && typeof w.value === 'object') {
+      const orgMap = webSettingsByOrganization.get(w.organization_id) ?? new Map<string, Record<string, unknown>>()
+      orgMap.set(w.key, w.value as Record<string, unknown>)
+      webSettingsByOrganization.set(w.organization_id, orgMap)
+    }
+  })
+
   return organizationRows.map((organization) => {
     const organizationProducts = productsByOrganization.get(organization.id) ?? []
     const resolvedRubro = resolveOrganizationRubro(organization, organizationProducts)
+    const orgSetting = settingsByOrganization.get(organization.id)
+    const orgBranches = branchesByOrganization.get(organization.id) ?? []
+    const defaultBranch = orgBranches.find((b) => b.is_default) || orgBranches[0]
+    const orgWebMap = webSettingsByOrganization.get(organization.id)
+    const companyInfo = orgWebMap?.get('company_info')
+    const heroContent = orgWebMap?.get('hero_content')
+
+    const companyMapsUrl = typeof companyInfo?.mapsUrl === 'string' ? companyInfo.mapsUrl : null
+    const companyAddress = typeof companyInfo?.address === 'string' ? companyInfo.address : null
+    const slogan = typeof companyInfo?.slogan === 'string' ? companyInfo.slogan : null
+    const rawDescription = typeof companyInfo?.description === 'string' && companyInfo.description.trim()
+      ? companyInfo.description.trim()
+      : (typeof heroContent?.subtitle === 'string' && heroContent.subtitle.trim() ? heroContent.subtitle.trim() : null)
+    const description = rawDescription || slogan || null
+    const brandColor = typeof companyInfo?.brandColor === 'string' ? companyInfo.brandColor : null
+    const customBrandColor = typeof companyInfo?.customBrandColor === 'string' ? companyInfo.customBrandColor : null
+    const phone = typeof companyInfo?.phone === 'string' ? companyInfo.phone : (orgSetting as any)?.company_phone || null
+    const email = typeof companyInfo?.email === 'string' ? companyInfo.email : (orgSetting as any)?.company_email || null
+    const whatsapp = typeof companyInfo?.whatsapp === 'string' ? companyInfo.whatsapp : null
+    const instagram = typeof companyInfo?.instagram === 'string' ? companyInfo.instagram : null
+    const facebook = typeof companyInfo?.facebook === 'string' ? companyInfo.facebook : null
+    const tiktok = typeof companyInfo?.tiktok === 'string' ? companyInfo.tiktok : null
+    const hours = (companyInfo?.hours && typeof companyInfo.hours === 'object') ? (companyInfo.hours as { weekdays?: string; saturday?: string; sunday?: string }) : null
+    const ruc = typeof companyInfo?.ruc === 'string' ? companyInfo.ruc : (orgSetting as any)?.company_ruc || null
+    const businessType = typeof companyInfo?.businessType === 'string' ? companyInfo.businessType : null
+
+    const city = orgSetting?.city?.trim() || defaultBranch?.city?.trim() || null
+    const address = orgSetting?.company_address?.trim() || defaultBranch?.address?.trim() || companyAddress?.trim() || null
+    const mapsHref = getCompanyMapsHref(companyMapsUrl, address || (city ? `${city}, Paraguay` : null))
 
     return {
       ...organization,
       rubro: resolvedRubro,
+      city,
+      address,
+      maps_url: mapsHref,
+      slogan,
+      description,
+      brand_color: brandColor,
+      custom_brand_color: customBrandColor,
+      phone,
+      email,
+      whatsapp,
+      instagram,
+      facebook,
+      tiktok,
+      hours,
+      ruc,
+      business_type: businessType,
       products_count: organizationProducts.length,
       featured_products: organizationProducts.slice(0, 3).map(toPublicProduct),
       review_rating_avg: organization.review_rating_avg ?? null,

@@ -26,9 +26,9 @@ export type PlatformBranding = {
 }
 
 export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
-  platformName: 'SERVIX 360',
+  platformName: 'Plataforma',
   platformTagline: 'POS, inventario, marketplace y servicios',
-  logoUrl: '/branding/mitiendapy-logo.png',
+  logoUrl: '',
   logoDarkUrl: '',
   faviconUrl: '',
   hideNavBrandText: false,
@@ -44,7 +44,7 @@ export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
   secondaryCtaHref: '/marketplace',
   loginEyebrow: 'Panel interno',
   loginSubtitle: 'Panel de administracion y staff',
-  seoTitle: 'SERVIX 360 para POS, inventario, marketplace y servicios',
+  seoTitle: 'POS, inventario, marketplace y servicios',
   seoDescription: 'Plataforma SaaS multiempresa para POS, inventario, ecommerce, reparaciones, servicios y marketplace.',
   footerText: 'Una plataforma para operar POS, catalogos, servicios y marketplace.',
 }

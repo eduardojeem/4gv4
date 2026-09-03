@@ -245,6 +245,7 @@ function DueList({
           return (
             <div key={row.id} className="flex items-center justify-between p-2.5 transition-colors hover:bg-muted/40">
               <div className="min-w-0 pr-2">
+                <p className="truncate text-sm font-medium">{row.concept || 'Obligación pendiente'}</p>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-foreground">{dateLabel}</span>
                   <span
@@ -513,7 +514,7 @@ function CashFlowInsights({
       <div className="flex items-center justify-between mb-3">
         <div>
           <h3 className="text-sm font-semibold">Salud del Flujo de Fondos</h3>
-          <p className="text-xs text-muted-foreground">Efectividad de cobranza y liquidez operativa del período.</p>
+          <p className="text-xs text-muted-foreground">Relación entre los cobros y pagos registrados en el período.</p>
         </div>
         <Badge
           className={cn(
@@ -531,14 +532,14 @@ function CashFlowInsights({
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Tasa de Cobranza</span>
+            <span className="text-xs text-muted-foreground">Cobros / ingresos del período</span>
             <Percent className="h-4 w-4 text-muted-foreground" />
           </div>
           <p className="mt-1 text-xl font-bold">
             {collectionRate !== null ? `${collectionRate}%` : 'N/A'}
           </p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            Del total de ventas devengadas cobrado efectivamente en caja o banco.
+            No mide la deuda cobrada: puede incluir cobros de ventas de meses anteriores y superar el 100%.
           </p>
         </div>
 
@@ -551,13 +552,13 @@ function CashFlowInsights({
             {paid > 0 ? `${(collected / paid).toFixed(2)}x` : 'N/A'}
           </p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            Pesos cobrados por cada peso pagado en el período.
+            Unidades monetarias cobradas por cada unidad pagada en el período.
           </p>
         </div>
 
         <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Saldo Neto Operativo</span>
+            <span className="text-xs text-muted-foreground">Flujo neto del período</span>
             <Banknote className="h-4 w-4 text-muted-foreground" />
           </div>
           <p className={cn('mt-1 text-xl font-bold', !isPositiveFlow && 'text-destructive')}>
@@ -579,7 +580,7 @@ export function FinanceSummary({
   onViewPayroll,
 }: {
   summary: FinanceSummaryReport
-  onViewExpenses?: () => void
+  onViewExpenses?: (action?: 'new' | 'overdue' | 'upcoming' | 'all') => void
   onViewProfitability?: () => void
   onViewPayroll?: () => void
 }) {
@@ -628,8 +629,8 @@ export function FinanceSummary({
   return (
     <div className="space-y-6">
       {/* ── HERO BANNER: BALANCE FINANCIERO INTEGRAL ── */}
-      <section className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-br from-card via-card to-primary/5 p-5 sm:p-6 shadow-sm">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      <section className="rounded-xl border bg-card p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           
           {/* Bloque 1: Ganancia Neta */}
           <div className="space-y-1.5 min-w-[220px]">
@@ -651,7 +652,7 @@ export function FinanceSummary({
                 </Badge>
               )}
             </div>
-            <p className={cn('text-3xl sm:text-4xl font-extrabold tracking-tight', isNetPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive')}>
+            <p className={cn('text-2xl sm:text-3xl font-bold tracking-tight', isNetPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive')}>
               {summary.accrued.netProfit === null ? 'Pendiente' : formatCurrency(summary.accrued.netProfit)}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -667,7 +668,7 @@ export function FinanceSummary({
           <div className="space-y-1.5 min-w-[220px]">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Flujo de Caja Real
+                Cobrado menos pagado
               </span>
               <Badge
                 variant="outline"
@@ -681,12 +682,13 @@ export function FinanceSummary({
                 {isCashPositive ? '✓ Superávit' : '✕ Déficit'}
               </Badge>
             </div>
-            <p className={cn('text-3xl sm:text-4xl font-extrabold tracking-tight', isCashPositive ? 'text-foreground' : 'text-destructive')}>
+            <p className={cn('text-2xl sm:text-3xl font-bold tracking-tight', isCashPositive ? 'text-foreground' : 'text-destructive')}>
               {formatCurrency(summary.cash.netCashFlow)}
             </p>
             <p className="text-xs text-muted-foreground">
               {formatCurrency(summary.cash.collected)} cobrados vs {formatCurrency(summary.cash.paid)} pagados
             </p>
+            <p className="text-xs text-muted-foreground">Flujo del período; no es el saldo disponible de caja o banco.</p>
           </div>
 
           <div className="hidden lg:block h-16 w-px bg-border/80" />
@@ -695,7 +697,7 @@ export function FinanceSummary({
           <div className="flex flex-wrap lg:flex-col gap-2">
             <button
               type="button"
-              onClick={onViewExpenses}
+              onClick={() => onViewExpenses?.('new')}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-xs hover:bg-primary/90 transition-all active:scale-95 select-none"
             >
               <span>+ Registrar Gasto</span>
@@ -705,7 +707,7 @@ export function FinanceSummary({
               onClick={onViewPayroll}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-all active:scale-95 select-none"
             >
-              <span>👥 Liquidar Nómina</span>
+              <span>Ver nómina</span>
             </button>
           </div>
 
@@ -720,6 +722,7 @@ export function FinanceSummary({
             <h2 id="finance-priorities-heading" className="text-sm sm:text-base font-bold text-foreground">
               Qué requiere atención hoy
             </h2>
+            <p className="mt-1 text-xs text-muted-foreground">Los vencimientos muestran saldos actuales, incluidos los de períodos anteriores.</p>
           </div>
           {summary.complete ? (
             <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs gap-1 hidden sm:flex font-semibold">
@@ -735,7 +738,7 @@ export function FinanceSummary({
             count={summary.overdue.length}
             tone={summary.overdue.length > 0 ? 'urgent' : 'default'}
             action="Ver gastos vencidos"
-            onClick={onViewExpenses}
+            onClick={() => onViewExpenses?.('overdue')}
             icon={CircleAlert}
           />
           <PriorityAction
@@ -743,7 +746,7 @@ export function FinanceSummary({
             description="Planificá los pagos y compromisos de los próximos días."
             count={summary.upcomingDue.length}
             action="Ver calendario de gastos"
-            onClick={onViewExpenses}
+            onClick={() => onViewExpenses?.('upcoming')}
             icon={CalendarClock}
           />
           <PriorityAction
@@ -975,14 +978,14 @@ export function FinanceSummary({
           title="Vencidos"
           rows={summary.overdue}
           description="Obligaciones atrasadas que requieren regularización inmediata."
-          onViewAll={onViewExpenses}
+          onViewAll={() => onViewExpenses?.('overdue')}
           urgent
         />
         <DueList
           title="Próximos vencimientos"
           rows={summary.upcomingDue}
           description="Obligaciones planificadas para los próximos días."
-          onViewAll={onViewExpenses}
+          onViewAll={() => onViewExpenses?.('upcoming')}
         />
       </div>
     </div>

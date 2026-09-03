@@ -22,7 +22,7 @@ export const adminFinanceSummarySWRConfig = {
   revalidateIfStale: false,
   refreshInterval: 0,
   dedupingInterval: 60_000,
-  keepPreviousData: true,
+  keepPreviousData: false,
 } as const
 
 export function getAdminFinancesKey(filters: AdminFinanceFilters, organizationId: string) {
@@ -77,7 +77,8 @@ export function useAdminFinances() {
   const loadActiveOrganization = useCallback(async () => {
     const requestId = organizationRequestRef.current + 1
     organizationRequestRef.current = requestId
-    setOrganizationLoading((current) => current || organizationId === null)
+    setOrganizationId(null)
+    setOrganizationLoading(true)
     setOrganizationError(null)
 
     try {
@@ -94,13 +95,16 @@ export function useAdminFinances() {
         setOrganizationLoading(false)
       }
     }
-  }, [organizationId])
+  }, [])
 
   useEffect(() => {
     void loadActiveOrganization()
     const handleOrganizationChange = () => void loadActiveOrganization()
     window.addEventListener('organization:changed', handleOrganizationChange)
-    return () => window.removeEventListener('organization:changed', handleOrganizationChange)
+    return () => {
+      organizationRequestRef.current += 1
+      window.removeEventListener('organization:changed', handleOrganizationChange)
+    }
   }, [loadActiveOrganization])
 
   const branchId = selectedBranch?.organization_id && organizationId && selectedBranch.organization_id !== organizationId
@@ -141,7 +145,7 @@ export function useAdminFinances() {
     isLoading: organizationLoading || isLoading,
     isRefreshing: isValidating && !isLoading,
     error: organizationError ?? (error instanceof Error ? error : error ? new Error('No se pudo cargar el resumen financiero.') : null),
-    refresh: () => mutate(),
+    refresh: () => organizationId ? mutate() : loadActiveOrganization(),
     mutateSummary: mutate,
     organizationId,
   }

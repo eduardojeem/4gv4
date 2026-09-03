@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { PublicFavorites } from './Favorites'
 import { useState, useEffect } from 'react'
 import {
   Building2,
@@ -38,6 +39,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
+import type { PlatformBranding } from '@/lib/platform/branding'
 import { resolveLogoSize } from '@/lib/platform/logo-size'
 import { AuthModal } from '@/components/public/AuthModal'
 
@@ -49,13 +51,13 @@ const navItems = [
   { href: '/marketplace/empresas', label: 'Tiendas', icon: Store, exact: false },
 ]
 
-export function MarketplacePublicNav() {
+export function MarketplacePublicNav({ initialBranding }: { initialBranding?: PlatformBranding }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
-  const { branding } = usePlatformBranding()
+  const { branding } = usePlatformBranding(initialBranding)
 
   // Cerrar drawer al cambiar de ruta
   useEffect(() => {
@@ -190,6 +192,7 @@ export function MarketplacePublicNav() {
           {/* Right actions */}
           <div className="flex items-center gap-2">
             <InstallPrompt />
+            <PublicFavorites />
             <ThemeToggle />
 
             {/* SaaS CTA — desktop */}

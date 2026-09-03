@@ -687,11 +687,13 @@ export function PayrollPanel({
   branchId,
   filters,
   onChanged,
+  refreshVersion = 0,
 }: {
   organizationId: string
   branchId: string | null | undefined
   filters: AdminFinanceFilters
   onChanged: () => unknown | Promise<unknown>
+  refreshVersion?: number
 }) {
   const [open, setOpen] = useState(false)
   const [runs, setRuns] = useState<PayrollRun[]>([])
@@ -737,22 +739,26 @@ export function PayrollPanel({
       periodTo: filters.endDate,
     })
     if (activeBranchId) params.set('branchId', activeBranchId)
-    const response = await fetch(`/api/admin/finances/payroll/runs?${params.toString()}`)
-    const payload = (await response.json().catch(() => null)) as { runs?: PayrollRun[]; error?: string } | null
-    // Ignorar si mientras tanto se disparó un pedido más nuevo (cambio rápido de
-    // sucursal/alcance): evita que una respuesta vieja pise el estado actual.
-    if (requestId !== loadRunsSeqRef.current) return
-    if (!response.ok) {
-      setError(payload?.error ?? 'No se pudieron cargar las nóminas.')
-      return
+    try {
+      const response = await fetch(`/api/admin/finances/payroll/runs?${params.toString()}`)
+      const payload = (await response.json().catch(() => null)) as { runs?: PayrollRun[]; error?: string } | null
+      // Ignorar si mientras tanto se disparó un pedido más nuevo (cambio rápido de
+      // sucursal/alcance): evita que una respuesta vieja pise el estado actual.
+      if (requestId !== loadRunsSeqRef.current) return
+      if (!response.ok) {
+        setError(payload?.error ?? 'No se pudieron cargar las nóminas.')
+        return
+      }
+      setError(null)
+      setRuns(payload?.runs ?? [])
+    } catch {
+      if (requestId === loadRunsSeqRef.current) setError('No se pudieron cargar las nóminas. Intentá actualizar nuevamente.')
     }
-    setError(null)
-    setRuns(payload?.runs ?? [])
   }, [activeBranchId, filters.endDate, filters.startDate, organizationId])
 
   useEffect(() => {
     void loadRuns()
-  }, [loadRuns])
+  }, [loadRuns, refreshVersion])
 
   async function changed() {
     await loadRuns()
@@ -762,18 +768,25 @@ export function PayrollPanel({
   async function approve(runId: string) {
     if (approvingId) return false
     setApprovingId(runId)
-    const response = await fetch(
-      `/api/admin/finances/payroll/${runId}/approve?organizationId=${organizationId}`,
-      { method: 'POST' },
-    )
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null
-    setApprovingId(null)
-    if (!response.ok) {
-      setError(payload?.error ?? 'No se pudo aprobar la nómina.')
+    setError(null)
+    try {
+      const response = await fetch(
+        `/api/admin/finances/payroll/${runId}/approve?organizationId=${organizationId}`,
+        { method: 'POST' },
+      )
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) {
+        setError(payload?.error ?? 'No se pudo aprobar la nómina.')
+        return false
+      }
+      await changed()
+      return true
+    } catch {
+      setError('No se pudo confirmar la aprobación. Verificá el estado de la nómina antes de volver a intentar.')
       return false
+    } finally {
+      setApprovingId(null)
     }
-    await changed()
-    return true
   }
 
   async function confirmApproval() {
@@ -958,7 +971,7 @@ export function PayrollPanel({
           ['1', 'Preparar', 'Calculá salarios y comisiones.'],
           ['2', 'Revisar y aprobar', 'Confirmá los importes finales.'],
           ['3', 'Registrar pagos', 'Cargá pagos completos o parciales.'],
-          ['4', 'Cerrar período', 'Verificá que no queden saldos.'],
+          ['4', 'Verificar saldos', 'Verificá que no queden saldos.'],
         ].map(([step, title, description]) => {
           const stepNumber = Number(step)
           const isCurrent = currentStep === stepNumber
@@ -1250,4 +1263,3 @@ export function PayrollPanel({
     </div>
   )
 }
-

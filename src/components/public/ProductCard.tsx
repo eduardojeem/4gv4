@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { FavoriteButton } from './Favorites'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Check, ChevronLeft, ChevronRight, CreditCard, Eye, MapPin, MessageCircle, Package, ShoppingCart, Sparkles, Tag, TrendingDown, X, Zap } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, CreditCard, Eye, MapPin, MessageCircle, Package, ShoppingCart, Sparkles, Tag, TrendingDown, Zap } from 'lucide-react'
 import { PublicProduct } from '@/types/public'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
@@ -13,7 +14,7 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { resolvePublicUnitPrice } from '@/lib/orders/public-pricing'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getWhatsAppLink } from '@/lib/whatsapp'
@@ -51,6 +52,7 @@ export function ProductCard(props: ProductCardProps) {
   const [quickViewOpen, setQuickViewOpen] = useState(false)
   const [justAdded, setJustAdded] = useState(false)
   const [activeImageIdx, setActiveImageIdx] = useState(0)
+  const [quantity, setQuantity] = useState(1)
 
   // Compute gallery images: deduplicate image_url and images[]
   const galleryImages = (() => {
@@ -135,6 +137,7 @@ export function ProductCard(props: ProductCardProps) {
 
   // ── Tenant prefix ────────────────────────────────────────────────────────
   const tenantSlug = getTenantSlugFromPathname(pathname)
+  const favoriteSlug = tenantSlug || websiteSettings?.company_info.slug
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
   const productHref = `${tenantPrefix}/productos/${product.id}`
@@ -158,13 +161,13 @@ export function ProductCard(props: ProductCardProps) {
       toast.error('Producto sin stock')
       return
     }
-    const result = addProduct(product, Number(displayPrice || 0), 1)
+    const result = addProduct(product, Number(displayPrice || 0), closeModal ? quantity : 1)
     if (result.limited) {
       toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
       return
     }
     toast.success('¡Agregado al carrito!')
-    if (closeModal) setQuickViewOpen(false)
+    if (closeModal) { setQuickViewOpen(false); setQuantity(1); setActiveImageIdx(0) }
     setJustAdded(true)
     setTimeout(() => setJustAdded(false), 1500)
   }
@@ -175,6 +178,7 @@ export function ProductCard(props: ProductCardProps) {
       <article
         className="group relative flex flex-col overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm transition-colors hover:border-primary/30"
       >
+        {favoriteSlug && <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug }} /></div>}
         {/* ── Image area ── */}
         <button
           type="button"
@@ -342,20 +346,21 @@ export function ProductCard(props: ProductCardProps) {
       </article>
 
       {/* ── Quick-view modal ── */}
-      <Dialog open={quickViewOpen} onOpenChange={(open) => { setQuickViewOpen(open); if (!open) setActiveImageIdx(0) }}>
+      <Dialog open={quickViewOpen} onOpenChange={(open) => { setQuickViewOpen(open); if (!open) { setActiveImageIdx(0); setQuantity(1) } }}>
         <DialogContent
-          className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-2xl gap-0 overflow-hidden rounded-3xl p-0 shadow-2xl"
-          showCloseButton={false}
+          className="flex max-h-[90dvh] w-[calc(100%-1rem)] sm:max-w-2xl flex-col gap-0 overflow-hidden rounded-xl p-0 shadow-xl"
+          showCloseButton
         >
           <DialogTitle className="sr-only">{product.name}</DialogTitle>
+          <DialogDescription className="sr-only">Imágenes, precio, disponibilidad y opciones de compra del producto.</DialogDescription>
 
           {/* ── Two-column layout ─────────────────────────────────────── */}
-          <div className="flex flex-col sm:flex-row">
+          <div className="min-h-0 overflow-y-auto overscroll-contain">
 
             {/* ── Left column: image gallery ──────────────────────────── */}
-            <div className="relative flex-shrink-0 sm:w-[42%] bg-gradient-to-br from-muted/60 to-muted/30 dark:from-muted/20 dark:to-background">
+            <div className="relative bg-muted/30">
               {/* Main image */}
-              <div className="relative aspect-square sm:aspect-[4/5] overflow-hidden">
+              <div className="relative h-40 sm:h-48 overflow-hidden">
                 {resolvedActive && !imageError ? (
                   <Image
                     src={resolvedActive}
@@ -388,7 +393,7 @@ export function ProductCard(props: ProductCardProps) {
                     <button
                       type="button"
                       aria-label="Imagen anterior"
-                      onClick={(e) => { e.stopPropagation(); setActiveImageIdx((i) => (i - 1 + galleryImages.length) % galleryImages.length) }}
+                      onClick={(e) => { e.stopPropagation(); setImageError(false); setActiveImageIdx((i) => (i - 1 + galleryImages.length) % galleryImages.length) }}
                       className="absolute left-2.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 shadow backdrop-blur-sm transition hover:bg-background"
                     >
                       <ChevronLeft className="h-4 w-4" />
@@ -396,7 +401,7 @@ export function ProductCard(props: ProductCardProps) {
                     <button
                       type="button"
                       aria-label="Imagen siguiente"
-                      onClick={(e) => { e.stopPropagation(); setActiveImageIdx((i) => (i + 1) % galleryImages.length) }}
+                      onClick={(e) => { e.stopPropagation(); setImageError(false); setActiveImageIdx((i) => (i + 1) % galleryImages.length) }}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 shadow backdrop-blur-sm transition hover:bg-background"
                     >
                       <ChevronRight className="h-4 w-4" />
@@ -407,20 +412,21 @@ export function ProductCard(props: ProductCardProps) {
 
               {/* Gallery dots */}
               {galleryImages.length > 1 && (
-                <div className="flex justify-center gap-1.5 py-2.5">
-                  {galleryImages.map((_, i) => (
+                <div className="flex gap-2 overflow-x-auto px-3 py-2">
+                  {galleryImages.map((image, i) => (
                     <button
                       key={i}
                       type="button"
                       aria-label={`Ver imagen ${i + 1}`}
-                      onClick={() => setActiveImageIdx(i)}
+                      aria-pressed={i === activeImageIdx}
+                      onClick={() => { setImageError(false); setActiveImageIdx(i) }}
                       className={cn(
-                        'h-1.5 rounded-full transition-all duration-200',
+                        'relative h-11 w-11 shrink-0 overflow-hidden rounded-md border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         i === activeImageIdx
-                          ? 'w-4 bg-primary'
-                          : 'w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60'
+                          ? 'border-primary'
+                          : 'border-transparent'
                       )}
-                    />
+                    ><Image src={resolveProductImageUrl(image)} alt="" fill sizes="44px" className="object-contain" /></button>
                   ))}
                 </div>
               )}
@@ -443,10 +449,11 @@ export function ProductCard(props: ProductCardProps) {
             </div>
 
             {/* ── Right column: info panel ─────────────────────────────── */}
-            <div className="flex flex-1 flex-col gap-0 overflow-y-auto">
+            <div className="flex flex-col">
 
               {/* Header bar */}
-              <div className="flex items-start justify-between gap-2 border-b border-border/60 px-5 py-4">
+              <div className="flex items-start justify-between gap-2 border-b border-border/60 px-4 py-3">
+                {favoriteSlug && <FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug }} />}
                 <div className="min-w-0">
                   {product.brand && (
                     <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
@@ -463,18 +470,10 @@ export function ProductCard(props: ProductCardProps) {
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setQuickViewOpen(false)}
-                  className="flex-shrink-0 flex h-7 w-7 items-center justify-center rounded-full bg-muted/60 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                  aria-label="Cerrar"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
               </div>
 
               {/* Scrollable content */}
-              <div className="flex flex-1 flex-col gap-4 px-5 py-4">
+              <div className="flex flex-col gap-3 px-4 py-3">
 
                 {/* Status / Category badges */}
                 <div className="flex flex-wrap gap-1.5">
@@ -509,7 +508,7 @@ export function ProductCard(props: ProductCardProps) {
                 <div className="rounded-2xl bg-muted/40 dark:bg-muted/20 px-4 py-3.5 ring-1 ring-border/60">
                   <div className="flex items-end gap-3">
                     <p className={cn(
-                      'text-3xl font-black leading-none tracking-tight',
+                      'text-2xl font-bold leading-none tracking-tight',
                       hasOffer || isWholesaleDiscount
                         ? 'text-rose-600 dark:text-rose-400'
                         : 'text-foreground'
@@ -534,7 +533,7 @@ export function ProductCard(props: ProductCardProps) {
                 {/* Installments */}
                 {installmentsVisible && (product.installments_plans?.length ?? 0) > 0 && (
                   <InstallmentSelector
-                    price={displayPrice}
+                    price={displayPrice * quantity}
                     plans={product.installments_plans ?? []}
                     compact
                   />
@@ -542,15 +541,16 @@ export function ProductCard(props: ProductCardProps) {
 
                 {/* Description */}
                 {product.description?.trim() && (
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    {product.description.trim().replace(/\n{3,}/g, '\n\n')}
-                  </p>
+                  <details className="rounded-md border p-2 text-sm"><summary className="cursor-pointer font-medium">Descripción y características</summary><p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{product.description.trim().replace(/\n{3,}/g, '\n\n')}</p></details>
                 )}
 
               </div>
 
-              {/* ── CTA footer ── */}
-              <div className="flex flex-col gap-2 border-t border-border/60 px-5 py-4">
+            </div>
+          </div>
+              {/* Actions stay outside the scrollable product information. */}
+              <div className="shrink-0 flex flex-col gap-2 border-t border-border/60 bg-background px-4 py-3">
+                {commerceMode === 'cart' && <div className="flex items-center justify-between gap-2 text-sm"><span>Cantidad</span><div className="flex items-center gap-3"><button type="button" aria-label="Reducir cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={quantity <= 1 || !isInStock} onClick={() => setQuantity(q => q - 1)}>−</button><span aria-live="polite">{quantity}</span><button type="button" aria-label="Aumentar cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={!isInStock || quantity >= product.stock_quantity} onClick={() => setQuantity(q => Math.min(product.stock_quantity, q + 1))}>+</button></div></div>}
                 {commerceMode === 'cart' && (
                   <button
                     type="button"
@@ -561,7 +561,7 @@ export function ProductCard(props: ProductCardProps) {
                     {justAdded ? (
                       <><Check className="h-4 w-4" /> ¡Agregado al carrito!</>
                     ) : (
-                      <><ShoppingCart className="h-4 w-4" /> Agregar al carrito</>
+                      <><ShoppingCart className="h-4 w-4" /> Agregar al carrito · {formatPrice(displayPrice * quantity)}</>
                     )}
                   </button>
                 )}
@@ -586,8 +586,6 @@ export function ProductCard(props: ProductCardProps) {
                   Ver detalle completo
                 </Link>
               </div>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
     </>

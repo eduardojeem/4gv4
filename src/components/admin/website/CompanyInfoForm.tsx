@@ -9,6 +9,7 @@ import { SectionCard } from '@/components/admin/website/SectionCard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import {
@@ -281,6 +282,7 @@ export function CompanyInfoForm() {
       showTopBar: formData.showTopBar !== undefined ? formData.showTopBar : true,
       whatsapp: formData.whatsapp || '',
       slogan: formData.slogan || '',
+      description: formData.description || '',
       ruc: formData.ruc || '',
       businessType: formData.businessType || '',
       instagram: formData.instagram || '',
@@ -441,7 +443,27 @@ export function CompanyInfoForm() {
             </div>
             {errors.logoUrl
               ? <p className="text-xs text-destructive">{errors.logoUrl}</p>
-              : <p className="text-xs text-muted-foreground">JPG, PNG, WebP o SVG — máx. 2 MB</p>}
+              : <p className="text-[11px] text-muted-foreground">PNG/WebP/JPG hasta 2MB con fondo transparente.</p>}
+          </div>
+
+          {/* Descripción de la Empresa */}
+          <div className="space-y-2 md:col-span-3">
+            <Label htmlFor="companyDescription" className="text-sm font-medium flex items-center gap-1.5">
+              <span>Descripción de la empresa</span>
+              <span className="text-xs font-normal text-muted-foreground">— Se muestra en el detalle de tu tienda y en el Marketplace</span>
+            </Label>
+            <Textarea
+              id="companyDescription"
+              value={formData.description || ''}
+              onChange={(e) => handleChange('description', e.target.value)}
+              placeholder="Contanos sobre tu negocio, los productos o servicios que ofrecés, tu trayectoria y por qué los clientes deberían elegirte..."
+              rows={3}
+              maxLength={1000}
+              className="resize-y"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Esta descripción se mostrará en el directorio de empresas y en el modal de detalles para que los clientes conozcan tu propuesta.
+            </p>
           </div>
         </div>
       </SectionCard>

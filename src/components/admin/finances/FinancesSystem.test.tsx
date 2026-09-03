@@ -60,6 +60,29 @@ vi.mock('@/contexts/branch-context', () => ({
 import { FinancesSystem } from './FinancesSystem'
 
 describe('FinancesSystem', () => {
+  it('provides collapsed section-specific help and examples in every tab', async () => {
+    mockUseAdminFinances.mockReturnValue({ summary, filters: summary.filters, isLoading: false, refresh: vi.fn() })
+    render(<FinancesSystem />)
+    const user = userEvent.setup()
+    for (const name of ['Resumen', 'Gastos', 'Nómina', 'Rentabilidad', 'Configuración']) {
+      await user.click(screen.getByRole('tab', { name, exact: true }))
+      const trigger = screen.getByText(`Cómo funciona esta sección: ${name}`)
+      expect(trigger.closest('details')).not.toHaveAttribute('open')
+      await user.click(trigger)
+      expect(trigger.closest('details')).toHaveAttribute('open')
+      expect(trigger.closest('details')).toHaveTextContent('Ejemplo en guaraníes')
+      expect(trigger.closest('details')).toHaveTextContent('Gs.')
+    }
+  })
+
+  it('offers concrete finance examples on demand', async () => {
+    mockUseAdminFinances.mockReturnValue({ summary, filters: summary.filters, isLoading: false, refresh: vi.fn() })
+    render(<FinancesSystem />)
+    await userEvent.setup().click(screen.getByRole('button', { name: /Cómo funciona/ }))
+    expect(screen.getByRole('dialog', { name: /Cómo funciona Finanzas/ })).toBeInTheDocument()
+    expect(screen.getByText(/Registrar un gasto no significa pagarlo/)).toBeInTheDocument()
+  })
+
   it('renders the executive summary, finance tabs, and coverage alert', () => {
     mockUseAdminFinances.mockReturnValue({
       summary,

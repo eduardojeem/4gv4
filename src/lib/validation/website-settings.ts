@@ -18,6 +18,10 @@ export const CompanyInfoSchema = z.object({
     .max(100, 'Eslogan no puede exceder 100 caracteres')
     .optional()
     .or(z.literal('')),
+  description: z.string()
+    .max(1000, 'La descripción no puede exceder 1000 caracteres')
+    .optional()
+    .or(z.literal('')),
   phone: z.string()
     .max(20, 'Teléfono no puede exceder 20 caracteres')
     .optional()

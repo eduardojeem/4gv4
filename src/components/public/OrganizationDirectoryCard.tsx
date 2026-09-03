@@ -5,6 +5,9 @@ import {
   ExternalLink,
   Heart,
   Home,
+  Info,
+  MapPin,
+  Navigation,
   Package,
   Shirt,
   ShoppingBasket,
@@ -18,11 +21,13 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
+import { normalizeCity } from '@/lib/public/city-normalizer'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
 
 type Props = {
   organization: MarketplaceOrganization
   className?: string
+  onOpenDetails?: (organization: MarketplaceOrganization) => void
 }
 
 export const RUBRO_LABELS: Record<string, { label: string; icon: React.ElementType; color: string }> = {
@@ -37,12 +42,13 @@ export const RUBRO_LABELS: Record<string, { label: string; icon: React.ElementTy
   comercio: { label: 'Comercio General', icon: Store, color: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700' },
 }
 
-export function OrganizationDirectoryCard({ organization, className }: Props) {
+export function OrganizationDirectoryCard({ organization, className, onOpenDetails }: Props) {
   const storeUrl = `/${organization.slug}/inicio`
   const previewProducts = organization.featured_products.slice(0, 3)
   const rubroKey = organization.rubro || 'comercio'
   const rubroMeta = RUBRO_LABELS[rubroKey] ?? RUBRO_LABELS.comercio
   const RubroIcon = rubroMeta.icon
+  const normalizedCity = normalizeCity(organization.city)
 
   return (
     <Link
@@ -82,7 +88,7 @@ export function OrganizationDirectoryCard({ organization, className }: Props) {
           </div>
         )}
 
-        {/* Logo superpuesto */}
+        {/* Logo superpuesto con Identidad de Marca */}
         <div className="absolute -bottom-5 left-3.5 z-10 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-background bg-card p-1 shadow-md">
           {organization.logo_url ? (
             <img
@@ -92,7 +98,24 @@ export function OrganizationDirectoryCard({ organization, className }: Props) {
               loading="lazy"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80 font-bold text-xs text-primary-foreground">
+            <div
+              className={cn(
+                'flex h-full w-full items-center justify-center rounded-lg font-bold text-xs text-white shadow-2xs bg-gradient-to-br',
+                organization.brand_color === 'green' && 'from-emerald-600 to-teal-700',
+                organization.brand_color === 'purple' && 'from-purple-600 to-pink-700',
+                organization.brand_color === 'orange' && 'from-orange-600 to-amber-700',
+                organization.brand_color === 'red' && 'from-rose-600 to-red-800',
+                organization.brand_color === 'indigo' && 'from-indigo-600 to-blue-800',
+                organization.brand_color === 'teal' && 'from-teal-600 to-emerald-700',
+                organization.brand_color === 'rose' && 'from-rose-600 to-pink-700',
+                (organization.brand_color === 'amber' || organization.brand_color === 'yellow') && 'from-amber-500 to-yellow-600',
+                organization.brand_color === 'emerald' && 'from-emerald-600 to-teal-700',
+                organization.brand_color === 'cyan' && 'from-cyan-600 to-sky-700',
+                organization.brand_color === 'sky' && 'from-sky-500 to-blue-700',
+                (!organization.brand_color || organization.brand_color === 'blue') && 'from-blue-600 to-blue-800'
+              )}
+              style={organization.custom_brand_color ? { backgroundColor: organization.custom_brand_color } : undefined}
+            >
               {organization.name.slice(0, 2).toUpperCase()}
             </div>
           )}
@@ -119,6 +142,48 @@ export function OrganizationDirectoryCard({ organization, className }: Props) {
           </span>
         </div>
 
+        {/* Ubicación, Dirección y Botón de Mapa */}
+        {(normalizedCity || organization.address) && (
+          <div className="mt-1.5 flex items-center justify-between gap-1.5 rounded-lg bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground border border-border/50">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <MapPin className="h-3 w-3 text-primary shrink-0" />
+              <div className="min-w-0 truncate text-[11px] leading-tight">
+                {normalizedCity && (
+                  <span className="font-semibold text-foreground mr-1">{normalizedCity.display}</span>
+                )}
+                {organization.address && (
+                  <span className="text-muted-foreground truncate">{organization.address}</span>
+                )}
+              </div>
+            </div>
+
+            {organization.maps_url && (
+              <span
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  window.open(organization.maps_url!, '_blank', 'noopener,noreferrer')
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    window.open(organization.maps_url!, '_blank', 'noopener,noreferrer')
+                  }
+                }}
+                title="Ver ubicación en Google Maps"
+                className="shrink-0 inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground cursor-pointer shadow-2xs"
+              >
+                <Navigation className="h-2.5 w-2.5" />
+                <span>Mapa</span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Estadísticas de la tienda */}
         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
           <p className="flex items-center gap-1 font-medium">
             <Package className="h-3.5 w-3.5 opacity-70" />
@@ -126,7 +191,7 @@ export function OrganizationDirectoryCard({ organization, className }: Props) {
           </p>
 
           {(organization.review_count ?? 0) > 0 && (
-            <p className="flex items-center gap-1 text-xs font-semibold text-foreground">
+            <p className="flex items-center gap-1 text-xs font-semibold text-foreground shrink-0">
               <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
               {Number(organization.review_rating_avg ?? 0).toFixed(1)}
               <span className="text-[10px] text-muted-foreground font-normal">({organization.review_count})</span>
@@ -136,9 +201,28 @@ export function OrganizationDirectoryCard({ organization, className }: Props) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between border-t border-border/60 px-4 py-2.5 bg-muted/10 text-xs font-semibold text-primary">
-        <span>Visitar tienda</span>
-        <ExternalLink className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+      <div className="flex items-center justify-between border-t border-border/60 px-3.5 py-2 bg-muted/10 text-xs font-semibold">
+        {onOpenDetails ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onOpenDetails(organization)
+            }}
+            className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors py-1 px-1.5 rounded-md hover:bg-muted cursor-pointer text-xs"
+          >
+            <Info className="h-3.5 w-3.5 text-primary" />
+            <span>Ver detalles</span>
+          </button>
+        ) : (
+          <span />
+        )}
+
+        <div className="flex items-center gap-1 text-primary group-hover:underline">
+          <span>Visitar tienda</span>
+          <ExternalLink className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+        </div>
       </div>
     </Link>
   )

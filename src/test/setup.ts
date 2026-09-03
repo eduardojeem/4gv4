@@ -100,27 +100,28 @@ beforeAll(() => {
   })
 
   // Mock de PerformanceObserver
-  const MockPerformanceObserver = vi.fn().mockImplementation((callback) => {
-    const mockObserver = {
-      observe: vi.fn(),
-      disconnect: vi.fn(),
-      takeRecords: vi.fn(() => []),
-      // Simular callback para tests
-      _callback: callback,
-      _triggerCallback: (entries: PerformanceEntry[]) => {
-        if (callback) {
-          callback({ 
-            getEntries: () => entries,
-            getEntriesByName: (name: string) => entries.filter(e => e.name === name),
-            getEntriesByType: (type: string) => entries.filter(e => e.entryType === type)
-          }, mockObserver)
-        }
+  class PerformanceObserverMock {
+    static supportedEntryTypes: string[] = []
+    observe = vi.fn()
+    disconnect = vi.fn()
+    takeRecords = vi.fn(() => [])
+    _callback: PerformanceObserverCallback
+
+    constructor(callback: PerformanceObserverCallback) {
+      this._callback = callback
+    }
+
+    _triggerCallback(entries: PerformanceEntry[]) {
+      if (this._callback) {
+        this._callback({
+          getEntries: () => entries,
+          getEntriesByName: (name: string) => entries.filter(e => e.name === name),
+          getEntriesByType: (type: string) => entries.filter(e => e.entryType === type)
+        } as PerformanceObserverEntryList, this as unknown as PerformanceObserver)
       }
     }
-    return mockObserver
-  })
-  Object.assign(MockPerformanceObserver, { supportedEntryTypes: [] as string[] })
-  global.PerformanceObserver = MockPerformanceObserver as unknown as typeof PerformanceObserver
+  }
+  global.PerformanceObserver = PerformanceObserverMock as unknown as typeof PerformanceObserver
 
   // Mock de PerformanceEntry para Web Vitals
   global.PerformanceEntry = vi.fn().mockImplementation(() => ({

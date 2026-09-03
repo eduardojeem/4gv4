@@ -9,6 +9,7 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import type { PublicProduct } from '@/types/public'
 import { MarketplaceProductModal } from './MarketplaceProductModal'
+import { FavoriteButton } from './Favorites'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
 
 type Org = {
@@ -79,6 +80,7 @@ export function MarketplaceOrgProductGrid({ organizations }: Props) {
                     className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card text-left transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md shadow-2xs p-3"
                   >
                     {/* Imagen (clic abre el detalle) */}
+                    <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: org.slug, name: product.name, store: org.name }} /></div>
                     <div
                       onClick={() => setSelected(asMarketplace)}
                       role="button"

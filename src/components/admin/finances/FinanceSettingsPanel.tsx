@@ -271,11 +271,13 @@ function EditSalaryDialog({
 export function FinanceSettingsPanel({
   organizationId,
   branchId,
+  refreshVersion = 0,
 }: {
   organizationId: string
   branchId: string | null | undefined
+  refreshVersion?: number
 }) {
-  const [activeSubTab, setActiveSubTab] = useState<'rules' | 'personnel'>('rules')
+  const [activeSubTab, setActiveSubTab] = useState<'rules' | 'personnel'>('personnel')
   const [employees, setEmployees] = useState<Employee[]>([])
   const [rules, setRules] = useState<Rule[]>([])
   const [compensations, setCompensations] = useState<Compensation[]>([])
@@ -314,38 +316,42 @@ export function FinanceSettingsPanel({
   const load = useCallback(async () => {
     const requestId = ++loadSeqRef.current
     setIsLoading(true)
-    const params = new URLSearchParams({ organizationId })
-    if (branchId) params.set('branchId', branchId)
-    const [employeeResponse, ruleResponse] = await Promise.all([
-      fetch(`/api/admin/finances/employees?organizationId=${organizationId}`),
-      fetch(`/api/admin/finances/commission-rules?${params.toString()}`),
-    ])
-    const ep = (await employeeResponse.json().catch(() => null)) as { employees?: Employee[]; error?: string } | null
-    const rp = (await ruleResponse.json().catch(() => null)) as { rules?: Rule[]; error?: string } | null
+    try {
+      const params = new URLSearchParams({ organizationId })
+      if (branchId) params.set('branchId', branchId)
+      const [employeeResponse, ruleResponse] = await Promise.all([
+        fetch(`/api/admin/finances/employees?organizationId=${organizationId}`),
+        fetch(`/api/admin/finances/commission-rules?${params.toString()}`),
+      ])
+      const ep = (await employeeResponse.json().catch(() => null)) as { employees?: Employee[]; error?: string } | null
+      const rp = (await ruleResponse.json().catch(() => null)) as { rules?: Rule[]; error?: string } | null
 
-    // Ignora respuestas de una sucursal/organización que ya no es la seleccionada.
-    if (requestId !== loadSeqRef.current) return
+      // Ignora respuestas de una sucursal/organización que ya no es la seleccionada.
+      if (requestId !== loadSeqRef.current) return
 
-    if (!employeeResponse.ok || !ruleResponse.ok) {
-      setError(ep?.error ?? rp?.error ?? 'No se pudo cargar la configuración.')
-      setIsLoading(false)
-      return
+      if (!employeeResponse.ok || !ruleResponse.ok) {
+        setError(ep?.error ?? rp?.error ?? 'No se pudo cargar la configuración.')
+        return
+      }
+      setError(null)
+      setEmployees(ep?.employees ?? [])
+      setRules(rp?.rules ?? [])
+    } catch {
+      if (requestId === loadSeqRef.current) setError('No se pudo cargar la configuración. Intentá actualizar nuevamente.')
+    } finally {
+      if (requestId === loadSeqRef.current) setIsLoading(false)
     }
-    setError(null)
-    setEmployees(ep?.employees ?? [])
-    setRules(rp?.rules ?? [])
-    setIsLoading(false)
   }, [branchId, organizationId])
 
   useEffect(() => {
     void load()
-  }, [load])
+  }, [load, refreshVersion])
 
   useEffect(() => {
     if (activeSubTab === 'personnel') {
       void loadCompensations()
     }
-  }, [activeSubTab, loadCompensations])
+  }, [activeSubTab, loadCompensations, refreshVersion])
 
   function resetForm() {
     setScopeType('employee')
@@ -374,63 +380,73 @@ export function FinanceSettingsPanel({
 
     setIsSaving(true)
     setError(null)
-    const response = await fetch(`/api/admin/finances/commission-rules?organizationId=${organizationId}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        branchId: branchId ?? undefined,
-        scopeType,
-        employeeId: scopeType === 'employee' ? employeeId : undefined,
-        role: scopeType === 'role' ? role : undefined,
-        sourceType,
-        accrualStatus: sourceType === 'repair' || sourceType === 'repair_labor' ? accrualStatus : undefined,
-        calculationType,
-        value: Number(value),
-        status,
-        effectiveFrom,
-        effectiveTo: effectiveTo || undefined,
-      }),
-    })
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null
-    setIsSaving(false)
-    if (!response.ok) {
-      setError(payload?.error ?? 'No se pudo guardar la regla.')
-      return
+    try {
+      const response = await fetch(`/api/admin/finances/commission-rules?organizationId=${organizationId}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          branchId: branchId ?? undefined,
+          scopeType,
+          employeeId: scopeType === 'employee' ? employeeId : undefined,
+          role: scopeType === 'role' ? role : undefined,
+          sourceType,
+          accrualStatus: sourceType === 'repair' || sourceType === 'repair_labor' ? accrualStatus : undefined,
+          calculationType,
+          value: Number(value),
+          status,
+          effectiveFrom,
+          effectiveTo: effectiveTo || undefined,
+        }),
+      })
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) {
+        setError(payload?.error ?? 'No se pudo guardar la regla.')
+        return
+      }
+      resetForm()
+      await load()
+    } catch {
+      setError('No se pudo confirmar el guardado. Verificá el estado de las reglas antes de volver a intentar.')
+    } finally {
+      setIsSaving(false)
     }
-    resetForm()
-    await load()
   }
 
   async function approveRule(rule: Rule) {
     if (approvingId) return
     setApprovingId(rule.id)
     setError(null)
-    const response = await fetch(`/api/admin/finances/commission-rules?organizationId=${organizationId}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        id: rule.id,
-        branchId: rule.branch_id ?? undefined,
-        scopeType: rule.scope_type,
-        employeeId: rule.scope_type === 'employee' ? rule.employee_id ?? undefined : undefined,
-        role: rule.scope_type === 'role' ? rule.role ?? undefined : undefined,
-        sourceType: rule.source_type,
-        sourceReferenceId: rule.source_reference_id ?? undefined,
-        accrualStatus: rule.accrual_status ?? undefined,
-        calculationType: rule.calculation_type,
-        value: Number(rule.value),
-        status: 'approved',
-        effectiveFrom: rule.effective_from,
-        effectiveTo: rule.effective_to ?? undefined,
-      }),
-    })
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null
-    setApprovingId(null)
-    if (!response.ok) {
-      setError(payload?.error ?? 'No se pudo aprobar la regla.')
-      return
+    try {
+      const response = await fetch(`/api/admin/finances/commission-rules?organizationId=${organizationId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: rule.id,
+          branchId: rule.branch_id ?? undefined,
+          scopeType: rule.scope_type,
+          employeeId: rule.scope_type === 'employee' ? rule.employee_id ?? undefined : undefined,
+          role: rule.scope_type === 'role' ? rule.role ?? undefined : undefined,
+          sourceType: rule.source_type,
+          sourceReferenceId: rule.source_reference_id ?? undefined,
+          accrualStatus: rule.accrual_status ?? undefined,
+          calculationType: rule.calculation_type,
+          value: Number(rule.value),
+          status: 'approved',
+          effectiveFrom: rule.effective_from,
+          effectiveTo: rule.effective_to ?? undefined,
+        }),
+      })
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) {
+        setError(payload?.error ?? 'No se pudo aprobar la regla.')
+        return
+      }
+      await load()
+    } catch {
+      setError('No se pudo confirmar la aprobación. Verificá el estado de la regla antes de volver a intentar.')
+    } finally {
+      setApprovingId(null)
     }
-    await load()
   }
 
   /**
@@ -444,32 +460,37 @@ export function FinanceSettingsPanel({
     if (approvingId) return
     setApprovingId(rule.id)
     setError(null)
-    const response = await fetch(`/api/admin/finances/commission-rules?organizationId=${organizationId}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        id: rule.id,
-        branchId: rule.branch_id ?? undefined,
-        scopeType: rule.scope_type,
-        employeeId: rule.scope_type === 'employee' ? rule.employee_id ?? undefined : undefined,
-        role: rule.scope_type === 'role' ? rule.role ?? undefined : undefined,
-        sourceType: rule.source_type,
-        sourceReferenceId: rule.source_reference_id ?? undefined,
-        accrualStatus: rule.accrual_status ?? undefined,
-        calculationType: rule.calculation_type,
-        value: Number(rule.value),
-        status: 'retired',
-        effectiveFrom: rule.effective_from,
-        effectiveTo: rule.effective_to ?? undefined,
-      }),
-    })
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null
-    setApprovingId(null)
-    if (!response.ok) {
-      setError(payload?.error ?? 'No se pudo retirar la regla.')
-      return
+    try {
+      const response = await fetch(`/api/admin/finances/commission-rules?organizationId=${organizationId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: rule.id,
+          branchId: rule.branch_id ?? undefined,
+          scopeType: rule.scope_type,
+          employeeId: rule.scope_type === 'employee' ? rule.employee_id ?? undefined : undefined,
+          role: rule.scope_type === 'role' ? rule.role ?? undefined : undefined,
+          sourceType: rule.source_type,
+          sourceReferenceId: rule.source_reference_id ?? undefined,
+          accrualStatus: rule.accrual_status ?? undefined,
+          calculationType: rule.calculation_type,
+          value: Number(rule.value),
+          status: 'retired',
+          effectiveFrom: rule.effective_from,
+          effectiveTo: rule.effective_to ?? undefined,
+        }),
+      })
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) {
+        setError(payload?.error ?? 'No se pudo retirar la regla.')
+        return
+      }
+      await load()
+    } catch {
+      setError('No se pudo confirmar el retiro. Verificá el estado de la regla antes de volver a intentar.')
+    } finally {
+      setApprovingId(null)
     }
-    await load()
   }
 
   const needsAccrualStatus = sourceType === 'repair' || sourceType === 'repair_labor'
@@ -583,6 +604,9 @@ export function FinanceSettingsPanel({
       </div>
 
       {/* ======================================================== */}
+      {error && activeSubTab === 'personnel' ? (
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</div>
+      ) : null}
       {/* SECCIÓN 1: REGLAS DE COMISIÓN                            */}
       {/* ======================================================== */}
       {activeSubTab === 'rules' && (

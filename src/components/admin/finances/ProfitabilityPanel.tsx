@@ -405,9 +405,11 @@ function ProfitabilityDetailModal({
 export function ProfitabilityPanel({
   organizationId,
   filters,
+  refreshVersion = 0,
 }: {
   organizationId: string
   filters: AdminFinanceFilters
+  refreshVersion?: number
 }) {
   const [group, setGroup] = useState<Group>('sale')
   const [rows, setRows] = useState<Row[]>([])
@@ -523,6 +525,7 @@ export function ProfitabilityPanel({
     let active = true
     setIsLoading(true)
     void (async () => {
+      try {
       const response = await fetch(`/api/admin/finances/profitability?${params.toString()}`)
       const payload = (await response.json().catch(() => null)) as { rows?: Row[]; error?: string } | null
       if (!active) return
@@ -533,12 +536,16 @@ export function ProfitabilityPanel({
       }
       setError(null)
       setRows(payload?.rows ?? [])
-      setIsLoading(false)
+      } catch {
+        if (active) setError('No se pudo conectar para cargar la rentabilidad. Reintentá con Actualizar.')
+      } finally {
+        if (active) setIsLoading(false)
+      }
     })()
     return () => {
       active = false
     }
-  }, [params])
+  }, [params, refreshVersion])
 
   const showSkeleton = isLoading && rows.length === 0 && !error
 

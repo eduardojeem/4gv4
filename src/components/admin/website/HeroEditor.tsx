@@ -511,13 +511,12 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                     {/* Header: Logo + Nombre de la Tienda */}
                     <div className="flex items-center gap-3 pb-3 border-b border-border/60">
                       {settings?.company_info?.logoUrl ? (
-                        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl border border-border bg-background p-1">
-                          <Image
+                        <div className="relative h-11 max-w-[140px] shrink-0 overflow-hidden flex items-center justify-start">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
                             src={settings.company_info.logoUrl}
                             alt="Logo"
-                            fill
-                            unoptimized
-                            className="object-contain"
+                            className="h-11 w-auto max-h-11 max-w-full object-contain"
                           />
                         </div>
                       ) : (

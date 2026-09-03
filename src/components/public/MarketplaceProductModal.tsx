@@ -1,10 +1,10 @@
 'use client'
 
 import Image from 'next/image'
+import { FavoriteButton } from './Favorites'
 import Link from 'next/link'
 import {
   ArrowRight,
-  Building2,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -15,7 +15,7 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
@@ -52,6 +52,7 @@ function Thumb({
           : 'border-slate-200/50 dark:border-slate-800/40 opacity-60 hover:border-slate-300 dark:hover:border-slate-700 hover:opacity-100',
       ].join(' ')}
       aria-label={alt}
+      aria-pressed={active}
     >
       <Image
         src={err ? '/placeholder-product.svg' : src}
@@ -95,9 +96,9 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
     setMainError(false)
   }, [product?.id])
 
-  const prev = useCallback(() => setActiveIdx((i) => Math.max(0, i - 1)), [])
+  const prev = useCallback(() => { setMainError(false); setActiveIdx((i) => Math.max(0, i - 1)) }, [])
   const next = useCallback(
-    () => setActiveIdx((i) => Math.min(allImages.length - 1, i + 1)),
+    () => { setMainError(false); setActiveIdx((i) => Math.min(allImages.length - 1, i + 1)) },
     [allImages.length]
   )
 
@@ -143,16 +144,18 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
           3. Footer   →  shrink-0  (siempre visible)
       */}
       <DialogContent
-        className="flex max-h-[92dvh] w-[calc(100%-1.5rem)] max-w-md flex-col gap-0 overflow-hidden rounded-3xl border border-slate-200/50 bg-white/95 backdrop-blur-xl dark:border-slate-800/40 dark:bg-slate-950/95 shadow-2xl focus:outline-none"
+        className="flex max-h-[90dvh] w-[calc(100%-1rem)] sm:max-w-lg flex-col gap-0 overflow-hidden rounded-xl border bg-background p-0 shadow-xl focus:outline-none"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">{product.name}</DialogTitle>
+        <DialogDescription className="sr-only">Vista previa del producto. Continuá en la tienda del vendedor para comprar.</DialogDescription>
 
         {/* ── 1. GALERÍA (shrink-0) ────────────────────────────────────────── */}
-        <div className="shrink-0 border-b border-slate-200/30 dark:border-slate-800/30">
+        <div className="min-h-0 overflow-y-auto overscroll-contain">
+        <div className="border-b border-slate-200/30 dark:border-slate-800/30">
 
           {/* Imagen principal */}
-          <div className="relative h-56 overflow-hidden bg-gradient-to-br from-slate-100/50 to-slate-50/50 dark:from-slate-900/40 dark:to-slate-850/30 sm:h-64">
+          <div className="relative h-40 overflow-hidden bg-muted/30 sm:h-48">
             {currentSrc && !mainError ? (
               <Image
                 key={currentSrc}
@@ -233,7 +236,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
 
             {/* Sin stock overlay */}
             {!isInStock && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/40 backdrop-blur-[2px] dark:bg-slate-950/40">
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/40 backdrop-blur-[2px] dark:bg-slate-950/40">
                 <span className="rounded-full bg-slate-900/90 px-4 py-1.5 text-xs font-extrabold text-white shadow-lg">
                   Agotado
                 </span>
@@ -243,7 +246,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
 
           {/* Strip de thumbnails — solo si hay 2+ imágenes */}
           {hasMultiple && (
-            <div className="flex gap-2 overflow-x-auto bg-slate-50/50 px-4 py-3 border-t border-slate-200/10 scrollbar-hide dark:bg-slate-900/30">
+            <div className="flex gap-2 overflow-x-auto bg-slate-50/50 px-3 py-2 border-t border-slate-200/10 dark:bg-slate-900/30">
               {allImages.map((src, i) => (
                 <Thumb
                   key={src}
@@ -258,8 +261,8 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
         </div>
 
         {/* ── 2. Contenido scrolleable ─────────────────────────────────────── */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="flex flex-col gap-4 p-5">
+        <div>
+          <div className="flex flex-col gap-3 p-4">
 
             {/* Pill de la tienda */}
             <Link
@@ -278,7 +281,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
                   {[product.brand, product.category?.name].filter(Boolean).join(' · ')}
                 </span>
               )}
-              <h2 className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-snug">
+              <h2 className="text-base font-bold text-foreground leading-snug">
                 {product.name}
               </h2>
             </div>
@@ -286,7 +289,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
             {/* Precio */}
             <div className="flex items-baseline gap-3 py-0.5">
               <p
-                className={`text-3xl font-black tracking-tight ${
+                className={`text-2xl font-bold tracking-tight ${
                   hasOffer
                     ? 'text-rose-600 dark:text-rose-450'
                     : 'text-slate-900 dark:text-slate-100'
@@ -303,6 +306,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
 
             {/* Indicadores de stock */}
             <div className="flex flex-wrap items-center gap-2">
+              <FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name }} />
               {isInStock ? (
                 <span className="flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-250/20 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
                   <Check className="h-3.5 w-3.5" />
@@ -323,20 +327,22 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
 
             {/* Descripción completa */}
             {product.description?.trim() && (
-              <div className="rounded-2xl border border-slate-200/50 bg-slate-50/50 p-4 dark:border-slate-800/40 dark:bg-slate-900/30">
+              <details className="rounded-md border bg-muted/30 p-2.5">
+                <summary className="cursor-pointer text-sm font-medium">Descripción y características</summary>
                 <p className="whitespace-pre-line text-sm leading-relaxed text-slate-650 dark:text-slate-400">
                   {product.description.trim().replace(/\n{3,}/g, '\n\n')}
                 </p>
-              </div>
+              </details>
             )}
 
             <div className="h-1" />
           </div>
         </div>
 
-        {/* ── 3. Footer fijo con CTAs ──────────────────────────────────────── */}
-        <div className="shrink-0 border-t border-slate-200/30 bg-white/95 px-5 py-4 backdrop-blur-md dark:border-slate-800/30 dark:bg-slate-950/95">
-          <div className="flex flex-col gap-2.5">
+        </div>
+        {/* Actions remain scoped to this seller's storefront. */}
+        <div className="shrink-0 border-t bg-background px-4 py-3">
+          <div className="flex flex-col gap-2">
             <Link
               href={productHref}
               onClick={onClose}

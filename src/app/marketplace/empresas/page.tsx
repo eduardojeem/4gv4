@@ -14,11 +14,11 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 type PageProps = {
-  searchParams: Promise<{ q?: string; rubro?: string }>
+  searchParams: Promise<{ q?: string; rubro?: string; ciudad?: string; city?: string }>
 }
 
 export default async function MarketplaceOrganizationsPage({ searchParams }: PageProps) {
-  const { q, rubro } = await searchParams
+  const { q, rubro, ciudad, city } = await searchParams
   const organizations = await getMarketplaceOrganizations(120)
 
   return (
@@ -51,7 +51,7 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
                   Directorio de Empresas
                 </h1>
                 <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-                  {organizations.length} tienda{organizations.length !== 1 ? 's' : ''} verificadas con catálogo público · Filtrá por rubro comercial y descubrí sus productos
+                  {organizations.length} tienda{organizations.length !== 1 ? 's' : ''} verificadas con catálogo público · Filtrá por ciudad y rubro comercial
                 </p>
               </div>
             </div>
@@ -63,13 +63,14 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
         </div>
       </section>
 
-      {/* ── Directorio con Filtro por Rubros ── */}
+      {/* ── Directorio con Filtro por Rubros y Ciudades ── */}
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-10">
         <TopRatedCarousel organizations={organizations} />
         <EmpresasClient
           organizations={organizations}
           initialQuery={q ?? ''}
           initialRubro={rubro ?? 'all'}
+          initialCity={ciudad ?? city ?? 'all'}
         />
       </section>
     </div>

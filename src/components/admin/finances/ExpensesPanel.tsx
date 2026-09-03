@@ -2,7 +2,8 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ExpenseAction } from './FinancesSystem'
 import { format, isValid, parseISO } from 'date-fns'
 import { Coins, Hash, Loader2, ReceiptText, RefreshCw, Search, Wallet, X } from 'lucide-react'
 
@@ -67,11 +68,17 @@ export function ExpensesPanel({
   branchId,
   filters,
   onChanged,
+  refreshVersion = 0,
+  action,
+  onActionHandled,
 }: {
   organizationId: string
   branchId: string | null | undefined
   filters: AdminFinanceFilters
   onChanged: () => unknown | Promise<unknown>
+  refreshVersion?: number
+  action?: { mode: ExpenseAction; nonce: number }
+  onActionHandled?: () => void
 }) {
   const [categories, setCategories] = useState<FinanceCategory[]>([])
   const categoriesLoadedRef = useRef(false)
@@ -81,6 +88,8 @@ export function ExpensesPanel({
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
+  const [search, setSearch] = useState('')
+  const [dueView, setDueView] = useState<'overdue' | 'upcoming' | undefined>(action?.mode === 'overdue' || action?.mode === 'upcoming' ? action.mode : undefined)
   const [error, setError] = useState<string | null>(null)
   const [expenseOpen, setExpenseOpen] = useState(false)
   const [editing, setEditing] = useState<EditableObligation | null>(null)
@@ -93,17 +102,32 @@ export function ExpensesPanel({
   const [isLoading, setIsLoading] = useState(false)
   const loadSeqRef = useRef(0)
 
+  useEffect(() => {
+    const timer = setTimeout(() => { setSearch(searchQuery.trim()); setPage(1) }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+  useEffect(() => {
+    if (!action) return
+    setDueView(action.mode === 'overdue' || action.mode === 'upcoming' ? action.mode : undefined)
+    setStatusFilter('all')
+    setPage(1)
+    setSearchQuery('')
+    setCategoryFilter('all')
+    if (action.mode === 'new' && branchId) { setExpenseOpen(true); onActionHandled?.() }
+  }, [action, branchId, onActionHandled])
+
   const load = useCallback(
     async (currentPage = page, currentStatus = statusFilter, currentCategory = categoryFilter) => {
       const requestId = ++loadSeqRef.current
       setIsLoading(true)
       const params = new URLSearchParams({
         organizationId,
-        startDate: filters.startDate,
-        endDate: filters.endDate,
         pageSize: String(PAGE_SIZE),
         page: String(currentPage),
       })
+      if (dueView) params.set('dueView', dueView)
+      else { params.set('startDate', filters.startDate); params.set('endDate', filters.endDate) }
+      if (search) params.set('search', search)
       if (branchId) params.set('branchId', branchId)
       if (currentStatus !== 'all') params.set('status', currentStatus)
       if (currentCategory !== 'all') params.set('categoryId', currentCategory)
@@ -154,16 +178,18 @@ export function ExpensesPanel({
             obligationsPayload?.total ??
             (obligationsPayload?.obligations?.length ?? 0),
         )
+      } catch {
+        if (requestId === loadSeqRef.current) setError('No se pudo conectar para cargar los gastos. Reintentá con Actualizar.')
       } finally {
         if (requestId === loadSeqRef.current) setIsLoading(false)
       }
     },
-    [organizationId, branchId, filters.startDate, filters.endDate, statusFilter, categoryFilter],
+    [organizationId, branchId, filters.startDate, filters.endDate, statusFilter, categoryFilter, dueView, search, page],
   )
 
   useEffect(() => {
     void load(page)
-  }, [load, page])
+  }, [load, page, refreshVersion])
 
   // Reset to page 1 when global filters or local criteria change.
   useEffect(() => {
@@ -195,6 +221,7 @@ export function ExpensesPanel({
     if (voiding.requires_cash_session_on_void && !voidCashSessionId) return
 
     setIsVoiding(true)
+    try {
     const response = await fetch(
       `/api/admin/finances/obligations/${voiding.id}?organizationId=${organizationId}`,
       {
@@ -218,18 +245,14 @@ export function ExpensesPanel({
     setVoidReason('')
     setVoidCashSessionId('')
     await changed()
+    } catch {
+      setError('No se pudo confirmar la anulación. Actualizá el estado antes de reintentar.')
+    } finally {
+      setIsVoiding(false)
+    }
   }
 
-  const filteredObligations = useMemo(() => {
-    if (!searchQuery.trim()) return obligations
-    const q = searchQuery.toLowerCase().trim()
-    return obligations.filter(
-      (item) =>
-        (item.concept && item.concept.toLowerCase().includes(q)) ||
-        (item.vendor && item.vendor.toLowerCase().includes(q)) ||
-        (item.finance_categories?.name && item.finance_categories.name.toLowerCase().includes(q)),
-    )
-  }, [obligations, searchQuery])
+  const filteredObligations = obligations
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
   const hasMore = totalCount > PAGE_SIZE
@@ -246,6 +269,11 @@ export function ExpensesPanel({
 
   return (
     <div className="space-y-5">
+      {dueView ? <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300/50 bg-amber-50/50 p-3 text-sm dark:bg-amber-950/20">
+        <span>{dueView === 'overdue' ? 'Vencidos' : 'Próximos vencimientos'}: saldos actuales de todos los períodos.</span>
+        <Button variant="outline" size="sm" onClick={() => setDueView(undefined)}>Volver al período seleccionado</Button>
+      </div> : null}
+      {!branchId ? <p className="rounded-lg border bg-muted/30 p-3 text-sm">Vista consolidada. Seleccioná una sucursal en el filtro superior para registrar o pagar gastos.</p> : null}
       <section className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -261,7 +289,7 @@ export function ExpensesPanel({
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Registra obligaciones, recurrencias y pagos parciales sin alterar los totales locales.
+              Registrar un gasto no significa pagarlo. Consultá el saldo y registrá cada abono.
             </p>
           </div>
         </div>
@@ -320,6 +348,7 @@ export function ExpensesPanel({
               placeholder="Buscar por concepto o proveedor…"
               aria-label="Buscar por concepto o proveedor"
               value={searchQuery}
+              maxLength={120}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 pr-8"
             />
@@ -335,7 +364,7 @@ export function ExpensesPanel({
             ) : null}
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={(value) => { setDueView(undefined); setStatusFilter(value) }}>
             <SelectTrigger aria-label="Filtrar por estado" className="h-9 w-auto min-w-[160px] text-xs font-medium">
               <SelectValue />
             </SelectTrigger>
@@ -460,7 +489,7 @@ export function ExpensesPanel({
                 ['draft', 'pending', 'overdue'].includes(item.status) &&
                 Number(item.paid_amount ?? 0) === 0
 
-              return (
+  return (
                 <tr
                   key={item.id}
                   className="border-b border-border/60 last:border-0 transition-colors hover:bg-muted/40"

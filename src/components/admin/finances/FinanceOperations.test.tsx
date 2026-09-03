@@ -149,11 +149,13 @@ describe('finance operational dialogs', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({ employees: [] }))
       .mockResolvedValueOnce(json({ rules: [] }))
+      .mockResolvedValueOnce(json({ compensation: [] }))
       .mockResolvedValueOnce(json({ rule: { id: uuid } }, 201))
       .mockResolvedValueOnce(json({ employees: [] }))
       .mockResolvedValueOnce(json({ rules: [] }))
     vi.stubGlobal('fetch', fetchMock)
     render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
+    await user.click(screen.getByRole('button', { name: /Reglas de Comisión/ }))
 
     await user.selectOptions(await screen.findByLabelText('Alcance'), 'role')
     await user.selectOptions(screen.getByLabelText('Rol'), 'seller')
@@ -161,8 +163,8 @@ describe('finance operational dialogs', () => {
     await user.type(screen.getByLabelText('Vigente desde'), '2026-08-01')
     await user.click(screen.getByRole('button', { name: 'Crear y aprobar regla' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5))
-    const [, request] = fetchMock.mock.calls[2]
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6))
+    const [, request] = fetchMock.mock.calls[3]
     expect(JSON.parse(request.body)).toMatchObject({ scopeType: 'role', role: 'seller', status: 'approved' })
   })
 
@@ -186,16 +188,18 @@ describe('finance operational dialogs', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({ employees: [] }))
       .mockResolvedValueOnce(json({ rules: [draftRule] }))
+      .mockResolvedValueOnce(json({ compensation: [] }))
       .mockResolvedValueOnce(json({ rule: { ...draftRule, status: 'approved' } }))
       .mockResolvedValueOnce(json({ employees: [] }))
       .mockResolvedValueOnce(json({ rules: [{ ...draftRule, status: 'approved' }] }))
     vi.stubGlobal('fetch', fetchMock)
     render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
+    await user.click(screen.getByRole('button', { name: /Reglas de Comisión/ }))
 
     await user.click(await screen.findByRole('button', { name: 'Aprobar regla' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5))
-    const [, request] = fetchMock.mock.calls[2]
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6))
+    const [, request] = fetchMock.mock.calls[3]
     expect(request.method).toBe('PATCH')
     expect(JSON.parse(request.body)).toMatchObject({ id: uuid, status: 'approved', effectiveFrom: '2026-08-01' })
   })
@@ -223,16 +227,18 @@ describe('finance operational dialogs', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({ employees: [] }))
       .mockResolvedValueOnce(json({ rules: [approvedRule] }))
+      .mockResolvedValueOnce(json({ compensation: [] }))
       .mockResolvedValueOnce(json({ rule: { ...approvedRule, status: 'retired' } }))
       .mockResolvedValueOnce(json({ employees: [] }))
       .mockResolvedValueOnce(json({ rules: [{ ...approvedRule, status: 'retired' }] }))
     vi.stubGlobal('fetch', fetchMock)
     render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
+    await user.click(screen.getByRole('button', { name: /Reglas de Comisión/ }))
 
     await user.click(await screen.findByRole('button', { name: 'Retirar' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5))
-    const [, request] = fetchMock.mock.calls[2]
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6))
+    const [, request] = fetchMock.mock.calls[3]
     expect(request.method).toBe('PATCH')
     expect(JSON.parse(request.body)).toMatchObject({ id: uuid, status: 'retired' })
   })
@@ -243,8 +249,10 @@ describe('finance operational dialogs', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({ employees: [] }))
       .mockResolvedValueOnce(json({ rules: [] }))
+      .mockResolvedValueOnce(json({ compensation: [] }))
     vi.stubGlobal('fetch', fetchMock)
     render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
+    await user.click(screen.getByRole('button', { name: /Reglas de Comisión/ }))
 
     await user.selectOptions(await screen.findByLabelText('Alcance'), 'role')
     await user.selectOptions(screen.getByLabelText('Rol'), 'seller')
@@ -253,7 +261,7 @@ describe('finance operational dialogs', () => {
     await user.click(screen.getByRole('button', { name: 'Crear y aprobar regla' }))
 
     expect(await screen.findByText(/no puede superar el 100%/i)).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('sends the end date so a seasonal rule stops on its own', async () => {
@@ -261,11 +269,13 @@ describe('finance operational dialogs', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({ employees: [] }))
       .mockResolvedValueOnce(json({ rules: [] }))
+      .mockResolvedValueOnce(json({ compensation: [] }))
       .mockResolvedValueOnce(json({ rule: { id: uuid } }, 201))
       .mockResolvedValueOnce(json({ employees: [] }))
       .mockResolvedValueOnce(json({ rules: [] }))
     vi.stubGlobal('fetch', fetchMock)
     render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
+    await user.click(screen.getByRole('button', { name: /Reglas de Comisión/ }))
 
     await user.selectOptions(await screen.findByLabelText('Alcance'), 'role')
     await user.selectOptions(screen.getByLabelText('Rol'), 'seller')
@@ -274,8 +284,8 @@ describe('finance operational dialogs', () => {
     await user.type(screen.getByLabelText('Vigente hasta'), '2026-08-31')
     await user.click(screen.getByRole('button', { name: 'Crear y aprobar regla' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5))
-    const [, request] = fetchMock.mock.calls[2]
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6))
+    const [, request] = fetchMock.mock.calls[3]
     expect(JSON.parse(request.body)).toMatchObject({ effectiveTo: '2026-08-31' })
   })
 
@@ -332,7 +342,7 @@ describe('finance operational dialogs', () => {
     ))
   })
 
-  it('filters obligations locally by search query', async () => {
+  it('searches obligations through the server across pages', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(json({ categories: [] }))
@@ -359,7 +369,8 @@ describe('finance operational dialogs', () => {
           },
         ],
         total: 2,
-      })))
+      }))
+      .mockResolvedValue(json({ obligations: [{ id: '2', concept: 'Repuestos pantalla', vendor: 'Proveedor ABC', amount: 300000, outstanding_amount: 300000, status: 'pending', due_date: '2026-08-25' }], total: 1 })))
 
     render(<ExpensesPanel organizationId={uuid} branchId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-31', branchId: uuid }} onChanged={vi.fn()} />)
 
@@ -370,7 +381,7 @@ describe('finance operational dialogs', () => {
     const searchInput = screen.getByPlaceholderText('Buscar por concepto o proveedor…')
     await user.type(searchInput, 'ABC')
 
-    expect(screen.queryByText('Limpieza de oficina')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.queryAllByText('Limpieza de oficina')).toHaveLength(0))
     expect(screen.getAllByText('Repuestos pantalla').length).toBeGreaterThan(0)
   })
 

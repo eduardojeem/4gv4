@@ -1,20 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import {
-  Banknote,
-  Building,
-  CheckCircle2,
-  Coins,
-  CreditCard,
-  FileText,
-  Loader2,
-  Wallet,
-} from 'lucide-react'
+import { CreditCard, Loader2 } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -56,6 +45,7 @@ export function PaymentDialog({
   const [cashSessionId, setCashSessionId] = useState('')
   const [openCashSessions, setOpenCashSessions] = useState<OpenCashSession[] | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const idempotencyKeyRef = useRef<string | null>(null)
 
@@ -74,11 +64,21 @@ export function PaymentDialog({
     setCashSessionId('')
     setOpenCashSessions(null)
     setError(null)
+    setPaymentConfirmed(false)
     idempotencyKeyRef.current = null
   }, [open, obligationId, payrollEntryId])
 
   async function submit(formData: FormData) {
     if (isSubmitting) return
+    if (paymentConfirmed) {
+      setIsSubmitting(true)
+      try {
+        await refreshAfterPayment()
+      } finally {
+        setIsSubmitting(false)
+      }
+      return
+    }
     const rawAmount = String(formData.get('amount') ?? '').trim()
     const amount = Number(rawAmount)
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -111,20 +111,36 @@ export function PaymentDialog({
       cashSessionId: method === 'cash' ? cashSessionId : undefined,
       reference: String(formData.get('reference')) || undefined,
     }
-    const response = await fetch(`${target}?organizationId=${organizationId}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-idempotency-key': idempotencyKeyRef.current },
-      body: JSON.stringify(payrollEntryId ? payment : { ...payment, branchId }),
-    })
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null
-    setIsSubmitting(false)
-    if (!response.ok) {
-      setError(payload?.error ?? 'No se pudo registrar el pago.')
-      return
+    try {
+      const response = await fetch(`${target}?organizationId=${organizationId}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-idempotency-key': idempotencyKeyRef.current },
+        body: JSON.stringify(payrollEntryId ? payment : { ...payment, branchId }),
+      })
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) {
+        setError(response.status >= 500
+          ? 'No se pudo confirmar el resultado. Verificá el estado del pago antes de volver a registrarlo. Si reintentás aquí, se conservará la misma clave de pago.'
+          : payload?.error ?? 'No se pudo registrar el pago.')
+        return
+      }
+      setPaymentConfirmed(true)
+      await refreshAfterPayment()
+    } catch {
+      setError('No se pudo confirmar el resultado. Verificá el estado del pago antes de volver a registrarlo. Si reintentás aquí, se conservará la misma clave de pago.')
+    } finally {
+      setIsSubmitting(false)
     }
-    await onSaved()
-    idempotencyKeyRef.current = null
-    onOpenChange(false)
+  }
+
+  async function refreshAfterPayment() {
+    try {
+      await onSaved()
+      idempotencyKeyRef.current = null
+      onOpenChange(false)
+    } catch {
+      setError('El pago fue registrado, pero no se pudo actualizar la pantalla. Actualizá el estado; no registres otro pago.')
+    }
   }
 
   function handleFillTotal() {
@@ -135,8 +151,8 @@ export function PaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden sm:rounded-2xl shadow-2xl border-border/80">
-        <DialogHeader className="p-6 pb-4 border-b bg-muted/20">
+      <DialogContent className="max-w-lg max-h-[90dvh] flex flex-col p-0 overflow-hidden sm:rounded-2xl shadow-2xl border-border/80">
+        <DialogHeader className="shrink-0 p-6 pb-4 border-b bg-muted/20">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <CreditCard className="h-5 w-5" />
@@ -152,7 +168,12 @@ export function PaymentDialog({
           </div>
         </DialogHeader>
 
-        <form action={submit} className="p-6 space-y-4">
+        <form onSubmit={(event) => {
+          event.preventDefault()
+          void submit(new FormData(event.currentTarget))
+        }} className="flex min-h-0 flex-col">
+          <div className="min-h-0 overflow-y-auto">
+          <fieldset disabled={isSubmitting || paymentConfirmed} className="min-w-0 p-6 space-y-4">
           {/* Card de Saldo Pendiente Autorizado */}
           {outstandingAmount !== undefined ? (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 flex items-center justify-between gap-3">
@@ -269,13 +290,15 @@ export function PaymentDialog({
             />
           </div>
 
+          </fieldset>
+          </div>
           {error ? (
             <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
               {error}
             </div>
           ) : null}
 
-          <DialogFooter className="pt-3 border-t gap-2 sm:justify-end">
+          <DialogFooter className="shrink-0 p-6 pt-3 border-t gap-2 sm:justify-end">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
@@ -286,7 +309,7 @@ export function PaymentDialog({
                   Registrando…
                 </>
               ) : (
-                'Registrar pago'
+                paymentConfirmed ? 'Actualizar estado' : 'Registrar pago'
               )}
             </Button>
           </DialogFooter>
@@ -295,4 +318,3 @@ export function PaymentDialog({
     </Dialog>
   )
 }
-

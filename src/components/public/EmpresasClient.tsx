@@ -6,6 +6,7 @@ import {
   Building2,
   Heart,
   Home,
+  MapPin,
   Search,
   Shirt,
   ShoppingBasket,
@@ -20,6 +21,8 @@ import {
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { OrganizationDirectoryCard, RUBRO_LABELS } from '@/components/public/OrganizationDirectoryCard'
+import { OrganizationDetailModal } from '@/components/public/OrganizationDetailModal'
+import { normalizeCity, removeAccents } from '@/lib/public/city-normalizer'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
 import { cn } from '@/lib/utils'
 
@@ -27,6 +30,7 @@ type Props = {
   organizations: MarketplaceOrganization[]
   initialQuery?: string
   initialRubro?: string
+  initialCity?: string
 }
 
 const RUBRO_FILTERS = [
@@ -46,6 +50,7 @@ export function EmpresasClient({
   organizations,
   initialQuery = '',
   initialRubro = 'all',
+  initialCity = 'all',
 }: Props) {
   const router = useRouter()
   const pathname = usePathname()
@@ -53,6 +58,8 @@ export function EmpresasClient({
 
   const [query, setQuery] = useState(initialQuery)
   const [selectedRubro, setSelectedRubro] = useState(initialRubro)
+  const [selectedCity, setSelectedCity] = useState(initialCity)
+  const [selectedOrgForDetails, setSelectedOrgForDetails] = useState<MarketplaceOrganization | null>(null)
 
   // Conteo de empresas por rubro
   const rubroCounts = useMemo(() => {
@@ -62,6 +69,25 @@ export function EmpresasClient({
       counts[r] = (counts[r] ?? 0) + 1
     })
     return counts
+  }, [organizations])
+
+  // Lista de ciudades normalizadas y consolidadas con sus conteos
+  const cityCounts = useMemo(() => {
+    const map = new Map<string, { display: string; key: string; count: number }>()
+
+    organizations.forEach((org) => {
+      const norm = normalizeCity(org.city)
+      if (norm) {
+        const existing = map.get(norm.key)
+        if (existing) {
+          existing.count += 1
+        } else {
+          map.set(norm.key, { display: norm.display, key: norm.key, count: 1 })
+        }
+      }
+    })
+
+    return [...map.values()].sort((a, b) => b.count - a.count || a.display.localeCompare(b.display))
   }, [organizations])
 
   // Sincronización de búsqueda con URL
@@ -94,7 +120,26 @@ export function EmpresasClient({
     router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
-  // Filtrado de organizaciones
+  const handleCityChange = (cityKey: string) => {
+    setSelectedCity(cityKey)
+    const params = new URLSearchParams(searchParams.toString())
+    if (cityKey && cityKey !== 'all') {
+      params.set('ciudad', cityKey)
+    } else {
+      params.delete('ciudad')
+      params.delete('city')
+    }
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
+  const handleResetFilters = () => {
+    setQuery('')
+    setSelectedRubro('all')
+    setSelectedCity('all')
+    router.push(pathname, { scroll: false })
+  }
+
+  // Filtrado inteligente de organizaciones
   const filtered = useMemo(() => {
     let result = organizations
 
@@ -103,41 +148,66 @@ export function EmpresasClient({
       result = result.filter((org) => (org.rubro || 'comercio') === selectedRubro)
     }
 
-    // Filtro por búsqueda
-    const q = query.trim().toLowerCase()
+    // Filtro por Ciudad (unificando variantes y acentos)
+    if (selectedCity && selectedCity !== 'all') {
+      const selectedNorm = normalizeCity(selectedCity)
+      const targetKey = selectedNorm?.key || removeAccents(selectedCity)
+
+      result = result.filter((org) => {
+        const orgNorm = normalizeCity(org.city)
+        if (!orgNorm) return false
+        return orgNorm.key === targetKey || orgNorm.display.toLowerCase() === selectedCity.toLowerCase()
+      })
+    }
+
+    // Filtro por búsqueda de texto (tolerante a acentos y mayúsculas)
+    const q = removeAccents(query)
     if (q) {
-      result = result.filter(
-        (org) =>
-          org.name.toLowerCase().includes(q) ||
-          org.slug.toLowerCase().includes(q) ||
-          (org.business_vertical ?? '').toLowerCase().includes(q)
-      )
+      result = result.filter((org) => {
+        const normCity = normalizeCity(org.city)
+        const nameMatch = removeAccents(org.name).includes(q)
+        const slugMatch = removeAccents(org.slug).includes(q)
+        const cityMatch = normCity
+          ? removeAccents(normCity.display).includes(q) || normCity.key.includes(q)
+          : false
+        const rawCityMatch = org.city ? removeAccents(org.city).includes(q) : false
+        const addressMatch = org.address ? removeAccents(org.address).includes(q) : false
+        const verticalMatch = org.business_vertical ? removeAccents(org.business_vertical).includes(q) : false
+
+        return nameMatch || slugMatch || cityMatch || rawCityMatch || addressMatch || verticalMatch
+      })
     }
 
     return result
-  }, [organizations, query, selectedRubro])
+  }, [organizations, query, selectedRubro, selectedCity])
 
   const activeRubroMeta = RUBRO_FILTERS.find((r) => r.id === selectedRubro)
+  const activeCityMeta = cityCounts.find(
+    (c) => c.key === selectedCity || c.display.toLowerCase() === selectedCity.toLowerCase()
+  )
+  const activeCityDisplay = activeCityMeta?.display || normalizeCity(selectedCity)?.display || selectedCity
+  const hasActiveFilters = Boolean(query || selectedRubro !== 'all' || selectedCity !== 'all')
 
   return (
     <div className="space-y-6">
-      {/* ── Panel de Control: Buscador y Filtro de Rubros ── */}
+      {/* ── Panel de Control: Buscador, Filtro por Ciudad y Rubros ── */}
       <div className="space-y-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs">
-        {/* Buscador */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
+        {/* Buscador y Filtro por Ciudad */}
+        <div className="grid gap-3 sm:grid-cols-12 items-center">
+          {/* Buscador */}
+          <div className="sm:col-span-7 lg:col-span-6 relative">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar tienda o empresa..."
+              placeholder="Buscar por tienda, rubro o ciudad..."
               className="h-10 rounded-xl pl-10 pr-9 text-xs sm:text-sm bg-background border-border/80 focus-visible:ring-primary"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
                 aria-label="Limpiar búsqueda"
               >
                 <X className="h-3.5 w-3.5" />
@@ -145,9 +215,33 @@ export function EmpresasClient({
             )}
           </div>
 
-          <p className="shrink-0 text-xs font-semibold text-muted-foreground">
-            Mostrando <strong className="text-foreground">{filtered.length}</strong> de {organizations.length} tiendas
-          </p>
+          {/* Filtro por Ciudad (Consolidado) */}
+          <div className="sm:col-span-5 lg:col-span-4 relative">
+            <MapPin className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
+            <select
+              aria-label="Filtrar por ciudad"
+              value={activeCityMeta?.key || selectedCity}
+              onChange={(e) => handleCityChange(e.target.value)}
+              className="h-10 w-full appearance-none rounded-xl border border-border/80 bg-background pl-9 pr-8 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all cursor-pointer truncate"
+            >
+              <option value="all">Todas las ciudades ({organizations.length})</option>
+              {cityCounts.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.display} ({c.count})
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground text-xs">
+              ▼
+            </div>
+          </div>
+
+          {/* Contador de Tiendas */}
+          <div className="sm:col-span-12 lg:col-span-2 flex justify-start lg:justify-end">
+            <p className="text-xs font-semibold text-muted-foreground">
+              <strong className="text-foreground">{filtered.length}</strong> de {organizations.length} tiendas
+            </p>
+          </div>
         </div>
 
         {/* ── Franja de Filtro por Rubros ── */}
@@ -163,7 +257,6 @@ export function EmpresasClient({
               const count = rubroCounts[rubro.id] ?? 0
               const isActive = selectedRubro === rubro.id
 
-              // Si el rubro no tiene tiendas y no es "all", se puede ocultar o mostrar deshabilitado
               if (rubro.id !== 'all' && count === 0) return null
 
               return (
@@ -172,7 +265,7 @@ export function EmpresasClient({
                   type="button"
                   onClick={() => handleRubroChange(rubro.id)}
                   className={cn(
-                    'group shrink-0 flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all shadow-xs',
+                    'group shrink-0 flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all shadow-xs cursor-pointer',
                     isActive
                       ? 'border-primary bg-primary text-primary-foreground shadow-xs'
                       : 'border-border/80 bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
@@ -180,10 +273,12 @@ export function EmpresasClient({
                 >
                   <Icon className={cn('h-3.5 w-3.5', isActive ? 'text-primary-foreground' : 'text-primary')} />
                   <span>{rubro.label}</span>
-                  <span className={cn(
-                    'rounded-full px-1.5 py-px text-[10px] tabular-nums',
-                    isActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
-                  )}>
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-px text-[10px] tabular-nums',
+                      isActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
+                    )}
+                  >
                     {count}
                   </span>
                 </button>
@@ -193,7 +288,7 @@ export function EmpresasClient({
         </div>
 
         {/* ── Chips de Filtros Activos ── */}
-        {(selectedRubro !== 'all' || query) && (
+        {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/60">
             <span className="text-[11px] font-semibold text-muted-foreground">Filtros activos:</span>
 
@@ -201,9 +296,21 @@ export function EmpresasClient({
               <button
                 type="button"
                 onClick={() => handleRubroChange('all')}
-                className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+                className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/20 cursor-pointer"
               >
                 <span>Rubro: {activeRubroMeta.label}</span>
+                <X className="h-3 w-3" />
+              </button>
+            )}
+
+            {selectedCity !== 'all' && (
+              <button
+                type="button"
+                onClick={() => handleCityChange('all')}
+                className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/20 cursor-pointer"
+              >
+                <MapPin className="h-3 w-3 text-primary" />
+                <span>Ciudad: {activeCityDisplay}</span>
                 <X className="h-3 w-3" />
               </button>
             )}
@@ -212,7 +319,7 @@ export function EmpresasClient({
               <button
                 type="button"
                 onClick={() => setQuery('')}
-                className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-bold text-foreground transition-colors hover:bg-muted/80"
+                className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-bold text-foreground transition-colors hover:bg-muted/80 cursor-pointer"
               >
                 <span>Búsqueda: &ldquo;{query}&rdquo;</span>
                 <X className="h-3 w-3" />
@@ -221,11 +328,8 @@ export function EmpresasClient({
 
             <button
               type="button"
-              onClick={() => {
-                setQuery('')
-                handleRubroChange('all')
-              }}
-              className="text-xs font-medium text-primary hover:underline ml-1"
+              onClick={handleResetFilters}
+              className="text-xs font-medium text-primary hover:underline ml-1 cursor-pointer"
             >
               Restablecer filtros
             </button>
@@ -237,7 +341,11 @@ export function EmpresasClient({
       {filtered.length > 0 ? (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((org) => (
-            <OrganizationDirectoryCard key={org.id} organization={org} />
+            <OrganizationDirectoryCard
+              key={org.id}
+              organization={org}
+              onOpenDetails={setSelectedOrgForDetails}
+            />
           ))}
         </div>
       ) : (
@@ -246,20 +354,28 @@ export function EmpresasClient({
           <Building2 className="mb-3 h-10 w-10 text-muted-foreground/40" />
           <h3 className="text-base font-bold text-foreground">No se encontraron tiendas</h3>
           <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-            No hay tiendas que coincidan con los filtros seleccionados.
+            {selectedCity !== 'all'
+              ? `No hay tiendas registradas en "${activeCityDisplay}" con los filtros seleccionados.`
+              : 'No hay tiendas que coincidan con los filtros seleccionados.'}
           </p>
-          <button
-            type="button"
-            onClick={() => {
-              setQuery('')
-              handleRubroChange('all')
-            }}
-            className="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors"
-          >
-            Ver todas las tiendas
-          </button>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
+            >
+              Restablecer todos los filtros
+            </button>
+          )}
         </div>
       )}
+
+      {/* ── Modal de Detalle Completo de la Organización ── */}
+      <OrganizationDetailModal
+        organization={selectedOrgForDetails}
+        open={Boolean(selectedOrgForDetails)}
+        onClose={() => setSelectedOrgForDetails(null)}
+      />
     </div>
   )
 }

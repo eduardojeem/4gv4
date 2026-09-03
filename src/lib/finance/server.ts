@@ -267,6 +267,8 @@ export async function assertFinanceBranchAccess(params: {
 }
 
 export interface ObligationListFilters {
+  search?: string
+  dueView?: 'overdue' | 'upcoming'
   startDate?: string
   endDate?: string
   branchId?: string
@@ -294,11 +296,20 @@ export async function listObligations(
     .order('created_at', { ascending: false })
     .range(from, to)
 
-  if (filters.startDate) query = query.gte('accounting_date', filters.startDate)
-  if (filters.endDate) query = query.lte('accounting_date', filters.endDate)
+  if (!filters.dueView && filters.startDate) query = query.gte('accounting_date', filters.startDate)
+  if (!filters.dueView && filters.endDate) query = query.lte('accounting_date', filters.endDate)
   if (filters.branchId) query = query.eq('branch_id', filters.branchId)
   if (filters.categoryId) query = query.eq('category_id', filters.categoryId)
-  if (filters.status) query = query.eq('status', filters.status)
+  if (filters.dueView || filters.status === 'overdue') {
+    const today = toOrganizationDay(new Date(), await loadOrganizationTimezone(organizationId))
+    query = query.in('status', ['pending', 'partially_paid', 'overdue'])
+    query = filters.dueView === 'upcoming' ? query.gte('due_date', today) : query.lt('due_date', today)
+  } else if (filters.status) query = query.eq('status', filters.status)
+  if (filters.search?.trim()) {
+    // Quote the PostgREST value; user punctuation cannot become filter syntax.
+    const pattern = JSON.stringify(`%${filters.search.trim().replace(/[\\%_*]/g, ' ')}%`)
+    query = query.or(`concept.ilike.${pattern},vendor.ilike.${pattern}`)
+  }
 
   const { data, error, count } = await query
   if (error) throw toFinanceApiError(error)
@@ -1713,6 +1724,8 @@ type FinanceObligationRecord = {
   dueDate: string | null
   status: string
   amount: number
+  paidAmount?: number
+  concept?: string | null
 }
 
 type FinancePayrollEntryRecord = {
@@ -1820,8 +1833,8 @@ export interface FinanceSummaryReport extends FinanceSummary {
   generatedAt: string
   filters: FinanceFilters
   comparison: FinanceSummary
-  upcomingDue: Array<{ id: string; dueDate: string; amount: number }>
-  overdue: Array<{ id: string; dueDate: string; amount: number }>
+  upcomingDue: Array<{ id: string; dueDate: string; amount: number; concept?: string | null }>
+  overdue: Array<{ id: string; dueDate: string; amount: number; concept?: string | null }>
 }
 
 export type FinanceProfitabilityGroup =
@@ -2188,21 +2201,21 @@ function buildFinancialSummary(
 export function buildFinanceSummaryFromRecords(
   records: FinanceSummaryRecords,
   filters: FinanceFilters,
-  today = new Date().toISOString().slice(0, 10),
+  today = toOrganizationDay(new Date(), DEFAULT_FINANCE_TIMEZONE),
 ): FinanceSummaryReport {
   const current = buildFinancialSummary(records, filters)
   const dueObligations = records.obligations.filter(
     (obligation) =>
       isInBranch(obligation.branchId, filters) &&
-      isInPeriod(obligation.accountingDate, filters) &&
-      obligation.status !== 'voided' &&
-      obligation.status !== 'paid' &&
+      ['pending', 'partially_paid', 'overdue'].includes(obligation.status) &&
+      money(obligation.amount) > money(obligation.paidAmount) &&
       Boolean(obligation.dueDate),
   )
   const toDueRow = (obligation: FinanceObligationRecord) => ({
     id: obligation.id,
     dueDate: obligation.dueDate as string,
-    amount: roundMoneyValue(money(obligation.amount)),
+    amount: roundMoneyValue(Math.max(0, money(obligation.amount) - money(obligation.paidAmount))),
+    ...(obligation.concept ? { concept: obligation.concept } : {}),
   })
   const byDueDate = (left: { dueDate: string }, right: { dueDate: string }) =>
     left.dueDate.localeCompare(right.dueDate)
@@ -2519,10 +2532,11 @@ async function loadFinanceSummaryRecords(
   const obligationsQuery = branch(
     admin
       .from('finance_obligations')
-      .select('id, branch_id, accounting_date, due_date, status, amount', { count: 'exact' })
+      .select('id, branch_id, accounting_date, due_date, status, amount, paid_amount, concept', { count: 'exact' })
       .eq('organization_id', organizationId)
-      .gte('accounting_date', startDate)
-      .lte('accounting_date', queryEndDate)
+      // The result uses the selected accounting period; the action list also
+      // needs older unpaid obligations. All values here are validated dates.
+      .or(`and(accounting_date.gte.${startDate},accounting_date.lte.${queryEndDate}),status.in.(pending,partially_paid,overdue)`)
       .limit(FINANCE_REPORT_QUERY_LIMIT),
   )
   const payrollQuery = branch(
@@ -2643,6 +2657,8 @@ async function loadFinanceSummaryRecords(
       dueDate: obligation.due_date ?? null,
       status: String(obligation.status),
       amount: money(obligation.amount),
+      paidAmount: money(obligation.paid_amount),
+      concept: obligation.concept,
     })),
     payrollEntries: (payrollResult.data ?? []).map((entry) => {
       const payrollRun = Array.isArray(entry.payroll_runs)
@@ -2986,7 +3002,8 @@ export async function getFinanceSummary(
   filters: FinanceFilters,
 ): Promise<FinanceSummaryReport> {
   const records = await loadFinanceSummaryRecords(organizationId, filters)
-  return buildFinanceSummaryFromRecords(records, filters)
+  const today = toOrganizationDay(new Date(), await loadOrganizationTimezone(organizationId))
+  return buildFinanceSummaryFromRecords(records, filters, today)
 }
 
 export async function getFinanceProfitability(

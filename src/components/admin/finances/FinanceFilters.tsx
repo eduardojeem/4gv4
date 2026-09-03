@@ -74,14 +74,14 @@ export function FinanceFilters({
     },
     {
       label: 'Últimos 30 días',
-      range: { from: subDays(now, 30), to: now },
-      startStr: format(subDays(now, 30), 'yyyy-MM-dd'),
+      range: { from: subDays(now, 29), to: now },
+      startStr: format(subDays(now, 29), 'yyyy-MM-dd'),
       endStr: format(now, 'yyyy-MM-dd'),
     },
     {
       label: 'Últimos 90 días',
-      range: { from: subDays(now, 90), to: now },
-      startStr: format(subDays(now, 90), 'yyyy-MM-dd'),
+      range: { from: subDays(now, 89), to: now },
+      startStr: format(subDays(now, 89), 'yyyy-MM-dd'),
       endStr: format(now, 'yyyy-MM-dd'),
     },
   ]
@@ -96,7 +96,7 @@ export function FinanceFilters({
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Filtro de Período y Sucursal</p>
-              <p className="text-xs text-foreground/80">
+              <p className="hidden text-xs text-foreground/80 sm:block">
                 Los cálculos se comparan automáticamente contra el período anterior de igual duración.
               </p>
             </div>
@@ -135,8 +135,9 @@ export function FinanceFilters({
                 type="button"
                 variant={isActive ? 'default' : 'outline'}
                 size="sm"
+                aria-pressed={isActive}
                 className={cn(
-                  'h-7 rounded-full px-3 text-xs font-medium transition-all select-none',
+                  'h-9 rounded-lg px-3 text-xs font-medium transition-all select-none',
                   isActive
                     ? 'shadow-xs scale-[1.02]'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'

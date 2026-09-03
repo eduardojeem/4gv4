@@ -258,13 +258,12 @@ export function HeroSection({
                 {/* Logo e Identidad de la Tienda */}
                 <div className="hidden lg:flex items-center gap-3.5 pb-4 border-b border-border/60">
                   {companyInfo.logoUrl ? (
-                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-border/80 bg-background p-1 shadow-xs">
-                      <Image
+                    <div className="relative h-12 max-w-[160px] shrink-0 overflow-hidden flex items-center justify-start">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
                         src={companyInfo.logoUrl}
                         alt={companyInfo.name || 'Logo'}
-                        fill
-                        unoptimized
-                        className="object-contain"
+                        className="h-12 w-auto max-h-12 max-w-full object-contain"
                       />
                     </div>
                   ) : (
