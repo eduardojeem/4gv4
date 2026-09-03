@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { registerCompanySchema } from '@/lib/validation/saas'
 import { logger } from '@/lib/logger'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
+import { normalizeTenantSlug, validateTenantSlug } from '@/lib/saas/reserved-slugs'
 import { sendEmail } from '@/lib/email/resend'
 import { renderWelcomeEmail } from '@/lib/email/templates'
 import {
@@ -62,9 +63,20 @@ export async function POST(request: Request) {
     const selectedPlan = input.selectedPlan
     const selectedPlanTier = selectedPlan.toLowerCase()
 
-    if (!input.companySlug) {
+    // El slug se normaliza y se valida aca, no solo en el navegador. El esquema
+    // aceptaba cualquier texto de hasta 64 caracteres y la unica limpieza vivia
+    // en el formulario, asi que una llamada directa a la API podia crear una
+    // tienda con slug `Admin`, `mi tienda` o uno que tapa una ruta del sistema.
+    const companySlug = normalizeTenantSlug(input.companySlug ?? input.companyName)
+    const slugCheck = validateTenantSlug(companySlug)
+
+    if (slugCheck.ok === false) {
       return NextResponse.json(
-        { success: false, error: 'El slug de la empresa no es valido.' },
+        {
+          success: false,
+          error: slugCheck.message,
+          fieldErrors: [{ field: 'companySlug', message: slugCheck.message }],
+        },
         { status: 400 }
       )
     }
@@ -106,7 +118,7 @@ export async function POST(request: Request) {
     const { data: existingOrganization, error: slugError } = await admin
       .from('organizations')
       .select('id')
-      .eq('slug', input.companySlug)
+      .eq('slug', companySlug)
       .maybeSingle()
 
     if (slugError) {
@@ -118,8 +130,15 @@ export async function POST(request: Request) {
     }
 
     if (existingOrganization) {
+      // Va tambien como error de campo: como banner suelto el usuario tenia que
+      // adivinar cual de los campos revisar, y el captcha ya se reinicio.
+      const mensaje = 'Esa dirección ya está en uso. Elegí otra.'
       return NextResponse.json(
-        { success: false, error: 'Ese subdominio ya esta en uso. Elige otro.' },
+        {
+          success: false,
+          error: mensaje,
+          fieldErrors: [{ field: 'companySlug', message: mensaje }],
+        },
         { status: 409 }
       )
     }
@@ -139,7 +158,7 @@ export async function POST(request: Request) {
         data: {
           full_name: input.fullName,
           company_name: input.companyName,
-          company_slug: input.companySlug,
+          company_slug: companySlug,
           selected_plan: selectedPlan,
           registration_type: 'company_owner',
         },
@@ -161,7 +180,7 @@ export async function POST(request: Request) {
     if (isExistingConfirmedAuthUser(authData.user)) {
       logger.warn('Company owner signup attempted with an existing confirmed email', {
         email: input.email,
-        slug: input.companySlug,
+        slug: companySlug,
       })
 
       return NextResponse.json(
@@ -179,7 +198,7 @@ export async function POST(request: Request) {
       .from('organizations')
       .insert({
         name: input.companyName,
-        slug: input.companySlug,
+        slug: companySlug,
         plan: selectedPlan,
         owner_id: userId,
       })
@@ -190,7 +209,7 @@ export async function POST(request: Request) {
       logger.error('Failed to create organization after signup', {
         error: organizationError?.message,
         userId,
-        slug: input.companySlug,
+        slug: companySlug,
       })
 
       // Only the auth user needs cleanup at this stage — org doesn't exist yet.

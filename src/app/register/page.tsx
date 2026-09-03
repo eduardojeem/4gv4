@@ -6,13 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Eye, EyeOff, ArrowRight, Shield, Sparkles, CheckCircle2 } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowRight, Shield, Sparkles, CheckCircle2, Check, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { validatePassword, getPasswordChecks } from '@/lib/auth/password-validation'
 import { slugifyTenantName } from '@/lib/saas/tenant'
+import { useSlugAvailability } from '@/hooks/use-slug-availability'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 import { createClient } from '@/lib/supabase/client'
 
@@ -114,6 +115,21 @@ function RegisterForm() {
 
   // Always resolve slug: prefer what the user typed, fall back to slugified company name.
   const previewSlug = slugifyTenantName(formData.companySlug || formData.companyName)
+
+  // Se verifica mientras se escribe. Antes la colision aparecia recien al
+  // enviar, y como el captcha se reinicia en cada intento fallido, corregir el
+  // subdominio obligaba a resolverlo de nuevo.
+  const slugStatus = useSlugAvailability(previewSlug)
+  const slugOcupado = slugStatus.estado === 'ocupado' || slugStatus.estado === 'invalido'
+  const slugSugerencia = slugStatus.estado === 'ocupado' || slugStatus.estado === 'invalido'
+    ? slugStatus.sugerencia
+    : null
+
+  const aplicarSugerencia = (sugerencia: string) => {
+    setSlugTouched(true)
+    setFormData((prev) => ({ ...prev, companySlug: sugerencia }))
+    setFieldErrors((prev) => { const next = { ...prev }; delete next.companySlug; return next })
+  }
 
   const handleInputChange = (field: string, value: string) => {
     // Clear per-field error when the user starts correcting that field.
@@ -386,11 +402,50 @@ function RegisterForm() {
                   {fieldErrors.companySlug ? (
                     <p className="text-xs text-red-400" role="alert">{fieldErrors.companySlug}</p>
                   ) : previewSlug ? (
-                    <p id="hint-slug" className="flex items-center gap-1.5 text-xs text-slate-400">
-                      <span className="text-slate-500">URL:</span>
-                      <span className="font-mono text-cyan-400">{previewSlug}</span>
-                      <span className="text-slate-500">.tu-dominio.com</span>
-                    </p>
+                    <div id="hint-slug" className="space-y-1">
+                      <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
+                        <span className="text-slate-500">URL:</span>
+                        <span className={`font-mono ${slugOcupado ? 'text-amber-400' : 'text-cyan-400'}`}>{previewSlug}</span>
+                        <span className="text-slate-500">.tu-dominio.com</span>
+                      </p>
+
+                      {/* El estado se anuncia con aria-live: quien usa lector de
+                          pantalla no ve el cambio de color ni el icono. */}
+                      <p className="flex flex-wrap items-center gap-1.5 text-xs" aria-live="polite">
+                        {slugStatus.estado === 'consultando' && (
+                          <span className="flex items-center gap-1.5 text-slate-400">
+                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                            Verificando disponibilidad…
+                          </span>
+                        )}
+                        {slugStatus.estado === 'libre' && (
+                          <span className="flex items-center gap-1.5 text-emerald-400">
+                            <Check className="h-3 w-3" aria-hidden="true" />
+                            Disponible
+                          </span>
+                        )}
+                        {(slugStatus.estado === 'ocupado' || slugStatus.estado === 'invalido') && (
+                          <>
+                            <span className="flex items-center gap-1.5 text-amber-400">
+                              <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                              {slugStatus.mensaje}
+                            </span>
+                            {slugSugerencia && (
+                              <button
+                                type="button"
+                                onClick={() => aplicarSugerencia(slugSugerencia)}
+                                className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 font-mono text-cyan-300 transition-colors hover:bg-cyan-500/20 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-500/60"
+                              >
+                                Usar {slugSugerencia}
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {slugStatus.estado === 'error' && (
+                          <span className="text-slate-500">{slugStatus.mensaje}</span>
+                        )}
+                      </p>
+                    </div>
                   ) : (
                     <p id="hint-slug" className="text-xs text-slate-500">Se genera automaticamente desde el nombre de la empresa.</p>
                   )}
