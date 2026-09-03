@@ -24,6 +24,10 @@ const syncSchema = z.object({
   email: z.string().trim().max(254).optional().or(z.literal('')),
   marketplacePublic: z.boolean().optional(),
   slug: slugSchema,
+  // El logo llegaba por el passthrough y se guardaba solo en website_settings.
+  // Se declara para poder escribirlo tambien en la organizacion; el limite es el
+  // mismo que usa el esquema de company_info.
+  logoUrl: z.string().trim().max(500).optional().or(z.literal('')),
 }).passthrough()
 
 async function handler(request: NextRequest, context: AdminAuthContext) {
@@ -33,7 +37,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ error: 'Datos invalidos' }, { status: 400 })
   }
 
-  const { name, phone, address, email, marketplacePublic, slug } = parsed.data
+  const { name, phone, address, email, marketplacePublic, slug, logoUrl } = parsed.data
   const admin = createAdminSupabase()
 
   const orgId = await resolveWebsiteAdminOrganizationId(context)
@@ -89,12 +93,19 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
   }
 
+  // `organizations.logo_url` es el logo canonico de la tienda: de ahi lo toman el
+  // directorio del marketplace, el contexto de la organizacion y los recibos de
+  // reparaciones. Hasta ahora solo lo escribia el onboarding, asi que cambiarlo
+  // despues desde esta pantalla no llegaba a ninguno de los tres: se guardaba en
+  // website_settings, que solo alimenta el encabezado de la tienda publica.
   const { error: orgUpdateError } = await admin
     .from('organizations')
     .update({
       name,
       marketplace_public: marketplacePublic !== false,
       slug: canonicalSlug,
+      // Vacio se guarda como null para que "sin logo" sea un solo valor y no dos.
+      logo_url: logoUrl?.trim() ? logoUrl.trim() : null,
     })
     .eq('id', orgId)
 
