@@ -44,10 +44,14 @@ describe('seleccion de plan en el registro', () => {
     expect(code).toContain('planInfo.trialDays')
   })
 
-  it('sigue validando el tier que llega por la URL', () => {
-    // La validacion no se puede perder: es lo que evita que un `?plan=` armado
-    // a mano llegue tal cual a la API.
-    expect(code).toContain('VALID_PLAN_TIERS')
+  it('valida el plan contra la base, no contra una lista fija', () => {
+    // La validacion no se puede perder: es lo que evita que un `?plan=` armado a
+    // mano llegue tal cual a la API. Lo que cambio es la autoridad: antes era la
+    // lista `VALID_PLAN_TIERS` escrita a mano, y un plan creado desde el panel
+    // con otro tier caia al default sin avisar.
+    expect(code).not.toContain('VALID_PLAN_TIERS')
+    expect(code).toContain('availablePlans.find')
+    expect(code).toContain('planInfo?.tier ?? null')
   })
 
   it('sugiere el subdominio a partir del nombre de la empresa', () => {

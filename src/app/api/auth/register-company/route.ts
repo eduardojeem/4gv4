@@ -93,11 +93,14 @@ export async function POST(request: Request) {
 
     const admin = createAdminSupabase()
 
+    // Se acepta el tier o el slug publico: los enlaces que circulan usan el
+    // slug, y la API no deberia depender de que el navegador ya lo tradujera.
     const { data: subscriptionPlan, error: planError } = await admin
       .from('subscription_plans')
       .select('tier, name, is_active, trial_days')
-      .eq('tier', selectedPlanTier)
       .eq('is_active', true)
+      .or(`tier.eq.${selectedPlanTier},public_slug.eq.${selectedPlanTier}`)
+      .limit(1)
       .maybeSingle()
 
     if (planError) {
@@ -109,11 +112,22 @@ export async function POST(request: Request) {
     }
 
     if (!subscriptionPlan) {
+      // Antes esto solo podia pasar con un `?plan=` armado a mano. Ahora tambien
+      // cubre el plan que se desactivo despues de que alguien guardara el enlace:
+      // el mensaje tiene que decir que hacer, no solo que fallo.
       return NextResponse.json(
-        { success: false, error: 'El plan seleccionado no esta disponible.' },
+        {
+          success: false,
+          error: 'Ese plan ya no está disponible. Elegí uno de los planes vigentes.',
+          fieldErrors: [{ field: 'plan', message: 'Ese plan ya no está disponible.' }],
+        },
         { status: 400 }
       )
     }
+
+    // El tier real sale de la fila, no de lo que llego: si vino por slug publico,
+    // lo que se guarda tiene que ser el tier.
+    const resolvedPlanTier = String(subscriptionPlan.tier).toUpperCase()
 
     const { data: existingOrganization, error: slugError } = await admin
       .from('organizations')
@@ -159,7 +173,7 @@ export async function POST(request: Request) {
           full_name: input.fullName,
           company_name: input.companyName,
           company_slug: companySlug,
-          selected_plan: selectedPlan,
+          selected_plan: resolvedPlanTier,
           registration_type: 'company_owner',
         },
       },
@@ -199,7 +213,7 @@ export async function POST(request: Request) {
       .insert({
         name: input.companyName,
         slug: companySlug,
-        plan: selectedPlan,
+        plan: resolvedPlanTier,
         owner_id: userId,
       })
       .select('id, name, slug, plan')
@@ -246,7 +260,7 @@ export async function POST(request: Request) {
           modules: {
             onboarding: {
               status: 'pending',
-              selected_plan: selectedPlan,
+              selected_plan: resolvedPlanTier,
               started_at: new Date().toISOString(),
             },
           },
@@ -256,7 +270,7 @@ export async function POST(request: Request) {
       admin.from('subscriptions').upsert(
         {
           organization_id: organization.id,
-          plan: selectedPlan,
+          plan: resolvedPlanTier,
           status: 'trialing',
           trial_ends_at: new Date(
             Date.now() + (subscriptionPlan.trial_days ?? 14) * 24 * 60 * 60 * 1000
@@ -335,7 +349,7 @@ export async function POST(request: Request) {
       userId,
       organizationId: organization.id,
       slug: organization.slug,
-      plan: selectedPlan,
+      plan: resolvedPlanTier,
     })
 
     // Send welcome email (non-blocking — don't fail registration if email fails)
@@ -346,7 +360,7 @@ export async function POST(request: Request) {
       html: renderWelcomeEmail({
         ownerName: input.fullName,
         companyName: input.companyName,
-        plan: subscriptionPlan.name || selectedPlan,
+        plan: subscriptionPlan.name || resolvedPlanTier,
         loginUrl: `${appUrl}/login`,
       }),
       log: { organizationId: organization.id, customerName: input.fullName },
@@ -359,7 +373,7 @@ export async function POST(request: Request) {
         success: true,
         data: {
           organization,
-          selectedPlan,
+          selectedPlan: resolvedPlanTier,
           planName: subscriptionPlan.name,
           requiresEmailConfirmation: !authData.session,
         },

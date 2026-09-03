@@ -24,9 +24,26 @@ import { createClient } from '@/lib/supabase/client'
  * pago llamado "Lite"). Mostrar el tier hacia que quien clickeaba "Lite"
  * terminara leyendo "Plan seleccionado: FREE".
  */
-const VALID_PLAN_TIERS = ['free', 'basic', 'pro', 'enterprise'] as const
+
+/**
+ * Los precios de los planes son de la plataforma, no de la tienda: se cobran en
+ * guaranies independientemente de la moneda con la que despues facture cada
+ * comercio, asi que aca no corresponde la moneda de la organizacion.
+ */
+const formatPlanPrice = (value: number) =>
+  new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(value)
 
 type SelectedPlanInfo = { tier: string; name: string; price: number; trialDays: number } | null
+
+type PlanOption = {
+  tier: string
+  /** Lo que va en la URL. Cae al tier si el plan todavia no tiene slug propio. */
+  slug: string
+  name: string
+  price: number
+  priceNote: string
+  trialDays: number
+}
 
 // Maps API field names to friendly display labels for inline errors.
 const FIELD_LABELS: Record<string, string> = {
@@ -72,46 +89,72 @@ function RegisterForm() {
   // distintas (el tier `free` puede ser un plan pago llamado "Lite"), y mostrar
   // el codigo interno hacia parecer que se habia elegido otro plan.
   const [planInfo, setPlanInfo] = useState<SelectedPlanInfo>(null)
+  const [availablePlans, setAvailablePlans] = useState<PlanOption[] | null>(null)
 
+  // Se traen todos los planes vigentes de una vez: hacen falta para resolver el
+  // que llega por la URL y, si no llega ninguno, para poder ofrecerlos.
   useEffect(() => {
-    // Formato de URL, no autorizacion: evita mandar basura a la consulta. Lo que
-    // decide el plan real es la fila que devuelve la base.
-    if (!planParam || !/^[a-z0-9][a-z0-9-]{0,47}$/.test(planParam)) {
-      setPlanInfo(null)
-      return
-    }
-
     let cancelled = false
     const supabase = createClient()
 
     void supabase
       .from('subscription_plans')
-      .select('tier, public_slug, name, price, trial_days')
+      .select('tier, public_slug, name, price, price_note, trial_days')
       .eq('is_active', true)
-      // Se busca por el slug publico y tambien por el tier, para que los enlaces
-      // viejos (/register?plan=free) sigan funcionando.
-      .or(`public_slug.eq.${planParam},tier.eq.${planParam}`)
-      .limit(1)
-      .maybeSingle()
+      .order('price', { ascending: true })
       .then(({ data }) => {
-        if (cancelled || !data) return
-        setPlanInfo({
-          tier: data.tier,
-          name: data.name,
-          price: Number(data.price) || 0,
-          trialDays: Number(data.trial_days) || 0,
-        })
+        if (cancelled) return
+        setAvailablePlans((data ?? []).map((row) => ({
+          tier: String(row.tier),
+          slug: String(row.public_slug || row.tier),
+          name: String(row.name),
+          price: Number(row.price) || 0,
+          priceNote: row.price_note ? String(row.price_note) : '',
+          trialDays: Number(row.trial_days) || 0,
+        })))
       })
 
     return () => { cancelled = true }
-  }, [planParam])
+  }, [])
 
-  // El tier que se envia sale SIEMPRE de la fila encontrada, nunca de la URL:
-  // asi un parametro armado a mano no puede pedir un plan que no existe o esta
-  // desactivado. Sin plan resuelto se usa el de entrada, como antes.
-  const selectedPlan = planInfo && (VALID_PLAN_TIERS as readonly string[]).includes(planInfo.tier)
-    ? planInfo.tier
-    : 'free'
+  // El plan pedido se resuelve contra esa lista. Se busca por slug publico y
+  // tambien por tier, para que los enlaces viejos sigan funcionando.
+  useEffect(() => {
+    if (availablePlans === null) return
+
+    const encontrado = planParam
+      ? availablePlans.find((plan) => plan.slug === planParam || plan.tier === planParam)
+      : undefined
+
+    setPlanInfo(encontrado
+      ? { tier: encontrado.tier, name: encontrado.name, price: encontrado.price, trialDays: encontrado.trialDays }
+      : null)
+  }, [planParam, availablePlans])
+
+  // El tier que se envia sale SIEMPRE de la fila encontrada, nunca de la URL.
+  //
+  // Antes, si no se resolvia ninguna fila, caia a `'free'`. En esta plataforma
+  // ese tier es un plan PAGO —"Lite", 45.000 al mes— asi que quien llegaba sin
+  // plan, o con un enlace a un plan que se desactivo despues, quedaba inscripto
+  // en el sin verlo nunca. Ahora no hay plan por defecto: si no se resolvio, se
+  // pide elegir.
+  const selectedPlan = planInfo?.tier ?? null
+
+  const planState: 'cargando' | 'sin-plan' | 'no-disponible' | 'ok' =
+    availablePlans === null ? 'cargando'
+      : planInfo ? 'ok'
+        : planParam ? 'no-disponible'
+          : 'sin-plan'
+
+  const elegirPlan = (slug: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (slug) params.set('plan', slug)
+    else params.delete('plan')
+    const query = params.toString()
+    // Queda en la URL para que el enlace se pueda compartir y para que volver
+    // atras no pierda la eleccion.
+    router.replace(query ? `/register?${query}` : '/register', { scroll: false })
+  }
 
   // Always resolve slug: prefer what the user typed, fall back to slugified company name.
   const previewSlug = slugifyTenantName(formData.companySlug || formData.companyName)
@@ -178,6 +221,14 @@ function RegisterForm() {
 
     if (!formData.companyName.trim()) {
       clientErrors.companyName = 'El nombre de la empresa es requerido'
+    }
+
+    // Sin plan no se envia nada. Antes se mandaba `'free'` por defecto y la
+    // cuenta se creaba igual, en un plan que el usuario nunca vio.
+    if (!selectedPlan) {
+      setError('Elegí un plan para continuar.')
+      setLoading(false)
+      return
     }
 
     if (formData.password !== formData.confirmPassword) {
@@ -287,7 +338,7 @@ function RegisterForm() {
                 <CardDescription className="mt-1 text-slate-400">Registro SaaS para nuevos negocios</CardDescription>
               </div>
               {planInfo && (
-                <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-300">
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-300">
                   <Sparkles className="h-4 w-4 shrink-0" />
                   <span>
                     {/* Nombre y dias reales del plan: antes se mostraba el codigo
@@ -297,20 +348,88 @@ function RegisterForm() {
                     Plan seleccionado: <strong>{planInfo.name}</strong>
                     {planInfo.price > 0 && (
                       <span className="ml-1 text-xs text-cyan-400/70">
-                        · {new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(planInfo.price)}/mes
+                        · {formatPlanPrice(planInfo.price)}/mes
                       </span>
                     )}
                     {planInfo.trialDays > 0 && (
                       <span className="ml-1 text-xs text-cyan-400/70">
-                        · {planInfo.trialDays} días de prueba gratis
+                        · {planInfo.trialDays} días de regalo
                       </span>
                     )}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => elegirPlan('')}
+                    className="ml-auto rounded-md border border-cyan-500/40 px-2 py-0.5 text-xs transition-colors hover:bg-cyan-500/20 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-500/60"
+                  >
+                    Cambiar
+                  </button>
                 </div>
               )}
             </CardHeader>
 
             <CardContent className="space-y-6">
+              {/* Sin plan resuelto no se muestra el formulario.
+                  Esta plataforma no tiene plan gratuito: antes se caia a `free`
+                  —que es "Lite", 45.000 al mes— y la cuenta se creaba sin que el
+                  usuario viera nunca que estaba contratando. Un enlace a un plan
+                  que se desactivo despues caia igual ahi, en silencio. */}
+              {planState !== 'ok' && planState !== 'cargando' && (
+                <div className="space-y-3">
+                  {planState === 'no-disponible' && (
+                    <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300" role="alert">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>Ese plan ya no está disponible. Elegí uno de estos:</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-200">
+                      {planState === 'no-disponible' ? 'Planes vigentes' : 'Elegí tu plan para continuar'}
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Todos incluyen días de regalo para probarlo antes de pagar.
+                    </p>
+                  </div>
+
+                  {availablePlans && availablePlans.length > 0 ? (
+                    <ul className="space-y-2">
+                      {availablePlans.map((plan) => (
+                        <li key={plan.tier}>
+                          <button
+                            type="button"
+                            onClick={() => elegirPlan(plan.slug)}
+                            className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2.5 text-left transition-colors hover:border-cyan-500/50 hover:bg-slate-900/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-500/60"
+                          >
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold text-white">{plan.name}</span>
+                              {plan.trialDays > 0 && (
+                                <span className="block text-xs text-cyan-400/80">
+                                  {plan.trialDays} días de regalo
+                                </span>
+                              )}
+                            </span>
+                            <span className="shrink-0 text-right">
+                              <span className="block text-sm font-semibold text-slate-200">
+                                {formatPlanPrice(plan.price)}
+                              </span>
+                              <span className="block text-xs text-slate-500">{plan.priceNote || 'por mes'}</span>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    // Sin planes activos no hay nada que contratar: decirlo es
+                    // mejor que mostrar un formulario que va a fallar al enviar.
+                    <p className="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-3 text-sm text-slate-400">
+                      No hay planes disponibles en este momento. Escribinos y te ayudamos a activar tu cuenta.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {planState === 'ok' && (
               <form onSubmit={handleRegister} className="space-y-4" noValidate>
                 {/* Nombre completo */}
                 <div className="space-y-1.5">
@@ -569,7 +688,7 @@ function RegisterForm() {
                 <Button
                   type="submit"
                   className="h-11 w-full bg-gradient-to-r from-cyan-600 to-blue-600 font-semibold text-white hover:from-cyan-500 hover:to-blue-500 disabled:opacity-60"
-                  disabled={loading || !captchaToken || (pwd.length > 0 && !allChecksOk)}
+                  disabled={loading || !captchaToken || !selectedPlan || (pwd.length > 0 && !allChecksOk)}
                 >
                   {loading ? (
                     <>
@@ -584,6 +703,7 @@ function RegisterForm() {
                   )}
                 </Button>
               </form>
+              )}
 
               <div className="pt-1 text-center">
                 <p className="text-sm text-slate-400">
