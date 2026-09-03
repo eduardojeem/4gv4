@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import {
+  actionsWithSeverity,
+  describeAuditEvent,
+  isAuditSeverity,
+  severityColumnValues,
+} from '@/lib/security/audit-events'
 
 type Severity = 'low' | 'medium' | 'high' | 'critical'
 
@@ -35,25 +41,6 @@ type SecurityLog = {
   user_agent?: string
 }
 
-const EVENT_MAP: Record<string, { event: string; severity: Severity }> = {
-  admin_api_access: { event: 'Acceso administrativo', severity: 'low' },
-  unauthorized_admin_access_attempt: { event: 'Intento de acceso admin no autorizado', severity: 'high' },
-  create: { event: 'Creacion de registro', severity: 'low' },
-  update: { event: 'Actualizacion de registro', severity: 'low' },
-  delete: { event: 'Eliminacion de registro', severity: 'medium' },
-  login: { event: 'Inicio de sesion exitoso', severity: 'low' },
-  login_failed: { event: 'Intento de acceso fallido', severity: 'medium' },
-  logout: { event: 'Cierre de sesion', severity: 'low' },
-  password_change: { event: 'Cambio de contrasena', severity: 'low' },
-  role_change: { event: 'Cambio de rol de usuario', severity: 'high' },
-  grant_admin_self_rpc: { event: 'Auto-promocion a administrador', severity: 'critical' },
-  grant_admin_migration: { event: 'Promocion a administrador', severity: 'high' },
-  permission_denied: { event: 'Acceso denegado', severity: 'medium' },
-  suspicious_activity: { event: 'Actividad sospechosa detectada', severity: 'high' },
-  data_export: { event: 'Exportacion de datos', severity: 'medium' },
-  bulk_operation: { event: 'Operacion masiva', severity: 'medium' },
-  update_user_status: { event: 'Cambio de estado de usuario', severity: 'high' },
-}
 
 const SELECT_COLUMNS_WITH_ORG = 'id, user_id, action, resource, resource_id, details, new_values, ip_address, user_agent, created_at, severity, organization_id'
 const SELECT_COLUMNS_LEGACY = 'id, user_id, action, resource, resource_id, details, new_values, ip_address, user_agent, created_at, severity'
@@ -65,14 +52,30 @@ function timeRangeToDate(value: string | null) {
 }
 
 function normalizeSeverity(value: unknown, fallback: Severity): Severity {
-  return value === 'low' || value === 'medium' || value === 'high' || value === 'critical' ? value : fallback
+  return isAuditSeverity(value) ? value : fallback
 }
 
-function severityDbValues(value: string | null) {
-  if (!value || value === 'all') return null
-  if (value === 'low') return ['low', 'info']
-  if (value === 'medium' || value === 'high' || value === 'critical') return [value]
-  return null
+/**
+ * Filtro de gravedad que alcanza tambien las filas sin severidad guardada.
+ *
+ * Solo el registro de superadmin completa la columna: todo lo que escribe la
+ * aplicacion la deja en null. La pantalla deduce la gravedad del catalogo para
+ * mostrarla, asi que filtrando unicamente por la columna el resultado era
+ * siempre vacio — justo para los eventos graves, que es para lo que se usa.
+ *
+ * Se buscan las dos cosas: la columna cuando esta escrita, y la accion cuando
+ * no. Los nombres de accion salen del catalogo, no del usuario.
+ */
+function severityFilterExpression(value: string | null): string | null {
+  if (!value || value === 'all' || !isAuditSeverity(value)) return null
+
+  const columnValues = severityColumnValues(value).join(',')
+  const actions = actionsWithSeverity(value)
+  const porColumna = `severity.in.(${columnValues})`
+
+  if (actions.length === 0) return porColumna
+
+  return `${porColumna},and(severity.is.null,action.in.(${actions.join(',')}))`
 }
 
 function stringifyDetails(value: unknown) {
@@ -154,7 +157,7 @@ async function loadProfiles(admin: ReturnType<typeof createAdminSupabase>, userI
 }
 
 function mapLog(row: AuditLogRow, profilesById: Map<string, string>): SecurityLog {
-  const mapped = EVENT_MAP[row.action] || { event: `Accion: ${row.action}`, severity: 'low' as Severity }
+  const mapped = describeAuditEvent(row.action)
 
   return {
     id: row.id,
@@ -178,11 +181,11 @@ function applyBaseFilters(query: any, params: {
   search: string
   userId: string | null
 }) {
-  const severityValues = severityDbValues(params.severity)
+  const severityExpression = severityFilterExpression(params.severity)
   let nextQuery = query.gte('created_at', params.startDate)
 
-  if (severityValues?.length) {
-    nextQuery = nextQuery.in('severity', severityValues)
+  if (severityExpression) {
+    nextQuery = nextQuery.or(severityExpression)
   }
 
   if (params.userId && params.userId !== 'all') {
