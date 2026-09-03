@@ -122,8 +122,15 @@ function RegisterForm() {
   useEffect(() => {
     if (availablePlans === null) return
 
+    // El slug publico manda; el tier es solo respaldo para enlaces viejos.
+    //
+    // El orden importa porque los dos espacios de nombres se cruzan: el slug de
+    // un plan puede ser el tier de otro (`pro` es el slug de "Pro" y el tier de
+    // "PRO+"). Resolverlo con una sola condicion dejaba el resultado a merced
+    // del orden del arreglo, que es por precio.
     const encontrado = planParam
-      ? availablePlans.find((plan) => plan.slug === planParam || plan.tier === planParam)
+      ? availablePlans.find((plan) => plan.slug === planParam)
+        ?? availablePlans.find((plan) => plan.tier === planParam)
       : undefined
 
     setPlanInfo(encontrado

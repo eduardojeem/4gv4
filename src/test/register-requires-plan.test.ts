@@ -89,8 +89,10 @@ describe('la pantalla no inventa un plan', () => {
 describe('el servidor resuelve el plan real', () => {
   it('acepta el tier o el slug público', () => {
     // Los enlaces que circulan usan el slug; la API no debería depender de que
-    // el navegador ya lo hubiera traducido.
-    expect(RUTA).toMatch(/tier\.eq\.\$\{selectedPlanTier\},public_slug\.eq\.\$\{selectedPlanTier\}/)
+    // el navegador ya lo hubiera traducido. La precedencia entre ambos se
+    // verifica en plan-slug-resolution.test.ts.
+    expect(RUTA).toContain("buscarPlan('public_slug')")
+    expect(RUTA).toContain("buscarPlan('tier')")
   })
 
   it('guarda el tier de la fila, no lo que llegó', () => {

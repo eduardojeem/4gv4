@@ -95,13 +95,22 @@ export async function POST(request: Request) {
 
     // Se acepta el tier o el slug publico: los enlaces que circulan usan el
     // slug, y la API no deberia depender de que el navegador ya lo tradujera.
-    const { data: subscriptionPlan, error: planError } = await admin
+    //
+    // El slug manda y el tier es respaldo, en dos consultas y no en un `or`: los
+    // dos espacios de nombres se cruzan —`pro` puede ser el slug de un plan y el
+    // tier de otro— y un `or` con limit(1) deja el resultado a merced del orden
+    // que devuelva la base.
+    const buscarPlan = (columna: 'public_slug' | 'tier') => admin
       .from('subscription_plans')
       .select('tier, name, is_active, trial_days')
       .eq('is_active', true)
-      .or(`tier.eq.${selectedPlanTier},public_slug.eq.${selectedPlanTier}`)
-      .limit(1)
+      .eq(columna, selectedPlanTier)
       .maybeSingle()
+
+    const porSlug = await buscarPlan('public_slug')
+    const { data: subscriptionPlan, error: planError } = porSlug.data || porSlug.error
+      ? porSlug
+      : await buscarPlan('tier')
 
     if (planError) {
       logger.error('Failed to validate selected plan', { error: planError.message, plan: selectedPlanTier })
