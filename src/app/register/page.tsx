@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Eye, EyeOff, ArrowRight, Shield, Sparkles, CheckCircle2, Check, AlertCircle } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowRight, Shield, ShieldCheck, Sparkles, CheckCircle2, Check, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
@@ -395,7 +395,7 @@ function RegisterForm() {
                       {planState === 'no-disponible' ? 'Planes vigentes' : 'Elegí tu plan para continuar'}
                     </h2>
                     <p className="mt-0.5 text-xs text-slate-500">
-                      Todos incluyen días de regalo para probarlo antes de pagar.
+                      Sin tarjeta: empezás con los días de regalo y pagás recién cuando terminan.
                     </p>
                   </div>
 
@@ -709,6 +709,20 @@ function RegisterForm() {
                     </>
                   )}
                 </Button>
+
+                {/* Se repite aca a proposito: quien llega con `?plan=` desde la
+                    pagina de precios va directo al formulario y no ve el texto
+                    del selector. Es lo ultimo que se lee antes de decidir. */}
+                <p className="flex items-center justify-center gap-1.5 text-center text-xs text-slate-400">
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden="true" />
+                  <span>
+                    No pedimos tarjeta para crear la cuenta
+                    {planInfo && planInfo.trialDays > 0 && (
+                      <>: tenés {planInfo.trialDays} días de regalo</>
+                    )}
+                    .
+                  </span>
+                </p>
               </form>
               )}
 
