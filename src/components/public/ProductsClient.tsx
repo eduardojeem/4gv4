@@ -50,6 +50,11 @@ type Props = {
   initialCategory?: string
   initialSubcategory?: string
   initialBrand?: string
+  /**
+   * Oculta el buscador de esta barra. Lo usa /marketplace/buscar, que ya tiene el
+   * suyo en el encabezado: dos buscadores sobre el mismo `?q=` se pisaban entre si.
+   */
+  hideSearch?: boolean
 }
 
 const SORT_OPTIONS: { id: SortKey; label: string; shortLabel: string; icon: React.ElementType }[] = [
@@ -69,6 +74,7 @@ export function ProductsClient({
   initialCategory = '',
   initialSubcategory = '',
   initialBrand = '',
+  hideSearch = false,
 }: Props) {
   const router = useRouter()
   const pathname = usePathname()
@@ -142,7 +148,11 @@ export function ProductsClient({
       lastFiltersRef.current.brand !== initialBrand
 
     if (filtersChanged) {
-      setQuery(initialQuery)
+      // Aca habia un `setQuery(initialQuery)`. `initialQuery` llega recien cuando
+      // responde el servidor, asi que una respuesta vieja pisaba lo que la persona
+      // ya habia terminado de escribir: escribias "notebook", volvia la respuesta
+      // de "note" y el campo retrocedia. El input es el dueño de su texto; la URL
+      // lo sigue, no al reves.
       setPage(1)
       lastFiltersRef.current = {
         query: initialQuery,
@@ -322,25 +332,29 @@ export function ProductsClient({
         {/* ── FILA ÚNICA: Buscador + Ofertas + Marca + Orden + Vista ── */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Input de Búsqueda */}
-          <div className="relative flex-1 min-w-0">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar productos..."
-              className="h-8 sm:h-9 rounded-lg sm:rounded-xl pl-8 pr-7 text-xs bg-background border-border/80 focus-visible:ring-primary"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-                aria-label="Limpiar búsqueda"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
+          {hideSearch ? (
+            <div className="flex-1 min-w-0" />
+          ) : (
+            <div className="relative flex-1 min-w-0">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar productos..."
+                className="h-8 sm:h-9 rounded-lg sm:rounded-xl pl-8 pr-7 text-xs bg-background border-border/80 focus-visible:ring-primary"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label="Limpiar búsqueda"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Botón Ofertas (al lado del buscador) */}
           {offersCount > 0 && (

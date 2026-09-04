@@ -87,9 +87,11 @@ describe('getMarketplaceProductsPage', () => {
     await getMarketplaceProductsPage(2, { q: 'funda', marca: 'Acme' })
 
     expect(productCalls).toContainEqual({ method: 'ilike', args: ['brand', 'Acme'] })
+    // La busqueda cubre tambien SKU y descripcion: antes solo nombre y marca, y el
+    // mismo termino daba resultados distintos que /marketplace/buscar.
     expect(productCalls).toContainEqual({
       method: 'or',
-      args: ['name.ilike.%funda%,brand.ilike.%funda%'],
+      args: ['name.ilike.%funda%,sku.ilike.%funda%,brand.ilike.%funda%,description.ilike.%funda%'],
     })
   })
 })

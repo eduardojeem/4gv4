@@ -2,6 +2,57 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import type { PublicProduct } from '@/types/public'
 import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapPublicPromotion } from '@/lib/public-promotions'
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
+import { sanitizeFilterTerm } from '@/lib/api/sanitize-search'
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Los ids de categoria se interpolan dentro de un `.or(...)` de PostgREST, donde
+ * la coma separa condiciones. Comprobar que sean UUID es lo que impide que un
+ * `?categoria=` armado a mano agregue condiciones propias, y de paso evita
+ * mandar a la base una consulta que solo puede fallar.
+ */
+function isUuid(value: string) {
+  return UUID_PATTERN.test(value.trim())
+}
+
+/**
+ * Terminos de busqueda dentro de un `.or('col.ilike.%term%,...')`.
+ *
+ * `sanitizeFilterTerm` saca lo que rompe la gramatica del filtro —la coma, los
+ * parentesis, la comilla, la barra y los comodines `%` y `*`— pero conserva el
+ * punto y el guion bajo, que son parte de nombres y codigos reales: un SKU como
+ * `ABC-1.5L` tiene que seguir encontrandose.
+ */
+function buildProductSearchExpression(rawQuery: string) {
+  const term = sanitizeFilterTerm(rawQuery)
+  if (!term) return null
+
+  return ['name', 'sku', 'brand', 'description']
+    .map((column) => `${column}.ilike.%${term}%`)
+    .join(',')
+}
+
+/**
+ * Una categoria padre incluye a sus hijas. Devuelve null cuando el id no es un
+ * UUID: no existe esa categoria, asi que no hace falta preguntarle nada a la
+ * base y el catalogo filtrado por ella esta vacio.
+ */
+async function resolveCategoryIds(
+  supabase: ReturnType<typeof createAdminSupabase>,
+  categoria: string
+): Promise<string[] | null> {
+  if (!isUuid(categoria)) return null
+
+  const id = categoria.trim()
+  const { data } = await supabase
+    .from('categories')
+    .select('id')
+    .or(`id.eq.${id},parent_id.eq.${id},global_category_id.eq.${id}`)
+
+  const ids = (data ?? []).map((row) => String(row.id))
+  return ids.length > 0 ? ids : [id]
+}
 
 export type MarketplaceOrganization = {
   id: string
@@ -167,15 +218,26 @@ export function resolveOrganizationRubro(
   return 'comercio'
 }
 
-export async function getMarketplaceOrganizations(limit = 24): Promise<MarketplaceOrganization[]> {
+export async function getMarketplaceOrganizations(
+  limit = 24,
+  options?: { q?: string }
+): Promise<MarketplaceOrganization[]> {
   const supabase = createAdminSupabase()
 
-  const { data: organizations, error: organizationError } = await supabase
+  let organizationQuery = supabase
     .from('organizations')
     .select('id, name, slug, plan, logo_url, business_vertical, operating_model, created_at, review_rating_avg, review_count')
     .eq('marketplace_public', true)
     .eq('storefront_public', true)
-    .limit(limit)
+
+  if (options?.q) {
+    const term = sanitizeFilterTerm(options.q)
+    if (term) {
+      organizationQuery = organizationQuery.or(`name.ilike.%${term}%,slug.ilike.%${term}%`)
+    }
+  }
+
+  const { data: organizations, error: organizationError } = await organizationQuery.limit(limit)
 
   if (organizationError || !organizations?.length) return []
 
@@ -353,23 +415,15 @@ export async function getMarketplaceProductsPage(
     query = query.eq('category_id', options.subcategoria)
   } else if (options?.categoria) {
     // Si se pasa una categoría padre, buscar todos los hijos/subcategorías para incluir sus productos
-    const { data: relatedCats } = await supabase
-      .from('categories')
-      .select('id')
-      .or(`id.eq.${options.categoria},parent_id.eq.${options.categoria},global_category_id.eq.${options.categoria}`)
-
-    const categoryIds = (relatedCats ?? []).map((c) => c.id)
-    if (categoryIds.length > 0) {
-      query = query.in('category_id', categoryIds)
-    } else {
-      query = query.eq('category_id', options.categoria)
-    }
+    const categoryIds = await resolveCategoryIds(supabase, options.categoria)
+    if (!categoryIds) return { products: [], total: 0 }
+    query = query.in('category_id', categoryIds)
   }
 
   if (options?.q) {
-    const qClean = options.q.trim()
-    if (qClean) {
-      query = query.or(`name.ilike.%${qClean}%,brand.ilike.%${qClean}%`)
+    const searchExpression = buildProductSearchExpression(options.q)
+    if (searchExpression) {
+      query = query.or(searchExpression)
     }
   }
 
@@ -466,14 +520,6 @@ export async function getMarketplaceProductsPage(
   }
 }
 
-export async function getMarketplaceProducts(
-  limit = 48,
-  options?: MarketplaceProductFilters
-): Promise<MarketplaceProduct[]> {
-  const page = await getMarketplaceProductsPage(limit, options)
-  return page.products
-}
-
 export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]> {
   const supabase = createAdminSupabase()
 
@@ -550,17 +596,9 @@ export async function getMarketplaceBrands(
     .gt('stock_quantity', 0)
 
   if (options?.categoria) {
-    const { data: relatedCats } = await supabase
-      .from('categories')
-      .select('id')
-      .or(`id.eq.${options.categoria},parent_id.eq.${options.categoria},global_category_id.eq.${options.categoria}`)
-
-    const categoryIds = (relatedCats ?? []).map((c) => c.id)
-    if (categoryIds.length > 0) {
-      query = query.in('category_id', categoryIds)
-    } else {
-      query = query.eq('category_id', options.categoria)
-    }
+    const categoryIds = await resolveCategoryIds(supabase, options.categoria)
+    if (!categoryIds) return []
+    query = query.in('category_id', categoryIds)
   }
 
   const { data, error } = await query.limit(20000)
