@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { AlertTriangle, ShieldAlert, CheckCircle2, EyeOff, Package, Wrench, X } from 'lucide-react'
+import { AlertTriangle, ShieldAlert, CheckCircle2, EyeOff, Package, Wrench, Layers, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Product } from '@/types/products'
@@ -10,6 +10,7 @@ export interface QuickFilterCounts {
   all: number
   products?: number
   services?: number
+  variants?: number
   low_stock: number
   out_of_stock: number
   active: number
@@ -19,8 +20,8 @@ export interface QuickFilterCounts {
 export interface QuickFiltersBarProps {
   products: Product[]
   counts?: QuickFilterCounts
-  activeFilter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | null
-  onFilterClick: (filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services') => void
+  activeFilter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | 'variants' | null
+  onFilterClick: (filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | 'variants') => void
   className?: string
 }
 
@@ -38,12 +39,14 @@ export function QuickFiltersBar({
         ...providedCounts,
         products: providedCounts.products ?? Math.max(0, providedCounts.all - (providedCounts.services ?? 0)),
         services: providedCounts.services ?? 0,
+        variants: providedCounts.variants ?? products.filter(p => p.has_variants || (p.variants && p.variants.length > 0)).length,
       }
     }
 
     const total = products.length
     const services = products.filter(isServiceLikeProduct).length
     const physicalProducts = total - services
+    const variants = products.filter(p => p.has_variants || (p.variants && p.variants.length > 0)).length
     const lowStock = products.filter(p => !isServiceLikeProduct(p) && isLowStock(p)).length
     const outOfStock = products.filter(p => !isServiceLikeProduct(p) && isOutOfStock(p)).length
     const active = products.filter(p => p.is_active).length
@@ -53,6 +56,7 @@ export function QuickFiltersBar({
       all: total,
       products: physicalProducts,
       services,
+      variants,
       low_stock: lowStock,
       out_of_stock: outOfStock,
       active,
@@ -137,6 +141,29 @@ export function QuickFiltersBar({
             className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-purple-100/60 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-700"
           >
             {counts.services ?? 0}
+          </Badge>
+        </Button>
+
+        {/* Con Variantes */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onFilterClick('variants')}
+          className={cn(
+            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
+            activeFilter === 'variants'
+              ? 'bg-pink-50 dark:bg-pink-950/60 border-pink-400 dark:border-pink-700 text-pink-800 dark:text-pink-300 shadow-xs'
+              : 'hover:bg-pink-50/50 dark:hover:bg-pink-950/30 text-pink-700 dark:text-pink-400 border-pink-200/80 dark:border-pink-800/60'
+          )}
+        >
+          <Layers className="h-3.5 w-3.5 text-pink-600 dark:text-pink-400" />
+          <span>Con Variantes</span>
+          <Badge
+            variant="outline"
+            className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-pink-100/60 dark:bg-pink-900/40 text-pink-800 dark:text-pink-300 border-pink-300 dark:border-pink-700"
+          >
+            {counts.variants ?? 0}
           </Badge>
         </Button>
 

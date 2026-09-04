@@ -10,6 +10,7 @@ export type PublicOrganization = {
   plan: string | null
   logo_url: string | null
   marketplace_public: boolean | null
+  storefront_public: boolean
 }
 
 const FALLBACK_PUBLIC_ORG_SLUG = normalizeDefaultPublicOrgSlug(process.env.DEFAULT_PUBLIC_ORG_SLUG)
@@ -31,8 +32,8 @@ export async function resolvePublicOrganization(
   return resolvePublicOrganizationBySlug(getTenantSlugFromRequest(request), supabase)
 }
 
-export function isPublicStorefrontEnabled(organization: Pick<PublicOrganization, 'marketplace_public'> | null | undefined) {
-  return organization?.marketplace_public !== false
+export function isPublicStorefrontEnabled(organization: Pick<PublicOrganization, 'storefront_public'> | null | undefined) {
+  return organization?.storefront_public === true
 }
 
 export async function resolvePublicStorefrontOrganization(
@@ -63,7 +64,7 @@ export async function resolvePublicOrganizationBySlug(
 
   const { data, error } = await supabase
     .from('organizations')
-    .select('id, name, slug, plan, logo_url, marketplace_public')
+    .select('id, name, slug, plan, logo_url, marketplace_public, storefront_public')
     .eq('slug', slug)
     .maybeSingle()
 
@@ -72,12 +73,12 @@ export async function resolvePublicOrganizationBySlug(
   }
 
   if (data) {
-    return data as PublicOrganization
+    return isPublicStorefrontEnabled(data) ? data as PublicOrganization : null
   }
 
   const { data: aliasRow, error: aliasError } = await supabase
     .from('organization_slug_aliases')
-    .select('organization:organizations(id, name, slug, plan, logo_url, marketplace_public)')
+    .select('organization:organizations(id, name, slug, plan, logo_url, marketplace_public, storefront_public)')
     .eq('old_slug', slug)
     .maybeSingle()
 
@@ -89,5 +90,5 @@ export async function resolvePublicOrganizationBySlug(
     ? aliasRow?.organization[0]
     : aliasRow?.organization
 
-  return (organization as PublicOrganization | null) ?? null
+  return isPublicStorefrontEnabled(organization) ? organization as PublicOrganization : null
 }

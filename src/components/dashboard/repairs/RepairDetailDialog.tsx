@@ -26,7 +26,7 @@ import {
   Edit, Printer, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
   PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown,
-  Loader2, Sparkles, History, FileCheck2, User
+  Loader2, Sparkles, History, FileCheck2, User, TrendingUp
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -53,6 +53,7 @@ import {
   formatWarrantyExpiration
 } from '@/lib/warranty-utils'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { logger } from '@/lib/logger'
 import { formatWhatsAppPhone, getWhatsAppLink } from '@/lib/whatsapp'
 import { RepairCostSummary } from './RepairCostSummary'
@@ -96,6 +97,7 @@ export function RepairDetailDialog({
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
   const { isAdmin } = useAuth()
+  const canViewCost = useCanViewCost()
   const [warrantyClaimOpen, setWarrantyClaimOpen] = useState(false)
   // Al registrar un reclamo se remonta el bloque para que muestre el caso recien creado.
   const [warrantyCaseVersion, setWarrantyCaseVersion] = useState(0)
@@ -204,6 +206,11 @@ export function RepairDetailDialog({
     discountAmount: activeRepair.discountAmount || 0,
     paidAmount: activeRepair.paidAmount || 0,
   })
+
+  const totalInternalCost = repairCostSummary.partsInternalCost ?? lineTotals.includedInternal
+  const currentFinalTotal = financial.priceDefined ? financial.total : (repairCostSummary.finalTotal ?? 0)
+  const grossProfit = Math.max(0, currentFinalTotal - totalInternalCost)
+  const profitMargin = currentFinalTotal > 0 ? (grossProfit / currentFinalTotal) * 100 : 0
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return 'Pendiente'
@@ -975,6 +982,40 @@ export function RepairDetailDialog({
                   </div>
                 </section>
 
+                {canViewCost && (
+                  <section aria-labelledby="repair-profitability-summary-title" className="relative overflow-hidden rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/70 via-background to-blue-50/50 p-4 shadow-sm sm:p-5 dark:border-indigo-900/60 dark:from-indigo-950/30 dark:via-background dark:to-blue-950/20">
+                    <TrendingUp className="pointer-events-none absolute -right-4 -top-4 h-24 w-24 text-indigo-600/5 dark:text-indigo-400/5" />
+                    <div className="relative space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">
+                          <TrendingUp className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                          <h3 id="repair-profitability-summary-title">Rentabilidad estimada</h3>
+                        </div>
+                        <Badge variant="outline" className="border-indigo-300 bg-indigo-100 font-bold text-[10px] text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-200">
+                          {profitMargin.toFixed(1)}% Margen
+                        </Badge>
+                      </div>
+                      <dl className="divide-y divide-indigo-100 rounded-lg border border-indigo-200/80 bg-background/90 text-sm dark:divide-indigo-900/50 dark:border-indigo-900/60">
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <dt className="text-muted-foreground text-xs">Inversión / Costo interno</dt>
+                          <dd className="font-semibold tabular-nums text-slate-800 dark:text-slate-200">
+                            {formatCurrency(totalInternalCost)}
+                          </dd>
+                        </div>
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <dt className="font-medium text-xs text-indigo-900 dark:text-indigo-200">Ganancia bruta</dt>
+                          <dd className="font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                            +{formatCurrency(grossProfit)}
+                          </dd>
+                        </div>
+                      </dl>
+                      <p className="text-[11px] text-muted-foreground leading-snug">
+                        * Calculado sobre el valor final ({formatCurrency(currentFinalTotal)}) menos el costo de repuestos e insumos ({formatCurrency(totalInternalCost)}).
+                      </p>
+                    </div>
+                  </section>
+                )}
+
                 {repair.closeout && (
                   <section aria-labelledby="repair-closeout-title" className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/20">
                     <h3 id="repair-closeout-title" className="text-sm font-semibold">Cierre sin reparación</h3>
@@ -1293,6 +1334,7 @@ export function RepairDetailDialog({
                   <TabsContent value="finance" className="mt-4 space-y-5">
                     <RepairCostSummary
                       summary={repairCostSummary}
+                      parts={activeRepair.parts}
                       editable={activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado'}
                       repairId={activeRepair.id}
                       onEdit={() => setIsCostsEditorOpen(true)}

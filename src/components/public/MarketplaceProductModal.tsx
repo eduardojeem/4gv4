@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  MapPin,
   Package,
   Store,
   Tag,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { resolveProductImageUrl } from '@/lib/images'
+import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import { formatPrice } from '@/lib/utils'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
 import { useState, useCallback, useEffect } from 'react'
@@ -134,6 +136,13 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
 
   const productHref = `/${product.organization_slug}/productos/${product.id}`
   const storeHref = `/${product.organization_slug}/inicio`
+
+  const mapsHref =
+    product.organization_maps_url ||
+    getCompanyMapsHref(
+      null,
+      product.organization_address || (product.organization_city ? `${product.organization_city}, Paraguay` : null)
+    )
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -264,15 +273,56 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
         <div>
           <div className="flex flex-col gap-3 p-4">
 
-            {/* Pill de la tienda */}
-            <Link
-              href={storeHref}
-              onClick={onClose}
-              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50/80 px-3 py-1.5 text-xs font-bold text-cyan-700 transition-all hover:bg-cyan-100 dark:border-cyan-800/40 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-950/60 shadow-sm"
-            >
-              <Store className="h-3.5 w-3.5 shrink-0 text-cyan-600 dark:text-cyan-400" />
-              {product.organization_name}
-            </Link>
+            {/* Fila de Vendedor: Logo de empresa, nombre y opción de ubicación */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-2.5 dark:border-slate-800/80 dark:bg-slate-900/40">
+              <Link
+                href={storeHref}
+                onClick={onClose}
+                className="group flex items-center gap-2.5 transition-opacity hover:opacity-90 min-w-0"
+              >
+                <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-white shadow-2xs flex items-center justify-center dark:border-slate-700 dark:bg-slate-800">
+                  {product.organization_logo_url ? (
+                    <Image
+                      src={resolveProductImageUrl(product.organization_logo_url)}
+                      alt={product.organization_name}
+                      fill
+                      sizes="36px"
+                      className="object-cover"
+                    />
+                  ) : (
+                    <Store className="h-4.5 w-4.5 text-cyan-600 dark:text-cyan-400" />
+                  )}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="truncate text-xs font-bold text-foreground group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
+                    {product.organization_name}
+                  </span>
+                  <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                    Tienda oficial
+                  </span>
+                </div>
+              </Link>
+
+              {/* Opción de ubicación */}
+              {mapsHref ? (
+                <a
+                  href={mapsHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/80 px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition-all hover:bg-rose-100 hover:border-rose-300 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/70 shadow-2xs shrink-0"
+                  title={product.organization_address ? `${product.organization_address} - ${product.organization_city || ''}` : 'Abrir ubicación en Google Maps'}
+                >
+                  <MapPin className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                  <span className="max-w-[130px] truncate">{product.organization_city || 'Ubicación'}</span>
+                  <ExternalLink className="h-3 w-3 opacity-60 shrink-0" />
+                </a>
+              ) : product.organization_city ? (
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-300 shadow-2xs shrink-0">
+                  <MapPin className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                  <span className="max-w-[130px] truncate">{product.organization_city}</span>
+                </span>
+              ) : null}
+            </div>
 
             {/* Nombre + marca + categoría */}
             <div>
@@ -306,7 +356,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
 
             {/* Indicadores de stock */}
             <div className="flex flex-wrap items-center gap-2">
-              <FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name }} />
+              <FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: displayPrice }} />
               {isInStock ? (
                 <span className="flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-250/20 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
                   <Check className="h-3.5 w-3.5" />
@@ -355,11 +405,23 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
             <Link
               href={storeHref}
               onClick={onClose}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-border/80 bg-muted/40 text-sm font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98]"
+              className="flex h-11 w-full items-center justify-center gap-2.5 rounded-2xl border border-border/80 bg-muted/40 text-sm font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98] px-4"
             >
-              <Store className="h-4 w-4 text-primary" />
-              <span>Visitar tienda ({product.organization_name})</span>
-              <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" />
+              <div className="relative h-5 w-5 shrink-0 overflow-hidden rounded-full border border-border/80 bg-background flex items-center justify-center">
+                {product.organization_logo_url ? (
+                  <Image
+                    src={resolveProductImageUrl(product.organization_logo_url)}
+                    alt={product.organization_name}
+                    fill
+                    sizes="20px"
+                    className="object-cover"
+                  />
+                ) : (
+                  <Store className="h-3 w-3 text-primary" />
+                )}
+              </div>
+              <span className="truncate">Visitar tienda ({product.organization_name})</span>
+              <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground shrink-0" />
             </Link>
           </div>
         </div>

@@ -6,7 +6,7 @@ describe('order status store-credit lifecycle', () => {
   it('consumes reserved credit atomically when the order is confirmed', () => {
     const route = readFileSync(resolve(process.cwd(), 'src/app/api/orders/[id]/status/route.ts'), 'utf8')
     expect(route).toContain("status === 'CONFIRMED'")
-    expect(route).toContain("'confirm_customer_order_store_credit_atomic'")
+    expect(route).toContain("'confirm_customer_order_from_pending_atomic'")
   })
 
   it('normalizes credit coverage and outstanding amount for every order view', () => {

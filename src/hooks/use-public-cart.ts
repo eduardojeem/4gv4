@@ -40,21 +40,21 @@ export function usePublicCart() {
   )
   const count = useMemo(() => items.reduce((sum, item) => sum + item.quantity, 0), [items])
 
-  const setQuantity = useCallback((productId: string, quantity: number) => {
+  const setQuantity = useCallback((cartItemId: string, quantity: number) => {
     const next = getPublicCartItems(tenantSlug)
-      .map((item) => item.productId === productId
+      .map((item) => item.cartItemId === cartItemId
         ? { ...item, quantity: clampPublicCartQuantity(quantity, item.availableStock) }
         : item)
       .filter((item) => item.quantity > 0)
     setPublicCartItems(tenantSlug, next)
   }, [tenantSlug])
 
-  const setAvailableStock = useCallback((productId: string, availableStock: number) => {
-    return setPublicCartItemStock(tenantSlug, productId, availableStock)
+  const setAvailableStock = useCallback((cartItemId: string, availableStock: number) => {
+    return setPublicCartItemStock(tenantSlug, cartItemId, availableStock)
   }, [tenantSlug])
 
-  const removeItem = useCallback((productId: string) => {
-    setPublicCartItems(tenantSlug, getPublicCartItems(tenantSlug).filter((item) => item.productId !== productId))
+  const removeItem = useCallback((cartItemId: string) => {
+    setPublicCartItems(tenantSlug, getPublicCartItems(tenantSlug).filter((item) => item.cartItemId !== cartItemId))
   }, [tenantSlug])
 
   const clear = useCallback(() => clearPublicCart(tenantSlug), [tenantSlug])

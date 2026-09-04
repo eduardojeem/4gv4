@@ -15,6 +15,7 @@ type HistoryRow = {
   created_at: string
   amount?: number | null
   payment_method?: string | null
+  payment_reference?: string | null
 }
 
 async function getRouteId(routeContext: unknown) {
@@ -69,7 +70,7 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage', modul
         .order('created_at', { ascending: true }),
       supabase
         .from('customer_order_payment_history')
-        .select('id, from_status, to_status, note, changed_by, created_at, amount, payment_method')
+        .select('id, from_status, to_status, note, changed_by, created_at, amount, payment_method, payment_reference')
         .eq('organization_id', organization.id)
         .eq('order_id', id)
         .order('created_at', { ascending: true }),
@@ -103,6 +104,8 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage', modul
         to: normalizePaymentStatus(row.to_status),
         note: row.note,
         amount: row.amount === null || row.amount === undefined ? null : Number(row.amount),
+        paymentMethod: row.payment_method,
+        paymentReference: row.payment_reference,
         actor: row.changed_by ? actorNames.get(row.changed_by) ?? 'Usuario removido' : null,
         createdAt: row.created_at,
       })),

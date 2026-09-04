@@ -34,7 +34,7 @@ async function getLandingData() {
   const [{ data: orgsData }, { data: settingsData }, { count: publicCount }] = await Promise.all([
     admin.from('organizations').select('id, name, slug, plan').limit(500),
     admin.from('website_settings').select('organization_id, key, value, updated_at'),
-    admin.from('organizations').select('id', { count: 'exact', head: true }).eq('marketplace_public', true),
+    admin.from('organizations').select('id', { count: 'exact', head: true }).eq('storefront_public', true).eq('marketplace_public', true),
   ])
 
   const orgs = (orgsData ?? []) as Array<{ id: string; name: string; slug: string; plan: string | null }>

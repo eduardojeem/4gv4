@@ -2,7 +2,10 @@ import type { PublicProduct } from '@/types/public'
 import { getTenantSlugFromPathname as getSharedTenantSlugFromPathname } from '@/lib/saas/tenant'
 
 export type PublicCartItem = {
+  cartItemId: string
   productId: string
+  variantId: string | null
+  variantName: string | null
   name: string
   sku: string | null
   image: string | null
@@ -47,10 +50,16 @@ export function getPublicCartItems(tenantSlug: string | null | undefined): Publi
 
     return parsed
       .filter((item) => item && typeof item === 'object' && typeof item.productId === 'string')
-      .map((item) => ({
-        ...item,
+      .map((item) => {
+        const legacyParts = String(item.productId).split(':')
+        const productId = legacyParts[0]
+        const variantId = typeof item.variantId === 'string' ? item.variantId : legacyParts[1] || null
+        return {
+        ...item, productId, variantId,
+        cartItemId: typeof item.cartItemId === 'string' ? item.cartItemId : (variantId ? `${productId}:${variantId}` : productId),
+        variantName: typeof item.variantName === 'string' ? item.variantName : null,
         availableStock: normalizeAvailableStock(item.availableStock),
-      })) as PublicCartItem[]
+      }}) as PublicCartItem[]
   } catch {
     return []
   }
@@ -69,14 +78,14 @@ export function clearPublicCart(tenantSlug: string | null | undefined) {
 
 export function setPublicCartItemStock(
   tenantSlug: string | null | undefined,
-  productId: string,
+  cartItemId: string,
   availableStock: number
 ) {
   const normalizedStock = normalizeAvailableStock(availableStock) ?? 0
   let updatedItem: PublicCartItem | null = null
   const next = getPublicCartItems(tenantSlug)
     .map((item) => {
-      if (item.productId !== productId) return item
+      if (item.cartItemId !== cartItemId) return item
 
       updatedItem = {
         ...item,
@@ -118,19 +127,22 @@ export function addPublicProductToCart({
     : product.stock_quantity
   const availableStock = normalizeAvailableStock(rawStock) ?? 0
 
-  const existing = current.find((item) => item.productId === cartItemId)
+  const existing = current.find((item) => item.cartItemId === cartItemId)
   const requestedQuantity = (existing?.quantity ?? 0) + quantity
   const nextQuantity = clampPublicCartQuantity(requestedQuantity, availableStock)
   const next = existing
     ? current.map((item) =>
-        item.productId === cartItemId
+        item.cartItemId === cartItemId
           ? { ...item, quantity: nextQuantity, availableStock, unitPrice }
           : item
       )
     : [
         ...current,
         {
-          productId: cartItemId,
+          cartItemId,
+          productId: product.id,
+          variantId: variant?.id ?? null,
+          variantName: variant?.variant_name ?? null,
           name: displayName,
           sku: displaySku,
           image: product.image || null,

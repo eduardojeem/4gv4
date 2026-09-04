@@ -999,6 +999,8 @@ export interface Database {
           organization_id: string
           order_id: string
           product_id: string | null
+          variant_id: string | null
+          variant_name: string | null
           product_name: string
           product_sku: string | null
           quantity: number
@@ -1011,6 +1013,8 @@ export interface Database {
           organization_id: string
           order_id: string
           product_id?: string | null
+          variant_id?: string | null
+          variant_name?: string | null
           product_name: string
           product_sku?: string | null
           quantity: number
@@ -1023,6 +1027,8 @@ export interface Database {
           organization_id?: string
           order_id?: string
           product_id?: string | null
+          variant_id?: string | null
+          variant_name?: string | null
           product_name?: string
           product_sku?: string | null
           quantity?: number
@@ -1073,6 +1079,8 @@ export interface Database {
           from_status: string | null
           to_status: string
           payment_method: string | null
+          payment_reference: string | null
+          idempotency_key: string | null
           amount: number | null
           note: string | null
           changed_by: string | null
@@ -1085,6 +1093,8 @@ export interface Database {
           from_status?: string | null
           to_status: string
           payment_method?: string | null
+          payment_reference?: string | null
+          idempotency_key?: string | null
           amount?: number | null
           note?: string | null
           changed_by?: string | null
@@ -1097,6 +1107,8 @@ export interface Database {
           from_status?: string | null
           to_status?: string
           payment_method?: string | null
+          payment_reference?: string | null
+          idempotency_key?: string | null
           amount?: number | null
           note?: string | null
           changed_by?: string | null
@@ -1123,6 +1135,7 @@ export interface Database {
           shipping_cost: number
           discount_amount: number
           total: number
+          collected_amount: number
           notes: string | null
           created_by: string | null
           created_at: string
@@ -1150,6 +1163,7 @@ export interface Database {
           shipping_cost: number
           discount_amount: number
           total: number
+          collected_amount?: number
           notes?: string | null
           created_by?: string | null
           created_at?: string
@@ -1177,6 +1191,7 @@ export interface Database {
           shipping_cost?: number
           discount_amount?: number
           total?: number
+          collected_amount?: number
           notes?: string | null
           created_by?: string | null
           created_at?: string
@@ -1628,6 +1643,7 @@ export interface Database {
           created_at: string
           updated_at: string
           marketplace_public: boolean
+          storefront_public: boolean
         }
         Insert: {
           business_vertical?: string
@@ -1641,7 +1657,8 @@ export interface Database {
           owner_id?: string | null
           created_at?: string
           updated_at?: string
-          marketplace_public: boolean
+          marketplace_public?: boolean
+          storefront_public?: boolean
         }
         Update: {
           business_vertical?: string
@@ -1656,6 +1673,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
           marketplace_public?: boolean
+          storefront_public?: boolean
         }
         Relationships: []
       }
@@ -4334,6 +4352,19 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
+      record_customer_order_collection_atomic: {
+        Args: {
+          p_organization_id: string
+          p_order_id: string
+          p_actor_id: string
+          p_amount: number
+          p_payment_method: string
+          p_payment_reference?: string | null
+          p_note?: string | null
+          p_idempotency_key?: string | null
+        }
+        Returns: Json
+      }
       save_product_with_variants: {
         Args: {
           p_product: Json

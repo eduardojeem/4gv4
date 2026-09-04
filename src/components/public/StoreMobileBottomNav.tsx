@@ -110,13 +110,13 @@ export function StoreMobileBottomNav() {
           <span className="truncate leading-none">Carrito</span>
         </button>
 
-        {/* Tab 5: Mi Cuenta / Panel */}
+        {/* Tab 5: Mi Perfil */}
         {user ? (
           <Link
-            href={canAccessDashboard ? '/dashboard' : `${tenantPrefix}/perfil`}
+            href={`${tenantPrefix}/perfil`}
             className={cn(
               'group flex flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-semibold transition-all select-none',
-              pathname.startsWith('/dashboard') || pathname.startsWith(`${tenantPrefix}/perfil`)
+              pathname.startsWith(`${tenantPrefix}/perfil`)
                 ? 'text-primary'
                 : 'text-muted-foreground hover:text-foreground'
             )}
@@ -124,20 +124,14 @@ export function StoreMobileBottomNav() {
             <div
               className={cn(
                 'flex h-7 w-7 items-center justify-center rounded-xl transition-all duration-200',
-                pathname.startsWith('/dashboard') || pathname.startsWith(`${tenantPrefix}/perfil`)
+                pathname.startsWith(`${tenantPrefix}/perfil`)
                   ? 'bg-primary/10 text-primary scale-110 shadow-xs'
                   : 'group-hover:bg-muted text-muted-foreground'
               )}
             >
-              {canAccessDashboard ? (
-                <LayoutDashboard className="h-4.5 w-4.5" />
-              ) : (
-                <User className="h-4.5 w-4.5" />
-              )}
+              <User className="h-4.5 w-4.5" />
             </div>
-            <span className="truncate leading-none">
-              {canAccessDashboard ? 'Panel' : 'Perfil'}
-            </span>
+            <span className="truncate leading-none">Mi Perfil</span>
           </Link>
         ) : (
           <button
@@ -148,7 +142,7 @@ export function StoreMobileBottomNav() {
             <div className="flex h-7 w-7 items-center justify-center rounded-xl group-hover:bg-muted text-muted-foreground transition-all duration-200">
               <User className="h-4.5 w-4.5" />
             </div>
-            <span className="truncate leading-none">Cuenta</span>
+            <span className="truncate leading-none">Mi Perfil</span>
           </button>
         )}
       </nav>

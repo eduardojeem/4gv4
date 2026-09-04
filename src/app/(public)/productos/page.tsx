@@ -63,7 +63,7 @@ export default async function ProductsPage(props: {
   const sort = (searchParams.sort as string) || 'default'
 
   const rawPerPage = Number(searchParams.per_page || searchParams.limit)
-  const ALLOWED_PER_PAGE = [12, 16, 24, 48]
+  const ALLOWED_PER_PAGE = [25, 50, 75, 100]
   const perPage = ALLOWED_PER_PAGE.includes(rawPerPage) ? rawPerPage : PRODUCTS_PER_PAGE
 
   // Resolve wholesale status once

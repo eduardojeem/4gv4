@@ -14,7 +14,7 @@ describe('public order store-credit request contract', () => {
   it('creates the order and reservation through one database transaction', () => {
     const route = readFileSync(resolve(process.cwd(), 'src/app/api/public/orders/route.ts'), 'utf8')
 
-    expect(route).toContain("'create_public_order_with_store_credit_atomic'")
+    expect(route).toContain("'create_public_order_idempotent_atomic'")
     expect(route).toContain('p_store_credit_amount: input.storeCreditAmount')
     expect(route).toContain('STORE_CREDIT_EXCEEDS_AVAILABLE')
     expect(route).toContain('STORE_CREDIT_PROFILE_REQUIRED')

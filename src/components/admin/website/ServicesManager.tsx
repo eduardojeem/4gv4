@@ -1,5 +1,7 @@
 'use client'
 
+import { ServicesPublicationStatus } from './ServicesPublicationStatus'
+
 import { createElement, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -17,8 +19,8 @@ import {
   Clock, Sparkles, Laptop, Edit3, Droplet, Camera,
   Eye, EyeOff, Receipt, Wallet, Landmark, Banknote, CreditCard,
   AlertTriangle, CheckCircle2, Globe, RotateCcw, Search, Download,
-  Tag, Timer, ExternalLink, Star, ChevronDown, ChevronUp, Globe2,
-  ListTodo, LayoutGrid, Rocket, Lightbulb
+  Tag, Timer, ExternalLink, Star, ChevronDown, ChevronUp,
+  LayoutGrid, Lightbulb
 } from 'lucide-react'
 import { Service, ServicesSectionSettings, type WebsiteSettings } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
@@ -378,7 +380,7 @@ interface ImportableProduct {
 // Componente principal
 // ─────────────────────────────────────────────
 
-export function ServicesManager() {
+export function ServicesManager({ orgSlug }: { orgSlug?: string | null }) {
   const { settings, isLoading, error, isSaving, updateSetting, updateSettings } = useAdminWebsiteSettings()
   const [servicesDraft, setServicesDraft] = useState<Service[] | null>(null)
   const [sectionDraft, setSectionDraft] = useState<ServicesSectionSettings | null>(null)
@@ -410,12 +412,11 @@ export function ServicesManager() {
   const [invFilter, setInvFilter] = useState<'all' | 'public' | 'hidden' | 'available'>('all')
   const [invSearch, setInvSearch] = useState('')
   const [loadingInventory, setLoadingInventory] = useState(false)
-  const [showInventorySection, setShowInventorySection] = useState(true)
+  const [showInventorySection, setShowInventorySection] = useState(false)
 
   // Plantillas expandibles y filtros
   const [presetsOpen, setPresetsOpen]                 = useState(false)
   const [presetCategoryFilter, setPresetCategoryFilter] = useState<string>('all')
-  const [showServicesGuide, setShowServicesGuide]     = useState(false)
 
   // Filtro lista
   const [searchQuery, setSearchQuery]     = useState('')
@@ -526,8 +527,6 @@ export function ServicesManager() {
 
   const activeCount       = getActivePublicServices(services).length
   const savedActive       = getActivePublicServices(savedServices).length
-  const pagePublished     = savedPageEnabled && savedActive > 0
-  const hasUnsavedPublish = (pageEnabled && activeCount > 0 && hasChanges) || (pageEnabledDraft !== null)
 
   // Filtrado
   const q = searchQuery.toLowerCase()
@@ -810,219 +809,68 @@ export function ServicesManager() {
   if (isLoading && !servicesDraft && !settings) return <div className="p-12 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" /></div>
   if (error && !servicesDraft && !settings) return <div className="p-12 text-center text-destructive text-sm">{error}</div>
 
-  // ── Pasos de progreso ──
-  const step1Done = services.length > 0
-  const step2Done = activeCount > 0
-  const step3Done = pagePublished
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
+      <ServicesPublicationStatus storefrontPublic={settings?.company_info?.storefrontPublic === true} enabled={savedPageEnabled} activeCount={savedActive} orgSlug={orgSlug} />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+        <div>
+          <label htmlFor="services-section-enabled" className="text-sm font-medium">Habilitar sección de servicios</label>
+          <p className="text-xs text-muted-foreground">Se aplica al guardar. No publica la tienda automáticamente.</p>
+        </div>
+        <Switch id="services-section-enabled" checked={pageEnabled} onCheckedChange={handlePageVisibilityToggle} disabled={isSaving} />
+      </div>
+      <p className="text-sm text-muted-foreground">{services.length} / 10 servicios · {activeCount} habilitados en el catálogo{hasChanges ? ' · Cambios sin guardar' : ''}</p>
 
       {/* ══════════════════════════════════════════════════════
-          GUÍA DESPLEGABLE DE SERVICIOS
+          BARRA DE ACCIONES
       ══════════════════════════════════════════════════════ */}
-      <div className="rounded-2xl border border-border/80 bg-muted/20 p-4">
-        <button
-          type="button"
-          onClick={() => setShowServicesGuide((prev) => !prev)}
-          className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
-        >
-          <Sparkles className="h-4 w-4" />
-          <span>{showServicesGuide ? 'Ocultar guía de servicios' : '¿Cómo organizar tu catálogo de servicios para atraer más clientes?'}</span>
-          {showServicesGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        </button>
-
-        {showServicesGuide && (
-          <div className="mt-3 text-xs space-y-2 text-muted-foreground border-t border-border/50 pt-3 animate-in fade-in-50 duration-200">
-            <p className="font-bold text-foreground">💡 Recomendaciones para tu catálogo de servicios:</p>
-            <ul className="space-y-1.5 list-disc list-inside leading-relaxed">
-              <li><strong className="text-foreground">Claridad en el título:</strong> Describí exactamente lo que el cliente busca (ej. <em>&quot;Cambio de batería&quot;</em>, <em>&quot;Ajustes de prendas&quot;</em>, <em>&quot;Limpieza facial&quot;</em>).</li>
-              <li><strong className="text-foreground">Beneficios destacados:</strong> Indicá tiempo de entrega, repuestos o garantía (ej. <em>&quot;Garantía escrita de 30 días&quot;</em>, <em>&quot;Presupuesto sin cargo&quot;</em>).</li>
-              <li><strong className="text-foreground">Botón directo a WhatsApp:</strong> Los clientes pueden consultar en 1 toque directo con el nombre del servicio pre-cargado.</li>
-              <li><strong className="text-foreground">Sincronización automática:</strong> Al activar la visualización pública, los servicios aparecen tanto en <code>/servicios</code> como en la sección de inicio.</li>
-            </ul>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        {/* Búsqueda */}
+        {services.length >= 3 && (
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              aria-label="Buscar servicios"
+              placeholder="Buscar servicio por nombre o categoría…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="h-9 rounded-xl pl-9"
+            />
           </div>
         )}
-      </div>
-
-      {/* ══════════════════════════════════════════════════════
-          BANNER DE ESTADO + PASOS
-      ══════════════════════════════════════════════════════ */}
-      <div className={cn(
-        'rounded-2xl border p-5 transition-colors',
-        !pageEnabled
-          ? 'border-border bg-muted/30'
-          : pagePublished
-          ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-800/50 dark:bg-emerald-950/20'
-          : 'border-amber-200 bg-amber-50/50 dark:border-amber-800/40 dark:bg-amber-950/20'
-      )}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          {/* Status */}
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
-              !pageEnabled
-                ? 'bg-muted text-muted-foreground'
-                : pagePublished
-                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
-                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
-            )}>
-              {!pageEnabled ? <Globe2 className="h-5 w-5" /> : pagePublished ? <Rocket className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-bold text-foreground">
-                  {!pageEnabled
-                    ? 'Página de servicios desactivada (Oculta)'
-                    : pagePublished
-                    ? 'Página de servicios publicada y online'
-                    : hasUnsavedPublish
-                    ? 'Cambios listos para publicar (Guardá para aplicar)'
-                    : 'Página activa pero sin servicios visibles'
-                  }
-                </p>
-                {pagePublished && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold rounded-full bg-emerald-500 text-white px-2 py-0.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
-                    En vivo
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {!pageEnabled
-                  ? 'Activa el switch a la derecha para mostrar la página de servicios en tu tienda.'
-                  : pagePublished
-                  ? `${savedActive} servicio${savedActive > 1 ? 's' : ''} disponible${savedActive > 1 ? 's' : ''} en /servicios e inicio.`
-                  : hasUnsavedPublish
-                  ? `Tenés ${activeCount} servicio${activeCount > 1 ? 's' : ''} configurado${activeCount > 1 ? 's' : ''}. Presioná "Guardar catálogo" abajo para publicar.`
-                  : 'Agregá o activá al menos 1 servicio para que sea visible.'}
-              </p>
-            </div>
-          </div>
-
-          {/* Toggle publicar */}
-          <div className="flex items-center gap-3">
-            {pagePublished && (
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="h-9 rounded-xl gap-1.5 text-xs font-semibold"
-              >
-                <a href="/servicios" target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Ver página
-                </a>
-              </Button>
-            )}
-
-            <div className={cn(
-              'flex items-center gap-3 rounded-2xl border-2 px-4 py-2 shadow-sm transition-all',
-              pageEnabled
-                ? 'border-emerald-400 bg-emerald-500/10 dark:border-emerald-700 dark:bg-emerald-950/40'
-                : 'border-border bg-background'
-            )}>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <p className="text-xs font-extrabold text-foreground">Visualización Pública</p>
-                  <span className={cn(
-                    'text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full',
-                    pageEnabled ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'
-                  )}>
-                    {pageEnabled ? 'Online' : 'Oculto'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">En menú, /servicios e inicio</p>
-              </div>
-              <Switch
-                checked={pageEnabled}
-                onCheckedChange={handlePageVisibilityToggle}
-                disabled={isSaving}
-                className="data-[state=checked]:bg-emerald-600 cursor-pointer"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Pasos de progreso */}
-        <div className="mt-5 grid grid-cols-3 gap-3">
-          {[
-            { done: step1Done, num: 1, label: '1. Agrega servicios', sub: `${services.length} cargado${services.length !== 1 ? 's' : ''}`, icon: ListTodo },
-            { done: step2Done, num: 2, label: '2. Actívalos',         sub: `${activeCount} activo${activeCount !== 1 ? 's' : ''}`,       icon: Eye },
-            { done: step3Done, num: 3, label: '3. Publicación',       sub: step3Done ? 'Publicado ✓' : pageEnabled ? 'Guardá cambios' : 'Activá switch', icon: Globe },
-          ].map(({ done, num, label, sub }) => (
-            <div key={label} className={cn(
-              'flex items-center gap-2.5 rounded-xl border p-2.5 transition-colors',
-              done ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-border bg-background'
-            )}>
-              <div className={cn(
-                'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-                done ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'
-              )}>
-                {done ? <Check className="h-3.5 w-3.5" /> : num}
-              </div>
-              <div className="min-w-0">
-                <p className={cn('text-xs font-semibold truncate', done ? 'text-emerald-700 dark:text-emerald-300' : 'text-foreground')}>{label}</p>
-                <p className="text-[10px] text-muted-foreground truncate">{sub}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ══════════════════════════════════════════════════════
-          TARJETAS DE RESUMEN Y SERVICIOS HABILITADOS
-      ══════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Catálogo</span>
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <ListTodo className="h-3.5 w-3.5" />
-            </div>
-          </div>
-          <p className="mt-2 text-2xl font-extrabold text-foreground">{services.length}<span className="text-xs text-muted-foreground font-normal"> / 10</span></p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Capacidad del catálogo</p>
-        </div>
-
-        <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Habilitados Online</span>
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Eye className="h-3.5 w-3.5" />
-            </div>
-          </div>
-          <p className="mt-2 text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{activeCount}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">{pageEnabled ? 'Visibles en tu web pública' : 'Ocultos por switch general'}</p>
-        </div>
-
-        <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Destacados</span>
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-              <Sparkles className="h-3.5 w-3.5" />
-            </div>
-          </div>
-          <p className="mt-2 text-2xl font-extrabold text-amber-600 dark:text-amber-400">{services.filter(s => s.featured).length}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Con insignia especial</p>
-        </div>
-
-        <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Categorías</span>
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <LayoutGrid className="h-3.5 w-3.5" />
-            </div>
-          </div>
-          <p className="mt-2 text-2xl font-extrabold text-foreground">{new Set(services.map(s => s.category || 'General')).size}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Grupos organizados</p>
+        <div className="flex gap-2 sm:ml-auto flex-wrap">
+          {services.length > 0 && (
+            <Button variant="outline" onClick={handleDeleteAll} className="h-9 rounded-xl gap-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/30">
+              <Trash2 className="h-4 w-4" />
+              <span>Vaciar catálogo</span>
+            </Button>
+          )}
+          <Button variant="outline" onClick={handleOpenImport} className="h-9 rounded-xl gap-2 text-sm">
+            <Download className="h-4 w-4" />
+            <span>Importar del inventario</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setPresetsOpen(v => !v)}
+            className="h-9 rounded-xl gap-2 text-sm"
+          >
+            <LayoutGrid className="h-4 w-4" />
+            <span>Plantillas</span>
+            {presetsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </Button>
+          <Button onClick={handleOpenAdd} disabled={services.length >= 10} className="h-9 rounded-xl gap-2 text-sm">
+            <Plus className="h-4 w-4" />
+            Agregar servicio
+          </Button>
         </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════
           TEXTOS Y ENCABEZADO DE LA SECCIÓN PÚBLICA
       ══════════════════════════════════════════════════════ */}
-      <div className="rounded-2xl border bg-card p-5 sm:p-6 shadow-xs space-y-6">
+      <details className="rounded-lg border bg-card p-3">
+        <summary className="cursor-pointer text-sm font-medium">Personalizar presentación y textos</summary>
+        <div className="mt-4 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-4">
           <div>
             <div className="flex items-center gap-2">
@@ -1228,13 +1076,14 @@ export function ServicesManager() {
               </div>
               <ul className="text-[11px] text-muted-foreground space-y-1.5 pl-5 list-disc leading-relaxed">
                 <li><strong className="text-foreground">Claridad en el título:</strong> Destacá tu propuesta de valor principal (*ej. Reparaciones garantizadas, rapidez, repuestos originales*).</li>
-                <li><strong className="text-foreground">Llamado directo a WhatsApp:</strong> Recordarles a los clientes que pueden cotizar en 1 toque directo aumenta un 35% las consultas.</li>
+                <li><strong className="text-foreground">Llamado directo a WhatsApp:</strong> Facilitá las consultas con un acceso directo a WhatsApp.</li>
                 <li><strong className="text-foreground">Insignias con Emojis:</strong> Usar etiquetas como <code>🛠️</code>, <code>⚡</code> o <code>⭐</code> genera mayor impacto visual.</li>
               </ul>
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </details>
 
       {/* ══════════════════════════════════════════════════════
           SERVICIOS E INVENTARIO DE REPARACIONES
@@ -1247,7 +1096,7 @@ export function ServicesManager() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-foreground">Servicios de tu Inventario de Reparaciones</h3>
+                <h3 className="text-sm font-bold text-foreground">Servicios disponibles en inventario</h3>
                 <span className="rounded-full bg-primary/10 text-primary text-[10px] font-extrabold px-2 py-0.5">
                   {loadingInventory ? 'Cargando…' : `${inventoryServices.length} servicios de taller`}
                 </span>
@@ -1415,7 +1264,7 @@ export function ServicesManager() {
                           </p>
                         </div>
 
-                        {/* Botones de acción: Ocultar / Publicar en Web y Cambiar Visibilidad en Tienda */}
+                        {/* Botones de acción: Ocultar / Agregar al catálogo y Cambiar Visibilidad en Tienda */}
                         <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2">
                           <button
                             type="button"
@@ -1474,49 +1323,6 @@ export function ServicesManager() {
             )}
           </div>
         )}
-      </div>
-
-      {/* ══════════════════════════════════════════════════════
-          BARRA DE ACCIONES
-      ══════════════════════════════════════════════════════ */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        {/* Búsqueda */}
-        {services.length >= 3 && (
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar servicio por nombre o categoría…"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="h-9 rounded-xl pl-9"
-            />
-          </div>
-        )}
-        <div className="flex gap-2 sm:ml-auto flex-wrap">
-          {services.length > 0 && (
-            <Button variant="outline" onClick={handleDeleteAll} className="h-9 rounded-xl gap-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/30">
-              <Trash2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Vaciar</span>
-            </Button>
-          )}
-          <Button variant="outline" onClick={handleOpenImport} className="h-9 rounded-xl gap-2 text-sm">
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Importar</span>
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setPresetsOpen(v => !v)}
-            className="h-9 rounded-xl gap-2 text-sm"
-          >
-            <LayoutGrid className="h-4 w-4" />
-            <span>Plantillas</span>
-            {presetsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          </Button>
-          <Button onClick={handleOpenAdd} disabled={services.length >= 10} className="h-9 rounded-xl gap-2 text-sm">
-            <Plus className="h-4 w-4" />
-            Nuevo servicio
-          </Button>
-        </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════
@@ -1716,7 +1522,7 @@ export function ServicesManager() {
                     </div>
 
                     {/* Controles de posición (R6: alineados) */}
-                    <div className="flex shrink-0 flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <div className="flex shrink-0 flex-col gap-1">
                       <Button
                         variant="ghost" size="icon"
                         className="h-7 w-7 rounded-lg"

@@ -11,18 +11,19 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { isPaymentConfirmable } from '@/lib/orders/payment-flow'
+import { getNextOrderStatus } from '@/lib/orders/flow'
 import {
   ORDER_FLOW, ORDER_STATUS_META, ORDER_STATUS_OPTIONS,
   PAYMENT_METHOD_META, PAYMENT_STATUS_META, PAYMENT_STATUS_OPTIONS,
 } from '@/lib/orders/constants'
-import type { CustomerOrder, OrderStatus, PaymentStatus } from '@/lib/orders/types'
+import type { CustomerOrder, OrderStatus, PaymentMethod, PaymentStatus } from '@/lib/orders/types'
 import { CreateOrderDialog } from './CreateOrderDialog'
 import { formatDate, formatMoney } from './format'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
@@ -31,6 +32,7 @@ import { ORDERS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DatePreset = 'all' | 'today' | 'week' | 'month'
 type SortDir = 'desc' | 'asc'
+const ORDERS_REFRESH_INTERVAL_MS = 30_000
 
 type OrdersPayload = {
   orders: CustomerOrder[]
@@ -260,21 +262,23 @@ function FulfillmentBadge({ type }: { type: 'PICKUP' | 'DELIVERY' }) {
 // ─── Order row (always-expanded card, actions on right column) ────────────────
 function OrderRow({
   order, selected, updating, onSelect,
-  onStatusChange, onPaymentChange, onAdvanceStatus, onCancelRequest, onDetailRequest,
+  onStatusChange, onPaymentRequest, onAdvanceStatus, onCancelRequest, onDetailRequest,
 }: {
   order: CustomerOrder
   selected: boolean
   updating: boolean
   onSelect: (checked: boolean) => void
   onStatusChange: (s: OrderStatus) => void
-  onPaymentChange: (s: PaymentStatus) => void
+  onPaymentRequest: () => void
   onAdvanceStatus: (s: OrderStatus) => void
   onCancelRequest: () => void
   onDetailRequest: () => void
 }) {
   const currentIdx = ORDER_FLOW.indexOf(order.status)
   const isTerminal = ['DELIVERED', 'CANCELLED'].includes(order.status)
-  const nextStatus = !isTerminal && currentIdx < ORDER_FLOW.length - 1 ? ORDER_FLOW[currentIdx + 1] : null
+  const nextStatus = !isTerminal && currentIdx < ORDER_FLOW.length - 1
+    ? getNextOrderStatus(order.status, order.fulfillment_type)
+    : null
   const PayIcon = PAYMENT_METHOD_META[order.payment_method]?.icon
   const payLabel = PAYMENT_METHOD_META[order.payment_method]?.label ?? order.payment_method
   const paymentPending = isPaymentConfirmable(order.payment_status)
@@ -306,7 +310,7 @@ function OrderRow({
 
   return (
     <div className={cn(
-      'flex overflow-hidden rounded-xl border transition-all duration-150',
+      'flex flex-col overflow-hidden rounded-xl border transition-all duration-150 sm:flex-row',
       selected ? 'border-blue-400 bg-blue-50 dark:border-blue-500/40 dark:bg-blue-500/5' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-white/8 dark:bg-white/[0.03] dark:hover:border-white/12'
     )}>
       {/* ── Left: main content ── */}
@@ -421,7 +425,7 @@ function OrderRow({
       </div>
 
       {/* ── Right: action column ── */}
-      <div className="flex shrink-0 flex-col gap-2 border-l border-slate-200 dark:border-white/8 p-3 min-w-[160px] justify-start">
+      <div className="flex shrink-0 flex-row flex-wrap gap-2 border-t sm:border-l sm:border-t-0 border-slate-200 p-3 dark:border-white/8 sm:min-w-[160px] sm:flex-col">
         {/* Advance status */}
         {nextStatus && (
           <Button size="sm" disabled={updating}
@@ -457,9 +461,9 @@ function OrderRow({
         {/* Payment action */}
         {canConfirmPayment ? (
           <Button size="sm" disabled={updating}
-            onClick={() => onPaymentChange('PAID')}
+            onClick={onPaymentRequest}
             className="h-9 w-full justify-center gap-1.5 rounded-lg border border-emerald-300/70 bg-emerald-500 px-3 text-xs font-bold text-emerald-950 shadow-md shadow-emerald-950/30 ring-1 ring-emerald-200/30 transition-all hover:bg-emerald-400 hover:text-emerald-950 hover:shadow-emerald-500/20 disabled:opacity-45">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Confirmar pago
+            <CheckCircle2 className="h-3.5 w-3.5" /> Registrar cobro
           </Button>
         ) : (
           <span className={cn(
@@ -559,6 +563,120 @@ function CancelConfirmBanner({ onConfirm, onDismiss }: { onConfirm: () => void; 
   )
 }
 
+function CollectionDialog({ order, open, submitting, onOpenChange, onConfirm }: {
+  order: CustomerOrder | null
+  open: boolean
+  submitting: boolean
+  onOpenChange: (open: boolean) => void
+  onConfirm: (input: { amount: number; method: PaymentMethod; reference: string; note: string; idempotencyKey: string }) => void
+}) {
+  const [amount, setAmount] = useState('')
+  const [method, setMethod] = useState<PaymentMethod>('CASH')
+  const [reference, setReference] = useState('')
+  const [note, setNote] = useState('')
+  const idempotencyRef = useRef(crypto.randomUUID())
+
+  useEffect(() => {
+    if (!open || !order) return
+    setAmount(String(order.amount_due))
+    setMethod(order.payment_method)
+    setReference('')
+    setNote('')
+    idempotencyRef.current = crypto.randomUUID()
+  }, [open, order])
+
+  const numericAmount = Number(amount)
+  const referenceRequired = method !== 'CASH'
+  const invalid = !order || !Number.isFinite(numericAmount) || numericAmount <= 0
+    || numericAmount > order.amount_due || (referenceRequired && !reference.trim())
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Registrar cobro</DialogTitle>
+          <DialogDescription>
+            Guardá el importe realmente recibido. El estado pasará a parcial o pagado automáticamente.
+          </DialogDescription>
+        </DialogHeader>
+        {order && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/40 p-3 text-sm">
+              <div><p className="text-xs text-muted-foreground">Pedido</p><p className="font-semibold">{order.order_number}</p></div>
+              <div className="text-right"><p className="text-xs text-muted-foreground">Pendiente</p><p className="font-bold text-rose-600">{formatMoney(order.amount_due)}</p></div>
+              <div><p className="text-xs text-muted-foreground">Cobrado hasta ahora</p><p className="font-semibold">{formatMoney(order.collected_amount)}</p></div>
+              <div className="text-right"><p className="text-xs text-muted-foreground">Total</p><p className="font-semibold">{formatMoney(order.total)}</p></div>
+            </div>
+            <label className="block space-y-1.5 text-sm font-medium">
+              <span>Monto recibido</span>
+              <Input inputMode="numeric" type="number" min={1} max={order.amount_due} step={1} value={amount} onChange={(event) => setAmount(event.target.value)} />
+              {numericAmount > order.amount_due && <span className="text-xs text-destructive">No puede superar {formatMoney(order.amount_due)}.</span>}
+            </label>
+            <label className="block space-y-1.5 text-sm font-medium">
+              <span>Medio de cobro</span>
+              <Select value={method} onValueChange={(value) => setMethod(value as PaymentMethod)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CASH">Efectivo</SelectItem>
+                  <SelectItem value="TRANSFER">Transferencia</SelectItem>
+                  <SelectItem value="CARD">Tarjeta</SelectItem>
+                  <SelectItem value="DIGITAL_WALLET">Billetera digital</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+            {referenceRequired && (
+              <label className="block space-y-1.5 text-sm font-medium">
+                <span>Referencia o comprobante</span>
+                <Input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={160} placeholder="Ej.: operación 45821" />
+              </label>
+            )}
+            <label className="block space-y-1.5 text-sm font-medium">
+              <span>Nota interna <span className="font-normal text-muted-foreground">(opcional)</span></span>
+              <textarea className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} />
+            </label>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancelar</Button>
+          <Button disabled={invalid || submitting} onClick={() => onConfirm({ amount: numericAmount, method, reference: reference.trim(), note: note.trim(), idempotencyKey: idempotencyRef.current })}>
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar cobro
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function DeliveryConfirmDialog({ order, open, submitting, onOpenChange, onConfirm }: {
+  order: CustomerOrder | null
+  open: boolean
+  submitting: boolean
+  onOpenChange: (open: boolean) => void
+  onConfirm: () => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Confirmar entrega</DialogTitle>
+          <DialogDescription>
+            {order ? `El pedido ${order.order_number} quedará cerrado como entregado. Verificá el cobro pendiente antes de continuar.` : ''}
+          </DialogDescription>
+        </DialogHeader>
+        {order && order.amount_due > 0 && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            Aún quedan {formatMoney(order.amount_due)} por cobrar. La entrega no marcará ese saldo como pagado.
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Volver</Button>
+          <Button onClick={onConfirm} disabled={submitting}>{submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar entrega</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 // ─── Historial del pedido ─────────────────────────────────────────────────────
 type OrderHistoryEvent = {
@@ -568,6 +686,8 @@ type OrderHistoryEvent = {
   to: string
   note: string | null
   amount: number | null
+  paymentMethod?: string | null
+  paymentReference?: string | null
   actor: string | null
   createdAt: string
 }
@@ -658,6 +778,12 @@ export function OrderHistory({ orderId }: { orderId: string }) {
                   {event.note && (
                     <p className="mt-1 text-xs italic text-slate-500 dark:text-slate-400">{event.note}</p>
                   )}
+                  {isPayment && (event.paymentMethod || event.paymentReference) && (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      {event.paymentMethod ? (PAYMENT_METHOD_META[event.paymentMethod as PaymentMethod]?.label ?? event.paymentMethod) : ''}
+                      {event.paymentReference ? ` · Ref. ${event.paymentReference}` : ''}
+                    </p>
+                  )}
                 </div>
               </li>
             )
@@ -707,21 +833,21 @@ function OrderDetailDialog({ order, open, onOpenChange }: {
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5">
-          <div className="grid grid-cols-[1fr_70px_110px_110px] gap-2 border-b border-slate-200 dark:border-white/10 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          <div className="hidden grid-cols-[1fr_70px_110px_110px] gap-2 border-b border-slate-200 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:border-white/10 dark:text-slate-500 sm:grid">
             <span>Producto</span>
             <span className="text-right">Cant.</span>
             <span className="text-right">Precio</span>
             <span className="text-right">Subtotal</span>
           </div>
           {order.order_items.map((item) => (
-            <div key={item.id} className="grid grid-cols-[1fr_70px_110px_110px] gap-2 border-b border-slate-200 dark:border-white/5 px-3 py-3 text-sm last:border-0">
+            <div key={item.id} className="grid grid-cols-[1fr_auto] gap-2 border-b border-slate-200 px-3 py-3 text-sm last:border-0 dark:border-white/5 sm:grid-cols-[1fr_70px_110px_110px]">
               <div className="min-w-0">
                 <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.product_name}</p>
                 {item.product_sku && <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">SKU {item.product_sku}</p>}
               </div>
-              <span className="text-right tabular-nums text-slate-600 dark:text-slate-300">{item.quantity}</span>
-              <span className="text-right tabular-nums text-slate-600 dark:text-slate-300">{formatMoney(item.unit_price)}</span>
-              <span className="text-right tabular-nums font-semibold text-slate-900 dark:text-white">{formatMoney(item.subtotal)}</span>
+              <span className="text-right tabular-nums text-slate-600 dark:text-slate-300"><span className="sm:hidden">Cant. </span>{item.quantity}</span>
+              <span className="hidden text-right tabular-nums text-slate-600 dark:text-slate-300 sm:block">{formatMoney(item.unit_price)}</span>
+              <span className="col-span-2 text-right tabular-nums font-semibold text-slate-900 dark:text-white sm:col-span-1">{formatMoney(item.subtotal)}</span>
             </div>
           ))}
         </div>
@@ -732,6 +858,7 @@ function OrderDetailDialog({ order, open, onOpenChange }: {
           {order.discount_amount > 0 && <div className="flex justify-between text-emerald-600 dark:text-emerald-300"><span>Descuento</span><span>-{formatMoney(order.discount_amount)}</span></div>}
           {order.store_credit_reserved > 0 && <div className="flex justify-between text-amber-600 dark:text-amber-300"><span>Saldo reservado</span><span>-{formatMoney(order.store_credit_reserved)}</span></div>}
           {order.store_credit_applied > 0 && <div className="flex justify-between text-emerald-600 dark:text-emerald-300"><span>Saldo aplicado</span><span>-{formatMoney(order.store_credit_applied)}</span></div>}
+          {order.collected_amount > 0 && <div className="flex justify-between text-emerald-600 dark:text-emerald-300"><span>Cobrado hasta ahora</span><span>-{formatMoney(order.collected_amount)}</span></div>}
           <div className="flex justify-between border-t border-slate-200 dark:border-white/10 pt-2 text-base font-bold text-slate-900 dark:text-white"><span>Total</span><span>{formatMoney(order.total)}</span></div>
           <div className="flex justify-between font-bold text-rose-600 dark:text-rose-300"><span>Pendiente por cobrar</span><span>{formatMoney(order.amount_due)}</span></div>
         </div>
@@ -762,12 +889,15 @@ export function OrdersDashboard() {
   const [todayCount, setTodayCount] = useState(0)
   const [todayRevenue, setTodayRevenue] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null)
   const [detailOrder, setDetailOrder] = useState<CustomerOrder | null>(null)
+  const [collectionOrder, setCollectionOrder] = useState<CustomerOrder | null>(null)
+  const [deliveryOrder, setDeliveryOrder] = useState<CustomerOrder | null>(null)
   const [showGuide, setShowGuide] = useState(true)
 
   // Derived metrics (org-wide values come from the API `stats`/`meta`, not the page)
@@ -778,6 +908,7 @@ export function OrdersDashboard() {
     const controller = new AbortController()
     abortRef.current = controller
     setLoading(true)
+    setLoadError(null)
     try {
       const needStats = !statsLoadedRef.current || Boolean(opts?.forceStats)
       const params = new URLSearchParams({
@@ -803,7 +934,9 @@ export function OrdersDashboard() {
       if (data.meta) { setTodayCount(data.meta.todayCount); setTodayRevenue(data.meta.todayRevenue) }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return
-      toast.error('No se pudieron cargar los pedidos', { description: error instanceof Error ? error.message : 'Intenta nuevamente.' })
+      const message = error instanceof Error ? error.message : 'Intentá nuevamente.'
+      setLoadError(message)
+      toast.error('No se pudieron cargar los pedidos', { description: message })
     } finally {
       if (abortRef.current === controller) setLoading(false)
     }
@@ -814,8 +947,16 @@ export function OrdersDashboard() {
     return () => window.clearTimeout(t)
   }, [loadOrders])
 
-  async function updateStatus(order: CustomerOrder, nextStatus: OrderStatus) {
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadOrders({ forceStats: true })
+    }, ORDERS_REFRESH_INTERVAL_MS)
+    return () => window.clearInterval(interval)
+  }, [loadOrders])
+
+  async function updateStatus(order: CustomerOrder, nextStatus: OrderStatus, confirmed = false) {
     if (nextStatus === 'CANCELLED' && cancelConfirmId !== order.id) { setCancelConfirmId(order.id); return }
+    if (nextStatus === 'DELIVERED' && !confirmed) { setDeliveryOrder(order); return }
     setCancelConfirmId(null); setUpdatingId(order.id)
     try {
       const response = await fetch(`/api/orders/${order.id}/status`, {
@@ -830,6 +971,7 @@ export function OrdersDashboard() {
         return statusTab !== 'ALL' && updated.status !== statusTab ? mapped.filter((r) => r.id !== order.id) : mapped
       })
       toast.success('Estado actualizado', { description: `${order.order_number} → ${ORDER_STATUS_META[nextStatus].label}` })
+      if (nextStatus === 'DELIVERED') setDeliveryOrder(null)
       // Los contadores se recargan del servidor en vez de ajustarse a mano: si
       // otro operador movió pedidos mientras tanto, la aritmética optimista
       // dejaba los números mal hasta la próxima recarga completa.
@@ -839,12 +981,18 @@ export function OrdersDashboard() {
     } finally { setUpdatingId(null) }
   }
 
-  async function updatePayment(order: CustomerOrder, paymentStatus: PaymentStatus) {
+  async function recordCollection(order: CustomerOrder, input: { amount: number; method: PaymentMethod; reference: string; note: string; idempotencyKey: string }) {
     setUpdatingId(order.id)
     try {
       const response = await fetch(`/api/orders/${order.id}/payment`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment_status: paymentStatus }),
+        body: JSON.stringify({
+          collectionAmount: input.amount,
+          paymentMethod: input.method,
+          paymentReference: input.reference || null,
+          note: input.note || null,
+          idempotencyKey: input.idempotencyKey,
+        }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || payload?.success === false) {
@@ -853,12 +1001,9 @@ export function OrdersDashboard() {
       const updated = payload.data as CustomerOrder
       setOrders((cur) => cur.map((r) => r.id === order.id ? updated : r))
       setDetailOrder((cur) => cur?.id === order.id ? updated : cur)
-      // Keep "Cobrado hoy" live: the server attributes revenue to the day the
-      // payment was confirmed, so a fresh PAID transition always lands on today.
-      if (updated.payment_status === 'PAID' && order.payment_status !== 'PAID') {
-        setTodayRevenue((cur) => cur + Math.max(0, Number(order.total || 0) - Number(order.store_credit_applied || 0) - Number(order.store_credit_reserved || 0)))
-      }
-      toast.success('Pago actualizado', { description: `${order.order_number} → ${PAYMENT_STATUS_META[paymentStatus].label}` })
+      setCollectionOrder(null)
+      toast.success('Cobro registrado', { description: `${formatMoney(input.amount)} en ${order.order_number}` })
+      void loadOrders({ forceStats: true })
     } catch (error) {
       toast.error('No se pudo actualizar el pago', { description: error instanceof Error ? error.message : 'Intenta nuevamente.' })
     } finally {
@@ -1117,7 +1262,14 @@ export function OrdersDashboard() {
             )}
           </div>
 
-          {loading ? <OrderSkeleton /> : orders.length === 0 ? (
+          {loading ? <OrderSkeleton /> : loadError ? (
+            <div role="alert" className="flex min-h-56 flex-col items-center justify-center rounded-xl border border-rose-200 bg-rose-50/60 p-6 text-center dark:border-rose-500/20 dark:bg-rose-500/5">
+              <AlertTriangle className="h-7 w-7 text-rose-600" />
+              <p className="mt-3 font-semibold">No pudimos cargar los pedidos</p>
+              <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
+              <Button className="mt-4" variant="outline" size="sm" onClick={() => void loadOrders({ forceStats: true })}>Reintentar</Button>
+            </div>
+          ) : orders.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-6 text-center dark:border-white/12 dark:bg-white/[0.02]">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 dark:border-white/8 dark:bg-white/[0.03]">
                 <PackageSearch className="h-8 w-8 text-slate-400 dark:text-slate-600" />
@@ -1152,7 +1304,7 @@ export function OrdersDashboard() {
                   updating={updatingId === order.id}
                   onSelect={(checked) => toggleSelect(order.id, checked)}
                   onStatusChange={(s) => void updateStatus(order, s)}
-                  onPaymentChange={(s) => void updatePayment(order, s)}
+                   onPaymentRequest={() => setCollectionOrder(order)}
                   onAdvanceStatus={(s) => void updateStatus(order, s)}
                   onCancelRequest={() => setCancelConfirmId(order.id)}
                   onDetailRequest={() => setDetailOrder(order)}
@@ -1193,6 +1345,20 @@ export function OrdersDashboard() {
         order={detailOrder}
         open={Boolean(detailOrder)}
         onOpenChange={(open) => { if (!open) setDetailOrder(null) }}
+      />
+      <CollectionDialog
+        order={collectionOrder}
+        open={Boolean(collectionOrder)}
+        submitting={Boolean(collectionOrder && updatingId === collectionOrder.id)}
+        onOpenChange={(open) => { if (!open) setCollectionOrder(null) }}
+        onConfirm={(input) => { if (collectionOrder) void recordCollection(collectionOrder, input) }}
+      />
+      <DeliveryConfirmDialog
+        order={deliveryOrder}
+        open={Boolean(deliveryOrder)}
+        submitting={Boolean(deliveryOrder && updatingId === deliveryOrder.id)}
+        onOpenChange={(open) => { if (!open) setDeliveryOrder(null) }}
+        onConfirm={() => { if (deliveryOrder) void updateStatus(deliveryOrder, 'DELIVERED', true) }}
       />
     </div>
   )

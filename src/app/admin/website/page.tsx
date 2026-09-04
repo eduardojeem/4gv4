@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { WebsiteEditorDirtyContext } from '@/components/admin/website/website-editor-dirty'
 import { CompanyInfoForm } from '@/components/admin/website/CompanyInfoForm'
 import { HeroEditor } from '@/components/admin/website/HeroEditor'
@@ -13,22 +12,15 @@ import { PromotionalCarouselEditor } from '@/components/admin/website/Promotiona
 import { TrustBarEditor } from '@/components/admin/website/TrustBarEditor'
 import { SetupGuide } from '@/components/admin/website/SetupGuide'
 import { WebsiteHowItWorksDialog } from '@/components/admin/website/WebsiteHowItWorksDialog'
-import { Building2, Briefcase, Eye, Footprints, GalleryHorizontalEnd, Globe, ShoppingCart, Sparkles, Tag, ShieldCheck } from 'lucide-react'
+import { WebsiteSectionIntro } from '@/components/admin/website/WebsiteSectionIntro'
+import { Eye, Globe } from 'lucide-react'
+import { WebsiteNavigation } from '@/components/admin/website/WebsiteNavigation'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-
-const TABS = [
-  { value: 'company',   label: 'Empresa',     icon: Building2   },
-  { value: 'hero',      label: 'Hero',        icon: Sparkles    },
-  { value: 'trust_bar', label: 'Beneficios',  icon: ShieldCheck },
-  { value: 'carousel',  label: 'Carrusel',    icon: GalleryHorizontalEnd },
-  { value: 'offers',    label: 'Ofertas',     icon: Tag         },
-  { value: 'services',  label: 'Servicios',   icon: Briefcase   },
-  { value: 'process',   label: 'Proceso',     icon: Footprints  },
-  { value: 'checkout',  label: 'Pagos y entregas', icon: ShoppingCart },
-]
+import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 
 export default function WebsiteAdminPage() {
+  const { settings } = useAdminWebsiteSettings()
   const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [tab, setTab] = useState('company')
   const dirtyRef = useRef(false)
@@ -116,35 +108,27 @@ export default function WebsiteAdminPage() {
       </div>
 
       {/* Setup Guide */}
+      {settings && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3 text-sm">
+        <div><p className="font-medium">{settings.company_info.storefrontPublic ? 'Tienda publicada' : 'Tienda sin publicar'}</p><p className="text-xs text-muted-foreground">{settings.company_info.storefrontPublic ? (settings.company_info.marketplacePublic ? 'Enlace público y Marketplace activos.' : 'Enlace público activo. No aparece en Marketplace.') : 'Podés preparar tus secciones. Activarlas no publica la tienda automáticamente.'}</p></div>
+        <Button type="button" size="sm" variant="outline" onClick={() => handleTabChange('company')}>Configurar publicación</Button>
+      </div>}
       <SetupGuide activeTab={tab} onTabChange={handleTabChange} />
 
       {/* Tabs */}
-      <Tabs value={tab} onValueChange={handleTabChange} className="space-y-6">
-        <div className="overflow-x-auto rounded-lg border bg-card p-1 [scrollbar-width:thin]">
-          <TabsList className="inline-flex h-auto w-max min-w-full items-center justify-start gap-1 bg-transparent p-0">
-            {TABS.map(({ value, label, icon: Icon }) => (
-              <TabsTrigger
-                key={value}
-                value={value}
-                aria-label={label}
-                className="inline-flex min-w-[112px] flex-1 items-center justify-center gap-2 rounded-md border border-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span>{label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
+      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <WebsiteNavigation value={tab} onChange={handleTabChange} />
+        <div className="min-w-0">
 
-        <TabsContent value="company"   className="mt-0"><CompanyInfoForm /></TabsContent>
-        <TabsContent value="hero"      className="mt-0"><HeroEditor /></TabsContent>
-        <TabsContent value="trust_bar" className="mt-0"><TrustBarEditor /></TabsContent>
-        <TabsContent value="carousel"  className="mt-0"><PromotionalCarouselEditor /></TabsContent>
-        <TabsContent value="offers"   className="mt-0"><OffersSectionEditor /></TabsContent>
-        <TabsContent value="services" className="mt-0"><ServicesManager /></TabsContent>
-        <TabsContent value="process"  className="mt-0"><ProcessStepsEditor /></TabsContent>
-        <TabsContent value="checkout" className="mt-0"><CheckoutSettingsEditor /></TabsContent>
-      </Tabs>
+        {tab === 'company' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="company" /><CompanyInfoForm /></section>}
+        {tab === 'hero' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="hero" /><HeroEditor /></section>}
+        {tab === 'trust_bar' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="trust_bar" /><TrustBarEditor /></section>}
+        {tab === 'carousel' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="carousel" /><PromotionalCarouselEditor /></section>}
+        {tab === 'offers' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="offers" /><OffersSectionEditor /></section>}
+        {tab === 'services' && <section aria-label="Catálogo de servicios"><WebsiteSectionIntro section="services" /><ServicesManager orgSlug={orgSlug} /></section>}
+        {tab === 'process' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="process" /><ProcessStepsEditor /></section>}
+        {tab === 'checkout' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="checkout" /><CheckoutSettingsEditor /></section>}
+        </div>
+      </div>
     </div>
    </WebsiteEditorDirtyContext.Provider>
   )

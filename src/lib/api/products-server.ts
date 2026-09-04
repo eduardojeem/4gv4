@@ -195,6 +195,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     installments_enabled: boolean | null
     installments_public: boolean | null
     installments_plans: { count: number; rate: number }[] | null
+    has_variants?: boolean | null
+    variant_attribute_config?: any
     stock_quantity: number
     is_active: boolean
     featured: boolean
@@ -262,8 +264,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   // Build query - only active products, never select wholesale_price for non-wholesale
   // Typed as string to avoid TS2590 (union type too complex with long string literals)
   const baseSelectFields: string = isWholesale
-    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
-    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
+    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
 
   // Sub-consultas que dependen de la BD se resuelven una sola vez, antes de
   // armar el query, para que el builder de abajo sea sincrónico y reutilizable.
@@ -383,11 +385,55 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     throw new Error(error.message)
   }
 
+  const rawProducts = ((products as unknown as DBProduct[]) || [])
+  const variantProductIds = rawProducts
+    .filter((p) => Boolean(p.has_variants))
+    .map((p) => p.id)
+
+  const variantsByProductId = new Map<string, PublicProduct['variants']>()
+
+  if (variantProductIds.length > 0) {
+    const { data: variantRows, error: variantError } = await (supabase as any)
+      .from('product_variants')
+      .select(
+        isWholesale
+          ? 'id, product_id, variant_name, attributes, sku, sale_price, wholesale_price, stock_quantity, is_active'
+          : 'id, product_id, variant_name, attributes, sku, sale_price, stock_quantity, is_active'
+      )
+      .in('product_id', variantProductIds)
+      .eq('organization_id', organization.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+
+    if (variantError) {
+      console.warn('[getPublicProducts] Error fetching variants:', variantError.message)
+    } else {
+      for (const v of (variantRows ?? []) as any[]) {
+        const list = variantsByProductId.get(v.product_id) || []
+        list.push({
+          id: v.id,
+          product_id: v.product_id,
+          variant_name: v.variant_name,
+          attributes: (typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : {}) as Record<string, string>,
+          sku: v.sku || null,
+          sale_price: Number(v.sale_price ?? 0),
+          wholesale_price: isWholesale && v.wholesale_price ? Number(v.wholesale_price) : null,
+          stock_quantity: Number(v.stock_quantity ?? 0),
+          is_active: Boolean(v.is_active ?? true),
+        })
+        variantsByProductId.set(v.product_id, list)
+      }
+    }
+  }
+
   // Transform to PublicProduct type - hide sensitive data
-  const publicProducts: PublicProduct[] = ((products as unknown as DBProduct[]) || []).map((p) => {
+  const publicProducts: PublicProduct[] = rawProducts.map((p) => {
     const category = Array.isArray(p.category) ? p.category[0] : p.category
     const cat = category as { id: string; name: string } | null
-    const stockQuantity = resolveEffectiveProductStock(p.stock_quantity, p.branch_stock, useBranchJoin)
+    const productVariants = variantsByProductId.get(p.id) || []
+    const stockQuantity = Boolean(p.has_variants) && productVariants.length > 0
+      ? productVariants.reduce((sum, v) => sum + (v.stock_quantity ?? 0), 0)
+      : resolveEffectiveProductStock(p.stock_quantity, p.branch_stock, useBranchJoin)
     const priced = applyAutomaticPromotionToProduct({
       id: p.id,
       category_id: cat?.id ?? null,
@@ -410,6 +456,9 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       installments_enabled: (p.installments_enabled as boolean) || false,
       installments_public: (p.installments_public as boolean) ?? true,
       installments_plans: Array.isArray(p.installments_plans) ? p.installments_plans : [],
+      has_variants: Boolean(p.has_variants),
+      variant_attribute_config: Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : undefined,
+      variants: productVariants,
       stock_quantity: stockQuantity,
       in_stock: stockQuantity > 0,
       is_active: p.is_active as boolean,

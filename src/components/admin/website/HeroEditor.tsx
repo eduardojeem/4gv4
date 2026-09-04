@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { SectionCard } from '@/components/admin/website/SectionCard'
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import {
   Loader2,
@@ -24,12 +25,10 @@ import {
   EyeOff,
   Flame,
   HelpCircle,
-  Lightbulb,
   Plus,
   RefreshCw,
   Store,
   Tag,
-  Wand2,
   Wrench,
   Smartphone,
   ShoppingBag,
@@ -248,6 +247,16 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
   }
 
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
+  const [activeSection, setActiveSection] = useState('texts')
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const focusValidationError = useRef(false)
+  useEffect(() => {
+    const firstError = Object.keys(errors)[0]
+    if (focusValidationError.current && activeSection === 'texts' && firstError) {
+      focusValidationError.current = false
+      document.getElementById(firstError)?.focus()
+    }
+  }, [activeSection, errors])
   const [showHeroGuide, setShowHeroGuide] = useState(false)
   const [showButtonsGuide, setShowButtonsGuide] = useState(false)
   const [showBadgesGuide, setShowBadgesGuide] = useState(false)
@@ -295,7 +304,9 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
       nextErrors.subtitle = 'El subtítulo debe tener al menos 10 caracteres.'
     }
     if (Object.keys(nextErrors).length > 0) {
+      focusValidationError.current = true
       setErrors(nextErrors)
+      setActiveSection('texts')
       toast.error('Revisá los campos marcados')
       return
     }
@@ -334,19 +345,25 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
   }
 
   return (
-    <form onSubmit={handleSave} className="space-y-6 pb-24 md:pb-6">
+    <form onSubmit={handleSave} className="space-y-4 pb-6">
       <PublicVisibilityCard
-        title="Visualización de Portada (Hero)"
-        badgeLabel="Banner de Inicio"
-        description="Define si el banner principal de bienvenida y garantías de confianza se muestran en la página principal de tu sitio web."
+        compact
+        title="Portada principal"
+        description="Es lo primero que ven tus clientes. Editá el contenido, revisá la vista previa y guardá para publicarlo."
         enabled={heroContent.enabled !== false}
         onToggle={(checked) => updateContent('enabled', checked)}
       />
 
-      {/* Live preview */}
-      <Card className="relative overflow-hidden shadow-md">
+      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+      <aside aria-label="Vista previa de la portada" className="min-w-0 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1">
+        <Button type="button" variant="outline" className="w-full justify-between xl:hidden" aria-expanded={previewOpen} aria-controls="hero-preview" onClick={() => setPreviewOpen((open) => !open)}>
+          <span className="flex items-center gap-2"><Eye className="h-4 w-4" />{previewOpen ? 'Ocultar vista previa' : 'Ver vista previa'}</span>
+          <ChevronDown className={cn('h-4 w-4 transition-transform', previewOpen && 'rotate-180')} />
+        </Button>
+      <div id="hero-preview" className={cn('mt-3 xl:mt-0 xl:block', !previewOpen && 'hidden')}>
+      <Card className="relative gap-0 overflow-hidden py-0 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               <Eye className="h-3.5 w-3.5 text-primary" />
               Vista previa en vivo
@@ -356,6 +373,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
             <div className="flex items-center rounded-lg border border-border/80 bg-background p-0.5 shadow-2xs">
               <button
                 type="button"
+                aria-pressed={previewDevice === 'desktop'}
                 onClick={() => setPreviewDevice('desktop')}
                 className={cn(
                   'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold transition-all cursor-pointer',
@@ -369,6 +387,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               </button>
               <button
                 type="button"
+                aria-pressed={previewDevice === 'mobile'}
                 onClick={() => setPreviewDevice('mobile')}
                 className={cn(
                   'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold transition-all cursor-pointer',
@@ -401,7 +420,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               heroContent.enabled !== false ? '' : 'opacity-45',
               previewDevice === 'mobile'
                 ? 'w-full max-w-[390px] rounded-3xl border-4 border-slate-800 shadow-2xl p-5 text-center'
-                : 'px-6 py-10 sm:px-8'
+                : 'px-4 py-6'
             )}
             data-custom-brand={hasValidCustomBrand ? '' : undefined}
             style={customBrandStyle}
@@ -413,12 +432,12 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
             <div className="mx-auto max-w-5xl relative">
               <div className={cn(
                 'grid items-center gap-8',
-                previewDevice === 'mobile' ? 'grid-cols-1' : 'lg:grid-cols-12 lg:gap-10'
+                previewDevice === 'mobile' ? 'grid-cols-1' : 'grid-cols-1 gap-5'
               )}>
                 {/* ── Columna Izquierda: Mensaje Comercial ── */}
                 <div className={cn(
                   'flex flex-col',
-                  previewDevice === 'mobile' ? 'items-center text-center' : 'items-start text-left lg:col-span-7'
+                  previewDevice === 'mobile' ? 'items-center text-center' : 'items-start text-left'
                 )}>
                   {/* Badges superiores */}
                   <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -436,7 +455,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                   {/* Título Principal */}
                   <h2 className={cn(
                     'font-extrabold tracking-tight text-foreground',
-                    previewDevice === 'mobile' ? 'text-xl sm:text-2xl leading-snug' : 'text-2xl sm:text-4xl lg:text-5xl lg:leading-[1.15]'
+                    previewDevice === 'mobile' ? 'text-xl leading-snug' : 'text-2xl leading-tight'
                   )}>
                     {heroContent.title || 'Los mejores productos al mejor precio'}
                   </h2>
@@ -504,7 +523,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 {/* ── Columna Derecha: Tarjeta Comercial Destacada ── */}
                 <div className={cn(
                   'flex',
-                  previewDevice === 'mobile' ? 'justify-center w-full mt-3' : 'lg:col-span-5 justify-center lg:justify-end'
+                  previewDevice === 'mobile' ? 'justify-center w-full mt-3' : 'justify-center w-full'
                 )}>
                   <div className="w-full max-w-sm rounded-3xl border border-border/80 bg-card p-5 sm:p-6 shadow-xl space-y-4 text-left">
 
@@ -606,26 +625,26 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
           </div>
         )}
       </Card>
+      <p className="mt-2 text-xs text-muted-foreground">Vista orientativa. Los cambios se publican únicamente al guardar.</p>
+      </div>
+      </aside>
 
-      {/* Hero content */}
-      <SectionCard icon={Sparkles} title="Contenido del hero" description="Textos principales de la sección hero">
+      <Tabs value={activeSection} onValueChange={setActiveSection} className="min-w-0 xl:col-start-1 xl:row-start-1 [&_[data-slot=card]]:gap-0 [&_[data-slot=card]]:py-0 [&_[data-slot=card-header]]:p-4 [&_[data-slot=card-content]]:p-4">
+        <TabsList aria-label="Editar portada" className="grid h-11 w-full grid-cols-3">
+          <TabsTrigger value="texts">Textos</TabsTrigger>
+          <TabsTrigger value="buttons">Botones</TabsTrigger>
+          <TabsTrigger value="trust">Confianza</TabsTrigger>
+        </TabsList>
+      <TabsContent value="texts">
+      <SectionCard icon={Sparkles} title="Presentá tu negocio" description="Una etiqueta breve, un título claro y una descripción de lo que ofrecés.">
         <div className="space-y-6">
 
           {/* ── Plantillas por Rubro ── */}
-          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Wand2 className="h-4 w-4 text-primary" />
-                <span className="text-sm font-bold text-foreground">
-                  Plantillas Rápidas por Rubro
-                </span>
-              </div>
-              <span className="text-xs text-muted-foreground">
-                Hacé clic en tu rubro para auto-completar todo el hero
-              </span>
-            </div>
+          <details className="rounded-xl border bg-muted/20 p-3">
+            <summary className="cursor-pointer text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Usar una plantilla</summary>
+            <p className="my-3 text-xs text-muted-foreground">Elegí tu rubro para reemplazar los textos, botones, insignias y cifras del borrador. Revisá las cifras antes de guardar: son ejemplos, no datos reales de tu negocio.</p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
               {HERO_PRESETS.map((preset) => (
                 <button
                   key={preset.id}
@@ -640,13 +659,14 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 </button>
               ))}
             </div>
-          </div>
+          </details>
 
           {/* ── Guía Visual Desplegable ── */}
           <div className="border-b border-border/60 pb-4">
             <button
               type="button"
               onClick={() => setShowHeroGuide((prev) => !prev)}
+              aria-expanded={showHeroGuide}
               className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
             >
               <HelpCircle className="h-4 w-4" />
@@ -696,7 +716,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
             <div className="flex items-center justify-between">
               <Label htmlFor="badge" className="text-sm font-bold text-foreground flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-amber-500" />
-                Badge superior
+                Etiqueta superior
               </Label>
               <span className="text-xs text-muted-foreground">{heroContent.badge.length}/100</span>
             </div>
@@ -708,16 +728,14 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               placeholder="✨ Más de 10 años de experiencia"
               maxLength={100}
               aria-invalid={!!errors.badge}
+              aria-describedby={errors.badge ? 'badge-error' : undefined}
               className="h-11"
             />
-            {errors.badge && <p className="text-xs text-destructive">{errors.badge}</p>}
+            {errors.badge && <p id="badge-error" role="alert" className="text-xs text-destructive">{errors.badge}</p>}
 
             {/* Sugerencias rápidas Badge */}
-            <div className="pt-1">
-              <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                <Lightbulb className="h-3 w-3 text-amber-500" />
-                Sugerencias para Badge (tocá para aplicar):
-              </p>
+            <details className="pt-1">
+              <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
               <div className="flex flex-wrap gap-1.5">
                 {BADGE_SUGGESTIONS.map((sug, i) => (
                   <button
@@ -735,7 +753,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                   </button>
                 ))}
               </div>
-            </div>
+            </details>
           </div>
 
           {/* ── Campo 2: Título Principal ── */}
@@ -755,16 +773,14 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               placeholder="Reparación de celulares rápida y confiable"
               maxLength={150}
               aria-invalid={!!errors.title}
+              aria-describedby={errors.title ? 'title-error' : undefined}
               className="h-11"
             />
-            {errors.title && <p className="text-xs text-destructive">{errors.title}</p>}
+            {errors.title && <p id="title-error" role="alert" className="text-xs text-destructive">{errors.title}</p>}
 
             {/* Sugerencias rápidas Título */}
-            <div className="pt-1">
-              <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                <Lightbulb className="h-3 w-3 text-amber-500" />
-                Sugerencias para Título (tocá para aplicar):
-              </p>
+            <details className="pt-1">
+              <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
               <div className="flex flex-wrap gap-1.5">
                 {TITLE_SUGGESTIONS.map((sug, i) => (
                   <button
@@ -782,7 +798,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                   </button>
                 ))}
               </div>
-            </div>
+            </details>
           </div>
 
           {/* ── Campo 3: Subtítulo ── */}
@@ -803,16 +819,14 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               rows={2}
               maxLength={300}
               aria-invalid={!!errors.subtitle}
+              aria-describedby={errors.subtitle ? 'subtitle-error' : undefined}
               className="text-sm"
             />
-            {errors.subtitle && <p className="text-xs text-destructive">{errors.subtitle}</p>}
+            {errors.subtitle && <p id="subtitle-error" role="alert" className="text-xs text-destructive">{errors.subtitle}</p>}
 
             {/* Sugerencias rápidas Subtítulo */}
-            <div className="pt-1">
-              <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                <Lightbulb className="h-3 w-3 text-amber-500" />
-                Sugerencias para Subtítulo (tocá para aplicar):
-              </p>
+            <details className="pt-1">
+              <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
               <div className="flex flex-wrap gap-1.5">
                 {SUBTITLE_SUGGESTIONS.map((sug, i) => (
                   <button
@@ -830,14 +844,16 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                   </button>
                 ))}
               </div>
-            </div>
+            </details>
           </div>
 
         </div>
       </SectionCard>
+      </TabsContent>
 
       {/* Action Buttons & Links */}
-      <SectionCard icon={TrendingUp} title="Botones y Enlaces" description="Textos de los botones de llamada a la acción y enlaces clave">
+      <TabsContent value="buttons">
+      <SectionCard icon={TrendingUp} title="Acciones del visitante" description="Elegí textos cortos que indiquen qué puede hacer el cliente, por ejemplo: Ver productos.">
         <div className="space-y-6">
 
           {/* Guía Desplegable Botones */}
@@ -845,6 +861,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
             <button
               type="button"
               onClick={() => setShowButtonsGuide((prev) => !prev)}
+              aria-expanded={showButtonsGuide}
               className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
             >
               <HelpCircle className="h-4 w-4" />
@@ -880,11 +897,8 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 className="h-11"
               />
               {/* Sugerencias Botón Principal */}
-              <div className="pt-1">
-                <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                  <Lightbulb className="h-3 w-3 text-amber-500" />
-                  Sugerencias:
-                </p>
+              <details className="pt-1">
+                <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
                 <div className="flex flex-wrap gap-1.5">
                   {CTA_PRIMARY_SUGGESTIONS.map((sug, i) => (
                     <button
@@ -902,7 +916,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                     </button>
                   ))}
                 </div>
-              </div>
+              </details>
             </div>
 
             {/* Botón Secundario */}
@@ -920,11 +934,8 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 className="h-11"
               />
               {/* Sugerencias Botón Secundario */}
-              <div className="pt-1">
-                <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                  <Lightbulb className="h-3 w-3 text-amber-500" />
-                  Sugerencias:
-                </p>
+              <details className="pt-1">
+                <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
                 <div className="flex flex-wrap gap-1.5">
                   {CTA_SECONDARY_SUGGESTIONS.map((sug, i) => (
                     <button
@@ -942,7 +953,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                     </button>
                   ))}
                 </div>
-              </div>
+              </details>
             </div>
 
             {/* Enlace de Rastreo */}
@@ -960,11 +971,8 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 className="h-11"
               />
               {/* Sugerencias Enlace de Rastreo */}
-              <div className="pt-1">
-                <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                  <Lightbulb className="h-3 w-3 text-amber-500" />
-                  Sugerencias:
-                </p>
+              <details className="pt-1">
+                <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
                 <div className="flex flex-wrap gap-1.5">
                   {TRACK_REPAIR_SUGGESTIONS.map((sug, i) => (
                     <button
@@ -982,14 +990,16 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                     </button>
                   ))}
                 </div>
-              </div>
+              </details>
             </div>
           </div>
 
         </div>
       </SectionCard>
+      </TabsContent>
 
       {/* Trust Badges */}
+      <TabsContent value="trust" className="space-y-4">
       <SectionCard icon={ShieldCheck} title="Insignias de Confianza" description="Sellos de garantía y beneficios que disipan dudas de los clientes">
         <div className="space-y-6">
 
@@ -998,6 +1008,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
             <button
               type="button"
               onClick={() => setShowBadgesGuide((prev) => !prev)}
+              aria-expanded={showBadgesGuide}
               className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
             >
               <HelpCircle className="h-4 w-4" />
@@ -1023,10 +1034,11 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 const badges = heroContent.trustBadges || ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados']
                 return (
                   <div key={idx} className="space-y-1.5">
-                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    <Label htmlFor={`hero-trust-badge-${idx}`} className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                       Insignia {idx + 1}
-                    </span>
+                    </Label>
                     <Input
+                      id={`hero-trust-badge-${idx}`}
                       value={badges[idx] || ''}
                       onChange={(e) => {
                         const newBadges = [...badges]
@@ -1044,13 +1056,9 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
           </div>
 
           {/* Banco Categorizado de Insignias */}
-          <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 space-y-4">
-            <div className="flex items-center gap-2">
-              <Award className="h-4 w-4 text-primary" />
-              <span className="text-xs font-bold text-foreground">
-                Banco de Insignias Recomendadas (tocá para asignar a tus slots):
-              </span>
-            </div>
+          <details className="rounded-xl border bg-muted/20 p-3 space-y-3">
+            <summary className="cursor-pointer text-xs font-medium text-primary">Ver ejemplos de insignias</summary>
+            <p className="text-xs text-muted-foreground">Se agrega al primer espacio vacío. Si los tres están completos, reemplaza la primera insignia.</p>
 
             <div className="grid gap-4 sm:grid-cols-3">
               {TRUST_BADGE_CATEGORIES.map((cat, catIdx) => (
@@ -1094,7 +1102,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 </div>
               ))}
             </div>
-          </div>
+          </details>
 
         </div>
       </SectionCard>
@@ -1119,6 +1127,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 <button
                   type="button"
                   onClick={() => setShowStatsGuide((prev) => !prev)}
+                  aria-expanded={showStatsGuide}
                   className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
                 >
                   <HelpCircle className="h-4 w-4" />
@@ -1138,7 +1147,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                 )}
               </div>
 
-              <div className="grid gap-6 md:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
                 {/* Métrica 1 */}
                 <div className="space-y-2.5">
                   <Label htmlFor="repairs" className="text-sm font-bold text-foreground flex items-center gap-1.5">
@@ -1154,11 +1163,8 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                     className="h-11 font-extrabold text-base"
                   />
                   {/* Sugerencias Métrica 1 */}
-                  <div className="pt-1">
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                      <Lightbulb className="h-3 w-3 text-amber-500" />
-                      Sugerencias:
-                    </p>
+                  <details className="pt-1">
+                    <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
                     <div className="flex flex-wrap gap-1">
                       {STAT_REPAIRS_SUGGESTIONS.map((sug, i) => (
                         <button
@@ -1176,7 +1182,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </details>
                 </div>
 
                 {/* Métrica 2 */}
@@ -1194,11 +1200,8 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                     className="h-11 font-extrabold text-base"
                   />
                   {/* Sugerencias Métrica 2 */}
-                  <div className="pt-1">
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                      <Lightbulb className="h-3 w-3 text-amber-500" />
-                      Sugerencias:
-                    </p>
+                  <details className="pt-1">
+                    <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
                     <div className="flex flex-wrap gap-1">
                       {STAT_SATISFACTION_SUGGESTIONS.map((sug, i) => (
                         <button
@@ -1216,7 +1219,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </details>
                 </div>
 
                 {/* Métrica 3 */}
@@ -1234,11 +1237,8 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                     className="h-11 font-extrabold text-base"
                   />
                   {/* Sugerencias Métrica 3 */}
-                  <div className="pt-1">
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                      <Lightbulb className="h-3 w-3 text-amber-500" />
-                      Sugerencias:
-                    </p>
+                  <details className="pt-1">
+                    <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
                     <div className="flex flex-wrap gap-1">
                       {STAT_AVG_TIME_SUGGESTIONS.map((sug, i) => (
                         <button
@@ -1256,7 +1256,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </details>
                 </div>
               </div>
             </>
@@ -1265,8 +1265,11 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
         </div>
       </SectionCard>
 
+      </TabsContent>
+      </Tabs>
+      </div>
       {/* Save bar */}
-      <div className="fixed inset-x-4 bottom-4 z-50 flex items-center justify-between gap-3 rounded-lg border bg-background/95 p-3 shadow-lg backdrop-blur md:sticky md:inset-x-auto md:bottom-4">
+      <div className="sticky bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/95 p-3 shadow-lg backdrop-blur">
         <div className="hidden min-w-0 md:block">
           <p className="text-sm font-medium">{hasChanges ? 'Cambios pendientes' : 'Hero actualizado'}</p>
           <p className="text-xs text-muted-foreground">{heroContent.enabled !== false ? 'La sección se mostrará al guardar.' : 'La sección se ocultará al guardar.'}</p>

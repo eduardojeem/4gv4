@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import {
   Heart,
@@ -19,13 +20,17 @@ import {
   Check,
   Tag,
   SlidersHorizontal,
-  ChevronRight
+  ChevronRight,
+  Package,
+  Layers,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
 import { FavoriteButton } from './Favorites'
 import { initializeFavorites, useFavorites } from '@/lib/public/favorites-store'
-import { favoriteKey } from '@/lib/public/favorites-schema'
+import { favoriteKey, type Favorite } from '@/lib/public/favorites-schema'
+import { resolveProductImageUrl } from '@/lib/images'
+import { formatPrice } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -36,17 +41,79 @@ const normalizeText = (value: string) =>
     .toLocaleLowerCase()
     .trim()
 
-type SortOption = 'name_asc' | 'name_desc' | 'store_asc'
-type ViewMode = 'grid' | 'list'
+type SortOption = 'store_asc' | 'store_desc' | 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc'
+type ViewMode = 'grid' | 'list' | 'grouped'
+
+interface ProductMeta {
+  image: string | null
+  price: number | null
+  hasOffer?: boolean
+  offerPrice?: number | null
+  inStock?: boolean
+}
+
+function FavoriteProductImage({ src, alt }: { src?: string | null; alt: string }) {
+  const [err, setErr] = useState(false)
+  const imageSrc = src ? resolveProductImageUrl(src) : null
+
+  if (!imageSrc || err || imageSrc === '/placeholder-product.svg') {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-muted/40 text-muted-foreground/40 transition-colors">
+        <Package className="h-10 w-10 sm:h-12 sm:w-12" />
+      </div>
+    )
+  }
+
+  return (
+    <Image
+      src={imageSrc}
+      alt={alt}
+      fill
+      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+      className="object-contain p-3 transition-transform duration-300 group-hover:scale-105"
+      onError={() => setErr(true)}
+      unoptimized={imageSrc.startsWith('data:') || imageSrc.startsWith('blob:')}
+    />
+  )
+}
 
 export function FavoritesPage() {
   const state = useFavorites()
   const { user } = useAuth()
   const [query, setQuery] = useState('')
   const [store, setStore] = useState('')
-  const [sortBy, setSortBy] = useState<SortOption>('name_asc')
+  const [sortBy, setSortBy] = useState<SortOption>('store_asc')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [productMetadata, setProductMetadata] = useState<Record<string, ProductMeta>>({})
+
+  // Cargar metadatos en vivo (imágenes, precios actualizados, ofertas) para todos los favoritos
+  useEffect(() => {
+    if (!state.items.length) return
+    const ids = state.items.map((item) => item.productId).filter(Boolean)
+    if (!ids.length) return
+
+    const controller = new AbortController()
+    fetch('/api/public/favorites/metadata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productIds: ids }),
+      signal: controller.signal,
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.metadata) {
+          setProductMetadata((prev) => ({ ...prev, ...data.metadata }))
+        }
+      })
+      .catch((err) => {
+        if (err?.name !== 'AbortError') {
+          // Ignorar silenciosamente
+        }
+      })
+
+    return () => controller.abort()
+  }, [state.items])
 
   // Lista única de tiendas con cantidad de productos guardados
   const stores = useMemo(() => {
@@ -74,19 +141,47 @@ export function FavoritesPage() {
     })
 
     return result.sort((a, b) => {
+      const metaA = productMetadata[a.productId]
+      const metaB = productMetadata[b.productId]
+      const priceA = metaA?.hasOffer && metaA.offerPrice ? metaA.offerPrice : (metaA?.price ?? a.price ?? 0)
+      const priceB = metaB?.hasOffer && metaB.offerPrice ? metaB.offerPrice : (metaB?.price ?? b.price ?? 0)
+
+      if (sortBy === 'store_asc') {
+        const storeCompare = a.store.localeCompare(b.store)
+        return storeCompare !== 0 ? storeCompare : a.name.localeCompare(b.name)
+      }
+      if (sortBy === 'store_desc') {
+        const storeCompare = b.store.localeCompare(a.store)
+        return storeCompare !== 0 ? storeCompare : a.name.localeCompare(b.name)
+      }
       if (sortBy === 'name_asc') return a.name.localeCompare(b.name)
       if (sortBy === 'name_desc') return b.name.localeCompare(a.name)
-      if (sortBy === 'store_asc') return a.store.localeCompare(b.store)
+      if (sortBy === 'price_asc') return priceA - priceB
+      if (sortBy === 'price_desc') return priceB - priceA
       return 0
     })
-  }, [state.items, store, query, sortBy])
+  }, [state.items, store, query, sortBy, productMetadata])
 
-  const hasActiveFilters = Boolean(query || store || sortBy !== 'name_asc')
+  // Agrupación de favoritos por organización
+  const groupedByOrg = useMemo(() => {
+    const map = new Map<string, { slug: string; storeName: string; items: Favorite[] }>()
+    filtered.forEach((item) => {
+      const existing = map.get(item.slug)
+      if (existing) {
+        existing.items.push(item)
+      } else {
+        map.set(item.slug, { slug: item.slug, storeName: item.store, items: [item] })
+      }
+    })
+    return [...map.values()]
+  }, [filtered])
+
+  const hasActiveFilters = Boolean(query || store || sortBy !== 'store_asc')
 
   const resetFilters = () => {
     setQuery('')
     setStore('')
-    setSortBy('name_asc')
+    setSortBy('store_asc')
   }
 
   const handleShareList = async () => {
@@ -223,7 +318,7 @@ export function FavoritesPage() {
         <div className="rounded-2xl border border-border/80 bg-card p-3 sm:p-4 shadow-sm space-y-3">
           <div className="grid gap-3 sm:grid-cols-12 items-center">
             {/* Buscador */}
-            <div className="sm:col-span-6 lg:col-span-5 relative">
+            <div className="sm:col-span-5 lg:col-span-4 relative">
               <label htmlFor="favorites-search" className="sr-only">
                 Buscar favoritos
               </label>
@@ -249,8 +344,8 @@ export function FavoritesPage() {
               )}
             </div>
 
-            {/* Selector de Tienda */}
-            <div className="sm:col-span-3 lg:col-span-3">
+            {/* Selector de Tienda / Organización */}
+            <div className="sm:col-span-4 lg:col-span-3">
               <label htmlFor="store-filter" className="sr-only">
                 Filtrar por tienda
               </label>
@@ -263,7 +358,7 @@ export function FavoritesPage() {
                   onChange={(e) => setStore(e.target.value)}
                   className="h-11 w-full appearance-none rounded-xl border border-border/80 bg-background pl-9 pr-8 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all cursor-pointer truncate"
                 >
-                  <option value="">Todas las tiendas ({state.items.length})</option>
+                  <option value="">Todas las organizaciones ({state.items.length})</option>
                   {stores.map((s) => (
                     <option key={s.slug} value={s.slug}>
                       {s.name} ({s.count})
@@ -276,8 +371,8 @@ export function FavoritesPage() {
               </div>
             </div>
 
-            {/* Selector de Orden */}
-            <div className="sm:col-span-3 lg:col-span-2">
+            {/* Selector de Ordenamiento */}
+            <div className="sm:col-span-3 lg:col-span-3">
               <label htmlFor="sort-filter" className="sr-only">
                 Ordenar por
               </label>
@@ -288,11 +383,14 @@ export function FavoritesPage() {
                   aria-label="Ordenar por"
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SortOption)}
-                  className="h-11 w-full appearance-none rounded-xl border border-border/80 bg-background pl-9 pr-8 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all cursor-pointer truncate"
+                  className="h-11 w-full appearance-none rounded-xl border border-border/80 bg-background pl-9 pr-8 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all cursor-pointer truncate font-medium"
                 >
+                  <option value="store_asc">Organización: A → Z</option>
+                  <option value="store_desc">Organización: Z → A</option>
                   <option value="name_asc">Nombre: A → Z</option>
                   <option value="name_desc">Nombre: Z → A</option>
-                  <option value="store_asc">Por Tienda</option>
+                  <option value="price_asc">Menor precio</option>
+                  <option value="price_desc">Mayor precio</option>
                 </select>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground text-xs">
                   ▼
@@ -300,22 +398,22 @@ export function FavoritesPage() {
               </div>
             </div>
 
-            {/* Botón Limpiar & Alternador de Vista */}
+            {/* Botón Limpiar & Alternador de Vista (Cuadrícula / Lista / Por Tienda) */}
             <div className="sm:col-span-12 lg:col-span-2 flex items-center justify-between lg:justify-end gap-2">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={resetFilters}
-                disabled={!query && !store && sortBy === 'name_asc'}
-                className="h-10 text-xs font-semibold text-muted-foreground hover:text-foreground gap-1.5 px-3 disabled:opacity-40"
+                disabled={!query && !store && sortBy === 'store_asc'}
+                className="h-10 text-xs font-semibold text-muted-foreground hover:text-foreground gap-1.5 px-2.5 disabled:opacity-40"
               >
                 <X className="h-3.5 w-3.5" />
                 <span>Limpiar filtros</span>
               </Button>
 
               {/* View toggle */}
-              <div className="flex items-center rounded-xl border border-border/80 bg-muted/40 p-1">
+              <div className="flex items-center rounded-xl border border-border/80 bg-muted/40 p-1 gap-0.5">
                 <button
                   type="button"
                   onClick={() => setViewMode('grid')}
@@ -327,6 +425,18 @@ export function FavoritesPage() {
                   aria-label="Vista en cuadrícula"
                 >
                   <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grouped')}
+                  className={cn(
+                    'flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-all',
+                    viewMode === 'grouped' && 'bg-card text-foreground shadow-xs'
+                  )}
+                  title="Agrupar por organización"
+                  aria-label="Agrupar por organización"
+                >
+                  <Layers className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
@@ -351,6 +461,7 @@ export function FavoritesPage() {
             <p role="status">
               Mostrando <span className="font-bold text-foreground">{filtered.length}</span> de{' '}
               <span className="font-bold text-foreground">{state.items.length}</span> favoritos guardados
+              {viewMode === 'grouped' && ` en ${groupedByOrg.length} organizaciones`}
             </p>
             <span className="flex items-center gap-1.5 text-muted-foreground/80">
               <Info className="h-3.5 w-3.5 shrink-0" />
@@ -406,145 +517,311 @@ export function FavoritesPage() {
           </div>
         )}
 
-        {/* ── Lista de Productos Favoritos ── */}
-        {filtered.length > 0 && (
-          <ul
-            className={cn(
-              viewMode === 'grid'
-                ? 'grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3'
-                : 'flex flex-col space-y-3'
-            )}
-          >
+        {/* ── 1. Modo Agrupado por Organización ── */}
+        {filtered.length > 0 && viewMode === 'grouped' && (
+          <div className="space-y-6">
+            {groupedByOrg.map((group) => {
+              const storeUrl = `/${group.slug}/inicio`
+              return (
+                <section
+                  key={group.slug}
+                  className="rounded-3xl border border-border/80 bg-card p-5 sm:p-6 space-y-5 shadow-xs"
+                >
+                  {/* Encabezado de la Organización */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
+                    <Link
+                      href={storeUrl}
+                      className="group flex items-center gap-3 transition-opacity hover:opacity-90 min-w-0"
+                    >
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-50 border border-cyan-200/80 text-cyan-700 shadow-2xs dark:bg-cyan-950/40 dark:border-cyan-800/50 dark:text-cyan-300">
+                        <Store className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-base sm:text-lg font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                            {group.storeName}
+                          </h2>
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary shrink-0">
+                            {group.items.length} {group.items.length === 1 ? 'producto' : 'productos'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Tienda oficial en el marketplace</p>
+                      </div>
+                    </Link>
+
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="h-9 rounded-xl text-xs font-semibold gap-1.5 border-border/80 bg-background"
+                    >
+                      <Link href={storeUrl}>
+                        <span>Visitar tienda</span>
+                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Link>
+                    </Button>
+                  </div>
+
+                  {/* Productos de esta organización */}
+                  <ul className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {group.items.map((item) => {
+                      const productUrl = `/${item.slug}/productos/${item.productId}`
+                      return (
+                        <li
+                          key={favoriteKey(item)}
+                          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-background shadow-xs transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-md"
+                        >
+                          {/* Contenedor de Imagen */}
+                          <div className="relative aspect-square w-full overflow-hidden bg-muted/20 border-b border-border/40">
+                            <FavoriteProductImage src={item.image} alt={item.name} />
+
+                            {/* Botón Favorito en esquina superior derecha */}
+                            <div className="absolute right-2 top-2 z-10">
+                              <FavoriteButton item={item} />
+                            </div>
+                          </div>
+
+                          {/* Info del Producto */}
+                          <div className="p-4 flex flex-col flex-1 justify-between gap-3">
+                            <div className="space-y-1.5">
+                              <Link href={productUrl} className="block group/link">
+                                <h3 className="text-sm font-bold text-foreground leading-snug line-clamp-2 group-hover/link:text-primary transition-colors">
+                                  {item.name}
+                                </h3>
+                              </Link>
+                              {typeof item.price === 'number' && item.price > 0 && (
+                                <p className="text-base font-extrabold text-foreground">
+                                  {formatPrice(item.price)}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Acciones */}
+                            <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleShareProduct(item)}
+                                className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                                title="Copiar enlace"
+                              >
+                                {copiedId === item.productId ? (
+                                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                                ) : (
+                                  <Share2 className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+
+                              <Button
+                                asChild
+                                size="sm"
+                                className="h-8 rounded-lg px-3 text-xs font-bold gap-1 shadow-xs flex-1 justify-center"
+                              >
+                                <Link href={productUrl}>
+                                  <span>Ver en tienda</span>
+                                  <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                                </Link>
+                              </Button>
+                            </div>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ── 2. Modo Cuadrícula (Grid Mode) ── */}
+        {filtered.length > 0 && viewMode === 'grid' && (
+          <ul className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filtered.map((item) => {
               const productUrl = `/${item.slug}/productos/${item.productId}`
-              const storeUrl = `/${item.slug}`
+              const storeUrl = `/${item.slug}/inicio`
+              const meta = productMetadata[item.productId]
+              const image = meta?.image ?? item.image
+              const displayPrice = meta?.hasOffer && meta.offerPrice ? meta.offerPrice : (meta?.price ?? item.price)
+              const originalPrice = meta?.hasOffer && meta.offerPrice ? meta.price : null
 
-              if (viewMode === 'list') {
-                return (
-                  <li
-                    key={favoriteKey(item)}
-                    className="group relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-md"
-                  >
-                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-black text-sm">
-                        <Tag className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={storeUrl}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground hover:text-primary transition-colors mb-0.5"
-                        >
-                          <Store className="h-3 w-3" />
-                          <span>{item.store}</span>
-                        </Link>
-                        <Link href={productUrl} className="block group/title">
-                          <h2 className="truncate text-sm font-bold text-foreground group-hover/title:text-primary transition-colors">
-                            {item.name}
-                          </h2>
-                        </Link>
-                      </div>
+              return (
+                <li
+                  key={favoriteKey(item)}
+                  className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg"
+                >
+                  {/* Contenedor de Imagen con Overlays */}
+                  <div className="relative aspect-square w-full overflow-hidden bg-muted/20 border-b border-border/60">
+                    <FavoriteProductImage src={image} alt={item.name} />
+
+                    {/* Pill de la tienda en esquina superior izquierda */}
+                    <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1.5 max-w-[calc(100%-4rem)]">
+                      <Link
+                        href={storeUrl}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-background/90 px-2.5 py-1 text-[11px] font-bold text-foreground backdrop-blur-md transition-all hover:bg-background shadow-xs truncate"
+                        title={item.store}
+                      >
+                        <Store className="h-3 w-3 shrink-0 text-primary" />
+                        <span className="truncate">{item.store}</span>
+                      </Link>
+                      {meta?.hasOffer && (
+                        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                          <Tag className="h-2.5 w-2.5" />
+                          Oferta
+                        </span>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                    {/* Botón Favorito en esquina superior derecha */}
+                    <div className="absolute right-2.5 top-2.5 z-10">
+                      <FavoriteButton item={{ ...item, image, price: displayPrice }} />
+                    </div>
+                  </div>
+
+                  {/* Contenido del Producto */}
+                  <div className="p-4 sm:p-5 flex flex-col flex-1 justify-between gap-3">
+                    <div className="space-y-2">
+                      <Link href={productUrl} className="block group/link">
+                        <h2 className="text-sm sm:text-base font-extrabold text-foreground leading-snug line-clamp-2 group-hover/link:text-primary transition-colors">
+                          {item.name}
+                        </h2>
+                      </Link>
+
+                      {typeof displayPrice === 'number' && displayPrice > 0 && (
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-lg font-black text-foreground tracking-tight">
+                            {formatPrice(displayPrice)}
+                          </p>
+                          {originalPrice && originalPrice > displayPrice && (
+                            <p className="text-xs text-muted-foreground line-through">
+                              {formatPrice(originalPrice)}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <p className="text-xs text-muted-foreground line-clamp-1">
+                        Vendido por <span className="font-semibold text-foreground/80">{item.store}</span>
+                      </p>
+                    </div>
+
+                    {/* Footer de la Tarjeta con Botones de Acción */}
+                    <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
                       <Button
-                        variant="ghost"
-                        size="icon"
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleShareProduct(item)}
-                        className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground"
-                        title="Copiar enlace"
+                        className="h-9 rounded-xl px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground gap-1 border-border/80"
+                        title="Compartir enlace de este producto"
                       >
                         {copiedId === item.productId ? (
-                          <Check className="h-4 w-4 text-emerald-500" />
+                          <>
+                            <Check className="h-3.5 w-3.5 text-emerald-500" />
+                            <span className="text-[11px] text-emerald-600 font-bold">Copiado</span>
+                          </>
                         ) : (
-                          <Share2 className="h-4 w-4" />
+                          <>
+                            <Share2 className="h-3.5 w-3.5" />
+                            <span className="text-[11px]">Compartir</span>
+                          </>
                         )}
                       </Button>
 
                       <Button
                         asChild
                         size="sm"
-                        className="h-9 rounded-xl px-4 text-xs font-bold gap-1.5 shadow-xs"
+                        className="h-9 rounded-xl px-4 text-xs font-bold gap-1.5 shadow-xs flex-1 justify-center"
                       >
                         <Link href={productUrl}>
                           <span>Ver en tienda</span>
-                          <ArrowRight className="h-3.5 w-3.5" />
+                          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
                         </Link>
                       </Button>
-
-                      <FavoriteButton item={item} />
                     </div>
-                  </li>
-                )
-              }
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
-              // Card Grid Mode
+        {/* ── 3. Modo Lista (List Mode) ── */}
+        {filtered.length > 0 && viewMode === 'list' && (
+          <ul className="flex flex-col space-y-3">
+            {filtered.map((item) => {
+              const productUrl = `/${item.slug}/productos/${item.productId}`
+              const storeUrl = `/${item.slug}/inicio`
+              const meta = productMetadata[item.productId]
+              const image = meta?.image ?? item.image
+              const displayPrice = meta?.hasOffer && meta.offerPrice ? meta.offerPrice : (meta?.price ?? item.price)
+              const originalPrice = meta?.hasOffer && meta.offerPrice ? meta.price : null
+
               return (
                 <li
                   key={favoriteKey(item)}
-                  className="group relative flex flex-col justify-between rounded-3xl border border-border/80 bg-card p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg"
+                  className="group relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-border/80 bg-card p-3.5 sm:p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-md"
                 >
-                  <div>
-                    {/* Header de la Tarjeta: Tienda y Botón Favorito */}
-                    <div className="flex items-center justify-between gap-2 pb-3.5 border-b border-border/60">
-                      <Link
-                        href={storeUrl}
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-primary transition-colors truncate"
-                      >
-                        <Store className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span className="truncate">{item.store}</span>
-                      </Link>
-
-                      <div className="shrink-0">
-                        <FavoriteButton item={item} />
-                      </div>
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                    {/* Thumbnail con Imagen */}
+                    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-muted/20">
+                      <FavoriteProductImage src={image} alt={item.name} />
                     </div>
 
-                    {/* Contenido del Producto */}
-                    <div className="py-4 space-y-2">
-                      <Link href={productUrl} className="block group/link">
-                        <h2 className="text-base font-extrabold text-foreground leading-snug line-clamp-2 group-hover/link:text-primary transition-colors">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <Link
+                        href={storeUrl}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <Store className="h-3 w-3" />
+                        <span>{item.store}</span>
+                      </Link>
+                      <Link href={productUrl} className="block group/title">
+                        <h2 className="truncate text-sm font-bold text-foreground group-hover/title:text-primary transition-colors">
                           {item.name}
                         </h2>
                       </Link>
-
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        Vendido por <span className="font-semibold text-foreground/80">{item.store}</span>
-                      </p>
+                      {typeof displayPrice === 'number' && displayPrice > 0 && (
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-sm font-black text-foreground">
+                            {formatPrice(displayPrice)}
+                          </p>
+                          {originalPrice && originalPrice > displayPrice && (
+                            <p className="text-xs text-muted-foreground line-through">
+                              {formatPrice(originalPrice)}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Footer de la Tarjeta con Botones de Acción */}
-                  <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                     <Button
-                      variant="outline"
-                      size="sm"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => handleShareProduct(item)}
-                      className="h-9 rounded-xl px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground gap-1 border-border/80"
-                      title="Compartir enlace de este producto"
+                      className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground"
+                      title="Copiar enlace"
                     >
                       {copiedId === item.productId ? (
-                        <>
-                          <Check className="h-3.5 w-3.5 text-emerald-500" />
-                          <span className="text-[11px] text-emerald-600 font-bold">Copiado</span>
-                        </>
+                        <Check className="h-4 w-4 text-emerald-500" />
                       ) : (
-                        <>
-                          <Share2 className="h-3.5 w-3.5" />
-                          <span className="text-[11px]">Compartir</span>
-                        </>
+                        <Share2 className="h-4 w-4" />
                       )}
                     </Button>
 
                     <Button
                       asChild
                       size="sm"
-                      className="h-9 rounded-xl px-4 text-xs font-bold gap-1.5 shadow-xs flex-1 justify-center"
+                      className="h-9 rounded-xl px-4 text-xs font-bold gap-1.5 shadow-xs"
                     >
                       <Link href={productUrl}>
                         <span>Ver en tienda</span>
-                        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+                        <ArrowRight className="h-3.5 w-3.5" />
                       </Link>
                     </Button>
+
+                    <FavoriteButton item={{ ...item, image, price: displayPrice }} />
                   </div>
                 </li>
               )

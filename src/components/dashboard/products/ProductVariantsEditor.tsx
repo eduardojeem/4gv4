@@ -105,6 +105,65 @@ const EXAMPLE_USE_CASES = [
   },
 ]
 
+type VariantPreset = {
+  id: string
+  title: string
+  description: string
+  skuPrefix: string
+  recommendedFor: BusinessVertical[]
+  attributes: ProductAttributeDefinition[]
+}
+
+const VARIANT_PRESETS: VariantPreset[] = [
+  {
+    id: 'shirt', title: 'Remera clásica', description: 'Talles S a XL y dos colores', skuPrefix: 'REM',
+    recommendedFor: ['clothing'],
+    attributes: [
+      { key: 'size', label: 'Talle', control: 'select', options: ['S', 'M', 'L', 'XL'] },
+      { key: 'color', label: 'Color', control: 'color', options: ['Negro', 'Blanco'] },
+    ],
+  },
+  {
+    id: 'sports-shirt', title: 'Remera deportiva', description: 'Cinco talles y tres colores', skuPrefix: 'SPORT',
+    recommendedFor: ['clothing'],
+    attributes: [
+      { key: 'size', label: 'Talle', control: 'select', options: ['XS', 'S', 'M', 'L', 'XL'] },
+      { key: 'color', label: 'Color', control: 'color', options: ['Negro', 'Blanco', 'Azul'] },
+    ],
+  },
+  {
+    id: 'footwear', title: 'Calzado', description: 'Numeración y color', skuPrefix: 'CAL',
+    recommendedFor: ['clothing'],
+    attributes: [
+      { key: 'size', label: 'Número', control: 'select', options: ['35', '36', '37', '38', '39', '40', '41', '42'] },
+      { key: 'color', label: 'Color', control: 'color', options: ['Negro', 'Blanco'] },
+    ],
+  },
+  {
+    id: 'cosmetics', title: 'Cosmética', description: 'Tono y presentación', skuPrefix: 'COS',
+    recommendedFor: ['cosmetics'],
+    attributes: [
+      { key: 'tone', label: 'Tono', control: 'color', options: ['Claro', 'Medio', 'Oscuro'] },
+      { key: 'volume', label: 'Volumen', control: 'select', options: ['30 ml', '50 ml'] },
+    ],
+  },
+  {
+    id: 'electronics', title: 'Electrónica', description: 'Capacidad y color', skuPrefix: 'TEC',
+    recommendedFor: ['electronics'],
+    attributes: [
+      { key: 'capacity', label: 'Capacidad', control: 'select', options: ['128 GB', '256 GB'] },
+      { key: 'color', label: 'Color', control: 'color', options: ['Negro', 'Plata'] },
+    ],
+  },
+  {
+    id: 'presentation', title: 'Presentaciones', description: 'Tamaño o contenido', skuPrefix: 'PRES',
+    recommendedFor: ['food', 'hardware', 'general', 'other'],
+    attributes: [
+      { key: 'presentation', label: 'Presentación', control: 'select', options: ['Pequeño', 'Mediano', 'Grande'] },
+    ],
+  },
+]
+
 export function ProductVariantsEditor({
   value,
   onChange,
@@ -119,7 +178,7 @@ export function ProductVariantsEditor({
   // Estado local para input de nueva opción por atributo
   const [optionInputs, setOptionInputs] = useState<Record<number, string>>({})
   const [expandedVariant, setExpandedVariant] = useState<number | null>(null)
-  const [showGuide, setShowGuide] = useState(true)
+  const [showGuide, setShowGuide] = useState(false)
   const [selectedExampleId, setSelectedExampleId] = useState('clothing')
 
   /* ── Mutators ── */
@@ -189,27 +248,26 @@ export function ProductVariantsEditor({
     onChange({ ...value, variants })
   }
 
-  const configureShirt = () => {
+  const applyPreset = (preset: VariantPreset) => {
     const replacesExistingConfiguration = value.attributes.length > 0 || value.variants.length > 0
     if (
       replacesExistingConfiguration
-      && !window.confirm('Esta acción reemplazará los atributos y variantes actuales. ¿Querés continuar?')
+      && !window.confirm(`La plantilla ${preset.title} reemplazará los atributos y variantes actuales. ¿Querés continuar?`)
     ) {
       return
     }
 
-    const attributes: ProductAttributeDefinition[] = [
-      { key: 'size', label: 'Talle', control: 'select', options: ['S', 'M', 'L', 'XL'] },
-      { key: 'color', label: 'Color', control: 'color', options: ['Negro', 'Blanco'] },
-    ]
+    const attributes = preset.attributes.map((attribute) => ({ ...attribute, options: [...attribute.options] }))
     const generated = generateVariantCombinations(attributes)
     const variants = mergeGeneratedVariants(generated, [], basePrices).map((variant, index) => ({
       ...variant,
-      sku: `${baseSku.trim().toUpperCase() || 'REM'}-${String(index + 1).padStart(2, '0')}`,
+      sku: `${baseSku.trim().toUpperCase() || preset.skuPrefix}-${String(index + 1).padStart(2, '0')}`,
     }))
 
     onChange({ hasVariants: true, attributes, variants })
   }
+
+  const configureShirt = () => applyPreset(VARIANT_PRESETS[0])
 
   const updateVariant = (
     index: number,
@@ -232,6 +290,9 @@ export function ProductVariantsEditor({
   const hasAttributes = value.attributes.length > 0
   const hasOptions = value.attributes.some((a) => a.options.length > 0)
   const currentExample = EXAMPLE_USE_CASES.find((e) => e.id === selectedExampleId) || EXAMPLE_USE_CASES[0]
+  const orderedPresets = [...VARIANT_PRESETS].sort((left, right) =>
+    Number(right.recommendedFor.includes(businessVertical)) - Number(left.recommendedFor.includes(businessVertical))
+  )
 
   return (
     <section className="space-y-5" aria-labelledby="product-variants-title">
@@ -273,10 +334,45 @@ export function ProductVariantsEditor({
         </div>
       </div>
 
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+        <div>
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Empezá con una plantilla</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Elegí el tipo de producto y después ajustá opciones, precios y stock.</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {orderedPresets.map((preset) => {
+            const recommended = preset.recommendedFor.includes(businessVertical)
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                disabled={disabled}
+                aria-label={preset.id === 'shirt' ? 'Configurar una remera' : `Usar plantilla ${preset.title}`}
+                onClick={() => applyPreset(preset)}
+                className="flex min-h-20 items-start gap-3 rounded-lg border border-slate-200 p-3 text-left transition-colors hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50 dark:border-slate-700"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  {preset.id.includes('shirt') || preset.id === 'footwear' ? <Shirt className="h-4 w-4" /> : preset.id === 'electronics' ? <Smartphone className="h-4 w-4" /> : <Layers3 className="h-4 w-4" />}
+                </span>
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    {preset.title}
+                    {recommended && <Badge variant="secondary" className="px-1.5 py-0 text-[9px]">Recomendado</Badge>}
+                  </span>
+                  <span className="mt-1 block text-xs leading-snug text-slate-500 dark:text-slate-400">{preset.description}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-[11px] text-slate-500">La plantilla usa los precios generales como referencia. Cada combinación puede tener luego su propio precio y stock.</p>
+      </div>
+
       {/* ── GUÍA EXPLICATIVA CON EJEMPLOS REALES ── */}
       <div className="rounded-xl border border-violet-200/80 dark:border-violet-800/50 bg-gradient-to-br from-violet-50/60 via-purple-50/30 to-indigo-50/40 dark:from-violet-950/20 dark:via-purple-950/10 dark:to-slate-900 overflow-hidden">
         <button
           type="button"
+          aria-expanded={showGuide}
           onClick={() => setShowGuide((prev) => !prev)}
           className="w-full flex items-center justify-between p-4 text-left hover:bg-violet-100/40 dark:hover:bg-violet-900/20 transition-colors"
         >
@@ -458,12 +554,27 @@ export function ProductVariantsEditor({
             </div>
 
             {value.attributes.length === 0 && (
-              <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 py-8 text-center">
+              <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 py-6 px-4 text-center bg-slate-50/50 dark:bg-slate-900/30">
                 <Layers3 className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Aún no hay atributos. Elegí uno de las sugerencias de arriba
-                  <br />o agregá uno personalizado.
-                </p>
+                <div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Aún no hay atributos configurados
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
+                    Elegí una de las sugerencias de arriba, usá una plantilla o desactivá las variantes si es un producto estándar.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={disabled}
+                  onClick={() => onChange({ hasVariants: false, attributes: [], variants: [] })}
+                  className="text-xs gap-1.5 mt-1"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  Cambiar a Producto Simple (sin variantes)
+                </Button>
               </div>
             )}
 
@@ -655,14 +766,20 @@ export function ProductVariantsEditor({
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {value.variants.map((variant, index) => {
-                      const margin = variant.purchasePrice > 0 && variant.salePrice > 0
-                        ? (((variant.salePrice - variant.purchasePrice) / variant.salePrice) * 100).toFixed(0)
+                      const vName = variant.name || (variant as any).variant_name || `Variante ${index + 1}`
+                      const vPurchase = Number(variant.purchasePrice ?? (variant as any).purchase_price ?? 0)
+                      const vSale = Number(variant.salePrice ?? (variant as any).sale_price ?? 0)
+                      const vWholesale = variant.wholesalePrice !== undefined ? variant.wholesalePrice : (variant as any).wholesale_price
+                      const vStock = Number(variant.stockQuantity ?? (variant as any).stock_quantity ?? 0)
+                      const vKey = variant.clientKey || (variant as any).client_key || (variant as any).id || String(index)
+                      const margin = vPurchase > 0 && vSale > 0
+                        ? (((vSale - vPurchase) / vSale) * 100).toFixed(0)
                         : null
                       return (
-                        <tr key={variant.clientKey} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                        <tr key={vKey} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
                           <td className="px-4 py-2">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{variant.name}</span>
+                              <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{vName}</span>
                               {margin !== null && (
                                 <span className="text-[10px] rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-px font-bold">
                                   {margin}% margen
@@ -672,7 +789,7 @@ export function ProductVariantsEditor({
                           </td>
                           <td className="px-2 py-2">
                             <Input
-                              value={variant.sku}
+                              value={variant.sku || ''}
                               placeholder="SKU"
                               className="h-8 text-xs"
                               onChange={(e) => updateVariant(index, { sku: e.target.value })}
@@ -683,7 +800,7 @@ export function ProductVariantsEditor({
                               type="number"
                               min={0}
                               step="0.01"
-                              value={variant.purchasePrice}
+                              value={vPurchase}
                               className="h-8 text-xs w-24"
                               onChange={(e) => updateVariant(index, { purchasePrice: Number(e.target.value) })}
                             />
@@ -693,7 +810,7 @@ export function ProductVariantsEditor({
                               type="number"
                               min={0}
                               step="0.01"
-                              value={variant.salePrice}
+                              value={vSale}
                               className="h-8 text-xs font-semibold w-24"
                               onChange={(e) => updateVariant(index, { salePrice: Number(e.target.value) })}
                             />
@@ -704,7 +821,7 @@ export function ProductVariantsEditor({
                               min={0}
                               step="0.01"
                               placeholder="—"
-                              value={variant.wholesalePrice ?? ''}
+                              value={vWholesale ?? ''}
                               className="h-8 text-xs w-24"
                               onChange={(e) =>
                                 updateVariant(index, {
@@ -717,7 +834,7 @@ export function ProductVariantsEditor({
                             <Input
                               type="number"
                               min={0}
-                              value={variant.stockQuantity}
+                              value={vStock}
                               className="h-8 text-xs w-20"
                               onChange={(e) => updateVariant(index, { stockQuantity: Number(e.target.value) })}
                             />
@@ -727,7 +844,7 @@ export function ProductVariantsEditor({
                               type="button"
                               onClick={() => removeVariant(index)}
                               className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/30 transition-colors mx-auto"
-                              aria-label={`Eliminar variante ${variant.name}`}
+                              aria-label={`Eliminar variante ${vName}`}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
@@ -743,12 +860,18 @@ export function ProductVariantsEditor({
               <div className="space-y-2 md:hidden">
                 {value.variants.map((variant, index) => {
                   const isExpanded = expandedVariant === index
-                  const margin = variant.purchasePrice > 0 && variant.salePrice > 0
-                    ? (((variant.salePrice - variant.purchasePrice) / variant.salePrice) * 100).toFixed(0)
+                  const vName = variant.name || (variant as any).variant_name || `Variante ${index + 1}`
+                  const vPurchase = Number(variant.purchasePrice ?? (variant as any).purchase_price ?? 0)
+                  const vSale = Number(variant.salePrice ?? (variant as any).sale_price ?? 0)
+                  const vWholesale = variant.wholesalePrice !== undefined ? variant.wholesalePrice : (variant as any).wholesale_price
+                  const vStock = Number(variant.stockQuantity ?? (variant as any).stock_quantity ?? 0)
+                  const vKey = variant.clientKey || (variant as any).client_key || (variant as any).id || String(index)
+                  const margin = vPurchase > 0 && vSale > 0
+                    ? (((vSale - vPurchase) / vSale) * 100).toFixed(0)
                     : null
                   return (
                     <div
-                      key={variant.clientKey}
+                      key={vKey}
                       className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden"
                     >
                       {/* Header de la tarjeta */}
@@ -759,7 +882,7 @@ export function ProductVariantsEditor({
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{variant.name}</span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{vName}</span>
                             {margin !== null && (
                               <span className="text-[10px] rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-px font-bold">
                                 {margin}%
@@ -769,9 +892,9 @@ export function ProductVariantsEditor({
                           <div className="flex items-center gap-3 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                             <span className="font-mono">{variant.sku}</span>
                             <span className="font-semibold text-slate-700 dark:text-slate-300">
-                              {formatCurrency(variant.salePrice)}
+                              {formatCurrency(vSale)}
                             </span>
-                            <span>Stock: {variant.stockQuantity}</span>
+                            <span>Stock: {vStock}</span>
                           </div>
                         </div>
                         {isExpanded
@@ -788,7 +911,7 @@ export function ProductVariantsEditor({
                               SKU
                               <Input
                                 className="mt-1 h-8 font-mono text-xs"
-                                value={variant.sku}
+                                value={variant.sku || ''}
                                 onChange={(e) => updateVariant(index, { sku: e.target.value })}
                               />
                             </label>
@@ -799,7 +922,7 @@ export function ProductVariantsEditor({
                                 type="number"
                                 min={0}
                                 step="0.01"
-                                value={variant.purchasePrice}
+                                value={vPurchase}
                                 onChange={(e) => updateVariant(index, { purchasePrice: Number(e.target.value) })}
                               />
                             </label>
@@ -810,7 +933,7 @@ export function ProductVariantsEditor({
                                 type="number"
                                 min={0}
                                 step="0.01"
-                                value={variant.salePrice}
+                                value={vSale}
                                 onChange={(e) => updateVariant(index, { salePrice: Number(e.target.value) })}
                               />
                             </label>
@@ -822,7 +945,7 @@ export function ProductVariantsEditor({
                                 min={0}
                                 step="0.01"
                                 placeholder="—"
-                                value={variant.wholesalePrice ?? ''}
+                                value={vWholesale ?? ''}
                                 onChange={(e) =>
                                   updateVariant(index, {
                                     wholesalePrice: e.target.value ? Number(e.target.value) : undefined,
@@ -836,7 +959,7 @@ export function ProductVariantsEditor({
                                 className="mt-1 h-8 text-xs"
                                 type="number"
                                 min={0}
-                                value={variant.stockQuantity}
+                                value={vStock}
                                 onChange={(e) => updateVariant(index, { stockQuantity: Number(e.target.value) })}
                               />
                             </label>

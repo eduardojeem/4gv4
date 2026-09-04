@@ -106,6 +106,9 @@ export function applyFilters(products: Product[], filters: DashboardFilters): Pr
       case 'services':
         filtered = filtered.filter(isServiceLikeProduct)
         break
+      case 'variants':
+        filtered = filtered.filter(p => Boolean(p.has_variants || (p.variants && p.variants.length > 0)))
+        break
       case 'all':
       default:
         // No additional filtering

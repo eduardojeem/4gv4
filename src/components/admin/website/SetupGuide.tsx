@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,24 +19,11 @@ interface SetupGuideProps {
 
 export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
   const { settings, isLoading } = useAdminWebsiteSettings()
-  const [isCollapsed, setIsCollapsed] = useState(false)
-
-  // Load state from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem('website-setup-guide-collapsed')
-    if (stored) {
-      const isTrue = stored === 'true'
-      const timer = setTimeout(() => {
-        setIsCollapsed(isTrue)
-      }, 0)
-      return () => clearTimeout(timer)
-    }
-  }, [])
+  const [isCollapsed, setIsCollapsed] = useState(true)
 
   const toggleCollapse = () => {
     const nextState = !isCollapsed
     setIsCollapsed(nextState)
-    localStorage.setItem('website-setup-guide-collapsed', String(nextState))
   }
 
   if (isLoading || !settings) {
@@ -175,10 +162,12 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
         </div>
 
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           onClick={toggleCollapse}
           aria-label={isCollapsed ? 'Expandir guía' : 'Contraer guía'}
+          aria-expanded={!isCollapsed}
           className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-xl shrink-0"
         >
           {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}

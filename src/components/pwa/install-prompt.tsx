@@ -20,7 +20,15 @@ type BeforeInstallPromptEvent = Event & {
  * En iOS no existe `beforeinstallprompt`: Safari solo permite instalar a mano
  * desde Compartir, por eso ahi se muestran las instrucciones.
  */
-export function InstallPrompt({ className }: { className?: string }) {
+export function InstallPrompt({
+  className,
+  compact = false,
+  variant = 'button',
+}: {
+  className?: string
+  compact?: boolean
+  variant?: 'button' | 'icon' | 'menu-item'
+}) {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isIOS, setIsIOS] = useState(false)
   const [isStandalone, setIsStandalone] = useState(true)
@@ -85,6 +93,40 @@ export function InstallPrompt({ className }: { className?: string }) {
   // Ya instalada, o el navegador no ofrece instalarla (y no es iOS): sin boton.
   if (isStandalone) return null
   if (!deferredPrompt && !isIOS) return null
+
+  if (variant === 'icon' || compact) {
+    return (
+      <button
+        type="button"
+        onClick={handleInstallClick}
+        title="Instalar aplicación"
+        aria-label="Instalar app"
+        className={
+          className ??
+          'inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/80 bg-background/90 text-foreground hover:bg-muted/80 hover:text-primary transition-all shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+        }
+      >
+        <Download className="h-4 w-4 text-primary" />
+        <span className="sr-only">Instalar app</span>
+      </button>
+    )
+  }
+
+  if (variant === 'menu-item') {
+    return (
+      <button
+        type="button"
+        onClick={handleInstallClick}
+        className={
+          className ??
+          'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors text-left'
+        }
+      >
+        <Download className="h-4 w-4 text-primary shrink-0" />
+        <span>Instalar aplicación</span>
+      </button>
+    )
+  }
 
   return (
     <Button

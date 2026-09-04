@@ -55,14 +55,14 @@ async function getMarketplaceData() {
   const productCountsByOrg = await getProductCountsFromView(admin)
 
   const [{ data: orgsData }, { data: categoryCounts }, productFallback] = await Promise.all([
-    admin.from('organizations').select('id, name, slug, plan, marketplace_public, created_at').limit(500),
+    admin.from('organizations').select('id, name, slug, plan, marketplace_public, storefront_public, created_at').limit(500),
     admin.from('categories').select('organization_id, name'),
     productCountsByOrg ? Promise.resolve({ data: null }) : admin.from('products').select('organization_id'),
   ])
 
   const orgs = (orgsData ?? []) as Array<{
     id: string; name: string; slug: string; plan: string | null
-    marketplace_public: boolean | null; created_at: string | null
+    marketplace_public: boolean | null; storefront_public: boolean | null; created_at: string | null
   }>
 
   // Products per org: from the view, or from the fallback row scan.
@@ -94,7 +94,7 @@ async function getMarketplaceData() {
     categories: categoriesByOrg.get(o.id) ?? 0,
   })).sort((a, b) => b.products - a.products)
 
-  const publicOrgs = orgsRich.filter((o) => o.marketplace_public !== false)
+  const publicOrgs = orgsRich.filter((o) => o.storefront_public === true && o.marketplace_public === true)
   // Total products: accurate across ALL orgs from the view (not capped by the
   // 500-org display limit); falls back to summing the scanned rows.
   const totalProducts = productCountsByOrg

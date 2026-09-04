@@ -7,13 +7,13 @@ async function getWebContentData(): Promise<WebContentData> {
   const admin = createAdminSupabase()
 
   const [{ data: orgsData }, { data: settingsData }] = await Promise.all([
-    admin.from('organizations').select('id, name, slug, plan, marketplace_public, created_at'),
+    admin.from('organizations').select('id, name, slug, plan, marketplace_public, storefront_public, created_at'),
     admin.from('website_settings').select('organization_id, key, value, updated_at, updated_by'),
   ])
 
   const orgs = (orgsData ?? []) as Array<{
     id: string; name: string; slug: string; plan: string | null
-    marketplace_public: boolean | null; created_at: string | null
+    marketplace_public: boolean | null; storefront_public: boolean | null; created_at: string | null
   }>
   const settings = (settingsData ?? []) as Array<{
     organization_id: string | null; key: string; value: unknown
@@ -65,7 +65,7 @@ async function getWebContentData(): Promise<WebContentData> {
       name: o.name,
       slug: o.slug,
       plan: o.plan ?? 'FREE',
-      marketplacePublic: o.marketplace_public !== false,
+      marketplacePublic: o.storefront_public === true && o.marketplace_public === true,
       maintenanceMode: Boolean(maintenance?.enabled),
       completion,
       settingsCount: orgSettings.size,

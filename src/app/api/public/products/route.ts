@@ -62,8 +62,8 @@ export async function GET(request: NextRequest) {
 
     // Build query - only active products, never select wholesale_price for non-wholesale
     const selectFields = isWholesale
-      ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, category:categories(id, name)'
-      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, category:categories(id, name)'
+      ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, has_variants, variant_attribute_config, category:categories(id, name)'
+      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, has_variants, variant_attribute_config, category:categories(id, name)'
 
     let queryBuilder = supabase.from('products')
       .select(selectFields as '*', { count: 'exact' })
@@ -131,11 +131,31 @@ export async function GET(request: NextRequest) {
       logger.error('Failed to fetch public products', { error: error.message })
       throw error
     }
+    const pageProductIds = (products ?? []).map((product) => String(product.id))
+    const { data: variantRows, error: variantError } = pageProductIds.length > 0
+      ? await supabase.from('product_variants')
+          .select(isWholesale
+            ? 'id, product_id, variant_name, attributes, sku, sale_price, wholesale_price, stock_quantity, is_active'
+            : 'id, product_id, variant_name, attributes, sku, sale_price, stock_quantity, is_active')
+          .eq('organization_id', organization.id).eq('is_active', true).in('product_id', pageProductIds).order('variant_name')
+      : { data: [], error: null }
+    if (variantError) throw variantError
+    const publicVariantRows = (variantRows ?? []) as unknown as Array<Record<string, unknown>>
+    const variantsByProduct = new Map<string, Array<Record<string, unknown>>>()
+    for (const variant of publicVariantRows) {
+      const key = String(variant.product_id)
+      variantsByProduct.set(key, [...(variantsByProduct.get(key) ?? []), variant])
+    }
 
     // Transform to PublicProduct type - hide sensitive data
     const publicProducts: Array<PublicProduct & { created_at: string | null }> = (products || []).map((p: Record<string, unknown>) => {
       const category = Array.isArray(p.category) ? p.category[0] : p.category
       const cat = category as { id: string; name: string } | null
+      const productVariants = variantsByProduct.get(String(p.id)) ?? []
+      const baseStock = Number(p.stock_quantity ?? 0)
+      const publicStock = Boolean(p.has_variants) && productVariants.length > 0
+        ? productVariants.reduce((sum, variant) => sum + Number(variant.stock_quantity ?? 0), 0)
+        : Number(p.stock_quantity ?? 0)
       const priced = applyAutomaticPromotionToProduct({
         id: p.id as string,
         category_id: cat?.id ?? null,
@@ -164,6 +184,15 @@ export async function GET(request: NextRequest) {
         unit_measure: p.unit_measure as string,
         barcode: p.barcode as string | null,
         created_at: p.created_at ? String(p.created_at) : null,
+        has_variants: Boolean(p.has_variants),
+        variant_attribute_config: Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : [],
+        variants: productVariants.map((variant) => ({
+          id: String(variant.id), product_id: String(variant.product_id), variant_name: String(variant.variant_name),
+          attributes: (variant.attributes ?? {}) as Record<string, string>, sku: variant.sku ? String(variant.sku) : null,
+          sale_price: Number(variant.sale_price ?? 0),
+          wholesale_price: isWholesale ? Number(variant.wholesale_price ?? 0) : null,
+          stock_quantity: Number(variant.stock_quantity ?? 0), is_active: Boolean(variant.is_active),
+        })),
       }
     }).filter((product) => !hasOffer || Boolean(product.has_offer && product.offer_price))
 
@@ -181,7 +210,7 @@ export async function GET(request: NextRequest) {
     response.headers.set('Vary', 'Cookie')
     response.headers.set(
       'Cache-Control',
-      user ? 'private, no-store' : 'public, max-age=30, s-maxage=60'
+      'private, no-store'
     )
     return response
   } catch (error) {

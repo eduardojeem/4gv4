@@ -8,6 +8,8 @@ import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWit
 import { CustomerLinkBanner } from '@/components/public/CustomerLinkBanner'
 import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
+import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { notFound } from 'next/navigation'
 
 // Cada tienda declara su propio manifest, para que el icono instalado abra en
 // esa tienda y no en la raiz de la plataforma.
@@ -22,9 +24,13 @@ export async function generateMetadata({
 
 export default async function OrganizationPublicLayout({
   children,
+  params,
 }: {
   children: React.ReactNode
+  params: Promise<{ organizationSlug: string }>
 }) {
+  const { organizationSlug } = await params
+  if (!await resolvePublicStorefrontOrganizationBySlug(organizationSlug)) notFound()
   const settings = await fetchWebsiteSettings()
   const brandColor = settings?.company_info?.brandColor || 'blue'
   const customBrandColor = settings?.company_info?.customBrandColor

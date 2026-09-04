@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
       data: normalized,
       organization: toPublicOrganizationPayload(organization),
     })
-    response.headers.set('Cache-Control', 'public, max-age=30, s-maxage=60')
+    response.headers.set('Cache-Control', 'no-store')
     return response
   } catch {
     return NextResponse.json(

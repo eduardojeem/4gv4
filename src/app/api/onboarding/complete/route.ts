@@ -178,7 +178,7 @@ export async function POST(request: Request) {
     servicesPageEnabled: verticalDefaults.company_info?.servicesPageEnabled ?? false,
     repairTrackingEnabled: verticalDefaults.company_info?.repairTrackingEnabled ?? false,
     processSectionEnabled: verticalDefaults.company_info?.processSectionEnabled ?? true,
-    marketplacePublic: true,
+    // Publication is preserved by complete_organization_onboarding, never enabled here.
   }
 
   const { data: completion, error: updateError } = await admin.rpc(

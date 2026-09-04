@@ -73,6 +73,10 @@ export function MarketplaceOrgProductGrid({ organizations }: Props) {
                   organization_id: org.id,
                   organization_name: org.name,
                   organization_slug: org.slug,
+                  organization_logo_url: org.logo_url ?? null,
+                  organization_city: org.city ?? null,
+                  organization_address: org.address ?? null,
+                  organization_maps_url: org.maps_url ?? null,
                 }
                 return (
                   <div
@@ -80,7 +84,7 @@ export function MarketplaceOrgProductGrid({ organizations }: Props) {
                     className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card text-left transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md shadow-2xs p-3"
                   >
                     {/* Imagen (clic abre el detalle) */}
-                    <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: org.slug, name: product.name, store: org.name }} /></div>
+                    <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: org.slug, name: product.name, store: org.name, image: product.image, price: product.sale_price }} /></div>
                     <div
                       onClick={() => setSelected(asMarketplace)}
                       role="button"

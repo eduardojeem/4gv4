@@ -339,6 +339,7 @@ export function ProcessStepsEditor() {
       </div>
 
       <PublicVisibilityCard
+        compact
         title="Visualización de la Sección de Procesos"
         badgeLabel="Cómo Trabajamos"
         description={processEnabled

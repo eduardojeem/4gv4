@@ -33,7 +33,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
     const supabase = await createClient()
     const { data: current, error: currentError } = await supabase
       .from('customer_orders')
-      .select('status')
+      .select('status, fulfillment_type')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -44,7 +44,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
     const status = validation.data.status
     const currentStatus = normalizeOrderStatus(current.status)
 
-    if (!canTransitionOrderStatus(currentStatus, status)) {
+    if (!canTransitionOrderStatus(currentStatus, status, current.fulfillment_type)) {
       return NextResponse.json({
         success: false,
         error: `Transicion invalida de ${currentStatus} a ${status}.`,
@@ -79,7 +79,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
     if (status === 'CONFIRMED' && currentStatus !== 'CONFIRMED') {
       const adminSupabase = createAdminSupabase()
       const { error: confirmationError } = await adminSupabase.rpc(
-        'confirm_customer_order_store_credit_atomic',
+        'confirm_customer_order_from_pending_atomic',
         {
           p_organization_id: organization.id,
           p_order_id: id,
@@ -101,36 +101,17 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
       return NextResponse.json({ success: true, data: normalizeOrder(confirmedOrder) })
     }
 
-    const now = new Date().toISOString()
-    const terminalDates: Record<string, string | null> = {}
-    if (status === 'DELIVERED' && currentStatus !== 'DELIVERED') {
-      terminalDates.delivered_at = now
-    }
-    const { data, error } = await supabase
-      .from('customer_orders')
-      .update({
-        status,
-        ...terminalDates,
-        updated_at: now,
-      })
-      .eq('id', id)
-      .eq('organization_id', organization.id)
-      .select('*, order_items:customer_order_items(*)')
-      .single()
-
-    if (error) throw error
-
-    const { error: historyError } = await supabase.from('customer_order_status_history').insert({
-      organization_id: organization.id,
-      order_id: id,
-      from_status: currentStatus,
-      to_status: status,
-      note: validation.data.note || null,
-      changed_by: user.id,
+    const adminSupabase = createAdminSupabase()
+    const { error: advanceError } = await adminSupabase.rpc('advance_customer_order_status_atomic', {
+      p_organization_id: organization.id, p_order_id: id, p_actor_id: user.id,
+      p_to_status: status, p_note: validation.data.note || null,
     })
-    if (historyError) {
-      logger.warn('Order status history insert failed', { error: historyError, orderId: id, fromStatus: currentStatus, toStatus: status })
-    }
+    if (advanceError) throw advanceError
+
+    const { data, error } = await supabase.from('customer_orders')
+      .select('*, order_items:customer_order_items(*)')
+      .eq('id', id).eq('organization_id', organization.id).single()
+    if (error) throw error
 
     return NextResponse.json({ success: true, data: normalizeOrder(data) })
   } catch (error) {

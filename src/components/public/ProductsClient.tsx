@@ -693,7 +693,7 @@ export function ProductsClient({
                 )}
               >
                 {/* Imagen (clic abre modal de detalle) */}
-                <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name }} /></div>
+                <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: product.sale_price }} /></div>
                 <div
                   onClick={() => setSelected(product)}
                   role="button"

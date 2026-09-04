@@ -46,6 +46,8 @@ import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
 import { cn } from '@/lib/utils'
+import { getPublicationIssues } from '@/lib/website/publication'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
 // ── Brand-color catalog — single source of truth for swatches and live preview ──
 const BRAND_COLORS: Array<{ key: string; name: string; swatch: string }> = [
@@ -143,8 +145,18 @@ export function CompanyInfoForm() {
   const [logoUploading, setLogoUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [confirmPublication, setConfirmPublication] = useState(false)
   const formData = draft ?? settings?.company_info ?? getWebsiteSettingsDefaults().company_info
   const hasChanges = draft !== null
+  const focusInvalidField = useRef(false)
+  useEffect(() => {
+    if (!focusInvalidField.current) return
+    focusInvalidField.current = false
+    const field = document.getElementById(Object.keys(errors)[0] ?? '')
+    const section = field?.closest('details')
+    if (section) section.open = true
+    field?.focus()
+  }, [errors])
 
   const preview = BRAND_PREVIEW[formData.brandColor || 'blue'] ?? BRAND_PREVIEW.blue
   const headerPreview = HEADER_PREVIEW_STYLES[formData.headerStyle || 'glass'] ?? HEADER_PREVIEW_STYLES.glass
@@ -209,7 +221,7 @@ export function CompanyInfoForm() {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, publicationConfirmed = false) => {
     e.preventDefault()
 
     const nextErrors: Record<string, string> = {}
@@ -264,11 +276,26 @@ export function CompanyInfoForm() {
     }
 
     if (Object.keys(nextErrors).length > 0) {
+      focusInvalidField.current = true
       setErrors(nextErrors)
       toast.error('Revisá los campos marcados')
       return
     }
     setErrors({})
+
+    const publishing = (formData.storefrontPublic === true && settings?.company_info.storefrontPublic !== true)
+      || (formData.marketplacePublic === true && settings?.company_info.marketplacePublic !== true)
+    if (publishing) {
+      const issues = getPublicationIssues(formData, settings?.checkout.commerceMode ?? 'cart')
+      if (issues.length) {
+        toast.error(issues.join(' '))
+        return
+      }
+      if (!publicationConfirmed) {
+        setConfirmPublication(true)
+        return
+      }
+    }
 
     const sanitizedData = {
       ...formData,
@@ -288,7 +315,9 @@ export function CompanyInfoForm() {
       instagram: formData.instagram || '',
       facebook: formData.facebook || '',
       tiktok: formData.tiktok || '',
-      marketplacePublic: formData.marketplacePublic !== false,
+      storefrontPublic: formData.storefrontPublic === true,
+      marketplacePublic: formData.storefrontPublic === true && formData.marketplacePublic === true,
+      publicationConfirmed,
       slug: formData.slug || '',
     }
 
@@ -312,6 +341,7 @@ export function CompanyInfoForm() {
         icon: <Check className="h-4 w-4" />,
       })
       setDraft(null)
+      setConfirmPublication(false)
 
       if (sanitizedData.slug) {
         window.dispatchEvent(new CustomEvent('website-slug-updated', { detail: sanitizedData.slug }))
@@ -496,17 +526,26 @@ export function CompanyInfoForm() {
           </div>
 
           <PublicVisibilityCard
+            title="Publicar tienda"
+            compact
+            description="Activa el enlace público de tu tienda. Al desactivarlo también se oculta del Marketplace, sin borrar datos del sistema. Los cambios se aplican al guardar."
+            enabled={formData.storefrontPublic === true}
+            onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), storefrontPublic: checked, marketplacePublic: checked ? formData.marketplacePublic : false }))}
+          />
+          <PublicVisibilityCard
             title="Visibilidad en Marketplace General"
             badgeLabel="Directorio Público"
-            description="Si está activo, tu negocio aparecerá listado en el marketplace general. Tu sitio web directo siempre funcionará en ambos casos."
-            enabled={formData.marketplacePublic !== false}
+            compact
+            description="Permite descubrir tu empresa y sus productos en el Marketplace. Requiere la tienda publicada; podés publicar solo tu enlace y mantener esta opción desactivada."
+            disabled={formData.storefrontPublic !== true}
+            enabled={formData.storefrontPublic === true && formData.marketplacePublic === true}
             onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
           />
         </div>
       </SectionCard>
 
       {/* Personalización visual */}
-      <SectionCard icon={Sparkles} title="Personalización visual" description="Define la identidad del sitio y comprobá el resultado antes de guardar">
+      <SectionCard collapsible icon={Sparkles} title="Personalización visual" description="Colores, encabezado y apariencia. Desplegá para personalizar.">
         <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
           {/* Config */}
           <div className="space-y-6 lg:col-span-7">
@@ -935,7 +974,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Horarios */}
-      <SectionCard icon={Clock} title="Horarios de atención" description="Horarios mostrados a los clientes">
+      <SectionCard collapsible icon={Clock} title="Horarios de atención" description="Horarios mostrados a los clientes">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="weekdays" className="text-sm font-medium">Lunes - Viernes</Label>
@@ -953,7 +992,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Legal */}
-      <SectionCard icon={Building2} title="Legal y negocio" description="RUC, tipo de actividad y datos fiscales">
+      <SectionCard collapsible icon={Building2} title="Legal y negocio" description="RUC, tipo de actividad y datos fiscales">
         <div className="grid gap-8 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="ruc" className="text-sm font-medium">
@@ -978,7 +1017,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Redes sociales */}
-      <SectionCard icon={MessageCircle} title="Redes sociales" description="Enlaza el perfil de la empresa en cada red — opcional">
+      <SectionCard collapsible icon={MessageCircle} title="Redes sociales" description="Enlaza el perfil de la empresa en cada red — opcional">
         <div className="grid gap-8 md:grid-cols-3">
           {[
             { id: 'instagram', label: 'Instagram', prefix: 'instagram.com/', value: formData.instagram, placeholder: 'tu_usuario' },
@@ -1004,7 +1043,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Save bar */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 md:sticky md:bottom-6 md:justify-end">
+      <div className="sticky bottom-4 z-30 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-background/95 p-3 shadow-lg backdrop-blur">
         {hasChanges && (
           <Button
             type="button"
@@ -1013,12 +1052,12 @@ export function CompanyInfoForm() {
               setDraft(null)
               setErrors({})
             }}
-            className="h-14 rounded-full px-6 shadow-2xl bg-background/80 backdrop-blur border md:h-12 md:rounded-xl md:px-4"
+            className="h-10 px-4"
           >
             Descartar
           </Button>
         )}
-        <Button type="submit" disabled={isSaving || isSyncing || !hasChanges} size="lg" className="h-14 rounded-full px-8 shadow-2xl md:h-12 md:rounded-xl md:px-6">
+        <Button type="submit" disabled={isSaving || isSyncing || !hasChanges} className="h-10 px-4">
           {isSaving || isSyncing ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -1033,6 +1072,20 @@ export function CompanyInfoForm() {
           )}
         </Button>
       </div>
+      <Dialog open={confirmPublication} onOpenChange={(open) => { if (!isSyncing) setConfirmPublication(open) }}>
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader><DialogTitle>Revisar y publicar tienda</DialogTitle><DialogDescription>Al confirmar, los visitantes podrán acceder al contenido guardado de tu tienda.</DialogDescription></DialogHeader>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
+            <dt className="text-muted-foreground">Empresa</dt><dd className="break-words font-medium">{formData.name}</dd>
+            <dt className="text-muted-foreground">Enlace</dt><dd className="break-all">/{formData.slug}/inicio</dd>
+            <dt className="text-muted-foreground">Modalidad</dt><dd>{settings?.checkout.commerceMode === 'whatsapp' ? 'Consulta por WhatsApp' : settings?.checkout.commerceMode === 'catalog' ? 'Solo catálogo' : 'Carrito de compras'}</dd>
+            <dt className="text-muted-foreground">Marketplace</dt><dd>{formData.marketplacePublic ? 'Aparecerá en el directorio y catálogo general' : 'No aparecerá; solo enlace directo'}</dd>
+            <dt className="text-muted-foreground">Contacto</dt><dd>{formData.whatsapp || formData.phone}</dd>
+          </dl>
+          <p className="rounded-lg bg-muted p-3 text-sm">Revisá los productos activos, precios y textos guardados. Podés volver a ocultar la tienda desde Empresa sin borrar información.</p>
+          <DialogFooter><Button type="button" variant="outline" disabled={isSyncing} onClick={() => setConfirmPublication(false)}>Volver a revisar</Button><Button type="button" disabled={isSyncing} onClick={(event) => { void handleSubmit(event, true) }}>{isSyncing ? 'Publicando…' : 'Confirmar publicación'}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </form>
   )
 }

@@ -11,12 +11,25 @@ export function SectionCard({
   title,
   description,
   children,
+  collapsible = false,
 }: {
   icon: ComponentType<{ className?: string }>
   title: string
   description: string
   children: ReactNode
+  collapsible?: boolean
 }) {
+  if (collapsible) {
+    return <Card className="gap-0 py-0">
+      <details className="group">
+        <summary className="cursor-pointer rounded-xl p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+          <span className="ml-2 inline-flex items-center gap-2 text-sm font-medium"><Icon className="h-4 w-4" />{title}</span>
+          <span className="mt-1 block text-xs text-muted-foreground">{description}</span>
+        </summary>
+        <CardContent className="border-t p-4">{children}</CardContent>
+      </details>
+    </Card>
+  }
   return (
     <Card>
       <CardHeader className="border-b bg-muted/30">

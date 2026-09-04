@@ -130,7 +130,8 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       .select(`
         *,
         category:categories(id, name, description),
-        supplier:suppliers(id, name, contact_name, phone, address)
+        supplier:suppliers(id, name, contact_name, phone, address),
+        variants:product_variants(*)
       `, { count: 'exact' })
       .eq('organization_id', organization.id)
       // Lo archivado por el ciclo de baja de plan sale del catalogo operativo:

@@ -824,6 +824,7 @@ export function PromotionalCarouselEditor({
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex-1">
               <PublicVisibilityCard
+                compact
                 title="Visualización del Carrusel de Promociones"
                 badgeLabel="Banners de Portada"
                 description="Activa o desactiva el carrusel en la página de inicio. Requiere al menos una diapositiva activa."

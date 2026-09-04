@@ -53,6 +53,7 @@ export function ProductCard(props: ProductCardProps) {
   const [justAdded, setJustAdded] = useState(false)
   const [activeImageIdx, setActiveImageIdx] = useState(0)
   const [quantity, setQuantity] = useState(1)
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
 
   // Compute gallery images: deduplicate image_url and images[]
   const galleryImages = (() => {
@@ -98,14 +99,25 @@ export function ProductCard(props: ProductCardProps) {
     hasOffer: product.has_offer === true,
     offerPrice: product.offer_price ?? null,
   })
+  const publicVariants = (product.variants ?? []).filter((variant) => variant.is_active)
+  const hasVariants = Boolean(product.has_variants || publicVariants.length > 0)
+  const selectedVariant = publicVariants.find((variant) => variant.id === selectedVariantId) ?? null
+  const selectedPrice = selectedVariant
+    ? (isWholesale && selectedVariant.wholesale_price != null ? selectedVariant.wholesale_price : selectedVariant.sale_price)
+    : displayPrice
+  const selectedStock = hasVariants
+    ? (selectedVariant ? selectedVariant.stock_quantity : 0)
+    : product.stock_quantity
 
   const originalPrice = hasOffer || isWholesaleDiscount ? product.sale_price : null
   const discountPct = originalPrice
     ? Math.round(((originalPrice - displayPrice) / originalPrice) * 100)
     : 0
 
-  const isInStock = product.in_stock
-  const isLowStock = isInStock && product.stock_quantity > 0 && product.stock_quantity <= 4
+  const isInStock = hasVariants
+    ? (selectedVariant ? selectedVariant.stock_quantity > 0 : publicVariants.some((variant) => variant.stock_quantity > 0))
+    : product.in_stock
+  const isLowStock = isInStock && (hasVariants ? selectedStock > 0 && selectedStock <= 4 : product.stock_quantity > 0 && product.stock_quantity <= 4)
   const imageSrc = resolveProductImageUrl(product.image)
 
   // ── Cuotas / financiación (informativo) ───────────────────────────────────
@@ -157,17 +169,22 @@ export function ProductCard(props: ProductCardProps) {
   // ── Handlers ────────────────────────────────────────────────────────────
   function addToCart(closeModal = false) {
     if (commerceMode !== 'cart') return
+    if (hasVariants && (!closeModal || !selectedVariant)) {
+      setQuickViewOpen(true)
+      if (!selectedVariant) toast.info('Elegí una variante para continuar.')
+      return
+    }
     if (!isInStock) {
       toast.error('Producto sin stock')
       return
     }
-    const result = addProduct(product, Number(displayPrice || 0), closeModal ? quantity : 1)
+    const result = addProduct(product, Number(selectedPrice || 0), closeModal ? quantity : 1, selectedVariant)
     if (result.limited) {
       toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
       return
     }
     toast.success('¡Agregado al carrito!')
-    if (closeModal) { setQuickViewOpen(false); setQuantity(1); setActiveImageIdx(0) }
+    if (closeModal) { setQuickViewOpen(false); setQuantity(1); setActiveImageIdx(0); setSelectedVariantId(null) }
     setJustAdded(true)
     setTimeout(() => setJustAdded(false), 1500)
   }
@@ -178,7 +195,7 @@ export function ProductCard(props: ProductCardProps) {
       <article
         className="group relative flex flex-col overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm transition-colors hover:border-primary/30"
       >
-        {favoriteSlug && <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug }} /></div>}
+        {favoriteSlug && <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug, image: product.image, price: product.sale_price }} /></div>}
         {/* ── Image area ── */}
         <button
           type="button"
@@ -346,7 +363,7 @@ export function ProductCard(props: ProductCardProps) {
       </article>
 
       {/* ── Quick-view modal ── */}
-      <Dialog open={quickViewOpen} onOpenChange={(open) => { setQuickViewOpen(open); if (!open) { setActiveImageIdx(0); setQuantity(1) } }}>
+      <Dialog open={quickViewOpen} onOpenChange={(open) => { setQuickViewOpen(open); if (!open) { setActiveImageIdx(0); setQuantity(1); setSelectedVariantId(null) } }}>
         <DialogContent
           className="flex max-h-[90dvh] w-[calc(100%-1rem)] sm:max-w-2xl flex-col gap-0 overflow-hidden rounded-xl p-0 shadow-xl"
           showCloseButton
@@ -453,7 +470,7 @@ export function ProductCard(props: ProductCardProps) {
 
               {/* Header bar */}
               <div className="flex items-start justify-between gap-2 border-b border-border/60 px-4 py-3">
-                {favoriteSlug && <FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug }} />}
+                {favoriteSlug && <FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug, image: product.image, price: product.sale_price }} />}
                 <div className="min-w-0">
                   {product.brand && (
                     <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
@@ -464,9 +481,9 @@ export function ProductCard(props: ProductCardProps) {
                     {product.name}
                   </h2>
                   {/* SKU */}
-                  {product.sku && (
+                  {(selectedVariant?.sku || product.sku) && (
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
-                      SKU: {product.sku}
+                      SKU: {selectedVariant?.sku || product.sku}
                     </p>
                   )}
                 </div>
@@ -484,7 +501,7 @@ export function ProductCard(props: ProductCardProps) {
                       : 'bg-destructive/10 text-destructive ring-1 ring-destructive/20'
                   )}>
                     <span className={cn('h-1.5 w-1.5 rounded-full', isInStock ? 'bg-emerald-500 animate-pulse' : 'bg-destructive')} />
-                    {isInStock ? 'En stock' : 'Sin stock'}
+                    {isInStock ? (hasVariants && selectedVariant ? `${selectedVariant.stock_quantity} disponibles` : 'En stock') : 'Sin stock'}
                   </span>
                   {product.category && (
                     <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border">
@@ -499,7 +516,7 @@ export function ProductCard(props: ProductCardProps) {
                   )}
                   {isLowStock && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-800/40">
-                      Últimas {product.stock_quantity} uds.
+                      Últimas {selectedStock} uds.
                     </span>
                   )}
                 </div>
@@ -513,7 +530,7 @@ export function ProductCard(props: ProductCardProps) {
                         ? 'text-rose-600 dark:text-rose-400'
                         : 'text-foreground'
                     )}>
-                      {formatPrice(displayPrice)}
+                      {formatPrice(selectedPrice)}
                     </p>
                     {originalPrice && (
                       <p className="mb-0.5 text-sm text-muted-foreground line-through">
@@ -529,6 +546,72 @@ export function ProductCard(props: ProductCardProps) {
                     </p>
                   )}
                 </div>
+
+                {hasVariants && (
+                  <fieldset className="space-y-2.5 rounded-xl border border-border/80 bg-muted/20 p-3">
+                    <div className="flex items-center justify-between">
+                      <legend className="text-xs font-bold text-foreground">
+                        Elegí una variante <span className="text-rose-500">*</span>
+                      </legend>
+                      {selectedVariant && (
+                        <span className="text-[11px] font-semibold text-primary">
+                          {selectedVariant.variant_name}
+                        </span>
+                      )}
+                    </div>
+                    {publicVariants.length > 0 ? (
+                      <div className="grid max-h-40 grid-cols-1 gap-2 sm:grid-cols-2 overflow-y-auto pr-1">
+                        {publicVariants.map((variant) => {
+                          const isSelected = selectedVariantId === variant.id
+                          const hasStock = variant.stock_quantity > 0
+                          const variantPrice = isWholesale && variant.wholesale_price != null ? variant.wholesale_price : variant.sale_price
+                          return (
+                            <button
+                              key={variant.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedVariantId(variant.id)
+                                setQuantity(1)
+                              }}
+                              disabled={!hasStock}
+                              className={cn(
+                                'flex flex-col justify-between rounded-xl border p-2.5 text-left text-xs transition-all',
+                                isSelected
+                                  ? 'border-primary bg-primary/10 shadow-xs ring-2 ring-primary/20 text-foreground'
+                                  : 'border-border bg-card hover:border-primary/40 hover:bg-muted/40 text-foreground',
+                                !hasStock && 'cursor-not-allowed opacity-45 bg-muted/50'
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <span className="font-semibold leading-tight line-clamp-1">
+                                  {variant.variant_name}
+                                </span>
+                                {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                              </div>
+                              <div className="mt-1.5 flex items-center justify-between gap-1 text-[11px]">
+                                <span className={cn('font-medium', hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive')}>
+                                  {hasStock ? `${variant.stock_quantity} disp.` : 'Sin stock'}
+                                </span>
+                                <span className="font-bold text-foreground">
+                                  {formatPrice(variantPrice)}
+                                </span>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-amber-200/70 bg-amber-50/80 p-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                        Este producto posee variantes configuradas. Podés ver el detalle completo en la página del producto.
+                      </div>
+                    )}
+                    {!selectedVariant && publicVariants.length > 0 && (
+                      <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                        Seleccioná una variante para continuar.
+                      </p>
+                    )}
+                  </fieldset>
+                )}
 
                 {/* Installments */}
                 {installmentsVisible && (product.installments_plans?.length ?? 0) > 0 && (
@@ -550,18 +633,20 @@ export function ProductCard(props: ProductCardProps) {
           </div>
               {/* Actions stay outside the scrollable product information. */}
               <div className="shrink-0 flex flex-col gap-2 border-t border-border/60 bg-background px-4 py-3">
-                {commerceMode === 'cart' && <div className="flex items-center justify-between gap-2 text-sm"><span>Cantidad</span><div className="flex items-center gap-3"><button type="button" aria-label="Reducir cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={quantity <= 1 || !isInStock} onClick={() => setQuantity(q => q - 1)}>−</button><span aria-live="polite">{quantity}</span><button type="button" aria-label="Aumentar cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={!isInStock || quantity >= product.stock_quantity} onClick={() => setQuantity(q => Math.min(product.stock_quantity, q + 1))}>+</button></div></div>}
+                {commerceMode === 'cart' && <div className="flex items-center justify-between gap-2 text-sm"><span>Cantidad</span><div className="flex items-center gap-3"><button type="button" aria-label="Reducir cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={quantity <= 1 || !isInStock} onClick={() => setQuantity(q => q - 1)}>−</button><span aria-live="polite">{quantity}</span><button type="button" aria-label="Aumentar cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={!isInStock || (hasVariants && !selectedVariant) || quantity >= selectedStock} onClick={() => setQuantity(q => Math.min(selectedStock, q + 1))}>+</button></div></div>}
                 {commerceMode === 'cart' && (
                   <button
                     type="button"
                     onClick={() => addToCart(true)}
-                    disabled={!isInStock}
+                    disabled={!isInStock || (hasVariants && !selectedVariant)}
                     className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {justAdded ? (
                       <><Check className="h-4 w-4" /> ¡Agregado al carrito!</>
+                    ) : hasVariants && !selectedVariant ? (
+                      <><ShoppingCart className="h-4 w-4" /> Elegí una variante para agregar</>
                     ) : (
-                      <><ShoppingCart className="h-4 w-4" /> Agregar al carrito · {formatPrice(displayPrice * quantity)}</>
+                      <><ShoppingCart className="h-4 w-4" /> Agregar al carrito · {formatPrice(selectedPrice * quantity)}</>
                     )}
                   </button>
                 )}

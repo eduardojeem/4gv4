@@ -73,7 +73,7 @@ export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage', modul
     const supabase = await createClient()
     const { data: current, error: currentError } = await supabase
       .from('customer_orders')
-      .select('subtotal, shipping_cost, discount_amount')
+      .select('subtotal, shipping_cost, discount_amount, status, payment_status')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -82,6 +82,14 @@ export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage', modul
     if (!current) return NextResponse.json({ success: false, error: 'Pedido no encontrado.' }, { status: 404 })
 
     const updates = validation.data
+    const changesMoney = 'shipping_cost' in updates || 'discount_amount' in updates
+    if (changesMoney && (current.payment_status !== 'PENDING' || ['DELIVERED', 'CANCELLED'].includes(String(current.status)))) {
+      return NextResponse.json({
+        success: false,
+        code: 'ORDER_FINANCIAL_EDIT_LOCKED',
+        error: 'No se pueden modificar importes después del pago, entrega o cancelación. Usá una corrección auditable.',
+      }, { status: 409 })
+    }
     const subtotal = Number(current.subtotal || 0)
 
     // Only recompute total when shipping or discount are explicitly changed
@@ -106,9 +114,8 @@ export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage', modul
 
     if (error) throw error
     return NextResponse.json({ success: true, data: normalizeOrder(data) })
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('Orders API update error', { error })
-    const msg = error?.message || 'No se pudo actualizar el pedido.'
-    return NextResponse.json({ success: false, error: msg, details: error }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'No se pudo actualizar el pedido.' }, { status: 500 })
   }
 })

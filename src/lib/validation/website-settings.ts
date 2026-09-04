@@ -65,6 +65,7 @@ export const CompanyInfoSchema = z.object({
   facebook: z.string().max(100).optional().or(z.literal('')),
   tiktok: z.string().max(100).optional().or(z.literal('')),
   marketplacePublic: z.boolean().optional(),
+  storefrontPublic: z.boolean().optional(),
   servicesPageEnabled: z.boolean().optional(),
   processSectionEnabled: z.boolean().optional().default(false),
   slug: z.string().optional(),

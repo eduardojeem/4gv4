@@ -2,18 +2,20 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { logger } from '@/lib/logger'
-import { normalizeOrderStatus } from '@/lib/orders/flow'
 import { normalizeOrder } from '@/lib/orders/helpers'
-import {
-  canTransitionPaymentStatus,
-  getInvalidPaymentTransitionMessage,
-  normalizePaymentStatus,
-} from '@/lib/orders/payment-flow'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 
 const paymentSchema = z.object({
-  payment_status: z.enum(['PAID', 'PARTIAL', 'REFUNDED', 'FAILED']),
+  collectionAmount: z.coerce.number().positive().max(999_999_999_999),
+  paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'DIGITAL_WALLET']),
+  paymentReference: z.string().trim().max(160).optional().nullable(),
   note: z.string().trim().max(1000).optional().nullable(),
+  idempotencyKey: z.string().uuid(),
+}).superRefine((value, context) => {
+  if (value.paymentMethod !== 'CASH' && !value.paymentReference) {
+    context.addIssue({ code: 'custom', path: ['paymentReference'], message: 'Ingresá la referencia o comprobante.' })
+  }
 })
 
 async function getRouteId(routeContext: unknown) {
@@ -37,7 +39,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
     const supabase = await createClient()
     const { data: current, error: currentError } = await supabase
       .from('customer_orders')
-      .select('status, payment_status, payment_method, total, store_credit_reserved, store_credit_applied')
+      .select('status, payment_status, total, collected_amount, store_credit_reserved, store_credit_applied')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -45,53 +47,50 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
     if (currentError) throw currentError
     if (!current) return NextResponse.json({ success: false, error: 'Pedido no encontrado.' }, { status: 404 })
 
-    const orderStatus = normalizeOrderStatus(current.status)
-    const fromPaymentStatus = normalizePaymentStatus(current.payment_status)
-    const toPaymentStatus = validation.data.payment_status
-
-    if (!canTransitionPaymentStatus(orderStatus, fromPaymentStatus, toPaymentStatus)) {
+    const amountDue = Math.max(
+      0,
+      Number(current.total || 0)
+        - Number(current.collected_amount || 0)
+        - Number(current.store_credit_reserved || 0)
+        - Number(current.store_credit_applied || 0)
+    )
+    if (validation.data.collectionAmount > amountDue) {
       return NextResponse.json({
         success: false,
-        error: getInvalidPaymentTransitionMessage(orderStatus, fromPaymentStatus, toPaymentStatus),
-      }, { status: 409 })
+        error: `El monto supera el saldo pendiente de Gs. ${amountDue.toLocaleString('es-PY')}.`,
+      }, { status: 422 })
     }
 
-    const now = new Date().toISOString()
+    const admin = createAdminSupabase()
+    const { error: paymentError } = await admin.rpc('record_customer_order_collection_atomic', {
+      p_organization_id: organization.id,
+      p_order_id: id,
+      p_actor_id: user.id,
+      p_amount: validation.data.collectionAmount,
+      p_payment_method: validation.data.paymentMethod,
+      p_payment_reference: validation.data.paymentReference || null,
+      p_note: validation.data.note || null,
+      p_idempotency_key: validation.data.idempotencyKey,
+    })
+    if (paymentError) {
+      const safeMessage = paymentError.message.includes('PAYMENT_EXCEEDS_AMOUNT_DUE')
+        ? 'El monto supera el saldo pendiente.'
+        : paymentError.message.includes('PAYMENT_REFERENCE_REQUIRED')
+          ? 'Ingresá la referencia o comprobante.'
+          : paymentError.message.includes('ORDER_ALREADY_CANCELLED')
+            ? 'No se pueden registrar cobros en un pedido cancelado.'
+            : null
+      if (safeMessage) return NextResponse.json({ success: false, error: safeMessage }, { status: 422 })
+      throw paymentError
+    }
+
     const { data, error } = await supabase
       .from('customer_orders')
-      .update({
-        payment_status: toPaymentStatus,
-        updated_at: now,
-      })
+      .select('*, order_items:customer_order_items(*)')
       .eq('id', id)
       .eq('organization_id', organization.id)
-      .select('*, order_items:customer_order_items(*)')
       .single()
-
     if (error) throw error
-
-    const { error: historyError } = await supabase.from('customer_order_payment_history').insert({
-      organization_id: organization.id,
-      order_id: id,
-      from_status: fromPaymentStatus,
-      to_status: toPaymentStatus,
-      payment_method: current.payment_method ? String(current.payment_method).toUpperCase() : null,
-      amount: toPaymentStatus === 'PAID'
-        ? Math.max(0, Number(current.total || 0) - Number(current.store_credit_reserved || 0) - Number(current.store_credit_applied || 0))
-        : null,
-      note: validation.data.note || null,
-      changed_by: user.id,
-      created_at: now,
-    })
-
-    if (historyError) {
-      logger.warn('Order payment history insert failed', {
-        error: historyError,
-        orderId: id,
-        fromPaymentStatus,
-        toPaymentStatus,
-      })
-    }
 
     return NextResponse.json({ success: true, data: normalizeOrder(data) })
   } catch (error) {

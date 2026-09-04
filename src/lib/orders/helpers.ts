@@ -26,6 +26,8 @@ export function normalizeOrderItem(item: RawOrderItem): CustomerOrderItem {
   return {
     id: String(item.id ?? ''),
     product_id: item.product_id ? String(item.product_id) : null,
+    variant_id: item.variant_id ? String(item.variant_id) : null,
+    variant_name: item.variant_name ? String(item.variant_name) : null,
     product_name: String(item.product_name ?? 'Producto'),
     product_sku: item.product_sku ? String(item.product_sku) : null,
     quantity: toNumber(item.quantity),
@@ -39,6 +41,7 @@ export function normalizeOrder(order: RawOrder): CustomerOrder {
   const total = toNumber(order.total)
   const storeCreditReserved = toNumber(order.store_credit_reserved)
   const storeCreditApplied = toNumber(order.store_credit_applied)
+  const collectedAmount = toNumber(order.collected_amount)
   const paymentStatus = normalizePaymentStatus(order.payment_status)
 
   return {
@@ -61,9 +64,10 @@ export function normalizeOrder(order: RawOrder): CustomerOrder {
     total,
     store_credit_reserved: storeCreditReserved,
     store_credit_applied: storeCreditApplied,
+    collected_amount: collectedAmount,
     amount_due: paymentStatus === 'PAID'
       ? 0
-      : Math.max(0, total - storeCreditReserved - storeCreditApplied),
+      : Math.max(0, total - storeCreditReserved - storeCreditApplied - collectedAmount),
     notes: order.notes ? String(order.notes) : null,
     created_at: String(order.created_at ?? ''),
     updated_at: String(order.updated_at ?? ''),

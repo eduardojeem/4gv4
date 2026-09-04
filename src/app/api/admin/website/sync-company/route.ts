@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
-import { validateSetting } from '@/lib/validation/website-settings'
+import { CompanyInfoSchema, validateSetting } from '@/lib/validation/website-settings'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
 import { z } from 'zod'
+import { getPublicationIssues, resolvePublicationUpdate } from '@/lib/website/publication'
 
 const slugSchema = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -23,6 +25,8 @@ const syncSchema = z.object({
   address: z.string().trim().max(300).optional().or(z.literal('')),
   email: z.string().trim().max(254).optional().or(z.literal('')),
   marketplacePublic: z.boolean().optional(),
+  storefrontPublic: z.boolean().optional(),
+  publicationConfirmed: z.boolean().optional(),
   slug: slugSchema,
   // El logo llegaba por el passthrough y se guardaba solo en website_settings.
   // Se declara para poder escribirlo tambien en la organizacion; el limite es el
@@ -37,7 +41,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ error: 'Datos invalidos' }, { status: 400 })
   }
 
-  const { name, phone, address, email, marketplacePublic, slug, logoUrl } = parsed.data
+  const { name, phone, address, email, slug, logoUrl } = parsed.data
   const admin = createAdminSupabase()
 
   const orgId = await resolveWebsiteAdminOrganizationId(context)
@@ -57,16 +61,22 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       .maybeSingle(),
     admin
       .from('organizations')
-      .select('slug')
+      .select('slug, marketplace_public, storefront_public')
       .eq('id', orgId)
       .maybeSingle(),
   ])
 
-  if (currentOrganizationError || defaultBranchError) {
+  if (currentOrganizationError || defaultBranchError || !currentOrganization) {
     return NextResponse.json({ error: 'Error al cargar la organizacion actual' }, { status: 500 })
   }
 
   const currentSlug = currentOrganization?.slug || ''
+  const publication = resolvePublicationUpdate(currentOrganization, parsed.data)
+  const activating = (publication.storefrontPublic && !currentOrganization.storefront_public)
+    || (publication.marketplacePublic && !currentOrganization.marketplace_public)
+  if (activating && parsed.data.publicationConfirmed !== true) {
+    return NextResponse.json({ error: 'Revisá y confirmá la publicación de la tienda.' }, { status: 422 })
+  }
   const canonicalSlug = slug || currentSlug
   if (!canonicalSlug) {
     return NextResponse.json({ error: 'La ruta publica es obligatoria' }, { status: 400 })
@@ -83,14 +93,24 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ error: 'La ruta publica ya esta en uso por otra organizacion' }, { status: 409 })
   }
 
+  const { publicationConfirmed: confirmed, ...companyData } = parsed.data
   const sanitizedCompanyInfo = sanitizeWebsiteSettings({
-    ...parsed.data,
+    ...companyData,
     slug: canonicalSlug,
-    marketplacePublic: marketplacePublic !== false,
+    ...publication,
   })
   const validation = validateSetting('company_info', sanitizedCompanyInfo)
   if (!validation.success) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
+  }
+
+  if (activating && confirmed) {
+    const { data: checkoutRow, error: checkoutError } = await admin.from('website_settings')
+      .select('value').eq('organization_id', orgId).eq('key', 'checkout').maybeSingle()
+    if (checkoutError) return NextResponse.json({ error: 'No se pudo verificar la modalidad comercial.' }, { status: 500 })
+    const mode = checkoutRow?.value?.commerceMode ?? 'cart'
+    const issues = getPublicationIssues(CompanyInfoSchema.parse(validation.data), mode)
+    if (issues.length) return NextResponse.json({ error: issues.join(' ') }, { status: 422 })
   }
 
   // `organizations.logo_url` es el logo canonico de la tienda: de ahi lo toman el
@@ -102,7 +122,9 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     .from('organizations')
     .update({
       name,
-      marketplace_public: marketplacePublic !== false,
+      // Disable immediately, but only publish after all related writes succeed.
+      marketplace_public: publication.marketplacePublic && currentOrganization.marketplace_public === true,
+      storefront_public: publication.storefrontPublic && currentOrganization.storefront_public === true,
       slug: canonicalSlug,
       // Vacio se guarda como null para que "sin logo" sea un solo valor y no dos.
       logo_url: logoUrl?.trim() ? logoUrl.trim() : null,
@@ -181,6 +203,17 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     })
   }
 
+  if (activating) {
+    const { error: publishError } = await admin.from('organizations').update({
+      storefront_public: publication.storefrontPublic,
+      marketplace_public: publication.marketplacePublic,
+    }).eq('id', orgId)
+    if (publishError) return NextResponse.json({ error: 'Datos guardados, pero no se pudo publicar. Intentá nuevamente.' }, { status: 500 })
+  }
+
+  revalidatePath(`/${canonicalSlug}`, 'layout')
+  if (currentSlug && currentSlug !== canonicalSlug) revalidatePath(`/${currentSlug}`, 'layout')
+  revalidatePath('/marketplace', 'layout')
   return NextResponse.json({ success: true, data: validation.data })
 }
 

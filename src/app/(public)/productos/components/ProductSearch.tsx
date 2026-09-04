@@ -11,7 +11,7 @@ export function ProductSearch() {
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
 
-  const urlQuery = searchParams.get('query') || ''
+  const urlQuery = searchParams.get('query') || searchParams.get('q') || ''
   const [value, setValue] = useState(urlQuery)
   // Ref: guarda el último valor que nosotros mismos empujamos a la URL.
   // Al usar una ref en vez de estado no dispara re-renders adicionales y
@@ -30,9 +30,11 @@ export function ProductSearch() {
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      if (value === (searchParams.get('query') || '')) return
+      const activeParam = searchParams.get('query') || searchParams.get('q') || ''
+      if (value === activeParam) return
 
       const params = new URLSearchParams(searchParams.toString())
+      params.delete('q') // Normalizar a 'query'
       if (value) {
         params.set('query', value)
       } else {

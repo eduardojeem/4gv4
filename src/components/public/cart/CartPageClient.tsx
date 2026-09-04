@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Building2, CheckCircle2, CreditCard, Loader2,
   LogIn, Minus, Package, Phone, Plus, ShoppingCart, Store,
@@ -265,6 +265,22 @@ export function CartPageClient({
   const [loading,             setLoading]             = useState(false)
   const [createdOrderNumber,  setCreatedOrderNumber]  = useState<string | null>(null)
   const [touched,             setTouched]             = useState(false)   // show validation only after submit attempt
+  const checkoutAttemptId = useRef<string>(crypto.randomUUID())
+
+  useEffect(() => {
+    const enabled = ([
+      ['CASH', checkout.payment.cash.enabled],
+      ['CARD', checkout.payment.card.enabled],
+      ['TRANSFER', checkout.payment.transfer.enabled],
+      ['DIGITAL_WALLET', checkout.payment.digital_wallet.enabled],
+    ] as const).filter(([, isEnabled]) => isEnabled !== false).map(([method]) => method)
+    if (!enabled.includes(paymentMethod) && enabled[0]) setPaymentMethod(enabled[0])
+  }, [checkout.payment, paymentMethod])
+
+  useEffect(() => {
+    if (fulfillmentType === 'PICKUP' && !checkout.pickup.enabled && checkout.delivery.enabled) setFulfillmentType('DELIVERY')
+    if (fulfillmentType === 'DELIVERY' && !checkout.delivery.enabled && checkout.pickup.enabled) setFulfillmentType('PICKUP')
+  }, [checkout.delivery.enabled, checkout.pickup.enabled, fulfillmentType])
 
   // ── Auto-fill from session ─────────────────────────────────────────────
   useEffect(() => {
@@ -329,8 +345,9 @@ export function CartPageClient({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          checkoutAttemptId: checkoutAttemptId.current,
           code: promotionCode,
-          items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+          items: items.map((item) => ({ productId: item.productId, variantId: item.variantId, quantity: item.quantity })),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -410,7 +427,7 @@ export function CartPageClient({
             phone: customerPhone || null,
             address: finalAddress,
           },
-          items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+          items: items.map((item) => ({ productId: item.productId, variantId: item.variantId, quantity: item.quantity })),
           fulfillmentType,
           paymentMethod,
           shippingCost: fulfillmentType === 'DELIVERY' ? shippingCost : 0,
@@ -426,7 +443,8 @@ export function CartPageClient({
         if (payload?.code === 'STOCK_CHANGED' && Array.isArray(payload?.data?.conflicts)) {
           for (const conflict of payload.data.conflicts) {
             if (typeof conflict?.productId === 'string') {
-              setAvailableStock(conflict.productId, Number(conflict.available || 0))
+              const cartItemId = conflict.variantId ? `${conflict.productId}:${conflict.variantId}` : conflict.productId
+              setAvailableStock(cartItemId, Number(conflict.available || 0))
             }
           }
         }
@@ -453,6 +471,7 @@ export function CartPageClient({
 
       clear()
       setCreatedOrderNumber(payload.data.order_number as string)
+      checkoutAttemptId.current = crypto.randomUUID()
     } catch (error) {
       toast.error('No se pudo confirmar el pedido', {
         description: error instanceof Error ? error.message : 'Intenta nuevamente.',
@@ -472,9 +491,10 @@ export function CartPageClient({
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 mb-5">
               <CheckCircle2 className="h-8 w-8" />
             </div>
-            <h1 className="text-2xl font-black">¡Pedido confirmado!</h1>
+            <h1 className="text-2xl font-black">¡Pedido recibido!</h1>
+            {/* pending confirmation: el negocio todavía debe aceptar el pedido */}
             <p className="mt-2 text-sm text-muted-foreground max-w-xs">
-              {checkout.confirmationMessage?.trim() || 'Tu pedido fue registrado. El negocio lo está gestionando.'}
+              {checkout.confirmationMessage?.trim() || 'Tu pedido fue registrado y está pendiente de confirmación del negocio.'}
             </p>
             <div className="mt-6 rounded-2xl border border-dashed bg-muted/30 px-8 py-4 text-center">
               <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Código de seguimiento</span>
@@ -586,13 +606,13 @@ export function CartPageClient({
                         <p className="text-xs text-muted-foreground">{item.sku || 'Sin SKU'} · {formatMoney(item.unitPrice)} c/u</p>
                         <div className="mt-2.5 flex w-fit items-center rounded-xl border bg-muted/40">
                           <Button variant="ghost" size="icon" className="h-7 w-7 rounded-l-xl"
-                            onClick={() => setQuantity(item.productId, item.quantity - 1)}
+                            onClick={() => setQuantity(item.cartItemId, item.quantity - 1)}
                             aria-label={`Quitar una unidad de ${item.name}`}>
                             <Minus className="h-3 w-3" />
                           </Button>
                           <span className="min-w-7 text-center text-xs font-bold">{item.quantity}</span>
                           <Button variant="ghost" size="icon" className="h-7 w-7 rounded-r-xl"
-                            onClick={() => setQuantity(item.productId, item.quantity + 1)}
+                            onClick={() => setQuantity(item.cartItemId, item.quantity + 1)}
                             disabled={item.availableStock != null && item.quantity >= item.availableStock}
                             aria-label={`Agregar una unidad de ${item.name}`}
                             title={item.availableStock != null && item.quantity >= item.availableStock
@@ -616,7 +636,7 @@ export function CartPageClient({
                       </div>
                       <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
                         <strong className="font-black tabular-nums">{formatMoney(item.quantity * item.unitPrice)}</strong>
-                        <button type="button" onClick={() => removeItem(item.productId)}
+                        <button type="button" onClick={() => removeItem(item.cartItemId)}
                           className="flex items-center gap-1 text-xs text-destructive hover:text-destructive/80 font-semibold transition-colors">
                           <Trash2 className="h-3.5 w-3.5" /> Quitar
                         </button>

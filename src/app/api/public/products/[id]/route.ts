@@ -25,6 +25,8 @@ type ProductRow = {
   images: string[] | null
   unit_measure: string
   barcode: string | null
+  has_variants: boolean
+  variant_attribute_config: PublicProduct['variant_attribute_config']
   category: { id: string; name: string }[] | { id: string; name: string } | null
 }
 
@@ -61,8 +63,8 @@ export async function GET(
     })
 
     const selectFields = isWholesale
-      ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
-      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+      ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name)'
+      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name)'
 
     // Supabase's inferred builder type here explodes into an overly large union.
     // Keep the query typed at runtime and let the final payload shape stay explicit.
@@ -134,6 +136,18 @@ export async function GET(
       has_offer: finalProduct.has_offer,
       offer_price: finalProduct.offer_price,
     }, (automaticRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>)))
+    const { data: variantRows, error: variantError } = finalProduct.has_variants
+      ? await supabase.from('product_variants')
+          .select(isWholesale
+            ? 'id, product_id, variant_name, attributes, sku, sale_price, wholesale_price, stock_quantity, is_active'
+            : 'id, product_id, variant_name, attributes, sku, sale_price, stock_quantity, is_active')
+          .eq('organization_id', organization.id).eq('product_id', finalProduct.id).eq('is_active', true).order('variant_name')
+      : { data: [], error: null }
+    if (variantError) throw variantError
+    const publicVariantRows = (variantRows ?? []) as unknown as Array<Record<string, unknown>>
+    const publicStock = finalProduct.has_variants
+      ? publicVariantRows.reduce((sum, variant) => sum + Number(variant.stock_quantity ?? 0), 0)
+      : finalProduct.stock_quantity
     const publicProduct: PublicProduct = {
       id: finalProduct.id,
       name: finalProduct.name,
@@ -143,8 +157,8 @@ export async function GET(
       category: category ? { id: category.id, name: category.name } : undefined,
       sale_price: finalProduct.sale_price,
       wholesale_price: isWholesale ? finalProduct.wholesale_price : null,
-      stock_quantity: finalProduct.stock_quantity,
-      in_stock: finalProduct.stock_quantity > 0,
+      stock_quantity: publicStock,
+      in_stock: publicStock > 0,
       is_active: finalProduct.is_active,
       featured: finalProduct.featured || false,
       has_offer: priced.has_offer,
@@ -154,6 +168,15 @@ export async function GET(
       images: finalProduct.images,
       unit_measure: finalProduct.unit_measure,
       barcode: finalProduct.barcode,
+      has_variants: finalProduct.has_variants,
+      variant_attribute_config: finalProduct.variant_attribute_config ?? [],
+      variants: publicVariantRows.map((variant) => ({
+        id: String(variant.id), product_id: String(variant.product_id), variant_name: String(variant.variant_name),
+        attributes: (variant.attributes ?? {}) as Record<string, string>, sku: variant.sku ? String(variant.sku) : null,
+        sale_price: Number(variant.sale_price ?? 0),
+        wholesale_price: isWholesale ? Number(variant.wholesale_price ?? 0) : null,
+        stock_quantity: Number(variant.stock_quantity ?? 0), is_active: Boolean(variant.is_active),
+      })),
     }
 
     const response = NextResponse.json({
@@ -163,7 +186,7 @@ export async function GET(
     response.headers.set('Vary', 'Cookie')
     response.headers.set(
       'Cache-Control',
-      user ? 'private, no-store' : 'public, max-age=30, s-maxage=60'
+      'private, no-store'
     )
     return response
   } catch (error) {

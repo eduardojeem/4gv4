@@ -105,6 +105,7 @@ describe('getStorefrontOffers', () => {
         plan: null,
         logo_url: null,
         marketplace_public: true,
+        storefront_public: true,
       }],
       promotions: [],
       products: [],
@@ -207,7 +208,7 @@ describe('getStorefrontOffers', () => {
     expect(orFilterArg()).toBe('has_offer.eq.true')
   })
 
-  it('no devuelve nada si la organización tiene el marketplace apagado', async () => {
+  it('no devuelve nada si la tienda no está publicada', async () => {
     rowsByTable.organizations = [{
       id: 'org-1',
       name: 'Tienda',
@@ -215,8 +216,15 @@ describe('getStorefrontOffers', () => {
       plan: null,
       logo_url: null,
       marketplace_public: false,
+      storefront_public: false,
     }]
 
     await expect(getStorefrontOffers('default')).resolves.toEqual([])
+  })
+
+  it('muestra ofertas por enlace directo aunque el marketplace esté apagado', async () => {
+    rowsByTable.organizations = [{ id: 'org-1', slug: 'default', name: 'Tienda', storefront_public: true, marketplace_public: false }]
+    rowsByTable.products = [productRow({ id: PRODUCT_WITH_MANUAL_OFFER, has_offer: true, offer_price: 70_000 })]
+    expect(await getStorefrontOffers('default')).toHaveLength(1)
   })
 })

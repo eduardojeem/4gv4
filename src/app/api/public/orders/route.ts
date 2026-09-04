@@ -12,11 +12,13 @@ import { resolvePublicUnitPrice } from '@/lib/orders/public-pricing'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
 import type { CheckoutSettings } from '@/types/website-settings'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 const ORDER_RATE_LIMIT = 5
 const ORDER_RATE_WINDOW_MS = 10 * 60 * 1000
 
 const publicOrderSchema = z.object({
+  checkoutAttemptId: z.string().uuid(),
   customer: z.object({
     name: z.string().trim().min(1).max(200),
     email: z.string().trim().email().optional().or(z.literal('')).nullable(),
@@ -25,6 +27,7 @@ const publicOrderSchema = z.object({
   }),
   items: z.array(z.object({
     productId: z.string().uuid(),
+    variantId: z.string().uuid().optional().nullable(),
     quantity: z.number().int().min(1).max(999),
   })).min(1).max(50),
   fulfillmentType: z.enum(['PICKUP', 'DELIVERY']).default('PICKUP'),
@@ -38,7 +41,7 @@ const publicOrderSchema = z.object({
 
 export async function POST(request: NextRequest) {
   const clientIp = getClientIp(request)
-  const allowed = rateLimiter.check(clientIp, ORDER_RATE_LIMIT, ORDER_RATE_WINDOW_MS)
+  const allowed = await rateLimiter.check(clientIp, ORDER_RATE_LIMIT, ORDER_RATE_WINDOW_MS)
   if (!allowed) {
     const retryAfter = rateLimiter.getResetTime(clientIp)
     logger.warn('[orders] Rate limit exceeded', { clientIp })
@@ -60,6 +63,13 @@ export async function POST(request: NextRequest) {
 
     if (!organization) {
       return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 404 })
+    }
+    const planInfo = await getOrganizationPlanInfo(organization.id)
+    if (!planInfo.modules.includes('orders')) {
+      return NextResponse.json({ success: false, code: 'ORDERS_MODULE_DISABLED', error: 'La tienda no recibe pedidos en este momento.' }, { status: 403 })
+    }
+    if (input.fulfillmentType === 'DELIVERY' && !planInfo.modules.includes('delivery')) {
+      return NextResponse.json({ success: false, code: 'DELIVERY_MODULE_DISABLED', error: 'Las entregas están desactivadas.' }, { status: 403 })
     }
 
     const { data: checkoutSetting, error: checkoutSettingError } = await supabase
@@ -84,18 +94,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const requestedByProduct = new Map<string, number>()
-    for (const item of input.items) {
-      requestedByProduct.set(
-        item.productId,
-        (requestedByProduct.get(item.productId) ?? 0) + item.quantity
-      )
+    const paymentKey = {
+      CASH: 'cash', CARD: 'card', TRANSFER: 'transfer', DIGITAL_WALLET: 'digital_wallet',
+    }[input.paymentMethod] as keyof CheckoutSettings['payment']
+    if (checkout.payment[paymentKey]?.enabled === false) {
+      return NextResponse.json({ success: false, error: 'El método de pago seleccionado no está disponible.' }, { status: 422 })
     }
-    const requestedItems = Array.from(requestedByProduct, ([productId, quantity]) => ({
-      productId,
-      quantity,
-    }))
-    const productIds = requestedItems.map((item) => item.productId)
+    if (!input.customer.phone?.trim()) {
+      return NextResponse.json({ success: false, error: 'Ingresá un teléfono de contacto.' }, { status: 422 })
+    }
+    if (input.fulfillmentType === 'DELIVERY' && !input.customer.address?.trim()) {
+      return NextResponse.json({ success: false, error: 'Ingresá una dirección de entrega.' }, { status: 422 })
+    }
+
+    const requestedByProduct = new Map<string, { productId: string; variantId: string | null; quantity: number }>()
+    for (const item of input.items) {
+      const key = `${item.productId}:${item.variantId ?? ''}`
+      const current = requestedByProduct.get(key)
+      requestedByProduct.set(key, { productId: item.productId, variantId: item.variantId ?? null, quantity: (current?.quantity ?? 0) + item.quantity })
+    }
+    const requestedItems = Array.from(requestedByProduct.values())
+    const productIds = [...new Set(requestedItems.map((item) => item.productId))]
+    const variantIds = [...new Set(requestedItems.flatMap((item) => item.variantId ? [item.variantId] : []))]
 
     // El catálogo le muestra al mayorista su propio precio y los productos de
     // visibilidad mayorista. El checkout tiene que resolver lo mismo o cobra de
@@ -110,8 +130,8 @@ export async function POST(request: NextRequest) {
 
     // Nunca se selecciona wholesale_price para un cliente minorista.
     const productSelect = isWholesale
-      ? 'id, name, sku, category_id, sale_price, wholesale_price, has_offer, offer_price, stock_quantity, is_active'
-      : 'id, name, sku, category_id, sale_price, has_offer, offer_price, stock_quantity, is_active'
+      ? 'id, name, sku, category_id, sale_price, wholesale_price, has_offer, offer_price, stock_quantity, is_active, has_variants'
+      : 'id, name, sku, category_id, sale_price, has_offer, offer_price, stock_quantity, is_active, has_variants'
 
     const { data: products, error: productsError } = await supabase
       .from('products')
@@ -123,18 +143,41 @@ export async function POST(request: NextRequest) {
 
     if (productsError) throw productsError
 
+    const { data: variants, error: variantsError } = variantIds.length > 0
+      ? await supabase.from('product_variants')
+          .select(isWholesale
+            ? 'id, product_id, variant_name, sku, sale_price, wholesale_price, stock_quantity, is_active'
+            : 'id, product_id, variant_name, sku, sale_price, stock_quantity, is_active')
+          .eq('organization_id', organization.id).eq('is_active', true).in('id', variantIds)
+      : { data: [], error: null }
+    if (variantsError) throw variantsError
+    const publicVariantRows = (variants ?? []) as unknown as Array<Record<string, unknown>>
+    const variantMap = new Map(publicVariantRows.map((variant) => [String(variant.id), variant]))
+
     const productMap = new Map((products ?? []).map((product) => [String(product.id), product]))
     const missing = productIds.find((id) => !productMap.has(id))
     if (missing) {
       return NextResponse.json({ success: false, error: 'Un producto del carrito ya no esta disponible.' }, { status: 400 })
     }
+    const invalidVariant = requestedItems.find((item) => {
+      const product = productMap.get(item.productId) as Record<string, unknown>
+      if (Boolean(product.has_variants) && !item.variantId) return true
+      if (!item.variantId) return false
+      const variant = variantMap.get(item.variantId)
+      return !variant || String(variant.product_id) !== item.productId
+    })
+    if (invalidVariant) {
+      return NextResponse.json({ success: false, code: 'VARIANT_NOT_AVAILABLE', error: 'Elegí nuevamente la variante del producto.' }, { status: 409 })
+    }
 
     const stockConflicts = requestedItems.flatMap((item) => {
       const product = productMap.get(item.productId) as Record<string, unknown>
-      const available = Math.max(0, Number(product.stock_quantity || 0))
+      const variant = item.variantId ? variantMap.get(item.variantId) : null
+      const available = Math.max(0, Number(variant?.stock_quantity ?? product.stock_quantity ?? 0))
       return item.quantity > available
         ? [{
             productId: item.productId,
+            variantId: item.variantId,
             name: String(product.name ?? 'Producto'),
             requested: item.quantity,
             available,
@@ -161,6 +204,7 @@ export async function POST(request: NextRequest) {
 
     const orderItems = requestedItems.map((item) => {
       const product = productMap.get(item.productId) as Record<string, unknown>
+      const variant = item.variantId ? variantMap.get(item.variantId) : null
       const priced = applyAutomaticPromotionToProduct({
         id: item.productId,
         category_id: product.category_id ? String(product.category_id) : null,
@@ -170,16 +214,20 @@ export async function POST(request: NextRequest) {
       }, automaticPromotions)
       const unitPrice = resolvePublicUnitPrice({
         isWholesale,
-        wholesalePrice: product.wholesale_price == null ? null : Number(product.wholesale_price),
-        salePrice: priced.sale_price,
+        wholesalePrice: variant?.wholesale_price == null
+          ? (product.wholesale_price == null ? null : Number(product.wholesale_price))
+          : Number(variant.wholesale_price),
+        salePrice: variant ? Number(variant.sale_price || 0) : priced.sale_price,
         hasOffer: Boolean(priced.has_offer),
         offerPrice: priced.offer_price ?? null,
       })
 
       return {
         product_id: item.productId,
-        product_name: String(product.name ?? 'Producto'),
-        product_sku: product.sku ? String(product.sku) : null,
+        variant_id: item.variantId,
+        variant_name: variant?.variant_name ? String(variant.variant_name) : null,
+        product_name: variant?.variant_name ? `${String(product.name ?? 'Producto')} (${String(variant.variant_name)})` : String(product.name ?? 'Producto'),
+        product_sku: variant?.sku ? String(variant.sku) : (product.sku ? String(product.sku) : null),
         quantity: item.quantity,
         unit_price: unitPrice,
         subtotal: unitPrice * item.quantity,
@@ -268,7 +316,7 @@ export async function POST(request: NextRequest) {
     const total = Math.max(0, subtotal + shippingCost - discountAmount)
 
     const { data: atomicResult, error: atomicError } = await supabase.rpc(
-      'create_public_order_with_store_credit_atomic',
+      'create_public_order_idempotent_atomic',
       {
         p_organization_id: organization.id,
         p_customer_id: customerId,
@@ -299,6 +347,7 @@ export async function POST(request: NextRequest) {
           ? String(buyer.user_metadata?.phone || buyer.phone || normalizedPhone).trim()
           : normalizedPhone,
         p_store_credit_amount: input.storeCreditAmount,
+        p_attempt_id: input.checkoutAttemptId,
       }
     )
 
@@ -324,6 +373,15 @@ export async function POST(request: NextRequest) {
       ? error.message
       : String((error as { message?: unknown } | null)?.message ?? '')
     const stockMatch = message.match(/STOCK_CHANGED\|([0-9a-f-]+)\|(\d+)/i)
+    const variantStockMatch = message.match(/STOCK_CHANGED_VARIANT\|([0-9a-f-]+)\|([0-9a-f-]+)\|(\d+)/i)
+    if (variantStockMatch) {
+      return NextResponse.json({
+        success: false,
+        code: 'STOCK_CHANGED',
+        error: 'Cambió el stock de la variante seleccionada.',
+        data: { conflicts: [{ productId: variantStockMatch[1], variantId: variantStockMatch[2], available: Number(variantStockMatch[3]) }] },
+      }, { status: 409 })
+    }
     if (stockMatch) {
       return NextResponse.json({
         success: false,

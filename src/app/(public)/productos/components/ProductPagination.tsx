@@ -13,7 +13,7 @@ interface ProductPaginationProps {
   perPage?: number
 }
 
-const PAGE_SIZE_OPTIONS = [12, 16, 24, 48]
+const PAGE_SIZE_OPTIONS = [25, 50, 75, 100]
 
 function buildPageRange(current: number, total: number): (number | null)[] {
   if (total <= 7) {
@@ -45,7 +45,7 @@ export function ProductPagination({
   currentPage,
   totalPages,
   total,
-  perPage = 16,
+  perPage = 25,
 }: ProductPaginationProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -74,7 +74,7 @@ export function ProductPagination({
   const to = total ? Math.min(currentPage * perPage, total) : 0
   const pages = buildPageRange(currentPage, totalPages)
 
-  if (totalPages <= 1 && (!total || total <= 12)) return null
+  if (totalPages <= 1 && (!total || total <= 25)) return null
 
   return (
     <div

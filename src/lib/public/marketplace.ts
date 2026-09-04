@@ -43,6 +43,10 @@ export type MarketplaceProduct = PublicProduct & {
   organization_id: string
   organization_name: string
   organization_slug: string
+  organization_logo_url?: string | null
+  organization_city?: string | null
+  organization_address?: string | null
+  organization_maps_url?: string | null
   created_at?: string | null
 }
 
@@ -93,7 +97,7 @@ type ProductRow = {
   barcode: string | null
   created_at?: string | null
   categories?: { id: string; name: string } | { id: string; name: string }[] | null
-  organizations?: { id: string; name: string; slug: string } | { id: string; name: string; slug: string }[] | null
+  organizations?: { id: string; name: string; slug: string; logo_url?: string | null } | { id: string; name: string; slug: string; logo_url?: string | null }[] | null
 }
 
 function toPublicProduct(product: ProductRow): PublicProduct {
@@ -170,6 +174,7 @@ export async function getMarketplaceOrganizations(limit = 24): Promise<Marketpla
     .from('organizations')
     .select('id, name, slug, plan, logo_url, business_vertical, operating_model, created_at, review_rating_avg, review_count')
     .eq('marketplace_public', true)
+    .eq('storefront_public', true)
     .limit(limit)
 
   if (organizationError || !organizations?.length) return []
@@ -328,10 +333,11 @@ export async function getMarketplaceProductsPage(
 
   let query = supabase
     .from('products')
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name, parent_id), organizations!inner(id, name, slug)', { count: 'exact' })
+    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name, parent_id), organizations!inner(id, name, slug, logo_url)', { count: 'exact' })
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
+    .eq('organizations.storefront_public', true)
     .gt('stock_quantity', 0)
 
   // Filtro por marca
@@ -376,15 +382,45 @@ export async function getMarketplaceProductsPage(
 
   const rows = (data ?? []) as unknown as ProductRow[]
   const organizationIds = [...new Set(rows.map((product) => product.organization_id))]
-  const { data: automaticRows } = organizationIds.length > 0
-    ? await supabase.from('promotions').select('*').in('organization_id', organizationIds).eq('public_mode', 'automatic').eq('is_active', true)
-    : { data: [] }
+  const [
+    { data: automaticRows },
+    { data: orgSettings },
+    { data: branches },
+    { data: websiteSettings },
+  ] = organizationIds.length > 0
+    ? await Promise.all([
+        supabase.from('promotions').select('*').in('organization_id', organizationIds).eq('public_mode', 'automatic').eq('is_active', true),
+        supabase.from('organization_settings').select('organization_id, city, company_address').in('organization_id', organizationIds),
+        supabase.from('branches').select('organization_id, city, address, is_default, is_active').in('organization_id', organizationIds).eq('is_active', true),
+        supabase.from('website_settings').select('organization_id, key, value').in('organization_id', organizationIds).in('key', ['company_info']),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+
   const promotionsByOrganization = new Map<string, ReturnType<typeof mapPublicPromotion>[]>()
   ;(automaticRows ?? []).forEach((row) => {
     const organizationId = String(row.organization_id)
     const promotions = promotionsByOrganization.get(organizationId) ?? []
     promotions.push(mapPublicPromotion(row as Record<string, unknown>))
     promotionsByOrganization.set(organizationId, promotions)
+  })
+
+  const settingsByOrganization = new Map<string, { city?: string | null; company_address?: string | null }>()
+  ;(orgSettings ?? []).forEach((s) => {
+    settingsByOrganization.set(s.organization_id, s)
+  })
+
+  const branchesByOrganization = new Map<string, Array<{ city?: string | null; address?: string | null; is_default?: boolean }>>()
+  ;(branches ?? []).forEach((b) => {
+    const list = branchesByOrganization.get(b.organization_id) ?? []
+    list.push(b)
+    branchesByOrganization.set(b.organization_id, list)
+  })
+
+  const webSettingsByOrganization = new Map<string, Record<string, unknown>>()
+  ;(websiteSettings ?? []).forEach((w) => {
+    if (w.value && typeof w.value === 'object') {
+      webSettingsByOrganization.set(w.organization_id, w.value as Record<string, unknown>)
+    }
   })
 
   const products = rows
@@ -397,6 +433,17 @@ export async function getMarketplaceProductsPage(
         category_id: publicProduct.category?.id ?? null,
       }, promotionsByOrganization.get(product.organization_id) ?? [])
 
+      const orgSetting = settingsByOrganization.get(product.organization_id)
+      const orgBranches = branchesByOrganization.get(product.organization_id) ?? []
+      const defaultBranch = orgBranches.find((b) => b.is_default) || orgBranches[0]
+      const companyInfo = webSettingsByOrganization.get(product.organization_id)
+
+      const city = orgSetting?.city?.trim() || defaultBranch?.city?.trim() || null
+      const companyAddress = typeof companyInfo?.address === 'string' ? companyInfo.address : null
+      const companyMapsUrl = typeof companyInfo?.mapsUrl === 'string' ? companyInfo.mapsUrl : null
+      const address = orgSetting?.company_address?.trim() || defaultBranch?.address?.trim() || companyAddress?.trim() || null
+      const mapsHref = getCompanyMapsHref(companyMapsUrl, address || (city ? `${city}, Paraguay` : null))
+
       return {
         ...publicProduct,
         has_offer: priced.has_offer,
@@ -405,6 +452,10 @@ export async function getMarketplaceProductsPage(
         organization_id: product.organization_id,
         organization_name: organization.name,
         organization_slug: organization.slug,
+        organization_logo_url: organization.logo_url ?? null,
+        organization_city: city,
+        organization_address: address,
+        organization_maps_url: mapsHref,
       }
     })
     .filter((product): product is MarketplaceProduct => product !== null)
@@ -438,6 +489,7 @@ export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]>
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
+    .eq('organizations.storefront_public', true)
     .gt('stock_quantity', 0)
     .limit(20000)
 
@@ -494,6 +546,7 @@ export async function getMarketplaceBrands(
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
+    .eq('organizations.storefront_public', true)
     .gt('stock_quantity', 0)
 
   if (options?.categoria) {
@@ -574,6 +627,7 @@ export async function getPublicOrganizationPage(slug: string) {
     .select('id, name, slug, plan, logo_url, created_at')
     .eq('slug', slug)
     .eq('marketplace_public', true)
+    .eq('storefront_public', true)
     .maybeSingle()
 
   if (organizationError || !organization) return null
@@ -611,11 +665,11 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
 
   const { data: organization } = await supabase
     .from('organizations')
-    .select('id, name, slug, plan, logo_url, marketplace_public')
+    .select('id, name, slug, plan, logo_url, marketplace_public, storefront_public')
     .eq('slug', slug)
     .maybeSingle()
 
-  if (!organization || organization.marketplace_public === false) {
+  if (!organization || organization.storefront_public !== true) {
     return []
   }
 
@@ -675,21 +729,27 @@ export async function getMarketplaceOffers(limit = 100): Promise<MarketplaceProd
   // 1. Obtener todas las organizaciones públicas en el marketplace
   const { data: organizations } = await supabase
     .from('organizations')
-    .select('id, name, slug')
+    .select('id, name, slug, logo_url')
     .eq('marketplace_public', true)
+    .eq('storefront_public', true)
 
   if (!organizations || organizations.length === 0) return []
 
   const organizationIds = organizations.map((o) => o.id)
   const orgMap = new Map(organizations.map((o) => [o.id, o]))
 
-  // 2. Obtener promociones automáticas vigentes de estas organizaciones
-  const { data: promotionRows } = await supabase
-    .from('promotions')
-    .select('*')
-    .in('organization_id', organizationIds)
-    .eq('public_mode', 'automatic')
-    .eq('is_active', true)
+  // 2. Obtener promociones automáticas vigentes y datos de ubicación de estas organizaciones
+  const [
+    { data: promotionRows },
+    { data: orgSettings },
+    { data: branches },
+    { data: websiteSettings },
+  ] = await Promise.all([
+    supabase.from('promotions').select('*').in('organization_id', organizationIds).eq('public_mode', 'automatic').eq('is_active', true),
+    supabase.from('organization_settings').select('organization_id, city, company_address').in('organization_id', organizationIds),
+    supabase.from('branches').select('organization_id, city, address, is_default, is_active').in('organization_id', organizationIds).eq('is_active', true),
+    supabase.from('website_settings').select('organization_id, key, value').in('organization_id', organizationIds).in('key', ['company_info']),
+  ])
 
   const automaticPromotions = (promotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
   const promotionsByOrg = new Map<string, ReturnType<typeof mapPublicPromotion>[]>()
@@ -698,6 +758,25 @@ export async function getMarketplaceOffers(limit = 100): Promise<MarketplaceProd
     const list = promotionsByOrg.get(orgId) ?? []
     list.push(mapPublicPromotion(row as Record<string, unknown>))
     promotionsByOrg.set(orgId, list)
+  })
+
+  const settingsByOrganization = new Map<string, { city?: string | null; company_address?: string | null }>()
+  ;(orgSettings ?? []).forEach((s) => {
+    settingsByOrganization.set(s.organization_id, s)
+  })
+
+  const branchesByOrganization = new Map<string, Array<{ city?: string | null; address?: string | null; is_default?: boolean }>>()
+  ;(branches ?? []).forEach((b) => {
+    const list = branchesByOrganization.get(b.organization_id) ?? []
+    list.push(b)
+    branchesByOrganization.set(b.organization_id, list)
+  })
+
+  const webSettingsByOrganization = new Map<string, Record<string, unknown>>()
+  ;(websiteSettings ?? []).forEach((w) => {
+    if (w.value && typeof w.value === 'object') {
+      webSettingsByOrganization.set(w.organization_id, w.value as Record<string, unknown>)
+    }
   })
 
   const offerCandidateFilter = buildPublicOfferCandidateFilter(automaticPromotions)
@@ -733,6 +812,17 @@ export async function getMarketplaceOffers(limit = 100): Promise<MarketplaceProd
         category_id: cat?.id ?? null,
       }, orgPromos)
 
+      const orgSetting = settingsByOrganization.get(product.organization_id)
+      const orgBranches = branchesByOrganization.get(product.organization_id) ?? []
+      const defaultBranch = orgBranches.find((b) => b.is_default) || orgBranches[0]
+      const companyInfo = webSettingsByOrganization.get(product.organization_id)
+
+      const city = orgSetting?.city?.trim() || defaultBranch?.city?.trim() || null
+      const companyAddress = typeof companyInfo?.address === 'string' ? companyInfo.address : null
+      const companyMapsUrl = typeof companyInfo?.mapsUrl === 'string' ? companyInfo.mapsUrl : null
+      const address = orgSetting?.company_address?.trim() || defaultBranch?.address?.trim() || companyAddress?.trim() || null
+      const mapsHref = getCompanyMapsHref(companyMapsUrl, address || (city ? `${city}, Paraguay` : null))
+
       return {
         ...publicProduct,
         category: cat,
@@ -742,6 +832,10 @@ export async function getMarketplaceOffers(limit = 100): Promise<MarketplaceProd
         organization_id: org.id,
         organization_name: org.name,
         organization_slug: org.slug,
+        organization_logo_url: org.logo_url ?? null,
+        organization_city: city,
+        organization_address: address,
+        organization_maps_url: mapsHref,
         created_at: product.created_at ?? null,
       }
     })

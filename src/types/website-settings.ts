@@ -26,6 +26,7 @@ export interface CompanyInfo {
   servicesPageEnabled?: boolean
   repairTrackingEnabled?: boolean
   marketplacePublic?: boolean
+  storefrontPublic?: boolean
   processSectionEnabled?: boolean
   slug?: string
 }

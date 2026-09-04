@@ -1,6 +1,6 @@
 'use client'
 
-import { Eye, MessageCircle, ShoppingCart, CheckCircle2, ArrowRight, Lightbulb, Store, Sparkles } from 'lucide-react'
+import { Eye, MessageCircle, ShoppingCart, CheckCircle2, Store } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { PublicCommerceMode } from '@/types/website-settings'
@@ -8,8 +8,8 @@ import type { PublicCommerceMode } from '@/types/website-settings'
 const COMMERCE_MODES = [
   {
     value: 'cart',
-    label: 'Carrito y Pedidos en Línea',
-    tag: 'Recomendado para Tiendas',
+    label: 'Carrito y pedidos en línea',
+    tag: 'Pedidos en línea',
     tagColor: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300',
     shortDesc: 'Venta completa en línea con carrito de compras, pasarela de checkout y cálculo de envíos.',
     icon: ShoppingCart,
@@ -22,7 +22,7 @@ const COMMERCE_MODES = [
   {
     value: 'whatsapp',
     label: 'Consultas por WhatsApp',
-    tag: 'Atención Directa',
+    tag: 'Inicial para nuevas tiendas',
     tagColor: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
     shortDesc: 'Cada producto abre un chat de WhatsApp con el artículo y precio prearmado para atención directa.',
     icon: MessageCircle,
@@ -69,7 +69,7 @@ export function CommerceModeSelector({
   const selectedModeObj = COMMERCE_MODES.find(m => m.value === value) || COMMERCE_MODES[0]
 
   return (
-    <section aria-labelledby="commerce-mode-title" className="rounded-2xl border bg-card p-5 sm:p-6 shadow-2xs space-y-5">
+    <section aria-labelledby="commerce-mode-title" className="rounded-xl border bg-card p-4 space-y-4">
       <div>
         <div className="flex items-center gap-2">
           <h2 id="commerce-mode-title" className="text-base sm:text-lg font-extrabold text-foreground flex items-center gap-2">
@@ -98,7 +98,7 @@ export function CommerceModeSelector({
               aria-checked={selected}
               onClick={() => onChange(mode)}
               className={cn(
-                'flex flex-col justify-between items-start gap-3 rounded-2xl border-2 p-4 sm:p-5 text-left transition-all relative overflow-hidden',
+                'flex flex-col justify-between items-start gap-2 rounded-xl border p-3 text-left transition-all relative overflow-hidden',
                 selected
                   ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs'
                   : 'border-border/80 bg-background hover:border-primary/40 hover:bg-muted/30'
@@ -106,7 +106,7 @@ export function CommerceModeSelector({
             >
               <div className="w-full flex items-center justify-between gap-2">
                 <div className={cn(
-                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors',
+                  'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
                   selected ? 'bg-primary text-primary-foreground shadow-xs' : 'bg-muted text-muted-foreground'
                 )}>
                   <Icon aria-hidden="true" className="h-5 w-5" />
@@ -137,13 +137,10 @@ export function CommerceModeSelector({
       </div>
 
       {/* Explicación Detallada del Modo Activo */}
-      <div className="p-4 sm:p-5 rounded-2xl border bg-muted/20 space-y-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary shrink-0" />
-          <h3 className="text-xs sm:text-sm font-bold text-foreground">
+      <details className="rounded-lg border bg-muted/20 p-3">
+        <summary className="cursor-pointer text-sm font-medium">
             ¿Cómo funciona el modo &ldquo;{selectedModeObj.label}&rdquo;?
-          </h3>
-        </div>
+        </summary>
 
         <div className="grid gap-3 sm:grid-cols-3 pt-1 text-xs">
           <div className="p-3 rounded-xl bg-background border space-y-1">
@@ -173,7 +170,7 @@ export function CommerceModeSelector({
             </p>
           </div>
         </div>
-      </div>
+      </details>
     </section>
   )
 }

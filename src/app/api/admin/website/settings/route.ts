@@ -42,14 +42,14 @@ async function handler(
     const [
       { data: settings, error },
       { data: orgSettings, error: orgSettingsError },
-      { data: organization },
+      { data: organization, error: organizationError },
       { data: branch, error: branchError },
     ] = await Promise.all([
       settingsQuery,
       userSupabase.from('organization_settings').select('display_name').eq('organization_id', orgId).maybeSingle(),
       orgId
-        ? adminSupabase.from('organizations').select('name, marketplace_public, slug').eq('id', orgId).maybeSingle()
-        : Promise.resolve({ data: null }),
+        ? adminSupabase.from('organizations').select('name, marketplace_public, storefront_public, slug').eq('id', orgId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
       userSupabase.from('branches').select('phone, email, address, city').eq('organization_id', orgId).eq('is_default', true).maybeSingle(),
     ])
 
@@ -57,8 +57,8 @@ async function handler(
       console.error('Failed to fetch website settings', { error: error.message })
       throw error
     }
-    if (orgSettingsError || branchError) {
-      throw orgSettingsError || branchError
+    if (orgSettingsError || branchError || organizationError) {
+      throw orgSettingsError || branchError || organizationError
     }
 
     // Transformar array a objeto
@@ -78,6 +78,7 @@ async function handler(
       email:   ci.email   || branch?.email   || '',
       address: ci.address || branch?.address || '',
       marketplacePublic: organization?.marketplace_public !== false,
+      storefrontPublic: organization?.storefront_public === true,
       slug: organization?.slug || ci.slug || '',
     }
 

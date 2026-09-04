@@ -94,7 +94,9 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
 
   return (
     <div className={cn('space-y-8 md:space-y-10', className ?? 'max-w-4xl pb-24 md:pb-8')}>
-      <Card className={cn('relative overflow-hidden border shadow-sm transition-all', selectedAccent.preview, !current.enabled && 'opacity-60 grayscale')}>
+      <details className="rounded-xl border p-3">
+      <summary className="cursor-pointer text-sm font-medium">Ver vista previa de ofertas</summary>
+      <Card className={cn('relative mt-3 overflow-hidden border shadow-sm transition-all', selectedAccent.preview, !current.enabled && 'opacity-60 grayscale')}>
         {/* Decorative elements to match public site */}
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-foreground/5 blur-3xl" />
 
@@ -116,6 +118,7 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
           <p className="mt-3 max-w-2xl text-base text-muted-foreground sm:text-lg">{current.subtitle}</p>
         </div>
       </Card>
+      </details>
 
       <SectionCard
         icon={ShoppingBag}
@@ -124,6 +127,7 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
       >
         <div className="space-y-8">
           <PublicVisibilityCard
+            compact
             title="Visualización de Sección de Ofertas"
             badgeLabel="Rebajas del Catálogo"
             description="Controla si este bloque de productos en oferta se muestra en la página de inicio y en la ruta /ofertas."
