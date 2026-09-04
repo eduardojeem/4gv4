@@ -435,6 +435,21 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
                 <Copy className="h-3 w-3 opacity-40 ml-0.5" />
               </button>
             )}
+            {customer.alternate_phone && (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(customer.alternate_phone || '', 'Otro teléfono')}
+                className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-xs text-white/80 transition-all hover:bg-white/20 hover:text-white"
+                title={`Otro teléfono para avisarle${customer.alternate_phone_label ? ` — de ${customer.alternate_phone_label}` : ''}`}
+              >
+                <Phone className="h-3.5 w-3.5 text-emerald-400" />
+                <span>{customer.alternate_phone}</span>
+                {customer.alternate_phone_label && (
+                  <span className="max-w-[90px] truncate opacity-60">({customer.alternate_phone_label})</span>
+                )}
+                <Copy className="h-3 w-3 opacity-40 ml-0.5" />
+              </button>
+            )}
             {customer.email && (
               <button
                 type="button"

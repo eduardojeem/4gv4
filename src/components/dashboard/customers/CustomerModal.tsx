@@ -28,6 +28,7 @@ import {
   UserPlus,
   Mail,
   Phone,
+  PhoneForwarded,
   MapPin,
   Edit,
   X,
@@ -189,12 +190,23 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
         formData.customerType === 'mayorista' ? 'wholesale' as const :
         formData.customerType === 'vip' ? 'vip' as const : 'business' as const
 
+      // El formulario ya pedia el contacto alternativo y lo validaba, pero acá
+      // no se lo mandaba a guardar: se escribia y se perdia sin aviso. Se arma
+      // una vez y se usa en el alta y en la edicion.
+      const alternatePhone = formData.alternatePhone?.trim() || null
+      const alternateContact = {
+        alternate_phone: alternatePhone,
+        // Sin telefono, la aclaracion de quien atiende no significa nada.
+        alternate_phone_label: alternatePhone ? (formData.alternatePhoneLabel?.trim() || null) : null,
+      }
+
       if (mode === 'create') {
         const customerData = {
           name: fullName,
           ruc: formData.ruc?.trim() || undefined,
           email: formData.email?.trim() || undefined,
           phone: formData.phone?.trim() || undefined,
+          ...alternateContact,
           city: formData.city?.trim() || undefined,
           address: formData.address?.trim() || undefined,
           status: 'active' as const,
@@ -236,6 +248,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           ruc: formData.ruc?.trim() || undefined,
           email: formData.email?.trim() || undefined,
           phone: formData.phone?.trim() || undefined,
+          ...alternateContact,
           city: formData.city?.trim() || undefined,
           address: formData.address?.trim() || undefined,
           notes: formData.notes?.trim() || undefined,
@@ -265,6 +278,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       lastName: nameParts.slice(1).join(' ') || '',
       ruc: customer.ruc || '',
       phone: customer.phone || '',
+      // Sin esto el campo salia vacio al editar y parecia que el cliente no
+      // tenia contacto alternativo, aunque lo hubiera cargado por reparaciones.
+      alternatePhone: customer.alternate_phone || '',
+      alternatePhoneLabel: customer.alternate_phone_label || '',
       email: customer.email || '',
       city: customer.city || 'Asunción',
       address: customer.address || '',
@@ -387,6 +404,17 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                       <Phone className="h-4 w-4 text-muted-foreground" />
                       <span>{customer.phone}</span>
                     </div>
+                    {customer.alternate_phone && (
+                      <div className="flex items-center gap-2">
+                        <PhoneForwarded className="h-4 w-4 text-muted-foreground" />
+                        <span>{customer.alternate_phone}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {customer.alternate_phone_label
+                            ? `(${customer.alternate_phone_label})`
+                            : '(otro contacto)'}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <Mail className="h-4 w-4 text-muted-foreground" />
                       <span>{customer.email}</span>

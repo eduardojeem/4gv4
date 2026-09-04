@@ -893,6 +893,35 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                       </div>
                     </div>
 
+                    {/* Contacto alternativo: el telefono del cliente suele ser el
+                        equipo que dejo en el taller, asi que ahi no se lo puede
+                        ubicar justo cuando hay algo que avisarle. */}
+                    {currentCustomer.alternate_phone && (
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                          Otro teléfono para avisarle
+                        </span>
+                        <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-white/5">
+                          <PhoneCall className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <p className="font-medium font-mono text-sm">{currentCustomer.alternate_phone}</p>
+                          <span className="flex-1 truncate text-xs text-gray-400">
+                            {currentCustomer.alternate_phone_label
+                              ? `de ${currentCustomer.alternate_phone_label}`
+                              : 'sin aclarar de quién es'}
+                          </span>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => copyToClipboard(currentCustomer.alternate_phone || '')}>
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => window.open(`tel:${encodeURIComponent(currentCustomer.alternate_phone || '')}`)}>
+                            <PhoneCall className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100" onClick={() => window.open(`https://wa.me/${(currentCustomer.alternate_phone || '').replace(/[^\d]/g, '')}`)}>
+                            <MessageSquare className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Dirección */}
                     <div className="space-y-1.5">
                       <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Dirección</span>
