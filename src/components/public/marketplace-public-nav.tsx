@@ -57,6 +57,9 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
   const { user, signOut } = useAuth()
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
+  // Mientras se escribe en el buscador, la fila le hace lugar: se esconden los
+  // enlaces y el CTA para que el campo crezca en vez de quedar apretado.
+  const [searchFocused, setSearchFocused] = useState(false)
   const { branding } = usePlatformBranding(initialBranding)
 
   // Cerrar drawer al cambiar de ruta
@@ -163,11 +166,24 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
 
           {/* Search — desktop */}
           <div className="hidden min-w-0 flex-1 justify-center px-2 xl:flex">
-            <MarketplaceSearchBox compact className="w-full max-w-sm" buttonClassName="hidden" />
+            <MarketplaceSearchBox
+              compact
+              className={cn(
+                'w-full transition-[max-width] duration-300 ease-out',
+                searchFocused ? 'max-w-3xl' : 'max-w-sm'
+              )}
+              buttonClassName="hidden"
+              onFocusChange={setSearchFocused}
+            />
           </div>
 
           {/* Desktop nav links */}
-          <nav className="hidden items-center gap-0.5 lg:flex">
+          {/*
+            El colapso va con `xl:` a proposito: por debajo de ese ancho el
+            buscador no esta en la fila, asi que no habria nada que ganar
+            escondiendo los enlaces.
+          */}
+          <nav className={cn('hidden items-center gap-0.5 lg:flex', searchFocused && 'xl:hidden')}>
             {navItems.map((item) => {
               const active = isActive(item.href, item.exact)
               const Icon = item.icon
@@ -198,7 +214,10 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
             {/* SaaS CTA — desktop */}
             <Link
               href="/saas"
-              className="hidden items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 lg:flex"
+              className={cn(
+                'hidden items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 lg:flex',
+                searchFocused && 'xl:hidden'
+              )}
             >
               <Rocket className="h-3.5 w-3.5" />
               ¿Tenés un negocio?
