@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { clearProductDraft, readProductDraft, saveProductDraft } from '@/lib/products/product-draft'
 import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatPrice } from '@/lib/utils'
@@ -109,6 +110,109 @@ function FieldRequirement({ required = false, conditional }: { required?: boolea
   )
 }
 
+export function normalizeProductVariantsForForm(product: any): {
+  has_variants: boolean
+  variant_attribute_config: any[]
+  variants: any[]
+} {
+  if (!product) {
+    return {
+      has_variants: false,
+      variant_attribute_config: [],
+      variants: [],
+    }
+  }
+
+  const rawConfig = Array.isArray(product.variant_attribute_config)
+    ? product.variant_attribute_config
+    : []
+
+  const rawVariants = Array.isArray(product.variants) ? product.variants : []
+
+  const normalizedConfig = rawConfig
+    .filter((attr: any) => attr && typeof attr === 'object' && (attr.key || attr.name || attr.label))
+    .map((attr: any) => {
+      const key = String(attr.key || attr.id || attr.name || '').trim()
+      const label = String(attr.label || attr.name || attr.key || '').trim()
+      const rawOptions = Array.isArray(attr.options)
+        ? attr.options
+        : Array.isArray(attr.values)
+          ? attr.values
+          : []
+      const options = rawOptions
+        .map((opt: any) => (typeof opt === 'string' ? opt.trim() : typeof opt?.value === 'string' ? opt.value.trim() : typeof opt?.name === 'string' ? opt.name.trim() : ''))
+        .filter(Boolean)
+
+      return {
+        key: key || `attr_${Math.random().toString(36).substring(2, 7)}`,
+        label: label || 'Atributo',
+        control: (attr.control === 'color' ? 'color' : 'select') as 'select' | 'color' | 'text' | 'number',
+        options: options.length > 0 ? options : ['Default'],
+      }
+    })
+
+  const normalizedVariants = rawVariants
+    .filter((v: any) => v && typeof v === 'object')
+    .map((v: any, index: number) => {
+      let attributes: Record<string, string> = {}
+      if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
+        for (const [k, val] of Object.entries(v.attributes)) {
+          if (val !== undefined && val !== null) {
+            attributes[k] = String(val).trim()
+          }
+        }
+      } else if (Array.isArray(v.attributes)) {
+        for (const item of v.attributes) {
+          if (item && typeof item === 'object') {
+            const k = item.key || item.attribute_name || item.name || `attr_${index}`
+            const val = item.value || item.display_value || ''
+            if (k && val) attributes[String(k).trim()] = String(val).trim()
+          }
+        }
+      }
+
+      const attrKey = Object.entries(attributes)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, val]) => `${k}=${val}`)
+        .join('|')
+      const clientKey = v.clientKey || v.client_key || attrKey || v.id || `variant-${index + 1}`
+
+      const name = String(v.name || v.variant_name || Object.values(attributes).join(' / ') || `Variante ${index + 1}`).trim()
+      const sku = String(v.sku || (product.sku ? `${product.sku}-${index + 1}` : `VAR-${index + 1}`)).trim().toUpperCase()
+      const isValidUuid = typeof v.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.id)
+
+      return {
+        id: isValidUuid ? String(v.id) : undefined,
+        clientKey,
+        name: name || `Variante ${index + 1}`,
+        attributes,
+        sku: sku || `VAR-${index + 1}`,
+        barcode: v.barcode ? String(v.barcode).trim() : undefined,
+        purchasePrice: Number(v.purchasePrice ?? v.purchase_price ?? product.purchase_price ?? 0),
+        salePrice: Number(v.salePrice ?? v.sale_price ?? product.sale_price ?? 0),
+        wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null
+          ? Number(v.wholesalePrice)
+          : v.wholesale_price !== undefined && v.wholesale_price !== null
+            ? Number(v.wholesale_price)
+            : undefined,
+        minStock: Number(v.minStock ?? v.min_stock ?? 0),
+        stockQuantity: Number(v.stockQuantity ?? v.stock_quantity ?? 0),
+        isActive: v.isActive !== undefined ? Boolean(v.isActive) : v.is_active !== undefined ? Boolean(v.is_active) : true,
+      }
+    })
+
+  const rawHasVariants = Boolean(product.has_variants)
+  // If product.has_variants is true, but there are 0 attributes AND 0 variants, it's an unconfigured or empty variant flag.
+  // We automatically set has_variants: false so that editing seed/example products doesn't block with validation errors.
+  const effectiveHasVariants = rawHasVariants && (normalizedConfig.length > 0 || normalizedVariants.length > 0)
+
+  return {
+    has_variants: effectiveHasVariants,
+    variant_attribute_config: effectiveHasVariants ? normalizedConfig : [],
+    variants: effectiveHasVariants ? normalizedVariants : [],
+  }
+}
+
 export function ProductModal({
   product,
   isOpen,
@@ -122,6 +226,16 @@ export function ProductModal({
   const [activeTab, setActiveTab] = useState('basic')
   const [saveFeedback, setSaveFeedback] = useState<ProductSaveFeedback | null>(null)
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false)
+  // Se avisa cuando se recupero un borrador: si el formulario aparece lleno sin
+  // explicacion, quien lo abre no sabe si eso es lo guardado o lo que estaba
+  // escribiendo.
+  const [draftRestored, setDraftRestored] = useState(false)
+  // El producto se lee de un ref dentro del efecto de reset: asi el efecto puede
+  // depender solo de su `id` y no del objeto, que cambia de identidad en cada
+  // recarga de la lista.
+  const productRef = useRef(product)
+  productRef.current = product
+  const productId = product?.id ?? null
   const [isUploadingImages, setIsUploadingImages] = useState(false)
   const newlyUploadedImages = useRef(new Map<string, string>())
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
@@ -309,7 +423,13 @@ export function ProductModal({
   }, [suppliers])
 
   // Reset form when product changes
+  //
+  // Depende del `id`, no del objeto: `product` llega como prop y cualquier
+  // recarga de la lista lo reemplaza por uno nuevo con los mismos datos. Con el
+  // objeto en las dependencias, ese reemplazo disparaba `form.reset()` y borraba
+  // lo que la persona estaba escribiendo.
   useEffect(() => {
+    const product = productRef.current
     newlyUploadedImages.current.clear()
     setSaveFeedback(null)
     setActiveTab('basic')
@@ -317,7 +437,18 @@ export function ProductModal({
     // producto se arrastraba al siguiente y la eleccion no volvia a aparecer.
     setCreditChoice('pending')
 
+    // Un borrador de esta pestaña gana sobre los datos guardados: es lo que la
+    // persona estaba escribiendo y todavia no llego a guardar.
+    const draft = readProductDraft(productId)
+    if (draft) {
+      form.reset(draft as never)
+      setDraftRestored(true)
+      return
+    }
+    setDraftRestored(false)
+
     if (product) {
+      const variantData = normalizeProductVariantsForForm(product)
       form.reset({
         sku: product.sku || '',
         name: product.name || '',
@@ -350,11 +481,9 @@ export function ProductModal({
         is_active: product.is_active ?? true,
         visibility: (product as any).visibility || 'public',
         images: product.images || [],
-        has_variants: Boolean((product as any).has_variants),
-        variant_attribute_config: Array.isArray((product as any).variant_attribute_config)
-          ? (product as any).variant_attribute_config
-          : [],
-        variants: Array.isArray((product as any).variants) ? (product as any).variants : [],
+        has_variants: variantData.has_variants,
+        variant_attribute_config: variantData.variant_attribute_config,
+        variants: variantData.variants,
       })
     } else {
       form.reset({
@@ -387,7 +516,19 @@ export function ProductModal({
         variants: [],
       })
     }
-  }, [product, form])
+  }, [productId, form])
+
+  // Se guarda lo escrito en cada cambio, pero solo mientras el formulario esta
+  // sucio: sin eso, abrir un producto y cerrarlo dejaria un borrador identico a
+  // lo guardado y la proxima apertura avisaria de una recuperacion que no
+  // recupero nada.
+  useEffect(() => {
+    if (!isDirty) return
+    const subscription = form.watch((values) => {
+      saveProductDraft(productId, values as Record<string, unknown>)
+    })
+    return () => subscription.unsubscribe()
+  }, [form, isDirty, productId])
 
   const handleSaveCategory = async (categoryData: { name: string; description: string; parent_id: string | null; global_category_id: string | null; is_active: boolean }) => {
     const payload = {
@@ -496,6 +637,13 @@ export function ProductModal({
       has_offer: data.has_offer ?? false,
       installments_enabled: data.installments_enabled ?? false,
       installments_public: data.installments_public ?? true,
+      has_variants: Boolean(data.has_variants && (data.variant_attribute_config?.length ?? 0) > 0 && (data.variants?.length ?? 0) > 0),
+      variant_attribute_config: data.has_variants && Array.isArray(data.variant_attribute_config)
+        ? data.variant_attribute_config
+        : [],
+      variants: data.has_variants && Array.isArray(data.variants)
+        ? data.variants
+        : [],
       // Los planes se conservan siempre (aunque se desactive la financiación o
       // la visibilidad pública) para no perder la configuración cargada.
       installments_plans: Array.isArray(data.installments_plans)
@@ -544,6 +692,10 @@ export function ProductModal({
           .map(cleanupNewImage),
       )
       newlyUploadedImages.current.clear()
+      // Lo escrito ya esta en la base: el borrador dejaria de ser un respaldo
+      // para pasar a ser una version vieja que reaparece.
+      clearProductDraft(productId)
+      setDraftRestored(false)
       form.reset(values)
       onClose()
     } catch (error) {
@@ -586,6 +738,10 @@ export function ProductModal({
   const discardChangesAndClose = async () => {
     setShowDiscardConfirmation(false)
     await cleanupAllNewImages()
+    // Descartar es explicito: si el borrador sobreviviera, volveria al abrir y
+    // la persona habria descartado nada.
+    clearProductDraft(productId)
+    setDraftRestored(false)
     form.reset()
     onClose()
   }
@@ -724,6 +880,27 @@ export function ProductModal({
                 )}
               </div>
             </div>
+
+            {draftRestored && (
+              <Alert className="mx-4 md:mx-8 mt-4 w-auto shrink-0 border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Recuperamos lo que estabas cargando</AlertTitle>
+                <AlertDescription className="flex flex-wrap items-center gap-2">
+                  <span>Esto no está guardado todavía.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearProductDraft(productId)
+                      setDraftRestored(false)
+                      onClose()
+                    }}
+                    className="rounded-md border border-amber-400 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-amber-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-700 dark:hover:bg-amber-900/40"
+                  >
+                    Descartar y usar lo guardado
+                  </button>
+                </AlertDescription>
+              </Alert>
+            )}
 
             {saveFeedback && (
               <Alert variant="destructive" className="mx-4 md:mx-8 mt-4 w-auto shrink-0">

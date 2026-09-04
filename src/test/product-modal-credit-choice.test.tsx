@@ -95,6 +95,11 @@ describe('ProductModal — elección de datos de cuotas', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     websiteSettings = getWebsiteSettingsDefaults()
+    // El modal guarda un borrador en sessionStorage mientras el formulario está
+    // sucio, para no perder lo cargado si la pestaña se recarga. Sin limpiarlo,
+    // el borrador de un caso se restaura en el siguiente y salta el panel de
+    // elección, que es justo lo que estos casos verifican.
+    window.sessionStorage.clear()
   })
 
   it('no muestra nada de cuotas mientras la financiación está apagada', async () => {
