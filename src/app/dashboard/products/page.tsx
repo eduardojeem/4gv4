@@ -131,6 +131,14 @@ export default function ProductsPage() {
   });
 
   const [isPending, startTransition] = useTransition();
+
+  // La grilla reemplazaba toda la lista por esqueletos en CADA recarga, no solo
+  // en la primera: cualquier refresco hacia desaparecer los productos y volver a
+  // pintarlos, que es lo que se siente como "se actualiza solo". El esqueleto
+  // queda para cuando no hay nada que mostrar todavia; con datos en pantalla la
+  // recarga es silenciosa y solo se avisa con un indicador chico.
+  const isFirstLoad = (loading || isPending) && products.length === 0;
+  const isRefreshing = (loading || isPending) && products.length > 0;
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -773,6 +781,18 @@ export default function ProductsPage() {
           isLoading={loading || isPending}
         />
 
+        {/* Recarga con datos ya en pantalla: se avisa acá en vez de vaciar la
+            grilla. `aria-live` porque el cambio es visual y chico. */}
+        {isRefreshing && (
+          <p
+            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+            aria-live="polite"
+          >
+            <RefreshCw className="h-3 w-3 animate-spin" aria-hidden="true" />
+            Actualizando productos…
+          </p>
+        )}
+
         {/* Quick Filters Bar */}
         <QuickFiltersBar
           products={products}
@@ -909,7 +929,7 @@ export default function ProductsPage() {
                 onDuplicate={handleProductDuplicate}
                 onViewDetails={handleProductViewDetails}
                 onToggleActive={handleToggleActive}
-                loading={loading || isPending}
+                loading={isFirstLoad}
               />
             ) : viewMode === "grid" ? (
               <ProductGrid
@@ -921,7 +941,7 @@ export default function ProductsPage() {
                 onProductDuplicate={handleProductDuplicate}
                 onProductViewDetails={handleProductViewDetails}
                 onProductToggleActive={handleToggleActive}
-                loading={loading || isPending}
+                loading={isFirstLoad}
               />
             ) : (
               <ProductTable
@@ -936,13 +956,13 @@ export default function ProductsPage() {
                 onDuplicate={handleProductDuplicate}
                 onViewDetails={handleProductViewDetails}
                 onToggleActive={handleToggleActive}
-                loading={loading || isPending}
+                loading={isFirstLoad}
                 viewMode={viewMode === "compact" ? "compact" : "table"}
               />
             )}
 
             {/* Pagination */}
-            {!loading && displayedProducts.length > 0 && (
+            {!isFirstLoad && displayedProducts.length > 0 && (
               <div className="mt-6 border-t pt-4 border-gray-100 dark:border-gray-800">
                 <Pagination
                   currentPage={currentPage}
