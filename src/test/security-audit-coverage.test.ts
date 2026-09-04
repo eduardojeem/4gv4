@@ -129,3 +129,75 @@ describe('el CSV no ejecuta fórmulas', () => {
     expect(panel).toContain(`replace(/"/g, '""')`)
   })
 })
+
+describe('los números del encabezado son del rango, no de la página', () => {
+  const api = leer('src/app/api/admin/security/logs/route.ts')
+  const hook = leer('src/hooks/use-security-logs.ts')
+  const panel = leer('src/components/admin/system/security-panel.tsx')
+
+  it('cuenta en la base en vez de sobre las filas cargadas', () => {
+    // Con doce eventos críticos repartidos en seis páginas, la tarjeta decía 2
+    // mientras «eventos totales» sí venía del conteo completo.
+    expect(api).not.toContain('computeStats')
+    expect(api).toContain('countBySeverity')
+    expect(api).toContain("{ count: 'exact', head: true }")
+  })
+
+  it('aplica los mismos filtros que la lista', () => {
+    // Un conteo con otros filtros sería otro número, no el de lo que se ve.
+    const fn = api.slice(api.indexOf('async function countBySeverity'))
+    expect(fn.slice(0, 700)).toContain('applyBaseFilters')
+    expect(fn.slice(0, 700)).toContain("eq('organization_id', organizationId)")
+  })
+
+  it('devuelve null si el conteo falla, no cero', () => {
+    // Un cero afirmaría que no hay eventos críticos.
+    expect(api).toContain('return error ? null : count ?? 0')
+    expect(hook).toContain('criticalEvents: number | null')
+    expect(panel).toContain('stats.criticalEvents ?? "—"')
+  })
+
+  it('quita los dos números que nadie mostraba', () => {
+    // Se calculaban sobre la página y no aparecían en ninguna pantalla. Se busca
+    // la declaración, no cualquier mención: el comentario que documenta la
+    // eliminación también los nombra.
+    expect(hook).not.toMatch(/^\s*uniqueIPs[?]?:/m)
+    expect(hook).not.toMatch(/^\s*uniqueUsers[?]?:/m)
+    expect(api).not.toMatch(/uniqueUsers[:,]/)
+  })
+})
+
+describe('la API exige el módulo del plan', () => {
+  const api = leer('src/app/api/admin/security/logs/route.ts')
+
+  it('comprueba el módulo, no solo el rol', () => {
+    // La pantalla estaba envuelta en el control de plan; el endpoint no
+    // comprobaba nada y se consumía por HTTP directo.
+    expect(api).toContain("effectiveModules.includes('security')")
+    expect(api).toContain('SECURITY_MODULE_DISABLED')
+  })
+
+  it('no se lo exige al superadmin', () => {
+    // El superadmin no pertenece a una organización con plan.
+    const bloque = api.slice(api.indexOf("auth.user.role !== 'super_admin'"))
+    expect(bloque.indexOf('effectiveModules')).toBeGreaterThan(-1)
+    expect(bloque.indexOf('effectiveModules')).toBeLessThan(bloque.indexOf('const { searchParams }'))
+  })
+})
+
+describe('sin código muerto que aparente defensa', () => {
+  const api = leer('src/app/api/admin/security/logs/route.ts')
+
+  it('no queda el modo sin columna de organización', () => {
+    // La columna existe desde junio: el reintento y el filtro en JavaScript no
+    // podían ejecutarse nunca.
+    expect(api).not.toContain('SELECT_COLUMNS_LEGACY')
+    expect(api).not.toContain('rowBelongsToOrganization')
+    expect(api).not.toContain('organizationFromPayload')
+  })
+
+  it('acota la organización en SQL, antes de paginar', () => {
+    expect(api).toContain("if (organizationId) query = query.eq('organization_id', organizationId)")
+    expect(api).not.toContain('rawRows.filter')
+  })
+})

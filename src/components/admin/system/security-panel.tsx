@@ -338,7 +338,7 @@ export function SecurityPanel() {
         />
         <MetricCard
           title="Eventos Críticos"
-          value={stats.criticalEvents}
+          value={stats.criticalEvents ?? "—"}
           detail="Requieren atención inmediata"
           icon={XCircle}
           tone="danger"
@@ -347,7 +347,7 @@ export function SecurityPanel() {
         />
         <MetricCard
           title="Alta Prioridad"
-          value={stats.highRiskEvents}
+          value={stats.highRiskEvents ?? "—"}
           detail="Cambios y eventos sensibles"
           icon={AlertTriangle}
           tone="warning"
@@ -356,7 +356,7 @@ export function SecurityPanel() {
         />
         <MetricCard
           title="Intentos Fallidos"
-          value={stats.failedAttempts}
+          value={stats.failedAttempts ?? "—"}
           detail="Accesos bloqueados o denegados"
           icon={Lock}
           tone="muted"
@@ -1036,7 +1036,8 @@ function MetricCard({
   onClick,
 }: {
   title: string
-  value: number
+  /** Cadena cuando el conteo no se pudo obtener: se muestra un guion, no un cero. */
+  value: number | string
   detail: string
   icon: typeof Shield
   tone: 'default' | 'danger' | 'warning' | 'muted'

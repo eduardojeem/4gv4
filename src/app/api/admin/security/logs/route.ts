@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { sanitizeFilterTerm } from '@/lib/api/sanitize-search'
 import {
+  type AuditSeverity,
   actionsWithSeverity,
   describeAuditEvent,
   isAuditSeverity,
@@ -50,8 +52,10 @@ type SecurityLog = {
  */
 const EXPORT_MAX_ROWS = 5000
 
+/** Acciones que cuentan como intento fallido en la tarjeta de la pantalla. */
+const FAILED_ATTEMPT_ACTIONS = ['login_failed', 'permission_denied', 'unauthorized_admin_access_attempt']
+
 const SELECT_COLUMNS_WITH_ORG = 'id, user_id, action, resource, resource_id, details, new_values, ip_address, user_agent, created_at, severity, organization_id'
-const SELECT_COLUMNS_LEGACY = 'id, user_id, action, resource, resource_id, details, new_values, ip_address, user_agent, created_at, severity'
 
 function timeRangeToDate(value: string | null) {
   const now = Date.now()
@@ -105,34 +109,50 @@ function buildDetails(row: AuditLogRow) {
   return detail ? `${resource}${suffix} - ${detail}` : `${resource}${suffix}`
 }
 
-function organizationFromPayload(value: unknown) {
-  if (!value || typeof value !== 'object') return null
-  const record = value as Record<string, unknown>
-  return typeof record.organization_id === 'string' ? record.organization_id : null
+/**
+ * Los tres numeros que muestra la pantalla, contados sobre TODO el rango.
+ *
+ * Antes salian de `logs`, o sea de las veinte filas de la pagina, mientras
+ * "eventos totales" venia del conteo completo: en la misma fila convivian un
+ * total real y tres parciales que parecian totales. Con doce eventos criticos
+ * repartidos en seis paginas, la tarjeta decia 2.
+ *
+ * Se cuentan en la base con `head: true`, que no trae filas: son tres consultas
+ * de conteo sobre los mismos filtros que la lista.
+ */
+async function countBySeverity(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string | null,
+  filtros: { startDate: string; search: string; userId: string | null },
+  severity: AuditSeverity,
+) {
+  let query = applyBaseFilters(
+    admin.from('audit_log').select('id', { count: 'exact', head: true }),
+    { ...filtros, severity },
+  )
+  if (organizationId) query = query.eq('organization_id', organizationId)
+
+  const { count, error } = await query
+  return error ? null : count ?? 0
 }
 
-function rowBelongsToOrganization(row: AuditLogRow, organizationId: string, organizationUserIds: Set<string>) {
-  const payloadOrg = row.organization_id || organizationFromPayload(row.new_values) || organizationFromPayload(row.details)
-  return payloadOrg === organizationId || Boolean(row.user_id && organizationUserIds.has(row.user_id))
-}
+/**
+ * Los intentos fallidos no son una gravedad sino un conjunto de acciones, asi
+ * que se cuentan por accion.
+ */
+async function countFailedAttempts(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string | null,
+  filtros: { startDate: string; search: string; userId: string | null },
+) {
+  let query = applyBaseFilters(
+    admin.from('audit_log').select('id', { count: 'exact', head: true }),
+    { ...filtros, severity: null },
+  ).in('action', FAILED_ATTEMPT_ACTIONS)
+  if (organizationId) query = query.eq('organization_id', organizationId)
 
-function computeStats(logs: SecurityLog[], totalEvents: number) {
-  const uniqueUsers = new Set<string>()
-  const uniqueIPs = new Set<string>()
-
-  for (const log of logs) {
-    if (log.user && log.user !== 'Sistema') uniqueUsers.add(log.user)
-    if (log.ip && log.ip !== 'N/A') uniqueIPs.add(log.ip)
-  }
-
-  return {
-    totalEvents,
-    criticalEvents: logs.filter((log) => log.severity === 'critical').length,
-    highRiskEvents: logs.filter((log) => log.severity === 'high').length,
-    failedAttempts: logs.filter((log) => log.action?.includes('failed') || log.action === 'permission_denied').length,
-    uniqueUsers: uniqueUsers.size,
-    uniqueIPs: uniqueIPs.size,
-  }
+  const { count, error } = await query
+  return error ? null : count ?? 0
 }
 
 async function loadOrganizationUserIds(admin: ReturnType<typeof createAdminSupabase>, organizationId: string) {
@@ -241,6 +261,21 @@ export async function GET(request: NextRequest) {
     }
 
     organizationId = organization.id
+
+    // El modulo lo exigia solo la pantalla, envuelta en el control de plan. La
+    // API no comprobaba nada, asi que una tienda sin el pedia este endpoint por
+    // HTTP y recibia su registro completo: son datos propios, no una fuga entre
+    // tiendas, pero es una funcion paga consumida sin tenerla.
+    const { effectiveModules } = await getOrganizationPlanInfo(organizationId)
+    if (!effectiveModules.includes('security')) {
+      return NextResponse.json(
+        {
+          error: 'El registro de seguridad no está incluido en tu plan.',
+          code: 'SECURITY_MODULE_DISABLED',
+        },
+        { status: 403 }
+      )
+    }
   }
 
   const { searchParams } = request.nextUrl
@@ -271,37 +306,28 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const runQuery = async (withOrganizationColumn: boolean) => {
+  // La organizacion se acota en SQL, antes de paginar. Habia ademas un modo
+  // "sin columna de organizacion" que reintentaba con menos campos y un filtro
+  // en JavaScript que volvia a comprobar la pertenencia: la columna existe desde
+  // junio, asi que ninguno de los dos podia ejecutarse. Aparentaban una defensa
+  // que no estaba haciendo nada, y el filtro en JavaScript ademas habria hecho
+  // que el conteo de paginas no coincidiera con lo devuelto.
+  const scopedQuery = () => {
     let query = applyBaseFilters(
-      admin
-        .from('audit_log')
-        .select(withOrganizationColumn ? SELECT_COLUMNS_WITH_ORG : SELECT_COLUMNS_LEGACY, { count: 'exact' }),
+      admin.from('audit_log').select(SELECT_COLUMNS_WITH_ORG, { count: 'exact' }),
       { startDate, severity, search, userId }
     )
-
-    if (organizationId && withOrganizationColumn) {
-      query = query.eq('organization_id', organizationId)
-    } else if (organizationId && organizationUserIds && organizationUserIds.size > 0) {
-      query = query.in('user_id', Array.from(organizationUserIds))
-    }
-
-    return query.order('created_at', { ascending: false }).range(from, to)
+    if (organizationId) query = query.eq('organization_id', organizationId)
+    return query
   }
 
-  let response = await runQuery(true)
-  if (response.error && /organization_id/i.test(response.error.message || '')) {
-    response = await runQuery(false)
-  }
+  const response = await scopedQuery().order('created_at', { ascending: false }).range(from, to)
 
   if (response.error) {
     return NextResponse.json({ error: response.error.message || 'No se pudieron cargar los eventos de seguridad.' }, { status: 500 })
   }
 
-  const rawRows = ((response.data || []) as AuditLogRow[])
-  const scopedRows = organizationId && organizationUserIds
-    ? rawRows.filter((row) => rowBelongsToOrganization(row, organizationId, organizationUserIds))
-    : rawRows
-
+  const scopedRows = (response.data || []) as AuditLogRow[]
   const userIds = Array.from(new Set(scopedRows.map((row) => row.user_id).filter(Boolean))) as string[]
   const profileUserIds = organizationUserIds
     ? Array.from(new Set([...Array.from(organizationUserIds), ...userIds]))
@@ -322,9 +348,21 @@ export async function GET(request: NextRequest) {
       ).values()
     ).sort((a, b) => a.name.localeCompare(b.name))
 
+  // Los tres conteos van sobre el rango completo, no sobre la pagina. Si alguno
+  // falla se devuelve null en vez de un cero: un cero afirmaria que no hay
+  // eventos criticos, que es exactamente lo contrario de lo que se sabe.
+  const filtrosDeConteo = { startDate, search, userId }
+  const [criticalEvents, highRiskEvents, failedAttempts] = await Promise.all([
+    countBySeverity(admin, organizationId, filtrosDeConteo, 'critical'),
+    countBySeverity(admin, organizationId, filtrosDeConteo, 'high'),
+    countFailedAttempts(admin, organizationId, filtrosDeConteo),
+  ])
+
+  const stats = { totalEvents: totalCount, criticalEvents, highRiskEvents, failedAttempts }
+
   return NextResponse.json({
     logs,
-    stats: computeStats(logs, totalCount),
+    stats,
     totalCount,
     page,
     pageSize,

@@ -19,11 +19,17 @@ export interface SecurityLog {
 
 export interface SecurityStats {
   totalEvents: number
-  criticalEvents: number
-  highRiskEvents: number
-  failedAttempts: number
-  uniqueUsers: number
-  uniqueIPs: number
+  /**
+   * Contados sobre todo el rango, no sobre la pagina. `null` cuando la consulta
+   * de conteo fallo: un cero afirmaria que no hay eventos criticos, que es lo
+   * contrario de lo que se sabe.
+   *
+   * Se quitaron `uniqueUsers` y `uniqueIPs`: se calculaban sobre la pagina y no
+   * los mostraba ninguna pantalla.
+   */
+  criticalEvents: number | null
+  highRiskEvents: number | null
+  failedAttempts: number | null
 }
 
 export type SecurityLogFilters = {
@@ -56,8 +62,6 @@ const EMPTY_STATS: SecurityStats = {
   criticalEvents: 0,
   highRiskEvents: 0,
   failedAttempts: 0,
-  uniqueUsers: 0,
-  uniqueIPs: 0,
 }
 
 interface SecurityLogsCache {
