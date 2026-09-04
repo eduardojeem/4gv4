@@ -59,7 +59,7 @@ import {
   type RepairFormData
 } from '@/schemas'
 import { CustomerSelectorV3 } from './repairs/CustomerSelectorV3'
-import { QuickCustomerModal, type QuickCustomerData } from './repairs/QuickCustomerModal'
+import { CustomerQuickCreateDialog, type QuickCustomerData } from './repairs/CustomerQuickCreateDialog'
 import { PatternDrawer } from './repairs/PatternDrawer'
 import { AppError } from '@/lib/errors'
 // import { uploadFile } from '@/lib/supabase-storage'
@@ -1113,7 +1113,20 @@ export function RepairFormDialogV2({
               <CardContent className="pt-4 space-y-3">
                 <CustomerSelectorV3
                   value={watch('existingCustomerId')}
-                  initialCustomer={selectedQuickCustomer || (initialData?.existingCustomerId ? {
+                  initialCustomer={selectedQuickCustomer ? {
+                    // El cliente recien guardado viene con los campos como los
+                    // devuelve la API, donde faltar es `null`. Este selector los
+                    // pinta directo, asi que se completan aca.
+                    id: selectedQuickCustomer.id,
+                    name: selectedQuickCustomer.name || '',
+                    phone: selectedQuickCustomer.phone || '',
+                    email: selectedQuickCustomer.email || '',
+                    ruc: selectedQuickCustomer.ruc || '',
+                    alternate_phone: selectedQuickCustomer.alternate_phone ?? null,
+                    alternate_phone_label: selectedQuickCustomer.alternate_phone_label ?? null,
+                    customer_type: selectedQuickCustomer.customer_type || undefined,
+                    is_wholesale: selectedQuickCustomer.is_wholesale,
+                  } : (initialData?.existingCustomerId ? {
                     id: initialData.existingCustomerId,
                     name: initialData.customerName || '',
                     phone: initialData.customerPhone || '',
@@ -1181,6 +1194,18 @@ export function RepairFormDialogV2({
                           <div className="flex items-center gap-1.5">
                             <Phone className="h-3 w-3 text-cyan-600 dark:text-cyan-400" />
                             <span>{watch('customerPhone')}</span>
+                          </div>
+                        )}
+                        {selectedQuickCustomer?.alternate_phone && (
+                          <div
+                            className="flex items-center gap-1.5 bg-indigo-50/70 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40"
+                            title="Teléfono alternativo para avisarle"
+                          >
+                            <Phone className="h-3 w-3 text-indigo-500" />
+                            <span>{selectedQuickCustomer.alternate_phone}</span>
+                            {selectedQuickCustomer.alternate_phone_label && (
+                              <span className="text-[10px] opacity-80">({selectedQuickCustomer.alternate_phone_label})</span>
+                            )}
                           </div>
                         )}
                         {watch('customerEmail') && (
@@ -3018,14 +3043,16 @@ export function RepairFormDialogV2({
     )}
 
     {/* Quick Customer Creation/Edit Modal */}
-    <QuickCustomerModal
+    {/* Mismo dialogo que usan el selector de reparaciones y el checkout del
+        POS: antes habia uno aparte solo para esta pantalla. */}
+    <CustomerQuickCreateDialog
       open={showQuickCustomerModal}
       onClose={() => {
         setShowQuickCustomerModal(false)
         setEditingCustomer(null)
       }}
-      onCustomerCreated={handleQuickCustomerCreated}
-      onCustomerUpdated={handleQuickCustomerUpdated}
+      onCreated={(_id, customer) => handleQuickCustomerCreated(customer)}
+      onUpdated={handleQuickCustomerUpdated}
       customerToEdit={editingCustomer}
     />
 

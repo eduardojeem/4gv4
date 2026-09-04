@@ -1,6 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+/**
+ * Alta y edicion rapida de un cliente, en un solo dialogo.
+ *
+ * Habia dos: este —solo alta, usado por el selector de reparaciones y por el
+ * checkout del POS— y `QuickCustomerModal` —alta y edicion, usado por el
+ * formulario de reparacion. Pedian los mismos datos y pegaban al mismo endpoint,
+ * pero cada uno con su propio estado, su propia validacion y su propia forma de
+ * armar el cliente que devolvia. Arreglar algo en uno y olvidar el otro es
+ * exactamente lo que venia pasando: el label del telefono alternativo se
+ * agrego primero aca y tardo en llegar al otro.
+ */
+
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -17,29 +29,26 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Save, X, UserPlus, Sparkles, CheckCircle2, Building2, Globe } from 'lucide-react'
+import { Loader2, Save, X, UserPlus, UserCog, Sparkles, CheckCircle2, Building2, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Customer } from '@/hooks/use-customers'
 import { validateCustomerContact, normalizePhone, MIN_PHONE_DIGITS, ALTERNATE_PHONE_LABELS } from '@/lib/customers/contact-rules'
 
-// El apellido deja de ser obligatorio: una empresa no tiene, y exigirlo obligaba
-// a inventar uno para poder cargarla. El telefono si, y ademas se admite un
-// contacto alternativo porque el celular del cliente suele ser el equipo que
-// dejo en el taller.
+// Un solo campo de nombre en vez de nombre + apellido: la base guarda un solo
+// `name`, una empresa no tiene apellido, y partir el nombre para editarlo y
+// volver a unirlo al guardar reordenaba lo que la persona habia escrito.
 const customerSchema = z
     .object({
-        first_name: z.string().min(2, 'El nombre o razón social debe tener al menos 2 caracteres'),
-        last_name: z.string().optional().or(z.literal('')),
+        name: z.string().min(2, 'El nombre o razón social debe tener al menos 2 caracteres'),
         phone: z.string().min(MIN_PHONE_DIGITS, `El teléfono debe tener al menos ${MIN_PHONE_DIGITS} dígitos`),
         alternate_phone: z.string().optional().or(z.literal('')),
         alternate_phone_label: z.string().optional().or(z.literal('')),
         email: z.string().email('Email inválido').optional().or(z.literal('')),
         ruc: z.string().optional().or(z.literal('')),
-        is_wholesale: z.boolean().optional(),
     })
     .superRefine((data, ctx) => {
         const errors = validateCustomerContact({
-            name: data.first_name,
+            name: data.name,
             phone: data.phone,
             email: data.email,
             alternatePhone: data.alternate_phone,
@@ -56,17 +65,67 @@ const customerSchema = z
 
 type CustomerFormData = z.infer<typeof customerSchema>
 
+/**
+ * Lo minimo que hace falta para abrir la edicion, y lo unico que las pantallas
+ * leen del cliente que se acaba de guardar. Deliberadamente mas chico que
+ * `Customer`: el formulario de reparacion arma uno de estos con lo que tiene a
+ * mano, sin poder completar las tres decenas de campos de un cliente entero.
+ */
+export type QuickCustomerData = {
+    id: string
+    name?: string | null
+    phone?: string | null
+    email?: string | null
+    alternate_phone?: string | null
+    alternate_phone_label?: string | null
+    ruc?: string | null
+    customer_type?: string | null
+    is_wholesale?: boolean
+}
+
+/** Lo que devuelve la API al crear o actualizar. */
+type SavedCustomerRow = {
+    id: string
+    customer_code?: string | null
+    name?: string | null
+    phone?: string | null
+    alternate_phone?: string | null
+    alternate_phone_label?: string | null
+    email?: string | null
+    ruc?: string | null
+    customer_type?: string | null
+    status?: string | null
+    created_at?: string | null
+}
+
 interface CustomerQuickCreateDialogProps {
     open: boolean
     onClose: () => void
-    onCreated: (customerId: string, customerData: Customer) => void
+    /** Se llama al crear. El id va aparte porque varios consumidores lo usan para autoseleccionar. */
+    onCreated?: (customerId: string, customerData: Customer & { is_wholesale?: boolean }) => void
+    /** Se llama al editar. Sin esto el dialogo solo da de alta. */
+    onUpdated?: (customerData: Customer & { is_wholesale?: boolean }) => void
+    /** Con un cliente acá el dialogo pasa a modo edicion. */
+    customerToEdit?: QuickCustomerData | null
+}
+
+const EMPTY_FORM: CustomerFormData = {
+    name: '',
+    phone: '',
+    alternate_phone: '',
+    alternate_phone_label: '',
+    email: '',
+    ruc: '',
 }
 
 export function CustomerQuickCreateDialog({
     open,
     onClose,
     onCreated,
+    onUpdated,
+    customerToEdit = null,
 }: CustomerQuickCreateDialogProps) {
+    const isEditing = Boolean(customerToEdit)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isWholesale, setIsWholesale] = useState(false)
     const [sendWebInvite, setSendWebInvite] = useState(false)
@@ -79,17 +138,88 @@ export function CustomerQuickCreateDialog({
         reset,
     } = useForm<CustomerFormData>({
         resolver: zodResolver(customerSchema),
-        defaultValues: {
-            first_name: '',
-            last_name: '',
-            phone: '',
-            alternate_phone: '',
-            alternate_phone_label: '',
-            email: '',
-            ruc: '',
-            is_wholesale: false,
-        }
+        defaultValues: EMPTY_FORM,
     })
+
+    // Al abrir se carga lo que hay que editar, o se limpia para un alta nueva.
+    // Sin esto el formulario conservaba lo de la vez anterior.
+    useEffect(() => {
+        if (!open) return
+
+        if (customerToEdit) {
+            reset({
+                name: customerToEdit.name || '',
+                phone: customerToEdit.phone || '',
+                alternate_phone: customerToEdit.alternate_phone || '',
+                alternate_phone_label: customerToEdit.alternate_phone_label || '',
+                email: customerToEdit.email || '',
+                ruc: customerToEdit.ruc || '',
+            })
+            setIsWholesale(Boolean(
+                customerToEdit.is_wholesale ||
+                customerToEdit.customer_type === 'wholesale' ||
+                customerToEdit.customer_type === 'mayorista'
+            ))
+        } else {
+            reset(EMPTY_FORM)
+            setIsWholesale(false)
+        }
+        // La invitacion al portal nunca se arrastra: es una accion, no un dato
+        // del cliente, y reenviarla sin querer manda un correo de verdad.
+        setSendWebInvite(false)
+    }, [open, customerToEdit, reset])
+
+    /**
+     * Arma el cliente que se devuelve a la pantalla. Estaba escrito cuatro veces
+     * entre los dos dialogos —alta y edicion en cada uno— con las mismas
+     * caidas de respaldo copiadas a mano.
+     */
+    function toCustomer(row: SavedCustomerRow, data: CustomerFormData): Customer & { is_wholesale?: boolean } {
+        const alternatePhone = data.alternate_phone?.trim() ? normalizePhone(data.alternate_phone) : null
+        const createdAt = row.created_at || new Date().toISOString()
+
+        return {
+            id: row.id,
+            customerCode: row.customer_code || `CLI-${String(row.id).slice(0, 6)}`,
+            name: String(row.name || data.name).trim(),
+            phone: row.phone || normalizePhone(data.phone),
+            alternate_phone: row.alternate_phone ?? alternatePhone,
+            alternate_phone_label: row.alternate_phone_label ?? (alternatePhone ? (data.alternate_phone_label || null) : null),
+            email: row.email || data.email || '',
+            ruc: row.ruc || data.ruc || '',
+            customer_type: (row.customer_type as Customer['customer_type']) || (isWholesale ? 'wholesale' : 'regular'),
+            is_wholesale: isWholesale,
+            status: (row.status as Customer['status']) || 'active',
+            total_purchases: 0,
+            total_repairs: 0,
+            registration_date: createdAt,
+            created_at: createdAt,
+            last_visit: createdAt,
+            last_activity: createdAt,
+            address: '',
+            city: '',
+            credit_score: 0,
+            segment: isWholesale ? 'wholesale' : 'regular',
+            satisfaction_score: 0,
+            lifetime_value: 0,
+            avg_order_value: 0,
+            purchase_frequency: 'low',
+            preferred_contact: 'email',
+            birthday: '',
+            loyalty_points: 0,
+            credit_limit: 0,
+            current_balance: 0,
+            pending_amount: 0,
+            notes: '',
+            tags: [],
+            referral_source: '',
+            discount_percentage: 0,
+            payment_terms: 'Contado',
+            assigned_salesperson: 'Sin asignar',
+            last_purchase_amount: 0,
+            total_spent_this_year: 0,
+        }
+    }
 
     const onSubmit = async (data: CustomerFormData) => {
         if (sendWebInvite && !data.email?.trim()) {
@@ -99,49 +229,44 @@ export function CustomerQuickCreateDialog({
 
         setIsSubmitting(true)
         try {
+            const alternatePhone = data.alternate_phone?.trim() ? normalizePhone(data.alternate_phone) : null
+            const payload = {
+                name: data.name.trim(),
+                phone: normalizePhone(data.phone),
+                alternate_phone: alternatePhone,
+                // Sin telefono, la aclaracion de quien atiende no significa nada.
+                alternate_phone_label: alternatePhone ? (data.alternate_phone_label || null) : null,
+                email: data.email || null,
+                ruc: data.ruc || null,
+                customer_type: isWholesale ? 'wholesale' : 'regular',
+                is_wholesale: isWholesale,
+            }
+
             const response = await fetch('/api/repairs/customers', {
-                method: 'POST',
+                method: isEditing ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: `${data.first_name} ${data.last_name || ''}`.trim(),
-                    phone: normalizePhone(data.phone),
-                    alternate_phone: data.alternate_phone ? normalizePhone(data.alternate_phone) : null,
-                    alternate_phone_label: data.alternate_phone?.trim() ? (data.alternate_phone_label || null) : null,
-                    email: data.email || null,
-                    ruc: data.ruc || null,
-                    customer_type: isWholesale ? 'wholesale' : 'regular',
-                    is_wholesale: isWholesale,
-                }),
+                body: JSON.stringify(isEditing ? { id: customerToEdit!.id, ...payload } : payload),
             })
 
-            const payload = await response.json().catch(() => null) as {
+            const body = await response.json().catch(() => null) as {
                 success?: boolean
-                data?: {
-                    id: string
-                    customer_code?: string | null
-                    name?: string | null
-                    phone?: string | null
-                    email?: string | null
-                    ruc?: string | null
-                    customer_type?: string | null
-                    status?: string | null
-                    created_at?: string | null
-                }
+                data?: SavedCustomerRow
                 error?: string
             } | null
 
-            if (!response.ok || !payload?.success || !payload.data) {
-                throw new Error(payload?.error || 'Error al crear el cliente')
+            if (!response.ok || !body?.success || !body.data) {
+                throw new Error(body?.error || (isEditing ? 'Error al actualizar el cliente' : 'Error al crear el cliente'))
             }
 
-            const customerRow = payload.data
+            const saved = toCustomer(body.data, data)
+            toast.success(`Cliente "${saved.name}" ${isEditing ? 'actualizado' : 'creado'} exitosamente`)
 
-            toast.success('Cliente creado exitosamente')
-
-            // Enviar invitación para el portal de clientes
-            if (sendWebInvite && customerRow.id && data.email?.trim()) {
+            // La invitacion se manda despues de guardar y su fallo se avisa
+            // aparte: reportarlo como error del alta seria enganoso, porque el
+            // cliente ya quedo creado y volverian a cargarlo duplicado.
+            if (sendWebInvite && data.email?.trim()) {
                 try {
-                    const inviteRes = await fetch(`/api/customers/${customerRow.id}/create-account`, {
+                    const inviteRes = await fetch(`/api/customers/${saved.id}/create-account`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ sendInvite: true }),
@@ -157,53 +282,19 @@ export function CustomerQuickCreateDialog({
                 }
             }
 
-            const parts = String(customerRow.name || '').trim().split(/\s+/)
-            const created: Customer = {
-                id: customerRow.id,
-                customerCode: customerRow.customer_code || `CLI-${String(customerRow.id).slice(0, 6)}`,
-                name: String(customerRow.name || '').trim() || [parts[0], parts.slice(1).join(' ')].filter(Boolean).join(' ').trim(),
-                phone: customerRow.phone || '',
-                email: customerRow.email || '',
-                ruc: customerRow.ruc || '',
-                customer_type: (customerRow.customer_type as Customer['customer_type']) || (isWholesale ? 'wholesale' : 'regular'),
-                status: (customerRow.status as Customer['status']) || 'active',
-                total_purchases: 0,
-                total_repairs: 0,
-                registration_date: customerRow.created_at || new Date().toISOString(),
-                created_at: customerRow.created_at || new Date().toISOString(),
-                last_visit: customerRow.created_at || new Date().toISOString(),
-                last_activity: customerRow.created_at || new Date().toISOString(),
-                address: '',
-                city: '',
-                credit_score: 0,
-                segment: isWholesale ? 'wholesale' : 'regular',
-                satisfaction_score: 0,
-                lifetime_value: 0,
-                avg_order_value: 0,
-                purchase_frequency: 'low',
-                preferred_contact: 'email',
-                birthday: '',
-                loyalty_points: 0,
-                credit_limit: 0,
-                current_balance: 0,
-                pending_amount: 0,
-                notes: '',
-                tags: [],
-                referral_source: '',
-                discount_percentage: 0,
-                payment_terms: 'Contado',
-                assigned_salesperson: 'Sin asignar',
-                last_purchase_amount: 0,
-                total_spent_this_year: 0
+            if (isEditing) {
+                onUpdated?.(saved)
+            } else {
+                onCreated?.(saved.id, saved)
             }
-            onCreated(customerRow.id, created)
-            reset()
+
+            reset(EMPTY_FORM)
             setIsWholesale(false)
             setSendWebInvite(false)
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error)
-            console.error('Error creating customer:', message)
-            toast.error(message || 'Error al crear el cliente')
+            console.error('Error al guardar el cliente:', message)
+            toast.error(message || 'Error al guardar el cliente')
         } finally {
             setIsSubmitting(false)
         }
@@ -211,7 +302,7 @@ export function CustomerQuickCreateDialog({
 
     const handleClose = () => {
         if (!isSubmitting) {
-            reset()
+            reset(EMPTY_FORM)
             setIsWholesale(false)
             setSendWebInvite(false)
             onClose()
@@ -224,57 +315,42 @@ export function CustomerQuickCreateDialog({
                 <DialogHeader className="p-5 pb-3 border-b bg-white dark:bg-slate-950">
                     <div className="flex items-center gap-2.5">
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
-                            <UserPlus className="h-5 w-5" />
+                            {isEditing ? <UserCog className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />}
                         </div>
                         <div>
-                            <DialogTitle className="text-lg font-bold">Crear Nuevo Cliente</DialogTitle>
+                            <DialogTitle className="text-lg font-bold">
+                                {isEditing ? 'Editar Cliente' : 'Crear Nuevo Cliente'}
+                            </DialogTitle>
                             <DialogDescription className="text-xs">
-                                Ingresa los datos básicos para registrar al cliente en el sistema.
+                                {isEditing
+                                    ? 'Actualizá los datos de contacto del cliente.'
+                                    : 'Ingresa los datos básicos para registrar al cliente en el sistema.'}
                             </DialogDescription>
                         </div>
                     </div>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-3.5">
-                    <div className="grid grid-cols-2 gap-3">
-                        {/* First Name */}
-                        <div className="space-y-1.5">
-                            <Label htmlFor="first_name" className="text-xs font-bold">
-                                Nombre o razón social <span className="text-red-500">*</span>
-                            </Label>
-                            <Input
-                                id="first_name"
-                                {...register('first_name')}
-                                placeholder="Juan"
-                                className={cn("h-10 text-xs font-medium", errors.first_name && 'border-red-500')}
-                                disabled={isSubmitting}
-                                autoFocus
-                            />
-                            {errors.first_name && (
-                                <p className="text-[11px] text-red-500">{errors.first_name.message}</p>
-                            )}
-                        </div>
-
-                        {/* Last Name */}
-                        <div className="space-y-1.5">
-                            <Label htmlFor="last_name" className="text-xs font-bold">
-                                Apellido <span className="text-[10px] text-muted-foreground font-normal">(opcional)</span>
-                            </Label>
-                            <Input
-                                id="last_name"
-                                {...register('last_name')}
-                                placeholder="Pérez"
-                                className={cn("h-10 text-xs font-medium", errors.last_name && 'border-red-500')}
-                                disabled={isSubmitting}
-                            />
-                            {errors.last_name && (
-                                <p className="text-[11px] text-red-500">{errors.last_name.message}</p>
-                            )}
-                        </div>
+                    {/* Nombre */}
+                    <div className="space-y-1.5">
+                        <Label htmlFor="name" className="text-xs font-bold">
+                            Nombre o razón social <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                            id="name"
+                            {...register('name')}
+                            placeholder="Juan Pérez / Comercial San Miguel S.A."
+                            className={cn("h-10 text-xs font-medium", errors.name && 'border-red-500')}
+                            disabled={isSubmitting}
+                            autoFocus
+                        />
+                        {errors.name && (
+                            <p className="text-[11px] text-red-500">{errors.name.message}</p>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* Phone */}
+                        {/* Teléfono */}
                         <div className="space-y-1.5">
                             <Label htmlFor="phone" className="text-xs font-bold">
                                 Teléfono <span className="text-red-500">*</span>
@@ -335,7 +411,7 @@ export function CustomerQuickCreateDialog({
                         ) : null}
 
                         {/* RUC / CI */}
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 sm:col-span-2">
                             <Label htmlFor="ruc" className="text-xs font-bold">
                                 RUC / C.I. <span className="text-[10px] text-muted-foreground font-normal">(opcional)</span>
                             </Label>
@@ -486,12 +562,12 @@ export function CustomerQuickCreateDialog({
                             {isSubmitting ? (
                                 <>
                                     <Loader2 className="h-4 w-4 animate-spin" />
-                                    Creando...
+                                    {isEditing ? 'Guardando...' : 'Creando...'}
                                 </>
                             ) : (
                                 <>
                                     <Save className="h-3.5 w-3.5" />
-                                    Crear Cliente
+                                    {isEditing ? 'Guardar Cambios' : 'Crear Cliente'}
                                 </>
                             )}
                         </Button>
