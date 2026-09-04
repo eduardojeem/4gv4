@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { sanitizeFilterTerm } from '@/lib/api/sanitize-search'
 import {
   actionsWithSeverity,
   describeAuditEvent,
@@ -200,7 +201,17 @@ function applyBaseFilters(query: any, params: {
   }
 
   if (params.search) {
-    const escaped = params.search.replace(/[%_,]/g, '\\$&')
+    // La cadena de filtro se arma a mano, asi que el termino no puede traer
+    // caracteres que rompan su gramatica. Antes se escapaban con barra
+    // invertida `%`, `_` y la coma, y los parentesis —que en PostgREST agrupan
+    // condiciones— pasaban tal cual.
+    //
+    // Se usa la variante que conserva el punto y el guion bajo: el helper
+    // general los borra, y aca son parte del dato (IPs, acciones en snake_case,
+    // rutas de API).
+    const escaped = sanitizeFilterTerm(params.search)
+    if (!escaped) return nextQuery
+
     nextQuery = nextQuery.or([
       `action.ilike.%${escaped}%`,
       `resource.ilike.%${escaped}%`,
