@@ -82,10 +82,13 @@ describe('el intento de acceso no autorizado queda atribuido', () => {
     expect(bloque.slice(0, 500)).toContain("severity: 'low'")
   })
 
-  it('la resolución de organización existe una sola vez', () => {
-    // Estaba duplicada: la copia de abajo es la que hacía notar que la de
-    // arriba faltaba.
-    expect(wrapper.split('getCurrentOrganizationContext(').length - 1).toBe(1)
+  it('la resolución de organización vive en un solo lugar', () => {
+    // Estaba duplicada dentro del propio wrapper —la copia de abajo es la que
+    // hacía notar que la de arriba faltaba— y ahora es compartida, porque el
+    // registro de auditoría también la necesita fuera de este envoltorio.
+    expect(wrapper).toContain("resolveUserOrganizationId } from '@/lib/saas/context'")
+    expect(wrapper).not.toContain('async function resolveUserOrganizationId')
+    expect(wrapper).not.toContain('getCurrentOrganizationContext(')
   })
 })
 

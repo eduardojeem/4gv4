@@ -21,6 +21,9 @@ async function handler(request: NextRequest, context: { user: { id: string; emai
       action: 'setup_storage',
       resource: 'storage',
       resource_id: 'buckets',
+      // Sin organizacion a proposito: prepara el almacenamiento de la
+      // plataforma, no de un comercio. Lo ve el registro de superadmin.
+      severity: 'medium',
       new_values: { success: true }
     })
 

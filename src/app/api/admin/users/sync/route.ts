@@ -173,6 +173,8 @@ async function handler(_request: Request, context: { user: { id: string; email?:
       action: 'user_sync',
       resource: 'users',
       resource_id: 'bulk',
+      organization_id: context.organizationId,
+      severity: 'low',
       new_values: {
         total: results.total,
         updated: results.updated,

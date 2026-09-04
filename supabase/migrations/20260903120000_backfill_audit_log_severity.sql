@@ -32,6 +32,16 @@ set severity = case action
   when 'data_export'                        then 'medium'
   when 'bulk_operation'                     then 'medium'
   when 'update_organization_settings'       then 'medium'
+  when 'sync_role'                          then 'high'
+  when 'bulk_user_import'                   then 'medium'
+  when 'user_sync'                          then 'low'
+  when 'setup_storage'                      then 'medium'
+  when 'update_system_settings'                    then 'high'
+  when 'update_admin_user'                         then 'high'
+  when 'assign_role'                               then 'high'
+  when 'enforce_user_quota'                        then 'medium'
+  when 'update_website_settings_batch'             then 'medium'
+  when 'update_website_setting'                    then 'low'
   when 'admin_api_access'                   then 'low'
   when 'create'                             then 'low'
   when 'update'                             then 'low'
@@ -49,7 +59,9 @@ where severity is null
     'grant_admin_migration', 'suspicious_activity', 'update_user_status',
     'assign_role_by_email', 'delete', 'login_failed', 'permission_denied',
     'data_export', 'bulk_operation', 'update_organization_settings',
-    'admin_api_access', 'create', 'update', 'login', 'logout', 'password_change'
+    'admin_api_access', 'create', 'update', 'login', 'logout', 'password_change',
+    'sync_role', 'bulk_user_import', 'user_sync', 'setup_storage',
+    'update_system_settings', 'update_admin_user', 'assign_role', 'enforce_user_quota', 'update_website_settings_batch', 'update_website_setting'
   );
 
 commit;

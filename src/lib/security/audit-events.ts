@@ -40,6 +40,16 @@ export const AUDIT_EVENTS: Record<string, AuditEventDefinition> = {
   update_user_status: { event: 'Cambio de estado de usuario', severity: 'high' },
   assign_role_by_email: { event: 'Asignacion de rol por correo', severity: 'high' },
   update_organization_settings: { event: 'Cambio de ajustes del sistema', severity: 'medium' },
+  sync_role: { event: 'Sincronizacion de rol', severity: 'high' },
+  bulk_user_import: { event: 'Importacion masiva de usuarios', severity: 'medium' },
+  user_sync: { event: 'Sincronizacion de usuarios', severity: 'low' },
+  setup_storage: { event: 'Preparacion de almacenamiento', severity: 'medium' },
+  update_system_settings: { event: 'Cambio de ajustes de la plataforma', severity: 'high' },
+  update_admin_user: { event: 'Modificacion de usuario administrado', severity: 'high' },
+  assign_role: { event: 'Asignacion de rol', severity: 'high' },
+  enforce_user_quota: { event: 'Ajuste de cupo de usuarios', severity: 'medium' },
+  update_website_settings_batch: { event: 'Cambio masivo del sitio publico', severity: 'medium' },
+  update_website_setting: { event: 'Cambio del sitio publico', severity: 'low' },
 }
 
 /** Gravedad por defecto de un evento que todavia no esta en el catalogo. */

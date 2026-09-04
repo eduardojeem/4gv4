@@ -2,43 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
-import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { resolveUserOrganizationId } from '@/lib/saas/context'
 import { logger } from '@/lib/logger'
-
-/**
- * Organizacion a la que pertenece quien llama: primero la activa, y si no hay,
- * su membresia mas antigua.
- *
- * Se extrajo para poder resolverla ANTES de registrar un intento de acceso no
- * autorizado. Ese registro se escribia veinticinco lineas por encima de donde
- * se resolvia la organizacion, asi que salia sin ella — y la pantalla de
- * seguridad filtra por esa columna, de modo que el evento no aparecia en
- * ninguna tienda. Era, justamente, el evento que mas justifica esa pantalla.
- */
-async function resolveUserOrganizationId(userId: string): Promise<string | null> {
-  try {
-    const activeOrganization = await getCurrentOrganizationContext(userId)
-    if (activeOrganization?.id) return activeOrganization.id
-  } catch (err) {
-    logger.error('Failed to resolve active admin organization', { error: err, userId })
-  }
-
-  try {
-    const admin = createAdminSupabase()
-    const { data: membership } = await admin
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-    return membership?.organization_id ?? null
-  } catch (err) {
-    logger.error('Failed to resolve admin organization', { error: err, userId })
-    return null
-  }
-}
 
 export interface AdminAuthContext {
   user: {

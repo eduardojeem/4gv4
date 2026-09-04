@@ -161,7 +161,11 @@ async function handleTenantUpdate(
     user_id: context.user.id,
     action: 'update_organization_settings',
     resource: 'organization_settings',
+    // El id de la tienda ya estaba a mano en `resource_id`, pero la pantalla de
+    // seguridad filtra por la columna propia y el evento no llegaba.
     resource_id: organizationId,
+    organization_id: organizationId,
+    severity: 'medium',
     new_values: withoutPlatformSettings(settings),
   })
   if (auditError) console.error('Failed to audit organization settings update', { auditError, organizationId })
@@ -227,6 +231,10 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       action: 'update_system_settings',
       resource: 'system_settings',
       resource_id: 'system',
+      // Sin organizacion a proposito: son los ajustes globales de la
+      // plataforma, no los de un comercio. El otro insert de este archivo, que
+      // si es por tienda, la escribe.
+      severity: 'high',
       new_values: validation.data,
     })
     if (auditError) console.error('Failed to audit global settings update', { auditError })

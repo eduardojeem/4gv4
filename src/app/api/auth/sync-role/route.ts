@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { resolveUserOrganizationId } from '@/lib/saas/context'
 import { createClient as createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 
@@ -103,11 +104,17 @@ export async function POST() {
 
     // 7. Registrar en audit log
     try {
+      // Un cambio de rol es de los eventos que mas justifica mirar el registro,
+      // asi que se resuelve la tienda del usuario para que llegue a su panel.
+      const organizationId = await resolveUserOrganizationId(user.id)
+
       await admin.from('audit_log').insert({
         user_id: user.id,
         action: 'sync_role',
         resource: 'auth',
         resource_id: user.id,
+        organization_id: organizationId,
+        severity: 'high',
         old_values: { user_roles: currentRole, profiles: currentProfile },
         new_values: {
           user_roles: verifyRole,

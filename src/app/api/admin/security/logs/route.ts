@@ -42,6 +42,13 @@ type SecurityLog = {
 }
 
 
+/**
+ * Tope de la exportacion. Existe para no armar un archivo de cientos de miles de
+ * filas en memoria; cuando se alcanza, la respuesta lo dice para que la pantalla
+ * pueda avisar en vez de entregar un recorte silencioso.
+ */
+const EXPORT_MAX_ROWS = 5000
+
 const SELECT_COLUMNS_WITH_ORG = 'id, user_id, action, resource, resource_id, details, new_values, ip_address, user_agent, created_at, severity, organization_id'
 const SELECT_COLUMNS_LEGACY = 'id, user_id, action, resource, resource_id, details, new_values, ip_address, user_agent, created_at, severity'
 
@@ -231,7 +238,14 @@ export async function GET(request: NextRequest) {
   const search = (searchParams.get('search') || '').trim()
   const userId = searchParams.get('userId')
   const page = Math.max(1, Number(searchParams.get('page') || 1))
-  const pageSize = Math.min(100, Math.max(10, Number(searchParams.get('pageSize') || searchParams.get('limit') || 20)))
+
+  // La exportacion pide el rango filtrado completo, no la pagina visible. El
+  // boton exportaba las veinte filas cargadas mientras el aviso decia "con los
+  // filtros actuales", asi que quien guardaba evidencia se llevaba una pagina.
+  const isExport = searchParams.get('mode') === 'export'
+  const maxPageSize = isExport ? EXPORT_MAX_ROWS : 100
+  const requestedSize = Number(searchParams.get('pageSize') || searchParams.get('limit') || (isExport ? EXPORT_MAX_ROWS : 20))
+  const pageSize = Math.min(maxPageSize, Math.max(10, requestedSize))
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
   const startDate = timeRangeToDate(timeRange)
@@ -304,5 +318,7 @@ export async function GET(request: NextRequest) {
     page,
     pageSize,
     users,
+    // Solo importa al exportar: dice si quedaron eventos fuera del archivo.
+    truncated: isExport && totalCount > logs.length,
   })
 }

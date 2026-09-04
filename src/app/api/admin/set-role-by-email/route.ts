@@ -70,8 +70,15 @@ async function handler(request: Request, context: AdminAuthContext) {
     await admin.from('audit_log').insert({
       user_id: context.user.id,
       action: 'assign_role_by_email',
-      resource_type: 'user',
+      // Era `resource_type`, que existe pero no es la que lee la pantalla: el
+      // evento salia como "unknown" porque `resource` tomaba su valor por
+      // defecto. Los otros 46 usos del proyecto escriben `resource`.
+      resource: 'user',
       resource_id: targetUser.id,
+      // Sin organizacion a proposito: cambia el rol global de una persona, que
+      // puede pertenecer a varias tiendas o a ninguna. Atribuirlo a una seria
+      // inventar. Queda como evento de plataforma.
+      severity: 'high',
       details: {
         email,
         ui_role: uiRole,
