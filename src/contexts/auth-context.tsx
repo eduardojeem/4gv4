@@ -35,7 +35,19 @@ export interface AuthUser extends SupabaseUser {
 
 export interface AuthContextType {
   user: AuthUser | null
-  session: Session | null
+  /**
+   * La sesion NO se expone.
+   *
+   * Supabase refresca el token al volver a una pestaña y eso cambiaba el objeto
+   * de sesion, que estaba en el valor del contexto: cada vez que el usuario
+   * volvia al navegador se re-renderizaban los 70 archivos que leen useAuth(),
+   * incluida la grilla de productos. Ninguno leia `session` — se comprobo en
+   * todo el proyecto: cero consumidores.
+   *
+   * Si alguna pantalla la necesita, conviene un contexto aparte antes que
+   * devolverla aca: lo que se paga no es guardarla sino que su cambio arrastre
+   * a todos los consumidores.
+   */
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error?: string }>
   signUp: (email: string, password: string, metadata?: SignUpMetadata) => Promise<{ error?: string }>
@@ -165,6 +177,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const latestUserRef = useRef<AuthUser | null>(null)
+  // La sesion vive tambien en un ref para que `refreshUser` no cambie de
+  // identidad con cada refresco de token: esta en las dependencias del valor del
+  // contexto, asi que si cambia arrastra a todos los consumidores igual que
+  // arrastraba el propio campo.
+  const sessionRef = useRef<Session | null>(null)
+
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
 
   const supabase = useMemo(() => createSupabaseClient(), [])
 
@@ -249,22 +270,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Función para refrescar los datos del usuario
+  // Lee la sesion del ref y no del estado: con `session` en las dependencias,
+  // esta funcion cambiaba de identidad en cada refresco de token y arrastraba al
+  // valor del contexto, que es lo que se queria dejar de mover.
   const refreshUser = useCallback(async () => {
-    if (!session?.user) return
+    const sessionUser = sessionRef.current?.user
+    if (!sessionUser) return
 
     try {
       const userProfile = await withTimeout(
-        fetchUserProfile(session.user.id),
+        fetchUserProfile(sessionUser.id),
         AUTH_PROFILE_TIMEOUT_MS,
         getDefaultAuthProfile()
       )
-      setUser(buildAuthUser(session.user, resolveStableProfile(session.user, userProfile)))
+      setUser(buildAuthUser(sessionUser, resolveStableProfile(sessionUser, userProfile)))
     } catch (error) {
       console.error('Error refreshing user:', error)
-      const fallbackProfile = resolveStableProfile(session.user, getDefaultAuthProfile())
-      setUser(buildAuthUser(session.user, fallbackProfile))
+      const fallbackProfile = resolveStableProfile(sessionUser, getDefaultAuthProfile())
+      setUser(buildAuthUser(sessionUser, fallbackProfile))
     }
-  }, [session, fetchUserProfile, resolveStableProfile])
+  }, [fetchUserProfile, resolveStableProfile])
 
   // Función para iniciar sesión
   const signIn = useCallback(async (email: string, password: string) => {
@@ -649,7 +674,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextType>(() => ({
     user,
-    session,
     loading,
     signIn,
     signUp,
@@ -664,7 +688,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUser
   }), [
     user,
-    session,
     loading,
     signIn,
     signUp,
