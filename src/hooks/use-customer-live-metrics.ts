@@ -110,6 +110,17 @@ export function useCustomerLiveMetrics(customerId: string | null | undefined, en
         fallas.push(`puntos${loyalty.status ? ` (HTTP ${loyalty.status})` : ''}`)
       }
 
+      // El detalle completo va a la consola: el cartel de pantalla tiene que ser
+      // corto, pero para arreglarlo hace falta saber qué respondió cada uno.
+      if (fallas.length > 0) {
+        console.warn('[ficha del cliente] no se pudieron cargar algunas métricas', {
+          customerId,
+          compras: { status: sales.status, body: sales.body },
+          reparaciones: { status: repairs.status, body: repairs.body },
+          puntos: { status: loyalty.status, body: loyalty.body },
+        })
+      }
+
       setMetrics({
         repairs: repairs.body?.stats ? Number(repairs.body.stats.totalRepairs ?? 0) : null,
         purchases: sales.body?.stats ? Number(sales.body.stats.totalPurchases ?? 0) : null,
