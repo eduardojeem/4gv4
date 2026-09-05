@@ -94,7 +94,7 @@ import { useHeldSales, HeldSale } from './hooks/useHeldSales'
 import { HeldSalesModal } from './components/HeldSalesModal'
 import { POSShortcutsBar } from './components/POSShortcutsBar'
 import { POSRepairChargeModal } from './components/POSRepairChargeModal'
-import { QuickCustomerDialog } from './components/QuickCustomerDialog'
+import { CustomerQuickCreateDialog } from '@/components/dashboard/repairs/CustomerQuickCreateDialog'
 import { POSProductDetailDialog } from './components/POSProductDetailDialog'
 import { POSCashMovementDialog } from './components/POSCashMovementDialog'
 import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
@@ -3008,12 +3008,16 @@ function POSPageContent() {
         onAddRepairToCart={handleAddRepairToCart}
       />
 
-      {/* Modal de Alta Rápida de Cliente */}
-      <QuickCustomerDialog
+      {/* Alta rapida de cliente: el mismo dialogo que el checkout y que
+          reparaciones. El que habia aca insertaba contra Supabase desde el
+          navegador, sin `organization_id`, con una columna `document_id` que no
+          existe y con el email en null sobre una columna NOT NULL. */}
+      <CustomerQuickCreateDialog
         open={isQuickCustomerOpen}
-        onOpenChange={setIsQuickCustomerOpen}
-        onCustomerCreated={(customer) => {
-          setSelectedCustomer(customer.id)
+        onClose={() => setIsQuickCustomerOpen(false)}
+        onCreated={(customerId) => {
+          setSelectedCustomer(customerId)
+          setIsQuickCustomerOpen(false)
         }}
       />
 
