@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { isCancelledSaleStatus } from '@/lib/sales-status'
+import { isCountableOrder } from '@/lib/customers/customer-spend'
 
 /**
  * GET /api/customers/[id]/sales
@@ -24,7 +26,10 @@ export async function GET(
 
     const { id: customerId } = await context.params
     const { searchParams } = new URL(request.url)
-    const limit = Math.min(Number(searchParams.get('limit') || 10), 50)
+    const requestedLimit = Number(searchParams.get('limit') || 10)
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(Math.trunc(requestedLimit), 50))
+      : 10
 
     const supabase = createAdminSupabase()
 
@@ -58,24 +63,35 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // 2. Calcular estadísticas reales de compras del cliente
-    // El monto ya excluia las canceladas; el conteo no, asi que "N compras" y
-    // "Total gastado" hablaban de conjuntos distintos.
-    const { count: totalPurchases } = await supabase
-      .from('sales')
-      .select('id', { count: 'exact', head: true })
-      .eq('customer_id', customerId)
-      .eq('organization_id', organization.id)
-      .not('status', 'eq', 'cancelado')
+    // La ficha debe coincidir con el historial comercial completo: POS y
+    // pedidos de la tienda publica. Se filtra en TypeScript para aceptar los
+    // estados canonicos y los historicos en espanol sin dejar cancelados dentro.
+    const [posTotalsResult, orderTotalsResult] = await Promise.all([
+      supabase
+        .from('sales')
+        .select('total_amount, status')
+        .eq('customer_id', customerId)
+        .eq('organization_id', organization.id),
+      supabase
+        .from('customer_orders')
+        .select('total, status')
+        .eq('customer_id', customerId)
+        .eq('organization_id', organization.id),
+    ])
 
-    const { data: totalsData } = await supabase
-      .from('sales')
-      .select('total_amount, status')
-      .eq('customer_id', customerId)
-      .eq('organization_id', organization.id)
-      .not('status', 'eq', 'cancelado')
+    if (posTotalsResult.error || orderTotalsResult.error) {
+      return NextResponse.json({ error: 'No se pudieron calcular las compras del cliente' }, { status: 500 })
+    }
 
-    const totalSpent = (totalsData ?? []).reduce((sum, s) => sum + Number(s.total_amount || 0), 0)
+    const validSales = (posTotalsResult.data ?? []).filter((sale) => {
+      const status = String(sale.status ?? '').trim().toLowerCase()
+      return !isCancelledSaleStatus(status) && status !== 'cancelado'
+    })
+    const validOrders = (orderTotalsResult.data ?? []).filter((order) => isCountableOrder(order.status))
+    const posSpent = validSales.reduce((sum, sale) => sum + Math.max(0, Number(sale.total_amount) || 0), 0)
+    const ordersSpent = validOrders.reduce((sum, order) => sum + Math.max(0, Number(order.total) || 0), 0)
+    const totalPurchases = validSales.length + validOrders.length
+    const totalSpent = posSpent + ordersSpent
 
     return NextResponse.json({
       success: true,
@@ -83,6 +99,10 @@ export async function GET(
       stats: {
         totalPurchases: totalPurchases ?? 0,
         totalSpent,
+        posPurchases: validSales.length,
+        webPurchases: validOrders.length,
+        posSpent,
+        ordersSpent,
       },
     })
   } catch (error) {

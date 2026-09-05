@@ -24,6 +24,10 @@ export type CustomerLiveMetrics = {
   purchases: number | null
   /** Ventas + reparaciones, en guaraníes. `null` si alguna consulta falló. */
   billed: number | null
+  /** Desglose del total confirmado por canal. */
+  posBilled: number | null
+  webBilled: number | null
+  repairsBilled: number | null
   /** Saldo de puntos. `null` si falló o si el módulo no está instalado. */
   loyaltyPoints: number | null
   /** Distingue "no tiene puntos" de "esta tienda no usa fidelidad". */
@@ -37,13 +41,29 @@ const VACIO: CustomerLiveMetrics = {
   repairs: null,
   purchases: null,
   billed: null,
+  posBilled: null,
+  webBilled: null,
+  repairsBilled: null,
   loyaltyPoints: null,
   loyaltyModuleInstalled: true,
   failed: [],
   loading: false,
 }
 
-type Respuesta = { ok: boolean; status: number; body: any | null }
+type MetricsBody = {
+  code?: string
+  moduleInstalled?: boolean
+  account?: { balance?: number | string | null } | null
+  stats?: {
+    totalSpent?: number | string | null
+    totalRepairs?: number | string | null
+    totalPurchases?: number | string | null
+    posSpent?: number | string | null
+    ordersSpent?: number | string | null
+  }
+}
+
+type Respuesta = { ok: boolean; status: number; body: MetricsBody | null }
 
 async function leer(url: string): Promise<Respuesta> {
   try {
@@ -74,14 +94,18 @@ export function useCustomerLiveMetrics(customerId: string | null | undefined, en
 
   useEffect(() => {
     if (!enabled || !customerId) {
-      setMetrics(VACIO)
       return
     }
 
     let vigente = true
-    setMetrics({ ...VACIO, loading: true })
 
     void (async () => {
+      // Se difiere al microtask para evitar una actualización sincrónica
+      // durante el montaje del efecto y mantener estable el primer render.
+      await Promise.resolve()
+      if (!vigente) return
+      setMetrics({ ...VACIO, loading: true })
+
       const [sales, repairs, loyalty] = await Promise.all([
         leer(`/api/customers/${customerId}/sales?limit=1`),
         leer(`/api/customers/${customerId}/repairs?limit=1`),
@@ -115,9 +139,13 @@ export function useCustomerLiveMetrics(customerId: string | null | undefined, en
       if (fallas.length > 0) {
         console.warn('[ficha del cliente] no se pudieron cargar algunas métricas', {
           customerId,
-          compras: { status: sales.status, body: sales.body },
-          reparaciones: { status: repairs.status, body: repairs.body },
-          puntos: { status: loyalty.status, body: loyalty.body },
+          compras: { status: sales.status, hasStats: Boolean(sales.body?.stats) },
+          reparaciones: { status: repairs.status, hasStats: Boolean(repairs.body?.stats) },
+          puntos: {
+            status: loyalty.status,
+            moduleInstalled: loyalty.body?.moduleInstalled,
+            hasAccountField: Boolean(loyalty.body?.hasOwnProperty('account')),
+          },
         })
       }
 
@@ -125,6 +153,9 @@ export function useCustomerLiveMetrics(customerId: string | null | undefined, en
         repairs: repairs.body?.stats ? Number(repairs.body.stats.totalRepairs ?? 0) : null,
         purchases: sales.body?.stats ? Number(sales.body.stats.totalPurchases ?? 0) : null,
         billed: facturado,
+        posBilled: sales.body?.stats ? Number(sales.body.stats.posSpent ?? 0) : null,
+        webBilled: sales.body?.stats ? Number(sales.body.stats.ordersSpent ?? 0) : null,
+        repairsBilled: repairs.body?.stats ? Number(repairs.body.stats.totalSpent ?? 0) : null,
         loyaltyPoints: moduloInstalado && loyalty.body?.hasOwnProperty('account')
           ? Number(loyalty.body.account?.balance ?? 0)
           : null,
@@ -137,5 +168,5 @@ export function useCustomerLiveMetrics(customerId: string | null | undefined, en
     return () => { vigente = false }
   }, [customerId, enabled])
 
-  return metrics
+  return enabled && customerId ? metrics : VACIO
 }

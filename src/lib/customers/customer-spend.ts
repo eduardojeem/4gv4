@@ -47,7 +47,8 @@ function toAmount(value: unknown): number {
 
 /** Un pedido cancelado no es plata gastada. */
 export function isCountableOrder(status: string | null | undefined) {
-  return String(status ?? '').trim().toUpperCase() !== 'CANCELLED'
+  const normalized = String(status ?? '').trim().toUpperCase()
+  return normalized !== 'CANCELLED' && normalized !== 'CANCELADO'
 }
 
 /**

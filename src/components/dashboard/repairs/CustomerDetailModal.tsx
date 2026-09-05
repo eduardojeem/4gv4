@@ -20,13 +20,10 @@ import {
   CreditCard, 
   TrendingUp,
   Star,
-  Clock,
   X,
   MessageCircle,
   Copy,
   Check,
-  Building2,
-  ExternalLink,
   Edit,
   ShieldCheck,
   Sparkles,
@@ -63,7 +60,7 @@ interface CustomerDetailModalProps {
   onClose: () => void
   customer: CustomerDetailInput | null
   authorizedPersons?: CustomerAuthorizedPerson[]
-  onEdit?: (customer: any) => void
+  onEdit?: (customer: CustomerDetailInput) => void
 }
 
 export function CustomerDetailModal({
@@ -127,8 +124,8 @@ export function CustomerDetailModal({
                 address: fullData.address ?? prev.address,
                 city: fullData.city ?? prev.city,
                 notes: fullData.notes ?? prev.notes,
-                customer_type: (fullData.customer_type as any) || prev.customer_type,
-                status: (fullData.status as any) || prev.status,
+                customer_type: (fullData.customer_type as CustomerDetailInput['customer_type']) || prev.customer_type,
+                status: (fullData.status as CustomerDetailInput['status']) || prev.status,
                 segment: fullData.segment || prev.segment,
                 // total_repairs, total_purchases, lifetime_value y loyalty_points
                 // no se copian: son columnas que nadie escribe y valen 0 para
@@ -167,7 +164,7 @@ export function CustomerDetailModal({
     return () => {
       isMounted = false
     }
-  }, [open, customer?.id, authorizedPersons])
+  }, [open, customer, authorizedPersons])
 
   const activeCustomer = detailedCustomer || customer
   if (!activeCustomer) return null
@@ -613,44 +610,50 @@ export function CustomerDetailModal({
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
                 <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Historial y Métricas en Taller
+                  Actividad real del cliente
                 </h4>
               </div>
-              <span className="text-[10px] text-muted-foreground font-medium">Paraguay (Gs.)</span>
+              <span className="text-[10px] text-muted-foreground font-medium">
+                {isLoadingDetails ? 'Actualizando ficha…' : 'Paraguay (Gs.)'}
+              </span>
             </div>
+
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+              Datos calculados en el momento desde ventas, pedidos web, reparaciones y fidelidad de esta organización.
+            </p>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <div className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
                 <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <Star className="h-3.5 w-3.5 text-amber-500" />
-                  <span>Reparaciones</span>
+                  <span>Reparaciones válidas</span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-foreground mt-1 tabular-nums">
                   {metrics.loading ? '…' : (metrics.repairs ?? '—')}
                 </div>
-                <p className="text-[9px] text-muted-foreground">Equipos en taller</p>
+                <p className="text-[9px] text-muted-foreground">Historial sin canceladas</p>
               </div>
 
               <div className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
                 <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <CreditCard className="h-3.5 w-3.5 text-cyan-600" />
-                  <span>Compras</span>
+                  <span>Compras válidas</span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-foreground mt-1 tabular-nums">
                   {metrics.loading ? '…' : (metrics.purchases ?? '—')}
                 </div>
-                <p className="text-[9px] text-muted-foreground">Ventas registradas</p>
+                <p className="text-[9px] text-muted-foreground">POS + tienda web</p>
               </div>
 
               <div className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
                 <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Facturado Total</span>
+                  <span>Total registrado</span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums truncate">
                   {metrics.loading ? '…' : (metrics.billed === null ? '—' : formatCurrency(metrics.billed))}
                 </div>
-                <p className="text-[9px] text-muted-foreground">Ventas + reparaciones</p>
+                <p className="text-[9px] text-muted-foreground">Compras + trabajos terminados</p>
               </div>
 
               <div className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
@@ -666,6 +669,23 @@ export function CustomerDetailModal({
                 </p>
               </div>
             </div>
+
+            {!metrics.loading && metrics.billed !== null && (
+              <div
+                className="grid grid-cols-1 gap-1.5 rounded-xl border border-emerald-200/70 bg-emerald-50/40 p-2.5 text-[10px] text-muted-foreground dark:border-emerald-900/50 dark:bg-emerald-950/20 sm:grid-cols-3"
+                aria-label="Desglose del total registrado"
+              >
+                <span className="flex items-center justify-between gap-2 sm:block">
+                  POS: <strong className="font-semibold text-foreground tabular-nums">{formatCurrency(metrics.posBilled || 0)}</strong>
+                </span>
+                <span className="flex items-center justify-between gap-2 sm:block sm:text-center">
+                  Tienda web: <strong className="font-semibold text-foreground tabular-nums">{formatCurrency(metrics.webBilled || 0)}</strong>
+                </span>
+                <span className="flex items-center justify-between gap-2 sm:block sm:text-right">
+                  Taller: <strong className="font-semibold text-foreground tabular-nums">{formatCurrency(metrics.repairsBilled || 0)}</strong>
+                </span>
+              </div>
+            )}
 
             {/* Un guion no es un cero: si la consulta falló, decirlo — y decir
                 cuál falló. Un aviso genérico obliga a abrir la consola para

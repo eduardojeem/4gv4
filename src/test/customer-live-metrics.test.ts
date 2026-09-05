@@ -61,8 +61,32 @@ describe('la ficha del cliente usa los números reales', () => {
     expect(hook).toContain('/api/loyalty/customers/${customerId}')
   })
 
+  it('incluye las compras hechas desde la tienda publica', () => {
+    const salesRoute = leer('src/app/api/customers/[id]/sales/route.ts')
+    expect(salesRoute).toContain(".from('customer_orders')")
+    expect(salesRoute).toContain(".eq('organization_id', organization.id)")
+    expect(salesRoute).toContain('ordersSpent')
+    expect(salesRoute).toContain('posSpent')
+  })
+
+  it('solo factura reparaciones terminadas y no cuenta canceladas', () => {
+    const repairsRoute = leer('src/app/api/customers/[id]/repairs/route.ts')
+    expect(repairsRoute).toContain('isCountableRepair')
+    expect(repairsRoute).toContain('validRepairs')
+    expect(repairsRoute).not.toContain('const cost = Number(r.final_cost ?? r.estimated_cost ?? 0)')
+  })
+
   it('el facturado suma ventas y reparaciones', () => {
     expect(hook).toContain('ventasGastado + reparacionesGastado')
+  })
+
+  it('expone el desglose para explicar el total', () => {
+    expect(hook).toContain('posBilled')
+    expect(hook).toContain('webBilled')
+    expect(hook).toContain('repairsBilled')
+    expect(modal).toContain('POS:')
+    expect(modal).toContain('Tienda web:')
+    expect(modal).toContain('Taller:')
   })
 
   it('no muestra un total parcial como si fuera bueno', () => {

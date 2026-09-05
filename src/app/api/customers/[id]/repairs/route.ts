@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { isCountableRepair } from '@/lib/customers/customer-spend'
 
 /**
  * GET /api/customers/[id]/repairs
@@ -24,7 +25,10 @@ export async function GET(
 
     const { id: customerId } = await context.params
     const { searchParams } = new URL(request.url)
-    const limit = Math.min(Number(searchParams.get('limit') || 10), 20)
+    const requestedLimit = Number(searchParams.get('limit') || 10)
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(Math.trunc(requestedLimit), 20))
+      : 10
 
     const supabase = createAdminSupabase()
 
@@ -40,34 +44,36 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Calcular stats reales
-    const { count: totalRepairs } = await supabase
-      .from('repairs')
-      .select('id', { count: 'exact', head: true })
-      .eq('customer_id', customerId)
-      .eq('organization_id', organization.id)
-
-    // Se toma el costo final y, si todavia no se cerro, el estimado: es la
-    // convencion del resto de la app. Filtrar por `final_cost not null` dejaba
-    // fuera toda reparacion sin cerrar y el "Total Gastado" del cliente no
-    // sumaba las reparaciones.
-    const { data: costData } = await supabase
+    // El conteo historico excluye canceladas. El total facturado incluye solo
+    // trabajos listos o entregados: un presupuesto abierto todavia puede
+    // cambiar y no debe presentarse como facturacion confirmada.
+    const { data: costData, error: costError } = await supabase
       .from('repairs')
       .select('final_cost, estimated_cost, status')
       .eq('customer_id', customerId)
       .eq('organization_id', organization.id)
 
-    const totalSpent = (costData ?? []).reduce((sum, r) => {
-      // Una reparacion cancelada no es plata gastada por el cliente.
-      if (String(r.status ?? '').trim().toLowerCase() === 'cancelado') return sum
-      const cost = Number(r.final_cost ?? r.estimated_cost ?? 0)
+    if (costError) {
+      return NextResponse.json({ error: 'No se pudieron calcular las reparaciones del cliente' }, { status: 500 })
+    }
+
+    const validRepairs = (costData ?? []).filter((repair) => {
+      const status = String(repair.status ?? '').trim().toLowerCase()
+      return status !== 'cancelado' && status !== 'cancelled'
+    })
+    const billableRepairs = validRepairs.filter((repair) => isCountableRepair(repair.status))
+    const totalSpent = billableRepairs.reduce((sum, repair) => {
+      // El costo final es la fuente principal. El estimado queda como respaldo
+      // para reparaciones historicas terminadas antes de incorporar final_cost.
+      const cost = Number(repair.final_cost ?? repair.estimated_cost ?? 0)
       return sum + (Number.isFinite(cost) && cost > 0 ? cost : 0)
     }, 0)
 
     return NextResponse.json({
       repairs: repairs ?? [],
       stats: {
-        totalRepairs: totalRepairs ?? 0,
+        totalRepairs: validRepairs.length,
+        completedRepairs: billableRepairs.length,
         totalSpent,
       },
     })

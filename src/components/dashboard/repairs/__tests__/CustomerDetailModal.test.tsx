@@ -1,6 +1,6 @@
 import React from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { CustomerDetailModal } from '../CustomerDetailModal'
 import type { Customer } from '@/hooks/use-customer-state'
 
@@ -83,6 +83,19 @@ describe('CustomerDetailModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.open = vi.fn()
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/sales')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ stats: { totalPurchases: 0, totalSpent: 0, posSpent: 0, ordersSpent: 0 } }) })
+      }
+      if (url.includes('/repairs')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ stats: { totalRepairs: 0, totalSpent: 0 } }) })
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ moduleInstalled: true, account: null }) })
+    }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('renders customer name, code, ruc and badges correctly', () => {
@@ -145,7 +158,7 @@ describe('CustomerDetailModal', () => {
   it('muestra las metricas reales, no las columnas congeladas', async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url.includes('/sales')) {
-        return Promise.resolve({ ok: true, json: async () => ({ stats: { totalPurchases: 7, totalSpent: 1_200_000 } }) })
+        return Promise.resolve({ ok: true, json: async () => ({ stats: { totalPurchases: 7, totalSpent: 1_200_000, posSpent: 900_000, ordersSpent: 300_000 } }) })
       }
       if (url.includes('/repairs')) {
         return Promise.resolve({ ok: true, json: async () => ({ stats: { totalRepairs: 3, totalSpent: 800_000 } }) })
@@ -162,7 +175,7 @@ describe('CustomerDetailModal', () => {
       />
     )
 
-    expect(screen.getByText('Historial y Métricas en Taller')).toBeInTheDocument()
+    expect(screen.getByText('Actividad real del cliente')).toBeInTheDocument()
 
     // Lo que devuelven las consultas, no lo que trae el objeto del cliente.
     expect(await screen.findByText('3')).toBeInTheDocument()   // reparaciones reales
@@ -171,6 +184,9 @@ describe('CustomerDetailModal', () => {
 
     // Ventas + reparaciones, no `lifetime_value`.
     expect(await screen.findByText(/2\.000\.000/)).toBeInTheDocument()
+    expect(screen.getByText(/POS:/)).toHaveTextContent(/900\.000/)
+    expect(screen.getByText(/Tienda web:/)).toHaveTextContent(/300\.000/)
+    expect(screen.getByText(/Taller:/)).toHaveTextContent(/800\.000/)
 
     // Los valores del objeto no aparecen en ningun lado.
     expect(screen.queryByText('14')).not.toBeInTheDocument()
@@ -179,7 +195,6 @@ describe('CustomerDetailModal', () => {
     expect(screen.getByText(/Cuenta Corriente Comercial/)).toBeInTheDocument()
     expect(screen.getByText(/Cliente preferencial de reparaciones de pantallas/)).toBeInTheDocument()
 
-    vi.unstubAllGlobals()
   })
 
   it('no muestra un cero cuando la consulta falla', async () => {

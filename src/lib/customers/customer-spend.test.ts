@@ -142,6 +142,7 @@ describe('isCountableOrder', () => {
     expect(isCountableOrder(null)).toBe(true)
     expect(isCountableOrder('CANCELLED')).toBe(false)
     expect(isCountableOrder('cancelled')).toBe(false)
+    expect(isCountableOrder('cancelado')).toBe(false)
   })
 })
 
