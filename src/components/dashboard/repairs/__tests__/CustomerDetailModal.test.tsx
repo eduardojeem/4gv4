@@ -135,7 +135,25 @@ describe('CustomerDetailModal', () => {
     expect(screen.getByText(/5678901/)).toBeInTheDocument()
   })
 
-  it('renders workshop metrics and credit/balance if available', () => {
+  /**
+   * Las metricas dejaron de leerse de `customer.total_repairs`,
+   * `total_purchases`, `lifetime_value` y `loyalty_points`. Esas cuatro
+   * columnas tienen `default 0` y nadie las escribe nunca, asi que los cuatro
+   * recuadros mostraban 0 a todo el mundo. Ahora salen de las ventas, las
+   * reparaciones y la cuenta de puntos reales.
+   */
+  it('muestra las metricas reales, no las columnas congeladas', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/sales')) {
+        return Promise.resolve({ ok: true, json: async () => ({ stats: { totalPurchases: 7, totalSpent: 1_200_000 } }) })
+      }
+      if (url.includes('/repairs')) {
+        return Promise.resolve({ ok: true, json: async () => ({ stats: { totalRepairs: 3, totalSpent: 800_000 } }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ moduleInstalled: true, account: { balance: 45 } }) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
     render(
       <CustomerDetailModal
         open={true}
@@ -145,11 +163,41 @@ describe('CustomerDetailModal', () => {
     )
 
     expect(screen.getByText('Historial y Métricas en Taller')).toBeInTheDocument()
-    expect(screen.getByText('14')).toBeInTheDocument() // repairs
-    expect(screen.getByText('5')).toBeInTheDocument() // purchases
-    expect(screen.getByText('120')).toBeInTheDocument() // loyalty points
+
+    // Lo que devuelven las consultas, no lo que trae el objeto del cliente.
+    expect(await screen.findByText('3')).toBeInTheDocument()   // reparaciones reales
+    expect(await screen.findByText('7')).toBeInTheDocument()   // ventas reales
+    expect(await screen.findByText('45')).toBeInTheDocument()  // puntos reales
+
+    // Ventas + reparaciones, no `lifetime_value`.
+    expect(await screen.findByText(/2\.000\.000/)).toBeInTheDocument()
+
+    // Los valores del objeto no aparecen en ningun lado.
+    expect(screen.queryByText('14')).not.toBeInTheDocument()
+    expect(screen.queryByText('120')).not.toBeInTheDocument()
+
     expect(screen.getByText(/Cuenta Corriente Comercial/)).toBeInTheDocument()
     expect(screen.getByText(/Cliente preferencial de reparaciones de pantallas/)).toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+  })
+
+  it('no muestra un cero cuando la consulta falla', async () => {
+    // Un 0 se lee como dato bueno. Si no se pudo contar, va un guion.
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: false, json: async () => ({}) })))
+
+    render(
+      <CustomerDetailModal
+        open={true}
+        onClose={vi.fn()}
+        customer={mockCustomer}
+      />
+    )
+
+    expect(await screen.findByText(/No pudimos cargar algunos números del cliente/)).toBeInTheDocument()
+    expect(screen.queryByText('14')).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
   })
 
   it('calls onEdit when clicking "Editar Datos"', () => {

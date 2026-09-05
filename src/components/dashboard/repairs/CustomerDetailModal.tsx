@@ -42,6 +42,7 @@ import { getWhatsAppLink } from '@/lib/whatsapp'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useCustomerLiveMetrics } from '@/hooks/use-customer-live-metrics'
 
 export interface CustomerAuthorizedPerson {
   id: string
@@ -76,6 +77,12 @@ export function CustomerDetailModal({
   const [detailedCustomer, setDetailedCustomer] = useState<CustomerDetailInput | null>(customer)
   const [authorizedList, setAuthorizedList] = useState<CustomerAuthorizedPerson[]>(authorizedPersons || [])
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+
+  // Las cuatro metricas de abajo salian de columnas de `customers` que nadie
+  // escribe nunca —no hay trigger ni codigo que las toque—, asi que mostraban 0
+  // para todos. Ahora se calculan sobre las ventas, las reparaciones y la
+  // cuenta de puntos reales.
+  const metrics = useCustomerLiveMetrics(customer?.id, open)
 
   // Sincronizar y cargar detalles ampliados desde Supabase si faltan datos
   useEffect(() => {
@@ -123,10 +130,9 @@ export function CustomerDetailModal({
                 customer_type: (fullData.customer_type as any) || prev.customer_type,
                 status: (fullData.status as any) || prev.status,
                 segment: fullData.segment || prev.segment,
-                total_repairs: fullData.total_repairs ?? prev.total_repairs,
-                total_purchases: fullData.total_purchases ?? prev.total_purchases,
-                lifetime_value: fullData.lifetime_value ?? prev.lifetime_value,
-                loyalty_points: fullData.loyalty_points ?? prev.loyalty_points,
+                // total_repairs, total_purchases, lifetime_value y loyalty_points
+                // no se copian: son columnas que nadie escribe y valen 0 para
+                // todos. Esas cuatro cifras vienen de `useCustomerLiveMetrics`.
                 credit_limit: fullData.credit_limit ?? prev.credit_limit,
                 current_balance: fullData.current_balance ?? prev.current_balance,
                 registration_date: fullData.registration_date ?? fullData.created_at ?? prev.registration_date,
@@ -620,7 +626,7 @@ export function CustomerDetailModal({
                   <span>Reparaciones</span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-foreground mt-1 tabular-nums">
-                  {activeCustomer.total_repairs ?? 0}
+                  {metrics.loading ? '…' : (metrics.repairs ?? '—')}
                 </div>
                 <p className="text-[9px] text-muted-foreground">Equipos en taller</p>
               </div>
@@ -631,9 +637,9 @@ export function CustomerDetailModal({
                   <span>Compras</span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-foreground mt-1 tabular-nums">
-                  {activeCustomer.total_purchases ?? 0}
+                  {metrics.loading ? '…' : (metrics.purchases ?? '—')}
                 </div>
-                <p className="text-[9px] text-muted-foreground">Repuestos y ventas</p>
+                <p className="text-[9px] text-muted-foreground">Ventas registradas</p>
               </div>
 
               <div className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
@@ -642,9 +648,9 @@ export function CustomerDetailModal({
                   <span>Facturado Total</span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums truncate">
-                  {formatCurrency(activeCustomer.lifetime_value ?? 0)}
+                  {metrics.loading ? '…' : (metrics.billed === null ? '—' : formatCurrency(metrics.billed))}
                 </div>
-                <p className="text-[9px] text-muted-foreground">Valor acumulado</p>
+                <p className="text-[9px] text-muted-foreground">Ventas + reparaciones</p>
               </div>
 
               <div className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
@@ -653,11 +659,23 @@ export function CustomerDetailModal({
                   <span>Puntos Fidelidad</span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-violet-600 dark:text-violet-400 mt-1 tabular-nums">
-                  {activeCustomer.loyalty_points ?? 0}
+                  {metrics.loading ? '…' : (metrics.loyaltyPoints ?? '—')}
                 </div>
-                <p className="text-[9px] text-muted-foreground">Puntos vigentes</p>
+                <p className="text-[9px] text-muted-foreground">
+                  {metrics.loyaltyModuleInstalled ? 'Puntos vigentes' : 'Fidelidad no activada'}
+                </p>
               </div>
             </div>
+
+            {/* Un guion no es un cero: si la consulta falló, decirlo. Antes estos
+                cuatro números salían de columnas que nadie escribe y mostraban 0
+                para todos, que es peor que no mostrar nada. */}
+            {!metrics.loading && (metrics.repairs === null || metrics.purchases === null || metrics.billed === null) && (
+              <p className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+                <AlertCircle className="h-3 w-3 shrink-0" />
+                No pudimos cargar algunos números del cliente. Los que aparecen con “—” no están disponibles ahora.
+              </p>
+            )}
 
             {/* Saldo de Cuenta y Crédito si aplica */}
             {((activeCustomer.credit_limit && activeCustomer.credit_limit > 0) || (activeCustomer.current_balance && activeCustomer.current_balance > 0)) && (
