@@ -6,7 +6,7 @@ import { parseCreateRepairInput } from '@/lib/repairs/create-repair-input'
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 const PAGINA = leer('src/app/dashboard/repairs/page.tsx')
 const CONTEXTO = leer('src/contexts/RepairsContext.tsx')
-const MIGRACION = leer('supabase/migrations/20260905120000_repair_reception_group.sql')
+const MIGRACION = leer('supabase/migrations/20260905130000_repair_reception_group.sql')
 
 function entradaValida(extra: Record<string, unknown> = {}) {
   return {
