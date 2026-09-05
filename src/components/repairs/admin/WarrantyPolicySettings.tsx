@@ -6,42 +6,46 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ShieldCheck, Save, CheckCircle2 } from 'lucide-react'
+import { ShieldCheck, Save, CheckCircle2, Loader2, Lock, Info } from 'lucide-react'
 import { toast } from 'sonner'
+import { useRepairWarrantyPolicy, type WarrantyPolicy } from '@/hooks/use-repair-warranty-policy'
 
 export function WarrantyPolicySettings() {
-  const [defaultMonths, setDefaultMonths] = useState<number>(3)
-  const [defaultType, setDefaultType] = useState<string>('full')
-  const [defaultNotes, setDefaultNotes] = useState<string>('')
+  // Antes esto se guardaba en localStorage con claves propias, que ningun otro
+  // lado leia: configurar la politica aca no cambiaba nada en el formulario de
+  // nueva reparacion ni en el comprobante. Ahora va contra la configuracion de
+  // la empresa, que es la que ya honra el comprobante que firma el cliente.
+  const { policy, loading, canEdit, persisted, error, save } = useRepairWarrantyPolicy()
+
+  const [defaultMonths, setDefaultMonths] = useState<number>(policy.months)
+  const [defaultType, setDefaultType] = useState<string>(policy.type)
+  const [defaultNotes, setDefaultNotes] = useState<string>(policy.notes)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    try {
-      const storedMonths = localStorage.getItem('repair_default_warranty_months')
-      if (storedMonths) setDefaultMonths(parseInt(storedMonths, 10))
+    setDefaultMonths(policy.months)
+    setDefaultType(policy.type)
+    setDefaultNotes(policy.notes)
+  }, [policy])
 
-      const storedType = localStorage.getItem('repair_default_warranty_type')
-      if (storedType) setDefaultType(storedType)
+  const handleSave = async () => {
+    setSaving(true)
+    const result = await save({
+      months: defaultMonths,
+      type: defaultType as WarrantyPolicy['type'],
+      notes: defaultNotes,
+    })
+    setSaving(false)
 
-      const storedNotes = localStorage.getItem('repair_default_warranty_notes')
-      if (storedNotes) setDefaultNotes(storedNotes)
-    } catch {
-      // Ignorar errores de SSR
+    if (!result.ok) {
+      toast.error(result.error || 'Error al guardar la política de garantía')
+      return
     }
-  }, [])
 
-  const handleSave = () => {
-    try {
-      localStorage.setItem('repair_default_warranty_months', String(defaultMonths))
-      localStorage.setItem('repair_default_warranty_type', defaultType)
-      localStorage.setItem('repair_default_warranty_notes', defaultNotes)
-
-      setSaved(true)
-      toast.success('Política de garantía predeterminada guardada correctamente')
-      setTimeout(() => setSaved(false), 2500)
-    } catch {
-      toast.error('Error al guardar la política de garantía')
-    }
+    setSaved(true)
+    toast.success('Política de garantía guardada para todo el taller')
+    setTimeout(() => setSaved(false), 2500)
   }
 
   return (
@@ -154,15 +158,38 @@ export function WarrantyPolicySettings() {
           </div>
         </div>
 
+        {/* Estado de la politica: de donde sale lo que se ve. */}
+        {error ? (
+          <p className="flex items-start gap-1.5 rounded-lg border border-amber-300/70 bg-amber-50 p-2.5 text-[11px] text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-200">
+            <Info className="mt-px h-3.5 w-3.5 shrink-0" />
+            {error} Lo que se muestra son los valores por defecto del sistema.
+          </p>
+        ) : !loading && !persisted ? (
+          <p className="flex items-start gap-1.5 rounded-lg border border-sky-300/70 bg-sky-50 p-2.5 text-[11px] text-sky-800 dark:border-sky-800/50 dark:bg-sky-950/40 dark:text-sky-200">
+            <Info className="mt-px h-3.5 w-3.5 shrink-0" />
+            Todavía no guardaste la política del taller. Esto es una sugerencia: guardala para que la tomen el formulario de nueva reparación y el comprobante.
+          </p>
+        ) : null}
+
+        {!loading && !canEdit && (
+          <p className="flex items-start gap-1.5 rounded-lg border border-slate-300/70 bg-slate-50 p-2.5 text-[11px] text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+            <Lock className="mt-px h-3.5 w-3.5 shrink-0" />
+            Solo un administrador puede cambiar la garantía del taller. Podés verla, pero no guardarla.
+          </p>
+        )}
+
         {/* Botón Guardar */}
         <div className="pt-4 flex justify-end">
           <Button
             type="button"
             onClick={handleSave}
+            disabled={loading || saving || !canEdit}
             className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md"
           >
-            {saved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-            {saved ? 'Política Guardada' : 'Guardar Política de Garantía'}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" />
+              : saved ? <CheckCircle2 className="h-4 w-4" />
+              : <Save className="h-4 w-4" />}
+            {saving ? 'Guardando…' : saved ? 'Política Guardada' : 'Guardar Política de Garantía'}
           </Button>
         </div>
       </CardContent>

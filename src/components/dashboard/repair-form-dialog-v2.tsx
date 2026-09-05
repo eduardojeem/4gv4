@@ -64,33 +64,12 @@ import { PatternDrawer } from './repairs/PatternDrawer'
 import { AppError } from '@/lib/errors'
 // import { uploadFile } from '@/lib/supabase-storage'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
+import { useRepairWarrantyPolicy } from '@/hooks/use-repair-warranty-policy'
 
-const DEFAULT_WARRANTY_KEY = '4g_default_repair_warranty'
-
-interface SavedWarrantyPreference {
-  months: number
-  type: 'labor' | 'parts' | 'full'
-  notes?: string
-}
-
-function getSavedWarrantyPreference(): SavedWarrantyPreference {
-  if (typeof window === 'undefined') return { months: 3, type: 'full' }
-  try {
-    const raw = localStorage.getItem(DEFAULT_WARRANTY_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (typeof parsed?.months === 'number') return parsed
-    }
-  } catch {}
-  return { months: 3, type: 'full' }
-}
-
-function saveWarrantyPreference(pref: SavedWarrantyPreference) {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(DEFAULT_WARRANTY_KEY, JSON.stringify(pref))
-  } catch {}
-}
+// La garantia predeterminada dejo de vivir en `localStorage`: era por navegador,
+// asi que dos computadoras del mismo local tenian politicas distintas y un
+// empleado nuevo empezaba siempre en 3 meses. Ahora sale de la configuracion de
+// la empresa, la misma que usa el comprobante. Ver `useRepairWarrantyPolicy`.
 
 const QUICK_MODE_PREF_KEY = '4g_repair_form_quick_mode'
 
@@ -313,6 +292,21 @@ export function RepairFormDialogV2({
   const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<QuickCustomerData | null>(null)
   const [selectedQuickCustomer, setSelectedQuickCustomer] = useState<QuickCustomerData | null>(null)
+  // La garantia predeterminada del taller: una sola, guardada por empresa, la
+  // misma que usa el comprobante. Antes cada navegador tenia la suya.
+  const warrantyPolicy = useRepairWarrantyPolicy(open)
+
+  async function guardarGarantiaDelTaller(next: { months: number; type: 'labor' | 'parts' | 'full'; notes: string }) {
+    const result = await warrantyPolicy.save(next)
+    if (!result.ok) {
+      toast.error(result.error || 'No se pudo guardar la garantía predeterminada')
+      return
+    }
+    const etiqueta = next.type === 'labor' ? 'Solo mano de obra' : next.type === 'parts' ? 'Solo repuestos' : 'Completa'
+    toast.success(`⭐ Garantía del taller guardada: ${next.months} meses (${etiqueta}). La toman todas las órdenes nuevas.`)
+  }
+
+
   const [isWarrantyConfigOpen, setIsWarrantyConfigOpen] = useState(false)
   const [configWarrantyMonths, setConfigWarrantyMonths] = useState<number>(3)
   const [configWarrantyType, setConfigWarrantyType] = useState<'labor' | 'parts' | 'full'>('full')
@@ -417,14 +411,36 @@ export function RepairFormDialogV2({
       pricingMode: initialData?.pricingMode || 'automatic',
       discountAmount: initialData?.discountAmount || 0,
       priceOverrideReason: initialData?.priceOverrideReason || '',
-      warrantyMonths: initialData?.warrantyMonths ?? (mode === 'add' ? getSavedWarrantyPreference().months : 3),
-      warrantyType: initialData?.warrantyType || (mode === 'add' ? getSavedWarrantyPreference().type : 'full'),
-      warrantyNotes: initialData?.warrantyNotes || (mode === 'add' ? (getSavedWarrantyPreference().notes || '') : ''),
+      warrantyMonths: initialData?.warrantyMonths ?? 3,
+      warrantyType: initialData?.warrantyType || 'full',
+      warrantyNotes: initialData?.warrantyNotes || '',
       depositAmount: null,
       depositMethod: null,
       depositReference: ''
     }
   })
+
+  /**
+   * Aplica la garantia del taller a una orden nueva, cuando llega del servidor.
+   * Solo si la persona todavia no la toco: pisarle lo que escribio seria peor
+   * que arrancar con el valor por defecto.
+   */
+  const garantiaAplicadaRef = useRef(false)
+  useEffect(() => {
+    if (!open) { garantiaAplicadaRef.current = false; return }
+    if (mode !== 'add' || warrantyPolicy.loading || garantiaAplicadaRef.current) return
+    if (initialData?.warrantyMonths !== undefined) return
+
+    const campos = getValues()
+    const sinTocar = !campos.warrantyNotes && (campos.warrantyMonths === 3 || campos.warrantyMonths === undefined)
+    if (!sinTocar) return
+
+    setValue('warrantyMonths', warrantyPolicy.policy.months)
+    setValue('warrantyType', warrantyPolicy.policy.type)
+    setValue('warrantyNotes', warrantyPolicy.policy.notes)
+    garantiaAplicadaRef.current = true
+  }, [open, mode, warrantyPolicy.loading, warrantyPolicy.policy, initialData?.warrantyMonths, getValues, setValue])
+
 
   // Field array for devices
   const { fields, append, remove } = useFieldArray({
@@ -610,9 +626,9 @@ export function RepairFormDialogV2({
         pricingMode: initialData?.pricingMode || 'automatic',
         discountAmount: initialData?.discountAmount || 0,
         priceOverrideReason: initialData?.priceOverrideReason || '',
-        warrantyMonths: initialData?.warrantyMonths ?? (mode === 'add' ? getSavedWarrantyPreference().months : 3),
-        warrantyType: initialData?.warrantyType || (mode === 'add' ? getSavedWarrantyPreference().type : 'full'),
-        warrantyNotes: initialData?.warrantyNotes || (mode === 'add' ? (getSavedWarrantyPreference().notes || '') : ''),
+        warrantyMonths: initialData?.warrantyMonths ?? 3,
+        warrantyType: initialData?.warrantyType || 'full',
+        warrantyNotes: initialData?.warrantyNotes || '',
         depositAmount: initialData?.depositAmount ?? null,
         depositMethod: initialData?.depositMethod ?? null,
         depositReference: initialData?.depositReference || ''
@@ -2700,8 +2716,7 @@ export function RepairFormDialogV2({
                         const months = watch('warrantyMonths') ?? 3
                         const type = watch('warrantyType') || 'full'
                         const notes = watch('warrantyNotes') || ''
-                        saveWarrantyPreference({ months, type, notes })
-                        toast.success(`⭐ Garantía predeterminada guardada: ${months} meses (${type === 'labor' ? 'Solo mano de obra' : type === 'parts' ? 'Solo repuestos' : 'Completa'})`)
+                        void guardarGarantiaDelTaller({ months, type, notes })
                       }}
                       className="h-8 text-xs gap-1.5 border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900 font-bold shadow-xs"
                       title="Guardar esta configuración como la predeterminada para nuevas reparaciones"
@@ -2720,7 +2735,7 @@ export function RepairFormDialogV2({
                       Atajos Rápidos de Duración
                     </Label>
                     <span className="text-[10px] text-muted-foreground">
-                      ⭐ = Configuración predeterminada actual ({getSavedWarrantyPreference().months}m)
+                      ⭐ = Predeterminada del taller ({warrantyPolicy.policy.months}m)
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -2732,7 +2747,7 @@ export function RepairFormDialogV2({
                       { months: 12, label: '1 Año' },
                     ].map((preset) => {
                       const active = watch('warrantyMonths') === preset.months
-                      const isDefault = getSavedWarrantyPreference().months === preset.months
+                      const isDefault = warrantyPolicy.policy.months === preset.months
                       return (
                         <Button
                           key={preset.months}
@@ -3764,13 +3779,12 @@ export function RepairFormDialogV2({
                 setValue('warrantyMonths', configWarrantyMonths, { shouldDirty: true, shouldValidate: true })
                 setValue('warrantyType', configWarrantyType, { shouldDirty: true, shouldValidate: true })
                 setValue('warrantyNotes', configWarrantyNotes, { shouldDirty: true })
-                saveWarrantyPreference({
+                void guardarGarantiaDelTaller({
                   months: configWarrantyMonths,
                   type: configWarrantyType,
-                  notes: configWarrantyNotes
+                  notes: configWarrantyNotes,
                 })
                 setIsWarrantyConfigOpen(false)
-                toast.success(`⭐ ¡Plantilla predeterminada guardada! Se usará automáticamente en todos los nuevos comprobantes.`)
               }}
               className="flex-1 sm:flex-none text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold gap-1 shadow-sm"
             >
