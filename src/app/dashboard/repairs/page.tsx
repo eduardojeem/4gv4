@@ -378,11 +378,33 @@ function RepairsPageContent() {
           return false
         }
 
+        // El adelanto se cobraba solo con un equipo y con varios se descartaba
+        // sin decir nada: el cliente pagaba y no quedaba registrado en ningún
+        // lado. No se reparte solo porque no hay forma de saber a qué equipo
+        // corresponde —descontarlo entero del primero le baja el saldo a ese y
+        // deja a los otros pagando completo—, así que se avisa y lo decide quien
+        // atiende.
+        if (data.devices.length > 1 && (data.depositAmount ?? 0) > 0) {
+          toast.error(
+            'El adelanto se cobra sobre una orden y acá hay varios equipos.',
+            {
+              description: 'Sacá el monto para guardar, y cobralo después desde la reparación que corresponda.',
+              duration: 8000,
+            }
+          )
+          return false
+        }
+
+        // Todas las órdenes de este envío comparten la recepción: es lo que
+        // permite saber después que los equipos llegaron juntos.
+        const receptionId = data.devices.length > 1 ? crypto.randomUUID() : null
+
         // Handle multiple devices - create one repair per device
         const promises = data.devices.map(async (d, deviceIndex) => {
           const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
           const payload: PersistRepairFormData = {
             idempotencyKey: `${data.idempotencyKey || crypto.randomUUID()}-${deviceIndex}`,
+            receptionId,
             customer_id: data.existingCustomerId || '',
             device: `${d.brand} ${d.model}`.trim(),
             deviceType: d.deviceType,

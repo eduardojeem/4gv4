@@ -24,6 +24,9 @@ const repairNoteSchema = z.object({
 const createRepairInputSchema = z.object({
   idempotency_key: z.string().trim().min(8).max(120),
   customer_id: z.string().uuid(),
+  // Agrupa las ordenes creadas en una misma recepcion. Null cuando el equipo
+  // vino solo, que es la mayoria de los casos.
+  reception_id: z.string().uuid().optional().nullable(),
   device_brand: z.string().trim().min(2).max(100),
   device_model: z.string().trim().min(1).max(100),
   serial_number: optionalText(100),

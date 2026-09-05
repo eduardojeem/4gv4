@@ -65,6 +65,7 @@ import { calculateRepairCost } from '@/lib/repairs/cost-breakdown'
 import { useAuth } from '@/contexts/auth-context'
 import { CustomerQuickCreateDialog, type QuickCustomerData } from './CustomerQuickCreateDialog'
 import { CustomerDetailModal } from './CustomerDetailModal'
+import { ReceptionSiblings } from './ReceptionSiblings'
 import type { Customer as FullCustomer } from '@/hooks/use-customers'
 
 interface RepairDetailDialogProps {
@@ -1225,6 +1226,13 @@ export function RepairDetailDialog({
                   </div>
 
                   <div className="space-y-2.5 text-sm pt-1">
+                    {/* Los otros equipos que dejó en la misma visita. No aparece
+                        nada cuando vino solo, que es la mayoría de los casos. */}
+                    <ReceptionSiblings
+                      receptionId={repair.receptionId}
+                      currentRepairId={repair.id}
+                    />
+
                     {/* Teléfono principal */}
                     {repair.customer?.phone && (
                       <div className="flex items-center justify-between gap-2">

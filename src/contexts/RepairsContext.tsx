@@ -37,6 +37,8 @@ type RepairNoteFormInput = {
 
 export interface RepairFormData {
     idempotencyKey?: string
+    /** Comparten valor las ordenes creadas en la misma recepcion. */
+    receptionId?: string | null
     customer_id: string
     device: string
     deviceType: string
@@ -230,6 +232,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 body: JSON.stringify({
                     idempotency_key: repairData.idempotencyKey || crypto.randomUUID(),
                     customer_id: repairData.customer_id,
+                    reception_id: repairData.receptionId || null,
                     device_brand: repairData.brand,
                     device_model: repairData.model,
                     serial_number: repairData.serial_number || repairData.serialNumber || repairData.imei || null,

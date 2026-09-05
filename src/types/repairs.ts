@@ -167,6 +167,12 @@ export interface Repair {
   id: string
   ticketNumber?: string
   /**
+   * Agrupa las ordenes creadas en una misma recepcion —los equipos que el
+   * cliente dejo en la misma visita—. Null cuando el equipo vino solo.
+   * No confundir con `parentRepairId`, que es el retrabajo de posventa.
+   */
+  receptionId?: string | null
+  /**
    * Reparacion original si esta nacio como retrabajo por garantia desde un
    * caso de posventa. Sin esto un retrabajo se veia igual que cualquier otra
    * reparacion en la lista.
