@@ -46,4 +46,13 @@ describe('persistencia de favoritos', () => {
     expect(renderHook(() => useFavorites()).result.current.items).toEqual([])
     expect(renderHook(() => useFavorites()).result.current.account).toBe(false)
   })
+  it('impide guardar más de 30 productos favoritos arrojando un error descriptivo', async () => {
+    for (let i = 1; i <= 30; i++) {
+      await toggleFavorite({ ...item, productId: `prod-${i}` })
+    }
+    expect(renderHook(() => useFavorites()).result.current.items).toHaveLength(30)
+    await expect(toggleFavorite({ ...item, productId: 'prod-31' })).rejects.toThrow(/30 productos como favoritos/)
+    expect(renderHook(() => useFavorites()).result.current.items).toHaveLength(30)
+  })
 })
+

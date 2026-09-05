@@ -29,7 +29,22 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Save, X, UserPlus, UserCog, Sparkles, CheckCircle2, Building2, Globe, AlertTriangle } from 'lucide-react'
+import { 
+    Loader2, 
+    Save, 
+    X, 
+    UserPlus, 
+    UserCog, 
+    Sparkles, 
+    CheckCircle2, 
+    Building2, 
+    Globe, 
+    AlertTriangle,
+    User,
+    Phone,
+    Mail,
+    Users
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Customer } from '@/hooks/use-customers'
 import { validateCustomerContact, normalizePhone, MIN_PHONE_DIGITS, ALTERNATE_PHONE_LABELS } from '@/lib/customers/contact-rules'
@@ -323,280 +338,373 @@ export function CustomerQuickCreateDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-[490px] p-0 overflow-hidden rounded-2xl">
-                <DialogHeader className="p-5 pb-3 border-b bg-white dark:bg-slate-950">
-                    <div className="flex items-center gap-2.5">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
-                            {isEditing ? <UserCog className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />}
+            <DialogContent className="w-[95vw] sm:max-w-[520px] max-h-[92dvh] sm:max-h-[88vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 shadow-2xl">
+                {/* Header fijo superior con gradiente sutil */}
+                <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-3.5 border-b bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/60 dark:to-slate-950 shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className={cn(
+                            "flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl shadow-xs transition-colors shrink-0",
+                            isEditing 
+                                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20" 
+                                : "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20"
+                        )}>
+                            {isEditing ? <UserCog className="h-5 w-5 sm:h-6 sm:w-6" /> : <UserPlus className="h-5 w-5 sm:h-6 sm:w-6" />}
                         </div>
-                        <div>
-                            <DialogTitle className="text-lg font-bold">
-                                {isEditing ? 'Editar Cliente' : 'Crear Nuevo Cliente'}
-                            </DialogTitle>
-                            <DialogDescription className="text-xs">
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <DialogTitle className="text-base sm:text-lg font-bold tracking-tight text-foreground truncate">
+                                    {isEditing ? 'Editar Ficha de Cliente' : 'Nuevo Cliente para Taller'}
+                                </DialogTitle>
+                                {isEditing && (
+                                    <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0 h-4 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700">
+                                        Modo Edición
+                                    </Badge>
+                                )}
+                            </div>
+                            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                                 {isEditing
-                                    ? 'Actualizá los datos de contacto del cliente.'
-                                    : 'Ingresa los datos básicos para registrar al cliente en el sistema.'}
+                                    ? 'Actualizá los datos de contacto y facturación del cliente.'
+                                    : 'Completá los datos clave para órdenes de reparación y seguimiento.'}
                             </DialogDescription>
                         </div>
                     </div>
                 </DialogHeader>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-3.5">
+                {/* Formulario scrolleable en móviles y desktop */}
+                <form id="customer-quick-create-form" onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
                     {duplicates.length > 0 && (
-                        <div className="flex items-start gap-2 rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-200">
+                        <div className="flex items-start gap-2.5 rounded-xl border border-amber-300/80 bg-amber-50/90 p-3 text-amber-900 shadow-xs dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200">
                             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                            <div className="min-w-0">
-                                <p className="text-xs font-bold">{duplicatesMessage(duplicates)}</p>
-                                <p className="mt-0.5 text-[11px] opacity-80">
-                                    Buscalo en vez de cargarlo de nuevo: si queda repetido, sus compras y su deuda se reparten entre las dos fichas.
+                            <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold leading-tight">{duplicatesMessage(duplicates)}</p>
+                                <p className="mt-1 text-[11px] opacity-85 leading-normal">
+                                    Buscalo en el selector en lugar de duplicarlo: registrarlo doble divide sus órdenes, garantías e historial.
                                 </p>
                             </div>
                         </div>
                     )}
 
-                    {/* Nombre */}
-                    <div className="space-y-1.5">
-                        <Label htmlFor="name" className="text-xs font-bold">
-                            Nombre o razón social <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                            id="name"
-                            {...register('name')}
-                            placeholder="Juan Pérez / Comercial San Miguel S.A."
-                            className={cn("h-10 text-xs font-medium", errors.name && 'border-red-500')}
-                            disabled={isSubmitting}
-                            autoFocus
-                        />
-                        {errors.name && (
-                            <p className="text-[11px] text-red-500">{errors.name.message}</p>
-                        )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* Teléfono */}
-                        <div className="space-y-1.5">
-                            <Label htmlFor="phone" className="text-xs font-bold">
-                                Teléfono <span className="text-red-500">*</span>
-                            </Label>
-                            <Input
-                                id="phone"
-                                {...register('phone')}
-                                placeholder="0981 123456"
-                                className={cn("h-10 text-xs font-medium", errors.phone && 'border-red-500')}
-                                disabled={isSubmitting}
-                            />
-                            {errors.phone && (
-                                <p className="text-[11px] text-red-500">{errors.phone.message}</p>
-                            )}
+                    {/* Sección 1: Identificación y Nombre */}
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-0.5 border-b border-border/40">
+                            <User className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                                Datos del Titular
+                            </span>
                         </div>
 
-                        {/* Contacto alternativo: el celular del cliente suele ser
-                            el equipo que acaba de dejar en el taller. */}
+                        {/* Nombre o Razón Social */}
                         <div className="space-y-1.5">
-                            <Label htmlFor="alternate_phone" className="text-xs font-bold">
-                                Otro teléfono para avisarle{' '}
-                                <span className="text-[10px] text-muted-foreground font-normal">(opcional)</span>
-                            </Label>
-                            <Input
-                                id="alternate_phone"
-                                {...register('alternate_phone')}
-                                placeholder="Si deja su celular acá"
-                                className={cn("h-10 text-xs font-medium", errors.alternate_phone && 'border-red-500')}
-                                disabled={isSubmitting}
-                            />
-                            {errors.alternate_phone && (
-                                <p className="text-[11px] text-red-500">{errors.alternate_phone.message}</p>
-                            )}
-                        </div>
-
-                        {watch('alternate_phone')?.trim() ? (
-                            <div className="space-y-1.5 sm:col-span-2">
-                                <Label htmlFor="alternate_phone_label" className="text-xs font-bold">
-                                    ¿De quién es ese teléfono? <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                    id="alternate_phone_label"
-                                    list="repair-alternate-phone-labels"
-                                    {...register('alternate_phone_label')}
-                                    placeholder="Ej: hermana, jefe, hijo…"
-                                    className={cn("h-10 text-xs font-medium", errors.alternate_phone_label && 'border-red-500')}
-                                    disabled={isSubmitting}
-                                />
-                                <datalist id="repair-alternate-phone-labels">
-                                    {ALTERNATE_PHONE_LABELS.map((label) => (
-                                        <option key={label} value={label} />
-                                    ))}
-                                </datalist>
-                                {errors.alternate_phone_label && (
-                                    <p className="text-[11px] text-red-500">{errors.alternate_phone_label.message}</p>
-                                )}
-                            </div>
-                        ) : null}
-
-                        {/* RUC / CI */}
-                        <div className="space-y-1.5 sm:col-span-2">
-                            <Label htmlFor="ruc" className="text-xs font-bold">
-                                RUC / C.I. <span className="text-[10px] text-muted-foreground font-normal">(opcional)</span>
+                            <Label htmlFor="name" className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                <span>Nombre o razón social <span className="text-red-500 font-bold">*</span></span>
                             </Label>
                             <div className="relative">
-                                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
+                                <Input
+                                    id="name"
+                                    {...register('name')}
+                                    placeholder="Ej: Juan Pérez / Electro Servicios S.R.L."
+                                    className={cn(
+                                        "pl-9 h-10 text-xs sm:text-sm font-medium rounded-xl transition-all shadow-2xs",
+                                        errors.name && 'border-red-500 focus-visible:ring-red-500'
+                                    )}
+                                    disabled={isSubmitting}
+                                    autoFocus
+                                />
+                            </div>
+                            {errors.name && (
+                                <p className="text-[11px] font-medium text-red-500 mt-1">{errors.name.message}</p>
+                            )}
+                        </div>
+
+                        {/* RUC / CI */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="ruc" className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                <span>RUC / C.I.</span>
+                                <span className="text-[10px] text-muted-foreground font-normal">Opcional para facturación</span>
+                            </Label>
+                            <div className="relative">
+                                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
                                 <Input
                                     id="ruc"
                                     {...register('ruc')}
-                                    placeholder="4567890-1"
-                                    className="pl-9 h-10 text-xs font-medium"
+                                    placeholder="Ej: 4567890 o 80012345-6"
+                                    className="pl-9 h-10 text-xs sm:text-sm font-mono font-medium rounded-xl transition-all shadow-2xs"
                                     disabled={isSubmitting}
                                 />
                             </div>
                         </div>
                     </div>
 
-                    {/* Email */}
-                    <div className="space-y-1.5">
-                        <Label htmlFor="email" className="text-xs font-bold">
-                            Email {sendWebInvite ? <span className="text-red-500">*</span> : <span className="text-[10px] text-muted-foreground font-normal">(opcional)</span>}
-                        </Label>
-                        <Input
-                            id="email"
-                            type="email"
-                            {...register('email')}
-                            placeholder="email@ejemplo.com"
-                            className={cn("h-10 text-xs font-medium", errors.email && 'border-red-500')}
-                            disabled={isSubmitting}
-                        />
-                        {errors.email && (
-                            <p className="text-[11px] text-red-500">{errors.email.message}</p>
-                        )}
+                    {/* Sección 2: Contacto Directo y Alternativo */}
+                    <div className="space-y-3 pt-1">
+                        <div className="flex items-center gap-2 pb-0.5 border-b border-border/40">
+                            <Phone className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                                Comunicación y Notificaciones
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* Teléfono Principal */}
+                            <div className="space-y-1.5">
+                                <Label htmlFor="phone" className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                    <span>Teléfono <span className="text-red-500 font-bold">*</span></span>
+                                </Label>
+                                <div className="relative">
+                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
+                                    <Input
+                                        id="phone"
+                                        type="tel"
+                                        {...register('phone')}
+                                        placeholder="Ej: 0981 123456"
+                                        className={cn(
+                                            "pl-9 h-10 text-xs sm:text-sm font-medium rounded-xl transition-all shadow-2xs",
+                                            errors.phone && 'border-red-500 focus-visible:ring-red-500'
+                                        )}
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+                                {errors.phone && (
+                                    <p className="text-[11px] font-medium text-red-500 mt-1">{errors.phone.message}</p>
+                                )}
+                            </div>
+
+                            {/* Contacto alternativo */}
+                            <div className="space-y-1.5">
+                                <Label htmlFor="alternate_phone" className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                    <span>Otro teléfono para avisarle</span>
+                                    <span className="text-[10px] text-muted-foreground font-normal">(opcional)</span>
+                                </Label>
+                                <div className="relative">
+                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
+                                    <Input
+                                        id="alternate_phone"
+                                        type="tel"
+                                        {...register('alternate_phone')}
+                                        placeholder="Si deja su celular acá"
+                                        className={cn(
+                                            "pl-9 h-10 text-xs sm:text-sm font-medium rounded-xl transition-all shadow-2xs",
+                                            errors.alternate_phone && 'border-red-500 focus-visible:ring-red-500'
+                                        )}
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+                                {errors.alternate_phone && (
+                                    <p className="text-[11px] font-medium text-red-500 mt-1">{errors.alternate_phone.message}</p>
+                                )}
+                            </div>
+
+                            {/* Aclaración de quién es el teléfono alternativo */}
+                            {watch('alternate_phone')?.trim() ? (
+                                <div className="space-y-1.5 sm:col-span-2 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-800/40 p-2.5 rounded-xl">
+                                    <Label htmlFor="alternate_phone_label" className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center justify-between">
+                                        <span>¿De quién es ese teléfono? <span className="text-red-500">*</span></span>
+                                        <span className="text-[10px] font-normal text-indigo-700 dark:text-indigo-300">Indica a quién contactar</span>
+                                    </Label>
+                                    <div className="relative mt-1">
+                                        <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-500/70 dark:text-indigo-400/70" />
+                                        <Input
+                                            id="alternate_phone_label"
+                                            list="repair-alternate-phone-labels"
+                                            {...register('alternate_phone_label')}
+                                            placeholder="Ej: Hermana, Esposo, Papá, Trabajo, etc."
+                                            className={cn(
+                                                "pl-9 h-10 text-xs sm:text-sm font-medium rounded-xl bg-white dark:bg-slate-900 transition-all",
+                                                errors.alternate_phone_label && 'border-red-500 focus-visible:ring-red-500'
+                                            )}
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+                                    <datalist id="repair-alternate-phone-labels">
+                                        {ALTERNATE_PHONE_LABELS.map((label) => (
+                                            <option key={label} value={label} />
+                                        ))}
+                                    </datalist>
+                                    {errors.alternate_phone_label && (
+                                        <p className="text-[11px] font-medium text-red-500 mt-1">{errors.alternate_phone_label.message}</p>
+                                    )}
+                                </div>
+                            ) : null}
+
+                            {/* Email */}
+                            <div className="space-y-1.5 sm:col-span-2">
+                                <Label htmlFor="email" className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                    <span>Email {sendWebInvite ? <span className="text-red-500 font-bold">*</span> : null}</span>
+                                    <span className="text-[10px] text-muted-foreground font-normal">
+                                        {sendWebInvite ? 'Requerido para la invitación' : '(opcional)'}
+                                    </span>
+                                </Label>
+                                <div className="relative">
+                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
+                                    <Input
+                                        id="email"
+                                        type="email"
+                                        {...register('email')}
+                                        placeholder="cliente@ejemplo.com"
+                                        className={cn(
+                                            "pl-9 h-10 text-xs sm:text-sm font-medium rounded-xl transition-all shadow-2xs",
+                                            errors.email && 'border-red-500 focus-visible:ring-red-500'
+                                        )}
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+                                {errors.email && (
+                                    <p className="text-[11px] font-medium text-red-500 mt-1">{errors.email.message}</p>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Opciones de Acceso: Mayorista e Invitación Web */}
-                    <div className="grid grid-cols-1 gap-2 pt-1">
-                        {/* Opción Habilitar como Mayorista */}
-                        <div
-                            onClick={() => setIsWholesale(prev => !prev)}
-                            className={cn(
-                                "p-3 rounded-xl border transition-all cursor-pointer select-none",
-                                isWholesale
-                                    ? "border-violet-400 bg-violet-50/60 dark:border-violet-700 dark:bg-violet-950/30"
-                                    : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 hover:border-slate-300 dark:hover:border-slate-700"
-                            )}
-                        >
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className={cn(
-                                        "flex h-7 w-7 items-center justify-center rounded-lg transition-colors shrink-0",
-                                        isWholesale
-                                            ? "bg-violet-600 text-white"
-                                            : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                                    )}>
-                                        <Sparkles className="h-3.5 w-3.5" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-1.5">
-                                            <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                                                Cliente Mayorista
-                                            </p>
-                                            {isWholesale && (
-                                                <Badge className="bg-violet-600 text-white text-[9px] py-0 px-1 font-bold">
-                                                    Tarifa Especial
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        <p className="text-[10px] text-muted-foreground truncate">
-                                            Aplica precios mayoristas automáticos en repuestos y servicios.
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className={cn(
-                                    "h-4.5 w-4.5 rounded-md border flex items-center justify-center shrink-0 transition-colors",
+                    {/* Sección 3: Categoría Comercial y Acceso Web */}
+                    <div className="space-y-2 pt-1">
+                        <div className="flex items-center gap-2 pb-0.5 border-b border-border/40">
+                            <Sparkles className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                                Opciones Especiales
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-2 pt-0.5">
+                            {/* Opción Habilitar como Mayorista */}
+                            <div
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setIsWholesale(p => !p) } }}
+                                onClick={() => setIsWholesale(prev => !prev)}
+                                className={cn(
+                                    "p-3 rounded-xl border transition-all cursor-pointer select-none",
                                     isWholesale
-                                        ? "bg-violet-600 border-violet-600 text-white"
-                                        : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                                )}>
-                                    {isWholesale && <CheckCircle2 className="h-3.5 w-3.5" />}
+                                        ? "border-violet-400/80 bg-violet-50/70 dark:border-violet-700/70 dark:bg-violet-950/40 shadow-xs"
+                                        : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/60"
+                                )}
+                            >
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className={cn(
+                                            "flex h-8 w-8 items-center justify-center rounded-lg transition-colors shrink-0",
+                                            isWholesale
+                                                ? "bg-violet-600 text-white shadow-xs"
+                                                : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                        )}>
+                                            <Sparkles className="h-4 w-4" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                                                    Tarifa Mayorista / Técnico
+                                                </p>
+                                                {isWholesale && (
+                                                    <Badge className="bg-violet-600 hover:bg-violet-600 text-white text-[9px] py-0 px-1.5 font-bold h-4">
+                                                        Activo
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                                                Aplica precios mayoristas automáticos en repuestos e insumos de reparación.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className={cn(
+                                        "h-5 w-5 rounded-md border flex items-center justify-center shrink-0 transition-colors",
+                                        isWholesale
+                                            ? "bg-violet-600 border-violet-600 text-white"
+                                            : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                                    )}>
+                                        {isWholesale && <CheckCircle2 className="h-3.5 w-3.5" />}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Opción Enviar Invitación al Portal Web Público */}
-                        <div
-                            onClick={() => setSendWebInvite(prev => !prev)}
-                            className={cn(
-                                "p-3 rounded-xl border transition-all cursor-pointer select-none",
-                                sendWebInvite
-                                    ? "border-cyan-500 bg-cyan-50/60 dark:border-cyan-700 dark:bg-cyan-950/30"
-                                    : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 hover:border-slate-300 dark:hover:border-slate-700"
-                            )}
-                        >
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className={cn(
-                                        "flex h-7 w-7 items-center justify-center rounded-lg transition-colors shrink-0",
-                                        sendWebInvite
-                                            ? "bg-cyan-600 text-white"
-                                            : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                                    )}>
-                                        <Globe className="h-3.5 w-3.5" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-1.5">
-                                            <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                                                Invitar a la Web Pública
-                                            </p>
-                                            {sendWebInvite && (
-                                                <Badge className="bg-cyan-600 text-white text-[9px] py-0 px-1 font-bold">
-                                                    Portal Web
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        <p className="text-[10px] text-muted-foreground truncate">
-                                            Envía un email para que el cliente cree su contraseña y consulte sus órdenes.
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className={cn(
-                                    "h-4.5 w-4.5 rounded-md border flex items-center justify-center shrink-0 transition-colors",
+                            {/* Opción Enviar Invitación al Portal Web Público */}
+                            <div
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setSendWebInvite(p => !p) } }}
+                                onClick={() => setSendWebInvite(prev => !prev)}
+                                className={cn(
+                                    "p-3 rounded-xl border transition-all cursor-pointer select-none",
                                     sendWebInvite
-                                        ? "bg-cyan-600 border-cyan-600 text-white"
-                                        : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                                )}>
-                                    {sendWebInvite && <CheckCircle2 className="h-3.5 w-3.5" />}
+                                        ? "border-cyan-500/80 bg-cyan-50/70 dark:border-cyan-700/70 dark:bg-cyan-950/40 shadow-xs"
+                                        : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/60"
+                                )}
+                            >
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className={cn(
+                                            "flex h-8 w-8 items-center justify-center rounded-lg transition-colors shrink-0",
+                                            sendWebInvite
+                                                ? "bg-cyan-600 text-white shadow-xs"
+                                                : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                        )}>
+                                            <Globe className="h-4 w-4" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                                                    Enviar Invitación al Portal Web
+                                                </p>
+                                                {sendWebInvite && (
+                                                    <Badge className="bg-cyan-600 hover:bg-cyan-600 text-white text-[9px] py-0 px-1.5 font-bold h-4">
+                                                        Email
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                                                Envía un correo para que el cliente consulte sus reparaciones en línea.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className={cn(
+                                        "h-5 w-5 rounded-md border flex items-center justify-center shrink-0 transition-colors",
+                                        sendWebInvite
+                                            ? "bg-cyan-600 border-cyan-600 text-white"
+                                            : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                                    )}>
+                                        {sendWebInvite && <CheckCircle2 className="h-3.5 w-3.5" />}
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-
-                    <DialogFooter className="gap-2 pt-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={handleClose}
-                            disabled={isSubmitting}
-                            className="h-9 text-xs"
-                        >
-                            <X className="mr-1.5 h-3.5 w-3.5" />
-                            Cancelar
-                        </Button>
-                        <Button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="h-9 text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white gap-1.5"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    {isEditing ? 'Guardando...' : 'Creando...'}
-                                </>
-                            ) : (
-                                <>
-                                    <Save className="h-3.5 w-3.5" />
-                                    {isEditing ? 'Guardar Cambios' : 'Crear Cliente'}
-                                </>
-                            )}
-                        </Button>
-                    </DialogFooter>
                 </form>
+
+                {/* Footer fijo inferior con botones amplios y touch-friendly */}
+                <DialogFooter className="p-3.5 sm:p-4 border-t bg-slate-50/80 dark:bg-slate-900/60 flex-row items-center justify-between gap-2 shrink-0">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleClose}
+                        disabled={isSubmitting}
+                        className="h-10 sm:h-9 px-4 text-xs font-medium rounded-xl flex-1 sm:flex-initial"
+                    >
+                        <X className="mr-1.5 h-3.5 w-3.5" />
+                        Cancelar
+                    </Button>
+                    <Button
+                        type="submit"
+                        form="customer-quick-create-form"
+                        disabled={isSubmitting}
+                        className={cn(
+                            "h-10 sm:h-9 px-5 text-xs font-bold text-white gap-2 rounded-xl shadow-xs transition-all active:scale-[0.98] flex-1 sm:flex-initial",
+                            isEditing
+                                ? "bg-amber-600 hover:bg-amber-700"
+                                : "bg-cyan-600 hover:bg-cyan-700"
+                        )}
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>{isEditing ? 'Guardando...' : 'Creando...'}</span>
+                            </>
+                        ) : (
+                            <>
+                                <Save className="h-4 w-4" />
+                                <span>{isEditing ? 'Guardar Cambios' : 'Crear Cliente'}</span>
+                            </>
+                        )}
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     )

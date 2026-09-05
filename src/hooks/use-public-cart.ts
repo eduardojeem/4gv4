@@ -10,6 +10,7 @@ import {
   getPublicCartItems,
   getTenantSlugFromPathname,
   setPublicCartItemStock,
+  setPublicCartItemPrice,
   setPublicCartItems,
   type PublicCartItem,
 } from '@/lib/public-cart'
@@ -53,6 +54,10 @@ export function usePublicCart() {
     return setPublicCartItemStock(tenantSlug, cartItemId, availableStock)
   }, [tenantSlug])
 
+  const setUnitPrice = useCallback((cartItemId: string, unitPrice: number) => {
+    return setPublicCartItemPrice(tenantSlug, cartItemId, unitPrice)
+  }, [tenantSlug])
+
   const removeItem = useCallback((cartItemId: string) => {
     setPublicCartItems(tenantSlug, getPublicCartItems(tenantSlug).filter((item) => item.cartItemId !== cartItemId))
   }, [tenantSlug])
@@ -76,5 +81,5 @@ export function usePublicCart() {
     [tenantSlug]
   )
 
-  return { tenantSlug, items, count, subtotal, addProduct, setQuantity, setAvailableStock, removeItem, clear }
+  return { tenantSlug, items, count, subtotal, addProduct, setQuantity, setAvailableStock, setUnitPrice, removeItem, clear }
 }

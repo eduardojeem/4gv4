@@ -716,7 +716,7 @@ export function ProductTable({
                                               {Object.entries(v.attributes).map(([key, val]) => (
                                                 <span key={key} className="inline-flex items-center gap-1 rounded bg-violet-50 dark:bg-violet-950/50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/60">
                                                   <span className="opacity-70">{key}:</span>
-                                                  <strong className="font-bold">{val}</strong>
+                                                  <strong className="font-bold">{String(val)}</strong>
                                                 </span>
                                               ))}
                                             </div>

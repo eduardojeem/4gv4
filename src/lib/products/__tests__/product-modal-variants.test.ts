@@ -12,7 +12,7 @@ describe('normalizeProductVariantsForForm', () => {
     })
   })
 
-  it('handles example/seed products with has_variants: true but empty attributes/variants by setting has_variants: false', () => {
+  it('preserves the variants flag while a summarized product is hydrated', () => {
     const seedProduct = {
       id: 'prod-123',
       name: 'Remera de Ejemplo',
@@ -23,7 +23,7 @@ describe('normalizeProductVariantsForForm', () => {
     }
 
     const result = normalizeProductVariantsForForm(seedProduct)
-    expect(result.has_variants).toBe(false)
+    expect(result.has_variants).toBe(true)
     expect(result.variant_attribute_config).toEqual([])
     expect(result.variants).toEqual([])
   })
@@ -95,7 +95,7 @@ describe('normalizeProductVariantsForForm', () => {
     expect(parsed.success).toBe(true)
   })
 
-  it('allows seed products with has_variants: false to pass validation without variant errors', () => {
+  it('does not silently downgrade an incomplete variant product', () => {
     const seedProduct = {
       id: 'prod-789',
       name: 'Accesorio Simple',
@@ -121,6 +121,11 @@ describe('normalizeProductVariantsForForm', () => {
     }
 
     const parsed = productSchema.safeParse(formValues)
-    expect(parsed.success).toBe(true)
+    expect(parsed.success).toBe(false)
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.path.join('.'))).toEqual(
+        expect.arrayContaining(['variant_attribute_config', 'variants']),
+      )
+    }
   })
 })

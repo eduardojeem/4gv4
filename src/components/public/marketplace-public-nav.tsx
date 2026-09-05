@@ -7,6 +7,7 @@ import {
   Building2,
   ChevronRight,
   Grid3X3,
+  Heart,
   Home,
   LayoutDashboard,
   LayoutGrid,
@@ -414,6 +415,23 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                   </Link>
                 )
               })}
+
+              <Link
+                href="/marketplace/favoritos"
+                onClick={() => setMobileDrawerOpen(false)}
+                className={cn(
+                  'flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',
+                  pathname === '/marketplace/favoritos'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold'
+                    : 'text-foreground hover:bg-muted'
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <Heart className={cn('h-4 w-4', pathname === '/marketplace/favoritos' ? 'fill-rose-500 text-rose-500' : 'text-rose-500')} />
+                  <span>Mis Favoritos</span>
+                </div>
+                <ChevronRight className="h-4 w-4 opacity-50" />
+              </Link>
 
               <div className="pt-3">
                 <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">

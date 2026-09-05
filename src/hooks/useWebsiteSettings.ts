@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import useSWR, { mutate } from 'swr'
 import { WebsiteSettings } from '@/types/website-settings'
 import { createSupabaseClient } from '@/lib/supabase/client'
@@ -51,6 +51,21 @@ function releasePublicWebsiteSettingsRealtime() {
   publicRealtimeChannel = null
 }
 
+// Fetcher estable a nivel de módulo — la URL se construye desde la key de SWR,
+// así todos los componentes comparten la misma referencia de función.
+async function publicSettingsFetcher(url: string): Promise<WebsiteSettings> {
+  const res = await fetch(url)
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}))
+    const message = errBody?.error || res.statusText || 'Error'
+    const err: FetchError = new Error(message)
+    err.status = res.status
+    throw err
+  }
+  const data = await res.json()
+  return data.data as WebsiteSettings
+}
+
 export function useWebsiteSettings() {
   const isHydrated = useSyncExternalStore(
     subscribeToHydration,
@@ -61,21 +76,7 @@ export function useWebsiteSettings() {
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const cacheKey = tenantSlug ? `${WEBSITE_SETTINGS_CACHE_KEY}?org=${encodeURIComponent(tenantSlug)}` : WEBSITE_SETTINGS_CACHE_KEY
 
-  const fetcher = useMemo(() => async () => {
-    const res = await fetch(cacheKey)
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}))
-      const statusText = res.statusText || 'Error'
-      const message = errBody?.error || statusText
-      const err: FetchError = new Error(message)
-      err.status = res.status
-      throw err
-    }
-    const data = await res.json()
-    return data.data as WebsiteSettings
-  }, [cacheKey])
-
-  const { data, error, isLoading } = useSWR<WebsiteSettings>(cacheKey, fetcher)
+  const { data, error, isLoading } = useSWR<WebsiteSettings>(cacheKey, publicSettingsFetcher)
 
   // Share a single realtime subscription across all consumers of this hook.
   useEffect(() => {
@@ -102,26 +103,25 @@ export function useWebsiteSettings() {
   }
 }
 
+// Fetcher para el panel admin (autenticado, sin caché agresiva).
+async function adminSettingsFetcher(url: string): Promise<WebsiteSettings> {
+  const adminRes = await fetch(url)
+  if (adminRes.ok) {
+    const adminData = await adminRes.json()
+    return adminData.data as WebsiteSettings
+  }
+  const errBody = await adminRes.json().catch(() => ({}))
+  const message = errBody?.error || adminRes.statusText || 'Error'
+  const err: FetchError = new Error(message)
+  err.status = adminRes.status
+  throw err
+}
+
 export function useAdminWebsiteSettings() {
   const [isSaving, setIsSaving] = useState(false)
   const [isInitializing, setIsInitializing] = useState(false)
 
-  const fetcher = useMemo(() => async () => {
-    const adminRes = await fetch(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
-    if (adminRes.ok) {
-      const adminData = await adminRes.json()
-      return adminData.data as WebsiteSettings
-    }
-
-    const errBody = await adminRes.json().catch(() => ({}))
-    const statusText = adminRes.statusText || 'Error'
-    const message = errBody?.error || statusText
-    const err: FetchError = new Error(message)
-    err.status = adminRes.status
-    throw err
-  }, [])
-
-  const { data, error, isLoading } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, fetcher, {
+  const { data, error, isLoading } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, adminSettingsFetcher, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     revalidateIfStale: false,

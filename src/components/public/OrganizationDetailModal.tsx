@@ -160,7 +160,7 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
           <div className="mt-4 space-y-1">
             <DialogTitle className="text-xl sm:text-2xl font-black tracking-tight text-foreground flex items-center gap-2">
               <span>{organization.name}</span>
-              <ShieldCheck className="h-5 w-5 text-primary shrink-0" title="Empresa Verificada" />
+              <span title="Empresa Verificada"><ShieldCheck className="h-5 w-5 text-primary shrink-0" /></span>
             </DialogTitle>
 
             <DialogDescription className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2 flex-wrap">

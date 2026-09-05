@@ -11,6 +11,7 @@ import { resolveWholesaleStatus } from '@/lib/api/products-server'
 import { resolvePublicUnitPrice } from '@/lib/orders/public-pricing'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
+import { deliveryZoneMatchesLocation } from '@/lib/checkout/delivery-zone'
 import type { CheckoutSettings } from '@/types/website-settings'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
@@ -29,12 +30,15 @@ const publicOrderSchema = z.object({
     productId: z.string().uuid(),
     variantId: z.string().uuid().optional().nullable(),
     quantity: z.number().int().min(1).max(999),
+    unitPrice: z.number().finite().min(0).max(9_999_999_999),
   })).min(1).max(50),
   fulfillmentType: z.enum(['PICKUP', 'DELIVERY']).default('PICKUP'),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'DIGITAL_WALLET']).default('CASH'),
   shippingCost: z.number().min(0).max(9_999_999).default(0),
   storeCreditAmount: z.number().finite().min(0).max(9_999_999).default(0),
   deliveryZoneId: z.string().max(100).optional().nullable(),
+  deliveryCity: z.string().trim().min(1).max(100).optional().nullable(),
+  deliveryNeighborhood: z.string().trim().min(1).max(100).optional().nullable(),
   notes: z.string().trim().max(1000).optional().nullable(),
   promotionCode: z.string().trim().max(80).optional().nullable(),
 })
@@ -107,11 +111,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Ingresá una dirección de entrega.' }, { status: 422 })
     }
 
-    const requestedByProduct = new Map<string, { productId: string; variantId: string | null; quantity: number }>()
+    const requestedByProduct = new Map<string, { productId: string; variantId: string | null; quantity: number; unitPrice: number }>()
     for (const item of input.items) {
       const key = `${item.productId}:${item.variantId ?? ''}`
       const current = requestedByProduct.get(key)
-      requestedByProduct.set(key, { productId: item.productId, variantId: item.variantId ?? null, quantity: (current?.quantity ?? 0) + item.quantity })
+      requestedByProduct.set(key, {
+        productId: item.productId,
+        variantId: item.variantId ?? null,
+        quantity: (current?.quantity ?? 0) + item.quantity,
+        unitPrice: current?.unitPrice ?? item.unitPrice,
+      })
     }
     const requestedItems = Array.from(requestedByProduct.values())
     const productIds = [...new Set(requestedItems.map((item) => item.productId))]
@@ -234,6 +243,25 @@ export async function POST(request: NextRequest) {
         category_id: product.category_id ? String(product.category_id) : null,
       }
     })
+    const priceConflicts = requestedItems.flatMap((requestedItem) => {
+      const serverItem = orderItems.find((item) =>
+        item.product_id === requestedItem.productId && item.variant_id === requestedItem.variantId
+      )
+      if (!serverItem || Math.abs(serverItem.unit_price - requestedItem.unitPrice) < 0.01) return []
+      return [{
+        productId: requestedItem.productId,
+        variantId: requestedItem.variantId,
+        currentPrice: serverItem.unit_price,
+      }]
+    })
+    if (priceConflicts.length > 0) {
+      return NextResponse.json({
+        success: false,
+        code: 'PRICE_CHANGED',
+        error: 'Actualizamos el carrito porque cambió el precio de uno o más productos.',
+        data: { conflicts: priceConflicts },
+      }, { status: 409 })
+    }
     const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0)
 
     if (input.fulfillmentType === 'DELIVERY' && !checkout.delivery.enabled) {
@@ -245,7 +273,22 @@ export async function POST(request: NextRequest) {
 
     const deliveryZones = checkout.delivery.zoneOptions ?? []
     const selectedDeliveryZone = deliveryZones.find((zone) => zone.id === input.deliveryZoneId)
-    if (input.fulfillmentType === 'DELIVERY' && deliveryZones.length > 0 && !selectedDeliveryZone) {
+    const selectedZoneMatchesAddress = selectedDeliveryZone && input.deliveryCity && input.deliveryNeighborhood
+      ? deliveryZoneMatchesLocation(selectedDeliveryZone, input.deliveryCity, input.deliveryNeighborhood)
+      : false
+    if (input.fulfillmentType === 'DELIVERY' && selectedDeliveryZone && !selectedZoneMatchesAddress) {
+      return NextResponse.json({
+        success: false,
+        code: 'DELIVERY_ZONE_MISMATCH',
+        error: `La dirección ingresada no corresponde a la zona ${selectedDeliveryZone.name}. Revisá la ciudad y el barrio.`,
+      }, { status: 422 })
+    }
+    if (
+      input.fulfillmentType === 'DELIVERY' &&
+      deliveryZones.length > 0 &&
+      !selectedDeliveryZone &&
+      checkout.delivery.defaultCost <= 0
+    ) {
       return NextResponse.json({ success: false, error: 'Seleccioná una zona de delivery válida.' }, { status: 422 })
     }
 

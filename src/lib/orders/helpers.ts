@@ -1,4 +1,4 @@
-import type { CustomerOrder, CustomerOrderItem, OrderStatus } from './types'
+import type { CustomerOrder, CustomerOrderItem, OrderStatus, PaymentMethod } from './types'
 import { ORDER_FLOW, normalizeOrderStatus } from './flow'
 import { normalizePaymentStatus } from './payment-flow'
 
@@ -51,8 +51,13 @@ export function normalizeOrder(order: RawOrder): CustomerOrder {
     order_number: String(order.order_number ?? ''),
     status: normalizeOrderStatus(order.status),
     payment_status: paymentStatus,
-    payment_method: String(order.payment_method ?? 'CASH').toUpperCase() as CustomerOrder['payment_method'],
-    fulfillment_type: String(order.fulfillment_type ?? 'PICKUP').toUpperCase() as CustomerOrder['fulfillment_type'],
+    payment_method: (order.payment_method ? String(order.payment_method) : 'CASH') as PaymentMethod,
+    fulfillment_type: (() => {
+      const raw = String(order.fulfillment_type ?? '').trim().toUpperCase()
+      if (raw === 'DELIVERY') return 'DELIVERY'
+      if (raw === 'PICKUP') return toNumber(order.shipping_cost) > 0 ? 'DELIVERY' : 'PICKUP'
+      return (toNumber(order.shipping_cost) > 0 || Boolean(order.customer_address && String(order.customer_address).trim())) ? 'DELIVERY' : 'PICKUP'
+    })() as CustomerOrder['fulfillment_type'],
     customer_name: String(order.customer_name ?? ''),
     customer_email: order.customer_email ? String(order.customer_email) : null,
     customer_phone: order.customer_phone ? String(order.customer_phone) : null,

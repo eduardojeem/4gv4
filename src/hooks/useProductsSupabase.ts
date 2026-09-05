@@ -51,7 +51,7 @@ interface DashboardStats {
 
 interface ProductApiPayload {
   success?: boolean
-  data?: Product
+  data?: Product | { product?: Product; variants?: unknown[] }
   error?: string
   code?: string
   message?: string
@@ -508,22 +508,30 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     productData: Database['public']['Tables']['products']['Update']
   ) => {
     try {
-      const response = await fetch(`/api/products/${id}`, {
+      // La ruta de colección es la implementación canónica que guarda el
+      // producto y sus variantes de forma atómica. La ruta por id conserva el
+      // CRUD simple para otros consumidores, pero no debe usarse desde este
+      // editor porque validaba variantes sin persistirlas.
+      const response = await fetch('/api/products', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           ...branchHeaders(selectedBranchId),
         },
-        body: JSON.stringify(productData),
+        body: JSON.stringify({ ...productData, id }),
       })
       const payload = await response.json().catch(() => null) as ProductApiPayload | null
 
-      if (!response.ok || !payload?.success || !payload.data) {
+      const responseData = payload?.data
+      const updatedProduct = responseData && 'product' in responseData
+        ? ({ ...responseData.product, variants: responseData.variants ?? [] } as Product)
+        : responseData as Product | undefined
+
+      if (!response.ok || !payload?.success || !updatedProduct) {
         throw new Error(getProductApiError(payload, 'Error al actualizar el producto'))
       }
 
       // Actualizar estado local inmediatamente
-      const updatedProduct = payload.data as Product
       setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p))
 
       // Refrescar estadísticas en segundo plano

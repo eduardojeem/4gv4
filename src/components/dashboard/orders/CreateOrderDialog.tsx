@@ -6,15 +6,20 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  FileText,
   Loader2,
+  Mail,
+  MapPin,
   Maximize2,
   Minimize2,
   Minus,
   Package,
+  Phone,
   Plus,
   Search,
   ShoppingBag,
   ShoppingCart,
+  Sparkles,
   Trash2,
   Truck,
   User,
@@ -142,6 +147,7 @@ export function CreateOrderDialog({
   const [productsError, setProductsError] = useState('')
   const [customersError, setCustomersError] = useState('')
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false)
+  const [mobileActiveTab, setMobileActiveTab] = useState<'items' | 'config'>('items')
 
   const subtotal = useMemo(() => items.reduce((s, i) => s + i.quantity * i.unitPrice, 0), [items])
   const total = Math.max(0, subtotal + shippingCost - discountAmount)
@@ -253,7 +259,7 @@ export function CreateOrderDialog({
     setCategoryFilter('ALL'); setBrandFilter('ALL')
     setCustomerCollapsed(false); setProductLimit(12)
     setProductsError(''); setCustomersError(''); setFullscreen(false)
-    setConfirmCloseOpen(false)
+    setConfirmCloseOpen(false); setMobileActiveTab('items')
   }
 
   function addProduct(product: ProductOption) {
@@ -393,27 +399,35 @@ export function CreateOrderDialog({
           }
         }}
         className={cn(
-        '!flex !flex-col gap-0 overflow-hidden border-white/10 bg-[#0d1117] p-0 text-slate-100 shadow-2xl',
-        fullscreen
-          ? 'fixed inset-0 !top-0 !left-0 h-[100dvh] max-h-none w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 rounded-none border-0'
-          : 'h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] rounded-lg sm:h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] lg:h-[90dvh] lg:max-w-[calc(100vw-4rem)] xl:!left-[calc(50%+128px)] xl:h-[88dvh] xl:w-[calc(100vw-288px)] xl:max-w-[1500px] 2xl:h-[min(88dvh,900px)]'
-      )}>
+          '!flex !flex-col gap-0 overflow-hidden border-white/10 bg-[#0d1117] p-0 text-slate-100 shadow-2xl transition-all duration-200',
+          fullscreen
+            ? 'fixed inset-0 !top-0 !left-0 h-[100dvh] max-h-none w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 rounded-none border-0'
+            : 'inset-0 fixed h-[100dvh] w-screen max-w-none rounded-none sm:inset-auto sm:h-[94vh] sm:max-h-[94vh] sm:w-[96vw] sm:max-w-7xl sm:rounded-3xl sm:border sm:border-white/10 sm:top-[3vh] sm:left-1/2 sm:-translate-x-1/2 sm:translate-y-0'
+        )}>
 
         {/* ── Header ── */}
-        <div className="relative flex shrink-0 items-center gap-3 border-b border-white/8 bg-gradient-to-r from-blue-500/10 via-blue-500/[0.04] to-transparent px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-950/30">
-            <ShoppingBag className="h-5 w-5" />
+        <div className="relative flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-gradient-to-r from-blue-600/15 via-blue-500/5 to-transparent px-4 py-3 sm:px-6 sm:py-3.5">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-lg shadow-blue-600/25 ring-1 ring-white/20">
+              <ShoppingBag className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <DialogTitle className="text-base font-bold tracking-tight text-white sm:text-lg">Nuevo pedido</DialogTitle>
+                <span className="inline-flex items-center rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-slate-400">
+                  {selectedBranch?.name || 'Stock general'}
+                </span>
+              </div>
+              <p className="truncate text-xs text-slate-400">
+                {items.length > 0
+                  ? `${totalUnits} ud${totalUnits !== 1 ? 's' : ''}. · ${items.length} producto${items.length !== 1 ? 's' : ''} cargados`
+                  : 'Carga productos, selecciona cliente y confirma'}
+              </p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <DialogTitle className="text-base font-semibold leading-tight text-white">Nuevo pedido</DialogTitle>
-            <p className="text-xs text-slate-400">
-              {items.length > 0
-                ? `${totalUnits} ud${totalUnits !== 1 ? 's' : ''}. · ${items.length} producto${items.length !== 1 ? 's' : ''} · ${selectedBranch?.name || 'Stock general'}`
-                : `Completa los pasos · ${selectedBranch?.name || 'Stock general'}`}
-            </p>
-          </div>
-          {/* Progress indicators */}
-          <div className="hidden items-center gap-1.5 xl:flex">
+
+          {/* Stepper indicators en desktop */}
+          <div className="hidden items-center gap-1.5 lg:flex">
             <StepPill n={1} label="Cliente" done={hasCustomer} />
             <ChevronRight className="h-3 w-3 text-slate-600" />
             <StepPill n={2} label="Productos" done={items.length > 0} />
@@ -422,18 +436,19 @@ export function CreateOrderDialog({
             <ChevronRight className="h-3 w-3 text-slate-600" />
             <StepPill n={4} label="Confirmar" done={hasCustomer && items.length > 0 && deliveryReady && discountAmount <= subtotal} />
           </div>
-          <div className="ml-2 flex items-center gap-1">
+
+          {/* Acciones de ventana */}
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setFullscreen((v) => !v)}
               aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-              aria-pressed={fullscreen}
               title={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                'flex h-8 w-8 items-center justify-center rounded-xl transition-all',
                 fullscreen
-                  ? 'bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/30 hover:bg-blue-500/30'
-                  : 'text-slate-400 hover:bg-white/8 hover:text-white'
+                  ? 'bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/30'
+                  : 'text-slate-400 hover:bg-white/10 hover:text-white'
               )}
             >
               {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -441,27 +456,68 @@ export function CreateOrderDialog({
             <button
               type="button"
               onClick={requestClose}
-              aria-label="Cerrar"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/8 hover:text-white"
+              aria-label="Cerrar modal"
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-all hover:bg-rose-500/15 hover:text-rose-300"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {/* ── Body ── */}
+        {/* ── Switcher de pestañas en Móvil (Catálogo / Resumen y Pago) ── */}
+        <div className="flex items-center border-b border-white/10 bg-slate-900/60 p-1.5 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileActiveTab('items')}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-xs font-semibold transition-all',
+              mobileActiveTab === 'items'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40'
+                : 'text-slate-400 hover:text-slate-200'
+            )}
+          >
+            <Package className="h-3.5 w-3.5" />
+            <span>1. Cliente y Catálogo</span>
+            {items.length > 0 && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white/20 px-1 text-[10px] font-bold">
+                {items.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileActiveTab('config')}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-xs font-semibold transition-all',
+              mobileActiveTab === 'config'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40'
+                : 'text-slate-400 hover:text-slate-200'
+            )}
+          >
+            <Truck className="h-3.5 w-3.5" />
+            <span>2. Entrega y Pago</span>
+            <span className="font-mono text-[11px] font-bold text-blue-200">
+              {formatMoney(total)}
+            </span>
+          </button>
+        </div>
+
+        {/* ── Body (Dos columnas en lg, tabs en móvil) ── */}
         <div className={cn(
           'min-h-0 flex-1 overflow-y-auto lg:grid lg:overflow-hidden',
           fullscreen
-            ? 'lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_480px] 2xl:grid-cols-[minmax(0,1fr)_500px]'
-            : 'lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_420px]'
+            ? 'lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[minmax(0,1fr)_480px]'
+            : 'lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_440px]'
         )}>
 
-          {/* Left — main content */}
-          <div className="min-w-0 lg:min-h-0 lg:overflow-y-auto">
+          {/* ── Columna Izquierda: Cliente, Catálogo y Carrito ── */}
+          <div className={cn(
+            'min-w-0 flex flex-col lg:min-h-0 lg:overflow-y-auto divide-y divide-white/8',
+            mobileActiveTab === 'items' ? 'block' : 'hidden lg:block'
+          )}>
 
-            {/* ── Step 1: Customer ── */}
-            <section className="border-b border-white/8">
+            {/* ── Paso 1: Cliente ── */}
+            <section className="bg-slate-900/20">
               <SectionHeader
                 icon={<User className="h-4 w-4" />}
                 title="Cliente"
@@ -470,205 +526,270 @@ export function CreateOrderDialog({
                 collapsed={customerCollapsed}
                 onToggle={() => setCustomerCollapsed((v) => !v)}
                 badge={
-                  hasCustomer
-                    ? <Badge className="gap-1 border-emerald-500/20 bg-emerald-500/15 text-[10px] text-emerald-300">
-                        <Check className="h-3 w-3" /> {newCustomer ? customerName.trim() || 'Nuevo' : selectedCustomer?.name}
-                      </Badge>
-                    : undefined
-                }
-                action={
-                  !customerCollapsed ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs font-medium text-slate-300 hover:bg-white/8 hover:text-white"
-                      onClick={() => {
-                        setNewCustomer((v) => !v)
-                        setCustomerId('')
-                        setSelectedCustomer(null)
-                        setDeliveryPhone('')
-                        setDeliveryAddress('')
-                      }}
-                    >
-                      <UserPlus className="h-3.5 w-3.5" />
-                      {newCustomer ? 'Elegir existente' : 'Crear nuevo'}
-                    </Button>
+                  hasCustomer ? (
+                    <Badge className="gap-1 border-emerald-500/30 bg-emerald-500/15 text-[10px] font-semibold text-emerald-300">
+                      <Check className="h-3 w-3" /> {newCustomer ? customerName.trim() || 'Nuevo' : selectedCustomer?.name}
+                    </Badge>
                   ) : undefined
                 }
+                action={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 rounded-lg text-xs font-semibold text-blue-400 hover:bg-blue-500/10 hover:text-blue-300"
+                    onClick={() => {
+                      setNewCustomer((v) => !v)
+                      setCustomerId('')
+                      setSelectedCustomer(null)
+                      setDeliveryPhone('')
+                      setDeliveryAddress('')
+                      setCustomerCollapsed(false)
+                    }}
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    {newCustomer ? 'Buscar existente' : 'Nuevo cliente'}
+                  </Button>
+                }
               />
+
               {!customerCollapsed && (
-              <div className="p-4">
-                {newCustomer ? (
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-slate-400">Nombre <span className="text-rose-400">*</span></Label>
-                      <Input className={cn('h-8 text-sm', INPUT_DARK)} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Nombre completo" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-slate-400">Email</Label>
-                      <Input className={cn('h-8 text-sm', INPUT_DARK)} type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="email@ejemplo.com" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-slate-400">Teléfono</Label>
-                      <Input className={cn('h-8 text-sm', INPUT_DARK)} value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="+595 9xx xxx xxx" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-slate-400">Dirección</Label>
-                      <Input className={cn('h-8 text-sm', INPUT_DARK)} value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Calle, ciudad" />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
-                      {customersLoading && <Loader2 className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-slate-500" />}
-                      <Input
-                        className={cn('h-9 pl-9 text-sm', INPUT_DARK)}
-                        value={customerSearch}
-                        onChange={(e) => setCustomerSearch(e.target.value)}
-                        placeholder="Buscar por nombre o teléfono…"
-                        autoFocus={open}
-                      />
-                    </div>
-                    {customersError && (
-                      <p role="alert" className="rounded-md border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
-                        {customersError}
-                      </p>
-                    )}
-                    {customers.length > 0 && (
-                      <div className="max-h-44 space-y-0.5 overflow-y-auto rounded-xl border border-white/8 bg-white/[0.02] p-1.5">
-                        {customers.map((c) => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => selectCustomer(c)}
-                            className={cn(
-                              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-white/8',
-                              customerId === c.id && 'bg-blue-500/10 ring-1 ring-blue-500/20'
-                            )}
-                          >
-                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-xs font-semibold uppercase text-blue-300">
-                              {c.name.charAt(0)}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-slate-200">{c.name}</p>
-                              <p className="truncate text-xs text-slate-500">{c.phone || c.email || 'Sin contacto'}</p>
-                            </div>
-                            {customerId === c.id && <Check className="h-3.5 w-3.5 shrink-0 text-blue-400" />}
-                          </button>
-                        ))}
+                <div className="p-4 sm:p-5">
+                  {newCustomer ? (
+                    <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.03] p-3.5 sm:p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-xs font-bold text-blue-300 uppercase tracking-wider">
+                        <UserPlus className="h-3.5 w-3.5" /> Nuevo cliente
                       </div>
-                    )}
-                    {customerSearch && !customersLoading && customers.length === 0 && (
-                      <p className="py-3 text-center text-xs text-slate-500">
-                        Sin resultados — <button type="button" className="font-semibold text-blue-400 underline underline-offset-2 hover:text-blue-300" onClick={() => setNewCustomer(true)}>crear cliente nuevo</button>
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-slate-300">Nombre completo <span className="text-rose-400">*</span></Label>
+                          <Input className={cn('h-9 text-sm rounded-xl', INPUT_DARK)} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Ej: Juan Pérez" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-slate-300">Teléfono</Label>
+                          <Input className={cn('h-9 text-sm rounded-xl', INPUT_DARK)} value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="0981 xxx xxx" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-slate-300">Email</Label>
+                          <Input className={cn('h-9 text-sm rounded-xl', INPUT_DARK)} type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="cliente@correo.com" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-slate-300">Dirección</Label>
+                          <Input className={cn('h-9 text-sm rounded-xl', INPUT_DARK)} value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Calle y número" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {/* Cliente seleccionado actualmente */}
+                      {selectedCustomer ? (
+                        <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-3.5">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 font-bold uppercase ring-1 ring-emerald-500/30">
+                              {selectedCustomer.name.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="truncate text-sm font-bold text-white">{selectedCustomer.name}</p>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
+                                  <Check className="h-3 w-3" /> Seleccionado
+                                </span>
+                              </div>
+                              <p className="truncate text-xs text-slate-400">
+                                {selectedCustomer.phone || selectedCustomer.email || 'Sin datos de contacto'}
+                                {selectedCustomer.address ? ` · ${selectedCustomer.address}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedCustomer(null)
+                              setCustomerId('')
+                            }}
+                            className="h-8 rounded-lg px-2.5 text-xs text-slate-400 hover:bg-white/10 hover:text-white shrink-0"
+                          >
+                            Cambiar
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                            {customersLoading && <Loader2 className="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-500" />}
+                            <Input
+                              className={cn('h-10 pl-10 text-sm rounded-xl', INPUT_DARK)}
+                              value={customerSearch}
+                              onChange={(e) => setCustomerSearch(e.target.value)}
+                              placeholder="Buscar cliente por nombre, teléfono o email…"
+                              autoFocus={open}
+                            />
+                          </div>
+
+                          {customersError && (
+                            <p role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                              {customersError}
+                            </p>
+                          )}
+
+                          {customers.length > 0 && (
+                            <div className="max-h-48 space-y-1 overflow-y-auto rounded-2xl border border-white/8 bg-white/[0.02] p-2">
+                              {customers.map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => selectCustomer(c)}
+                                  className={cn(
+                                    'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all hover:bg-white/8',
+                                    customerId === c.id ? 'bg-blue-500/15 ring-1 ring-blue-500/30' : ''
+                                  )}
+                                >
+                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-xs font-bold uppercase text-blue-300">
+                                    {c.name.charAt(0)}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-semibold text-slate-200">{c.name}</p>
+                                    <p className="truncate text-xs text-slate-500">{c.phone || c.email || 'Sin contacto'}</p>
+                                  </div>
+                                  {customerId === c.id ? (
+                                    <Check className="h-4 w-4 shrink-0 text-blue-400" />
+                                  ) : (
+                                    <span className="text-[11px] font-medium text-slate-500 opacity-0 group-hover:opacity-100">Elegir</span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {customerSearch && !customersLoading && customers.length === 0 && (
+                            <div className="rounded-xl border border-dashed border-white/10 py-3 text-center text-xs text-slate-400">
+                              No encontramos clientes con esa búsqueda.{' '}
+                              <button
+                                type="button"
+                                className="font-bold text-blue-400 underline underline-offset-2 hover:text-blue-300 ml-1"
+                                onClick={() => setNewCustomer(true)}
+                              >
+                                Crear nuevo
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </section>
 
-            {/* ── Step 2: Products ── */}
-            <section className="border-b border-white/8">
-              <SectionHeader
-                icon={<Package className="h-4 w-4" />}
-                title="Productos"
-                step={2}
-                badge={
-                  items.length > 0
-                    ? <Badge className="gap-1 border-blue-500/20 bg-blue-500/15 text-[10px] text-blue-300">
-                        <ShoppingCart className="h-3 w-3" /> {items.length} en carrito
-                      </Badge>
-                    : undefined
-                }
-              />
-              <div className="p-4 space-y-3">
-                {/* Search + filters */}
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <div className="relative min-w-[200px] flex-1">
-                    <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
-                    {productsLoading && <Loader2 className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-slate-500" />}
-                    <Input
-                      className={cn('h-9 pl-9 text-sm', INPUT_DARK)}
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                      placeholder="Nombre, SKU o código de barras…"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && products.length === 1) {
-                          e.preventDefault()
-                          addProduct(products[0])
-                        }
-                      }}
-                    />
+            {/* ── Paso 2: Catálogo de Productos ── */}
+            <section className="p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-500/15 text-blue-300">
+                    <Package className="h-3.5 w-3.5" />
                   </div>
-                  <BarcodeScanner
-                    onScan={(code) => setProductSearch(code)}
-                    label="Escanear"
-                    variant="outline"
-                    size="sm"
-                    className={cn('h-9 border-white/10 text-slate-300 hover:bg-white/8 hover:text-white')}
-                  />
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className={cn('h-9 w-full text-sm sm:w-[170px]', INPUT_DARK)}>
-                      <SelectValue placeholder="Categoría" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">Todas las categorías</SelectItem>
-                      {categories.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={brandFilter} onValueChange={setBrandFilter}>
-                    <SelectTrigger className={cn('h-9 w-full text-sm sm:w-[150px]', INPUT_DARK)}>
-                      <SelectValue placeholder="Marca" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">Todas las marcas</SelectItem>
-                      {brands.map((b) => (
-                        <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <h3 className="text-sm font-bold text-white">Catálogo de productos</h3>
                 </div>
-
-                {/* Active filter chips */}
-                {(categoryFilter !== 'ALL' || brandFilter !== 'ALL') && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {categoryFilter !== 'ALL' && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/25 bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-medium text-blue-300">
-                        {categories.find((c) => c.id === categoryFilter)?.name ?? 'Categoría'}
-                        <button type="button" onClick={() => setCategoryFilter('ALL')} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
-                      </span>
-                    )}
-                    {brandFilter !== 'ALL' && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[11px] text-slate-300">
-                        {brandFilter}
-                        <button type="button" onClick={() => setBrandFilter('ALL')} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
-                      </span>
-                    )}
-                    <button type="button" onClick={() => { setCategoryFilter('ALL'); setBrandFilter('ALL') }}
-                      className="text-[11px] font-medium text-slate-500 transition-colors hover:text-slate-300">
-                      Limpiar
-                    </button>
-                  </div>
+                {items.length > 0 && (
+                  <Badge className="border-blue-500/30 bg-blue-500/10 text-xs font-bold text-blue-300">
+                    {totalUnits} en pedido
+                  </Badge>
                 )}
+              </div>
 
-                {/* Product grid */}
-                {productsError && (
-                  <p role="alert" className="mb-3 rounded-md border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
-                    {productsError}
-                  </p>
-                )}
-                {products.length > 0 && (
-                  <div className="space-y-3">
-                    <div className={cn(
-                      'grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
-                      fullscreen && '2xl:grid-cols-5'
-                    )}>
+              {/* Barra de búsqueda y filtros */}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="relative min-w-[200px] flex-1">
+                  <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  {productsLoading && <Loader2 className="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-500" />}
+                  <Input
+                    className={cn('h-10 pl-10 text-sm rounded-xl', INPUT_DARK)}
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Buscar producto por nombre, SKU o código…"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && products.length === 1) {
+                        e.preventDefault()
+                        addProduct(products[0])
+                      }
+                    }}
+                  />
+                </div>
+                <BarcodeScanner
+                  onScan={(code) => setProductSearch(code)}
+                  label="Escanear"
+                  variant="outline"
+                  size="sm"
+                  className={cn('h-10 rounded-xl border-white/10 text-slate-300 hover:bg-white/8 hover:text-white px-3')}
+                />
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className={cn('h-10 w-full text-sm rounded-xl sm:w-[160px]', INPUT_DARK)}>
+                    <SelectValue placeholder="Categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todas las categorías</SelectItem>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={brandFilter} onValueChange={setBrandFilter}>
+                  <SelectTrigger className={cn('h-10 w-full text-sm rounded-xl sm:w-[140px]', INPUT_DARK)}>
+                    <SelectValue placeholder="Marca" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todas las marcas</SelectItem>
+                    {brands.map((b) => (
+                      <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Filtros activos */}
+              {(categoryFilter !== 'ALL' || brandFilter !== 'ALL') && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {categoryFilter !== 'ALL' && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-300">
+                      {categories.find((c) => c.id === categoryFilter)?.name ?? 'Categoría'}
+                      <button type="button" onClick={() => setCategoryFilter('ALL')} className="opacity-60 hover:opacity-100">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  {brandFilter !== 'ALL' && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-xs text-slate-300">
+                      {brandFilter}
+                      <button type="button" onClick={() => setBrandFilter('ALL')} className="opacity-60 hover:opacity-100">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { setCategoryFilter('ALL'); setBrandFilter('ALL') }}
+                    className="text-xs font-medium text-slate-400 hover:text-white ml-1 transition-colors"
+                  >
+                    Limpiar filtros
+                  </button>
+                </div>
+              )}
+
+              {/* Grilla de productos */}
+              {productsError && (
+                <p role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                  {productsError}
+                </p>
+              )}
+
+              {products.length > 0 && (
+                <div className="space-y-3">
+                  <div className={cn(
+                    'grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4',
+                    fullscreen && 'xl:grid-cols-4 2xl:grid-cols-5'
+                  )}>
                     {products.slice(0, productLimit).map((product) => {
                       const inCart = items.find((i) => i.productId === product.id)
                       const price = Number(product.offer_price || product.sale_price || 0)
@@ -676,6 +797,7 @@ export function CreateOrderDialog({
                       const outOfStock = stock !== null && stock <= 0
                       const imgSrc = product.image_url || (Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null)
                       const lowStock = stock !== null && stock > 0 && stock <= 3
+
                       return (
                         <button
                           key={product.id}
@@ -683,13 +805,14 @@ export function CreateOrderDialog({
                           onClick={() => !outOfStock && addProduct(product)}
                           disabled={outOfStock}
                           className={cn(
-                            'group relative flex items-center gap-3 rounded-xl border p-3 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50',
+                            'group relative flex items-center gap-3 rounded-2xl border p-3 text-left transition-all',
                             inCart
-                              ? 'border-blue-500/40 bg-blue-500/[0.07] ring-1 ring-blue-500/15'
-                              : 'border-white/8 bg-white/[0.02] hover:border-blue-500/30 hover:bg-white/[0.05]'
+                              ? 'border-blue-500/40 bg-blue-500/[0.08] ring-1 ring-blue-500/20 shadow-md shadow-blue-950/20'
+                              : 'border-white/8 bg-white/[0.02] hover:border-blue-500/30 hover:bg-white/[0.05]',
+                            outOfStock && 'opacity-40 cursor-not-allowed hover:border-white/8 hover:bg-white/[0.02]'
                           )}
                         >
-                          {/* Thumbnail */}
+                          {/* Imagen */}
                           <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/5">
                             {imgSrc ? (
                               <Image src={imgSrc} alt={product.name} fill sizes="56px" className="object-cover" />
@@ -697,90 +820,98 @@ export function CreateOrderDialog({
                               <Package className="h-6 w-6 text-slate-600" />
                             )}
                             {inCart && (
-                              <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-blue-600/85 text-white">
-                                <span className="text-sm font-bold">×{inCart.quantity}</span>
+                              <div className="absolute inset-0 flex items-center justify-center bg-blue-600/90 text-white font-bold text-xs backdrop-blur-[1px]">
+                                ×{inCart.quantity}
                               </div>
                             )}
                           </div>
 
-                          {/* Info */}
+                          {/* Datos */}
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold leading-snug text-slate-100">{product.name}</p>
-                            <p className="mt-0.5 text-xs text-slate-500">{product.sku || 'Sin SKU'}</p>
-                            {lowStock && (
-                              <p className="mt-0.5 text-[11px] font-semibold text-amber-400">Solo {stock} en stock</p>
-                            )}
+                            <p className="truncate text-xs font-semibold leading-tight text-slate-100">{product.name}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-slate-500">{product.sku || 'Sin SKU'}</p>
+                            <div className="mt-1 flex items-center gap-2">
+                              <p className="text-xs font-bold tabular-nums text-white">{formatMoney(price)}</p>
+                              {lowStock && (
+                                <span className="text-[10px] font-semibold text-amber-400">({stock} rest.)</span>
+                              )}
+                            </div>
                           </div>
 
-                          {/* Price */}
-                          <div className="shrink-0 text-right">
-                            <p className="text-sm font-bold tabular-nums text-white">{formatMoney(price)}</p>
-                            {inCart && <p className="mt-0.5 text-[11px] font-semibold text-blue-400">En carrito</p>}
+                          {/* Botón agregar */}
+                          <div className="shrink-0">
+                            <div className={cn(
+                              'flex h-7 w-7 items-center justify-center rounded-lg transition-all',
+                              inCart
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-white/5 text-slate-400 group-hover:bg-blue-600 group-hover:text-white'
+                            )}>
+                              <Plus className="h-4 w-4" />
+                            </div>
                           </div>
                         </button>
                       )
                     })}
                   </div>
+
                   {products.length > productLimit && (
                     <button
                       type="button"
                       onClick={() => setProductLimit((l) => l + 12)}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/8 py-2.5 text-xs font-medium text-slate-400 transition-colors hover:border-blue-500/30 hover:bg-white/[0.04] hover:text-blue-300"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] py-2.5 text-xs font-semibold text-slate-400 transition-colors hover:border-blue-500/30 hover:bg-white/[0.04] hover:text-blue-300"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      Ver más productos ({products.length - productLimit} restantes)
+                      Ver más productos ({products.length - productLimit} disponibles)
                     </button>
                   )}
-                  </div>
-                )}
+                </div>
+              )}
 
-                {productsLoading && products.length === 0 && (
-                  <div className="flex items-center justify-center gap-2 py-6 text-sm text-slate-500">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Buscando productos…
-                  </div>
-                )}
+              {productsLoading && products.length === 0 && (
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-400" /> Buscando productos…
+                </div>
+              )}
 
-                {(() => {
-                  if (productsLoading || products.length > 0) return null
-                  const hasFilter = productSearch || categoryFilter !== 'ALL' || brandFilter !== 'ALL'
-                  return (
-                    <p className="py-4 text-center text-sm text-slate-500">
-                      {hasFilter
-                        ? 'Ningún producto con stock coincide con la búsqueda o los filtros.'
-                        : 'Buscá por nombre, SKU o marca, o filtrá por categoría para empezar.'}
-                    </p>
-                  )
-                })()}
-              </div>
+              {!productsLoading && products.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-400">
+                  No se encontraron productos disponibles con los filtros actuales.
+                </div>
+              )}
             </section>
 
-            {/* ── Step 3: Cart ── */}
-            <section>
-              <SectionHeader
-                icon={<ShoppingCart className="h-4 w-4" />}
-                title="Productos del pedido"
-                step={2}
-                badge={
-                  items.length > 0
-                    ? <Badge className="border-white/10 bg-white/10 text-[10px] text-slate-300">{totalUnits} ud{totalUnits !== 1 ? 's' : ''}.</Badge>
-                    : undefined
-                }
-              />
-              <div className="p-4">
-                {items.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/12 py-8 text-center">
-                    <ShoppingBag className="h-8 w-8 text-slate-700" />
-                    <p className="text-sm text-slate-400">Todavía no agregaste productos</p>
-                    <p className="text-xs text-slate-600">Buscá arriba y hacé clic para agregar</p>
+            {/* ── Paso 3: Productos del pedido (Carrito) ── */}
+            <section className="p-4 sm:p-5 space-y-3 bg-slate-900/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-300">
+                    <ShoppingCart className="h-3.5 w-3.5" />
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    {items.map((item) => (
-                      <div
-                        key={item.productId}
-                        className="grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-white/8 bg-white/[0.02] px-3 py-3 transition-colors hover:bg-white/[0.04] sm:grid-cols-[48px_minmax(0,1fr)_auto_auto_auto] sm:px-4"
-                      >
-                        {/* Thumbnail */}
+                  <h3 className="text-sm font-bold text-white">Productos en este pedido</h3>
+                </div>
+                {items.length > 0 && (
+                  <span className="text-xs font-mono font-bold text-slate-300">
+                    Subtotal: {formatMoney(subtotal)}
+                  </span>
+                )}
+              </div>
+
+              {items.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/12 py-8 text-center bg-white/[0.01]">
+                  <ShoppingBag className="h-8 w-8 text-slate-700" />
+                  <p className="text-sm font-medium text-slate-300">El pedido todavía no tiene productos</p>
+                  <p className="text-xs text-slate-500 max-w-xs">
+                    Hacé clic sobre cualquier producto del catálogo superior para agregarlo.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {items.map((item) => (
+                    <div
+                      key={item.productId}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.02] p-3.5 transition-colors hover:bg-white/[0.04]"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/5">
                           {item.imageUrl ? (
                             <Image src={item.imageUrl} alt={item.name} fill sizes="48px" className="object-cover" />
@@ -788,273 +919,316 @@ export function CreateOrderDialog({
                             <Package className="h-5 w-5 text-slate-600" />
                           )}
                         </div>
-
-                        {/* Info */}
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold leading-snug text-slate-100">{item.name}</p>
-                          <p className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-slate-500">
-                            {item.sku && <span className="mr-1.5 font-mono">{item.sku}</span>}
-                            <span className="font-medium tabular-nums text-slate-300">{formatMoney(item.unitPrice)} c/u</span>
+                          <p className="truncate text-sm font-bold text-white">{item.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                            {item.sku && <span className="font-mono">{item.sku}</span>}
+                            <span>·</span>
+                            <span className="tabular-nums font-semibold text-slate-200">{formatMoney(item.unitPrice)} c/u</span>
                             {item.stock !== null && item.quantity >= item.stock && (
-                              <span className="ml-1.5 font-semibold text-amber-400">· stock máx.</span>
+                              <span className="text-[11px] font-bold text-amber-400">· Tope stock</span>
                             )}
-                          </p>
+                          </div>
                         </div>
+                      </div>
 
-                        {/* Qty controls */}
-                        <div className="col-start-2 row-start-2 flex w-fit items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1 sm:col-auto sm:row-auto">
+                      {/* Controles de cantidad y precio */}
+                      <div className="flex items-center justify-between sm:justify-end gap-3 self-end sm:self-auto w-full sm:w-auto pt-2 sm:pt-0 border-t border-white/5 sm:border-0">
+                        <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
                           <button
                             type="button"
                             onClick={() => changeQty(item.productId, -1)}
                             aria-label={`Reducir cantidad de ${item.name}`}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
                           >
                             <Minus className="h-3.5 w-3.5" />
                           </button>
-                          <span className="w-8 text-center text-sm font-bold tabular-nums text-white">{item.quantity}</span>
+                          <span className="w-8 text-center text-xs font-bold tabular-nums text-white">
+                            {item.quantity}
+                          </span>
                           <button
                             type="button"
                             onClick={() => changeQty(item.productId, 1)}
                             disabled={item.stock !== null && item.quantity >= item.stock}
                             aria-label={`Aumentar cantidad de ${item.name}`}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <Plus className="h-3.5 w-3.5" />
                           </button>
                         </div>
 
-                        {/* Subtotal */}
-                        <span className="col-start-3 row-start-2 text-right text-sm font-bold tabular-nums text-white sm:col-auto sm:row-auto sm:w-24">
-                          {formatMoney(item.quantity * item.unitPrice)}
-                        </span>
+                        <div className="w-24 text-right">
+                          <p className="text-sm font-bold tabular-nums text-white">
+                            {formatMoney(item.quantity * item.unitPrice)}
+                          </p>
+                        </div>
 
-                        {/* Remove */}
                         <button
                           type="button"
                           onClick={() => removeItem(item.productId)}
                           aria-label={`Quitar ${item.name}`}
-                          className="col-start-3 row-start-1 flex h-8 w-8 items-center justify-center justify-self-end rounded-lg text-slate-600 transition-colors hover:bg-rose-500/10 hover:text-rose-400 sm:col-auto sm:row-auto"
+                          className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           </div>
 
-          {/* ── Right column — config + summary ── */}
-          <div className="flex flex-col border-t border-white/8 bg-white/[0.02] lg:min-h-0 lg:overflow-hidden lg:border-l lg:border-t-0">
+          {/* ── Columna Derecha: Configuración de Entrega, Pago y Resumen Total ── */}
+          <div className={cn(
+            'flex flex-col border-t border-white/10 bg-[#0d1219] lg:min-h-0 lg:overflow-hidden lg:border-l lg:border-t-0',
+            mobileActiveTab === 'config' ? 'block' : 'hidden lg:flex'
+          )}>
 
-            {/* Config */}
+            {/* Configuración scrollable */}
             <div className="space-y-5 p-5 lg:flex-1 lg:overflow-y-auto">
 
-              {/* Delivery & Payment */}
-              <div>
-                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-500">Paso 3 · Entrega y pago</p>
-                <div className="space-y-2">
-                  {/* Fulfillment pills */}
-                  <div className={cn('grid gap-2', hasDelivery ? 'grid-cols-2' : 'grid-cols-1')}>
-                    {availableFulfillmentOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => selectFulfillment(opt.value)}
-                        className={cn(
-                          'flex flex-col items-center gap-1.5 rounded-xl border py-3.5 text-xs font-medium transition-all',
-                          fulfillmentType === opt.value
-                            ? 'border-blue-500/50 bg-blue-500/12 text-blue-300 shadow-sm'
-                            : 'border-white/8 bg-white/[0.02] text-slate-400 hover:border-white/15 hover:bg-white/[0.05]'
-                        )}
-                      >
-                        {opt.value === 'DELIVERY'
-                          ? <Truck className="h-5 w-5" />
-                          : <Package className="h-5 w-5" />}
-                        <span className="text-center text-xs font-medium leading-tight">{opt.label}</span>
-                      </button>
-                    ))}
+              {/* Entrega y Pago */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-500/15 text-blue-300">
+                    <Truck className="h-3.5 w-3.5" />
                   </div>
-                  {!hasDelivery ? (
-                    <p className="text-xs text-slate-500">Las entregas están desactivadas para esta organización.</p>
-                  ) : null}
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-300">Tipo de Entrega</p>
+                </div>
 
-                  {/* Payment method */}
-                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                    <SelectTrigger className={cn('h-10 text-sm', INPUT_DARK)}>
-                      <Wallet className="mr-2 h-4 w-4 text-slate-500" />
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAYMENT_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {fulfillmentType === 'DELIVERY' && (
-                    <div className="space-y-2 rounded-lg border border-blue-500/20 bg-blue-500/[0.06] p-3">
-                      <p className="text-xs font-semibold text-blue-200">Datos para esta entrega</p>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-400">Teléfono de contacto</Label>
-                        <Input
-                          className={cn('h-9 text-sm', INPUT_DARK)}
-                          value={newCustomer ? customerPhone : deliveryPhone}
-                          onChange={(event) => newCustomer
-                            ? setCustomerPhone(event.target.value)
-                            : setDeliveryPhone(event.target.value)}
-                          placeholder="+595 9xx xxx xxx"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-400">Dirección de entrega</Label>
-                        <Textarea
-                          className={cn('min-h-16 resize-none text-sm', INPUT_DARK)}
-                          value={newCustomer ? customerAddress : deliveryAddress}
-                          onChange={(event) => newCustomer
-                            ? setCustomerAddress(event.target.value)
-                            : setDeliveryAddress(event.target.value)}
-                          placeholder="Calle, número, barrio y referencia"
-                          maxLength={500}
-                        />
-                      </div>
-                      {!deliveryReady && (
-                        <p role="alert" className="text-xs text-amber-300">
-                          Completa teléfono y dirección para confirmar el delivery.
-                        </p>
+                {/* Métodos de fulfillment */}
+                <div className={cn('grid gap-2', hasDelivery ? 'grid-cols-2' : 'grid-cols-1')}>
+                  {availableFulfillmentOptions.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => selectFulfillment(opt.value)}
+                      className={cn(
+                        'flex items-center justify-center gap-2.5 rounded-2xl border py-3 px-3 text-xs font-bold transition-all',
+                        fulfillmentType === opt.value
+                          ? 'border-blue-500 bg-blue-500/15 text-white shadow-md shadow-blue-950/40 ring-1 ring-blue-500/30'
+                          : 'border-white/10 bg-white/[0.02] text-slate-400 hover:border-white/20 hover:text-slate-200'
+                      )}
+                    >
+                      {opt.value === 'DELIVERY' ? <Truck className="h-4 w-4 text-blue-400" /> : <Package className="h-4 w-4 text-amber-400" />}
+                      <span>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {!hasDelivery && (
+                  <p className="text-xs text-slate-500">Módulo de delivery no activo para esta organización.</p>
+                )}
+
+                {/* Datos de delivery */}
+                {fulfillmentType === 'DELIVERY' && (
+                  <div className="space-y-3 rounded-2xl border border-blue-500/30 bg-blue-500/[0.06] p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-blue-200 flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-blue-400" /> Datos de envío
+                      </p>
+                      {effectiveDeliveryPhone && (
+                        <span className="text-[11px] font-mono text-blue-300">{effectiveDeliveryPhone}</span>
                       )}
                     </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-slate-300">Teléfono para el repartidor</Label>
+                      <Input
+                        className={cn('h-9 text-sm rounded-xl', INPUT_DARK)}
+                        value={newCustomer ? customerPhone : deliveryPhone}
+                        onChange={(event) => newCustomer
+                          ? setCustomerPhone(event.target.value)
+                          : setDeliveryPhone(event.target.value)}
+                        placeholder="Ej: +595 981 123456"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-slate-300">Dirección exacta</Label>
+                      <Textarea
+                        className={cn('min-h-16 resize-none text-sm rounded-xl', INPUT_DARK)}
+                        value={newCustomer ? customerAddress : deliveryAddress}
+                        onChange={(event) => newCustomer
+                          ? setCustomerAddress(event.target.value)
+                          : setDeliveryAddress(event.target.value)}
+                        placeholder="Calle, número de casa, barrio y referencias visuales"
+                        maxLength={500}
+                      />
+                    </div>
+
+                    {!deliveryReady && (
+                      <p role="alert" className="text-xs font-medium text-amber-400">
+                        ⚠ Completa teléfono y dirección de entrega para confirmar el delivery.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Método de pago */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-300">
+                    <Wallet className="h-3.5 w-3.5" />
+                  </div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-300">Método de Cobro</p>
+                </div>
+
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger className={cn('h-10 text-sm rounded-xl', INPUT_DARK)}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="h-px bg-white/10" />
+
+              {/* Costos y Descuento */}
+              <div className="space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Costos y Descuento</p>
+
+                {/* Costo de envío */}
+                <div className="space-y-1.5">
+                  <Label className="flex items-center justify-between text-xs font-medium text-slate-300">
+                    <span>Costo de envío</span>
+                    <span className="font-mono font-bold text-slate-200">
+                      {fulfillmentType === 'DELIVERY' ? (shippingCost === 0 ? 'Gratis' : formatMoney(shippingCost)) : 'Sin costo'}
+                    </span>
+                  </Label>
+
+                  {fulfillmentType === 'DELIVERY' ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {DELIVERY_COST_PRESETS.map((cost) => (
+                          <button
+                            key={cost}
+                            type="button"
+                            aria-pressed={shippingCost === cost}
+                            onClick={() => setShippingCost(cost)}
+                            className={cn(
+                              'h-8 rounded-xl border px-1 text-xs font-bold tabular-nums transition-all',
+                              shippingCost === cost
+                                ? 'border-blue-500 bg-blue-500/20 text-blue-200'
+                                : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-white'
+                            )}
+                          >
+                            {cost === 0 ? 'Gratis' : formatMoney(cost)}
+                          </button>
+                        ))}
+                      </div>
+                      <Input
+                        type="number"
+                        min={0}
+                        className={cn('h-9 text-sm rounded-xl', INPUT_DARK)}
+                        value={shippingCost}
+                        onChange={(e) => setShippingCost(Math.max(0, Number(e.target.value || 0)))}
+                        placeholder="Otro monto de envío"
+                      />
+                    </div>
+                  ) : (
+                    <p className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2 text-xs text-slate-500">
+                      Sin costo para retiro en tienda.
+                    </p>
+                  )}
+                </div>
+
+                {/* Descuento */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-300">Descuento aplicado</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={subtotal}
+                    className={cn('h-9 text-sm rounded-xl', INPUT_DARK)}
+                    value={discountAmount}
+                    onChange={(e) => setDiscountAmount(Math.max(0, Number(e.target.value || 0)))}
+                    placeholder="0"
+                  />
+                  {discountAmount > subtotal && (
+                    <p role="alert" className="text-xs text-rose-400 font-medium">El descuento supera el subtotal.</p>
                   )}
                 </div>
               </div>
 
-              <div className="h-px bg-white/8" />
+              <div className="h-px bg-white/10" />
 
-              {/* Adjustments */}
-              <div>
-                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-500">Ajustes</p>
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
-                      <Truck className="h-3.5 w-3.5" /> Costo de envío
-                    </Label>
-                    {fulfillmentType === 'DELIVERY' ? (
-                      <>
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
-                          {DELIVERY_COST_PRESETS.map((cost) => (
-                            <button
-                              key={cost}
-                              type="button"
-                              aria-pressed={shippingCost === cost}
-                              onClick={() => setShippingCost(cost)}
-                              className={cn(
-                                'h-9 rounded-md border px-2 text-xs font-semibold tabular-nums transition-colors',
-                                shippingCost === cost
-                                  ? 'border-blue-500/50 bg-blue-500/15 text-blue-200'
-                                  : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:bg-white/[0.06] hover:text-white'
-                              )}
-                            >
-                              {cost === 0 ? 'Gratis' : formatMoney(cost)}
-                            </button>
-                          ))}
-                        </div>
-                        <Input
-                          type="number"
-                          min={0}
-                          className={cn('h-9 text-sm', INPUT_DARK)}
-                          value={shippingCost}
-                          onChange={(e) => setShippingCost(Math.max(0, Number(e.target.value || 0)))}
-                          placeholder="Otro importe"
-                          aria-label="Costo de delivery personalizado"
-                        />
-                      </>
-                    ) : (
-                      <p className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2 text-xs text-slate-500">
-                        Sin costo para retiro en local.
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-slate-400">Descuento</Label>
-                    <Input
-                      type="number" min={0} max={subtotal}
-                      className={cn('h-9 text-sm', INPUT_DARK)}
-                      value={discountAmount}
-                      onChange={(e) => setDiscountAmount(Math.max(0, Number(e.target.value || 0)))}
-                      placeholder="0"
-                    />
-                    {discountAmount > subtotal && (
-                      <p role="alert" className="text-xs text-rose-300">El descuento no puede superar el subtotal.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-px bg-white/8" />
-
-              {/* Notes */}
-              <div>
-                <p className="mb-2.5 text-[11px] font-bold uppercase tracking-widest text-slate-500">Notas internas</p>
+              {/* Notas del pedido */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Observaciones / Notas</p>
                 <Textarea
-                  className={cn('resize-none text-sm', INPUT_DARK)}
+                  className={cn('resize-none text-sm rounded-xl', INPUT_DARK)}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  rows={4}
-                  placeholder="Instrucciones especiales, referencias…"
+                  rows={3}
+                  placeholder="Notas para el repartidor o para la preparación del pedido…"
                   maxLength={2000}
                 />
               </div>
             </div>
 
-            {/* Summary + CTA */}
-            <div className="sticky bottom-0 space-y-4 border-t border-white/8 bg-[#0f151d] p-5 lg:static lg:bg-white/[0.03]">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Paso 4 · Confirmación</p>
-              <div className="space-y-2 text-sm">
+            {/* ── Summary & Confirm CTA ── */}
+            <div className="border-t border-white/10 bg-slate-950/80 p-5 space-y-4 backdrop-blur-sm">
+              <div className="space-y-2 text-xs">
                 <div className="flex justify-between text-slate-400">
-                  <span>Subtotal</span>
-                  <span className="font-medium tabular-nums text-slate-300">{formatMoney(subtotal)}</span>
+                  <span>Subtotal productos ({totalUnits} uds.)</span>
+                  <span className="font-semibold font-mono text-slate-200">{formatMoney(subtotal)}</span>
                 </div>
                 {shippingCost > 0 && (
                   <div className="flex justify-between text-slate-400">
                     <span>Envío</span>
-                    <span className="font-medium tabular-nums text-slate-300">+{formatMoney(shippingCost)}</span>
+                    <span className="font-semibold font-mono text-slate-200">+{formatMoney(shippingCost)}</span>
                   </div>
                 )}
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-400">
                     <span>Descuento</span>
-                    <span className="font-medium tabular-nums">−{formatMoney(discountAmount)}</span>
+                    <span className="font-semibold font-mono">−{formatMoney(discountAmount)}</span>
                   </div>
                 )}
-                <div className="my-2 h-px bg-white/8" />
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold text-white">Total</span>
-                  <span className="text-lg font-bold tabular-nums text-blue-400">{formatMoney(total)}</span>
+                <div className="my-2 h-px bg-white/10" />
+                <div className="flex items-baseline justify-between">
+                  <div>
+                    <span className="text-sm font-bold text-white uppercase tracking-wider">Total a cobrar</span>
+                    <p className="text-[11px] text-slate-400">
+                      {paymentMethod === 'CASH' ? 'Efectivo' : paymentMethod === 'CARD' ? 'Tarjeta' : paymentMethod === 'TRANSFER' ? 'Transferencia' : 'Billetera'} · {fulfillmentType === 'DELIVERY' ? 'Delivery' : 'Retiro'}
+                    </p>
+                  </div>
+                  <span className="text-2xl font-black font-mono tracking-tight text-blue-400">
+                    {formatMoney(total)}
+                  </span>
                 </div>
               </div>
 
               <Button
-                className="h-11 w-full gap-2 rounded-xl bg-blue-600 text-sm font-bold text-white shadow-lg shadow-blue-950/30 transition-all hover:bg-blue-500 disabled:opacity-40"
+                className="h-12 w-full gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-sm font-bold text-white shadow-xl shadow-blue-900/30 transition-all hover:from-blue-500 hover:to-blue-600 active:scale-[0.99] disabled:opacity-40"
                 onClick={submit}
                 disabled={loading || items.length === 0 || !hasCustomer || !deliveryReady || discountAmount > subtotal}
               >
-                {loading
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Creando pedido…</>
-                  : <><Check className="h-4 w-4" /> Confirmar pedido</>
-                }
+                {loading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Registrando pedido…</>
+                ) : (
+                  <><Check className="h-4 w-4" /> Confirmar y crear pedido</>
+                )}
               </Button>
 
               {(items.length === 0 || !hasCustomer || !deliveryReady || discountAmount > subtotal) && (
-                <p className="text-center text-xs text-slate-500">
+                <p className="text-center text-xs text-amber-400/90 font-medium">
                   {items.length === 0
-                    ? 'Agrega al menos un producto'
+                    ? 'Agrega al menos un producto al pedido'
                     : !hasCustomer
-                      ? 'Selecciona un cliente primero'
+                      ? 'Selecciona o crea un cliente para continuar'
                       : !deliveryReady
-                        ? 'Completa los datos de entrega'
-                        : 'Corrige el descuento para continuar'}
+                        ? 'Completa los datos de envío (teléfono y dirección)'
+                        : 'El descuento no puede superar el subtotal'}
                 </p>
               )}
             </div>

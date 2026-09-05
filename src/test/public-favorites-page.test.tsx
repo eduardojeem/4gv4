@@ -58,4 +58,29 @@ describe('página de favoritos', () => {
     expect(screen.getByRole('link', { name: /Belleza/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Tienda Ropa/i })).toBeInTheDocument()
   })
+
+  it('muestra indicadores de sin stock e inactivo según los metadatos', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        metadata: {
+          '1': { image: '/remera.jpg', price: 85000, hasOffer: false, offerPrice: null, inStock: false, isActive: true },
+          '2': { image: '/perfume.jpg', price: 150000, hasOffer: false, offerPrice: null, inStock: true, isActive: false },
+        },
+      }),
+    }))
+
+    render(<FavoritesPage />)
+    expect(await screen.findByText('Sin stock')).toBeInTheDocument()
+    expect(await screen.findByText('No disponible')).toBeInTheDocument()
+  })
+
+  it('permite filtrar favoritos únicamente para una tienda específica en su sección propia', () => {
+    render(<FavoritesPage scopedStoreSlug="ropa" scopedStoreName="Tienda Ropa" />)
+    expect(screen.getByRole('heading', { level: 1, name: /Mis favoritos en Tienda Ropa/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Remera algodón/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Perfume/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Ver favoritos de todas las tiendas/i })).toHaveAttribute('href', '/marketplace/favoritos')
+  })
 })
+

@@ -26,12 +26,13 @@ import {
   Edit, Printer, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
   PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown,
-  Loader2, Sparkles, History, FileCheck2, User, TrendingUp
+  Loader2, Sparkles, History, FileCheck2, User, TrendingUp, ShieldCheck, UserCheck
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase/client'
 import { Repair, RepairDeliveryOutcome, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { getAvailableTransitions } from '@/lib/repairs/state-machine'
@@ -62,6 +63,9 @@ import { RepairInternalCostCorrectionDialog } from './RepairInternalCostCorrecti
 import { RepairFinalPriceCorrectionDialog } from './RepairFinalPriceCorrectionDialog'
 import { calculateRepairCost } from '@/lib/repairs/cost-breakdown'
 import { useAuth } from '@/contexts/auth-context'
+import { CustomerQuickCreateDialog, type QuickCustomerData } from './CustomerQuickCreateDialog'
+import { CustomerDetailModal } from './CustomerDetailModal'
+import type { Customer as FullCustomer } from '@/hooks/use-customers'
 
 interface RepairDetailDialogProps {
   open: boolean
@@ -110,6 +114,8 @@ export function RepairDetailDialog({
   const { settings } = useSharedSettings()
   const [verificationHash, setVerificationHash] = useState<string | undefined>(undefined)
   const [deliveredEditWarningOpen, setDeliveredEditWarningOpen] = useState(false)
+  const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false)
+  const [isCustomerDetailOpen, setIsCustomerDetailOpen] = useState(false)
 
   // Estado local sincronizado para actualización reactiva instantánea
   const [localRepair, setLocalRepair] = useState<Repair | null>(propRepair)
@@ -119,6 +125,68 @@ export function RepairDetailDialog({
   }, [propRepair])
 
   const activeRepair = propRepair || localRepair
+
+  const [authorizedPersons, setAuthorizedPersons] = useState<Array<{
+    id: string
+    full_name: string
+    document_number: string
+    phone?: string | null
+    relationship?: string | null
+    is_active?: boolean
+  }>>([])
+  const [loadingAuthorized, setLoadingAuthorized] = useState(false)
+
+  // Cargar personas autorizadas vinculadas al cliente de la orden
+  React.useEffect(() => {
+    let active = true
+    const customerId = activeRepair?.customer?.id
+    if (!customerId || !open) {
+      setAuthorizedPersons([])
+      return
+    }
+
+    async function loadAuthorized() {
+      try {
+        setLoadingAuthorized(true)
+        const supabase = createClient()
+        const { data: customerData } = await supabase
+          .from('customers')
+          .select('profile_id')
+          .eq('id', customerId)
+          .maybeSingle()
+
+        if (!active) return
+
+        const profileId = customerData?.profile_id
+        if (profileId) {
+          const { data: authList } = await supabase
+            .from('authorized_persons')
+            .select('id, full_name, document_number, phone, relationship, is_active')
+            .eq('profile_id', profileId)
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+
+          if (active && authList && authList.length > 0) {
+            setAuthorizedPersons(authList)
+            return
+          }
+        }
+
+        if (active) {
+          setAuthorizedPersons([])
+        }
+      } catch (err) {
+        console.warn('Could not load authorized persons for repair customer:', err)
+      } finally {
+        if (active) setLoadingAuthorized(false)
+      }
+    }
+
+    loadAuthorized()
+    return () => {
+      active = false
+    }
+  }, [activeRepair?.customer?.id, open])
 
   // Fetch verification hash when repair is loaded
   React.useEffect(() => {
@@ -240,6 +308,8 @@ export function RepairDetailDialog({
         name: repair.customer?.name || 'Cliente',
         customerCode: repair.customer?.customerCode || '',
         phone: repair.customer?.phone || '',
+        alternate_phone: repair.customer?.alternate_phone || null,
+        alternate_phone_label: repair.customer?.alternate_phone_label || null,
         email: repair.customer?.email || '',
         address: extraCustomerFields.address,
         city: extraCustomerFields.city,
@@ -285,15 +355,30 @@ export function RepairDetailDialog({
     printRepairReceipt(type, payload)
   }
 
-  const handleShare = async (method: 'whatsapp' | 'copy' | 'native' | 'whatsapp-pdf') => {
+  const handleShare = async (
+    method: 'whatsapp' | 'copy' | 'native' | 'whatsapp-pdf',
+    customTargetPhone?: string,
+    targetLabel?: string
+  ) => {
     if (!repair) return
     const payload = getPrintPayload()
     const shareText = generateRepairShareText(payload)
 
     if (method === 'whatsapp') {
+      const phoneToSend = customTargetPhone?.trim() || repair.customer?.phone?.trim()
+      let cleanPhone = ''
+      if (phoneToSend) {
+        cleanPhone = formatWhatsAppPhone(phoneToSend).replace(/\D/g, '')
+      }
       const encodedText = encodeURIComponent(shareText)
-      const url = `https://wa.me/?text=${encodedText}`
+      const url = cleanPhone.length >= 6
+        ? `https://wa.me/${cleanPhone}?text=${encodedText}`
+        : `https://wa.me/?text=${encodedText}`
+
       window.open(url, '_blank')
+      if (targetLabel) {
+        toast.success(`WhatsApp abierto para enviar a ${targetLabel}`)
+      }
     } else if (method === 'whatsapp-pdf') {
        // Opción para abrir el diálogo de impresión directamente,
        // sugiriendo al usuario guardar como PDF y enviarlo
@@ -365,16 +450,16 @@ export function RepairDetailDialog({
     return true
   }
 
-  const handleSendStatusByWhatsApp = async () => {
-    const rawPhone = repair.customer?.phone?.trim()
+  const handleSendStatusByWhatsApp = async (customPhone?: string, phoneLabel?: string) => {
+    const rawPhone = (customPhone ?? repair.customer?.phone)?.trim()
     if (!rawPhone) {
-      toast.error('El cliente no tiene telefono registrado')
+      toast.error('El cliente no tiene teléfono registrado')
       return
     }
 
     const normalizedPhone = formatWhatsAppPhone(rawPhone).replace(/\D/g, '')
     if (normalizedPhone.length < 6) {
-      toast.error('El telefono del cliente no es valido')
+      toast.error(`El teléfono ${phoneLabel ? `(${phoneLabel}) ` : ''}del cliente no es válido`)
       return
     }
 
@@ -388,7 +473,11 @@ export function RepairDetailDialog({
         return
       }
 
-      toast.success('WhatsApp abierto con el aviso de estado')
+      toast.success(
+        phoneLabel
+          ? `WhatsApp abierto para avisar a ${phoneLabel}`
+          : 'WhatsApp abierto con el aviso de estado'
+      )
     } catch (error) {
       logger.error('Failed to send repair status via WhatsApp', { error, repairId: repair.id })
       toast.error('No se pudo enviar el aviso por WhatsApp')
@@ -494,6 +583,20 @@ export function RepairDetailDialog({
                     <MessageCircle className="mr-2 h-4 w-4 text-emerald-600" />
                     Enviar texto por WhatsApp
                   </DropdownMenuItem>
+                  {repair.customer?.alternate_phone && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        handleShare(
+                          'whatsapp',
+                          repair.customer?.alternate_phone || undefined,
+                          repair.customer?.alternate_phone_label || 'número alternativo'
+                        )
+                      }
+                    >
+                      <MessageCircle className="mr-2 h-4 w-4 text-indigo-500" />
+                      Enviar a {repair.customer?.alternate_phone_label ? `${repair.customer.alternate_phone_label}` : 'número alternativo'}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => handleShare('whatsapp-pdf')}>
                     <FileText className="mr-2 h-4 w-4 text-rose-500" />
                     PDF para WhatsApp
@@ -541,6 +644,20 @@ export function RepairDetailDialog({
                     <MessageCircle className="mr-2 h-4 w-4 text-emerald-600" />
                     Enviar Texto por WhatsApp
                   </DropdownMenuItem>
+                  {repair.customer?.alternate_phone && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        handleShare(
+                          'whatsapp',
+                          repair.customer?.alternate_phone || undefined,
+                          repair.customer?.alternate_phone_label || 'número alternativo'
+                        )
+                      }
+                    >
+                      <MessageCircle className="mr-2 h-4 w-4 text-indigo-500" />
+                      Enviar a {repair.customer?.alternate_phone_label ? `${repair.customer.alternate_phone_label}` : 'número alternativo'}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => handleShare('whatsapp-pdf')}>
                     <FileText className="mr-2 h-4 w-4 text-rose-500" />
                     PDF para WhatsApp
@@ -1056,52 +1173,271 @@ export function RepairDetailDialog({
 
                 {/* Cliente */}
                 <div className="rounded-xl border bg-card p-4 space-y-3.5 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-sm">
-                      {((repair.customer?.name || 'Cliente')
-                        .split(' ')
-                        .map((w) => w[0])
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .join('')
-                        .toUpperCase()) || 'C'}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-sm">
+                        {((repair.customer?.name || 'Cliente')
+                          .split(' ')
+                          .map((w) => w[0])
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .join('')
+                          .toUpperCase()) || 'C'}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold truncate text-sm">{repair.customer?.name || 'Cliente Registrado'}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-xs text-muted-foreground">Cliente de la orden</p>
+                          {repair.customer?.ruc && (
+                            <span className="text-[11px] font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                              RUC/CI: {repair.customer.ruc}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold truncate text-sm">{repair.customer?.name || 'Cliente Registrado'}</p>
-                      <p className="text-xs text-muted-foreground">Cliente de la orden</p>
-                    </div>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    {repair.customer?.phone && (
-                      <a
-                        href={`tel:${repair.customer.phone}`}
-                        className="flex items-center gap-2.5 text-foreground/90 hover:text-primary transition-colors"
-                      >
-                        <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
-                        {repair.customer.phone}
-                      </a>
+
+                    {/* Acciones de gestión del cliente */}
+                    {repair.customer?.id && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg text-slate-500 hover:text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-950/40"
+                          onClick={() => setIsCustomerDetailOpen(true)}
+                          title="Ver ficha completa del cliente"
+                        >
+                          <User className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                          onClick={() => setIsEditCustomerOpen(true)}
+                          title="Editar datos de este cliente"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </div>
                     )}
+                  </div>
+
+                  <div className="space-y-2.5 text-sm pt-1">
+                    {/* Teléfono principal */}
+                    {repair.customer?.phone && (
+                      <div className="flex items-center justify-between gap-2">
+                        <a
+                          href={`tel:${repair.customer.phone}`}
+                          className="flex items-center gap-2 text-foreground/90 hover:text-primary transition-colors text-xs sm:text-sm font-medium"
+                          title="Llamar al teléfono principal"
+                        >
+                          <Phone className="h-4 w-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
+                          <span>{repair.customer.phone}</span>
+                          <span className="text-[10px] text-muted-foreground font-normal bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                            Principal
+                          </span>
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Teléfono alternativo / para avisarle */}
+                    {repair.customer?.alternate_phone && (
+                      <div className="bg-indigo-50/60 dark:bg-indigo-950/20 p-2.5 rounded-xl border border-indigo-200/80 dark:border-indigo-900/50 space-y-1.5 shadow-xs">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 uppercase tracking-wide flex items-center gap-1">
+                            <Phone className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                            Teléfono para avisos
+                          </span>
+                          {repair.customer.alternate_phone_label ? (
+                            <span className="text-[10px] text-indigo-700 dark:text-indigo-300 font-bold bg-indigo-100/90 dark:bg-indigo-900/60 border border-indigo-300/80 dark:border-indigo-800 px-1.5 py-0.5 rounded-md">
+                              {repair.customer.alternate_phone_label}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground font-normal bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                              Alternativo
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between gap-2 pt-0.5">
+                          <a
+                            href={`tel:${repair.customer.alternate_phone}`}
+                            className="flex items-center gap-1.5 text-foreground hover:text-indigo-600 font-mono text-xs sm:text-sm font-semibold transition-colors"
+                            title="Llamar al teléfono alternativo"
+                          >
+                            <span>{repair.customer.alternate_phone}</span>
+                          </a>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 rounded-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-100/50 dark:hover:bg-indigo-950"
+                              onClick={() => {
+                                if (repair.customer?.alternate_phone) {
+                                  navigator.clipboard.writeText(repair.customer.alternate_phone)
+                                  toast.success('Teléfono alternativo copiado')
+                                }
+                              }}
+                              title="Copiar teléfono alternativo"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 rounded-md text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100/50 dark:hover:bg-emerald-950"
+                              onClick={() =>
+                                handleSendStatusByWhatsApp(
+                                  repair.customer?.alternate_phone ?? undefined,
+                                  repair.customer?.alternate_phone_label || 'teléfono alternativo'
+                                )
+                              }
+                              title={`Avisar por WhatsApp a ${repair.customer.alternate_phone_label || 'número alternativo'}`}
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Email */}
                     {repair.customer?.email && (
                       <a
                         href={`mailto:${repair.customer.email}`}
-                        className="flex items-center gap-2.5 text-foreground/90 hover:text-primary transition-colors break-all"
+                        className="flex items-center gap-2 text-foreground/90 hover:text-primary transition-colors break-all text-xs sm:text-sm"
                       >
                         <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                        {repair.customer.email}
+                        <span>{repair.customer.email}</span>
                       </a>
                     )}
                   </div>
-                  {repair.customer?.phone && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full h-10 gap-2 font-bold text-xs rounded-xl bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition-all active:scale-[0.98]"
-                      onClick={handleSendStatusByWhatsApp}
-                      disabled={isSendingStatusWhatsApp}
-                    >
-                      <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                      {isSendingStatusWhatsApp ? 'Abriendo WhatsApp...' : 'Avisar estado por WhatsApp'}
-                    </Button>
+
+                  {/* Acciones de WhatsApp */}
+                  <div className="space-y-2 pt-1">
+                    {repair.customer?.phone && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-9 gap-2 font-bold text-xs rounded-xl bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition-all active:scale-[0.98]"
+                        onClick={() => handleSendStatusByWhatsApp(repair.customer?.phone, 'teléfono principal')}
+                        disabled={isSendingStatusWhatsApp}
+                      >
+                        <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        {isSendingStatusWhatsApp ? 'Abriendo WhatsApp...' : 'Avisar estado por WhatsApp'}
+                      </Button>
+                    )}
+
+                    {repair.customer?.alternate_phone && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 gap-2 font-semibold text-xs rounded-xl bg-indigo-500/10 border-indigo-500/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/20 transition-all active:scale-[0.98]"
+                        onClick={() =>
+                          handleSendStatusByWhatsApp(
+                            repair.customer?.alternate_phone ?? undefined,
+                            repair.customer?.alternate_phone_label || 'teléfono alternativo'
+                          )
+                        }
+                        disabled={isSendingStatusWhatsApp}
+                      >
+                        <MessageCircle className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                        {isSendingStatusWhatsApp
+                          ? 'Abriendo WhatsApp...'
+                          : `Avisar a ${repair.customer?.alternate_phone_label || 'teléfono alternativo'}`}
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Personas Autorizadas para Retiro / Terceros Autorizados */}
+                  {(authorizedPersons.length > 0 || repair.customer?.alternate_phone) && (
+                    <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800/80 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          Autorizados para retiro
+                        </span>
+                        {authorizedPersons.length > 0 ? (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-semibold">
+                            {authorizedPersons.length} registrado{authorizedPersons.length > 1 ? 's' : ''}
+                          </Badge>
+                        ) : repair.customer?.alternate_phone_label ? (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30">
+                            Contacto directo
+                          </Badge>
+                        ) : null}
+                      </div>
+
+                      {/* Lista de personas autorizadas registradas en el perfil */}
+                      {authorizedPersons.map((person) => (
+                        <div
+                          key={person.id}
+                          className="bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/40 p-2.5 rounded-xl space-y-1.5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1 flex-wrap">
+                                <span className="truncate">{person.full_name}</span>
+                                {person.relationship && (
+                                  <span className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-900/50 px-1 py-0.5 rounded">
+                                    {person.relationship}
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
+                                Documento: {person.document_number}
+                              </p>
+                            </div>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/15 px-1.5 py-0.5 rounded-md shrink-0">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Autorizado
+                            </span>
+                          </div>
+
+                          {person.phone && (
+                            <div className="flex items-center justify-between gap-2 pt-1 border-t border-emerald-200/50 dark:border-emerald-900/40">
+                              <a
+                                href={`tel:${person.phone}`}
+                                className="text-xs text-foreground/90 hover:text-emerald-600 flex items-center gap-1.5 font-medium"
+                              >
+                                <Phone className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>{person.phone}</span>
+                              </a>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/15 gap-1 rounded-lg"
+                                onClick={() => handleSendStatusByWhatsApp(person.phone ?? undefined, person.full_name)}
+                                title={`Avisar estado por WhatsApp a ${person.full_name}`}
+                              >
+                                <MessageCircle className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>Avisar</span>
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Si sólo tiene contacto alternativo asignado */}
+                      {authorizedPersons.length === 0 && repair.customer?.alternate_phone && (
+                        <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200/70 dark:border-slate-800/60 p-2 rounded-lg text-xs text-muted-foreground flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <UserCheck className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                            <span className="truncate">
+                              {repair.customer.alternate_phone_label
+                                ? `Avisar / retirar: ${repair.customer.alternate_phone_label}`
+                                : 'Teléfono de contacto secundario'}
+                            </span>
+                          </div>
+                          <span className="font-mono text-[11px] text-slate-700 dark:text-slate-300 font-semibold shrink-0">
+                            {repair.customer.alternate_phone}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -1328,6 +1664,68 @@ export function RepairDetailDialog({
                         )}
                       </div>
                     </div>
+
+                    {/* Información de aviso y entrega al cliente */}
+                    {repair.customer?.alternate_phone && (
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                          <Phone className="h-4 w-4 text-indigo-500" />
+                          Contacto Alternativo para Avisos
+                        </h3>
+                        <div className="rounded-xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50/70 via-background to-blue-50/40 p-4 sm:p-5 shadow-sm dark:border-indigo-900/60 dark:from-indigo-950/20 dark:to-blue-950/10">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-bold text-foreground">
+                                  {repair.customer.alternate_phone}
+                                </span>
+                                {repair.customer.alternate_phone_label && (
+                                  <Badge variant="outline" className="bg-indigo-100/80 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200 border-indigo-300 dark:border-indigo-800 font-semibold text-xs">
+                                    {repair.customer.alternate_phone_label}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Número registrado para avisar sobre el avance de esta reparación o coordinar el retiro del equipo.
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1.5 text-xs font-semibold rounded-lg bg-background hover:bg-slate-100 dark:hover:bg-slate-800"
+                                onClick={() => {
+                                  if (repair.customer?.alternate_phone) {
+                                    navigator.clipboard.writeText(repair.customer.alternate_phone)
+                                    toast.success('Teléfono alternativo copiado')
+                                  }
+                                }}
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                                <span>Copiar</span>
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="default"
+                                size="sm"
+                                className="h-8 gap-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                                onClick={() =>
+                                  handleSendStatusByWhatsApp(
+                                    repair.customer?.alternate_phone ?? undefined,
+                                    repair.customer?.alternate_phone_label || 'número alternativo'
+                                  )
+                                }
+                                disabled={isSendingStatusWhatsApp}
+                              >
+                                <MessageCircle className="h-3.5 w-3.5" />
+                                <span>Avisar por WhatsApp</span>
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </TabsContent>
 
                   {/* Costos y Piezas */}
@@ -1339,7 +1737,7 @@ export function RepairDetailDialog({
                       repairId={activeRepair.id}
                       onEdit={() => setIsCostsEditorOpen(true)}
                       correctable={isAdmin && activeRepair.status === 'entregado'}
-                      onCorrectInternalCost={activeRepair.parts.some((part) => Boolean(part.databaseId)) ? () => setIsInternalCostCorrectionOpen(true) : undefined}
+                      onCorrectInternalCost={(activeRepair.parts || []).some((p) => p.lineType === 'service') ? () => setIsInternalCostCorrectionOpen(true) : undefined}
                       onCorrectFinalPrice={() => setIsFinalPriceCorrectionOpen(true)}
                     />
                     {onQuickPay && financial.canCollect && (
@@ -1651,6 +2049,74 @@ export function RepairDetailDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Diálogo de Edición Rápida del Cliente de la Orden */}
+    {activeRepair?.customer && (
+      <CustomerQuickCreateDialog
+        open={isEditCustomerOpen}
+        onClose={() => setIsEditCustomerOpen(false)}
+        customerToEdit={{
+          id: activeRepair.customer.id,
+          name: activeRepair.customer.name,
+          phone: activeRepair.customer.phone,
+          alternate_phone: activeRepair.customer.alternate_phone || null,
+          alternate_phone_label: activeRepair.customer.alternate_phone_label || null,
+          email: activeRepair.customer.email || null,
+          ruc: activeRepair.customer.ruc || null,
+        }}
+        onUpdated={(updatedCustomer: FullCustomer) => {
+          setIsEditCustomerOpen(false)
+          setLocalRepair((prev) => {
+            if (!prev) return null
+            return {
+              ...prev,
+              customer: {
+                ...prev.customer,
+                name: updatedCustomer.name,
+                phone: updatedCustomer.phone,
+                alternate_phone: updatedCustomer.alternate_phone || undefined,
+                alternate_phone_label: updatedCustomer.alternate_phone_label || undefined,
+                email: updatedCustomer.email || undefined,
+                ruc: updatedCustomer.ruc || undefined,
+              },
+            }
+          })
+          toast.success(`Datos de ${updatedCustomer.name} actualizados`)
+        }}
+      />
+    )}
+
+    {/* Modal de Detalle Completo del Cliente de la Orden */}
+    {activeRepair?.customer && (
+      <CustomerDetailModal
+        open={isCustomerDetailOpen}
+        onClose={() => setIsCustomerDetailOpen(false)}
+        authorizedPersons={authorizedPersons}
+        customer={{
+          id: activeRepair.customer.id,
+          name: activeRepair.customer.name,
+          phone: activeRepair.customer.phone || '',
+          alternate_phone: activeRepair.customer.alternate_phone || null,
+          alternate_phone_label: activeRepair.customer.alternate_phone_label || null,
+          email: activeRepair.customer.email || '',
+          ruc: activeRepair.customer.ruc || '',
+          status: 'active',
+          address: '',
+          city: '',
+          registration_date: activeRepair.createdAt,
+          created_at: activeRepair.createdAt,
+          total_purchases: 0,
+          total_repairs: 1,
+          lifetime_value: activeRepair.finalCost || activeRepair.estimatedCost || 0,
+          loyalty_points: 0,
+          notes: '',
+        }}
+        onEdit={() => {
+          setIsCustomerDetailOpen(false)
+          setIsEditCustomerOpen(true)
+        }}
+      />
+    )}
     </>
   )
 }

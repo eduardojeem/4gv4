@@ -30,6 +30,22 @@ describe('public order inventory workflow', () => {
     expect(publicOrderRoute).toContain("code: 'STOCK_CHANGED'")
   })
 
+  it('reconciles browser prices before creating the order', () => {
+    expect(publicOrderRoute).toContain('unitPrice: z.number()')
+    expect(publicOrderRoute).toContain("code: 'PRICE_CHANGED'")
+    expect(publicOrderRoute).toContain('priceConflicts')
+  })
+
+  it('allows an unlisted delivery area when a default delivery cost is configured', () => {
+    expect(publicOrderRoute).toContain('checkout.delivery.defaultCost <= 0')
+    expect(publicOrderRoute).toContain('selectedZoneCost: selectedDeliveryZone?.cost')
+  })
+
+  it('rejects a configured zone when the submitted city and neighborhood do not match', () => {
+    expect(publicOrderRoute).toContain("code: 'DELIVERY_ZONE_MISMATCH'")
+    expect(publicOrderRoute).toContain('deliveryZoneMatchesLocation')
+  })
+
   it('creates public orders and reserves inventory in one transaction', () => {
     expect(publicOrderRoute).toContain("'create_public_order_idempotent_atomic'")
     expect(lifecycleMigration).toContain('public.create_public_order_with_store_credit_atomic(')

@@ -36,7 +36,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
 
     const { data: product, error } = await supabase
       .from('products')
-      .select('*, category:categories(id, name)')
+      .select('*, category:categories(id, name), variants:product_variants(*)')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()

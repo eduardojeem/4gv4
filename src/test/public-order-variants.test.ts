@@ -13,6 +13,12 @@ describe('public order product variants', () => {
     expect(checkout).toContain('variantId: item.variantId')
   })
 
+  it('renders variant rows with their unique cart item identifier', () => {
+    const cartPage = read('src/components/public/cart/CartPageClient.tsx')
+    expect(cartPage).toContain('key={item.cartItemId}')
+    expect(cartPage).not.toContain('key={item.productId}')
+  })
+
   it('validates and prices the selected variant on the server', () => {
     const route = read('src/app/api/public/orders/route.ts')
     expect(route).toContain('variantId: z.string().uuid().optional().nullable()')

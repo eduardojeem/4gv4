@@ -1,6 +1,6 @@
 'use client'
 import { useSyncExternalStore } from 'react'
-import { favoriteKey, favoriteListSchema, favoriteSchema, mergeFavorites, type Favorite } from './favorites-schema'
+import { favoriteKey, favoriteListSchema, favoriteSchema, mergeFavorites, MAX_FAVORITES, type Favorite } from './favorites-schema'
 
 const KEY = 'mitiendapy:guest-favorites:v1'
 const EMPTY = { items: [] as Favorite[], busy: true, error: '', account: false }
@@ -32,7 +32,7 @@ export async function initializeFavorites(userId: string | null) {
     if (version !== generation) return
     // Clear only after the authenticated merge succeeds; never persist account data locally.
     if (guest.length) localStorage.removeItem(KEY)
-    publish({ items: mergeFavorites(remote, guest), busy: false, error: '', account: true })
+    publish({ items: mergeFavorites(remote, guest).slice(0, MAX_FAVORITES), busy: false, error: '', account: true })
   } catch {
     if (version === generation) publish({ items: [], busy: false, error: 'No se pudieron cargar los favoritos de tu cuenta. Los favoritos del navegador siguen guardados.', account: true })
   }
@@ -46,7 +46,7 @@ export async function toggleFavorite(raw: Favorite) {
   const previous = snapshot
   const exists = previous.items.some(row => favoriteKey(row) === favoriteKey(item))
   const items = exists ? previous.items.filter(row => favoriteKey(row) !== favoriteKey(item)) : mergeFavorites(previous.items, [item])
-  if (!exists && items.length > 200) throw new Error('Podés guardar hasta 200 favoritos. Quitá alguno para agregar otro.')
+  if (!exists && items.length > MAX_FAVORITES) throw new Error(`Podés guardar hasta ${MAX_FAVORITES} productos como favoritos. Quitá alguno para agregar uno nuevo.`)
   publish({ ...previous, busy: true })
   try {
     if (accountId) await request(exists ? 'DELETE' : 'POST', exists ? item : [item])

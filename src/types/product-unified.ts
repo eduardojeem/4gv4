@@ -5,6 +5,7 @@
  */
 
 import type { Database } from '@/lib/supabase/types'
+import type { ProductAttributeDefinition, ProductVariantInput } from '@/lib/products/variant-contract'
 
 // Base types from Supabase
 export type DbProduct = Database['public']['Tables']['products']['Row']
@@ -18,6 +19,21 @@ type Json = Database['public']['Tables']['products']['Row']['dimensions']
 export interface InstallmentPlanOption {
   count: number
   rate: number
+}
+
+export type ProductVariantRecord = ProductVariantInput | {
+  id: string
+  variant_name?: string | null
+  name?: string | null
+  attributes: Record<string, string>
+  sku: string
+  barcode?: string | null
+  purchase_price?: number | null
+  sale_price?: number | null
+  wholesale_price?: number | null
+  stock_quantity?: number | null
+  min_stock?: number | null
+  is_active?: boolean | null
 }
 
 // Unified Product type - extends Supabase with computed fields and compatibility
@@ -42,6 +58,12 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   installments_enabled?: boolean | null
   installments_public?: boolean | null
   installments_plans?: InstallmentPlanOption[] | null
+
+  // Configuración completa usada por el editor y por las vistas de inventario.
+  // La API puede devolver filas DB (snake_case) o el contrato del formulario.
+  has_variants?: boolean | null
+  variant_attribute_config?: ProductAttributeDefinition[] | null
+  variants?: ProductVariantRecord[]
 
   // Legacy compatibility - ensure these exist
   stock_quantity: number

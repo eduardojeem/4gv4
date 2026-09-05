@@ -76,7 +76,14 @@ export async function GET(request: NextRequest) {
       data: normalized,
       organization: toPublicOrganizationPayload(organization),
     })
-    response.headers.set('Cache-Control', 'no-store')
+    // 30 s fresh, luego sirve el cache mientras revalida en background.
+    // El `s-maxage` aplica al CDN/edge (ej: Vercel). `private` queda
+    // excluido a propósito: los settings públicos son los mismos para
+    // todos los visitantes del mismo org.
+    response.headers.set(
+      'Cache-Control',
+      'public, max-age=30, s-maxage=60, stale-while-revalidate=300'
+    )
     return response
   } catch {
     return NextResponse.json(

@@ -1,6 +1,21 @@
 import { config } from '@/lib/config'
 import { formatCurrency } from '@/lib/currency'
 import { generateRepairHash } from '@/lib/repair-qr'
+import {
+  DEFAULT_RECEIPT_SETTINGS,
+  normalizeRepairReceiptSettings,
+  type RepairReceiptSettings,
+} from '@/lib/repairs/receipt-settings'
+
+export { DEFAULT_RECEIPT_SETTINGS, type RepairReceiptSettings } from '@/lib/repairs/receipt-settings'
+
+export const REPAIR_RECEIPT_SETTINGS_EVENT = 'repair-receipt-settings-updated'
+const RECEIPT_SETTINGS_KEY = '4g_repair_receipt_settings'
+const ACTIVE_RECEIPT_ORGANIZATION_KEY = '4g_repair_receipt_settings_active_org'
+
+function receiptSettingsKey(organizationId?: string | null) {
+  return organizationId ? `${RECEIPT_SETTINGS_KEY}:${organizationId}` : RECEIPT_SETTINGS_KEY
+}
 
 /**
  * Utilidades de impresión de comprobantes de reparación.
@@ -14,48 +29,16 @@ import { generateRepairHash } from '@/lib/repair-qr'
 
 export type RepairReceiptType = 'customer' | 'technician' | 'technician_detailed'
 
-export interface RepairReceiptSettings {
-  paperFormat: '80mm' | '58mm' | 'A4'
-  showLogo: boolean
-  monochromeLogo: boolean
-  logoHeight: number
-  showDeliveryControl: boolean
-  showFinancialBreakdown: boolean
-  showAccessories: boolean
-  showImei: boolean
-  showHash: boolean
-  showCustomerSignature: boolean
-  legalText: string
-  defaultWarrantyMonths: number
-  defaultWarrantyType: 'labor' | 'parts' | 'full'
-  defaultWarrantyNotes: string
-}
-
-export const DEFAULT_RECEIPT_SETTINGS: RepairReceiptSettings = {
-  paperFormat: '80mm',
-  showLogo: true,
-  monochromeLogo: true,
-  logoHeight: 48,
-  showDeliveryControl: true,
-  showFinancialBreakdown: true,
-  showAccessories: true,
-  showImei: true,
-  showHash: true,
-  showCustomerSignature: true,
-  legalText:
-    'Declaro haber leído y aceptado los términos y condiciones del servicio técnico. Autorizo la revisión y/o reparación de los equipos detallados. La empresa no se responsabiliza por pérdida de datos; se recomienda realizar copias de seguridad.',
-  defaultWarrantyMonths: 3,
-  defaultWarrantyType: 'full',
-  defaultWarrantyNotes:
-    'Garantía sobre piezas sustituidas y mano de obra. No cubre golpes, caídas ni humedad posteriores a la entrega.',
-}
-
-export const getReceiptSettings = (): RepairReceiptSettings => {
+export const getReceiptSettings = (organizationId?: string | null): RepairReceiptSettings => {
   try {
     if (typeof window !== 'undefined') {
-      const raw = window.localStorage.getItem('4g_repair_receipt_settings')
+      const storedActiveOrganizationId = window.localStorage.getItem(ACTIVE_RECEIPT_ORGANIZATION_KEY)
+      const activeOrganizationId = organizationId || storedActiveOrganizationId
+      const scoped = window.localStorage.getItem(receiptSettingsKey(activeOrganizationId))
+      const mayUseLegacy = !organizationId || !storedActiveOrganizationId || storedActiveOrganizationId === organizationId
+      const raw = scoped || (mayUseLegacy ? window.localStorage.getItem(RECEIPT_SETTINGS_KEY) : null)
       if (raw) {
-        return { ...DEFAULT_RECEIPT_SETTINGS, ...JSON.parse(raw) }
+        return normalizeRepairReceiptSettings(JSON.parse(raw))
       }
       const legacyPaper = window.localStorage.getItem('repairReceiptPaper') as '80mm' | '58mm' | 'A4'
       if (legacyPaper) {
@@ -66,15 +49,20 @@ export const getReceiptSettings = (): RepairReceiptSettings => {
   return DEFAULT_RECEIPT_SETTINGS
 }
 
-export const saveReceiptSettings = (settings: Partial<RepairReceiptSettings>): RepairReceiptSettings => {
+export const saveReceiptSettings = (
+  settings: Partial<RepairReceiptSettings>,
+  organizationId?: string | null
+): RepairReceiptSettings => {
   try {
     if (typeof window !== 'undefined') {
-      const current = getReceiptSettings()
+      const current = getReceiptSettings(organizationId)
       const updated: RepairReceiptSettings = { ...current, ...settings }
-      window.localStorage.setItem('4g_repair_receipt_settings', JSON.stringify(updated))
+      if (organizationId) window.localStorage.setItem(ACTIVE_RECEIPT_ORGANIZATION_KEY, organizationId)
+      window.localStorage.setItem(receiptSettingsKey(organizationId), JSON.stringify(updated))
       if (updated.paperFormat) {
         window.localStorage.setItem('repairReceiptPaper', updated.paperFormat)
       }
+      window.dispatchEvent(new CustomEvent(REPAIR_RECEIPT_SETTINGS_EVENT, { detail: updated }))
       return updated
     }
   } catch {}
@@ -104,6 +92,8 @@ export interface RepairCustomerInfo {
   id?: string
   name: string
   phone?: string
+  alternate_phone?: string | null
+  alternate_phone_label?: string | null
   email?: string
   address?: string
   document?: string
@@ -227,6 +217,12 @@ export const generateRepairShareText = (payload: RepairPrintPayload): string => 
   text += `📄 *N° de Orden / Ticket:* ${ticketNumber}\n`
   text += `📅 *Fecha:* ${date}\n`
   text += `👤 *Cliente:* ${payload.customer.name}\n`
+  if (payload.customer.phone) {
+    text += `📞 *Teléfono:* ${payload.customer.phone}\n`
+  }
+  if (payload.customer.alternate_phone) {
+    text += `📞 *Tel. Alternativo:* ${payload.customer.alternate_phone}${payload.customer.alternate_phone_label ? ` (${payload.customer.alternate_phone_label})` : ''}\n`
+  }
   text += `═══════════════════════════════\n`
   text += `📱 *EQUIPOS INGRESADOS*\n`
   
@@ -298,7 +294,8 @@ export const openRepairWhatsApp = (payload: RepairPrintPayload, directPhone?: st
 export const printRepairReceipt = (
   type: RepairReceiptType,
   payload: RepairPrintPayload,
-  paperOverride?: '80mm' | '58mm' | 'A4'
+  paperOverride?: '80mm' | '58mm' | 'A4',
+  settingsOverride?: RepairReceiptSettings
 ): void => {
   const printWindow = window.open('', '_blank')
   if (!printWindow) {
@@ -306,7 +303,7 @@ export const printRepairReceipt = (
     return
   }
 
-  const html = generateRepairReceiptHTML(type, payload, paperOverride)
+  const html = generateRepairReceiptHTML(type, payload, paperOverride, settingsOverride)
   printWindow.document.write(html)
   printWindow.document.close()
 
@@ -323,7 +320,8 @@ export const printRepairReceipt = (
 const generateRepairReceiptHTML = (
   type: RepairReceiptType,
   payload: RepairPrintPayload,
-  paperOverride?: '80mm' | '58mm' | 'A4'
+  paperOverride?: '80mm' | '58mm' | 'A4',
+  settingsOverride?: RepairReceiptSettings
 ): string => {
   const company = payload.company || FALLBACK_COMPANY
   const ticketNumber = payload.ticketNumber || generateRepairTicketNumber()
@@ -331,7 +329,7 @@ const generateRepairReceiptHTML = (
   const date = dateObj.toLocaleDateString(config.locale || 'es-PY')
   const time = dateObj.toLocaleTimeString(config.locale || 'es-PY')
   
-  const settings = getReceiptSettings()
+  const settings = settingsOverride || getReceiptSettings()
   const paperPref = paperOverride || settings.paperFormat || '80mm'
   const isA4 = paperPref === 'A4'
   const pageSizeValue = isA4 ? 'A4' : `${paperPref} auto`
@@ -649,6 +647,11 @@ const generateRepairReceiptHTML = (
             <span class="info-label">Teléfono:</span>
             <span class="info-value">${payload.customer.phone}</span>
           </div>` : ''}
+          ${payload.customer.alternate_phone ? `
+          <div class="info-row">
+            <span class="info-label">Tel. Alt:</span>
+            <span class="info-value">${payload.customer.alternate_phone}${payload.customer.alternate_phone_label ? ` (${payload.customer.alternate_phone_label})` : ''}</span>
+          </div>` : ''}
           <div class="info-row">
             <span class="info-label">Prioridad:</span>
             <span class="info-value">${payload.priority === 'high' ? '🔴 ALTA' : payload.priority === 'medium' ? '🟡 MEDIA' : '🟢 NORMAL'} ${payload.urgency === 'urgent' ? '• ⚡ URGENTE' : ''}</span>
@@ -759,6 +762,11 @@ const generateRepairReceiptHTML = (
           <div class="info-row">
             <span class="info-label">Teléfono:</span>
             <span class="info-value">${payload.customer.phone}</span>
+          </div>` : ''}
+          ${payload.customer.alternate_phone ? `
+          <div class="info-row">
+            <span class="info-label">Tel. Alt:</span>
+            <span class="info-value">${payload.customer.alternate_phone}${payload.customer.alternate_phone_label ? ` (${payload.customer.alternate_phone_label})` : ''}</span>
           </div>` : ''}
           ${payload.customer.document ? `
           <div class="info-row">
@@ -888,6 +896,11 @@ const generateRepairReceiptHTML = (
           <div class="info-row">
             <span class="info-label">Teléfono:</span>
             <span class="info-value">${payload.customer.phone}</span>
+          </div>` : ''}
+          ${payload.customer.alternate_phone ? `
+          <div class="info-row">
+            <span class="info-label">Tel. Alternativo:</span>
+            <span class="info-value">${payload.customer.alternate_phone}${payload.customer.alternate_phone_label ? ` (${payload.customer.alternate_phone_label})` : ''}</span>
           </div>` : ''}
           ${payload.customer.email ? `
           <div class="info-row">

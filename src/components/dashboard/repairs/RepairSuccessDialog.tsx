@@ -6,11 +6,9 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { 
   CheckCircle2, 
   Printer, 
@@ -18,13 +16,14 @@ import {
   Layers, 
   FileText, 
   FileCheck2, 
-  Sparkles,
   Smartphone
 } from 'lucide-react'
 import { 
   RepairPrintPayload, 
   printRepairReceipt, 
-  openRepairWhatsApp 
+  openRepairWhatsApp,
+  getReceiptSettings,
+  REPAIR_RECEIPT_SETTINGS_EVENT,
 } from '@/lib/repair-receipt'
 import { formatCurrency } from '@/lib/currency'
 import { RepairReceiptSettingsDialog } from '@/components/dashboard/repairs/RepairReceiptSettingsDialog'
@@ -44,19 +43,14 @@ export function RepairSuccessDialog({
   const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('repairReceiptPaper') as '80mm' | '58mm' | 'A4'
-      if (saved && (saved === '80mm' || saved === '58mm' || saved === 'A4')) {
-        setPaperFormat(saved)
-      }
-    } catch {}
+    const syncPaper = () => setPaperFormat(getReceiptSettings().paperFormat)
+    syncPaper()
+    window.addEventListener(REPAIR_RECEIPT_SETTINGS_EVENT, syncPaper)
+    return () => window.removeEventListener(REPAIR_RECEIPT_SETTINGS_EVENT, syncPaper)
   }, [])
 
   const handleFormatChange = (format: '80mm' | '58mm' | 'A4') => {
     setPaperFormat(format)
-    try {
-      localStorage.setItem('repairReceiptPaper', format)
-    } catch {}
   }
 
   // El corte va despues de TODOS los hooks: el dialogo vive montado con `data`

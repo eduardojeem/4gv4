@@ -323,6 +323,11 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                                     </div>
                                                     <div className="text-xs text-muted-foreground flex gap-2 flex-wrap">
                                                         {customer.phone && <span>{customer.phone}</span>}
+                                                        {customer.alternate_phone && (
+                                                            <span className="text-indigo-600 dark:text-indigo-400 font-medium">
+                                                                • Alt: {customer.alternate_phone} {customer.alternate_phone_label ? `(${customer.alternate_phone_label})` : ''}
+                                                            </span>
+                                                        )}
                                                         {customer.ruc && <span>• RUC: {customer.ruc}</span>}
                                                         {customer.email && <span>• {customer.email}</span>}
                                                     </div>
@@ -356,6 +361,11 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                                 </div>
                                                 <div className="text-xs text-muted-foreground flex gap-2 flex-wrap">
                                                     {customer.phone && <span>{customer.phone}</span>}
+                                                    {customer.alternate_phone && (
+                                                        <span className="text-indigo-600 dark:text-indigo-400 font-medium">
+                                                            • Alt: {customer.alternate_phone} {customer.alternate_phone_label ? `(${customer.alternate_phone_label})` : ''}
+                                                        </span>
+                                                    )}
                                                     {customer.ruc && <span>• RUC: {customer.ruc}</span>}
                                                     {customer.email && <span>• {customer.email}</span>}
                                                 </div>

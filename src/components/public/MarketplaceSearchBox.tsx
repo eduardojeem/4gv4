@@ -65,6 +65,7 @@ export function MarketplaceSearchBox({
       onFocus={() => changeFocus(true)}
       onBlur={handleBlur}
       role="search"
+      suppressHydrationWarning
       className={cn('flex gap-2', className)}
     >
       <div className="relative min-w-0 flex-1">
@@ -72,10 +73,11 @@ export function MarketplaceSearchBox({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          autoFocus={autoFocus}
+          autoFocus={autoFocus ? true : undefined}
           type="search"
           name="q"
           placeholder={placeholder}
+          suppressHydrationWarning
           className={cn(
             'h-11 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-9 text-sm shadow-sm outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50 dark:placeholder-slate-500',
             // `type="search"` trae su propia X y quedaban dos, una al lado de la

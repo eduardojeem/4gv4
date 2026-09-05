@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,10 @@ import {
   FileText, 
   Sliders, 
   RotateCcw, 
-  Check 
+  Check,
+  Loader2,
+  Cloud,
+  AlertCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { 
@@ -45,23 +48,83 @@ export function RepairReceiptSettingsDialog({
   onSettingsSaved
 }: RepairReceiptSettingsDialogProps) {
   const [settings, setSettings] = useState<RepairReceiptSettings>(DEFAULT_RECEIPT_SETTINGS)
+  const [savedSettings, setSavedSettings] = useState<RepairReceiptSettings>(DEFAULT_RECEIPT_SETTINGS)
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [canEdit, setCanEdit] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const isDirty = useMemo(() => JSON.stringify(settings) !== JSON.stringify(savedSettings), [savedSettings, settings])
+  const activeSections = useMemo(() => [
+    settings.showLogo,
+    settings.showDeliveryControl,
+    settings.showFinancialBreakdown,
+    settings.showAccessories,
+    settings.showImei,
+    settings.showCustomerSignature,
+    settings.showHash,
+  ].filter(Boolean).length, [settings])
 
   useEffect(() => {
-    if (open) {
-      setSettings(getReceiptSettings())
+    let active = true
+    const load = async () => {
+      if (open) setIsLoading(true)
+      setLoadError(null)
+      try {
+        const response = await fetch('/api/repairs/receipt-settings', { cache: 'no-store' })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo cargar la configuración.')
+        if (!active) return
+        const local = getReceiptSettings(payload.organizationId)
+        const next = payload.persisted ? payload.data as RepairReceiptSettings : local
+        saveReceiptSettings(next, payload.organizationId)
+        setOrganizationId(payload.organizationId)
+        setCanEdit(payload.canEdit !== false)
+        setSavedSettings(next)
+        if (open) setSettings(next)
+      } catch (error) {
+        if (!active) return
+        const fallback = getReceiptSettings()
+        if (open) {
+          setSettings(fallback)
+          setSavedSettings(fallback)
+          setLoadError(error instanceof Error ? error.message : 'Se usará la última copia disponible en este equipo.')
+        }
+      } finally {
+        if (active && open) setIsLoading(false)
+      }
     }
+    void load()
+    return () => { active = false }
   }, [open])
 
-  const handleSave = () => {
-    const updated = saveReceiptSettings(settings)
-    toast.success('Configuración de comprobantes guardada correctamente')
-    onSettingsSaved?.(updated)
-    onOpenChange(false)
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      const response = await fetch('/api/repairs/receipt-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo guardar la configuración.')
+      const updated = saveReceiptSettings(payload.data, payload.organizationId || organizationId)
+      setSavedSettings(updated)
+      toast.success('Configuración guardada para toda la organización')
+      onSettingsSaved?.(updated)
+      onOpenChange(false)
+    } catch (error) {
+      toast.error('No se guardaron los cambios', {
+        description: error instanceof Error ? error.message : 'Intentá nuevamente.',
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleReset = () => {
-    setSettings(DEFAULT_RECEIPT_SETTINGS)
-    toast.info('Se han restablecido los valores por defecto')
+    setSettings({ ...DEFAULT_RECEIPT_SETTINGS })
+    toast.info('Valores predeterminados cargados', { description: 'Presioná Guardar para aplicarlos a la organización.' })
   }
 
   const insertClause = (clause: string) => {
@@ -108,45 +171,80 @@ export function RepairReceiptSettingsDialog({
       }
     }
 
-    saveReceiptSettings(settings)
-    printRepairReceipt('customer', samplePayload, settings.paperFormat)
+    printRepairReceipt('customer', samplePayload, settings.paperFormat, settings)
+  }
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && isDirty && !isSaving) {
+      const discard = window.confirm('Tenés cambios sin guardar. ¿Querés descartarlos?')
+      if (!discard) return
+    }
+    onOpenChange(nextOpen)
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[660px] max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-3xl border-slate-200 dark:border-slate-800 shadow-2xl">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-[780px] flex flex-col p-0 overflow-hidden rounded-2xl border shadow-xl">
         {/* Cabecera del Modal */}
-        <DialogHeader className="p-5 pb-4 bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 text-white">
+        <DialogHeader className="border-b bg-muted/30 p-4 pr-12 sm:p-5 sm:pr-12">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center text-indigo-300">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
               <Settings2 className="h-5 w-5" />
             </div>
             <div>
-              <DialogTitle className="text-lg font-bold text-white">
+              <DialogTitle className="text-base font-bold sm:text-lg">
                 Personalizar Comprobante de Impresión
               </DialogTitle>
-              <DialogDescription className="text-slate-300 text-xs mt-0.5">
-                Configura qué datos, términos legales y sellos de garantía se imprimen para el cliente.
+              <DialogDescription className="text-xs mt-0.5">
+                Esta configuración se comparte con todos los usuarios de la organización.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
+        <div className="flex items-center gap-2 border-b px-4 py-2 text-[11px] sm:px-5">
+          {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : loadError ? <AlertCircle className="h-3.5 w-3.5 text-amber-600" /> : <Cloud className="h-3.5 w-3.5 text-emerald-600" />}
+          <span className={loadError ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'}>
+            {isLoading ? 'Sincronizando configuración…' : loadError ? `${loadError} Podés revisar, pero necesitás conexión para guardar.` : isDirty ? 'Cambios pendientes de guardar' : 'Configuración sincronizada'}
+          </span>
+        </div>
+
         {/* Pestañas de Configuración */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+          {!canEdit && (
+            <div className="mb-4 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>Podés revisar e imprimir una muestra. Solo un administrador puede cambiar esta configuración.</p>
+            </div>
+          )}
+          <div className="mb-4 grid grid-cols-3 gap-2" aria-label="Resumen de configuración">
+            <div className="rounded-lg border bg-card p-2.5">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Papel</p>
+              <p className="mt-0.5 text-sm font-bold">{settings.paperFormat}</p>
+            </div>
+            <div className="rounded-lg border bg-card p-2.5">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Secciones</p>
+              <p className="mt-0.5 text-sm font-bold">{activeSections} activas</p>
+            </div>
+            <div className="rounded-lg border bg-card p-2.5">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Garantía</p>
+              <p className="mt-0.5 text-sm font-bold">{settings.defaultWarrantyMonths} meses</p>
+            </div>
+          </div>
+          <fieldset disabled={!canEdit || isLoading || isSaving}>
           <Tabs defaultValue="sections" className="space-y-4">
-            <TabsList className="grid grid-cols-3 w-full bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl">
+            <TabsList className="grid h-auto grid-cols-3 w-full bg-muted p-1 rounded-xl">
               <TabsTrigger value="sections" className="text-xs font-bold rounded-xl gap-1.5">
                 <Sliders className="h-3.5 w-3.5" />
                 <span>Secciones</span>
               </TabsTrigger>
               <TabsTrigger value="legal" className="text-xs font-bold rounded-xl gap-1.5">
                 <FileText className="h-3.5 w-3.5" />
-                <span>Términos Legales</span>
+                <span className="hidden sm:inline">Términos legales</span><span className="sm:hidden">Términos</span>
               </TabsTrigger>
               <TabsTrigger value="warranty" className="text-xs font-bold rounded-xl gap-1.5">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                <span>Garantía y Papel</span>
+                <span className="hidden sm:inline">Garantía y papel</span><span className="sm:hidden">Garantía</span>
               </TabsTrigger>
             </TabsList>
 
@@ -166,6 +264,7 @@ export function RepairReceiptSettingsDialog({
                     </p>
                   </div>
                   <Switch
+                    aria-label="Mostrar logo de la empresa"
                     checked={settings.showLogo}
                     onCheckedChange={(val) => setSettings(prev => ({ ...prev, showLogo: val }))}
                   />
@@ -182,6 +281,7 @@ export function RepairReceiptSettingsDialog({
                     </p>
                   </div>
                   <Switch
+                    aria-label="Mostrar control de entrega y garantía"
                     checked={settings.showDeliveryControl}
                     onCheckedChange={(val) => setSettings(prev => ({ ...prev, showDeliveryControl: val }))}
                   />
@@ -198,6 +298,7 @@ export function RepairReceiptSettingsDialog({
                     </p>
                   </div>
                   <Switch
+                    aria-label="Mostrar resumen financiero"
                     checked={settings.showFinancialBreakdown}
                     onCheckedChange={(val) => setSettings(prev => ({ ...prev, showFinancialBreakdown: val }))}
                   />
@@ -214,6 +315,7 @@ export function RepairReceiptSettingsDialog({
                     </p>
                   </div>
                   <Switch
+                    aria-label="Mostrar accesorios recibidos"
                     checked={settings.showAccessories}
                     onCheckedChange={(val) => setSettings(prev => ({ ...prev, showAccessories: val }))}
                   />
@@ -230,6 +332,7 @@ export function RepairReceiptSettingsDialog({
                     </p>
                   </div>
                   <Switch
+                    aria-label="Mostrar IMEI o número de serie"
                     checked={settings.showImei}
                     onCheckedChange={(val) => setSettings(prev => ({ ...prev, showImei: val }))}
                   />
@@ -246,6 +349,7 @@ export function RepairReceiptSettingsDialog({
                     </p>
                   </div>
                   <Switch
+                    aria-label="Mostrar firma del cliente"
                     checked={settings.showCustomerSignature}
                     onCheckedChange={(val) => setSettings(prev => ({ ...prev, showCustomerSignature: val }))}
                   />
@@ -262,6 +366,7 @@ export function RepairReceiptSettingsDialog({
                     </p>
                   </div>
                   <Switch
+                    aria-label="Mostrar código de verificación"
                     checked={settings.showHash}
                     onCheckedChange={(val) => setSettings(prev => ({ ...prev, showHash: val }))}
                   />
@@ -283,11 +388,13 @@ export function RepairReceiptSettingsDialog({
 
                 <Textarea
                   rows={4}
+                  maxLength={3000}
                   value={settings.legalText}
                   onChange={(e) => setSettings(prev => ({ ...prev, legalText: e.target.value }))}
                   className="rounded-xl font-mono text-xs leading-relaxed"
                   placeholder="Escribe aquí los términos legales..."
                 />
+                <p className="text-right text-[10px] text-muted-foreground">{settings.legalText.length}/3000</p>
 
                 {/* Píldoras de Cláusulas Rápidas */}
                 <div className="space-y-1.5 pt-1">
@@ -347,6 +454,7 @@ export function RepairReceiptSettingsDialog({
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
+                      aria-pressed={settings.paperFormat === '80mm'}
                       onClick={() => setSettings(prev => ({ ...prev, paperFormat: '80mm' }))}
                       className={`p-3 rounded-xl border text-center transition-all ${
                         settings.paperFormat === '80mm'
@@ -361,6 +469,7 @@ export function RepairReceiptSettingsDialog({
 
                     <button
                       type="button"
+                      aria-pressed={settings.paperFormat === '58mm'}
                       onClick={() => setSettings(prev => ({ ...prev, paperFormat: '58mm' }))}
                       className={`p-3 rounded-xl border text-center transition-all ${
                         settings.paperFormat === '58mm'
@@ -375,6 +484,7 @@ export function RepairReceiptSettingsDialog({
 
                     <button
                       type="button"
+                      aria-pressed={settings.paperFormat === 'A4'}
                       onClick={() => setSettings(prev => ({ ...prev, paperFormat: 'A4' }))}
                       className={`p-3 rounded-xl border text-center transition-all ${
                         settings.paperFormat === 'A4'
@@ -405,6 +515,7 @@ export function RepairReceiptSettingsDialog({
                       </p>
                     </div>
                     <Switch
+                      aria-label="Mostrar logo en el comprobante"
                       checked={settings.showLogo}
                       onCheckedChange={(val) => setSettings(prev => ({ ...prev, showLogo: val }))}
                     />
@@ -422,6 +533,7 @@ export function RepairReceiptSettingsDialog({
                           </p>
                         </div>
                         <Switch
+                          aria-label="Usar logo monocromático"
                           checked={settings.monochromeLogo}
                           onCheckedChange={(val) => setSettings(prev => ({ ...prev, monochromeLogo: val }))}
                         />
@@ -445,6 +557,7 @@ export function RepairReceiptSettingsDialog({
                             <button
                               key={item.val}
                               type="button"
+                              aria-pressed={(settings.logoHeight || 48) === item.val}
                               onClick={() => setSettings(prev => ({ ...prev, logoHeight: item.val }))}
                               className={`py-1.5 text-xs font-bold rounded-lg border transition-all ${
                                 (settings.logoHeight || 48) === item.val
@@ -484,7 +597,10 @@ export function RepairReceiptSettingsDialog({
                       </Label>
                       <select
                         value={settings.defaultWarrantyType}
-                        onChange={(e) => setSettings(prev => ({ ...prev, defaultWarrantyType: e.target.value as any }))}
+                        onChange={(e) => setSettings(prev => ({
+                          ...prev,
+                          defaultWarrantyType: e.target.value as RepairReceiptSettings['defaultWarrantyType'],
+                        }))}
                         className="w-full h-9 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 text-xs font-semibold"
                       >
                         <option value="full">Completa (Mano de obra y repuestos)</option>
@@ -500,26 +616,30 @@ export function RepairReceiptSettingsDialog({
                     </Label>
                     <Textarea
                       rows={2}
+                      maxLength={1000}
                       value={settings.defaultWarrantyNotes}
                       onChange={(e) => setSettings(prev => ({ ...prev, defaultWarrantyNotes: e.target.value }))}
                       className="rounded-xl text-xs font-sans"
                       placeholder="Condiciones de garantía predeterminadas..."
                     />
+                    <p className="text-right text-[10px] text-muted-foreground">{settings.defaultWarrantyNotes.length}/1000</p>
                   </div>
                 </div>
               </div>
             </TabsContent>
           </Tabs>
+          </fieldset>
         </div>
 
         {/* Pie de Acciones */}
-        <DialogFooter className="p-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+        <DialogFooter className="border-t bg-muted/30 p-3 sm:p-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="flex items-center gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleTestPrint}
+              disabled={isLoading || isSaving}
               className="rounded-xl text-xs font-bold gap-1.5 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50"
             >
               <Printer className="h-3.5 w-3.5" />
@@ -531,6 +651,7 @@ export function RepairReceiptSettingsDialog({
               variant="ghost"
               size="sm"
               onClick={handleReset}
+              disabled={isLoading || isSaving || !canEdit}
               className="rounded-xl text-xs text-slate-500 hover:text-slate-800 gap-1"
             >
               <RotateCcw className="h-3 w-3" />
@@ -543,7 +664,8 @@ export function RepairReceiptSettingsDialog({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleOpenChange(false)}
+              disabled={isSaving}
               className="rounded-xl text-xs"
             >
               Cancelar
@@ -552,10 +674,11 @@ export function RepairReceiptSettingsDialog({
               type="button"
               size="sm"
               onClick={handleSave}
+              disabled={isLoading || isSaving || !isDirty || !canEdit}
               className="rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 text-xs font-bold gap-1.5 shadow-sm"
             >
-              <Check className="h-3.5 w-3.5" />
-              <span>Guardar Configuración</span>
+              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              <span>{isSaving ? 'Guardando…' : isDirty ? 'Guardar configuración' : 'Guardado'}</span>
             </Button>
           </div>
         </DialogFooter>

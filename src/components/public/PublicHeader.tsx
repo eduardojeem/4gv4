@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag, ChevronRight, Search, MapPin, Sparkles, Flame, Mail, MessageCircle, ShieldCheck } from 'lucide-react'
+import { Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag, ChevronRight, Search, MapPin, Sparkles, Flame, Mail, MessageCircle, ShieldCheck, Heart } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
@@ -781,11 +781,11 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
                     </Button>
                   )}
 
-                  <div className="grid grid-cols-3 gap-1.5 pt-1">
+                  <div className="grid grid-cols-4 gap-1.5 pt-1">
                     <Link
                       href={withTenantPrefix('/perfil')}
                       onClick={() => setMobileMenuOpen(false)}
-                      className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-background px-1.5 py-2 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-center"
+                      className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-background px-1 py-2 text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-center"
                     >
                       <User className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span className="leading-tight">Mi Perfil</span>
@@ -793,7 +793,7 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
                     <Link
                       href={withTenantPrefix('/track')}
                       onClick={() => setMobileMenuOpen(false)}
-                      className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-background px-1.5 py-2 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-center"
+                      className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-background px-1 py-2 text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-center"
                     >
                       <Truck className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span className="leading-tight">Rastrear</span>
@@ -801,10 +801,23 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
                     <Link
                       href={withTenantPrefix('/perfil/autorizados')}
                       onClick={() => setMobileMenuOpen(false)}
-                      className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-background px-1.5 py-2 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-center"
+                      className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-background px-1 py-2 text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-center"
                     >
                       <Shield className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span className="leading-tight">Autorizados</span>
+                    </Link>
+                    <Link
+                      href={tenantPrefix ? `${tenantPrefix}/favoritos` : '/marketplace/favoritos'}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(
+                        'flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-background px-1 py-2 text-[10px] font-semibold transition-colors text-center',
+                        pathname === (tenantPrefix ? `${tenantPrefix}/favoritos` : '/marketplace/favoritos') || pathname === '/marketplace/favoritos'
+                          ? 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      )}
+                    >
+                      <Heart className={cn('h-3.5 w-3.5 shrink-0', pathname.includes('/favoritos') ? 'fill-rose-500 text-rose-500' : 'text-rose-500')} />
+                      <span className="leading-tight">Favoritos</span>
                     </Link>
                   </div>
                 </div>
@@ -823,14 +836,29 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
                     <User className="h-4 w-4" />
                     Iniciar sesión / Registro
                   </Button>
-                  <Link
-                    href={withTenantPrefix('/track')}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-border/70 bg-background px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                  >
-                    <Truck className="h-3.5 w-3.5 text-primary" />
-                    <span>Rastrear un Pedido</span>
-                  </Link>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      href={withTenantPrefix('/track')}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-border/70 bg-background px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                      <Truck className="h-3.5 w-3.5 text-primary" />
+                      <span>Rastrear Pedido</span>
+                    </Link>
+                    <Link
+                      href={tenantPrefix ? `${tenantPrefix}/favoritos` : '/marketplace/favoritos'}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(
+                        'flex items-center justify-center gap-2 rounded-xl border border-border/70 bg-background px-3 py-2 text-xs font-semibold transition-colors',
+                        pathname === (tenantPrefix ? `${tenantPrefix}/favoritos` : '/marketplace/favoritos') || pathname === '/marketplace/favoritos'
+                          ? 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      )}
+                    >
+                      <Heart className={cn('h-3.5 w-3.5', pathname.includes('/favoritos') ? 'fill-rose-500 text-rose-500' : 'text-rose-500')} />
+                      <span>Favoritos</span>
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>

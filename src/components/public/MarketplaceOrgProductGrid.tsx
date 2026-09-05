@@ -17,6 +17,9 @@ type Org = {
   name: string
   slug: string
   logo_url: string | null
+  city?: string | null
+  address?: string | null
+  maps_url?: string | null
   products_count: number
   featured_products: PublicProduct[]
 }

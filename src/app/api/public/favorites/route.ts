@@ -20,7 +20,7 @@ async function mutate(request: NextRequest, remove: boolean) {
   const body = await request.json().catch(() => null)
   if (request.headers.get('x-favorites-user') !== user.id) return NextResponse.json({ error: 'La sesión cambió. Recargá tus favoritos.' }, { status: 409 })
   const parsed = favoriteListSchema.safeParse(remove ? [body] : body)
-  if (!parsed.success) return NextResponse.json({ error: 'Favoritos inválidos (máximo 200 por envío).' }, { status: 400 })
+  if (!parsed.success) return NextResponse.json({ error: 'Favoritos inválidos (máximo 30 por envío).' }, { status: 400 })
   if (remove) {
     const item = favoriteSchema.parse(parsed.data[0])
     const { error } = await db.from('public_product_favorites').delete().eq('user_id', user.id).eq('product_id', item.productId).eq('store_slug', item.slug)

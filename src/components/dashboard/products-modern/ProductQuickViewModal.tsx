@@ -326,7 +326,7 @@ export function ProductQuickViewModal({
                               <div className="flex flex-wrap gap-1 mt-0.5">
                                 {Object.entries(v.attributes).map(([key, val]) => (
                                   <span key={key} className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                                    {key}: <strong className="ml-0.5 font-bold">{val}</strong>
+                                    {key}: <strong className="ml-0.5 font-bold">{String(val)}</strong>
                                   </span>
                                 ))}
                               </div>

@@ -1604,6 +1604,7 @@ export interface Database {
           timezone: string
           branding: Json
           modules: Json
+          repair_receipt_settings: Json | null
           created_at: string
           updated_at: string
         }
@@ -1614,6 +1615,7 @@ export interface Database {
           timezone: string
           branding: Json
           modules: Json
+          repair_receipt_settings?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -1624,6 +1626,7 @@ export interface Database {
           timezone?: string
           branding?: Json
           modules?: Json
+          repair_receipt_settings?: Json | null
           created_at?: string
           updated_at?: string
         }

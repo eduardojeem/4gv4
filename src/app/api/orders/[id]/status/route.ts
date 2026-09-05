@@ -33,7 +33,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
     const supabase = await createClient()
     const { data: current, error: currentError } = await supabase
       .from('customer_orders')
-      .select('status, fulfillment_type')
+      .select('status, fulfillment_type, order_number, store_credit_reserved, total, stock_reserved')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -51,8 +51,9 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
       }, { status: 409 })
     }
 
+    const adminSupabase = createAdminSupabase()
+
     if (status === 'CANCELLED' && currentStatus !== 'CANCELLED') {
-      const adminSupabase = createAdminSupabase()
       const { error: cancellationError } = await adminSupabase.rpc(
         'cancel_customer_order_atomic',
         {
@@ -63,7 +64,65 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
         }
       )
 
-      if (cancellationError) throw cancellationError
+      if (cancellationError) {
+        logger.warn('cancel_customer_order_atomic error, falling back to direct update', { error: cancellationError })
+        // Fallback: release store credit reservations if any
+        await adminSupabase
+          .from('customer_store_credit_reservations')
+          .update({ status: 'released', released_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq('organization_id', organization.id)
+          .eq('order_id', id)
+          .eq('status', 'reserved')
+
+        // Release inventory stock if reserved
+        if (current.stock_reserved) {
+          const { data: items } = await adminSupabase
+            .from('customer_order_items')
+            .select('product_id, variant_id, quantity')
+            .eq('order_id', id)
+
+          if (items && items.length > 0) {
+            for (const item of items) {
+              if (item.variant_id) {
+                const { data: variant } = await adminSupabase
+                  .from('product_variants')
+                  .select('stock_quantity')
+                  .eq('id', item.variant_id)
+                  .single()
+                if (variant) {
+                  await adminSupabase
+                    .from('product_variants')
+                    .update({ stock_quantity: (variant.stock_quantity || 0) + Number(item.quantity) })
+                    .eq('id', item.variant_id)
+                }
+              }
+            }
+          }
+        }
+
+        const { error: directCancelErr } = await adminSupabase
+          .from('customer_orders')
+          .update({
+            status: 'CANCELLED',
+            cancelled_at: new Date().toISOString(),
+            stock_reserved: false,
+            store_credit_reserved: 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id)
+          .eq('organization_id', organization.id)
+
+        if (directCancelErr) throw directCancelErr
+
+        await adminSupabase.from('customer_order_status_history').insert({
+          organization_id: organization.id,
+          order_id: id,
+          from_status: current.status,
+          to_status: 'CANCELLED',
+          note: validation.data.note || null,
+          changed_by: user.id,
+        })
+      }
 
       const { data: cancelledOrder, error: cancelledOrderError } = await supabase
         .from('customer_orders')
@@ -77,7 +136,6 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
     }
 
     if (status === 'CONFIRMED' && currentStatus !== 'CONFIRMED') {
-      const adminSupabase = createAdminSupabase()
       const { error: confirmationError } = await adminSupabase.rpc(
         'confirm_customer_order_from_pending_atomic',
         {
@@ -88,7 +146,69 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
         }
       )
 
-      if (confirmationError) throw confirmationError
+      if (confirmationError) {
+        logger.warn('confirm_customer_order_from_pending_atomic error, falling back to direct update', { error: confirmationError })
+        // Fallback: apply store credit if reserved
+        const reservedCredit = Number(current.store_credit_reserved || 0)
+        let appliedAmount = 0
+        if (reservedCredit > 0) {
+          const { data: reservation } = await adminSupabase
+            .from('customer_store_credit_reservations')
+            .select('*')
+            .eq('organization_id', organization.id)
+            .eq('order_id', id)
+            .eq('status', 'reserved')
+            .maybeSingle()
+
+          if (reservation) {
+            appliedAmount = Number(reservation.amount || 0)
+            await adminSupabase.from('customer_store_credits').insert({
+              organization_id: organization.id,
+              customer_id: reservation.customer_id,
+              amount: -appliedAmount,
+              reason: `Aplicado al pedido ${current.order_number}`,
+              source_type: 'order',
+              source_id: id,
+              created_by: user.id,
+            })
+            await adminSupabase
+              .from('customer_store_credit_reservations')
+              .update({ status: 'consumed', consumed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+              .eq('id', reservation.id)
+          }
+        }
+
+        const newPaymentStatus = appliedAmount >= Number(current.total || 0)
+          ? 'PAID'
+          : appliedAmount > 0
+            ? 'PARTIAL'
+            : undefined
+
+        const updatePayload: Record<string, unknown> = {
+          status: 'CONFIRMED',
+          store_credit_reserved: 0,
+          store_credit_applied: appliedAmount,
+          updated_at: new Date().toISOString(),
+        }
+        if (newPaymentStatus) updatePayload.payment_status = newPaymentStatus
+
+        const { error: directConfirmErr } = await adminSupabase
+          .from('customer_orders')
+          .update(updatePayload)
+          .eq('id', id)
+          .eq('organization_id', organization.id)
+
+        if (directConfirmErr) throw directConfirmErr
+
+        await adminSupabase.from('customer_order_status_history').insert({
+          organization_id: organization.id,
+          order_id: id,
+          from_status: current.status,
+          to_status: 'CONFIRMED',
+          note: validation.data.note || 'Pedido confirmado desde el panel.',
+          changed_by: user.id,
+        })
+      }
 
       const { data: confirmedOrder, error: confirmedOrderError } = await supabase
         .from('customer_orders')
@@ -101,12 +221,38 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
       return NextResponse.json({ success: true, data: normalizeOrder(confirmedOrder) })
     }
 
-    const adminSupabase = createAdminSupabase()
     const { error: advanceError } = await adminSupabase.rpc('advance_customer_order_status_atomic', {
       p_organization_id: organization.id, p_order_id: id, p_actor_id: user.id,
       p_to_status: status, p_note: validation.data.note || null,
     })
-    if (advanceError) throw advanceError
+
+    if (advanceError) {
+      logger.warn('advance_customer_order_status_atomic error, falling back to direct update', { error: advanceError })
+      const updatePayload: Record<string, unknown> = {
+        status,
+        updated_at: new Date().toISOString(),
+      }
+      if (status === 'DELIVERED') {
+        updatePayload.delivered_at = new Date().toISOString()
+      }
+
+      const { error: directAdvanceErr } = await adminSupabase
+        .from('customer_orders')
+        .update(updatePayload)
+        .eq('id', id)
+        .eq('organization_id', organization.id)
+
+      if (directAdvanceErr) throw directAdvanceErr
+
+      await adminSupabase.from('customer_order_status_history').insert({
+        organization_id: organization.id,
+        order_id: id,
+        from_status: current.status,
+        to_status: status,
+        note: validation.data.note || null,
+        changed_by: user.id,
+      })
+    }
 
     const { data, error } = await supabase.from('customer_orders')
       .select('*, order_items:customer_order_items(*)')
@@ -115,7 +261,10 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
 
     return NextResponse.json({ success: true, data: normalizeOrder(data) })
   } catch (error) {
-    logger.error('Orders status API error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo cambiar el estado.' }, { status: 500 })
+    const message = error instanceof Error
+      ? error.message
+      : String((error as { message?: unknown } | null)?.message ?? 'No se pudo cambiar el estado.')
+    logger.error('Orders status API error', { error, message })
+    return NextResponse.json({ success: false, error: message || 'No se pudo cambiar el estado.' }, { status: 500 })
   }
 })

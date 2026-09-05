@@ -100,6 +100,24 @@ export function setPublicCartItemStock(
   return updatedItem
 }
 
+export function setPublicCartItemPrice(
+  tenantSlug: string | null | undefined,
+  cartItemId: string,
+  unitPrice: number
+) {
+  const normalizedPrice = Number(unitPrice)
+  if (!Number.isFinite(normalizedPrice) || normalizedPrice < 0) return null
+
+  let updatedItem: PublicCartItem | null = null
+  const next = getPublicCartItems(tenantSlug).map((item) => {
+    if (item.cartItemId !== cartItemId) return item
+    updatedItem = { ...item, unitPrice: normalizedPrice }
+    return updatedItem
+  })
+  setPublicCartItems(tenantSlug, next)
+  return updatedItem
+}
+
 export function addPublicProductToCart({
   tenantSlug,
   product,

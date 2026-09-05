@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { productSchema } from '@/lib/validation/schemas'
 
 const routeSource = readFileSync(resolve(process.cwd(), 'src/app/api/products/route.ts'), 'utf8')
+const itemRouteSource = readFileSync(resolve(process.cwd(), 'src/app/api/products/[id]/route.ts'), 'utf8')
+const productsHookSource = readFileSync(resolve(process.cwd(), 'src/hooks/useProductsSupabase.ts'), 'utf8')
 
 const validProduct = {
   name: 'Remera clásica',
@@ -42,5 +44,14 @@ describe('product variants API contract', () => {
     expect(routeSource).toContain('VARIANT_SKU_DUPLICATE')
     expect(routeSource).toContain('VARIANT_BARCODE_DUPLICATE')
     expect(routeSource).toContain('VARIANT_STOCK_INSUFFICIENT')
+  })
+
+  it('loads variants in the authenticated product detail used by edit forms', () => {
+    expect(itemRouteSource).toContain('variants:product_variants(*)')
+  })
+
+  it('updates modal products through the variant-aware collection endpoint', () => {
+    expect(productsHookSource).toContain("fetch('/api/products', {")
+    expect(productsHookSource).toContain('body: JSON.stringify({ ...productData, id })')
   })
 })

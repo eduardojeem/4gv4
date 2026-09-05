@@ -201,10 +201,10 @@ export function normalizeProductVariantsForForm(product: any): {
       }
     })
 
-  const rawHasVariants = Boolean(product.has_variants)
-  // If product.has_variants is true, but there are 0 attributes AND 0 variants, it's an unconfigured or empty variant flag.
-  // We automatically set has_variants: false so that editing seed/example products doesn't block with validation errors.
-  const effectiveHasVariants = rawHasVariants && (normalizedConfig.length > 0 || normalizedVariants.length > 0)
+  // No se debe convertir silenciosamente un producto con variantes en uno
+  // simple cuando un listado resumido todavía no incluyó la relación. El modal
+  // completa esos datos desde el detalle antes de permitir guardar.
+  const effectiveHasVariants = Boolean(product.has_variants)
 
   return {
     has_variants: effectiveHasVariants,
@@ -236,6 +236,14 @@ export function ProductModal({
   const productRef = useRef(product)
   productRef.current = product
   const productId = product?.id ?? null
+  const listedVariants = (product as (Product & { variants?: unknown[] }) | null)?.variants
+  const productNeedsVariantHydration = Boolean(
+    product?.has_variants
+    && (!Array.isArray(listedVariants) || listedVariants.length === 0)
+  )
+  const [hydratedVariantProductId, setHydratedVariantProductId] = useState<string | null>(null)
+  const [isLoadingExistingVariants, setIsLoadingExistingVariants] = useState(false)
+  const [variantLoadError, setVariantLoadError] = useState<string | null>(null)
   const [isUploadingImages, setIsUploadingImages] = useState(false)
   const newlyUploadedImages = useRef(new Map<string, string>())
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
@@ -297,9 +305,10 @@ export function ProductModal({
   })
 
   const { formState: { isSubmitting, errors, isValid, isDirty }, setValue, watch } = form
+  const isExistingVariantDataReady = !productNeedsVariantHydration || hydratedVariantProductId === productId
   const submitState = getProductSubmitState({
     isEditing: Boolean(product),
-    isSubmitting: isSubmitting || isUploadingImages,
+    isSubmitting: isSubmitting || isUploadingImages || isLoadingExistingVariants,
     isValid,
   })
 
@@ -517,6 +526,46 @@ export function ProductModal({
       })
     }
   }, [productId, form])
+
+  // Algunos consumidores abren el modal desde listados resumidos que solo
+  // incluyen `has_variants`. Recuperamos el detalle completo para mostrar las
+  // combinaciones existentes y evitar que una edición las borre.
+  useEffect(() => {
+    if (!isOpen || !productId || !productNeedsVariantHydration) {
+      setIsLoadingExistingVariants(false)
+      setVariantLoadError(null)
+      return
+    }
+
+    const controller = new AbortController()
+    setIsLoadingExistingVariants(true)
+    setVariantLoadError(null)
+    setHydratedVariantProductId(null)
+
+    void fetch(`/api/products/${productId}`, { signal: controller.signal, cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null) as { success?: boolean; data?: unknown; error?: string } | null
+        if (!response.ok || !payload?.success || !payload.data) {
+          throw new Error(payload?.error || 'No se pudieron cargar las variantes guardadas.')
+        }
+
+        const variantData = normalizeProductVariantsForForm(payload.data)
+        form.reset(
+          { ...form.getValues(), ...variantData },
+          { keepDirty: true, keepDirtyValues: true },
+        )
+        setHydratedVariantProductId(productId)
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        setVariantLoadError(error instanceof Error ? error.message : 'No se pudieron cargar las variantes guardadas.')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingExistingVariants(false)
+      })
+
+    return () => controller.abort()
+  }, [form, isOpen, productId, productNeedsVariantHydration])
 
   // Se guarda lo escrito en cada cambio, pero solo mientras el formulario esta
   // sucio: sin eso, abrir un producto y cerrarlo dejaria un borrador identico a
@@ -2309,6 +2358,24 @@ export function ProductModal({
                       </p>
                     </div>
                   </div>
+                  {isLoadingExistingVariants && (
+                    <Alert className="border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <AlertTitle>Cargando variantes guardadas</AlertTitle>
+                      <AlertDescription>
+                        Estamos recuperando talles, colores, precios y stock antes de habilitar la edición.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {variantLoadError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>No se pudieron mostrar las variantes</AlertTitle>
+                      <AlertDescription>
+                        {variantLoadError} Cerrá y volvé a abrir el producto para reintentar. No se guardará ningún cambio mientras falten estos datos.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <ProductVariantsEditor
                     businessVertical={businessVertical}
                     value={variantValue}
@@ -2318,7 +2385,7 @@ export function ProductModal({
                       salePrice: Number(salePrice) || 0,
                       wholesalePrice: Number(wholesalePrice) > 0 ? Number(wholesalePrice) : undefined,
                     }}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isLoadingExistingVariants || !isExistingVariantDataReady}
                     onChange={(next) => {
                       form.setValue('has_variants', next.hasVariants, { shouldDirty: true, shouldValidate: true })
                       form.setValue('variant_attribute_config', next.attributes, { shouldDirty: true, shouldValidate: true })
@@ -2671,7 +2738,7 @@ export function ProductModal({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSubmitting || isUploadingImages}
+                  disabled={isSubmitting || isUploadingImages || !isExistingVariantDataReady}
                   aria-describedby="product-form-status"
                   className={`min-w-[180px] flex-1 sm:flex-none text-white rounded-xl font-medium transition-all ${
                     submitState.ready
@@ -2679,10 +2746,10 @@ export function ProductModal({
                       : 'bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-500/20 dark:bg-amber-600 dark:hover:bg-amber-500'
                   }`}
                 >
-                  {isSubmitting || isUploadingImages ? (
+                  {isSubmitting || isUploadingImages || isLoadingExistingVariants ? (
                     <>
                       <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      {isUploadingImages ? 'Subiendo imágenes...' : 'Guardando...'}
+                      {isUploadingImages ? 'Subiendo imágenes...' : isLoadingExistingVariants ? 'Cargando variantes...' : 'Guardando...'}
                     </>
                   ) : (
                     <>

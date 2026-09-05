@@ -142,19 +142,28 @@ const swrConfig = {
   
   // Configuración de middleware
   use: [
-    // Middleware para logging en desarrollo
+    // Middleware para logging en desarrollo.
+    // Usa un Set global para deduplicar: solo loguea la primera vez que una
+    // clave va a red, no una vez por cada componente que comparte la misma key.
     ...(process.env.NODE_ENV === 'development' ? [
-      (useSWRNext: any) => (key: any, fetcher: any, config: any) => {
-        const swr = useSWRNext(key, fetcher, config)
-        
-        // Log cache hits/misses en desarrollo
-        if (swr.data && !swr.isLoading) {
-          console.debug(`[SWR Cache HIT] ${JSON.stringify(key)}`)
-        } else if (swr.isLoading) {
-          console.debug(`[SWR Cache MISS] ${JSON.stringify(key)}`)
+      (useSWRNext: any) => {
+        const inFlightKeys = new Set<string>()
+        return (key: any, fetcher: any, config: any) => {
+          const swr = useSWRNext(key, fetcher, config)
+          const keyStr = JSON.stringify(key)
+
+          if (swr.isLoading && !inFlightKeys.has(keyStr)) {
+            inFlightKeys.add(keyStr)
+            console.debug(`[SWR Cache MISS] ${keyStr}`)
+          } else if (!swr.isLoading && inFlightKeys.has(keyStr)) {
+            inFlightKeys.delete(keyStr)
+            if (swr.data) {
+              console.debug(`[SWR Cache HIT] ${keyStr}`)
+            }
+          }
+
+          return swr
         }
-        
-        return swr
       }
     ] : []),
     
