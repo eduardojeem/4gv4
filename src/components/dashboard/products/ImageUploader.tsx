@@ -20,6 +20,12 @@ interface ImageUploaderProps {
   onUploadFiles?: (files: File[]) => Promise<string[]>
   onRemoveImage?: (url: string) => Promise<void> | void
   onUploadingChange?: (uploading: boolean) => void
+  /**
+   * Version baja para formularios donde el cargador se repite. En la ficha de
+   * reparacion hay uno por equipo: con tres equipos el dropzone grande sumaba
+   * unos 700px de alto y empujaba el resto del formulario fuera de la pantalla.
+   */
+  compact?: boolean
 }
 
 export function ImageUploader({ 
@@ -31,6 +37,7 @@ export function ImageUploader({
   onUploadFiles,
   onRemoveImage,
   onUploadingChange,
+  compact = false,
 }: ImageUploaderProps) {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
@@ -224,7 +231,11 @@ export function ImageUploader({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+            className={compact
+              // Miniaturas mas chicas: con un cargador por equipo, la grilla de
+              // cuatro columnas cuadradas ocupaba tanto como el dropzone.
+              ? 'grid grid-cols-4 sm:grid-cols-6 gap-2'
+              : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'}
           >
             {images.map((url, index) => (
               <motion.div
@@ -288,7 +299,8 @@ export function ImageUploader({
           <div
             {...getRootProps()}
             className={`
-              border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all
+              border-2 border-dashed rounded-xl text-center cursor-pointer transition-all
+              ${compact ? 'p-3' : 'p-8'}
               ${isDragActive 
                 ? 'border-blue-500 bg-blue-50 scale-105' 
                 : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
@@ -299,10 +311,38 @@ export function ImageUploader({
             <input {...getInputProps()} />
             
             {uploading ? (
-              <div className="space-y-3">
-                <Loader2 className="h-12 w-12 text-blue-500 mx-auto animate-spin" />
-                <p className="text-gray-600 font-medium">Subiendo imágenes...</p>
-                <p className="text-xs text-gray-500">Comprimiendo y optimizando</p>
+              compact ? (
+                <div className="flex items-center justify-center gap-2 text-xs text-gray-600">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                  Subiendo imágenes…
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Loader2 className="h-12 w-12 text-blue-500 mx-auto animate-spin" />
+                  <p className="text-gray-600 font-medium">Subiendo imágenes...</p>
+                  <p className="text-xs text-gray-500">Comprimiendo y optimizando</p>
+                </div>
+              )
+            ) : compact ? (
+              <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-gray-600">
+                <Upload className="h-4 w-4 shrink-0 text-gray-400" />
+                <span className="font-medium">
+                  {isDragActive ? '¡Soltá las fotos acá!' : 'Arrastrá fotos o hacé clic'}
+                </span>
+                <span className="text-gray-400">
+                  hasta {maxImages} · {maxSize / 1024 / 1024}MB
+                </span>
+                {/* Sin esto la carga por URL quedaba inalcanzable en compacto:
+                    el boton que abre el panel vive en la version grande. */}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setShowUrlInput(!showUrlInput) }}
+                  disabled={disabled || uploading}
+                  className="inline-flex items-center gap-1 rounded px-1 font-medium text-blue-600 underline-offset-2 hover:underline disabled:opacity-50"
+                >
+                  <LinkIcon className="h-3 w-3" />
+                  URL
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
