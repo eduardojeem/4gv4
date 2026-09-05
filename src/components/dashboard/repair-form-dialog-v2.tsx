@@ -66,6 +66,7 @@ import { AppError } from '@/lib/errors'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { useRepairWarrantyPolicy } from '@/hooks/use-repair-warranty-policy'
 import { hasSingleDeviceOnlyData, describeSingleDeviceOnlyData } from '@/lib/repairs/multi-device-guard'
+import { describeDeviceName, describeDeviceSummary, deviceAccent } from '@/lib/repairs/device-label'
 
 // La garantia predeterminada dejo de vivir en `localStorage`: era por navegador,
 // asi que dos computadoras del mismo local tenian politicas distintas y un
@@ -1281,26 +1282,75 @@ export function RepairFormDialogV2({
                 </div>
               </CardHeader>
               <CardContent className="space-y-4 pt-4">
+                {/* Tira de resumen: con tres equipos el formulario es largo y
+                    hay que poder ver cuales son sin bajar hasta cada tarjeta. */}
+                {fields.length > 1 && (
+                  <div className="flex flex-wrap gap-1.5 rounded-xl border border-dashed border-border/80 bg-muted/30 p-2">
+                    {fields.map((field, index) => {
+                      const nombre = describeDeviceName({
+                        brand: watch(`devices.${index}.brand`),
+                        model: watch(`devices.${index}.model`),
+                      })
+                      const accent = deviceAccent(index)
+                      return (
+                        <span
+                          key={`chip-${field.id}`}
+                          className="flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-2 py-1 text-[11px] font-medium"
+                        >
+                          <span className={cn('flex h-4 w-4 items-center justify-center rounded-md text-[9px] font-bold text-white', accent.badge)}>
+                            {index + 1}
+                          </span>
+                          <span className={cn('max-w-[140px] truncate', !nombre && 'italic text-muted-foreground')}>
+                            {nombre || 'sin completar'}
+                          </span>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+
                 {fields.map((field, index) => {
                   const deviceType = watch(`devices.${index}.deviceType`)
                   const DeviceIcon = deviceTypeOptions.find(opt => opt.value === deviceType)?.icon || Smartphone
-                  
+                  // Con varios equipos hay que poder decir cual es cual de un
+                  // vistazo. Antes el resumen aparecia solo con marca Y modelo
+                  // completos: hasta entonces los tres decian «Dispositivo N».
+                  const varios = fields.length > 1
+                  const resumen = describeDeviceSummary({
+                    brand: watch(`devices.${index}.brand`),
+                    model: watch(`devices.${index}.model`),
+                    serialNumber: watch(`devices.${index}.serialNumber`),
+                    issue: watch(`devices.${index}.issue`),
+                  })
+                  const accent = deviceAccent(index)
+
                   return (
-                  <Card key={field.id} className={subsectionCardClass}>
+                  <Card
+                    key={field.id}
+                    className={cn(subsectionCardClass, varios && `border-l-4 ${accent.edge}`)}
+                  >
                     <CardHeader className={`pb-2 ${sectionHeaderClass}`}>
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-slate-900 text-xs font-bold text-white shadow-sm dark:bg-slate-100 dark:text-slate-900">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <div className={cn(
+                            'flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl text-xs font-bold text-white shadow-sm',
+                            varios ? accent.badge : 'bg-slate-900 dark:bg-slate-100 dark:text-slate-900'
+                          )}>
                             {index + 1}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <CardTitle className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                              <DeviceIcon className="h-3.5 w-3.5" />
+                              <DeviceIcon className="h-3.5 w-3.5 shrink-0" />
                               Dispositivo {index + 1}
+                              {varios && !resumen && (
+                                <span className="text-[10px] font-normal text-muted-foreground">
+                                  · sin identificar todavía
+                                </span>
+                              )}
                             </CardTitle>
-                            {watch(`devices.${index}.brand`) && watch(`devices.${index}.model`) && (
-                              <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
-                                {watch(`devices.${index}.brand`)} {watch(`devices.${index}.model`)}
+                            {resumen && (
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground dark:text-slate-400" title={resumen}>
+                                {resumen}
                               </p>
                             )}
                           </div>
