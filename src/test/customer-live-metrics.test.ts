@@ -74,7 +74,7 @@ describe('la ficha del cliente usa los números reales', () => {
     // `customers.loyalty_points` nunca fue parte del circuito de fidelidad:
     // el saldo lo mantienen award_loyalty_points_for_sale y adjust_loyalty_points
     // sobre `loyalty_accounts.balance`.
-    expect(hook).toContain('loyalty.account?.balance')
+    expect(hook).toContain('loyalty.body.account?.balance')
     // Sin los comentarios: el propio docstring nombra la columna para explicar
     // por que no se usa, y buscarla a secas daba un falso positivo.
     const soloCodigo = hook
@@ -88,7 +88,7 @@ describe('la ficha del cliente usa los números reales', () => {
   it('distingue "sin puntos" de "fidelidad no activada"', () => {
     // Un 0 afirmaría que el cliente no juntó puntos, cuando el módulo puede
     // no estar en el plan de esa tienda.
-    expect(hook).toContain("loyalty?.moduleInstalled !== false")
+    expect(hook).toContain("respuesta.body?.moduleInstalled !== false")
     expect(modal).toContain('Fidelidad no activada')
   })
 
@@ -97,11 +97,34 @@ describe('la ficha del cliente usa los números reales', () => {
     expect(modal).not.toMatch(/activeCustomer\.(total_repairs|total_purchases|lifetime_value|loyalty_points)/)
   })
 
+  it('trata el 403 y el 402 del plan como "fidelidad no activada"', () => {
+    // El endpoint de puntos no responde `moduleInstalled: false` cuando el plan
+    // no lo incluye: `withTenantAuth` corta antes con 403 (MODULE_DISABLED) o
+    // 402 (MODULE_NOT_ENTITLED). Mirando solo el cuerpo, el recuadro quedaba en
+    // "—" con la etiqueta "Puntos vigentes", que es lo que no corresponde decir.
+    const fn = hook.slice(hook.indexOf('function fidelidadDisponible'))
+    expect(fn.slice(0, 400)).toContain('respuesta.status === 402 || respuesta.status === 403')
+    expect(fn.slice(0, 400)).toContain("code === 'MODULE_DISABLED'")
+    expect(fn.slice(0, 400)).toContain("code === 'MODULE_NOT_ENTITLED'")
+  })
+
+  it('distingue "sin cuenta de puntos" de "no se pudo consultar"', () => {
+    // Un cliente sin movimientos tiene `account: null` con el modulo activo:
+    // eso es 0 puntos de verdad, no una consulta fallida.
+    expect(hook).toContain("loyalty.body?.hasOwnProperty('account')")
+  })
+
+  it('dice cual consulta fallo, con su codigo HTTP', () => {
+    expect(hook).toContain('const fallas: string[] = []')
+    expect(hook).toContain('HTTP ${sales.status}')
+    expect(modal).toContain("metrics.failed.join(' ni ')")
+  })
+
   it('muestra un guion, no un cero, cuando la consulta falla', () => {
     // Un 0 se lee como dato bueno. Es la misma regla que en el panel de
     // seguridad: si no se pudo contar, no se inventa el número.
     expect(modal).toContain("metrics.repairs ?? '—'")
     expect(modal).toContain("metrics.billed === null ? '—'")
-    expect(modal).toContain('No pudimos cargar algunos números del cliente')
+    expect(modal).toContain('No pudimos cargar {metrics.failed')
   })
 })

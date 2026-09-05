@@ -28,6 +28,8 @@ export type CustomerLiveMetrics = {
   loyaltyPoints: number | null
   /** Distingue "no tiene puntos" de "esta tienda no usa fidelidad". */
   loyaltyModuleInstalled: boolean
+  /** Qué consultas fallaron, con nombre, para poder decirlo en pantalla. */
+  failed: string[]
   loading: boolean
 }
 
@@ -37,17 +39,34 @@ const VACIO: CustomerLiveMetrics = {
   billed: null,
   loyaltyPoints: null,
   loyaltyModuleInstalled: true,
+  failed: [],
   loading: false,
 }
 
-async function leerJson(url: string): Promise<any | null> {
+type Respuesta = { ok: boolean; status: number; body: any | null }
+
+async function leer(url: string): Promise<Respuesta> {
   try {
     const response = await fetch(url)
-    if (!response.ok) return null
-    return await response.json()
+    const body = await response.json().catch(() => null)
+    return { ok: response.ok, status: response.status, body }
   } catch {
-    return null
+    return { ok: false, status: 0, body: null }
   }
+}
+
+/**
+ * El modulo de fidelidad es opcional por plan, y cuando no esta el endpoint no
+ * responde `moduleInstalled: false`: `withTenantAuth` corta antes con 403
+ * (MODULE_DISABLED) o 402 (MODULE_NOT_ENTITLED). Mirando solo el cuerpo, esos
+ * dos casos se veian como "fallo la consulta" y el recuadro quedaba en "—" con
+ * la etiqueta "Puntos vigentes", que es justo lo que no corresponde decir.
+ */
+function fidelidadDisponible(respuesta: Respuesta): boolean {
+  if (respuesta.status === 402 || respuesta.status === 403) return false
+  const code = respuesta.body?.code
+  if (code === 'MODULE_DISABLED' || code === 'MODULE_NOT_ENTITLED') return false
+  return respuesta.body?.moduleInstalled !== false
 }
 
 export function useCustomerLiveMetrics(customerId: string | null | undefined, enabled = true): CustomerLiveMetrics {
@@ -64,15 +83,15 @@ export function useCustomerLiveMetrics(customerId: string | null | undefined, en
 
     void (async () => {
       const [sales, repairs, loyalty] = await Promise.all([
-        leerJson(`/api/customers/${customerId}/sales?limit=1`),
-        leerJson(`/api/customers/${customerId}/repairs?limit=1`),
-        leerJson(`/api/loyalty/customers/${customerId}`),
+        leer(`/api/customers/${customerId}/sales?limit=1`),
+        leer(`/api/customers/${customerId}/repairs?limit=1`),
+        leer(`/api/loyalty/customers/${customerId}`),
       ])
 
       if (!vigente) return
 
-      const ventasGastado = sales?.stats ? Number(sales.stats.totalSpent ?? 0) : null
-      const reparacionesGastado = repairs?.stats ? Number(repairs.stats.totalSpent ?? 0) : null
+      const ventasGastado = sales.body?.stats ? Number(sales.body.stats.totalSpent ?? 0) : null
+      const reparacionesGastado = repairs.body?.stats ? Number(repairs.body.stats.totalSpent ?? 0) : null
 
       // Si una de las dos partes falló, el total sería menor que el real y
       // parecería un dato bueno. Mejor no mostrar número.
@@ -80,16 +99,26 @@ export function useCustomerLiveMetrics(customerId: string | null | undefined, en
         ? null
         : ventasGastado + reparacionesGastado
 
-      // El módulo de fidelidad es opcional por plan. Cuando no está, decirlo:
-      // un 0 afirmaría que el cliente no juntó puntos.
-      const moduloInstalado = loyalty?.moduleInstalled !== false
+      const moduloInstalado = fidelidadDisponible(loyalty)
+
+      // Qué falló, con nombre. Un aviso genérico obliga a abrir la consola para
+      // saber por dónde empezar a mirar.
+      const fallas: string[] = []
+      if (!sales.body?.stats) fallas.push(`compras${sales.status ? ` (HTTP ${sales.status})` : ''}`)
+      if (!repairs.body?.stats) fallas.push(`reparaciones${repairs.status ? ` (HTTP ${repairs.status})` : ''}`)
+      if (moduloInstalado && !loyalty.body?.hasOwnProperty('account')) {
+        fallas.push(`puntos${loyalty.status ? ` (HTTP ${loyalty.status})` : ''}`)
+      }
 
       setMetrics({
-        repairs: repairs?.stats ? Number(repairs.stats.totalRepairs ?? 0) : null,
-        purchases: sales?.stats ? Number(sales.stats.totalPurchases ?? 0) : null,
+        repairs: repairs.body?.stats ? Number(repairs.body.stats.totalRepairs ?? 0) : null,
+        purchases: sales.body?.stats ? Number(sales.body.stats.totalPurchases ?? 0) : null,
         billed: facturado,
-        loyaltyPoints: moduloInstalado && loyalty ? Number(loyalty.account?.balance ?? 0) : null,
+        loyaltyPoints: moduloInstalado && loyalty.body?.hasOwnProperty('account')
+          ? Number(loyalty.body.account?.balance ?? 0)
+          : null,
         loyaltyModuleInstalled: moduloInstalado,
+        failed: fallas,
         loading: false,
       })
     })()

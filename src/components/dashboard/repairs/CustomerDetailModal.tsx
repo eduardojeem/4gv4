@@ -667,13 +667,15 @@ export function CustomerDetailModal({
               </div>
             </div>
 
-            {/* Un guion no es un cero: si la consulta falló, decirlo. Antes estos
-                cuatro números salían de columnas que nadie escribe y mostraban 0
-                para todos, que es peor que no mostrar nada. */}
-            {!metrics.loading && (metrics.repairs === null || metrics.purchases === null || metrics.billed === null) && (
-              <p className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
-                <AlertCircle className="h-3 w-3 shrink-0" />
-                No pudimos cargar algunos números del cliente. Los que aparecen con “—” no están disponibles ahora.
+            {/* Un guion no es un cero: si la consulta falló, decirlo — y decir
+                cuál falló. Un aviso genérico obliga a abrir la consola para
+                saber por dónde empezar a mirar. */}
+            {!metrics.loading && metrics.failed.length > 0 && (
+              <p className="flex items-start gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+                <AlertCircle className="mt-px h-3 w-3 shrink-0" />
+                <span>
+                  No pudimos cargar {metrics.failed.join(' ni ')}. Lo que aparece con “—” no está disponible ahora.
+                </span>
               </p>
             )}
 

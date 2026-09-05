@@ -194,7 +194,9 @@ describe('CustomerDetailModal', () => {
       />
     )
 
-    expect(await screen.findByText(/No pudimos cargar algunos números del cliente/)).toBeInTheDocument()
+    // El aviso ahora nombra que fallo y con que codigo, para no tener que abrir
+    // la consola para saber por donde empezar a mirar.
+    expect(await screen.findByText(/No pudimos cargar compras .*ni reparaciones/)).toBeInTheDocument()
     expect(screen.queryByText('14')).not.toBeInTheDocument()
 
     vi.unstubAllGlobals()
