@@ -50,6 +50,7 @@ import { getWarrantyStatus, formatWarrantyExpiration } from '@/lib/warranty-util
 import type { WarrantyFilterType } from '@/hooks/use-repair-filters'
 import type { RepairFormData } from '@/schemas'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
+import { hasSingleDeviceOnlyData } from '@/lib/repairs/multi-device-guard'
 import { RepairPrintPayload } from '@/lib/repair-receipt'
 import { deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
@@ -364,14 +365,11 @@ function RepairsPageContent() {
   const handleFormSubmit = useCallback(async (data: RepairFormData) => {
     try {
       if (dialogMode === 'add') {
-        const hasSharedRepairData =
-          data.devices.length > 1 &&
-          (
-            (data.parts?.length ?? 0) > 0 ||
-            (data.notes?.length ?? 0) > 0 ||
-            (data.laborCost ?? 0) > 0 ||
-            data.finalCost !== null
-          )
+        // Misma condicion que usa el boton «Agregar equipo», en un solo lugar.
+        // Estaba duplicada y las dos comprobaban `finalCost !== null`, que da
+        // verdadero con el 0 que escribe el modo de precio automatico apenas se
+        // abre el formulario.
+        const hasSharedRepairData = data.devices.length > 1 && hasSingleDeviceOnlyData(data)
 
         if (hasSharedRepairData) {
           toast.error('Para varios dispositivos, crea una reparación por equipo si necesitas repuestos, notas o costos distintos.')

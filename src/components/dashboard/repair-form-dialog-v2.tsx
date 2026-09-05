@@ -65,6 +65,7 @@ import { AppError } from '@/lib/errors'
 // import { uploadFile } from '@/lib/supabase-storage'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { useRepairWarrantyPolicy } from '@/hooks/use-repair-warranty-policy'
+import { hasSingleDeviceOnlyData, describeSingleDeviceOnlyData } from '@/lib/repairs/multi-device-guard'
 
 // La garantia predeterminada dejo de vivir en `localStorage`: era por navegador,
 // asi que dos computadoras del mismo local tenian politicas distintas y un
@@ -846,15 +847,14 @@ export function RepairFormDialogV2({
 
   const handleAddDevice = () => {
     const values = getValues()
-    const hasIndividualDetails =
-      (values.parts?.length ?? 0) > 0 ||
-      (values.notes?.length ?? 0) > 0 ||
-      (values.laborCost ?? 0) > 0 ||
-      values.finalCost !== null ||
-      (values.depositAmount ?? 0) > 0
 
-    if (hasIndividualDetails) {
-      toast.error('Los costos, repuestos, notas y adelantos corresponden a un solo equipo. Quita esos datos antes de agregar otro.')
+    if (hasSingleDeviceOnlyData(values)) {
+      // Se nombra lo que hay cargado: el mensaje anterior enumeraba las cuatro
+      // cosas posibles y dejaba a la persona buscando cual era.
+      toast.error(`Ya cargaste ${describeSingleDeviceOnlyData(values)} para este equipo.`, {
+        description: 'Esos datos son de una sola orden. Quitalos si querés recibir varios equipos juntos.',
+        duration: 7000,
+      })
       return
     }
 
