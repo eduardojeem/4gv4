@@ -26,7 +26,23 @@ interface ImageUploaderProps {
    * unos 700px de alto y empujaba el resto del formulario fuera de la pantalla.
    */
   compact?: boolean
+  /**
+   * Los consejos de abajo. El texto por defecto habla de productos —«la primera
+   * imagen sera la principal del producto»— y no aplica en todos lados: en una
+   * reparacion las fotos son el estado con el que entro el equipo, que es lo que
+   * respalda al taller si despues hay un reclamo.
+   */
+  tips?: string[]
+  tipsTitle?: string
 }
+
+const CONSEJOS_POR_DEFECTO = [
+  'Usá imágenes de alta calidad y bien iluminadas',
+  'La primera imagen será la principal del producto',
+  'Las imágenes se comprimen automáticamente',
+  'Podés agregar imágenes desde tu computadora o por URL',
+  'Podés eliminar imágenes haciendo clic en la X',
+]
 
 export function ImageUploader({ 
   images = [], 
@@ -38,7 +54,10 @@ export function ImageUploader({
   onRemoveImage,
   onUploadingChange,
   compact = false,
+  tips,
+  tipsTitle,
 }: ImageUploaderProps) {
+  const listaDeConsejos = tips ?? CONSEJOS_POR_DEFECTO
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
   const [showUrlInput, setShowUrlInput] = useState(false)
@@ -489,22 +508,33 @@ export function ImageUploader({
       )}
 
       {/* Ayuda */}
-      {images.length === 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex gap-3">
-            <ImageIcon className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-            <div className="text-sm">
-              <p className="font-medium text-blue-900 mb-1">Consejos para mejores imágenes:</p>
-              <ul className="text-blue-700 space-y-1 text-xs">
-                <li>• Usa imágenes de alta calidad y bien iluminadas</li>
-                <li>• La primera imagen será la principal del producto</li>
-                <li>• Las imágenes se comprimen automáticamente</li>
-                <li>• Puedes agregar imágenes desde tu computadora o por URL</li>
-                <li>• Puedes eliminar imágenes haciendo clic en la X</li>
-              </ul>
+      {images.length === 0 && listaDeConsejos.length > 0 && (
+        compact ? (
+          // Una sola linea: este bloque se repite por equipo y aparece
+          // justo cuando el formulario esta vacio, que es cuando mas estorba.
+          // El resto de los consejos queda en el `title`.
+          <p
+            className="flex items-start gap-1.5 text-[11px] leading-snug text-blue-700 dark:text-blue-300"
+            title={listaDeConsejos.join('\n')}
+          >
+            <ImageIcon className="mt-px h-3 w-3 shrink-0" />
+            <span>{listaDeConsejos[0]}</span>
+          </p>
+        ) : (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex gap-3">
+              <ImageIcon className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-medium text-blue-900 mb-1">{tipsTitle ?? 'Consejos para mejores imágenes:'}</p>
+                <ul className="text-blue-700 space-y-1 text-xs">
+                  {listaDeConsejos.map((consejo) => (
+                    <li key={consejo}>• {consejo}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
-        </div>
+        )
       )}
     </div>
   )

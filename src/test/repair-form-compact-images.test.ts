@@ -34,6 +34,28 @@ describe('el cargador de fotos tiene una versión baja', () => {
     expect(bloque.slice(0, 400)).toContain('compact')
   })
 
+  it('los consejos se pueden reemplazar', () => {
+    // Los de fabrica hablan de productos —«la primera imagen sera la principal
+    // del producto»— y en una reparacion eso no aplica.
+    expect(UPLOADER).toContain('const listaDeConsejos = tips ?? CONSEJOS_POR_DEFECTO')
+    expect(UPLOADER).toContain("{tipsTitle ?? 'Consejos para mejores imágenes:'}")
+  })
+
+  it('en compacto los consejos son una linea, no una tarjeta', () => {
+    // El bloque se repite por equipo y aparece justo cuando el formulario esta
+    // vacio, que es cuando mas estorba. El resto queda en el `title`.
+    const bloque = UPLOADER.slice(UPLOADER.indexOf('{images.length === 0 && listaDeConsejos.length > 0'))
+    // El `\n` va escapado: se busca el texto del código, no un salto real.
+    expect(bloque.slice(0, 700)).toMatch(/title=\{listaDeConsejos\.join\('\\n'\)\}/)
+    expect(bloque.slice(0, 700)).toContain('{listaDeConsejos[0]}')
+  })
+
+  it('reparaciones habla del estado de ingreso, no del producto', () => {
+    expect(FORMULARIO).toContain('CONSEJOS_FOTOS_INGRESO')
+    expect(FORMULARIO).toContain('Fotografiá los golpes y rayaduras que ya tiene')
+    expect(FORMULARIO).toContain('Fotos del estado con el que entró:')
+  })
+
   it('no cambia nada donde no se pide', () => {
     // Productos sigue con el cargador grande: ahí hay uno solo por pantalla.
     expect(UPLOADER).toContain('compact = false')

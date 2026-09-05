@@ -73,6 +73,19 @@ import { describeDeviceName, describeDeviceSummary, deviceAccent } from '@/lib/r
 // empleado nuevo empezaba siempre en 3 meses. Ahora sale de la configuracion de
 // la empresa, la misma que usa el comprobante. Ver `useRepairWarrantyPolicy`.
 
+/**
+ * Los consejos por defecto del cargador hablan de productos —«la primera imagen
+ * sera la principal del producto»— y no aplican aca. En una reparacion la foto
+ * de ingreso es lo que respalda al taller si el cliente despues reclama por un
+ * golpe o una rayadura que ya venia.
+ */
+const CONSEJOS_FOTOS_INGRESO = [
+  'Fotografiá los golpes y rayaduras que ya tiene, antes de recibirlo',
+  'Sacale una con la pantalla encendida: deja constancia de si prendía',
+  'Si tiene número de serie o IMEI visible, incluilo en una foto',
+  'Con buena luz y sin reflejos: son la prueba ante un reclamo',
+]
+
 const QUICK_MODE_PREF_KEY = '4g_repair_form_quick_mode'
 
 function getSavedQuickModePreference(): boolean {
@@ -2077,6 +2090,8 @@ export function RepairFormDialogV2({
                                 maxSize={5242880}
                                 onUploadFiles={onUploadFiles}
                                 compact
+                                tipsTitle="Fotos del estado con el que entró:"
+                                tips={CONSEJOS_FOTOS_INGRESO}
                               />
                             )
                           }}
