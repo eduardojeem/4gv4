@@ -33,11 +33,41 @@ alter table public.cash_register_config
 -- La sucursal viaja junto con la tienda: la pantalla filtra por sucursal y, sin
 -- la columna aca, ese filtro solo se podia aplicar recorriendo la sesion —que es
 -- justo lo que el camino de tiempo real no hacia.
+--
+-- Va uuid, no text: `cash_closures.branch_id` es uuid desde
+-- 20260517010000_add_multi_branch_foundation, que justamente borra la version
+-- text anterior y la recrea apuntando a `branches`. El
+-- `create_cash_admin_monitor.sql` de database/migrations todavia dice TEXT, pero
+-- ese ADD COLUMN IF NOT EXISTS ya no hace nada; guiarse por ahi hacia fallar el
+-- backfill con "COALESCE types text and uuid cannot be matched".
+
+-- Por si una corrida anterior alcanzo a crear la columna con el tipo viejo.
+-- Estas dos tablas no traen `branch_id` de origen, asi que si existe con otro
+-- tipo es de un intento fallido y no tiene datos que perder.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'cash_alerts'
+      and column_name = 'branch_id' and data_type <> 'uuid'
+  ) then
+    alter table public.cash_alerts drop column branch_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'cash_admin_audit'
+      and column_name = 'branch_id' and data_type <> 'uuid'
+  ) then
+    alter table public.cash_admin_audit drop column branch_id;
+  end if;
+end $$;
+
 alter table public.cash_alerts
-  add column if not exists branch_id text;
+  add column if not exists branch_id uuid references public.branches(id) on delete set null;
 
 alter table public.cash_admin_audit
-  add column if not exists branch_id text;
+  add column if not exists branch_id uuid references public.branches(id) on delete set null;
 
 -- ── 2. Backfill desde la sesion de caja ────────────────────────────────────
 update public.cash_alerts a
