@@ -29,10 +29,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Save, X, UserPlus, UserCog, Sparkles, CheckCircle2, Building2, Globe } from 'lucide-react'
+import { Loader2, Save, X, UserPlus, UserCog, Sparkles, CheckCircle2, Building2, Globe, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Customer } from '@/hooks/use-customers'
 import { validateCustomerContact, normalizePhone, MIN_PHONE_DIGITS, ALTERNATE_PHONE_LABELS } from '@/lib/customers/contact-rules'
+import { useCustomerDuplicates } from '@/hooks/use-customer-duplicates'
+import { duplicatesMessage } from '@/lib/customers/duplicate-check'
 
 // Un solo campo de nombre en vez de nombre + apellido: la base guarda un solo
 // `name`, una empresa no tiene apellido, y partir el nombre para editarlo y
@@ -139,6 +141,16 @@ export function CustomerQuickCreateDialog({
     } = useForm<CustomerFormData>({
         resolver: zodResolver(customerSchema),
         defaultValues: EMPTY_FORM,
+    })
+
+    // Aviso anticipado de que el telefono, el correo o el RUC ya estan cargados
+    // en otro cliente. Quien decide es el servidor: esto solo evita llenar el
+    // formulario entero para que despues lo rechace.
+    const duplicates = useCustomerDuplicates({
+        phone: watch('phone'),
+        email: watch('email'),
+        ruc: watch('ruc'),
+        excludeId: customerToEdit?.id ?? null,
     })
 
     // Al abrir se carga lo que hay que editar, o se limpia para un alta nueva.
@@ -331,6 +343,18 @@ export function CustomerQuickCreateDialog({
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-3.5">
+                    {duplicates.length > 0 && (
+                        <div className="flex items-start gap-2 rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-200">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold">{duplicatesMessage(duplicates)}</p>
+                                <p className="mt-0.5 text-[11px] opacity-80">
+                                    Buscalo en vez de cargarlo de nuevo: si queda repetido, sus compras y su deuda se reparten entre las dos fichas.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Nombre */}
                     <div className="space-y-1.5">
                         <Label htmlFor="name" className="text-xs font-bold">

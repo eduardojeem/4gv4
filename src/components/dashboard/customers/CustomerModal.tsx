@@ -701,6 +701,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
             // Formulario de edición/creación
             <CustomerFormSimple
               showStoreInvite={mode === 'create'}
+              customerId={mode === 'edit' ? customer?.id : null}
               initialData={getInitialFormData()}
               onSubmit={handleFormSubmit}
               onCancel={() => mode === 'edit' ? setMode('view') : onClose()}

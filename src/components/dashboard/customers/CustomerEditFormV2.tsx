@@ -48,11 +48,19 @@ import { formatCurrency } from '@/lib/currency'
 import customerService from '@/services/customer-service'
 import { customerTypeLabel } from '@/lib/i18n/labels'
 
+import { ALTERNATE_PHONE_LABELS } from '@/lib/customers/contact-rules'
+import { useCustomerDuplicates } from '@/hooks/use-customer-duplicates'
+import { duplicatesMessage } from '@/lib/customers/duplicate-check'
+
 // Validation Schema
 const customerEditSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
+  // Contacto de un tercero: el celular del cliente suele ser el equipo que dejo
+  // en el taller, asi que ahi no se lo puede ubicar.
+  alternate_phone: z.string().optional().or(z.literal('')),
+  alternate_phone_label: z.string().optional().or(z.literal('')),
   whatsapp: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
   city: z.string().optional().or(z.literal('')),
@@ -118,6 +126,8 @@ export function CustomerEditFormV2({
       name: customer.name || '',
       email: customer.email || '',
       phone: customer.phone || '',
+      alternate_phone: customer.alternate_phone || '',
+      alternate_phone_label: customer.alternate_phone_label || '',
       whatsapp: customer.whatsapp || '',
       address: customer.address || '',
       city: customer.city || '',
@@ -138,6 +148,15 @@ export function CustomerEditFormV2({
   })
 
   const { watch, setValue, getValues, reset, handleSubmit } = form
+
+  // Aviso anticipado de que el telefono, el correo o el RUC ya estan cargados en
+  // otro cliente. Quien decide es el servidor, que rechaza el guardado con 409.
+  const duplicates = useCustomerDuplicates({
+    phone: watch('phone'),
+    email: watch('email'),
+    ruc: watch('ruc'),
+    excludeId: customer.id,
+  })
   const watchedValues = watch()
 
   // Cargar datos frescos
@@ -190,6 +209,9 @@ export function CustomerEditFormV2({
         name: data.name?.trim(),
         email: data.email?.trim() || undefined,
         phone: data.phone?.trim() || undefined,
+        alternate_phone: data.alternate_phone?.trim() || null,
+        // Sin telefono, la aclaracion de quien atiende no significa nada.
+        alternate_phone_label: data.alternate_phone?.trim() ? (data.alternate_phone_label?.trim() || null) : null,
         whatsapp: data.whatsapp?.trim() || undefined,
         address: data.address?.trim() || undefined,
         city: data.city?.trim() || undefined,
@@ -426,6 +448,18 @@ export function CustomerEditFormV2({
                       />
                     </div>
 
+                    {duplicates.length > 0 && (
+                      <div className="sm:col-span-2 flex items-start gap-2 rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-200">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold">{duplicatesMessage(duplicates)}</p>
+                          <p className="mt-0.5 text-[11px] opacity-80">
+                            Son datos que no se pueden repetir dentro de la empresa: si quedan en dos fichas, las compras y la deuda del cliente se reparten entre las dos.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Teléfono */}
                     <div className="space-y-1.5">
                       <Label htmlFor="phone" className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -447,6 +481,56 @@ export function CustomerEditFormV2({
                         )}
                       />
                     </div>
+
+                    {/* Contacto alternativo */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="alternate_phone" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Otro teléfono para avisarle
+                      </Label>
+                      <Controller
+                        name="alternate_phone"
+                        control={form.control}
+                        render={({ field }) => (
+                          <div className="relative">
+                            <Input
+                              {...field}
+                              id="alternate_phone"
+                              placeholder="Si deja su celular en reparación"
+                              className="h-9 text-sm font-mono pl-8"
+                            />
+                            <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                          </div>
+                        )}
+                      />
+                    </div>
+
+                    {watchedValues.alternate_phone?.trim() ? (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="alternate_phone_label" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                          ¿De quién es ese teléfono?
+                        </Label>
+                        <Controller
+                          name="alternate_phone_label"
+                          control={form.control}
+                          render={({ field }) => (
+                            <>
+                              <Input
+                                {...field}
+                                id="alternate_phone_label"
+                                list="customer-edit-alternate-labels"
+                                placeholder="Ej: hermana, jefe, hijo…"
+                                className="h-9 text-sm"
+                              />
+                              <datalist id="customer-edit-alternate-labels">
+                                {ALTERNATE_PHONE_LABELS.map((label) => (
+                                  <option key={label} value={label} />
+                                ))}
+                              </datalist>
+                            </>
+                          )}
+                        />
+                      </div>
+                    ) : null}
 
                     {/* WhatsApp */}
                     <div className="space-y-1.5">

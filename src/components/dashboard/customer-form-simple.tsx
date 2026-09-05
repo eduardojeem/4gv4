@@ -36,6 +36,8 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { canInviteCustomer } from '@/lib/customers/invite-customer-to-store'
 import { validateCustomerContact, ALTERNATE_PHONE_LABELS } from '@/lib/customers/contact-rules'
+import { useCustomerDuplicates } from '@/hooks/use-customer-duplicates'
+import { duplicatesMessage } from '@/lib/customers/duplicate-check'
 import { formatThousands, parseThousands } from '@/lib/currency'
 
 export interface SimpleCustomerFormData {
@@ -64,6 +66,8 @@ interface ValidationErrors {
 
 interface CustomerFormSimpleProps {
   initialData?: Partial<SimpleCustomerFormData>
+  /** Al editar, el propio cliente no cuenta como duplicado de si mismo. */
+  customerId?: string | null
   /** Ofrece invitar a la tienda pública. Solo tiene sentido al crear. */
   showStoreInvite?: boolean
   onSubmit: (data: SimpleCustomerFormData) => void
@@ -134,6 +138,7 @@ function validateForm(data: SimpleCustomerFormData): ValidationErrors {
 
 export function CustomerFormSimple({
   initialData,
+  customerId,
   showStoreInvite = false,
   onSubmit,
   onCancel,
@@ -158,6 +163,16 @@ export function CustomerFormSimple({
   })
 
   const [errors, setErrors] = useState<ValidationErrors>({})
+
+  // Aviso anticipado de que el telefono, el correo o el RUC ya estan cargados en
+  // otro cliente. Quien decide es el servidor, que rechaza el alta con 409: esto
+  // solo evita llenar el formulario entero para que despues lo rechace.
+  const duplicates = useCustomerDuplicates({
+    phone: formData.phone,
+    email: formData.email,
+    ruc: formData.ruc,
+    excludeId: customerId ?? null,
+  })
 
   // Actualizar estado si initialData cambia
   useEffect(() => {
@@ -189,6 +204,17 @@ export function CustomerFormSimple({
 
   return (
     <form onSubmit={handleSubmit} className={cn("space-y-4 text-slate-800 dark:text-slate-200", className)}>
+      {duplicates.length > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold">{duplicatesMessage(duplicates)}</p>
+            <p className="mt-0.5 text-[11px] opacity-80">
+              Buscalo en vez de cargarlo de nuevo: si queda repetido, sus compras y su deuda se reparten entre las dos fichas.
+            </p>
+          </div>
+        </div>
+      )}
       {/* ─── Tipo de Cliente / Segmento (Pill Cards) ─── */}
       <div className="space-y-1.5">
         <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">

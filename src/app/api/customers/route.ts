@@ -4,6 +4,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
+import { duplicatesMessage, findCustomerDuplicates } from '@/lib/customers/duplicate-check'
 
 const customerSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -194,6 +195,23 @@ export const POST = withTenantAuth({ permission: ['crm.customers.manage', 'pos.s
     }
 
     const supabase = await createClient()
+
+    // Telefono, correo y RUC no se pueden repetir dentro de la misma empresa:
+    // el mismo cliente cargado dos veces reparte su deuda, sus compras y sus
+    // reparaciones entre fichas distintas.
+    const duplicates = await findCustomerDuplicates(supabase, organization.id, {
+      phone: validation.data.phone,
+      email: validation.data.email,
+      ruc: validation.data.ruc,
+    })
+
+    if (duplicates.length > 0) {
+      return NextResponse.json(
+        { success: false, code: 'CUSTOMER_DUPLICATE', error: duplicatesMessage(duplicates), duplicates },
+        { status: 409 }
+      )
+    }
+
     const now = new Date().toISOString()
     const { data, error } = await supabase
       .from('customers')
@@ -225,6 +243,24 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
 
     const { id, ...updates } = validation.data
     const supabase = await createClient()
+
+    // Telefono, correo y RUC no se pueden repetir dentro de la misma empresa:
+    // el mismo cliente cargado dos veces reparte su deuda, sus compras y sus
+    // reparaciones entre fichas distintas.
+    const duplicates = await findCustomerDuplicates(supabase, organization.id, {
+      phone: validation.data.phone,
+      email: validation.data.email,
+      ruc: validation.data.ruc,
+      excludeId: id,
+    })
+
+    if (duplicates.length > 0) {
+      return NextResponse.json(
+        { success: false, code: 'CUSTOMER_DUPLICATE', error: duplicatesMessage(duplicates), duplicates },
+        { status: 409 }
+      )
+    }
+
     const { data, error } = await supabase
       .from('customers')
       .update({

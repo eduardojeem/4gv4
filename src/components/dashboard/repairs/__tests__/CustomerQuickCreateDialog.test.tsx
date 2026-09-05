@@ -23,6 +23,18 @@ function jsonResponse(body: unknown, status = 200) {
   return { ok: status < 400, status, json: async () => body } as Response
 }
 
+/**
+ * La llamada que guarda, no la primera que hubo. El dialogo tambien consulta si
+ * el telefono ya existe mientras se escribe, asi que mirar `calls[0]` dependia
+ * de si ese aviso alcanzo a salir antes: una prueba que pasa o falla segun lo
+ * rapido que escriba el runner.
+ */
+function llamadaDeGuardado(fetchMock: { mock: { calls: any[][] } }) {
+  const call = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST' || init?.method === 'PUT')
+  expect(call, 'no se llamo a guardar').toBeDefined()
+  return { method: call![1].method as string, body: JSON.parse(call![1].body as string) }
+}
+
 describe('CustomerQuickCreateDialog', () => {
   beforeEach(() => { vi.unstubAllGlobals() })
 
@@ -39,7 +51,8 @@ describe('CustomerQuickCreateDialog', () => {
     await user.click(screen.getByRole('button', { name: /Crear Cliente/i }))
 
     expect(await screen.findByText(/tel[eé]fono debe tener al menos/i)).toBeInTheDocument()
-    expect(fetchMock).not.toHaveBeenCalled()
+    // Puede haber salido la consulta de duplicados; lo que no puede haber es un guardado.
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
   })
 
   it('exige aclarar de quién es el teléfono alternativo', async () => {
@@ -56,7 +69,8 @@ describe('CustomerQuickCreateDialog', () => {
     await user.click(screen.getByRole('button', { name: /Crear Cliente/i }))
 
     expect(await screen.findByText(/qui[eé]n es el tel[eé]fono/i)).toBeInTheDocument()
-    expect(fetchMock).not.toHaveBeenCalled()
+    // Puede haber salido la consulta de duplicados; lo que no puede haber es un guardado.
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
   })
 
   it('manda el contacto alternativo para poder avisarle al cliente', async () => {
@@ -74,9 +88,8 @@ describe('CustomerQuickCreateDialog', () => {
     await user.type(screen.getByLabelText(/qui[eé]n es ese tel[eé]fono/i), 'Hermana')
     await user.click(screen.getByRole('button', { name: /Crear Cliente/i }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    expect(fetchMock.mock.calls[0][1].method).toBe('POST')
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+    await waitFor(() => expect(llamadaDeGuardado(fetchMock).method).toBe('POST'))
+    expect(llamadaDeGuardado(fetchMock).body).toMatchObject({
       name: 'Ana Pérez',
       phone: '0981123456',
       alternate_phone: '0982999999',
@@ -122,9 +135,8 @@ describe('CustomerQuickCreateDialog', () => {
     await user.type(rucInput, '80012345-6')
     await user.click(screen.getByRole('button', { name: /Guardar Cambios/i }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    expect(fetchMock.mock.calls[0][1].method).toBe('PUT')
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+    await waitFor(() => expect(llamadaDeGuardado(fetchMock).method).toBe('PUT'))
+    expect(llamadaDeGuardado(fetchMock).body).toMatchObject({
       id: 'cust-123',
       name: 'Carlos Benítez',
       ruc: '80012345-6',
@@ -153,7 +165,7 @@ describe('CustomerQuickCreateDialog', () => {
     await user.type(screen.getByLabelText(/^Teléfono/i), '0981123456')
     await user.click(screen.getByRole('button', { name: /Crear Cliente/i }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).name).toBe('Comercial San Miguel S.A.')
+    await waitFor(() => expect(llamadaDeGuardado(fetchMock).method).toBe('POST'))
+    expect(llamadaDeGuardado(fetchMock).body.name).toBe('Comercial San Miguel S.A.')
   })
 })
