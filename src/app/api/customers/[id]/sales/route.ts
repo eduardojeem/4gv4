@@ -43,15 +43,15 @@ export async function GET(
         payment_method,
         payment_status,
         total_amount,
-        subtotal,
+        subtotal_amount,
         discount_amount,
         created_at,
         sale_items (
           id,
           quantity,
           unit_price,
-          total_price,
-          product_name
+          subtotal,
+          product:products (name)
         )
       `)
       .eq('customer_id', customerId)
@@ -93,9 +93,21 @@ export async function GET(
     const totalPurchases = validSales.length + validOrders.length
     const totalSpent = posSpent + ordersSpent
 
+    // Conserva la forma que consume CustomerQuickView aunque la base use
+    // `subtotal_amount`, `sale_items.subtotal` y la relacion con products.
+    const normalizedSales = (sales ?? []).map((sale) => ({
+      ...sale,
+      subtotal: sale.subtotal_amount,
+      sale_items: (sale.sale_items ?? []).map((item) => ({
+        ...item,
+        total_price: item.subtotal,
+        product_name: item.product?.[0]?.name ?? 'Producto',
+      })),
+    }))
+
     return NextResponse.json({
       success: true,
-      sales: sales ?? [],
+      sales: normalizedSales,
       stats: {
         totalPurchases: totalPurchases ?? 0,
         totalSpent,

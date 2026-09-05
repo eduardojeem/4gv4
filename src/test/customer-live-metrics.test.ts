@@ -69,6 +69,22 @@ describe('la ficha del cliente usa los números reales', () => {
     expect(salesRoute).toContain('posSpent')
   })
 
+  it('consulta columnas reales del esquema de ventas y adapta la respuesta historica', () => {
+    const salesRoute = leer('src/app/api/customers/[id]/sales/route.ts')
+    expect(salesRoute).toContain('subtotal_amount')
+    expect(salesRoute).toContain('product:products')
+    expect(salesRoute).not.toMatch(/^\s*total_price,\s*$/m)
+    expect(salesRoute).not.toMatch(/^\s*product_name\s*$/m)
+    expect(salesRoute).toContain('product_name: item.product?.[0]?.name')
+  })
+
+  it('espera los parametros dinamicos de Next 16 en fidelidad', () => {
+    const loyaltyRoute = leer('src/app/api/loyalty/customers/[customerId]/route.ts')
+    expect(loyaltyRoute).toContain('async function customerId')
+    expect(loyaltyRoute).toContain('await Promise.resolve(params)')
+    expect(loyaltyRoute).toContain('const id = await customerId(routeContext)')
+  })
+
   it('solo factura reparaciones terminadas y no cuenta canceladas', () => {
     const repairsRoute = leer('src/app/api/customers/[id]/repairs/route.ts')
     expect(repairsRoute).toContain('isCountableRepair')

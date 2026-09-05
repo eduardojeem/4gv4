@@ -5,14 +5,17 @@ import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { isLoyaltyModuleMissing, LOYALTY_MIGRATION_HINT } from '@/lib/loyalty/module-status'
 import { logger } from '@/lib/logger'
 
-function customerId(routeContext: unknown): string | null {
-  const params = (routeContext as { params?: { customerId?: string } } | undefined)?.params
-  return params?.customerId ?? null
+async function customerId(routeContext: unknown): Promise<string | null> {
+  const params = (routeContext as {
+    params?: { customerId?: string } | Promise<{ customerId?: string }>
+  } | undefined)?.params
+  const resolved = params ? await Promise.resolve(params) : null
+  return resolved?.customerId ?? null
 }
 
 /** Historial completo del cliente: saldo, movimientos, números y premios. */
 export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'promotions' }, async (_request, { organization }, routeContext) => {
-  const id = customerId(routeContext)
+  const id = await customerId(routeContext)
   if (!id) return NextResponse.json({ error: 'Falta el cliente' }, { status: 400 })
 
   const supabase = await createOrgScopedClient(organization.id)
@@ -50,7 +53,7 @@ const adjustSchema = z.object({
 
 /** Ajuste manual. Pasa por la función, que exige motivo y bloquea negativos. */
 export const POST = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, { organization }, routeContext) => {
-  const id = customerId(routeContext)
+  const id = await customerId(routeContext)
   if (!id) return NextResponse.json({ error: 'Falta el cliente' }, { status: 400 })
 
   const body = await request.json().catch(() => null)
@@ -99,7 +102,7 @@ const exclusionSchema = z.object({
  * y eso lo decide la función de la base, no esta ruta.
  */
 export const PATCH = withTenantAuth({ permission: 'pos.sales.create', module: 'promotions' }, async (request: NextRequest, { organization }, routeContext) => {
-  const id = customerId(routeContext)
+  const id = await customerId(routeContext)
   if (!id) return NextResponse.json({ error: 'Falta el cliente' }, { status: 400 })
 
   const body = await request.json().catch(() => null)
