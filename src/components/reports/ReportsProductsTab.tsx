@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { FileText, Download } from 'lucide-react'
-import { exportProductsSectionPDF } from '@/lib/reports/section-pdf-exporter'
+import { exportProductsSectionPDF, type ReportContext } from '@/lib/reports/section-pdf-exporter'
 import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { BarChart } from 'recharts/es6/chart/BarChart'
 import { Bar } from 'recharts/es6/cartesian/Bar'
@@ -57,6 +57,10 @@ type ProductTrendPoint = {
 }
 
 interface ReportsProductsTabProps {
+  /** Nombre del negocio, para que el PDF diga de quién es. */
+  brand?: string
+  /** Período, sucursal y quién lo descarga: identifica el PDF una vez guardado. */
+  context?: ReportContext
   productTopCount: number
   setProductTopCount: (value: number) => void
   productSortBy: 'sales' | 'quantity'
@@ -82,6 +86,8 @@ interface ReportsProductsTabProps {
 }
 
 export function ReportsProductsTab({
+  brand,
+  context,
   productTopCount,
   setProductTopCount,
   productSortBy,
@@ -271,7 +277,10 @@ export function ReportsProductsTab({
                     return
                   }
                   exportProductsSectionPDF({
-                    title: 'Reporte de Productos Más Vendidos',
+                    // Las otras tres exportaciones ya llevaban el nombre del
+                    // negocio en el título; estas dos no.
+                    title: `Reporte de Productos Más Vendidos${brand ? ` - ${brand}` : ''}`,
+                    context,
                     products: visibleProducts,
                     chartRef: productsChartRef
                   })

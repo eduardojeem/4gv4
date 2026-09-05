@@ -62,6 +62,7 @@ import { RealtimeChannel } from '@supabase/supabase-js'
 import { ReportsProductsTab } from '@/components/reports/ReportsProductsTab'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { useBranch } from '@/contexts/branch-context'
+import { useAuth } from '@/contexts/auth-context'
 import { withBranchFilter } from '@/lib/branches/client'
 import { chunkQueryValues } from '@/lib/analytics/query-batches'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
@@ -131,16 +132,28 @@ type CostSnapshotQuery = PromiseLike<CostSnapshotQueryResult> & {
 }
 
 export default function ReportsPage() {
-  const { selectedBranchId } = useBranch()
+  const { selectedBranchId, selectedBranch } = useBranch()
   const { organization } = useActiveOrganization()
+  const { user } = useAuth()
   const { planCode, organizationName, effectiveModules } = useSubscriptionStatus()
   const hasRepairs = effectiveModules.includes('repairs')
   const hasCredits = effectiveModules.includes('credits')
   const canExport = canExportReports(planCode) // exportar/descargar: Basic en adelante
   const canViewCost = useCanViewCost()
   const reportBrand = organizationName || 'Mi Negocio'
+
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>(() => createCalendarPeriodRange(new Date(), 30))
   const [selectedPeriod, setSelectedPeriod] = useState('30d')
+
+  // Lo que hace que un PDF descargado se pueda identificar despues: de que
+  // periodo habla, de que sucursal y quien lo pidio. Sin esto, el reporte de
+  // enero y el de marzo salian identicos.
+  const reportContext = useMemo(() => ({
+    periodFrom: dateRange.from,
+    periodTo: dateRange.to,
+    branchName: selectedBranch?.name ?? null,
+    generatedBy: user?.profile?.name || user?.email || null,
+  }), [dateRange.from, dateRange.to, selectedBranch?.name, user?.profile?.name, user?.email])
   const [salesData, setSalesData] = useState<SalesData[]>([])
   const [productData, setProductData] = useState<ProductData[]>([])
   const [categoryData, setCategoryData] = useState<CategoryData[]>([])
@@ -1294,6 +1307,7 @@ export default function ReportsPage() {
                       className="h-8 gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-100"
                       onClick={() => exportSalesSectionPDF({
                         title: `Reporte de Ventas - ${reportBrand}`,
+                        context: reportContext,
                         salesData,
                         metrics: {
                           totalSales,
@@ -1512,6 +1526,7 @@ export default function ReportsPage() {
                 className="h-8 gap-1.5 font-semibold text-xs text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-100"
                 onClick={() => exportRepairsSectionPDF({
                   title: `Reporte de Reparaciones - ${reportBrand}`,
+                  context: reportContext,
                   trend: repairsTrend,
                   statusDist: repairsStatusDist,
                   metrics: repairsMetrics,
@@ -1538,6 +1553,8 @@ export default function ReportsPage() {
         {hasCredits ? (
           <TabsContent value="credits" className="space-y-4">
             <ReportsCreditsTab
+              brand={reportBrand}
+              context={reportContext}
               report={creditReport}
               loading={creditReportLoading}
               error={creditReportError}
@@ -1547,6 +1564,8 @@ export default function ReportsPage() {
 
         {/* Tab 3: Productos */}
         <ReportsProductsTab
+          brand={reportBrand}
+          context={reportContext}
           productTopCount={productTopCount}
           setProductTopCount={setProductTopCount}
           productSortBy={productSortBy}
@@ -1591,6 +1610,7 @@ export default function ReportsPage() {
                     className="h-8 gap-1.5 font-semibold text-xs text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-100"
                     onClick={() => exportCategoriesSectionPDF({
                       title: `Reporte de Categorías - ${reportBrand}`,
+                      context: reportContext,
                       categories: categoryComputed.visible,
                       chartRef: categoriesChartRef
                     })}

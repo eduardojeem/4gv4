@@ -58,8 +58,78 @@ const sanitizeFileName = (value: string) => {
     .slice(0, 120) || 'reporte'
 }
 
+/**
+ * De qué habla el reporte, además de sus números.
+ *
+ * Sin esto un PDF de ventas solo decía "Emisión: <ahora>": no el período que
+ * cubre, ni la sucursal filtrada, ni quién lo pidió. Dos reportes del mismo
+ * local, uno de enero y otro de marzo, salían indistinguibles una vez
+ * descargados, y un reporte de una sucursal parecía el del negocio entero.
+ */
+export type ReportContext = {
+  periodFrom?: Date | string | null
+  periodTo?: Date | string | null
+  /** Nombre de la sucursal filtrada. Sin esto se asume "todas". */
+  branchName?: string | null
+  /** Quién lo descargó. Queda en el pie, junto a "Confidencial". */
+  generatedBy?: string | null
+}
+
+function toDateLabel(value: Date | string | null | undefined): string {
+  if (!value) return ''
+  const d = value instanceof Date ? value : new Date(value)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+/** "01/03/2026 al 31/03/2026 (31 días)". Vacío si no se pasó el rango. */
+export function describeReportPeriod(context?: ReportContext): string {
+  const desde = toDateLabel(context?.periodFrom)
+  const hasta = toDateLabel(context?.periodTo)
+  if (!desde && !hasta) return ''
+  if (!desde || !hasta) return desde || hasta
+
+  const from = context!.periodFrom instanceof Date ? context!.periodFrom : new Date(context!.periodFrom as string)
+  const to = context!.periodTo instanceof Date ? context!.periodTo : new Date(context!.periodTo as string)
+  const dias = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400000) + 1)
+
+  return `${desde} al ${hasta} (${dias} día${dias === 1 ? '' : 's'})`
+}
+
+/**
+ * Recorta una tabla larga y dice cuánto quedó afuera.
+ *
+ * Antes las tablas de tendencia hacían `slice(0, 31)` en silencio mientras el
+ * pie seguía anunciando el total del período entero: con 60 días, las filas no
+ * sumaban lo que decía el pie y nada lo explicaba. El tope ahora es alto y,
+ * cuando aplica, se avisa.
+ */
+function capRows<T>(rows: T[], max = 400): { rows: T[]; omitidas: number } {
+  if (rows.length <= max) return { rows, omitidas: 0 }
+  return { rows: rows.slice(0, max), omitidas: rows.length - max }
+}
+
+function renderOmittedNote(doc: jsPDF, omitidas: number, margin: number) {
+  if (omitidas <= 0) return
+  const y = (doc as any).lastAutoTable.finalY + 12
+  doc.setFontSize(7.5)
+  doc.setFont('helvetica', 'italic')
+  doc.setTextColor(180, 83, 9)
+  doc.text(
+    `Se listan las primeras filas por tamaño del documento: quedaron ${formatNumber(omitidas)} fuera de la tabla. Los totales del pie sí incluyen todo el período.`,
+    margin,
+    y
+  )
+}
+
 // ── RENDERIZADOR DE CABECERA Y FOOTER ESTÁNDAR ────────────────────────────────
-function setupDocPageHeadersAndFooters(doc: jsPDF, title: string, sectionSubtitle: string, dateLabel: string) {
+function setupDocPageHeadersAndFooters(
+  doc: jsPDF,
+  title: string,
+  sectionSubtitle: string,
+  dateLabel: string,
+  context?: ReportContext
+) {
   const totalPages = (doc.internal as any).getNumberOfPages()
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
@@ -89,7 +159,18 @@ function setupDocPageHeadersAndFooters(doc: jsPDF, title: string, sectionSubtitl
     doc.setFontSize(7.5)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(148, 163, 184)
-    doc.text(`Generado el ${dateLabel} • Documento Confidencial`, margin, pageHeight - 10)
+
+    // El pie va en todas las páginas: si alguien imprime solo la hoja 3, ahí
+    // tiene que decir de qué período habla.
+    const periodo = describeReportPeriod(context)
+    const pie = [
+      periodo ? `Período ${periodo}` : null,
+      `Generado el ${dateLabel}`,
+      context?.generatedBy?.trim() ? `por ${context.generatedBy.trim()}` : null,
+      'Documento Confidencial',
+    ].filter(Boolean).join(' • ')
+
+    doc.text(pie, margin, pageHeight - 10, { maxWidth: pageWidth - margin * 2 - 90 })
     doc.text(`Página ${p} de ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' })
   }
 }
@@ -101,10 +182,16 @@ function renderExecutiveCoverHeader(
   dateLabel: string,
   margin: number,
   contentWidth: number,
-  pageWidth: number
+  pageWidth: number,
+  context?: ReportContext
 ) {
+  const periodo = describeReportPeriod(context)
+  // La franja crece solo si hay algo que poner: sin periodo ni sucursal, el
+  // encabezado queda como estaba.
+  const alturaExtra = periodo || context?.branchName ? 20 : 0
+
   doc.setFillColor(15, 23, 42)
-  doc.rect(margin, 24, contentWidth, 68, 'F')
+  doc.rect(margin, 24, contentWidth, 68 + alturaExtra, 'F')
 
   doc.setFillColor(37, 99, 235)
   doc.rect(margin, 24, contentWidth / 2, 4, 'F')
@@ -125,6 +212,26 @@ function renderExecutiveCoverHeader(
   doc.setTextColor(203, 213, 225)
   doc.text(`Emisión: ${dateLabel}`, pageWidth - margin - 16, 52, { align: 'right' })
   doc.text('Sistema 4G • Confidencial', pageWidth - margin - 16, 72, { align: 'right' })
+
+  // Período y sucursal: es lo que distingue este reporte del mismo reporte de
+  // otro mes o de otro local.
+  if (periodo || context?.branchName) {
+    const partes: string[] = []
+    if (periodo) partes.push(`Período: ${periodo}`)
+    // Decirlo siempre, incluso cuando son todas: un reporte de una sucursal que
+    // no lo aclara se lee como el del negocio entero.
+    partes.push(`Sucursal: ${context?.branchName?.trim() || 'Todas'}`)
+
+    doc.setFontSize(8.5)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(226, 232, 240)
+    doc.text(partes.join('     •     '), margin + 16, 92, { maxWidth: contentWidth - 32 })
+  }
+}
+
+/** Dónde arranca el contenido, según cuánto creció la portada. */
+function coverBottom(context?: ReportContext): number {
+  return describeReportPeriod(context) || context?.branchName ? 124 : 104
 }
 
 function renderKpiCardsGrid(
@@ -191,6 +298,7 @@ export async function exportSalesSectionPDF(params: {
     totalProfit?: number
   }
   chartRef?: React.RefObject<HTMLDivElement | null>
+  context?: ReportContext
 }) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
@@ -200,9 +308,9 @@ export async function exportSalesSectionPDF(params: {
   const now = new Date()
   const dateLabel = now.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-  renderExecutiveCoverHeader(doc, params.title, 'Informe Específico de Ventas y Facturación', dateLabel, margin, contentWidth, pageWidth)
+  renderExecutiveCoverHeader(doc, params.title, 'Informe Específico de Ventas y Facturación', dateLabel, margin, contentWidth, pageWidth, params.context)
 
-  let y = 104
+  let y = coverBottom(params.context)
   const kpiMap: Record<string, any> = {
     'Ventas Totales': formatGs(params.metrics.totalSales),
     'Órdenes': formatNumber(params.metrics.totalOrders),
@@ -283,7 +391,7 @@ export async function exportSalesSectionPDF(params: {
     },
   })
 
-  setupDocPageHeadersAndFooters(doc, params.title, 'Reporte Específico de Ventas', dateLabel)
+  setupDocPageHeadersAndFooters(doc, params.title, 'Reporte Específico de Ventas', dateLabel, params.context)
   const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
   doc.save(`${sanitizeFileName(params.title)}_ventas_${timestamp}.pdf`)
 }
@@ -293,6 +401,7 @@ export async function exportProductsSectionPDF(params: {
   title: string
   products: any[]
   chartRef?: React.RefObject<HTMLDivElement | null>
+  context?: ReportContext
 }) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
@@ -301,13 +410,13 @@ export async function exportProductsSectionPDF(params: {
   const now = new Date()
   const dateLabel = now.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-  renderExecutiveCoverHeader(doc, params.title, 'Ranking y Análisis Comercial de Productos', dateLabel, margin, contentWidth, pageWidth)
+  renderExecutiveCoverHeader(doc, params.title, 'Ranking y Análisis Comercial de Productos', dateLabel, margin, contentWidth, pageWidth, params.context)
 
   const totalSalesSum = params.products.reduce((acc, p) => acc + (Number(p.sales) || 0), 0)
   const totalQtySum = params.products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0)
   const totalProfitSum = params.products.reduce((acc, p) => acc + (Number(p.profit) || 0), 0)
 
-  let y = 104
+  let y = coverBottom(params.context)
   const kpiMap: Record<string, any> = {
     'Total Facturado Catálogo': formatGs(totalSalesSum),
     'Unidades Vendidas': formatNumber(totalQtySum),
@@ -385,7 +494,7 @@ export async function exportProductsSectionPDF(params: {
     },
   })
 
-  setupDocPageHeadersAndFooters(doc, params.title, 'Ranking de Productos', dateLabel)
+  setupDocPageHeadersAndFooters(doc, params.title, 'Ranking de Productos', dateLabel, params.context)
   const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
   doc.save(`${sanitizeFileName(params.title)}_productos_${timestamp}.pdf`)
 }
@@ -395,6 +504,7 @@ export async function exportCategoriesSectionPDF(params: {
   title: string
   categories: any[]
   chartRef?: React.RefObject<HTMLDivElement | null>
+  context?: ReportContext
 }) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
@@ -403,12 +513,12 @@ export async function exportCategoriesSectionPDF(params: {
   const now = new Date()
   const dateLabel = now.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-  renderExecutiveCoverHeader(doc, params.title, 'Participación y Ventas por Categoría Comercial', dateLabel, margin, contentWidth, pageWidth)
+  renderExecutiveCoverHeader(doc, params.title, 'Participación y Ventas por Categoría Comercial', dateLabel, margin, contentWidth, pageWidth, params.context)
 
   const totalSalesSum = params.categories.reduce((acc, c) => acc + (Number(c.sales) || 0), 0)
   const totalQtySum = params.categories.reduce((acc, c) => acc + (Number(c.quantity) || 0), 0)
 
-  let y = 104
+  let y = coverBottom(params.context)
   const kpiMap: Record<string, any> = {
     'Total en Rubros': formatGs(totalSalesSum),
     'Unidades Vendidas': formatNumber(totalQtySum),
@@ -465,7 +575,7 @@ export async function exportCategoriesSectionPDF(params: {
     },
   })
 
-  setupDocPageHeadersAndFooters(doc, params.title, 'Desglose por Categorías', dateLabel)
+  setupDocPageHeadersAndFooters(doc, params.title, 'Desglose por Categorías', dateLabel, params.context)
   const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
   doc.save(`${sanitizeFileName(params.title)}_categorias_${timestamp}.pdf`)
 }
@@ -486,6 +596,7 @@ export async function exportRepairsSectionPDF(params: {
     avgParts?: number
   }
   chartRefs?: React.RefObject<HTMLDivElement | null>[]
+  context?: ReportContext
 }) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
@@ -494,9 +605,9 @@ export async function exportRepairsSectionPDF(params: {
   const now = new Date()
   const dateLabel = now.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-  renderExecutiveCoverHeader(doc, params.title, 'Informe Técnico de Reparaciones y Taller', dateLabel, margin, contentWidth, pageWidth)
+  renderExecutiveCoverHeader(doc, params.title, 'Informe Técnico de Reparaciones y Taller', dateLabel, margin, contentWidth, pageWidth, params.context)
 
-  let y = 104
+  let y = coverBottom(params.context)
   const kpiMap: Record<string, any> = {
     'Órdenes Totales': formatNumber(params.metrics.total),
     'Finalizadas / Entregadas': formatNumber(params.metrics.completed),
@@ -547,7 +658,11 @@ export async function exportRepairsSectionPDF(params: {
 
   if (params.trend.length > 0) {
     const totalTrendCount = params.trend.reduce((acc, t) => acc + (Number(t.count) || 0), 0)
-    const trendRows = params.trend.slice(0, 31).map((t: any) => {
+    // Antes esto era `slice(0, 31)`: con un período más largo la tabla mostraba
+    // 31 filas mientras el pie anunciaba el total de todos los días, y nada
+    // explicaba por qué no sumaban.
+    const { rows: trendVisibles, omitidas: trendOmitidas } = capRows(params.trend)
+    const trendRows = trendVisibles.map((t: any) => {
       const c = Number(t.count) || 0
       const pct = totalTrendCount > 0 ? ((c / totalTrendCount) * 100).toFixed(1) : '0'
       return [formatDateStr(t.date), getDayOfWeekStr(t.date), formatNumber(c), `${pct}%`]
@@ -570,9 +685,10 @@ export async function exportRepairsSectionPDF(params: {
         3: { halign: 'right' },
       },
     })
+    renderOmittedNote(doc, trendOmitidas, margin)
   }
 
-  setupDocPageHeadersAndFooters(doc, params.title, 'Reporte de Taller y Reparaciones', dateLabel)
+  setupDocPageHeadersAndFooters(doc, params.title, 'Reporte de Taller y Reparaciones', dateLabel, params.context)
   const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
   doc.save(`${sanitizeFileName(params.title)}_reparaciones_${timestamp}.pdf`)
 }
@@ -582,6 +698,7 @@ export async function exportCreditsSectionPDF(params: {
   title: string
   report: CreditReport | null
   chartRef?: React.RefObject<HTMLDivElement | null>
+  context?: ReportContext
 }) {
   if (!params.report) return
 
@@ -592,9 +709,9 @@ export async function exportCreditsSectionPDF(params: {
   const now = new Date()
   const dateLabel = now.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-  renderExecutiveCoverHeader(doc, params.title, 'Informe de Créditos, Cartera y Cobranzas', dateLabel, margin, contentWidth, pageWidth)
+  renderExecutiveCoverHeader(doc, params.title, 'Informe de Créditos, Cartera y Cobranzas', dateLabel, margin, contentWidth, pageWidth, params.context)
 
-  let y = 104
+  let y = coverBottom(params.context)
   const kpiMap: Record<string, any> = {
     'Créditos Otorgados': formatNumber(params.report.period.grantedCount),
     'Capital Financiado': formatGs(params.report.period.principalGranted),
@@ -658,7 +775,8 @@ export async function exportCreditsSectionPDF(params: {
   // Tabla 2: Evolución de Pagos Recibidos
   if (params.report.paymentTrend.length > 0) {
     const totalPaymentsReceived = params.report.paymentTrend.reduce((acc, p) => acc + p.amount, 0)
-    const paymentRows = params.report.paymentTrend.slice(0, 31).map((p) => {
+    const { rows: pagosVisibles, omitidas: pagosOmitidos } = capRows(params.report.paymentTrend)
+    const paymentRows = pagosVisibles.map((p) => {
       const pct = totalPaymentsReceived > 0 ? ((p.amount / totalPaymentsReceived) * 100).toFixed(1) : '0'
       return [
         formatDateStr(p.date),
@@ -685,9 +803,10 @@ export async function exportCreditsSectionPDF(params: {
         3: { halign: 'right' },
       },
     })
+    renderOmittedNote(doc, pagosOmitidos, margin)
   }
 
-  setupDocPageHeadersAndFooters(doc, params.title, 'Reporte de Créditos y Cobranzas', dateLabel)
+  setupDocPageHeadersAndFooters(doc, params.title, 'Reporte de Créditos y Cobranzas', dateLabel, params.context)
   const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
   doc.save(`${sanitizeFileName(params.title)}_creditos_${timestamp}.pdf`)
 }

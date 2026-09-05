@@ -17,10 +17,14 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
-import { exportCreditsSectionPDF } from '@/lib/reports/section-pdf-exporter'
+import { exportCreditsSectionPDF, type ReportContext } from '@/lib/reports/section-pdf-exporter'
 import type { CreditReport } from '@/lib/reports/credit-report'
 
 type ReportsCreditsTabProps = {
+  /** Nombre del negocio, para que el PDF diga de quién es. */
+  brand?: string
+  /** Período, sucursal y quién lo descarga: identifica el PDF una vez guardado. */
+  context?: ReportContext
   report: CreditReport | null
   loading: boolean
   error: string | null
@@ -73,7 +77,7 @@ function MetricCard({
   )
 }
 
-export function ReportsCreditsTab({ report, loading, error }: ReportsCreditsTabProps) {
+export function ReportsCreditsTab({ brand, context, report, loading, error }: ReportsCreditsTabProps) {
   if (loading && !report) {
     return (
       <div className="space-y-4" aria-busy="true" aria-label="Cargando reporte de créditos">
@@ -133,7 +137,8 @@ export function ReportsCreditsTab({ report, loading, error }: ReportsCreditsTabP
           size="sm"
           className="h-8 gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-100"
           onClick={() => exportCreditsSectionPDF({
-            title: 'Reporte de Créditos y Cartera',
+            title: `Reporte de Créditos y Cartera${brand ? ` - ${brand}` : ''}`,
+            context,
             report
           })}
         >
