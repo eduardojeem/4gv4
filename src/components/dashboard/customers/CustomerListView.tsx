@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -156,9 +156,23 @@ export function CustomerListView({
   const { isAdmin, isManager } = useAuth()
   const canDelete = isAdmin || isManager
   const isControlled = typeof controlledSearchTerm === 'string' && typeof onSearchChange === 'function'
+
+  // Lo que se esta escribiendo, que no es lo mismo que lo que se esta buscando:
+  // la lista se rearma al confirmar —Enter o la lupa—, no en cada tecla.
+  const [draft, setDraft] = useState(controlledSearchTerm ?? '')
   const [localSearchTerm, setLocalSearchTerm] = useState('')
-  const searchTerm = isControlled ? controlledSearchTerm : localSearchTerm
-  const setSearchTerm = isControlled ? onSearchChange : setLocalSearchTerm
+  const searchTerm = isControlled ? controlledSearchTerm ?? '' : localSearchTerm
+
+  // Si el termino cambia desde afuera —el otro campo, o limpiar filtros—, este
+  // se pone al dia en vez de quedar mostrando lo anterior.
+  useEffect(() => {
+    if (isControlled) setDraft(controlledSearchTerm ?? '')
+  }, [controlledSearchTerm, isControlled])
+
+  const submitSearch = (value: string) => {
+    if (isControlled) onSearchChange?.(value)
+    else setLocalSearchTerm(value)
+  }
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
   const effectiveViewMode = viewMode === 'grid' ? 'grid' : 'table'
@@ -193,11 +207,31 @@ export function CustomerListView({
         <div className="flex items-center gap-2 flex-1">
           {/* Búsqueda */}
           <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <button
+              type="button"
+              onClick={() => submitSearch(draft)}
+              aria-label="Buscar"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Search className="h-4 w-4" />
+            </button>
             <Input
               placeholder="Nombre, teléfono, CI/RUC, correo o código..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={draft}
+              onChange={(e) => {
+                const value = e.target.value
+                setDraft(value)
+                // Vaciar el campo devuelve la lista completa sin pedir Enter:
+                // borrar es la forma natural de cancelar una busqueda.
+                if (value === '') submitSearch('')
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  submitSearch(draft)
+                }
+              }}
+              aria-label="Buscar clientes"
               className="pl-10"
             />
           </div>

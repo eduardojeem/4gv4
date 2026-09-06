@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 const VISTA = leer('src/components/dashboard/customers/CustomerListView.tsx')
 const PANEL = leer('src/components/dashboard/customers/CustomerDashboard.tsx')
+const FILTROS = leer('src/components/dashboard/customers/CustomerFilters.tsx')
+const BARRA = leer('src/components/dashboard/customers/ImprovedSearchBar.tsx')
 
 /**
  * En /dashboard/customers habia dos campos de busqueda, uno arriba del otro.
@@ -46,6 +48,44 @@ describe('los dos buscadores son el mismo', () => {
   it('el campo dice por que se puede buscar', () => {
     // Decia «Buscar clientes...» y solo miraba tres campos.
     expect(VISTA).toContain('placeholder="Nombre, teléfono, CI/RUC, correo o código..."')
+  })
+})
+
+/**
+ * La busqueda se aplicaba en vivo: cada tecla —con 300ms de espera— reemplazaba
+ * el filtro del panel. Desde la primera letra la lista se rearmaba entera,
+ * saltaba el paginador y podias quedar mirando cientos de coincidencias de una
+ * «a». Ahora se aplica al confirmar.
+ */
+describe('la busqueda se aplica al confirmar, no mientras se escribe', () => {
+  it('el campo de arriba ya no empuja cada tecla al filtro', () => {
+    expect(FILTROS).not.toContain('const debouncedSearch = useDebounce(searchValue, 300)')
+    expect(FILTROS).not.toContain('onFiltersChange({ search: debouncedSearch })')
+    expect(FILTROS).toContain('onSearch={handleSearchSubmit}')
+  })
+
+  it('el de abajo separa lo que se escribe de lo que se busca', () => {
+    expect(VISTA).toContain("const [draft, setDraft] = useState(controlledSearchTerm ?? '')")
+    expect(VISTA).toContain('value={draft}')
+    expect(VISTA).toContain("if (e.key === 'Enter') {")
+    expect(VISTA).toContain('submitSearch(draft)')
+  })
+
+  it('la lupa confirma la busqueda en vez de ser un adorno', () => {
+    expect(VISTA).toContain('onClick={() => submitSearch(draft)}')
+    expect(VISTA).toContain('aria-label="Buscar"')
+  })
+
+  it('vaciar el campo devuelve la lista completa sin pedir Enter', () => {
+    // Borrar es la forma natural de cancelar una busqueda: si hubiera que
+    // confirmar el vacio, quedaba un recorte con el campo en blanco.
+    expect(VISTA).toContain("if (value === '') submitSearch('')")
+    expect(BARRA).toContain("onSearch?.('')")
+  })
+
+  it('el campo se pone al dia si el termino cambia desde afuera', () => {
+    expect(VISTA).toContain("if (isControlled) setDraft(controlledSearchTerm ?? '')")
+    expect(FILTROS).toContain('setSearchValue(filters.search)')
   })
 })
 

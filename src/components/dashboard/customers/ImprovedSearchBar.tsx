@@ -324,7 +324,7 @@ export function ImprovedSearchBar({
             setSelectedIndex(-1)
             onSearch?.(recentSearch)
           }
-        } else if (value.trim()) {
+        } else {
           handleSearch()
         }
         break
@@ -380,12 +380,17 @@ export function ImprovedSearchBar({
     if (value.trim()) {
       saveToHistory(value)
       onSearch?.(value)
+    } else {
+      onSearch?.('')
     }
     setShowSuggestions(false)
   }
 
   const handleClear = () => {
     onChange('')
+    // Sin esto quedaban los resultados de la busqueda anterior con el campo ya
+    // vacio: la lista mostraba un recorte y nada explicaba por que.
+    onSearch?.('')
     setShowSuggestions(false)
     setSelectedIndex(-1)
     inputRef.current?.focus()

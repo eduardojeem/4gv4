@@ -22,7 +22,6 @@ import { ImprovedSearchBar } from './ImprovedSearchBar'
 import { ImprovedActionButtons } from './ImprovedActionButtons'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { CustomerFilters as CustomerFiltersType, Customer } from '@/hooks/use-customer-state'
-import { useDebounce } from '@/hooks/use-debounce'
 import { CustomerDataDialog } from './CustomerDataDialog'
 import { customerService } from '@/services/customer-service'
 import { format, subDays, startOfMonth, startOfYear, endOfDay } from 'date-fns'
@@ -60,23 +59,23 @@ export function CustomerFilters({
   const [dataDialogTab, setDataDialogTab] = useState<'export' | 'import'>('export')
   const [showDatePicker, setShowDatePicker] = useState(false)
   
-  // Debounce search to avoid excessive filtering cycles
-  const debouncedSearch = useDebounce(searchValue, 300)
-  
+  // El campo escribe en su propio estado y NO filtra mientras se escribe.
+  //
+  // Antes cada tecla —con 300ms de espera— reemplazaba el filtro del panel: la
+  // lista se rearmaba entera desde la primera letra, saltaba el paginador y
+  // podias quedar mirando cientos de coincidencias de una «a». La busqueda se
+  // aplica al confirmar: Enter, el boton, o elegir una sugerencia.
   React.useEffect(() => {
-    onFiltersChange({ search: debouncedSearch })
-  }, [debouncedSearch, onFiltersChange])
-
-  // Sync external search filter changes with local state
-  React.useEffect(() => {
-    if (filters.search !== searchValue && filters.search === "") {
-      setSearchValue("")
-    }
+    setSearchValue(filters.search)
   }, [filters.search])
 
   const handleSearchChange = useCallback((value: string) => {
     setSearchValue(value)
   }, [])
+
+  const handleSearchSubmit = useCallback((value: string) => {
+    onFiltersChange({ search: value })
+  }, [onFiltersChange])
 
   const handleFilterChange = useCallback((key: keyof CustomerFiltersType, value: any) => {
     onFiltersChange({ [key]: value })
@@ -561,7 +560,7 @@ export function CustomerFilters({
           <ImprovedSearchBar
             value={searchValue}
             onChange={handleSearchChange}
-            onSearch={(value) => onFiltersChange({ search: value })}
+            onSearch={handleSearchSubmit}
             customers={customers}
             isSearching={false}
             placeholder="Buscar por nombre, CI/RUC, teléfono, email, código o notas..."
