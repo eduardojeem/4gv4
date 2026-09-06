@@ -61,7 +61,10 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'system',
+  // Claro por defecto: quien nunca eligio tema abre en claro, aunque su sistema
+  // este en oscuro. Quien ya eligio conserva su eleccion —incluido 'system',
+  // que sigue al sistema operativo—. Tiene que coincidir con `ThemeInitScript`.
+  defaultTheme = 'light',
   defaultColorScheme = DEFAULT_SYSTEM_COLOR_SCHEME
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
