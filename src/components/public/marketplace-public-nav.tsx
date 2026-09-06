@@ -61,11 +61,16 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
   // Mientras se escribe en el buscador, la fila le hace lugar: se esconden los
   // enlaces y el CTA para que el campo crezca en vez de quedar apretado.
   const [searchFocused, setSearchFocused] = useState(false)
+  // En el telefono el buscador no entra en la fila del encabezado —logo,
+  // favoritos, tema y menu ya la llenan— y tampoco estaba en la barra de abajo:
+  // no habia forma de buscar. Se abre en una fila propia, bajo el encabezado.
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const { branding } = usePlatformBranding(initialBranding)
 
   // Cerrar drawer al cambiar de ruta
   useEffect(() => {
     setMobileDrawerOpen(false)
+    setMobileSearchOpen(false)
   }, [pathname])
 
   // Bloquear scroll cuando el drawer está abierto
@@ -208,6 +213,23 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
 
           {/* Right actions */}
           <div className="flex items-center gap-2">
+            {/* Buscar — solo donde el buscador no esta en la fila. */}
+            <button
+              type="button"
+              onClick={() => setMobileSearchOpen((abierto) => !abierto)}
+              className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-xl border transition-colors xl:hidden',
+                mobileSearchOpen
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-border/80 bg-background text-foreground hover:bg-muted'
+              )}
+              aria-label={mobileSearchOpen ? 'Cerrar la búsqueda' : 'Buscar en el marketplace'}
+              aria-expanded={mobileSearchOpen}
+              aria-controls="marketplace-mobile-search"
+            >
+              {mobileSearchOpen ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+            </button>
+
             <InstallPrompt />
             <PublicFavorites />
             <ThemeToggle />
@@ -304,6 +326,25 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
             </button>
           </div>
         </div>
+
+        {/* Fila del buscador en telefono y tablet.
+            Va dentro del `<header>` sticky para que siga a mano al desplazarse,
+            que es cuando mas se busca. `autoFocus` abre el teclado directo: si
+            hay que tocar el campo despues de tocar la lupa, son dos toques para
+            lo mismo. */}
+        {mobileSearchOpen && (
+          <div
+            id="marketplace-mobile-search"
+            className="border-t border-border/60 bg-background/95 px-4 py-2.5 sm:px-6 xl:hidden"
+          >
+            <MarketplaceSearchBox
+              compact
+              autoFocus
+              className="w-full"
+              placeholder="Buscar productos, tiendas, marcas…"
+            />
+          </div>
+        )}
       </header>
 
       {/* ── MODAL / DRAWER LATERAL OFF-CANVAS (SHEET) ─────────────────────────── */}
