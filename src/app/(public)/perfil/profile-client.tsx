@@ -23,6 +23,7 @@ import type { CustomerAccountSummary } from '@/lib/profile/customer-account-summ
 import type { CustomerStoreSummary } from '@/lib/profile/customer-stores'
 import type { StoreCreditByOrganization } from '@/components/profile/profile-account-summary'
 import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreCredit'
+import { ProfileSettingsPanel } from '@/components/profile/profile-settings-panel'
 
 const profileSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -234,7 +235,7 @@ export function ProfileClient({
               </div>
             </section>
 
-            <section aria-labelledby="personal-info-title" className="mb-10 border-t border-border pt-8">
+            <section id="datos-personales" aria-labelledby="personal-info-title" className="mb-10 scroll-mt-20 border-t border-border pt-8">
               <div className="mb-5">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mi cuenta</p>
                 <h2 id="personal-info-title" className="mt-1 text-xl font-bold tracking-tight">Datos personales y seguridad</h2>
@@ -254,7 +255,7 @@ export function ProfileClient({
                   onLocationChange={(v) => setProfile(p => ({ ...p, location: v }))}
                   onSubmit={handleUpdateProfile}
                 />
-                <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={linkPrefix} variant="account" showStaffPanel={false} />
+                <ProfileSettingsPanel hasStore={Boolean(organization)} />
               </div>
             </section>
 

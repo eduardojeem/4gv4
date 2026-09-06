@@ -130,14 +130,16 @@ export function ProfileOrders({ orders, totalCount = orders.length, tenantPrefix
                         <Clock className="h-3 w-3" /> {formatDate(order.created_at)}
                       </span>
                       <span>{formatMoney(order.total)}</span>
-                      {(order.store_credit_reserved ?? 0) > 0 && <span className="font-semibold text-amber-700 dark:text-amber-300">{formatMoney(order.store_credit_reserved ?? 0)} reservado</span>}
-                      {(order.store_credit_applied ?? 0) > 0 && <span className="font-semibold text-emerald-700 dark:text-emerald-300">{formatMoney(order.store_credit_applied ?? 0)} aplicado</span>}
                       {typeof order.amount_due === 'number' && order.amount_due > 0 && <span className="font-semibold text-rose-700 dark:text-rose-300">Pendiente {formatMoney(order.amount_due)}</span>}
                       <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', paymentInfo.className)}>
                         {paymentInfo.label}
                       </span>
                     </div>
-                    <div className="mt-2 grid gap-1.5 rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    <details className="mt-2 rounded-lg bg-muted/40 text-xs text-muted-foreground">
+                      <summary className="cursor-pointer list-none px-3 py-2 font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        Ver entrega y movimientos del pago
+                      </summary>
+                      <div className="grid gap-1.5 border-t border-border/60 px-3 py-2">
                       <span className="inline-flex min-w-0 items-center gap-1.5">
                         {delivery ? <Truck className="h-3.5 w-3.5 shrink-0" /> : <Store className="h-3.5 w-3.5 shrink-0" />}
                         {delivery ? 'Envio a domicilio' : 'Retiro en tienda'}
@@ -154,7 +156,10 @@ export function ProfileOrders({ orders, totalCount = orders.length, tenantPrefix
                           Entrega estimada: {formatDate(order.estimated_delivery_date)}
                         </span>
                       )}
-                    </div>
+                      {(order.store_credit_reserved ?? 0) > 0 && <span>{formatMoney(order.store_credit_reserved ?? 0)} de saldo reservado</span>}
+                      {(order.store_credit_applied ?? 0) > 0 && <span>{formatMoney(order.store_credit_applied ?? 0)} de saldo aplicado</span>}
+                      </div>
+                    </details>
                   </div>
                 </Link>
                 <div className="flex shrink-0 items-center gap-1">

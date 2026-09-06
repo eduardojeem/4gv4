@@ -7,6 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney } from '@/components/dashboard/orders/format'
 import { PUBLIC_CART_EVENT, type PublicCartItem } from '@/lib/public-cart'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 export interface ActiveStoreCart {
   tenantSlug: string
@@ -15,6 +19,28 @@ export interface ActiveStoreCart {
   totalAmount: number
   items: PublicCartItem[]
   href: string
+  logoUrl?: string | null
+  changedPrices?: number
+  unavailableItems?: number
+  syncFailed?: boolean
+}
+
+type CartProductMetadata = {
+  name: string
+  image: string | null
+  price: number | null
+  hasOffer: boolean
+  offerPrice: number | null
+  isActive: boolean
+  stockQuantity: number
+}
+
+type CartVariantMetadata = {
+  productId: string
+  name: string
+  price: number
+  isActive: boolean
+  stockQuantity: number
 }
 
 function getStoreDisplayName(slug: string): string {
@@ -27,7 +53,6 @@ function getStoreDisplayName(slug: string): string {
 
 export function ProfileStoreCarts() {
   const [carts, setCarts] = useState<ActiveStoreCart[]>([])
-  const [mounted, setMounted] = useState(false)
 
   const scanCarts = useCallback(() => {
     if (typeof window === 'undefined') return
@@ -72,17 +97,77 @@ export function ProfileStoreCarts() {
     }
 
     setCarts(activeCarts)
+
+    void Promise.all(activeCarts.map(async (cart) => {
+      try {
+        const response = await fetch(`/api/public/favorites/metadata?org=${encodeURIComponent(cart.tenantSlug)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productIds: [...new Set(cart.items.map((item) => item.productId))],
+            variantIds: cart.items.flatMap((item) => item.variantId ? [item.variantId] : []),
+          }),
+        })
+        if (!response.ok) throw new Error('catalog unavailable')
+        const payload = await response.json() as {
+          metadata?: Record<string, CartProductMetadata>
+          variants?: Record<string, CartVariantMetadata>
+          organization?: { name?: string; logo_url?: string | null } | null
+        }
+        const metadata = payload.metadata ?? {}
+        let changedPrices = 0
+        let unavailableItems = 0
+        const syncedItems = cart.items.map((item) => {
+          const current = metadata[item.productId]
+          if (!current) {
+            unavailableItems += 1
+            return { ...item, availableStock: 0 }
+          }
+          const currentVariant = item.variantId ? payload.variants?.[item.variantId] : null
+          const currentPrice = currentVariant
+            ? currentVariant.price
+            : current.hasOffer && current.offerPrice != null ? current.offerPrice : current.price
+          const currentStock = currentVariant?.stockQuantity ?? current.stockQuantity
+          const currentActive = current.isActive && (currentVariant?.isActive ?? true)
+          if (currentPrice != null && currentPrice !== item.unitPrice) changedPrices += 1
+          if (!currentActive || currentStock <= 0) unavailableItems += 1
+          return {
+            ...item,
+            name: currentVariant ? `${current.name} (${currentVariant.name})` : current.name || item.name,
+            image: current.image || item.image,
+            unitPrice: currentPrice ?? item.unitPrice,
+            availableStock: currentActive ? currentStock : 0,
+            quantity: Math.min(item.quantity, currentActive ? currentStock : 0),
+          }
+        }).filter((item) => item.quantity > 0)
+        const totalAmount = syncedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
+        const itemCount = syncedItems.reduce((sum, item) => sum + item.quantity, 0)
+
+        setCarts((current) => current.map((entry) => entry.tenantSlug === cart.tenantSlug ? {
+          ...entry,
+          displayName: payload.organization?.name || entry.displayName,
+          logoUrl: payload.organization?.logo_url,
+          items: syncedItems,
+          totalAmount,
+          itemCount,
+          changedPrices,
+          unavailableItems,
+        } : entry))
+      } catch {
+        setCarts((current) => current.map((entry) => entry.tenantSlug === cart.tenantSlug ? { ...entry, syncFailed: true } : entry))
+      }
+    }))
   }, [])
 
   useEffect(() => {
-    setMounted(true)
-    scanCarts()
+    const initialScan = window.setTimeout(scanCarts, 0)
 
     const handleUpdate = () => scanCarts()
     window.addEventListener(PUBLIC_CART_EVENT, handleUpdate)
     window.addEventListener('storage', handleUpdate)
 
     return () => {
+      window.clearTimeout(initialScan)
       window.removeEventListener(PUBLIC_CART_EVENT, handleUpdate)
       window.removeEventListener('storage', handleUpdate)
     }
@@ -98,8 +183,6 @@ export function ProfileStoreCarts() {
       // Noop
     }
   }
-
-  if (!mounted) return null
 
   return (
     <div id="carritos" className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
@@ -145,7 +228,10 @@ export function ProfileStoreCarts() {
               >
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Store className="h-4 w-4 text-primary" />
+                    {cart.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={cart.logoUrl} alt="" className="h-6 w-6 rounded object-contain" />
+                    ) : <Store className="h-4 w-4 text-primary" aria-hidden="true" />}
                     <span className="text-sm font-bold text-foreground">
                       {cart.displayName}
                     </span>
@@ -154,6 +240,10 @@ export function ProfileStoreCarts() {
                     </Badge>
                   </div>
 
+                  {(cart.changedPrices ?? 0) > 0 && <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Se actualizaron precios según el catálogo actual.</p>}
+                  {(cart.unavailableItems ?? 0) > 0 && <p className="text-xs font-semibold text-destructive">Hay productos sin stock o que ya no están disponibles.</p>}
+                  {cart.syncFailed && <p className="text-xs text-muted-foreground">No pudimos verificar precio y stock ahora. Se confirmarán al continuar.</p>}
+
                   {/* Previews de productos */}
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     {cart.items.slice(0, 3).map((item, idx) => (
@@ -161,7 +251,13 @@ export function ProfileStoreCarts() {
                         key={item.cartItemId || idx}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground"
                       >
-                        <Package className="h-3 w-3 text-primary/70" />
+                        {item.image ? (
+                          // La imagen ya fue validada al agregar el producto al carrito.
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.image} alt={item.name} className="h-6 w-6 rounded object-cover" />
+                        ) : (
+                          <Package className="h-3 w-3 text-primary/70" aria-hidden="true" />
+                        )}
                         <span className="max-w-[140px] truncate font-medium text-foreground">
                           {item.name}
                         </span>
@@ -186,16 +282,33 @@ export function ProfileStoreCarts() {
                 </div>
 
                 <div className="flex items-center gap-2 pt-2 sm:pt-0 self-end sm:self-center">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleClearCart(cart.tenantSlug)}
-                    className="h-9 px-2.5 text-muted-foreground hover:text-destructive text-xs"
-                    title="Vaciar este carrito"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 px-2.5 text-muted-foreground hover:text-destructive text-xs"
+                        aria-label={`Vaciar carrito de ${cart.displayName}`}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Vaciar este carrito?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Se eliminarán {cart.itemCount} {cart.itemCount === 1 ? 'producto' : 'productos'} del carrito de {cart.displayName}.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Conservar carrito</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleClearCart(cart.tenantSlug)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                          Vaciar carrito
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                   <Button asChild size="sm" className="h-9 gap-1.5 rounded-xl text-xs font-bold">
                     <Link href={cart.href}>
                       Continuar compra

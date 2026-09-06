@@ -69,6 +69,12 @@ export function ProfileStores({ stores }: ProfileStoresProps) {
   if (stores.length === 0) return null
 
   const conPendientes = stores.filter((store) => store.needsAttention).length
+  const orderedStores = [...stores].sort((left, right) => {
+    const overdueDifference = right.summary.financing.overdueCount - left.summary.financing.overdueCount
+    if (overdueDifference !== 0) return overdueDifference
+    if (left.needsAttention !== right.needsAttention) return left.needsAttention ? -1 : 1
+    return right.summary.totalDue - left.summary.totalDue
+  })
 
   return (
     <section
@@ -80,7 +86,7 @@ export function ProfileStores({ stores }: ProfileStoresProps) {
         <div className="flex items-center gap-2">
           <Store className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h2 id="profile-stores-title" className="text-sm font-semibold text-foreground">
-            Tus tiendas
+            Actividad por tienda
           </h2>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -91,13 +97,18 @@ export function ProfileStores({ stores }: ProfileStoresProps) {
       </div>
 
       <ul className="divide-y divide-border">
-        {stores.map((store) => {
+        {orderedStores.map((store) => {
           const { organization, summary, needsAttention } = store
           const nombre = organization?.name ?? 'Tienda sin identificar'
           const perfilHref = organization ? `/${organization.slug}/perfil` : null
           const reparacionesHref = organization
             ? customerRepairsListHref(organization.slug, '')
             : null
+          const creditsHref = organization
+            ? `/${organization.slug}/perfil/creditos`
+            : null
+          const hasRepairs = summary.equipment.total > 0
+          const hasCredits = summary.financing.pendingAmount > 0 || summary.financing.overdueCount > 0
 
           return (
             <li key={store.organizationId} className="px-5 py-4">
@@ -106,6 +117,7 @@ export function ProfileStores({ stores }: ProfileStoresProps) {
                   {organization?.logo_url ? (
                     // Logo de la tienda: `img` y no `next/image` porque la URL es
                     // de un dominio por organizacion y no todas estan permitidas.
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={organization.logo_url}
                       alt=""
@@ -151,15 +163,28 @@ export function ProfileStores({ stores }: ProfileStoresProps) {
                   </div>
                 </div>
 
-                {reparacionesHref && (
-                  <Link
-                    href={reparacionesHref}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
-                  >
-                    Ver
-                    <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                  </Link>
-                )}
+                <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row">
+                  {hasCredits && creditsHref && (
+                    <Link
+                      href={creditsHref}
+                      aria-label={`Ver créditos de ${nombre}`}
+                      className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+                    >
+                      Créditos
+                      <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Link>
+                  )}
+                  {hasRepairs && reparacionesHref && (
+                    <Link
+                      href={reparacionesHref}
+                      aria-label={`Ver reparaciones de ${nombre}`}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
+                    >
+                      Reparaciones
+                      <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Link>
+                  )}
+                </div>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">

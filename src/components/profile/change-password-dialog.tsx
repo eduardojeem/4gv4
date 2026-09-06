@@ -160,11 +160,11 @@ export function ChangePasswordDialog() {
             })
           }
         } catch {
-          toast.warning('Contrasena actualizada, pero no se pudieron cerrar otras sesiones')
+          toast.warning('Contraseña actualizada, pero no se pudieron cerrar otras sesiones')
         }
       }
 
-      toast.success('Contrasena actualizada correctamente')
+      toast.success('Contraseña actualizada correctamente')
       setOpen(false)
       setFormData({ password: '', confirmPassword: '' })
       setCooldownRemaining(COOLDOWN_MS)
@@ -215,13 +215,13 @@ export function ChangePasswordDialog() {
               Espera {Math.ceil(cooldownRemaining / 1000)}s
             </span>
           ) : (
-            'Cambiar contrasena'
+            'Cambiar contraseña'
           )}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Cambiar contrasena</DialogTitle>
+          <DialogTitle>Cambiar contraseña</DialogTitle>
           <DialogDescription>
             Asegurate de usar una contrasena segura y unica.
           </DialogDescription>

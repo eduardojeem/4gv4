@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { z } from 'zod'
+import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 
 const requestSchema = z.object({
   productIds: z.array(z.string().min(1).max(100)).max(200),
+  variantIds: z.array(z.string().min(1).max(100)).max(200).optional().default([]),
 })
 
 export async function POST(request: NextRequest) {
@@ -14,16 +16,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'IDs de productos inválidos' }, { status: 400 })
     }
 
-    const { productIds } = parsed.data
+    const { productIds, variantIds } = parsed.data
     if (productIds.length === 0) {
       return NextResponse.json({ metadata: {} })
     }
 
     const supabase = createAdminSupabase()
-    const { data: products, error } = await supabase
+    const requestedOrganization = request.nextUrl.searchParams.get('org')
+    const organization = requestedOrganization
+      ? await resolvePublicStorefrontOrganization(request, supabase)
+      : null
+
+    if (requestedOrganization && !organization) {
+      return NextResponse.json({ error: 'Tienda no disponible' }, { status: 404 })
+    }
+
+    let productsQuery = supabase
       .from('products')
       .select('id, name, description, sku, brand, image_url, images, sale_price, offer_price, has_offer, is_active, stock_quantity')
       .in('id', productIds)
+
+    if (organization) productsQuery = productsQuery.eq('organization_id', organization.id)
+
+    const { data: products, error } = await productsQuery
 
     if (error) {
       return NextResponse.json({ metadata: {} })
@@ -31,6 +46,7 @@ export async function POST(request: NextRequest) {
 
     const metadata: Record<string, {
       image: string | null
+      name: string
       images: string[]
       description: string | null
       sku: string | null
@@ -56,6 +72,7 @@ export async function POST(request: NextRequest) {
       const primaryImg = allImgs[0] ?? (typeof p.image_url === 'string' && p.image_url.trim() ? p.image_url : null)
 
       metadata[p.id] = {
+        name: p.name,
         image: primaryImg,
         images: allImgs,
         description: p.description ?? null,
@@ -70,8 +87,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const { data: variantRows } = organization && variantIds.length > 0
+      ? await supabase
+          .from('product_variants')
+          .select('id, product_id, variant_name, sale_price, stock_quantity, is_active')
+          .eq('organization_id', organization.id)
+          .in('id', variantIds)
+      : { data: [] }
+    const variants = Object.fromEntries((variantRows ?? []).map((variant) => [variant.id, {
+      productId: variant.product_id,
+      name: variant.variant_name,
+      price: Number(variant.sale_price ?? 0),
+      stockQuantity: Number(variant.stock_quantity ?? 0),
+      isActive: variant.is_active !== false,
+    }]))
+
     return NextResponse.json(
-      { metadata },
+      { metadata, variants, organization: organization ? toPublicOrganizationPayload(organization) : null },
       { headers: { 'Cache-Control': 'public, max-age=60, s-maxage=120' } }
     )
   } catch {
