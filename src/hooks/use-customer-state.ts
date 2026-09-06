@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { useDebounce } from "./use-debounce"
+import { searchCustomers } from '@/lib/customers/search'
 
 export interface Customer {
   id: string  // UUID from Supabase
@@ -312,145 +313,12 @@ export function useCustomerState() {
   // Derive searching state without storing it
   const searching = state.filters.search !== debouncedSearchTerm
 
-  // Enhanced search function with fuzzy matching and pattern detection
-  const performIntelligentSearch = useCallback((customers: Customer[], searchTerm: string): Customer[] => {
-    if (!searchTerm || searchTerm.trim().length === 0) return customers
-    
-    const term = searchTerm.toLowerCase().trim()
-    
-    // Detect search patterns
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(term)
-    const isPhone = /^[\d\s\-\+\(\)]+$/.test(term) && term.replace(/\D/g, '').length >= 8
-    const isRUC = /^\d{12}$/.test(term.replace(/\D/g, ''))
-    const isCode = /^CLI-/.test(term.toUpperCase())
-    const isQuickFilter = term.includes(':')
-    
-    // Handle quick filters (e.g., "customer_type:premium", "city:Montevideo")
-    if (isQuickFilter) {
-      const [filterType, filterValue] = term.split(':')
-      return customers.filter(customer => {
-        switch (filterType) {
-          case 'customer_type':
-            return customer.customer_type === filterValue
-          case 'city':
-            return customer.city?.toLowerCase() === filterValue.toLowerCase()
-          case 'status':
-            return customer.status === filterValue
-          case 'segment':
-            return customer.segment?.toLowerCase() === filterValue.toLowerCase()
-          default:
-            return true
-        }
-      })
-    }
-    
-    // Fuzzy matching function
-    const fuzzyMatch = (text: string, query: string): number => {
-      if (!text) return 0
-      text = text.toLowerCase()
-      
-      if (text.includes(query)) return 100
-      
-      let score = 0
-      let queryIndex = 0
-      
-      for (let i = 0; i < text.length && queryIndex < query.length; i++) {
-        if (text[i] === query[queryIndex]) {
-          score += 1
-          queryIndex++
-        }
-      }
-      
-      return queryIndex === query.length ? (score / query.length) * 80 : 0
-    }
-    
-    // Score and filter customers
-    const scoredCustomers = customers.map(customer => {
-      let totalScore = 0
-      let matchCount = 0
-      
-      const nameScore = fuzzyMatch(customer.name || '', term)
-      if (nameScore > 30) {
-        totalScore += nameScore * 2
-        matchCount++
-      }
-      
-      if (customer.email) {
-        if (isEmail && customer.email.toLowerCase() === term) {
-          totalScore += 100
-          matchCount++
-        } else if (customer.email.toLowerCase().includes(term)) {
-          totalScore += 90
-          matchCount++
-        }
-      }
-      
-      if (customer.phone) {
-        const cleanPhone = customer.phone.replace(/\D/g, '')
-        const cleanTerm = term.replace(/\D/g, '')
-        if (isPhone && cleanPhone.includes(cleanTerm)) {
-          totalScore += 95
-          matchCount++
-        } else if (customer.phone.includes(term)) {
-          totalScore += 85
-          matchCount++
-        }
-      }
-      
-      if (customer.customerCode) {
-        if (isCode && customer.customerCode.toLowerCase().includes(term)) {
-          totalScore += 95
-          matchCount++
-        } else if (customer.customerCode.toLowerCase().includes(term)) {
-          totalScore += 90
-          matchCount++
-        }
-      }
-      
-      if (customer.ruc) {
-        const cleanRUC = customer.ruc.replace(/\D/g, '')
-        const cleanTerm = term.replace(/\D/g, '')
-        if (isRUC && cleanRUC === cleanTerm) {
-          totalScore += 100
-          matchCount++
-        } else if (customer.ruc.includes(term)) {
-          totalScore += 85
-          matchCount++
-        }
-      }
-      
-      if (customer.city && customer.city.toLowerCase().includes(term)) {
-        totalScore += 70
-        matchCount++
-      }
-      
-      if (customer.company && customer.company.toLowerCase().includes(term)) {
-        totalScore += 75
-        matchCount++
-      }
-      
-      if (customer.address && customer.address.toLowerCase().includes(term)) {
-        totalScore += 50
-        matchCount++
-      }
-      
-      if (customer.notes && customer.notes.toLowerCase().includes(term)) {
-        totalScore += 30
-        matchCount++
-      }
-      
-      return {
-        customer,
-        score: matchCount > 0 ? totalScore / matchCount : 0,
-        matchCount
-      }
-    })
-    
-    return scoredCustomers
-      .filter(item => item.score > 25)
-      .sort((a, b) => b.score - a.score)
-      .map(item => item.customer)
-  }, [])
+  // La busqueda vive en `lib/customers/search`: es logica pura, se puede probar
+  // sin montar el hook, y la comparten el panel y el selector de reparaciones.
+  const performIntelligentSearch = useCallback(
+    (customers: Customer[], searchTerm: string): Customer[] => searchCustomers(customers, searchTerm),
+    []
+  )
 
   // Derive filtered customers (not stored in state)
   const filteredCustomers = useMemo(() => {
