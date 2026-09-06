@@ -70,7 +70,7 @@ export default async function CustomerProfilePage({ basePath }: { basePath?: str
     fetchCustomerActivity(organizationId),
     getCurrentOrganizationContext(user.id).catch(() => null),
   ])
-  const { history, orders, ordersCount, storeCreditsByOrganization } = activity
+  const { history, orders, ordersCount, storeCreditsByOrganization, stores } = activity
   accountSummary = activity.accountSummary
   stats = {
     totalRepairs: accountSummary.equipment.total,
@@ -127,6 +127,7 @@ export default async function CustomerProfilePage({ basePath }: { basePath?: str
       stats={stats}
       accountSummary={accountSummary}
       storeCredits={storeCreditsByOrganization}
+      stores={stores}
       recentRepairs={recentRepairs}
       recentOrders={recentOrders}
       organization={userOrganization ? {

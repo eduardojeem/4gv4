@@ -6,6 +6,7 @@ import {
   calculateCustomerAccountSummary,
   EMPTY_CUSTOMER_ACCOUNT_SUMMARY,
 } from '@/lib/profile/customer-account-summary'
+import { summarizeCustomerStores, type CustomerStoreInfo } from '@/lib/profile/customer-stores'
 
 export async function fetchCustomerActivity(organizationId: string | null) {
   try {
@@ -42,6 +43,7 @@ export async function fetchCustomerActivity(organizationId: string | null) {
         ordersCount: 0,
         accountSummary: EMPTY_CUSTOMER_ACCOUNT_SUMMARY,
         storeCreditsByOrganization: [],
+        stores: [],
       }
     }
 
@@ -49,7 +51,7 @@ export async function fetchCustomerActivity(organizationId: string | null) {
     // reads below run server-side after the ownership and tenant checks above.
     let repairsFinancialQuery = adminSupabase
       .from('repairs')
-      .select('status, final_cost, estimated_cost, paid_amount, payment_status')
+      .select('status, final_cost, estimated_cost, paid_amount, payment_status, organization_id')
       .in('customer_id', validIds)
       .or('is_deleted.is.null,is_deleted.eq.false')
 
@@ -68,7 +70,7 @@ export async function fetchCustomerActivity(organizationId: string | null) {
 
     let ordersFinancialQuery = adminSupabase
       .from('customer_orders')
-      .select('status, payment_status, total', { count: 'exact' })
+      .select('status, payment_status, total, organization_id', { count: 'exact' })
       .in('customer_id', validIds)
 
     let recentOrdersQuery = adminSupabase
@@ -85,7 +87,7 @@ export async function fetchCustomerActivity(organizationId: string | null) {
 
     let creditsQuery = adminSupabase
       .from('customer_credits')
-      .select('status, credit_installments(amount, amount_paid, status, due_date)')
+      .select('status, organization_id, credit_installments(amount, amount_paid, status, due_date)')
       .in('customer_id', validIds)
       .in('status', ['active', 'defaulted'])
 
@@ -138,6 +140,9 @@ export async function fetchCustomerActivity(organizationId: string | null) {
           ...(history || []).map((r: { organization_id?: string | null }) => r.organization_id),
           ...(recentOrders || []).map((o: { organization_id?: string | null }) => o.organization_id),
           ...(storeCredits || []).map((c: { organization_id?: string | null }) => c.organization_id),
+          ...(repairs || []).map((r: { organization_id?: string | null }) => r.organization_id),
+          ...(orders || []).map((o: { organization_id?: string | null }) => o.organization_id),
+          ...(credits || []).map((c: { organization_id?: string | null }) => c.organization_id),
         ].filter((id): id is string => Boolean(id))
       )
     )
@@ -181,6 +186,17 @@ export async function fetchCustomerActivity(organizationId: string | null) {
       .filter((row) => row.amount > 0)
       .sort((a, b) => b.amount - a.amount)
 
+    // La cuenta abierta por tienda. Sale de las consultas financieras, que no
+    // tienen tope: las listas de «reciente» si (6 y 5), asi que una tienda puede
+    // no aparecer ahi y tener saldo igual.
+    const stores = summarizeCustomerStores({
+      repairs: repairs || [],
+      orders: orders || [],
+      credits: credits || [],
+      storeCreditMovements: storeCredits || [],
+      organizations: orgMap as Map<string, CustomerStoreInfo>,
+    })
+
     return { 
       repairs: repairs || [],
       history: enrichedHistory,
@@ -188,6 +204,7 @@ export async function fetchCustomerActivity(organizationId: string | null) {
       ordersCount: ordersCount || 0,
       accountSummary,
       storeCreditsByOrganization,
+      stores,
     }
   } catch (error) {
     console.error('Error fetching customer data:', error)

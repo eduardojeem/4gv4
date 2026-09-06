@@ -15,10 +15,12 @@ import { ProfileActivity } from '@/components/profile/profile-activity'
 import { ProfileOrders, type ProfileOrder } from '@/components/profile/profile-orders'
 import { ProfileAccountSummary } from '@/components/profile/profile-account-summary'
 import { ProfileStoreCarts } from '@/components/profile/profile-store-carts'
+import { ProfileStores } from '@/components/profile/profile-stores'
 import { ProfileFavoritesWidget } from '@/components/profile/profile-favorites-widget'
 import { ProfileAccountTypeBanner, type UserOrganizationInfo } from '@/components/profile/profile-account-type-banner'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import type { CustomerAccountSummary } from '@/lib/profile/customer-account-summary'
+import type { CustomerStoreSummary } from '@/lib/profile/customer-stores'
 import type { StoreCreditByOrganization } from '@/components/profile/profile-account-summary'
 import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreCredit'
 
@@ -47,6 +49,8 @@ interface ProfileClientProps {
    * enlace salia del marketplace.
    */
   linkPrefix?: string
+  /** La cuenta abierta por tienda. Solo aporta con mas de una. */
+  stores?: CustomerStoreSummary[]
   stats: { totalRepairs: number; activeRepairs: number; readyRepairs: number; deliveredRepairs: number; totalOrders: number }
   accountSummary: CustomerAccountSummary
   storeCredits?: StoreCreditByOrganization[]
@@ -78,6 +82,7 @@ export function ProfileClient({
   userId,
   tenantPrefix,
   linkPrefix = tenantPrefix,
+  stores = [],
   stats,
   accountSummary,
   storeCredits = [],
@@ -201,6 +206,12 @@ export function ProfileClient({
           />
         </div>
 
+        {stores.length > 1 && (
+          <div className="mb-8">
+            <ProfileStores stores={stores} />
+          </div>
+        )}
+
         {/* Este widget consulta el saldo de UNA organizacion: la de la ruta, y
             si no hay, la de por defecto. Fuera de una tienda eso mostraba el
             saldo de un comercio cualquiera al lado del total real del resumen,
@@ -217,6 +228,11 @@ export function ProfileClient({
 
         <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
           <div className="flex flex-col gap-6">
+            <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={linkPrefix} />
+            <ProfileFavoritesWidget linkPrefix={linkPrefix} />
+            <ProfileStoreCarts />
+            <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />
+
             <ProfileForm
               name={profile.name}
               phone={profile.phone || ''}
@@ -230,11 +246,6 @@ export function ProfileClient({
               onLocationChange={(v) => setProfile(p => ({ ...p, location: v }))}
               onSubmit={handleUpdateProfile}
             />
-
-            <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={linkPrefix} />
-            <ProfileFavoritesWidget linkPrefix={linkPrefix} />
-            <ProfileStoreCarts />
-            <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />
           </div>
 
           <div className="lg:sticky lg:top-24 lg:self-start">
