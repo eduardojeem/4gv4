@@ -76,7 +76,7 @@ import {
   MiniStat,
   SectionFrame,
 } from './analytics-widgets'
-import { ChartExporter } from '@/components/reports/ChartExporter'
+import { ChartExporter, type ChartSection } from '@/components/reports/ChartExporter'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 const PRESET_OPTIONS: Array<{ value: AnalyticsPreset; label: string }> = [
@@ -340,13 +340,17 @@ export default function AnalyticsDashboard() {
     'Estados de reparación',
     'Ingresos vs egresos',
   ]
-  const exportChartData = [
-    snapshot.salesTrend,
-    snapshot.hourlySales,
-    snapshot.salesByBranch,
-    snapshot.topCategories,
-    snapshot.repairStatus,
-    snapshot.financeComparison,
+  // Cada dataset dice que es: el exportador elegia el tipo de grafico y la
+  // tabla por la POSICION en el arreglo, cableada al orden de la pagina de
+  // reportes. Estos seis van en otro orden, asi que uno reventaba y los demas
+  // se dibujaban en cero.
+  const exportChartData: ChartSection[] = [
+    { id: 'generic', kind: 'area', rows: snapshot.salesTrend, formatValue: formatCurrency },
+    { id: 'generic', kind: 'bar', rows: snapshot.hourlySales, formatValue: formatCurrency },
+    { id: 'generic', kind: 'bar', rows: snapshot.salesByBranch, formatValue: formatCurrency },
+    { id: 'generic', kind: 'donut', rows: snapshot.topCategories, formatValue: formatCurrency },
+    { id: 'generic', kind: 'donut', rows: snapshot.repairStatus, formatValue: (v) => `${v} equipos` },
+    { id: 'generic', kind: 'bar', rows: snapshot.financeComparison, formatValue: formatCurrency },
   ]
   const exportMetrics = Object.fromEntries(snapshot.headlineCards.map((c) => [c.label, c.value]))
 

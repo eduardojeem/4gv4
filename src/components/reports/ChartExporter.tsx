@@ -142,13 +142,44 @@ interface ChartExportOptions {
   chartSize: 'small' | 'medium' | 'large'
 }
 
+/**
+ * Que es cada dataset que se exporta.
+ *
+ * Antes esto se deducia de la POSICION en el arreglo: el indice 2 era «estados
+ * de reparacion», el 3 «productos», etc. Solo la pagina de reportes ordenaba sus
+ * datos asi. El panel de admin manda otros seis, en otro orden y con otras
+ * claves, y el exportador les aplicaba igual el tipo de grafico y la tabla del
+ * indice: reventaba en uno y dibujaba los demas en cero.
+ *
+ * `generic` es para cualquier serie de `{ etiqueta, valor }` que no sea ninguna
+ * de las secciones conocidas: se dibuja con el `kind` que pida quien la manda y
+ * la tabla sale de dos columnas.
+ */
+export type ChartSectionId =
+  | 'sales'
+  | 'repairs-trend'
+  | 'repairs-status'
+  | 'products'
+  | 'selected-product'
+  | 'categories'
+  | 'generic'
+
+export interface ChartSection {
+  id: ChartSectionId
+  rows: any[]
+  /** Solo para `generic`. Por defecto, barras. */
+  kind?: 'area' | 'bar' | 'donut'
+  /** Como se escribe el valor en el grafico y en la tabla. Por defecto, guaranies. */
+  formatValue?: (value: number) => string
+}
+
 interface ChartExporterProps {
   title: string
   data: any[]
   metrics?: Record<string, any>
   chartRefs: React.RefObject<HTMLDivElement | null>[]
   chartTitles: string[]
-  chartData?: any[][]
+  chartData?: ChartSection[]
   creditReport?: CreditReport | null
   onExport?: (format: string, success: boolean) => void
   className?: string
@@ -320,12 +351,16 @@ export function ChartExporter({
       const pointLabel = chartPointLabel
       const pointValue = chartPointValue
 
-      const salesDataset = chartData?.[0] ?? data ?? []
-      const repairsTrendDataset = chartData?.[1] ?? []
-      const repairsStatusDataset = chartData?.[2] ?? []
-      const productsDataset = chartData?.[3] ?? []
-      const selectedProductDataset = chartData?.[4] ?? []
-      const categoriesDataset = chartData?.[5] ?? []
+      const sections: ChartSection[] = chartData ?? []
+      const rowsOf = (id: ChartSectionId) => sections.find((section) => section.id === id)?.rows ?? []
+
+      // `data` sigue siendo el respaldo de ventas para quien no manda secciones.
+      const salesDataset = rowsOf('sales').length > 0 ? rowsOf('sales') : (data ?? [])
+      const repairsTrendDataset = rowsOf('repairs-trend')
+      const repairsStatusDataset = rowsOf('repairs-status')
+      const productsDataset = rowsOf('products')
+      const selectedProductDataset = rowsOf('selected-product')
+      const categoriesDataset = rowsOf('categories')
 
       // Cálculos globales de resumen del período
       const totalSalesSum = salesDataset.reduce((sum: number, r: any) => sum + (Number(r.sales) || 0), 0)
@@ -538,28 +573,51 @@ export function ChartExporter({
 
         const chartTitle = chartTitles[i] || `Gráfico ${i + 1}`
 
+        // Que seccion es esta pagina. Sale de lo que el dataset dice ser, no de
+        // su posicion: dos tableros distintos mandan seis datasets cada uno, en
+        // ordenes que no coinciden.
+        const section = sections[i]
+        const sectionId: ChartSectionId = section?.id ?? 'generic'
+        const sectionRows = section?.rows ?? (i === 0 ? (data ?? []) : [])
+        const sectionFormat = section?.formatValue ?? formatGs
+
+        const asDatePoint = (d: any, idx: number) => ({
+          label: d?.date ? formatDateStr(d.date) : pointLabel(d, String(idx + 1)),
+          value: pointValue(d),
+        })
+
         let chartDataUrl: string | null = null
-        if (i === 0 && salesDataset.length > 0) {
-          chartDataUrl = renderAreaChartCanvas(chartTitle, salesDataset.map((d: any, idx: number) => ({ label: d?.date ? formatDateStr(d.date) : pointLabel(d, String(idx + 1)), value: pointValue(d) })), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
-        } else if (i === 1 && repairsTrendDataset.length > 0) {
-          chartDataUrl = renderAreaChartCanvas(chartTitle, repairsTrendDataset.map((d: any, idx: number) => ({ label: d?.date ? formatDateStr(d.date) : pointLabel(d, String(idx + 1)), value: pointValue(d) })), { lineColor: '#dc2626', fillColor: '#ef4444', formatValue: (v) => `${v} orden${v === 1 ? '' : 'es'}` })
-        } else if (i === 2 && repairsStatusDataset.length > 0) {
+        if (sectionId === 'sales' && salesDataset.length > 0) {
+          chartDataUrl = renderAreaChartCanvas(chartTitle, salesDataset.map(asDatePoint), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
+        } else if (sectionId === 'repairs-trend' && repairsTrendDataset.length > 0) {
+          chartDataUrl = renderAreaChartCanvas(chartTitle, repairsTrendDataset.map(asDatePoint), { lineColor: '#dc2626', fillColor: '#ef4444', formatValue: (v) => `${v} orden${v === 1 ? '' : 'es'}` })
+        } else if (sectionId === 'repairs-status' && repairsStatusDataset.length > 0) {
           chartDataUrl = renderDonutChartCanvas(chartTitle, repairsStatusDataset.map((d: any) => ({ label: pointLabel(d, 'Sin dato'), value: pointValue(d), color: d?.color })), { formatValue: (v) => `${v} equipos` })
-        } else if (i === 3 && productsDataset.length > 0) {
+        } else if (sectionId === 'products' && productsDataset.length > 0) {
           chartDataUrl = renderBarChartCanvas(chartTitle, productsDataset.slice(0, 10).map((d: any) => ({ label: pointLabel(d, 'Sin nombre'), value: pointValue(d) })), { barColor: '#059669', formatValue: formatGs })
-        } else if (i === 4 && selectedProductDataset.length > 0) {
-          chartDataUrl = renderAreaChartCanvas(chartTitle, selectedProductDataset.map((d: any, idx: number) => ({ label: d?.date ? formatDateStr(d.date) : pointLabel(d, String(idx + 1)), value: pointValue(d) })), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
-        } else if (i === 5 && categoriesDataset.length > 0) {
+        } else if (sectionId === 'selected-product' && selectedProductDataset.length > 0) {
+          chartDataUrl = renderAreaChartCanvas(chartTitle, selectedProductDataset.map(asDatePoint), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
+        } else if (sectionId === 'categories' && categoriesDataset.length > 0) {
           chartDataUrl = renderDonutChartCanvas(chartTitle, categoriesDataset.slice(0, 8).map((d: any) => ({ label: pointLabel(d, 'Sin categoría'), value: pointValue(d) })), { formatValue: formatGs })
+        } else if (sectionId === 'generic' && sectionRows.length > 0) {
+          // Serie cualquiera de etiqueta y valor: la dibuja como pida quien la
+          // manda, y si no pide nada, en barras.
+          const points = sectionRows.map((d: any, idx: number) => ({
+            label: pointLabel(d, String(idx + 1)),
+            value: pointValue(d),
+            color: d?.color,
+          }))
+          const kind = section?.kind ?? 'bar'
+          chartDataUrl = kind === 'donut'
+            ? renderDonutChartCanvas(chartTitle, points.slice(0, 8), { formatValue: sectionFormat })
+            : kind === 'area'
+              ? renderAreaChartCanvas(chartTitle, points, { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: sectionFormat })
+              : renderBarChartCanvas(chartTitle, points.slice(0, 10), { barColor: '#059669', formatValue: sectionFormat })
         }
 
-        // Si no hay datos específicos para la página, omitir para no generar hoja vacía
-        const hasDataForChart = (i === 0 && salesDataset.length > 0) ||
-          (i === 1 && repairsTrendDataset.length > 0) ||
-          (i === 2 && repairsStatusDataset.length > 0) ||
-          (i === 3 && productsDataset.length > 0) ||
-          (i === 4 && selectedProductDataset.length > 0) ||
-          (i === 5 && categoriesDataset.length > 0)
+        // Si no hay datos para la pagina, se omite para no generar una hoja vacia.
+        const hasDataForChart = sectionRows.length > 0 ||
+          (sectionId === 'sales' && salesDataset.length > 0)
 
         if (!hasDataForChart && !chartDataUrl) {
           continue
@@ -589,7 +647,7 @@ export function ChartExporter({
 
         // ── GENERAR TABLA DE DATOS DETALLADOS SEGÚN LA SECCIÓN ───────────────
         if (options.includeData) {
-          if (i === 0 && salesDataset.length > 0) {
+          if (sectionId === 'sales' && salesDataset.length > 0) {
             // Sección 1: Ventas Diarias Detalladas
             const headers = ['Fecha', 'Día', 'Facturación (Gs.)', 'Órdenes', 'Ticket Prom. (Gs.)', 'Ganancia (Gs.)', 'Margen %', 'Part. %']
 
@@ -645,7 +703,7 @@ export function ChartExporter({
                 7: { halign: 'right', cellWidth: 42 }
               }
             })
-          } else if (i === 1 && repairsTrendDataset.length > 0) {
+          } else if (sectionId === 'repairs-trend' && repairsTrendDataset.length > 0) {
             // Sección: Tendencia de Reparaciones
             const headers = ['Fecha', 'Día', 'Reparaciones Ingresadas', 'Participación sobre Ingresos %']
             const totalRepairsCount = repairsTrendDataset.reduce((sum: number, r: any) => sum + (Number(r.count) || 0), 0)
@@ -685,7 +743,7 @@ export function ChartExporter({
                 3: { halign: 'right' }
               }
             })
-          } else if (i === 2 && repairsStatusDataset.length > 0) {
+          } else if (sectionId === 'repairs-status' && repairsStatusDataset.length > 0) {
             // Sección: Estados de Reparación
             const headers = ['Estado Operativo de la Orden', 'Equipos Registrados', 'Distribución %']
             const totalRepairs = repairsStatusDataset.reduce((sum: number, r: any) => sum + (Number(r.value) || 0), 0)
@@ -714,7 +772,7 @@ export function ChartExporter({
                 2: { halign: 'right' }
               }
             })
-          } else if (i === 3 && productsDataset.length > 0) {
+          } else if (sectionId === 'products' && productsDataset.length > 0) {
             // Sección: Ranking de Productos Detallado
             const headers = ['#', 'Producto', 'Categoría', 'Unid.', 'Precio Unit. Prom.', 'Facturación Total (Gs.)', 'Part. %', 'Ganancia (Gs.)', 'Margen %']
             const totalProductsSales = productsDataset.reduce((sum: number, p: any) => sum + (Number(p.sales) || 0), 0)
@@ -777,7 +835,7 @@ export function ChartExporter({
                 8: { halign: 'right', cellWidth: 42 }
               }
             })
-          } else if (i === 4 && selectedProductDataset.length > 0) {
+          } else if (sectionId === 'selected-product' && selectedProductDataset.length > 0) {
             // Sección: Tendencia Individual de Producto
             const headers = ['Fecha', 'Día', 'Facturación (Gs.)', 'Unidades Vendidas', 'Ticket Promedio (Gs.)']
             const totalSales = selectedProductDataset.reduce((sum: number, p: any) => sum + (Number(p.sales) || 0), 0)
@@ -811,7 +869,7 @@ export function ChartExporter({
                 4: { halign: 'right' }
               }
             })
-          } else if (i === 5 && categoriesDataset.length > 0) {
+          } else if (sectionId === 'categories' && categoriesDataset.length > 0) {
             // Sección: Categorías Detalladas
             const headers = ['Categoría Comercial', 'Unidades Vendidas', 'Ventas Totales (Gs.)', 'Ticket Prom. / Unid.', 'Participación %']
             const totalCatSales = categoriesDataset.reduce((sum: number, c: any) => sum + (Number(c.sales) || 0), 0)
@@ -844,6 +902,32 @@ export function ChartExporter({
                 3: { halign: 'right' },
                 4: { halign: 'right' }
               }
+            })
+          } else if (sectionId === 'generic' && sectionRows.length > 0) {
+            // Serie de etiqueta y valor: dos columnas y el total. Antes estas
+            // paginas caian en la tabla de otra seccion, que leia `row.date` y
+            // `row.sales`, y salian vacias.
+            const totalGeneric = sectionRows.reduce((sum: number, row: any) => sum + pointValue(row), 0)
+
+            autoTable(doc, {
+              startY: yPos,
+              head: [['Concepto', 'Valor', 'Part. %']],
+              body: sectionRows.slice(0, 40).map((row: any, idx: number) => [
+                pointLabel(row, String(idx + 1)),
+                sectionFormat(pointValue(row)),
+                totalGeneric > 0 ? `${((pointValue(row) / totalGeneric) * 100).toFixed(1)}%` : '0%',
+              ]),
+              foot: [['TOTAL', sectionFormat(totalGeneric), '100%']],
+              theme: 'grid',
+              margin: { left: margin, right: margin },
+              styles: { fontSize: 8, cellPadding: 4 },
+              headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+              footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
+              alternateRowStyles: { fillColor: [248, 250, 252] },
+              columnStyles: {
+                1: { halign: 'right', fontStyle: 'bold' },
+                2: { halign: 'right' },
+              },
             })
           }
         }
@@ -1040,12 +1124,14 @@ export function ChartExporter({
       })
 
       // Datasets reales recibidos de la vista
-      const salesDataset = chartData?.[0] ?? data ?? []
-      const repairsTrendDataset = chartData?.[1] ?? []
-      const repairsStatusDataset = chartData?.[2] ?? []
-      const productsDataset = chartData?.[3] ?? []
-      const selectedProductDataset = chartData?.[4] ?? []
-      const categoriesDataset = chartData?.[5] ?? []
+      const salesRows = chartData?.find((section) => section.id === 'sales')?.rows
+      const salesDataset = salesRows && salesRows.length > 0 ? salesRows : (data ?? [])
+      const rowsById = (id: ChartSectionId) => chartData?.find((section) => section.id === id)?.rows ?? []
+      const repairsTrendDataset = rowsById('repairs-trend')
+      const repairsStatusDataset = rowsById('repairs-status')
+      const productsDataset = rowsById('products')
+      const selectedProductDataset = rowsById('selected-product')
+      const categoriesDataset = rowsById('categories')
 
       // ── Hoja 1: Resumen Ejecutivo ──────────────────────────────────────────
       {

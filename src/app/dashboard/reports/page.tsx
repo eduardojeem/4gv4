@@ -1093,7 +1093,14 @@ export default function ReportsPage() {
               }}
               chartRefs={[salesChartRef, repairsChartRef, repairsStatusRef, productsChartRef, productTrendRef, categoriesChartRef]}
               chartTitles={['Tendencia de Ventas', 'Tendencia de Reparaciones', 'Distribución por Estado', 'Productos Más Vendidos', 'Tendencia del Producto', 'Distribución por Categorías']}
-              chartData={[salesData, repairsTrend, repairsStatusDist, visibleProducts, selectedProductTrend, categoryComputed.visible]}
+              chartData={[
+                { id: 'sales', rows: salesData },
+                { id: 'repairs-trend', rows: repairsTrend },
+                { id: 'repairs-status', rows: repairsStatusDist },
+                { id: 'products', rows: visibleProducts },
+                { id: 'selected-product', rows: selectedProductTrend },
+                { id: 'categories', rows: categoryComputed.visible },
+              ]}
               creditReport={creditReport}
             />
           ) : (

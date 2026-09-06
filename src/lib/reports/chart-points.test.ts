@@ -68,6 +68,55 @@ describe('el renderer no puede caerse por una etiqueta que falta', () => {
   })
 })
 
+/**
+ * El exportador elegia el tipo de grafico Y la tabla por la POSICION del dataset
+ * en el arreglo: el indice 2 era «estados de reparacion», el 3 «productos». Solo
+ * la pagina de reportes ordenaba sus datos asi. El panel de admin manda otros
+ * seis, en otro orden: uno reventaba, los demas se dibujaban en cero y las
+ * tablas salian vacias porque leian `row.date` y `row.sales`.
+ */
+describe('cada dataset dice que es, en vez de deducirse por su posicion', () => {
+  const EXPORTADOR = leer('src/components/reports/ChartExporter.tsx')
+
+  it('la prop declara la seccion de cada uno', () => {
+    expect(EXPORTADOR).toContain('export type ChartSectionId =')
+    expect(EXPORTADOR).toContain('export interface ChartSection {')
+    expect(EXPORTADOR).toContain('chartData?: ChartSection[]')
+  })
+
+  it('ni los graficos ni las tablas se eligen por indice', () => {
+    expect(EXPORTADOR).not.toContain('if (i === 0 && salesDataset.length > 0)')
+    expect(EXPORTADOR).not.toContain('} else if (i === 2 && repairsStatusDataset.length > 0)')
+    expect(EXPORTADOR).toContain("if (sectionId === 'sales' && salesDataset.length > 0)")
+    expect(EXPORTADOR).toContain("} else if (sectionId === 'repairs-status' && repairsStatusDataset.length > 0)")
+  })
+
+  it('los datasets se buscan por id, tambien en el Excel', () => {
+    expect(EXPORTADOR).not.toContain('chartData?.[1]')
+    expect(EXPORTADOR).not.toContain('chartData?.[5]')
+    expect(EXPORTADOR).toContain("const rowsOf = (id: ChartSectionId) =>")
+    expect(EXPORTADOR).toContain("const rowsById = (id: ChartSectionId) =>")
+  })
+
+  it('una serie generica tiene su propio grafico y su propia tabla', () => {
+    // Sin esto, una pagina que no es ninguna de las secciones conocidas caia en
+    // la tabla de otra y salia vacia.
+    expect(EXPORTADOR).toContain("} else if (sectionId === 'generic' && sectionRows.length > 0) {")
+    expect(EXPORTADOR).toContain("head: [['Concepto', 'Valor', 'Part. %']]")
+  })
+
+  it('los dos tableros declaran sus secciones', () => {
+    const REPORTES = leer('src/app/dashboard/reports/page.tsx')
+    const ADMIN = leer('src/components/admin/reports/analytics-dashboard.tsx')
+
+    expect(REPORTES).toContain("{ id: 'sales', rows: salesData },")
+    expect(REPORTES).toContain("{ id: 'repairs-status', rows: repairsStatusDist },")
+
+    expect(ADMIN).toContain('const exportChartData: ChartSection[] = [')
+    expect(ADMIN).toContain("{ id: 'generic', kind: 'donut', rows: snapshot.repairStatus")
+  })
+})
+
 describe('el exportador usa los normalizadores en todos los graficos', () => {
   const EXPORTADOR = leer('src/components/reports/ChartExporter.tsx')
 
@@ -77,8 +126,13 @@ describe('el exportador usa los normalizadores en todos los graficos', () => {
     expect(EXPORTADOR).not.toContain("label: d.name || 'Sin categoría'")
   })
 
-  it('los seis pasan por el mismo camino', () => {
-    expect(EXPORTADOR.match(/pointLabel\(d, /g)).toHaveLength(6)
-    expect(EXPORTADOR.match(/value: pointValue\(d\)/g)).toHaveLength(6)
+  it('ninguna serie se arma sin pasar por los normalizadores', () => {
+    // Las tres series por fecha comparten `asDatePoint`; las otras tres —donut de
+    // estados, barras de productos, donut de categorias— y la generica llaman
+    // directo. Ninguna lee `d.name` ni `d.sales` por su cuenta.
+    expect(EXPORTADOR).toContain('const asDatePoint = (d: any, idx: number) => ({')
+    expect(EXPORTADOR.match(/asDatePoint/g)!.length).toBeGreaterThanOrEqual(4)
+    expect(EXPORTADOR.match(/pointLabel\(d, /g)!.length).toBeGreaterThanOrEqual(3)
+    expect(EXPORTADOR.match(/value: pointValue\(d\)/g)!.length).toBeGreaterThanOrEqual(3)
   })
 })
