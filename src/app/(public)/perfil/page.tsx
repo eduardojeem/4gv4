@@ -8,6 +8,7 @@ import { EMPTY_CUSTOMER_ACCOUNT_SUMMARY } from '@/lib/profile/customer-account-s
 import type { ProfileOrder } from '@/components/profile/profile-orders'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 
 interface RecentProfileRepair {
   id: string
@@ -20,6 +21,12 @@ interface RecentProfileRepair {
   estimated_cost?: number | null
   paid_amount?: number | null
   payment_status?: string | null
+  organization?: {
+    id: string
+    name: string
+    slug: string
+    logo_url?: string | null
+  } | null
 }
 
 export default async function CustomerProfilePage() {
@@ -51,8 +58,11 @@ export default async function CustomerProfilePage() {
   let recentRepairs: RecentProfileRepair[] = []
   let recentOrders: ProfileOrder[] = []
 
-  const activity = await fetchCustomerActivity(organizationId)
-  const { history, orders, ordersCount } = activity
+  const [activity, userOrganization] = await Promise.all([
+    fetchCustomerActivity(organizationId),
+    getCurrentOrganizationContext(user.id).catch(() => null),
+  ])
+  const { history, orders, ordersCount, storeCreditsByOrganization } = activity
   accountSummary = activity.accountSummary
   stats = {
     totalRepairs: accountSummary.equipment.total,
@@ -77,6 +87,7 @@ export default async function CustomerProfilePage() {
       ? 0
       : Math.max(0, Number(order.total || 0) - Number(order.store_credit_reserved || 0) - Number(order.store_credit_applied || 0)),
     created_at: order.created_at,
+    organization: order.organization || null,
   }))
 
   const profileData = {
@@ -86,7 +97,17 @@ export default async function CustomerProfilePage() {
     avatarUrl: profileRow?.avatar_url || user.user_metadata?.avatar_url || '',
     location: profileRow?.location || '',
     createdAt: user.created_at || '',
-    role: profileRow?.role || 'cliente'
+    role: userOrganization?.role || profileRow?.role || 'cliente',
+    organization: userOrganization
+      ? {
+          id: userOrganization.id,
+          name: userOrganization.name,
+          slug: userOrganization.slug,
+          role: userOrganization.role,
+          plan: userOrganization.plan,
+          logoUrl: userOrganization.logoUrl,
+        }
+      : null,
   }
 
   return (
@@ -96,8 +117,17 @@ export default async function CustomerProfilePage() {
       tenantPrefix={tenantPrefix} 
       stats={stats}
       accountSummary={accountSummary}
+      storeCredits={storeCreditsByOrganization}
       recentRepairs={recentRepairs}
       recentOrders={recentOrders}
+      organization={userOrganization ? {
+        id: userOrganization.id,
+        name: userOrganization.name,
+        slug: userOrganization.slug,
+        role: userOrganization.role,
+        plan: userOrganization.plan,
+        logoUrl: userOrganization.logoUrl,
+      } : null}
     />
   )
 }

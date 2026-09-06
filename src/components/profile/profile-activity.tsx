@@ -3,9 +3,10 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Clock, History, Smartphone, Wrench } from 'lucide-react'
+import { ChevronRight, Clock, History, Smartphone, Store, Wrench } from 'lucide-react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/currency'
+import { customerRepairHref, customerRepairsListHref } from '@/lib/public/store-scoped-href'
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   recibido: { label: 'Recibido', color: 'bg-info/10 text-info' },
@@ -15,6 +16,13 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   listo: { label: 'Listo', color: 'bg-success/10 text-success' },
   entregado: { label: 'Entregado', color: 'bg-muted text-muted-foreground' },
   cancelado: { label: 'Cancelado', color: 'bg-destructive/10 text-destructive' },
+}
+
+export interface RepairStoreInfo {
+  id: string
+  name: string
+  slug: string
+  logo_url?: string | null
 }
 
 interface Repair {
@@ -29,6 +37,7 @@ interface Repair {
   estimated_cost?: number | null
   paid_amount?: number | null
   payment_status?: string | null
+  organization?: RepairStoreInfo | null
 }
 
 interface ProfileActivityProps {
@@ -49,10 +58,11 @@ function formatDate(dateString: string) {
 }
 
 export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityProps) {
-  const repairsHref = tenantPrefix ? `${tenantPrefix}/mis-reparaciones` : '/mis-reparaciones'
+  // El "ver todo" no puede llevar tienda: junta las de todas.
+  const repairsHref = customerRepairsListHref(null, tenantPrefix)
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm">
+    <div id="reparaciones" className="rounded-xl border border-border bg-card shadow-sm scroll-mt-20">
       <div className="flex items-center gap-2 border-b border-border px-5 py-4">
         <History className="h-4 w-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold text-foreground">Actividad Reciente</h2>
@@ -69,53 +79,82 @@ export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityP
             const paidAmount = Math.min(cost, Math.max(0, Number(repair.paid_amount || 0)))
             const isPaid = ['pagado', 'paid'].includes(String(repair.payment_status || '').toLowerCase()) || (cost > 0 && paidAmount >= cost)
             const pendingAmount = isPaid ? 0 : Math.max(0, cost - paidAmount)
+            // El detalle se autoriza contra la tienda de la reparacion: desde el
+            // marketplace, sin ese slug, la pantalla queda vacia.
+            const detailHref = customerRepairHref(
+              repair.organization?.slug,
+              tenantPrefix,
+              repair.ticket_number || repair.id
+            )
             return (
-              <Link
+              <div
                 key={repair.id}
-                // La pagina de destino no lee ningun parametro `search`: acepta
-                // el id o el numero de ticket como segmento de ruta. Con
-                // `?search=` el link caia siempre en el buscador general,
-                // ignorando la reparacion puntual en la que se hizo click.
-                href={`${repairsHref}/${repair.id}`}
-                className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/50"
+                className="flex items-center justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-muted/50 group"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                  <Smartphone className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {repair.device || `${repair.brand} ${repair.model}`}
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> {formatDate(repair.created_at)}
-                    </span>
-                    {repair.ticket_number && <span className="font-mono">{repair.ticket_number}</span>}
+                <Link
+                  href={detailHref}
+                  className="flex min-w-0 flex-1 items-start gap-3"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground mt-0.5">
+                    <Smartphone className="h-4 w-4" />
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <Badge
-                      variant="outline"
-                      className={cn('border-none text-[10px] font-medium', statusInfo.color)}
-                    >
-                      {statusInfo.label}
-                    </Badge>
-                    {cost > 0 && (
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {repair.device || `${repair.brand} ${repair.model}`}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="h-3 w-3" /> {formatDate(repair.created_at)}
+                      </span>
+                      {repair.ticket_number && <span className="font-mono">{repair.ticket_number}</span>}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <Badge
                         variant="outline"
-                        className={cn(
-                          'border-none text-[10px] font-medium',
-                          isPaid
-                            ? 'bg-success/10 text-success'
-                            : 'bg-warning/10 text-warning'
-                        )}
+                        className={cn('border-none text-[10px] font-medium', statusInfo.color)}
                       >
-                        {isPaid ? 'Pagado' : `Por pagar ${formatCurrency(pendingAmount)}`}
+                        {statusInfo.label}
                       </Badge>
-                    )}
+                      {repair.organization && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground/90 bg-muted/80 border border-border/60 px-2 py-0.5 rounded-md">
+                          <Store className="h-3 w-3 text-primary" />
+                          <span className="text-muted-foreground text-[10px]">Taller:</span>
+                          <strong className="font-semibold text-foreground">{repair.organization.name}</strong>
+                        </span>
+                      )}
+                      {cost > 0 && (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'border-none text-[10px] font-medium',
+                            isPaid
+                              ? 'bg-success/10 text-success'
+                              : 'bg-warning/10 text-warning'
+                          )}
+                        >
+                          {isPaid ? 'Pagado' : `Por pagar ${formatCurrency(pendingAmount)}`}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
+                </Link>
+                <div className="flex shrink-0 items-center gap-1">
+                  {repair.organization && (
+                    <Button asChild variant="ghost" size="sm" className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground hidden sm:inline-flex">
+                      <Link href={`/${repair.organization.slug}/inicio`} title="Ver taller / tienda">
+                        <Store className="h-3.5 w-3.5 mr-1 text-primary" />
+                        Taller
+                      </Link>
+                    </Button>
+                  )}
+                  <Link
+                    href={detailHref}
+                    className="p-1 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
                 </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/40" />
-              </Link>
+              </div>
             )
           })
         ) : (

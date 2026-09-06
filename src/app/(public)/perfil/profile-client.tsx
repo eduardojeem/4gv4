@@ -14,8 +14,12 @@ import { ProfileQuickActions } from '@/components/profile/profile-quick-actions'
 import { ProfileActivity } from '@/components/profile/profile-activity'
 import { ProfileOrders, type ProfileOrder } from '@/components/profile/profile-orders'
 import { ProfileAccountSummary } from '@/components/profile/profile-account-summary'
+import { ProfileStoreCarts } from '@/components/profile/profile-store-carts'
+import { ProfileFavoritesWidget } from '@/components/profile/profile-favorites-widget'
+import { ProfileAccountTypeBanner, type UserOrganizationInfo } from '@/components/profile/profile-account-type-banner'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import type { CustomerAccountSummary } from '@/lib/profile/customer-account-summary'
+import type { StoreCreditByOrganization } from '@/components/profile/profile-account-summary'
 import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreCredit'
 
 const profileSchema = z.object({
@@ -25,7 +29,12 @@ const profileSchema = z.object({
   location: z.string().optional()
 })
 
-type ProfileData = z.infer<typeof profileSchema> & { email: string; createdAt?: string; role?: string }
+type ProfileData = z.infer<typeof profileSchema> & {
+  email: string
+  createdAt?: string
+  role?: string
+  organization?: UserOrganizationInfo | null
+}
 
 interface ProfileClientProps {
   initialData: ProfileData
@@ -33,6 +42,7 @@ interface ProfileClientProps {
   tenantPrefix: string
   stats: { totalRepairs: number; activeRepairs: number; readyRepairs: number; deliveredRepairs: number; totalOrders: number }
   accountSummary: CustomerAccountSummary
+  storeCredits?: StoreCreditByOrganization[]
   recentRepairs: Array<{
     id: string
     ticket_number?: string | null
@@ -45,8 +55,15 @@ interface ProfileClientProps {
     estimated_cost?: number | null
     paid_amount?: number | null
     payment_status?: string | null
+    organization?: {
+      id: string
+      name: string
+      slug: string
+      logo_url?: string | null
+    } | null
   }>
   recentOrders: ProfileOrder[]
+  organization?: UserOrganizationInfo | null
 }
 
 export function ProfileClient({
@@ -55,8 +72,10 @@ export function ProfileClient({
   tenantPrefix,
   stats,
   accountSummary,
+  storeCredits = [],
   recentRepairs,
-  recentOrders
+  recentOrders,
+  organization,
 }: ProfileClientProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -151,25 +170,42 @@ export function ProfileClient({
         avatarUrl={profile.avatarUrl}
         phone={profile.phone}
         userId={userId}
+        organizationName={profile.organization?.name || organization?.name}
         onAvatarChange={(url) => setProfile(p => ({ ...p, avatarUrl: url }))}
         onLogout={() => setShowLogoutConfirm(true)}
       />
 
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+        <ProfileAccountTypeBanner
+          organization={profile.organization || organization}
+          userRole={profile.role}
+        />
+
         <div className="mb-8">
           <ProfileStats {...stats} />
         </div>
 
         <div className="mb-8">
-          <ProfileAccountSummary summary={accountSummary} tenantPrefix={tenantPrefix} />
-        </div>
-
-        <div className="mb-8">
-          <PublicStoreCredit
-            authenticated
-            organizationSlug={tenantPrefix.replace(/^\//, '') || null}
+          <ProfileAccountSummary
+            summary={accountSummary}
+            tenantPrefix={tenantPrefix}
+            storeCredits={storeCredits}
           />
         </div>
+
+        {/* Este widget consulta el saldo de UNA organizacion: la de la ruta, y
+            si no hay, la de por defecto. Fuera de una tienda eso mostraba el
+            saldo de un comercio cualquiera al lado del total real del resumen,
+            dos numeros distintos para lo mismo. En el marketplace el desglose
+            por tienda vive en el resumen de cuenta. */}
+        {tenantPrefix && (
+          <div className="mb-8">
+            <PublicStoreCredit
+              authenticated
+              organizationSlug={tenantPrefix.replace(/^\//, '') || null}
+            />
+          </div>
+        )}
 
         <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
           <div className="flex flex-col gap-6">
@@ -188,6 +224,8 @@ export function ProfileClient({
             />
 
             <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={tenantPrefix} />
+            <ProfileFavoritesWidget />
+            <ProfileStoreCarts />
             <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={tenantPrefix} />
           </div>
 

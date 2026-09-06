@@ -8,6 +8,7 @@ import {
   CircleDollarSign,
   CreditCard,
   ShoppingBag,
+  Store,
   WalletCards,
   Wrench,
 } from 'lucide-react'
@@ -17,12 +18,29 @@ import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import type { CustomerAccountSummary } from '@/lib/profile/customer-account-summary'
 
+export interface StoreCreditByOrganization {
+  organization: { id: string; name: string; slug: string; logo_url?: string | null } | null
+  amount: number
+}
+
 interface ProfileAccountSummaryProps {
   summary: CustomerAccountSummary
   tenantPrefix?: string
+  /**
+   * Saldo a favor abierto por tienda. El de una no se gasta en otra, asi que el
+   * total del resumen no es plata disponible cuando hay mas de una: se muestra
+   * el desglose para que se vea de quien es cada parte.
+   */
+  storeCredits?: StoreCreditByOrganization[]
 }
 
-export function ProfileAccountSummary({ summary, tenantPrefix = '' }: ProfileAccountSummaryProps) {
+export function ProfileAccountSummary({
+  summary,
+  tenantPrefix = '',
+  storeCredits = [],
+}: ProfileAccountSummaryProps) {
+  const creditStores = storeCredits.filter((row) => row.amount > 0)
+  const splitAcrossStores = creditStores.length > 1
   const repairsHref = tenantPrefix ? `${tenantPrefix}/mis-reparaciones` : '/mis-reparaciones'
   const creditsHref = tenantPrefix ? `${tenantPrefix}/perfil/creditos` : '/perfil/creditos'
   const netState = summary.netBalance > 0
@@ -57,9 +75,11 @@ export function ProfileAccountSummary({ summary, tenantPrefix = '' }: ProfileAcc
       emphasis: summary.orders.pendingAmount > 0,
     },
     {
-      label: 'Saldo disponible a favor',
+      label: splitAcrossStores ? 'Saldo a favor en tiendas' : 'Saldo disponible a favor',
       value: formatCurrency(summary.storeCredit),
-      detail: 'Disponible para próximas operaciones',
+      detail: splitAcrossStores
+        ? `Repartido en ${creditStores.length} tiendas · se usa en cada una`
+        : 'Disponible para próximas operaciones',
       icon: CircleDollarSign,
       emphasis: false,
     },
@@ -101,6 +121,39 @@ export function ProfileAccountSummary({ summary, tenantPrefix = '' }: ProfileAcc
           </div>
         ))}
       </div>
+
+      {splitAcrossStores && (
+        <div className="border-t border-border bg-muted/20 px-5 py-4">
+          <p className="text-xs font-medium text-muted-foreground">
+            El saldo a favor es de cada tienda: no se puede usar en otra.
+          </p>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {creditStores.map((row, index) => (
+              <li
+                key={row.organization?.id ?? `sin-tienda-${index}`}
+                className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-card px-3 py-2"
+              >
+                <span className="inline-flex min-w-0 items-center gap-1.5">
+                  <Store className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                  {row.organization ? (
+                    <Link
+                      href={`/${row.organization.slug}/perfil`}
+                      className="truncate text-xs font-semibold text-foreground hover:text-primary hover:underline"
+                    >
+                      {row.organization.name}
+                    </Link>
+                  ) : (
+                    <span className="truncate text-xs font-semibold text-muted-foreground">Tienda sin identificar</span>
+                  )}
+                </span>
+                <span className="shrink-0 text-xs font-bold tabular-nums text-foreground">
+                  {formatCurrency(row.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 border-t border-border bg-muted/20 px-4 py-3 sm:flex-row sm:justify-end">
         <Button asChild variant="ghost" size="sm" className="justify-between sm:justify-center">

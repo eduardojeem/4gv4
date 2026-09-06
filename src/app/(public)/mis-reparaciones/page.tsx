@@ -13,6 +13,7 @@ import {
   CircleDollarSign,
   Package,
   PackageCheck,
+  Store,
   Ticket,
   Wrench,
   XCircle,
@@ -32,6 +33,7 @@ import {
   parseCustomerRepairsQuery,
   type CustomerRepairFilter,
 } from '@/lib/public/customer-repairs'
+import { customerRepairHref } from '@/lib/public/store-scoped-href'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
@@ -57,7 +59,10 @@ type RepairRow = {
   estimated_cost: number | null
   paid_amount: number | null
   payment_status: string | null
+  organization_id: string | null
 }
+
+type RepairStore = { id: string; name: string; slug: string }
 
 const STATUS_STYLES: Record<string, string> = {
   recibido: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300',
@@ -142,9 +147,13 @@ export default async function MisReparacionesPage({
   const companyName = settings?.company_info?.name || organization?.name || 'Tienda'
   const parsedQuery = parseCustomerRepairsQuery(await searchParams)
 
+  // Sin tienda en la ruta —o sea desde el marketplace— el cliente puede tener
+  // ficha en varias organizaciones. Antes se tomaba una al azar con `limit(1)`
+  // y sin `order by`: las reparaciones de los demas talleres desaparecian, y de
+  // las que quedaban no se decia a que taller pertenecian.
   let customerQuery = admin
     .from('customers')
-    .select('id, name')
+    .select('id, name, organization_id')
     .eq('profile_id', user.id)
 
   let membershipQuery = admin
@@ -155,12 +164,10 @@ export default async function MisReparacionesPage({
   if (organization) {
     customerQuery = customerQuery.eq('organization_id', organization.id)
     membershipQuery = membershipQuery.eq('organization_id', organization.id)
-  } else {
-    customerQuery = customerQuery.limit(1)
   }
 
-  const [{ data: customer, error: customerError }, { data: membership, error: membershipError }] = await Promise.all([
-    customerQuery.maybeSingle(),
+  const [{ data: customerRows, error: customerError }, { data: membership, error: membershipError }] = await Promise.all([
+    customerQuery,
     organization
       ? membershipQuery.maybeSingle()
       : Promise.resolve({ data: null, error: null }),
@@ -170,6 +177,12 @@ export default async function MisReparacionesPage({
     throw customerError || membershipError
   }
 
+  const customerRecords = customerRows || []
+  const customerIds = customerRecords.map((row) => row.id)
+  // El saludo usa el nombre de la ficha: entre varias tiendas es la misma
+  // persona, pero alguna puede tenerlo vacio.
+  const customer = customerRecords.find((row) => row.name?.trim()) || customerRecords[0] || null
+
   if (!customer || (organization && (!membership || membership.status !== 'active'))) {
     const loginHref = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
     redirect(`${loginHref}?next=${encodeURIComponent(repairsHref)}`)
@@ -177,8 +190,8 @@ export default async function MisReparacionesPage({
 
   let financialRepairsQuery = admin
     .from('repairs')
-    .select('status, final_cost, estimated_cost, paid_amount, payment_status')
-    .eq('customer_id', customer.id)
+    .select('status, final_cost, estimated_cost, paid_amount, payment_status, organization_id')
+    .in('customer_id', customerIds)
     .or('is_deleted.is.null,is_deleted.eq.false')
 
   if (organization) {
@@ -189,6 +202,16 @@ export default async function MisReparacionesPage({
   if (financialRepairsResult.error) throw financialRepairsResult.error
 
   const financialRepairs = financialRepairsResult.data || []
+
+  // Cuantos talleres hay en juego: decide si vale la pena decir de quien es
+  // cada reparacion y como se redacta el encabezado.
+  const repairStoreIds = Array.from(
+    new Set(
+      financialRepairs
+        .map((repair: { organization_id?: string | null }) => repair.organization_id)
+        .filter((id: string | null | undefined): id is string => Boolean(id))
+    )
+  )
 
   const repairAccount = calculateCustomerAccountSummary({
     repairs: financialRepairs,
@@ -213,8 +236,8 @@ export default async function MisReparacionesPage({
 
   let repairsQuery = admin
     .from('repairs')
-    .select('id, ticket_number, device_type, device_brand, device_model, problem_description, status, created_at, final_cost, estimated_cost, paid_amount, payment_status', { count: 'exact' })
-    .eq('customer_id', customer.id)
+    .select('id, ticket_number, device_type, device_brand, device_model, problem_description, status, created_at, final_cost, estimated_cost, paid_amount, payment_status, organization_id', { count: 'exact' })
+    .in('customer_id', customerIds)
     .or('is_deleted.is.null,is_deleted.eq.false')
     .order('created_at', { ascending: false })
     .range(from, to)
@@ -231,6 +254,21 @@ export default async function MisReparacionesPage({
   }
 
   const repairs = (data || []) as RepairRow[]
+
+  // El detalle se autoriza contra la tienda de la reparacion, asi que cada
+  // tarjeta necesita el slug de la suya y no el prefijo de la ruta actual, que
+  // en el marketplace esta vacio. Dentro de una tienda ya esta todo filtrado.
+  let repairStores = new Map<string, RepairStore>()
+  if (!organization && repairStoreIds.length > 0) {
+    const { data: storeRows, error: storesError } = await admin
+      .from('organizations')
+      .select('id, name, slug')
+      .in('id', repairStoreIds)
+
+    if (storesError) throw storesError
+    repairStores = new Map((storeRows || []).map((row) => [row.id, row as RepairStore]))
+  }
+  const showStorePerRepair = !organization && repairStoreIds.length > 1
   const filters: Array<{ key: CustomerRepairFilter; label: string; count: number }> = [
     { key: 'all', label: 'Todas', count: counts.all },
     { key: 'active', label: 'En proceso', count: counts.active },
@@ -261,7 +299,12 @@ export default async function MisReparacionesPage({
             <p className="text-sm font-semibold text-primary">Seguimiento de equipos</p>
             <h1 className="mt-1 text-3xl font-bold text-foreground sm:text-4xl">Mis reparaciones</h1>
             <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-              {customer.name ? `${customer.name.split(' ')[0]}, revisá` : 'Revisá'} el estado, los pagos y el historial de tus equipos en {companyName}.
+              {customer.name ? `${customer.name.split(' ')[0]}, revisá` : 'Revisá'} el estado, los pagos y el historial de tus equipos{' '}
+              {organization
+                ? `en ${companyName}.`
+                : repairStoreIds.length > 1
+                  ? `en los ${repairStoreIds.length} talleres donde dejaste equipos.`
+                  : 'registrados a tu nombre.'}
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-md border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">
@@ -365,7 +408,8 @@ export default async function MisReparacionesPage({
             <div className="grid gap-4 md:grid-cols-2">
               {repairs.map((repair) => {
                 const device = [repair.device_brand, repair.device_model].filter(Boolean).join(' ') || repair.device_type || 'Dispositivo'
-                const detailHref = `${repairsHref}/${encodeURIComponent(repair.ticket_number || repair.id)}`
+                const store = repair.organization_id ? repairStores.get(repair.organization_id) ?? null : null
+                const detailHref = customerRepairHref(store?.slug, tenantPrefix, repair.ticket_number || repair.id)
 
                 return (
                   <Link key={repair.id} href={detailHref} className="group block h-full">
@@ -379,6 +423,12 @@ export default async function MisReparacionesPage({
                             {repair.ticket_number || repair.id.slice(0, 8).toUpperCase()}
                           </p>
                           <h3 className="mt-1 truncate text-base font-semibold text-foreground">{device}</h3>
+                          {showStorePerRepair && store && (
+                            <p className="mt-1.5 inline-flex max-w-full items-center gap-1 rounded-md border border-border/60 bg-muted/70 px-2 py-0.5 text-[11px] font-medium">
+                              <Store className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+                              <span className="truncate text-foreground">{store.name}</span>
+                            </p>
+                          )}
                         </div>
                         <StatusBadge status={repair.status} />
                       </div>
