@@ -319,7 +319,9 @@ export function ProductsClient({
 
   const gridClass =
     view === 'grid'
-      ? 'grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+      // Sin `grid-cols` propio, el telefono caia en una sola columna: una
+      // tarjeta de 343x554 por fila, o sea un producto por pantalla.
+      ? 'grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-5 md:grid-cols-3 lg:grid-cols-4'
       : 'grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
 
   const CurrentSortIcon = currentSortOption.icon
@@ -763,12 +765,16 @@ export function ProductsClient({
                     </Link>
 
                     {/* Categoría / Marca */}
-                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground truncate">
+                    {/* `truncate` en el contenedor no hacia nada: es flex, y quien
+                        tiene que poder encogerse es cada hijo. Con la tarjeta a
+                        166px, marca y categoria pedian 197px y se desbordaban. La
+                        marca se recorta ultima porque es la que identifica. */}
+                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
                       {product.brand && (
-                        <span className="font-medium text-foreground">{product.brand}</span>
+                        <span className="min-w-0 shrink-0 truncate font-medium text-foreground">{product.brand}</span>
                       )}
                       {product.category && (
-                        <span>{product.category.name}</span>
+                        <span className="min-w-0 truncate">{product.category.name}</span>
                       )}
                     </div>
 
@@ -801,13 +807,13 @@ export function ProductsClient({
                     </div>
 
                     {/* Acciones directas: Detalle + Ir a tienda */}
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <div className="grid grid-cols-2 gap-1 sm:gap-1.5">
                       <Button
                         type="button"
                         variant="secondary"
                         size="sm"
                         onClick={() => setSelected(product)}
-                        className="h-8 rounded-xl text-xs font-semibold gap-1 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
+                        className="h-7 gap-1 rounded-lg px-1.5 text-[11px] font-semibold transition-colors hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs"
                       >
                         <Eye className="h-3 w-3" />
                         <span>Detalle</span>
@@ -817,11 +823,15 @@ export function ProductsClient({
                         asChild
                         variant="outline"
                         size="sm"
-                        className="h-8 rounded-xl text-xs font-semibold gap-1 px-2 border-border/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-colors"
+                        className="h-7 gap-1 rounded-lg border-border/80 px-1.5 text-[11px] font-semibold transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs"
                       >
                         <Link href={`/${product.organization_slug}/productos/${product.id}`}>
-                          <span>Ir a tienda</span>
-                          <ArrowRight className="h-3 w-3" />
+                          {/* «Ir a tienda» pide 68px y en dos columnas hay 61:
+                              desbordaba. En el telefono se acorta y la flecha,
+                              que no aporta, se va. */}
+                          <span className="sm:hidden">Tienda</span>
+                          <span className="hidden sm:inline">Ir a tienda</span>
+                          <ArrowRight className="hidden h-3 w-3 sm:inline" />
                         </Link>
                       </Button>
                     </div>
