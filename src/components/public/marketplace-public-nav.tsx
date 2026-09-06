@@ -230,7 +230,12 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
               {mobileSearchOpen ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
             </button>
 
-            <InstallPrompt />
+            {/* Misma geometria que la lupa y el resto de la fila: era el unico
+                con forma de boton de texto entre iconos de 9x9. */}
+            <InstallPrompt
+              variant="icon"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
             <PublicFavorites />
             <ThemeToggle />
 
