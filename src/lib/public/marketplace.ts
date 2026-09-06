@@ -249,6 +249,7 @@ export async function getMarketplaceOrganizations(
     { data: orgSettings },
     { data: branches },
     { data: websiteSettings },
+    { data: countRows },
   ] = await Promise.all([
     supabase
       .from('products')
@@ -274,7 +275,26 @@ export async function getMarketplaceOrganizations(
       .select('organization_id, key, value')
       .in('organization_id', organizationIds)
       .in('key', ['company_info', 'hero_content']),
+    // Conteo aparte, con una sola columna y sin tope por empresa.
+    //
+    // `products_count` salia de contar las filas que le tocaban a cada tienda
+    // dentro del pozo de arriba, que esta capado en `limit * 4` y ordenado a
+    // nivel global: una tienda con muchos productos recientes se llevaba el pozo
+    // entero y las demas mostraban 0 aunque tuvieran catalogo.
+    supabase
+      .from('products')
+      .select('organization_id')
+      .in('organization_id', organizationIds)
+      .eq('is_active', true)
+      .eq('visibility', 'public')
+      .gt('stock_quantity', 0)
+      .limit(20000),
   ])
+
+  const productCountByOrganization = new Map<string, number>()
+  ;((countRows ?? []) as Array<{ organization_id: string }>).forEach((row) => {
+    productCountByOrganization.set(row.organization_id, (productCountByOrganization.get(row.organization_id) ?? 0) + 1)
+  })
 
   const productsByOrganization = new Map<string, ProductRow[]>()
   ;((products ?? []) as unknown as ProductRow[]).forEach((product) => {
@@ -356,7 +376,7 @@ export async function getMarketplaceOrganizations(
       hours,
       ruc,
       business_type: businessType,
-      products_count: organizationProducts.length,
+      products_count: productCountByOrganization.get(organization.id) ?? 0,
       featured_products: organizationProducts.slice(0, 3).map(toPublicProduct),
       review_rating_avg: organization.review_rating_avg ?? null,
       review_count: organization.review_count ?? null,
