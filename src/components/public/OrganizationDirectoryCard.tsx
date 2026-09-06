@@ -1,3 +1,9 @@
+'use client'
+
+// El chip del mapa usa `onClick` y `onKeyDown` —es un `<span>` y no un `<a>`
+// porque la tarjeta entera ya es un `<Link>`, y anidar anclas es HTML invalido—.
+// Sin esta directiva, Next lo renderiza como componente de servidor y falla con
+// «Event handlers cannot be passed to Client Component props».
 import Image from 'next/image'
 import { describeCatalogState } from '@/lib/public/catalog-state'
 import { organizationAccentColor } from '@/lib/public/organization-brand'

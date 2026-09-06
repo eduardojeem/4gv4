@@ -197,7 +197,9 @@ function classifyCategoryIntoBranch(categoryName: string): string {
 export function CategoriesClient({ categories }: Props) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
-  const [viewMode, setViewMode] = useState<ViewMode>('branches')
+  // Cuadricula por defecto: es la que muestra todas las categorias de una,
+  // sin tener que abrir rama por rama.
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [collapsedBranches, setCollapsedBranches] = useState<Record<string, boolean>>({})
 
   const toggleBranch = (branchId: string) => {
@@ -437,7 +439,7 @@ export function CategoriesClient({ categories }: Props) {
                 {/* Sub-ramas / Subcategorías (Contenido Desplegable) */}
                 {!isCollapsed && (
                   <div className="border-t border-border/60 bg-muted/10 p-5">
-                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-2.5 lg:grid-cols-3 xl:grid-cols-4">
                       {subCats.map((sub) => (
                         <Link
                           key={sub.id}
@@ -470,7 +472,7 @@ export function CategoriesClient({ categories }: Props) {
 
       {/* ── VISTA 2: CUADRÍCULA DIRECTA (GRID VIEW) ── */}
       {viewMode === 'grid' && filteredCategories.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
           {filteredCategories.map((cat, i) => {
             const branchId = classifyCategoryIntoBranch(cat.name)
             const branch = MAIN_BRANCHES.find((b) => b.id === branchId) ?? MAIN_BRANCHES[0]
