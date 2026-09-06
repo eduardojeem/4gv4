@@ -11,6 +11,7 @@ describe('customer repairs query', () => {
     expect(parseCustomerRepairsQuery({ status: 'unknown', page: '-4' })).toEqual({
       status: 'all',
       page: 1,
+      store: null,
     })
   })
 

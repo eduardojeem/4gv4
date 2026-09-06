@@ -165,7 +165,9 @@ describe('el historial completo abarca todas las tiendas', () => {
   })
 
   it('cada tarjeta dice de que taller es y enlaza al suyo', () => {
-    expect(PAGINA).toContain('const showStorePerRepair = !organization && repairStoreIds.length > 1')
+    // La condicion vive ahora en repairs-store-attribution: la etiqueta pasa a
+    // mostrarse siempre fuera de una tienda, no solo con mas de un taller.
+    expect(PAGINA).toContain('const showStorePerRepair = !organization')
     expect(PAGINA).toContain('customerRepairHref(store?.slug, tenantPrefix, repair.ticket_number || repair.id)')
   })
 

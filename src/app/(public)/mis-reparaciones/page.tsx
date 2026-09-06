@@ -33,6 +33,7 @@ import {
   parseCustomerRepairsQuery,
   type CustomerRepairFilter,
 } from '@/lib/public/customer-repairs'
+import { RepairStoreFilter } from '@/components/public/repairs/repair-store-filter'
 import { customerRepairHref } from '@/lib/public/store-scoped-href'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
@@ -131,7 +132,7 @@ export default async function MisReparacionesPage({
   searchParams,
   basePath,
 }: {
-  searchParams: Promise<{ status?: string | string[]; page?: string | string[] }>
+  searchParams: Promise<{ status?: string | string[]; page?: string | string[]; store?: string | string[] }>
   basePath?: string
 }) {
   const supabase = await createClient()
@@ -215,8 +216,8 @@ export default async function MisReparacionesPage({
 
   const financialRepairs = financialRepairsResult.data || []
 
-  // Cuantos talleres hay en juego: decide si vale la pena decir de quien es
-  // cada reparacion y como se redacta el encabezado.
+  // Que talleres hay en juego. Se resuelven antes del listado porque el filtro
+  // por tienda tiene que aplicarse tanto a la consulta como a los contadores.
   const repairStoreIds = Array.from(
     new Set(
       financialRepairs
@@ -225,15 +226,46 @@ export default async function MisReparacionesPage({
     )
   )
 
+  let repairStores = new Map<string, RepairStore>()
+  if (!organization && repairStoreIds.length > 0) {
+    const { data: storeRows, error: storesError } = await admin
+      .from('organizations')
+      .select('id, name, slug')
+      .in('id', repairStoreIds)
+
+    if (storesError) throw storesError
+    repairStores = new Map((storeRows || []).map((row) => [row.id, row as RepairStore]))
+  }
+
+  // El slug de la URL se resuelve contra las tiendas donde esta persona tiene
+  // equipos: uno ajeno o inventado no filtra nada, simplemente se ignora.
+  const storesForFilter = Array.from(repairStores.values()).sort((a, b) => a.name.localeCompare(b.name))
+  const selectedStore = parsedQuery.store
+    ? storesForFilter.find((store) => store.slug === parsedQuery.store) ?? null
+    : null
+  const activeStoreSlug = selectedStore?.slug ?? null
+
+  const repairsPerStore = new Map<string, number>()
+  for (const repair of financialRepairs as Array<{ organization_id?: string | null }>) {
+    if (!repair.organization_id) continue
+    repairsPerStore.set(repair.organization_id, (repairsPerStore.get(repair.organization_id) || 0) + 1)
+  }
+
+  const scopedFinancialRepairs = selectedStore
+    ? financialRepairs.filter(
+        (repair: { organization_id?: string | null }) => repair.organization_id === selectedStore.id
+      )
+    : financialRepairs
+
   const repairAccount = calculateCustomerAccountSummary({
-    repairs: financialRepairs,
+    repairs: scopedFinancialRepairs,
     orders: [],
     credits: [],
     storeCreditMovements: [],
   })
 
   const activeStatuses = new Set(['recibido', 'diagnostico', 'reparacion', 'pausado'])
-  const counts = financialRepairs.reduce((result, repair) => {
+  const counts = scopedFinancialRepairs.reduce((result, repair) => {
     result.all += 1
     if (activeStatuses.has(repair.status)) result.active += 1
     if (repair.status === 'listo') result.ready += 1
@@ -255,6 +287,7 @@ export default async function MisReparacionesPage({
     .range(from, to)
 
   if (organization) repairsQuery = repairsQuery.eq('organization_id', organization.id)
+  if (selectedStore) repairsQuery = repairsQuery.eq('organization_id', selectedStore.id)
   if (selectedStatuses) repairsQuery = repairsQuery.in('status', selectedStatuses)
 
   const { data, count: filteredCount, error: repairsError } = await repairsQuery
@@ -262,25 +295,16 @@ export default async function MisReparacionesPage({
 
   const totalPages = Math.max(1, Math.ceil((filteredCount || 0) / CUSTOMER_REPAIRS_PAGE_SIZE))
   if (parsedQuery.page > totalPages && (filteredCount || 0) > 0) {
-    redirect(buildCustomerRepairsHref(repairsHref, parsedQuery.status, totalPages))
+    redirect(buildCustomerRepairsHref(repairsHref, parsedQuery.status, totalPages, activeStoreSlug))
   }
 
   const repairs = (data || []) as RepairRow[]
 
-  // El detalle se autoriza contra la tienda de la reparacion, asi que cada
-  // tarjeta necesita el slug de la suya y no el prefijo de la ruta actual, que
-  // en el marketplace esta vacio. Dentro de una tienda ya esta todo filtrado.
-  let repairStores = new Map<string, RepairStore>()
-  if (!organization && repairStoreIds.length > 0) {
-    const { data: storeRows, error: storesError } = await admin
-      .from('organizations')
-      .select('id, name, slug')
-      .in('id', repairStoreIds)
-
-    if (storesError) throw storesError
-    repairStores = new Map((storeRows || []).map((row) => [row.id, row as RepairStore]))
-  }
-  const showStorePerRepair = !organization && repairStoreIds.length > 1
+  // De que tienda es cada equipo. Fuera de una tienda se muestra SIEMPRE, aunque
+  // haya una sola: la pregunta «de que taller es esto» es justamente la que no
+  // se podia responder desde el marketplace. Adentro de una tienda sobra, porque
+  // todo lo listado es de ella.
+  const showStorePerRepair = !organization
   const filters: Array<{ key: CustomerRepairFilter; label: string; count: number }> = [
     { key: 'all', label: 'Todas', count: counts.all },
     { key: 'active', label: 'En proceso', count: counts.active },
@@ -387,9 +411,24 @@ export default async function MisReparacionesPage({
         </section>
 
         <section aria-labelledby="repair-list-title" className="space-y-5">
+          {/* Solo fuera de una tienda y con mas de un taller: adentro todo es de
+              la misma, y con uno solo el filtro no filtra nada. */}
+          {storesForFilter.length > 1 && (
+            <RepairStoreFilter
+              stores={storesForFilter}
+              counts={repairsPerStore}
+              total={financialRepairs.length}
+              selectedStoreId={selectedStore?.id ?? null}
+              status={parsedQuery.status}
+              baseHref={repairsHref}
+            />
+          )}
+
           <div className="flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 id="repair-list-title" className="text-lg font-semibold text-foreground">Reparaciones registradas</h2>
+              <h2 id="repair-list-title" className="text-lg font-semibold text-foreground">
+                {selectedStore ? `Reparaciones en ${selectedStore.name}` : 'Reparaciones registradas'}
+              </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {filteredCount || 0} resultados en esta vista
               </p>
@@ -399,7 +438,7 @@ export default async function MisReparacionesPage({
                 {filters.map((filter) => (
                   <Link
                     key={filter.key}
-                    href={buildCustomerRepairsHref(repairsHref, filter.key)}
+                    href={buildCustomerRepairsHref(repairsHref, filter.key, 1, activeStoreSlug)}
                     aria-current={parsedQuery.status === filter.key ? 'page' : undefined}
                     className={cn(
                       'inline-flex h-9 items-center gap-2 rounded-md px-3 text-xs font-medium transition-colors',
@@ -495,7 +534,7 @@ export default async function MisReparacionesPage({
               <div className="flex gap-2">
                 {parsedQuery.page > 1 ? (
                   <Button asChild variant="outline" size="sm">
-                    <Link href={buildCustomerRepairsHref(repairsHref, parsedQuery.status, parsedQuery.page - 1)}>
+                    <Link href={buildCustomerRepairsHref(repairsHref, parsedQuery.status, parsedQuery.page - 1, activeStoreSlug)}>
                       <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
                     </Link>
                   </Button>
@@ -506,7 +545,7 @@ export default async function MisReparacionesPage({
                 )}
                 {parsedQuery.page < totalPages ? (
                   <Button asChild variant="outline" size="sm">
-                    <Link href={buildCustomerRepairsHref(repairsHref, parsedQuery.status, parsedQuery.page + 1)}>
+                    <Link href={buildCustomerRepairsHref(repairsHref, parsedQuery.status, parsedQuery.page + 1, activeStoreSlug)}>
                       Siguiente <ChevronRight className="ml-1 h-4 w-4" />
                     </Link>
                   </Button>
