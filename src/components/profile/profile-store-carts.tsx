@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { ShoppingCart, ArrowRight, Trash2, Store, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney } from '@/components/dashboard/orders/format'
 import { PUBLIC_CART_EVENT, type PublicCartItem } from '@/lib/public-cart'
+import { useFavorites } from '@/lib/public/favorites-store'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -43,16 +44,34 @@ type CartVariantMetadata = {
   stockQuantity: number
 }
 
-function getStoreDisplayName(slug: string): string {
+/**
+ * Como se llama la tienda de un carrito.
+ *
+ * El carrito guarda solo el slug, asi que antes se armaba un nombre a mano
+ * capitalizando cada palabra: `servicio-tecnico-don-jose` salia como «Servicio
+ * Tecnico Don Jose», que se parece a un nombre pero no es el nombre. Los
+ * favoritos del mismo navegador SI guardan el nombre real de cada tienda, asi
+ * que se usa ese cuando esta. Si no, se muestra el slug tal cual: un
+ * identificador se lee como identificador y no se confunde con un dato.
+ */
+function getStoreDisplayName(slug: string, realNames: Map<string, string>): string {
   if (!slug || slug === 'default') return 'Tienda Principal'
-  return slug
-    .split('-')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
+  return realNames.get(slug) || slug
 }
 
 export function ProfileStoreCarts() {
   const [carts, setCarts] = useState<ActiveStoreCart[]>([])
+
+  // Los favoritos del mismo navegador traen `{ slug, store }` con el nombre real
+  // de cada tienda: sin esto habria que inventarlo a partir del slug.
+  const favoritesState = useFavorites()
+  const realStoreNames = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const favorite of favoritesState?.items || []) {
+      if (favorite.slug && favorite.store) map.set(favorite.slug, favorite.store)
+    }
+    return map
+  }, [favoritesState?.items])
 
   const scanCarts = useCallback(() => {
     if (typeof window === 'undefined') return
@@ -83,7 +102,7 @@ export function ProfileStoreCarts() {
 
             activeCarts.push({
               tenantSlug: slug,
-              displayName: getStoreDisplayName(slug),
+              displayName: getStoreDisplayName(slug, realStoreNames),
               itemCount,
               totalAmount,
               items,
@@ -157,7 +176,7 @@ export function ProfileStoreCarts() {
         setCarts((current) => current.map((entry) => entry.tenantSlug === cart.tenantSlug ? { ...entry, syncFailed: true } : entry))
       }
     }))
-  }, [])
+  }, [realStoreNames])
 
   useEffect(() => {
     const initialScan = window.setTimeout(scanCarts, 0)

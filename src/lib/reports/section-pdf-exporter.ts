@@ -632,6 +632,13 @@ export async function exportRepairsSectionPDF(params: {
     // `formatNumber(undefined)` los imprimia como «0» sin que nada avisara.
     completed: number
     inProgress: number
+    /**
+     * Equipos entregados DENTRO del periodo, por `delivered_at`. Es otra
+     * pregunta que `completed`, que cuenta cuantas de las ingresadas ya se
+     * entregaron —a la fecha de hoy, no al cierre del periodo—. `null` cuando la
+     * instalacion no tiene esa fecha cargada.
+     */
+    deliveredInPeriod?: number | null
     completionRate: number
     avgCost?: number
     avgTATDays?: number
@@ -652,12 +659,23 @@ export async function exportRepairsSectionPDF(params: {
 
   let y = coverBottom(params.context)
   const kpiMap: Record<string, any> = {
-    'Órdenes Totales': formatNumber(params.metrics.total),
-    'Finalizadas / Entregadas': formatNumber(params.metrics.completed),
+    'Ingresadas en el Período': formatNumber(params.metrics.total),
+    'Ya Entregadas (de las ingresadas)': formatNumber(params.metrics.completed),
     'En Proceso Técnico': formatNumber(params.metrics.inProgress),
     'Tasa de Finalización': `${params.metrics.completionRate.toFixed(1)}%`,
+    ...(params.metrics.deliveredInPeriod !== null && params.metrics.deliveredInPeriod !== undefined ? {
+      'Entregadas en el Período': formatNumber(params.metrics.deliveredInPeriod),
+    } : {}),
   }
   y = renderKpiCardsGrid(doc, kpiMap, y, margin, contentWidth)
+
+  y = renderKpiNote(
+    doc,
+    'Las tres primeras cifras miran los equipos INGRESADOS en el periodo, con el estado que tienen hoy: la tasa sube sola con el tiempo y un equipo que ingreso antes del periodo no cuenta, aunque se haya entregado dentro. «Entregadas en el Periodo» cuenta las entregas hechas entre esas fechas, sin importar cuando ingreso el equipo, y no cambia si se vuelve a bajar el informe mas adelante.',
+    y,
+    margin,
+    contentWidth
+  )
 
   // Gráficos Canvas (Distribución de Estados y Tendencia)
   if (params.statusDist.length > 0) {

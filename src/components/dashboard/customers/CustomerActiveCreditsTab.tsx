@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
+import { searchCustomers } from '@/lib/customers/search'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
@@ -71,25 +72,21 @@ export function CustomerActiveCreditsTab({
   }, [customers, creditSummaries])
 
   // Filtrado y búsqueda
+  //
+  // La busqueda usa el mismo modulo que el resto del panel: antes era un
+  // `includes` crudo que no ignoraba tildes —«jose» no encontraba a «José»—, no
+  // normalizaba telefonos —«0981123» no encontraba «0981 123-456»— y miraba el
+  // RUC solo si no habia codigo de cliente.
   const filteredCustomers = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase()
-    return customersWithCredits.filter(c => {
+    const byStatus = customersWithCredits.filter(c => {
       const summary = creditSummaries[c.id]
       const isOverdue = summary?.next_payment?.is_overdue ?? false
-
-      // Filtro por estado
       if (statusFilter === 'overdue' && !isOverdue) return false
       if (statusFilter === 'up_to_date' && isOverdue) return false
-
-      // Búsqueda por texto
-      if (!term) return true
-      const matchesName = c.name?.toLowerCase().includes(term) ?? false
-      const matchesCode = (c.customerCode || c.ruc || '').toLowerCase().includes(term)
-      const matchesPhone = c.phone?.includes(term) ?? false
-      const matchesEmail = c.email?.toLowerCase().includes(term) ?? false
-
-      return matchesName || matchesCode || matchesPhone || matchesEmail
+      return true
     })
+
+    return searchCustomers(byStatus, searchTerm)
   }, [customersWithCredits, creditSummaries, searchTerm, statusFilter])
 
   // Métricas agregadas

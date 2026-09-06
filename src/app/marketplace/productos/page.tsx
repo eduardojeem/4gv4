@@ -106,7 +106,7 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
               variant="outline"
               className="w-fit shrink-0 gap-2 rounded-xl border-border/80 bg-card shadow-xs hover:bg-muted"
             >
-              <Link href="/marketplace/tiendas">
+              <Link href="/marketplace/empresas">
                 <Store className="h-4 w-4" />
                 Ver todas las tiendas
                 <ArrowRight className="h-4 w-4" />

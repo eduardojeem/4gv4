@@ -173,7 +173,7 @@ export default function ReportsPage() {
   const [selectedProductTrend, setSelectedProductTrend] = useState<{ date: string; sales: number; qty: number }[]>([])
   const [repairsTrend, setRepairsTrend] = useState<{ date: string; count: number }[]>([])
   const [repairsStatusDist, setRepairsStatusDist] = useState<{ name: string; value: number; color: string }[]>([])
-  const [repairsMetrics, setRepairsMetrics] = useState<{ total: number; completed: number; inProgress: number; completionRate: number; avgCost: number; avgTATDays: number; avgLabor: number; avgParts: number }>({ total: 0, completed: 0, inProgress: 0, completionRate: 0, avgCost: 0, avgTATDays: 0, avgLabor: 0, avgParts: 0 })
+  const [repairsMetrics, setRepairsMetrics] = useState<{ total: number; completed: number; inProgress: number; deliveredInPeriod: number | null; completionRate: number; avgCost: number; avgTATDays: number; avgLabor: number; avgParts: number }>({ total: 0, completed: 0, inProgress: 0, deliveredInPeriod: null, completionRate: 0, avgCost: 0, avgTATDays: 0, avgLabor: 0, avgParts: 0 })
   const [creditReport, setCreditReport] = useState<CreditReport | null>(null)
   const [creditReportLoading, setCreditReportLoading] = useState(false)
   const [creditReportError, setCreditReportError] = useState<string | null>(null)
@@ -554,6 +554,30 @@ export default function ReportsPage() {
         if (repairsError) throw repairsError
         const safeRepairs = repairsData ?? []
 
+        // Segunda lectura: equipos ENTREGADOS dentro del periodo.
+        //
+        // La consulta de arriba filtra por `created_at` —cuando ingreso el
+        // equipo— pero el estado que se lee es el de HOY. Eso responde «de las
+        // que entraron, cuantas ya entregamos», que no es lo mismo que «cuantas
+        // entregamos». Un equipo que entro el mes pasado y se entrego este no
+        // aparecia en ningun lado, y el mismo informe daba distinto segun el dia
+        // en que se lo bajaba.
+        const { data: deliveredData, error: deliveredError } = hasRepairs ? await withBranchFilter(
+          supabase
+            .from('repairs')
+            .select('id, delivered_at')
+            .eq('organization_id', organization.id)
+            .eq('status', 'entregado')
+            .gte('delivered_at', dateRange.from.toISOString())
+            .lte('delivered_at', dateRange.to.toISOString()),
+          selectedBranchId
+        ) : { data: [], error: null }
+
+        // Si la columna no esta poblada en esta instalacion, se avisa con null en
+        // vez de mostrar un cero que parece un dato.
+        const deliveredInPeriod = deliveredError ? null : (deliveredData ?? []).length
+        if (deliveredError) console.warn('No se pudo contar las entregas del período:', deliveredError.message)
+
         const trendMap: Record<string, number> = {}
         const statusMap: Record<string, number> = {}
 
@@ -607,6 +631,7 @@ export default function ReportsPage() {
           // lado de una tasa de finalizacion que si era real.
           completed: completion.deliveredCount,
           inProgress: completion.inProgressCount,
+          deliveredInPeriod,
           completionRate,
           avgCost,
           avgTATDays,
@@ -1451,8 +1476,14 @@ export default function ReportsPage() {
           <TabsContent value="repairs" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
               {[
-                { label: 'Reparaciones', value: String(repairsMetrics.total), icon: Wrench, color: 'text-slate-600 dark:text-slate-300', bg: 'bg-slate-50 dark:bg-white/[0.02]' },
+                { label: 'Ingresadas en el período', value: String(repairsMetrics.total), icon: Wrench, color: 'text-slate-600 dark:text-slate-300', bg: 'bg-slate-50 dark:bg-white/[0.02]' },
+                // Dos lecturas distintas: de las que entraron, cuantas ya se
+                // entregaron (sube sola con el tiempo), y cuantas entregas se
+                // hicieron entre esas fechas (no cambia si se mira despues).
                 { label: 'Entregadas / ingresadas', value: `${repairsMetrics.completionRate.toFixed(0)}%`, icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50/50 dark:bg-emerald-950/20' },
+                ...(repairsMetrics.deliveredInPeriod !== null ? [
+                  { label: 'Entregadas en el período', value: String(repairsMetrics.deliveredInPeriod), icon: CheckCircle2, color: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-50/50 dark:bg-teal-950/20' },
+                ] : []),
                 { label: 'Precio final promedio', value: formatFullPrice(Math.round(repairsMetrics.avgCost)), icon: DollarSign, color: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50/50 dark:bg-violet-950/20' },
                 { label: 'M.O. promedio', value: formatFullPrice(Math.round(repairsMetrics.avgLabor)), icon: DollarSign, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50/50 dark:bg-blue-950/20' },
                 { label: 'Repuestos promedio', value: formatFullPrice(Math.round(repairsMetrics.avgParts)), icon: Package, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50/50 dark:bg-amber-950/20' },
