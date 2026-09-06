@@ -71,9 +71,14 @@ describe('los carritos ya no inventan el nombre de la tienda', () => {
     expect(CARRITOS).toContain('if (favorite.slug && favorite.store) map.set(favorite.slug, favorite.store)')
   })
 
-  it('sin nombre real muestra el slug, no un titulo inventado', () => {
-    expect(CARRITOS).toContain('return realNames.get(slug) || slug')
-    expect(CARRITOS).not.toContain(".map((word) => word.charAt(0).toUpperCase() + word.slice(1))")
+  it('el nombre real gana al titulo armado desde el slug', () => {
+    // El titulo queda como respaldo: se lee mejor que un slug crudo, pero pierde
+    // los acentos y no es el nombre que la tienda eligio.
+    const bloque = CARRITOS.slice(CARRITOS.indexOf('function getStoreDisplayName'))
+    expect(bloque.indexOf('const realName = realNames.get(slug)')).toBeLessThan(
+      bloque.indexOf(".map((word) => word.charAt(0).toUpperCase() + word.slice(1))")
+    )
+    expect(bloque).toContain('if (realName) return realName')
   })
 })
 
@@ -90,6 +95,41 @@ describe('un solo buscador de clientes en todo el panel', () => {
     // 318 lineas con reglas propias y cero importadores: existir alcanzaba para
     // confundir a quien buscara donde se filtra.
     expect(hay('src/hooks/use-customer-search.ts')).toBe(false)
+  })
+})
+
+/**
+ * La tarjeta de clientes respondia una sola pregunta —cuantas altas hubo— y la
+ * flecha comparaba altas contra altas. Y con una sucursal elegida mostraba las
+ * cifras de toda la empresa sin decirlo, porque `customers` no tiene sucursal.
+ */
+describe('la tarjeta de clientes dice las dos cosas', () => {
+  it('muestra tambien cuantos compraron, con su propia comparacion', () => {
+    expect(REPORTES).toContain("{buyersCount === 1 ? 'cliente compró' : 'clientes compraron'}")
+    expect(REPORTES).toContain('kpiDelta.buyers !== null')
+  })
+
+  it('el delta de compradores compara compradores, no altas', () => {
+    expect(REPORTES).toContain('buyers: pctChange(uniqueBuyersCurrent, previousBuyers)')
+    // Para poder contarlos hace falta el cliente de cada venta del periodo anterior.
+    expect(REPORTES).toContain(".select('id, total_amount, status, customer_id')")
+  })
+
+  it('avisa que los clientes no se separan por sucursal', () => {
+    expect(REPORTES).toContain('De toda la empresa: los clientes no se separan por sucursal.')
+  })
+})
+
+/**
+ * Dentro de una tienda todo lo listado es de ella: la etiqueta del taller se
+ * repetia igual en cada fila y el boton llevaba a donde ya estabas.
+ */
+describe('el chip de taller solo aparece donde aporta', () => {
+  it('se esconde dentro de una tienda', () => {
+    const ACTIVIDAD = leer('src/components/profile/profile-activity.tsx')
+    expect(ACTIVIDAD).toContain('const showStore = !tenantPrefix')
+    expect(ACTIVIDAD).toContain('{showStore && repair.organization && (')
+    expect(ACTIVIDAD).not.toContain('{repair.organization && (')
   })
 })
 

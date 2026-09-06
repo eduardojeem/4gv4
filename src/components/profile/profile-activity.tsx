@@ -3,7 +3,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Clock, History, Smartphone, Store, Wrench } from 'lucide-react'
+import { ChevronRight, Clock, Smartphone, Store, Wrench } from 'lucide-react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/currency'
 import { customerRepairHref, customerRepairsListHref } from '@/lib/public/store-scoped-href'
@@ -43,6 +43,7 @@ interface Repair {
 interface ProfileActivityProps {
   repairs: Repair[]
   tenantPrefix?: string
+  hideWhenEmpty?: boolean
 }
 
 function formatDate(dateString: string) {
@@ -57,15 +58,34 @@ function formatDate(dateString: string) {
   }
 }
 
-export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityProps) {
+export function ProfileActivity({ repairs, tenantPrefix = '', hideWhenEmpty = false }: ProfileActivityProps) {
   // El "ver todo" no puede llevar tienda: junta las de todas.
   const repairsHref = customerRepairsListHref(null, tenantPrefix)
 
+  // De que taller es cada equipo solo aporta fuera de una tienda. Adentro, todo
+  // lo listado es de ella: la etiqueta se repetiria igual en cada fila y el
+  // boton llevaria a donde ya estas.
+  const showStore = !tenantPrefix
+
+  if (hideWhenEmpty && repairs.length === 0) return null
+
   return (
-    <div id="reparaciones" className="rounded-xl border border-border bg-card shadow-sm scroll-mt-20">
-      <div className="flex items-center gap-2 border-b border-border px-5 py-4">
-        <History className="h-4 w-4 text-muted-foreground" />
-        <h2 className="text-sm font-semibold text-foreground">Actividad Reciente</h2>
+    <section id="reparaciones" aria-labelledby="recent-repairs-title" className="overflow-hidden rounded-xl border border-border bg-card scroll-mt-20">
+      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Wrench className="h-4 w-4" />
+          </div>
+          <div>
+            <h2 id="recent-repairs-title" className="text-sm font-semibold text-foreground">Reparaciones recientes</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">Estado y pagos de tus últimos equipos.</p>
+          </div>
+        </div>
+        {repairs.length > 0 && (
+          <Badge variant="secondary" className="shrink-0 text-[11px]">
+            {repairs.length} {repairs.length === 1 ? 'equipo' : 'equipos'}
+          </Badge>
+        )}
       </div>
 
       <div className="divide-y divide-border">
@@ -89,13 +109,13 @@ export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityP
             return (
               <div
                 key={repair.id}
-                className="flex items-center justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-muted/50 group"
+                className="group flex items-center justify-between gap-2 px-4 py-3 transition-colors hover:bg-muted/40 sm:px-5"
               >
                 <Link
                   href={detailHref}
-                  className="flex min-w-0 flex-1 items-start gap-3"
+                  className="flex min-w-0 flex-1 items-start gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground mt-0.5">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                     <Smartphone className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -115,11 +135,10 @@ export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityP
                       >
                         {statusInfo.label}
                       </Badge>
-                      {repair.organization && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground/90 bg-muted/80 border border-border/60 px-2 py-0.5 rounded-md">
+                      {showStore && repair.organization && (
+                        <span className="inline-flex max-w-full items-center gap-1 text-[11px] text-muted-foreground">
                           <Store className="h-3 w-3 text-primary" />
-                          <span className="text-muted-foreground text-[10px]">Taller:</span>
-                          <strong className="font-semibold text-foreground">{repair.organization.name}</strong>
+                          <span className="truncate">{repair.organization.name}</span>
                         </span>
                       )}
                       {cost > 0 && (
@@ -139,9 +158,9 @@ export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityP
                   </div>
                 </Link>
                 <div className="flex shrink-0 items-center gap-1">
-                  {repair.organization && (
+                  {showStore && repair.organization && (
                     <Button asChild variant="ghost" size="sm" className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground hidden sm:inline-flex">
-                      <Link href={`/${repair.organization.slug}/inicio`} title="Ver taller / tienda">
+                      <Link href={`/${repair.organization.slug}/inicio`} title="Ver taller o tienda">
                         <Store className="h-3.5 w-3.5 mr-1 text-primary" />
                         Taller
                       </Link>
@@ -149,7 +168,8 @@ export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityP
                   )}
                   <Link
                     href={detailHref}
-                    className="p-1 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors"
+                    aria-label={`Ver reparación ${repair.ticket_number || repair.device || repair.id}`}
+                    className="rounded-md p-1 text-muted-foreground/50 transition-colors group-hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Link>
@@ -158,13 +178,13 @@ export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityP
             )
           })
         ) : (
-          <div className="px-5 py-14 text-center">
+          <div className="px-5 py-10 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
               <Wrench className="h-5 w-5 text-muted-foreground" />
             </div>
-            <p className="text-sm font-medium text-muted-foreground">Sin actividad reciente</p>
+            <p className="text-sm font-medium text-foreground">Todavía no tenés reparaciones</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Tus reparaciones apareceran aqui
+              Cuando dejes un equipo en un taller, podrás seguirlo desde acá.
             </p>
           </div>
         )}
@@ -174,11 +194,11 @@ export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityP
         <div className="border-t border-border p-2">
           <Button asChild variant="ghost" size="sm" className="w-full text-xs">
             <Link href={repairsHref}>
-              Ver todo el historial <ChevronRight className="ml-1 h-3 w-3" />
+              Ver todas las reparaciones <ChevronRight className="ml-1 h-3 w-3" />
             </Link>
           </Button>
         </div>
       )}
-    </div>
+    </section>
   )
 }

@@ -117,7 +117,10 @@ interface CategoryData {
 interface KpiDelta {
   sales: number | null
   orders: number | null
+  /** Altas nuevas del periodo. */
   customers: number | null
+  /** Clientes distintos que compraron. Es otra pregunta que `customers`. */
+  buyers: number | null
   aov: number | null
 }
 
@@ -188,7 +191,7 @@ export default function ReportsPage() {
   const [saleItemsAll, setSaleItemsAll] = useState<any[]>([])
   const [totalProfit, setTotalProfit] = useState(0)
   const [profitCoverage, setProfitCoverage] = useState({ coveredItems: 0, totalItems: 0, coveredRevenue: 0 })
-  const [kpiDelta, setKpiDelta] = useState<KpiDelta>({ sales: null, orders: null, customers: null, aov: null })
+  const [kpiDelta, setKpiDelta] = useState<KpiDelta>({ sales: null, orders: null, customers: null, buyers: null, aov: null })
   
   // Estado para controlar refrescos por tiempo real
   const [refreshTrigger, setRefreshTrigger] = useState(0)
@@ -366,7 +369,9 @@ export default function ReportsPage() {
           withBranchFilter(
             supabase
               .from('sales')
-              .select('id, total_amount, status')
+              // `customer_id` para poder comparar compradores contra compradores:
+              // el delta de «Clientes» comparaba altas nuevas.
+              .select('id, total_amount, status, customer_id')
               .eq('organization_id', organization.id)
               .gte('created_at', previousFrom.toISOString())
               .lte('created_at', previousTo.toISOString()),
@@ -407,10 +412,25 @@ export default function ReportsPage() {
           return ((current - previous) / previous) * 100
         }
 
+        // Compradores distintos de cada periodo. Antes el delta de «Clientes»
+        // comparaba altas nuevas contra altas nuevas, que es otra pregunta.
+        const uniqueBuyersCurrent = new Set(
+          completedSales
+            .map((sale) => (sale as { customer_id?: string | null }).customer_id)
+            .filter((id): id is string => Boolean(id))
+        ).size
+
+        const previousBuyers = new Set(
+          previousCompletedSales
+            .map((sale) => (sale as { customer_id?: string | null }).customer_id)
+            .filter((id): id is string => Boolean(id))
+        ).size
+
         setKpiDelta({
           sales: pctChange(currentSalesTotal, previousSalesTotal),
           orders: pctChange(currentOrdersCount, previousOrdersCount),
           customers: pctChange(safeCustomers.length, safePreviousCustomers.length),
+          buyers: pctChange(uniqueBuyersCurrent, previousBuyers),
           aov: pctChange(currentAov, previousAov)
         })
 
@@ -1173,6 +1193,20 @@ export default function ReportsPage() {
                 <p className="text-2xl font-extrabold font-mono text-slate-900 dark:text-white tracking-tight">
                   {totalCustomers}
                 </p>
+                {/* Altas y compradores son dos preguntas distintas y la tarjeta
+                    solo respondia una. */}
+                <p className="text-[11px] text-muted-foreground">
+                  {buyersCount} {buyersCount === 1 ? 'cliente compró' : 'clientes compraron'}
+                  {kpiDelta.buyers !== null && ` (${formatDelta(kpiDelta.buyers)} vs anterior)`}
+                </p>
+                {/* `customers` no tiene sucursal: la ficha del cliente no
+                    pertenece a una, asi que estas dos cifras son de toda la
+                    empresa aunque arriba se haya elegido una sucursal. */}
+                {selectedBranchId && selectedBranchId !== 'all' && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    De toda la empresa: los clientes no se separan por sucursal.
+                  </p>
+                )}
               </div>
               <div className="h-10 w-10 rounded-2xl bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center text-violet-600 dark:text-violet-400 shrink-0">
                 <Users className="h-5 w-5" />

@@ -47,16 +47,24 @@ type CartVariantMetadata = {
 /**
  * Como se llama la tienda de un carrito.
  *
- * El carrito guarda solo el slug, asi que antes se armaba un nombre a mano
- * capitalizando cada palabra: `servicio-tecnico-don-jose` salia como «Servicio
- * Tecnico Don Jose», que se parece a un nombre pero no es el nombre. Los
- * favoritos del mismo navegador SI guardan el nombre real de cada tienda, asi
- * que se usa ese cuando esta. Si no, se muestra el slug tal cual: un
- * identificador se lee como identificador y no se confunde con un dato.
+ * El carrito guarda solo el slug, asi que el nombre se armaba capitalizando cada
+ * palabra: `servicio-tecnico-don-jose` salia «Servicio Tecnico Don Jose» —se
+ * lee bien, pero pierde los acentos y no es el nombre que la tienda eligio—.
+ *
+ * Los favoritos del mismo navegador SI guardan el nombre real de cada tienda,
+ * asi que se usa ese cuando esta. El titulo armado queda como respaldo: es una
+ * aproximacion legible, y mejor que mostrar un slug crudo.
  */
 function getStoreDisplayName(slug: string, realNames: Map<string, string>): string {
   if (!slug || slug === 'default') return 'Tienda Principal'
-  return realNames.get(slug) || slug
+
+  const realName = realNames.get(slug)
+  if (realName) return realName
+
+  return slug
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
 }
 
 export function ProfileStoreCarts() {
