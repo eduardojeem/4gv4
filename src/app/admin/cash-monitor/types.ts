@@ -71,6 +71,11 @@ export interface CashSession {
   expense_total?: number
   last_movement?: CashMovementAdmin | null
   duration_hours?: number
+  /**
+   * Lo guardado en el cierre y lo que suman los movimientos no coinciden.
+   * `null` cuando no hay con que comparar. Manda lo guardado; esto es el aviso.
+   */
+  sales_mismatch?: number | null
 }
 
 export interface CashMovementAdmin {

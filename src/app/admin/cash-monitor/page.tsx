@@ -25,6 +25,7 @@ export default function CashMonitorPage() {
   const { user } = useAuth()
   const {
     sessions,
+    truncatedSessions,
     alerts,
     auditLog,
     metrics,
@@ -398,6 +399,14 @@ export default function CashMonitorPage() {
         {/* Sessions Tab */}
         <TabsContent value="sessions" className="space-y-4">
           <SessionFilters filter={filter} onFilterChange={setFilter} />
+          {/* Hay un tope de seguridad al cargar. Si se alcanza, las metricas de
+              arriba no cubren todo el periodo y hay que decirlo. */}
+          {truncatedSessions > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+              El período tiene {truncatedSessions.toLocaleString('es-PY')} turnos más de los que se cargaron.
+              Los totales de arriba cubren solo los cargados: acotá el período o filtrá por caja para verlos completos.
+            </div>
+          )}
           <SessionsTable
             sessions={sessions}
             loading={loading}
