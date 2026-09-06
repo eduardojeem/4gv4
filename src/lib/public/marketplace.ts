@@ -84,7 +84,14 @@ export type MarketplaceOrganization = {
   ruc?: string | null
   business_type?: string | null
   created_at: string | null
+  /** Publicados y con stock: lo que un comprador ve en el marketplace. */
   products_count: number
+  /**
+   * Todo lo activo, publicado o no. La diferencia con `products_count` es lo que
+   * permite decir «catalogo interno» en vez de «sin productos» a una tienda que
+   * usa el sistema puertas adentro.
+   */
+  products_total?: number
   featured_products: PublicProduct[]
   review_rating_avg?: number | null
   review_count?: number | null
@@ -250,6 +257,7 @@ export async function getMarketplaceOrganizations(
     { data: branches },
     { data: websiteSettings },
     { data: countRows },
+    { data: subscriptionRows },
   ] = await Promise.all([
     supabase
       .from('products')
@@ -275,26 +283,46 @@ export async function getMarketplaceOrganizations(
       .select('organization_id, key, value')
       .in('organization_id', organizationIds)
       .in('key', ['company_info', 'hero_content']),
-    // Conteo aparte, con una sola columna y sin tope por empresa.
+    // Conteo aparte, sin tope por empresa.
     //
     // `products_count` salia de contar las filas que le tocaban a cada tienda
     // dentro del pozo de arriba, que esta capado en `limit * 4` y ordenado a
     // nivel global: una tienda con muchos productos recientes se llevaba el pozo
     // entero y las demas mostraban 0 aunque tuvieran catalogo.
+    //
+    // Se traen todos los activos, no solo los publicados, para poder distinguir
+    // tres situaciones que antes se veian igual: la tienda que todavia no cargo
+    // nada, la que carga pero no publica —usa el sistema puertas adentro— y la
+    // que publica pero se quedo sin stock.
     supabase
       .from('products')
-      .select('organization_id')
+      .select('organization_id, visibility, stock_quantity')
       .in('organization_id', organizationIds)
       .eq('is_active', true)
-      .eq('visibility', 'public')
-      .gt('stock_quantity', 0)
       .limit(20000),
+    // Una tienda suspendida o dada de baja no puede seguir figurando entre los
+    // comercios adheridos. `organizations` no tiene estado propio: vive en la
+    // suscripcion.
+    supabase
+      .from('subscriptions')
+      .select('organization_id, status')
+      .in('organization_id', organizationIds),
   ])
 
+  /** Publicados y con stock: lo que un comprador puede ver en el marketplace. */
   const productCountByOrganization = new Map<string, number>()
-  ;((countRows ?? []) as Array<{ organization_id: string }>).forEach((row) => {
-    productCountByOrganization.set(row.organization_id, (productCountByOrganization.get(row.organization_id) ?? 0) + 1)
-  })
+  /** Todo lo activo, publicado o no: sirve para saber si el catalogo es interno. */
+  const productTotalByOrganization = new Map<string, number>()
+
+  ;((countRows ?? []) as Array<{ organization_id: string; visibility: string | null; stock_quantity: number | null }>)
+    .forEach((row) => {
+      const org = row.organization_id
+      productTotalByOrganization.set(org, (productTotalByOrganization.get(org) ?? 0) + 1)
+
+      if (row.visibility === 'public' && Number(row.stock_quantity ?? 0) > 0) {
+        productCountByOrganization.set(org, (productCountByOrganization.get(org) ?? 0) + 1)
+      }
+    })
 
   const productsByOrganization = new Map<string, ProductRow[]>()
   ;((products ?? []) as unknown as ProductRow[]).forEach((product) => {
@@ -324,7 +352,21 @@ export async function getMarketplaceOrganizations(
     }
   })
 
-  return organizationRows.map((organization) => {
+  /**
+   * Estados que sacan a la tienda de la vitrina publica: `past_due`, `canceled`
+   * y `suspended`. Una organizacion sin fila de suscripcion se deja pasar a
+   * proposito —ya opto explicitamente por publicarse con `marketplace_public` y
+   * `storefront_public`—: excluir por un dato faltante vaciaria la seccion sin
+   * que nadie sepa por que.
+   */
+  const ESTADOS_FUERA_DE_VITRINA = new Set(['past_due', 'canceled', 'suspended'])
+  const excluidas = new Set(
+    ((subscriptionRows ?? []) as Array<{ organization_id: string; status: string | null }>)
+      .filter((row) => ESTADOS_FUERA_DE_VITRINA.has(String(row.status ?? '')))
+      .map((row) => row.organization_id)
+  )
+
+  return organizationRows.filter((organization) => !excluidas.has(organization.id)).map((organization) => {
     const organizationProducts = productsByOrganization.get(organization.id) ?? []
     const resolvedRubro = resolveOrganizationRubro(organization, organizationProducts)
     const orgSetting = settingsByOrganization.get(organization.id)
@@ -377,6 +419,7 @@ export async function getMarketplaceOrganizations(
       ruc,
       business_type: businessType,
       products_count: productCountByOrganization.get(organization.id) ?? 0,
+      products_total: productTotalByOrganization.get(organization.id) ?? 0,
       featured_products: organizationProducts.slice(0, 3).map(toPublicProduct),
       review_rating_avg: organization.review_rating_avg ?? null,
       review_count: organization.review_count ?? null,
@@ -682,13 +725,25 @@ export async function getPublicOrganizationPage(slug: string) {
 
   const { data: organization, error: organizationError } = await supabase
     .from('organizations')
-    .select('id, name, slug, plan, logo_url, created_at')
+    .select('id, name, slug, plan, logo_url, business_vertical, created_at')
     .eq('slug', slug)
     .eq('marketplace_public', true)
     .eq('storefront_public', true)
     .maybeSingle()
 
   if (organizationError || !organization) return null
+
+  // Una tienda suspendida o dada de baja tampoco tiene perfil publico: sin esto
+  // salia del listado pero su pagina seguia accesible por URL directa.
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('status')
+    .eq('organization_id', organization.id)
+    .maybeSingle()
+
+  if (subscription && ['past_due', 'canceled', 'suspended'].includes(String(subscription.status ?? ''))) {
+    return null
+  }
 
   const { data: settings } = await supabase
     .from('website_settings')
@@ -709,11 +764,18 @@ export async function getPublicOrganizationPage(slug: string) {
     .order('created_at', { ascending: false })
     .limit(24)
 
+  const productRows = (products ?? []) as unknown as ProductRow[]
+
   return {
-    organization: organization as OrganizationRow,
+    organization: {
+      ...(organization as OrganizationRow),
+      // El rubro no venia resuelto en esta pagina: se calcula igual que en el
+      // listado, del `business_vertical` o de las categorias de sus productos.
+      rubro: resolveOrganizationRubro(organization as OrganizationRow, productRows),
+    },
     companyInfo: settingsMap.get('company_info') as Record<string, unknown> | undefined,
     heroContent: settingsMap.get('hero_content') as Record<string, unknown> | undefined,
-    products: ((products ?? []) as unknown as ProductRow[]).map(toPublicProduct),
+    products: productRows.map(toPublicProduct),
   }
 }
 

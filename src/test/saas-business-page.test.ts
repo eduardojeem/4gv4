@@ -52,8 +52,10 @@ describe('solo se muestran negocios reales', () => {
  */
 describe('no se inventan datos de un negocio real', () => {
   it('no queda el respaldo de 150 productos', () => {
+    // El texto del estado ahora vive en `describeCatalogState`, compartido con
+    // el directorio del marketplace; acá solo se comprueba que se lo use.
     expect(PAGINA).not.toContain('store.products_count || 150')
-    expect(PAGINA).toContain('Catálogo en preparación')
+    expect(PAGINA).toContain('describeCatalogState(store)')
   })
 
   it('no queda la calificación de 4.9 inventada', () => {

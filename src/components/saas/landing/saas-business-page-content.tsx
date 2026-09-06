@@ -25,6 +25,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
+import { describeCatalogState } from '@/lib/public/catalog-state'
+import { rubroLabel } from '@/lib/public/organization-rubro'
+import { organizationAccentColor, organizationAccentSoft } from '@/lib/public/organization-brand'
 
 
 // Filtros por rubro comercial
@@ -202,9 +205,23 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
               href={`/${store.slug}/inicio`}
               className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-2.5 shadow-2xs transition-all hover:border-cyan-500/50 hover:bg-cyan-50/40 hover:scale-[1.02] dark:border-slate-800 dark:bg-slate-950/80 dark:hover:border-cyan-500/40"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-blue-600 font-bold text-xs text-white shadow-xs">
-                {store.name.slice(0, 2).toUpperCase()}
-              </div>
+              {store.logo_url ? (
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs dark:border-slate-700">
+                  <img
+                    src={store.logo_url}
+                    alt={`Logo de ${store.name}`}
+                    loading="lazy"
+                    className="h-full w-full object-contain p-1"
+                  />
+                </div>
+              ) : (
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-blue-600 font-bold text-xs text-white shadow-xs"
+                  style={organizationAccentColor(store) ? { background: organizationAccentColor(store)! } : undefined}
+                >
+                  {store.name.slice(0, 2).toUpperCase()}
+                </div>
+              )}
               <div className="text-left">
                 <p className="text-xs font-bold text-slate-900 dark:text-white whitespace-nowrap">
                   {store.name}
@@ -293,6 +310,11 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
                   exit={{ opacity: 0, scale: 0.96 }}
                   transition={{ duration: 0.25 }}
                   className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:-translate-y-1 hover:border-cyan-500/40 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900"
+                  style={organizationAccentColor(store)
+                    // El mismo color que la tienda eligio para su pagina publica:
+                    // la tarjeta se parece a lo que el visitante va a encontrar.
+                    ? { borderTop: `3px solid ${organizationAccentColor(store)}` }
+                    : undefined}
                 >
                   {/* Glow decorativo de tarjeta */}
                   <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-cyan-500/10 blur-2xl transition-all group-hover:bg-cyan-500/20" />
@@ -301,9 +323,26 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
                     {/* Header de la tienda */}
                     <div className="flex items-start justify-between gap-3 mb-4">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-600 to-blue-600 font-black text-sm text-white shadow-md">
-                          {store.name.slice(0, 2).toUpperCase()}
-                        </div>
+                        {/* El logo que la tienda cargó; las iniciales solo si no
+                            tiene. Sobre fondo claro para que un logo con fondo
+                            transparente no quede invisible. */}
+                        {store.logo_url ? (
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md dark:border-slate-700">
+                            <img
+                              src={store.logo_url}
+                              alt={`Logo de ${store.name}`}
+                              loading="lazy"
+                              className="h-full w-full object-contain p-1.5"
+                            />
+                          </div>
+                        ) : (
+                          <div
+                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-600 to-blue-600 font-black text-sm text-white shadow-md"
+                            style={organizationAccentColor(store) ? { background: organizationAccentColor(store)! } : undefined}
+                          >
+                            {store.name.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
                         <div>
                           <h3 className="text-base font-bold text-slate-900 dark:text-white line-clamp-1 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
                             {store.name}
@@ -315,9 +354,13 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
                         </div>
                       </div>
 
-                      {store.plan && (
+                      {/* Antes acá iba el plan contratado —LITE, PRO+,
+                          ENTERPRISE—: le decía a cualquier visitante cuánto paga
+                          cada comercio, que no es asunto suyo y no le sirve para
+                          nada. El rubro sí: es por lo que busca. */}
+                      {rubroLabel(store.rubro) && (
                         <Badge variant="outline" className="text-[10px] font-bold border-cyan-500/30 text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/40">
-                          {store.plan}
+                          {rubroLabel(store.rubro)}
                         </Badge>
                       )}
                     </div>
@@ -327,11 +370,30 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
                       {store.slogan || store.description || 'Tienda verificada en plataforma MiPOS'}
                     </p>
 
-                    {/* Dirección física */}
+                    {/* Dirección física. `maps_url` ya viene resuelto: es el enlace
+                        exacto que cargó la tienda, o una búsqueda por su dirección.
+                        Antes la dirección se mostraba como texto suelto y había que
+                        copiarla a mano para llegar. */}
                     {store.address && (
-                      <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
-                        📍 {store.address}
-                      </p>
+                      store.maps_url ? (
+                        <a
+                          href={store.maps_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-2 flex items-center gap-1 text-[11px] text-slate-500 underline-offset-2 hover:text-cyan-600 hover:underline dark:text-slate-400 dark:hover:text-cyan-400"
+                          title={`Ver «${store.name}» en el mapa`}
+                        >
+                          <MapPin className="h-3 w-3 shrink-0 text-cyan-600 dark:text-cyan-400" />
+                          <span className="truncate">{store.address}</span>
+                          <ExternalLink className="h-2.5 w-2.5 shrink-0 opacity-60" />
+                        </a>
+                      ) : (
+                        <p className="mt-2 flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+                          <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
+                          <span className="truncate">{store.address}</span>
+                        </p>
+                      )
                     )}
 
                     {/* Indicadores rápidos.
@@ -342,10 +404,13 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-950/60 p-2 text-slate-600 dark:text-slate-400">
                         <span className="block text-[10px] text-slate-400">Artículos publicados</span>
                         <span className="font-bold text-slate-900 dark:text-white">
-                          {store.products_count > 0
-                            ? `${store.products_count.toLocaleString('es-PY')} producto${store.products_count === 1 ? '' : 's'}`
-                            : 'Catálogo en preparación'}
+                          {describeCatalogState(store).label}
                         </span>
+                        {describeCatalogState(store).hint && (
+                          <span className="mt-0.5 block text-[10px] font-normal text-slate-400">
+                            {describeCatalogState(store).hint}
+                          </span>
+                        )}
                       </div>
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-950/60 p-2 text-slate-600 dark:text-slate-400">
                         <span className="block text-[10px] text-slate-400">Calificación</span>

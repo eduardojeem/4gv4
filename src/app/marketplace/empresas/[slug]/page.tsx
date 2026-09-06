@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { rubroLabel } from '@/lib/public/organization-rubro'
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -22,13 +23,6 @@ import { formatPrice } from '@/lib/utils'
 
 type PageProps = {
   params: Promise<{ slug: string }>
-}
-
-const planStyles: Record<string, string> = {
-  FREE: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400',
-  BASIC: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400',
-  PRO: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-400',
-  ENTERPRISE: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400',
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -72,8 +66,8 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
       : address
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
       : ''
-  const plan = org.plan ?? 'FREE'
-  const planClass = planStyles[plan] ?? planStyles.FREE
+  // Acá iba el plan contratado: le decía al visitante cuánto paga el comercio.
+  const rubro = rubroLabel(org.rubro)
   const tenantUrl = `/${org.slug}/inicio`
   const hasContact = phone || address || email || website
 
@@ -123,7 +117,11 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
 
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${planClass}`}>{plan}</span>
+                  {rubro && (
+                    <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700 dark:border-cyan-900 dark:bg-cyan-950/40 dark:text-cyan-300">
+                      {rubro}
+                    </span>
+                  )}
                   <Badge variant="outline" className="gap-1.5 text-xs">
                     <Store className="h-3 w-3" />
                     Empresa verificada

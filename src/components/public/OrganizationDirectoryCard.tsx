@@ -1,4 +1,6 @@
 import Image from 'next/image'
+import { describeCatalogState } from '@/lib/public/catalog-state'
+import { organizationAccentColor } from '@/lib/public/organization-brand'
 import Link from 'next/link'
 import {
   Building2,
@@ -58,6 +60,11 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
         'hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg',
         className
       )}
+      // El color que la tienda eligio para su pagina publica: la tarjeta
+      // anticipa lo que el visitante va a encontrar si entra.
+      style={organizationAccentColor(organization)
+        ? { borderTop: `3px solid ${organizationAccentColor(organization)}` }
+        : undefined}
     >
       {/* Product preview thumbnails + logo overlay */}
       <div className="relative grid h-28 grid-cols-3 overflow-visible bg-muted/40">
@@ -185,9 +192,11 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
 
         {/* Estadísticas de la tienda */}
         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-          <p className="flex items-center gap-1 font-medium">
+          {/* «0 productos» no distinguia una tienda vacia de una que carga su
+              catalogo para uso interno y no publica al marketplace. */}
+          <p className="flex items-center gap-1 font-medium" title={describeCatalogState(organization).hint ?? undefined}>
             <Package className="h-3.5 w-3.5 opacity-70" />
-            {organization.products_count} producto{organization.products_count !== 1 ? 's' : ''}
+            {describeCatalogState(organization).label}
           </p>
 
           {(organization.review_count ?? 0) > 0 && (

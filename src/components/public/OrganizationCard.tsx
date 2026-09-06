@@ -1,15 +1,9 @@
 import Image from 'next/image'
+import { rubroLabel } from '@/lib/public/organization-rubro'
 import Link from 'next/link'
 import { ArrowRight, Building2, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
-
-const planStyles: Record<string, string> = {
-  FREE: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
-  BASIC: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900',
-  PRO: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900',
-  ENTERPRISE: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
-}
 
 type Props = {
   organization: MarketplaceOrganization
@@ -17,8 +11,8 @@ type Props = {
 }
 
 export function OrganizationCard({ organization, className }: Props) {
-  const plan = organization.plan ?? 'FREE'
-  const planClass = planStyles[plan] ?? planStyles.FREE
+  // Acá iba el plan contratado: le decía al visitante cuánto paga el comercio.
+  const rubro = rubroLabel(organization.rubro)
 
   return (
     <Link
@@ -50,9 +44,11 @@ export function OrganizationCard({ organization, className }: Props) {
               </div>
             )}
           </div>
-          <span className={cn('rounded-md border px-2 py-0.5 text-xs font-medium', planClass)}>
-            {plan}
-          </span>
+          {rubro && (
+            <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700 dark:border-cyan-900 dark:bg-cyan-950/40 dark:text-cyan-300">
+              {rubro}
+            </span>
+          )}
         </div>
 
         {/* Name + slug */}
