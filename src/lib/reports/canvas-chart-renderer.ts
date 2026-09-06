@@ -145,7 +145,7 @@ export function renderAreaChartCanvas(
 
   for (let i = 0; i < points.length; i += stepX) {
     const p = points[i]
-    ctx.fillText(p.label, p.x, height - 12)
+    ctx.fillText(String(p.label ?? ''), p.x, height - 12)
   }
 
   return canvas.toDataURL('image/png', 0.95)
@@ -205,7 +205,10 @@ export function renderBarChartCanvas(
     ctx.fillStyle = '#1e293b'
     ctx.font = 'bold 10px Helvetica, Arial, sans-serif'
     ctx.textAlign = 'right'
-    const cleanLabel = item.label.length > 28 ? `${item.label.slice(0, 26)}...` : item.label
+    // `label` llega de datasets que no siempre traen ese campo: un PDF entero no
+    // puede caerse porque a una fila le falte el nombre.
+    const rawLabel = String(item.label ?? '')
+    const cleanLabel = rawLabel.length > 28 ? `${rawLabel.slice(0, 26)}...` : rawLabel
     ctx.fillText(`#${idx + 1} ${cleanLabel}`, padLeft - 14, y + barH - 4)
 
     // Barra de fondo gris
@@ -323,7 +326,8 @@ export function renderDonutChartCanvas(
     ctx.fillStyle = '#1e293b'
     ctx.font = '10px Helvetica, Arial, sans-serif'
     ctx.textAlign = 'left'
-    const nameStr = item.label.length > 25 ? `${item.label.slice(0, 23)}...` : item.label
+    const rawLabel = String(item.label ?? '')
+    const nameStr = rawLabel.length > 25 ? `${rawLabel.slice(0, 23)}...` : rawLabel
     ctx.fillText(nameStr, legendX + 20, y + 9)
 
     // Valor y %

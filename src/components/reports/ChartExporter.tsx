@@ -25,6 +25,7 @@ import {
   renderBarChartCanvas,
   renderDonutChartCanvas
 } from '@/lib/reports/canvas-chart-renderer'
+import { chartPointLabel, chartPointValue } from '@/lib/reports/chart-points'
 
 // ── Helpers de formato monetario y fechas ─────────────────────────────────────
 const formatGs = (amount: number | null | undefined): string => {
@@ -314,6 +315,11 @@ export function ChartExporter({
       })
 
       // Datasets reales recibidos de la vista
+      // Los dos tableros que usan este exportador traen los puntos con claves
+      // distintas: ver `lib/reports/chart-points`.
+      const pointLabel = chartPointLabel
+      const pointValue = chartPointValue
+
       const salesDataset = chartData?.[0] ?? data ?? []
       const repairsTrendDataset = chartData?.[1] ?? []
       const repairsStatusDataset = chartData?.[2] ?? []
@@ -534,17 +540,17 @@ export function ChartExporter({
 
         let chartDataUrl: string | null = null
         if (i === 0 && salesDataset.length > 0) {
-          chartDataUrl = renderAreaChartCanvas(chartTitle, salesDataset.map((d: any) => ({ label: formatDateStr(d.date), value: Number(d.sales) || 0 })), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
+          chartDataUrl = renderAreaChartCanvas(chartTitle, salesDataset.map((d: any, idx: number) => ({ label: d?.date ? formatDateStr(d.date) : pointLabel(d, String(idx + 1)), value: pointValue(d) })), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
         } else if (i === 1 && repairsTrendDataset.length > 0) {
-          chartDataUrl = renderAreaChartCanvas(chartTitle, repairsTrendDataset.map((d: any) => ({ label: formatDateStr(d.date), value: Number(d.count) || 0 })), { lineColor: '#dc2626', fillColor: '#ef4444', formatValue: (v) => `${v} orden${v === 1 ? '' : 'es'}` })
+          chartDataUrl = renderAreaChartCanvas(chartTitle, repairsTrendDataset.map((d: any, idx: number) => ({ label: d?.date ? formatDateStr(d.date) : pointLabel(d, String(idx + 1)), value: pointValue(d) })), { lineColor: '#dc2626', fillColor: '#ef4444', formatValue: (v) => `${v} orden${v === 1 ? '' : 'es'}` })
         } else if (i === 2 && repairsStatusDataset.length > 0) {
-          chartDataUrl = renderDonutChartCanvas(chartTitle, repairsStatusDataset.map((d: any) => ({ label: d.name, value: Number(d.value) || 0, color: d.color })), { formatValue: (v) => `${v} equipos` })
+          chartDataUrl = renderDonutChartCanvas(chartTitle, repairsStatusDataset.map((d: any) => ({ label: pointLabel(d, 'Sin dato'), value: pointValue(d), color: d?.color })), { formatValue: (v) => `${v} equipos` })
         } else if (i === 3 && productsDataset.length > 0) {
-          chartDataUrl = renderBarChartCanvas(chartTitle, productsDataset.slice(0, 10).map((d: any) => ({ label: d.name || 'Sin nombre', value: Number(d.sales) || 0 })), { barColor: '#059669', formatValue: formatGs })
+          chartDataUrl = renderBarChartCanvas(chartTitle, productsDataset.slice(0, 10).map((d: any) => ({ label: pointLabel(d, 'Sin nombre'), value: pointValue(d) })), { barColor: '#059669', formatValue: formatGs })
         } else if (i === 4 && selectedProductDataset.length > 0) {
-          chartDataUrl = renderAreaChartCanvas(chartTitle, selectedProductDataset.map((d: any) => ({ label: formatDateStr(d.date), value: Number(d.sales) || 0 })), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
+          chartDataUrl = renderAreaChartCanvas(chartTitle, selectedProductDataset.map((d: any, idx: number) => ({ label: d?.date ? formatDateStr(d.date) : pointLabel(d, String(idx + 1)), value: pointValue(d) })), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
         } else if (i === 5 && categoriesDataset.length > 0) {
-          chartDataUrl = renderDonutChartCanvas(chartTitle, categoriesDataset.slice(0, 8).map((d: any) => ({ label: d.name || 'Sin categoría', value: Number(d.sales) || 0 })), { formatValue: formatGs })
+          chartDataUrl = renderDonutChartCanvas(chartTitle, categoriesDataset.slice(0, 8).map((d: any) => ({ label: pointLabel(d, 'Sin categoría'), value: pointValue(d) })), { formatValue: formatGs })
         }
 
         // Si no hay datos específicos para la página, omitir para no generar hoja vacía
