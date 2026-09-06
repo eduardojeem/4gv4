@@ -9,6 +9,7 @@ import type { UserRole } from '@/lib/auth/roles-permissions'
 import {
   getTenantSlugFromPath,
   getTenantSlugFromRequest,
+  isReservedTenantSlug,
   isTenantPublicSection,
   normalizeDefaultPublicOrgSlug,
 } from '@/lib/saas/tenant'
@@ -61,7 +62,9 @@ function redirectLegacyPublicPath(request: NextRequest) {
 
 async function redirectOrganizationSlugAlias(request: NextRequest) {
   const [maybeSlug, section] = request.nextUrl.pathname.split('/').filter(Boolean)
-  if (!maybeSlug || !isTenantPublicSection(section)) {
+  // `marketplace` y compania son secciones de la app, no tiendas: sin esto se
+  // buscaba en la base una organizacion llamada «marketplace» en cada request.
+  if (!maybeSlug || isReservedTenantSlug(maybeSlug) || !isTenantPublicSection(section)) {
     return null
   }
 

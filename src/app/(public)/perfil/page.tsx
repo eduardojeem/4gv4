@@ -29,7 +29,14 @@ interface RecentProfileRepair {
   } | null
 }
 
-export default async function CustomerProfilePage() {
+/**
+ * `basePath` es el prefijo de los enlaces, y no siempre coincide con el del
+ * tenant. En el marketplace no hay tenant —los datos son de todas las tiendas—
+ * pero las pantallas del cliente cuelgan de `/marketplace`: sin distinguir los
+ * dos, cada enlace del perfil sacaba a la persona del marketplace y la dejaba
+ * en la vidriera de la tienda por defecto.
+ */
+export default async function CustomerProfilePage({ basePath }: { basePath?: string } = {}) {
   const supabase = await createClient()
   const { data: authData } = await supabase.auth.getUser()
   const user = authData?.user
@@ -37,9 +44,10 @@ export default async function CustomerProfilePage() {
   const headerStore = await headers()
   const tenantSlug = headerStore.get('x-tenant-slug')
   const tenantPrefix = await getPublicTenantPathPrefix()
+  const linkPrefix = basePath ?? tenantPrefix
   
   if (!user) {
-    const profilePath = tenantPrefix ? `${tenantPrefix}/perfil` : '/perfil'
+    const profilePath = `${linkPrefix}/perfil`
     const loginPath = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
     redirect(`${loginPath}?next=${encodeURIComponent(profilePath)}`)
   }
@@ -114,7 +122,8 @@ export default async function CustomerProfilePage() {
     <ProfileClient 
       initialData={profileData} 
       userId={user.id} 
-      tenantPrefix={tenantPrefix} 
+      tenantPrefix={tenantPrefix}
+      linkPrefix={linkPrefix}
       stats={stats}
       accountSummary={accountSummary}
       storeCredits={storeCreditsByOrganization}

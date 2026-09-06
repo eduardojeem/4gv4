@@ -118,16 +118,28 @@ function formatDate(value: string | null): string {
   }).format(new Date(value))
 }
 
+/**
+ * `basePath` es el prefijo de los enlaces de esta pantalla —filtros, paginado y
+ * la vuelta al perfil—. Fuera de una tienda no coincide con el del tenant: en
+ * el marketplace no hay tenant pero la lista vive en `/marketplace`, y con el
+ * prefijo vacio cada filtro devolvia a la persona a la vidriera por defecto.
+ *
+ * Los enlaces al detalle de cada reparacion son otra cosa: esos van a la tienda
+ * duena, porque ahi se autoriza. Siguen usando `tenantPrefix` como respaldo.
+ */
 export default async function MisReparacionesPage({
   searchParams,
+  basePath,
 }: {
   searchParams: Promise<{ status?: string | string[]; page?: string | string[] }>
+  basePath?: string
 }) {
   const supabase = await createClient()
   const { data: auth } = await supabase.auth.getUser()
   const user = auth?.user
   const tenantPrefix = await getPublicTenantPathPrefix()
-  const repairsHref = prefixPublicTenantPath(tenantPrefix, '/mis-reparaciones')
+  const linkPrefix = basePath ?? tenantPrefix
+  const repairsHref = prefixPublicTenantPath(linkPrefix, '/mis-reparaciones')
 
   if (!user) {
     const loginHref = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
@@ -291,7 +303,7 @@ export default async function MisReparacionesPage({
         <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Button asChild variant="ghost" size="sm" className="-ml-3 mb-3 text-muted-foreground">
-              <Link href={tenantPrefix ? `${tenantPrefix}/perfil` : '/perfil'}>
+              <Link href={`${linkPrefix}/perfil`}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Volver al perfil
               </Link>

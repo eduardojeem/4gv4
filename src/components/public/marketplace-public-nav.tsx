@@ -20,11 +20,13 @@ import {
   Store,
   User,
   X,
-  Layers,
   Sparkles,
+  Wrench,
+  ShoppingCart,
 } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { useAuth } from '@/contexts/auth-context'
@@ -267,34 +269,108 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuContent align="end" className="w-64">
                   <DropdownMenuLabel className="font-normal">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold">{user.profile?.name || 'Usuario'}</p>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-bold truncate">{user.profile?.name || 'Usuario'}</p>
+                        {canAccessDashboard ? (
+                          <Badge className="bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30 text-[10px] font-bold shrink-0">
+                            🏢 Empresa
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground font-semibold shrink-0">
+                            👤 Cliente
+                          </Badge>
+                        )}
+                      </div>
                       <p className="break-all text-xs text-muted-foreground">{user.email}</p>
                     </div>
                   </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {canAccessDashboard && (
-                    <DropdownMenuItem asChild>
-                      <Link href="/dashboard" className="cursor-pointer">
-                        <LayoutDashboard className="mr-2 h-4 w-4" />
-                        Panel administrativo
-                      </Link>
-                    </DropdownMenuItem>
+
+                  {canAccessDashboard ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Gestión Comercial
+                      </p>
+                      <DropdownMenuItem asChild>
+                        <Link href="/dashboard" className="cursor-pointer font-semibold text-primary">
+                          <LayoutDashboard className="mr-2 h-4 w-4" />
+                          Panel Administrativo (POS)
+                        </Link>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuSeparator />
+                      <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Mi Cuenta Comprador
+                      </p>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/perfil" className="cursor-pointer font-medium">
+                          <User className="mr-2 h-4 w-4 text-primary" />
+                          Mi Perfil
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/perfil#pedidos" className="cursor-pointer">
+                          <Package className="mr-2 h-4 w-4 text-muted-foreground" />
+                          Mis Compras en Tiendas
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/favoritos" className="cursor-pointer">
+                          <Heart className="mr-2 h-4 w-4 text-rose-500 fill-rose-500/20" />
+                          Mis Favoritos
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/mis-reparaciones" className="cursor-pointer">
+                          <Wrench className="mr-2 h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                          Mis Reparaciones
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
+                    <>
+                      <DropdownMenuSeparator />
+                      <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Mi Cuenta Cliente
+                      </p>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/perfil" className="cursor-pointer font-medium">
+                          <User className="mr-2 h-4 w-4 text-primary" />
+                          Mi Perfil
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/perfil#pedidos" className="cursor-pointer">
+                          <Package className="mr-2 h-4 w-4 text-muted-foreground" />
+                          Mis Compras en Tiendas
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/favoritos" className="cursor-pointer">
+                          <Heart className="mr-2 h-4 w-4 text-rose-500 fill-rose-500/20" />
+                          Mis Favoritos
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/mis-reparaciones" className="cursor-pointer">
+                          <Wrench className="mr-2 h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                          Mis Reparaciones
+                        </Link>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href="/saas" className="cursor-pointer text-cyan-600 dark:text-cyan-400 font-semibold">
+                          <Building2 className="mr-2 h-4 w-4" />
+                          ¿Tenés un negocio? Publicar tienda
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
                   )}
-                  <DropdownMenuItem asChild>
-                    <Link href="/marketplace" className="cursor-pointer">
-                      <ShoppingBag className="mr-2 h-4 w-4" />
-                      Marketplace
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/saas" className="cursor-pointer">
-                      <Rocket className="mr-2 h-4 w-4" />
-                      Planes SaaS
-                    </Link>
-                  </DropdownMenuItem>
+
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={handleLogout}
@@ -397,21 +473,59 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-foreground">
-                        {user.profile?.name || 'Usuario'}
-                      </p>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <p className="truncate text-sm font-bold text-foreground">
+                          {user.profile?.name || 'Usuario'}
+                        </p>
+                        {canAccessDashboard ? (
+                          <Badge className="bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30 text-[9px] font-bold shrink-0">
+                            🏢 Empresa
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] text-muted-foreground font-semibold shrink-0">
+                            👤 Cliente
+                          </Badge>
+                        )}
+                      </div>
                       <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                     </div>
                   </div>
 
                   {canAccessDashboard && (
-                    <Button asChild variant="outline" size="sm" className="w-full justify-start gap-2 rounded-xl">
+                    <Button asChild size="sm" className="w-full justify-start gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-xs text-xs">
                       <Link href="/dashboard" onClick={() => setMobileDrawerOpen(false)}>
-                        <LayoutDashboard className="h-4 w-4 text-primary" />
-                        Panel administrativo
+                        <LayoutDashboard className="h-4 w-4" />
+                        Panel Administrativo (POS)
                       </Link>
                     </Button>
                   )}
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <Button asChild variant="outline" size="sm" className="h-8 justify-start gap-1.5 rounded-lg text-xs font-semibold">
+                      <Link href="/marketplace/perfil" onClick={() => setMobileDrawerOpen(false)}>
+                        <User className="h-3.5 w-3.5 text-primary" />
+                        Mi Perfil
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" size="sm" className="h-8 justify-start gap-1.5 rounded-lg text-xs font-semibold">
+                      <Link href="/marketplace/perfil#pedidos" onClick={() => setMobileDrawerOpen(false)}>
+                        <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                        Mis Compras
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" size="sm" className="h-8 justify-start gap-1.5 rounded-lg text-xs font-semibold">
+                      <Link href="/marketplace/favoritos" onClick={() => setMobileDrawerOpen(false)}>
+                        <Heart className="h-3.5 w-3.5 text-rose-500" />
+                        Favoritos
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" size="sm" className="h-8 justify-start gap-1.5 rounded-lg text-xs font-semibold">
+                      <Link href="/marketplace/mis-reparaciones" onClick={() => setMobileDrawerOpen(false)}>
+                        <Wrench className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                        Reparaciones
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">

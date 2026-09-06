@@ -17,6 +17,30 @@ export const TENANT_PUBLIC_SECTION_NAMES = [
 const TENANT_PATH_SECTIONS = new Set<string>(TENANT_PUBLIC_SECTION_NAMES)
 const SAFE_TENANT_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,47}$/
 
+/**
+ * Primeros segmentos que son secciones de la app, no tiendas.
+ *
+ * El slug sale del path: `/una-tienda/perfil` da `una-tienda`. Pero el
+ * marketplace tiene sus propias pantallas de cliente —`/marketplace/perfil`,
+ * `/marketplace/mis-reparaciones`, `/marketplace/track`—, y sin esta lista el
+ * primer segmento se leia como el nombre de una tienda llamada «marketplace»:
+ * se resolvia contra la base, no existia, y la pagina terminaba en un 404.
+ */
+const RESERVED_FIRST_SEGMENTS = new Set([
+  'marketplace',
+  'saas',
+  'dashboard',
+  'admin',
+  'superadmin',
+  'api',
+  'auth',
+  'login',
+])
+
+export function isReservedTenantSlug(value: string | undefined | null): boolean {
+  return !!value && RESERVED_FIRST_SEGMENTS.has(value.toLowerCase())
+}
+
 function stripPort(host: string) {
   return host.split(':')[0]?.toLowerCase() ?? ''
 }
@@ -76,6 +100,10 @@ export function getTenantSlugFromPath(pathname: string) {
     return null
   }
 
+  if (isReservedTenantSlug(maybeSlug)) {
+    return null
+  }
+
   return slugifyTenantName(maybeSlug)
 }
 
@@ -85,7 +113,9 @@ export function getTenantSlugFromPath(pathname: string) {
  */
 export function getTenantSlugFromPathname(pathname: string): string {
   const segments = pathname.split('/').filter(Boolean)
-  return segments.length > 1 && TENANT_PATH_SECTIONS.has(segments[1])
+  return segments.length > 1 &&
+    TENANT_PATH_SECTIONS.has(segments[1]) &&
+    !isReservedTenantSlug(segments[0])
     ? segments[0]
     : ''
 }

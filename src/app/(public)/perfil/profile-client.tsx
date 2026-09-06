@@ -39,7 +39,14 @@ type ProfileData = z.infer<typeof profileSchema> & {
 interface ProfileClientProps {
   initialData: ProfileData
   userId: string
+  /** Tienda de la ruta. Vacio fuera de una: decide el alcance de los datos. */
   tenantPrefix: string
+  /**
+   * Prefijo de los enlaces. Coincide con `tenantPrefix` dentro de una tienda,
+   * pero en el marketplace es `/marketplace`: ahi no hay tenant y sin esto cada
+   * enlace salia del marketplace.
+   */
+  linkPrefix?: string
   stats: { totalRepairs: number; activeRepairs: number; readyRepairs: number; deliveredRepairs: number; totalOrders: number }
   accountSummary: CustomerAccountSummary
   storeCredits?: StoreCreditByOrganization[]
@@ -70,6 +77,7 @@ export function ProfileClient({
   initialData,
   userId,
   tenantPrefix,
+  linkPrefix = tenantPrefix,
   stats,
   accountSummary,
   storeCredits = [],
@@ -156,7 +164,7 @@ export function ProfileClient({
   }
 
   const handleLogout = async () => {
-    try { await supabase.auth.signOut(); toast.success('Sesion cerrada'); router.push(tenantPrefix ? `${tenantPrefix}/inicio` : '/login') }
+    try { await supabase.auth.signOut(); toast.success('Sesion cerrada'); router.push(tenantPrefix ? `${tenantPrefix}/inicio` : linkPrefix || '/login') }
     catch { toast.error('Error al cerrar sesion') }
   }
 
@@ -188,7 +196,7 @@ export function ProfileClient({
         <div className="mb-8">
           <ProfileAccountSummary
             summary={accountSummary}
-            tenantPrefix={tenantPrefix}
+            tenantPrefix={linkPrefix}
             storeCredits={storeCredits}
           />
         </div>
@@ -223,14 +231,14 @@ export function ProfileClient({
               onSubmit={handleUpdateProfile}
             />
 
-            <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={tenantPrefix} />
-            <ProfileFavoritesWidget />
+            <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={linkPrefix} />
+            <ProfileFavoritesWidget linkPrefix={linkPrefix} />
             <ProfileStoreCarts />
-            <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={tenantPrefix} />
+            <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />
           </div>
 
           <div className="lg:sticky lg:top-24 lg:self-start">
-            <ProfileActivity repairs={recentRepairs} tenantPrefix={tenantPrefix} />
+            <ProfileActivity repairs={recentRepairs} tenantPrefix={linkPrefix} />
           </div>
         </div>
       </div>
