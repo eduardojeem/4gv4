@@ -98,6 +98,7 @@ export function ProfileClient({
   const [initialProfile, setInitialProfile] = useState<ProfileData>(initialData)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const isMarketplaceProfile = linkPrefix === '/marketplace'
 
   const isDirty = useMemo(() => {
     return JSON.stringify(profile) !== JSON.stringify(initialProfile)
@@ -188,7 +189,87 @@ export function ProfileClient({
         onLogout={() => setShowLogoutConfirm(true)}
       />
 
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        {isMarketplaceProfile ? (
+          <>
+            {organization && (
+              <section aria-labelledby="store-management-title" className="mb-10">
+                <div className="mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">Para tu tienda</p>
+                  <h2 id="store-management-title" className="mt-1 text-xl font-bold tracking-tight">Administrar mi negocio</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Accesos de gestión separados de tus compras personales.</p>
+                </div>
+                <ProfileAccountTypeBanner organization={profile.organization || organization} userRole={profile.role} />
+              </section>
+            )}
+
+            <section aria-labelledby="marketplace-activity-title" className="mb-10">
+              <div className="mb-5 border-b border-border pb-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary">Marketplace</p>
+                <h2 id="marketplace-activity-title" className="mt-1 text-xl font-bold tracking-tight">Mi actividad</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Compras, favoritos, carritos, créditos y reparaciones de todas las tiendas.</p>
+              </div>
+
+              <ProfileQuickActions
+                role={profile.role || 'cliente'}
+                tenantPrefix={linkPrefix}
+                variant="marketplace"
+                showAuthorizedPersons={false}
+              />
+              <div className="mt-4"><ProfileStats {...stats} variant="activity" /></div>
+              <div className="mt-6">
+                <ProfileAccountSummary summary={accountSummary} tenantPrefix={linkPrefix} storeCredits={storeCredits} />
+              </div>
+              {stores.length > 0 && <div className="mt-6"><ProfileStores stores={stores} /></div>}
+
+              <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="flex min-w-0 flex-col gap-6">
+                  <ProfileFavoritesWidget linkPrefix={linkPrefix} />
+                  <ProfileStoreCarts />
+                  <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />
+                </div>
+                <div className="lg:sticky lg:top-24 lg:self-start">
+                  <ProfileActivity repairs={recentRepairs} tenantPrefix={linkPrefix} hideWhenEmpty />
+                </div>
+              </div>
+            </section>
+
+            <section aria-labelledby="personal-info-title" className="mb-10 border-t border-border pt-8">
+              <div className="mb-5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mi cuenta</p>
+                <h2 id="personal-info-title" className="mt-1 text-xl font-bold tracking-tight">Datos personales y seguridad</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Actualizá tus datos de contacto o cambiá tu contraseña.</p>
+              </div>
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <ProfileForm
+                  name={profile.name}
+                  phone={profile.phone || ''}
+                  email={profile.email}
+                  location={profile.location || ''}
+                  errors={errors}
+                  isDirty={isDirty}
+                  loading={loading}
+                  onNameChange={(v) => setProfile(p => ({ ...p, name: v }))}
+                  onPhoneChange={(v) => setProfile(p => ({ ...p, phone: v }))}
+                  onLocationChange={(v) => setProfile(p => ({ ...p, location: v }))}
+                  onSubmit={handleUpdateProfile}
+                />
+                <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={linkPrefix} variant="account" showStaffPanel={false} />
+              </div>
+            </section>
+
+            {!organization && (
+              <section aria-labelledby="store-information-title" className="border-t border-border pt-8">
+                <div className="mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">Para quienes venden</p>
+                  <h2 id="store-information-title" className="mt-1 text-xl font-bold tracking-tight">Información para abrir una tienda</h2>
+                </div>
+                <ProfileAccountTypeBanner userRole={profile.role} />
+              </section>
+            )}
+          </>
+        ) : (
+          <>
         <ProfileAccountTypeBanner
           organization={profile.organization || organization}
           userRole={profile.role}
@@ -252,6 +333,8 @@ export function ProfileClient({
             <ProfileActivity repairs={recentRepairs} tenantPrefix={linkPrefix} />
           </div>
         </div>
+          </>
+        )}
       </div>
 
       <LogoutDialog
