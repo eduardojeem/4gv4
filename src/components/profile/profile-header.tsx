@@ -24,13 +24,14 @@ interface ProfileHeaderProps {
   createdAt: string
   avatarUrl?: string
   phone?: string
+  organizationName?: string
   userId: string | null
   onAvatarChange: (url: string) => void
   onLogout: () => void
 }
 
 export function ProfileHeader({
-  name, email, role, createdAt, avatarUrl, userId, onAvatarChange, onLogout
+  name, email, role, createdAt, avatarUrl, organizationName, userId, onAvatarChange, onLogout
 }: ProfileHeaderProps) {
   const roleInfo = ROLE_CONFIG[role || 'cliente'] || ROLE_CONFIG.cliente
   // El boton de WhatsApp de la cabecera es "hablar con la empresa": debe
@@ -75,6 +76,7 @@ export function ProfileHeader({
               </Badge>
             </div>
             <div className="mt-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground sm:justify-start">
+              {organizationName && <span className="font-medium text-foreground">{organizationName}</span>}
               <span className="flex items-center gap-1.5">
                 <Mail className="h-3.5 w-3.5 shrink-0" /> {email}
               </span>

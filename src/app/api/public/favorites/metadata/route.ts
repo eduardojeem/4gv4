@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { z } from 'zod'
-import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
+import { resolvePublicStorefrontOrganizationBySlug, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 
 const requestSchema = z.object({
   productIds: z.array(z.string().min(1).max(100)).max(200),
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminSupabase()
     const requestedOrganization = request.nextUrl.searchParams.get('org')
     const organization = requestedOrganization
-      ? await resolvePublicStorefrontOrganization(request, supabase)
+      ? await resolvePublicStorefrontOrganizationBySlug(requestedOrganization, supabase)
       : null
 
     if (requestedOrganization && !organization) {

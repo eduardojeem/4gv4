@@ -43,6 +43,7 @@ interface Repair {
 interface ProfileActivityProps {
   repairs: Repair[]
   tenantPrefix?: string
+  hideWhenEmpty?: boolean
 }
 
 function formatDate(dateString: string) {
@@ -57,9 +58,10 @@ function formatDate(dateString: string) {
   }
 }
 
-export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityProps) {
+export function ProfileActivity({ repairs, tenantPrefix = '', hideWhenEmpty = false }: ProfileActivityProps) {
   // El "ver todo" no puede llevar tienda: junta las de todas.
   const repairsHref = customerRepairsListHref(null, tenantPrefix)
+  if (hideWhenEmpty && repairs.length === 0) return null
 
   return (
     <div id="reparaciones" className="rounded-xl border border-border bg-card shadow-sm scroll-mt-20">

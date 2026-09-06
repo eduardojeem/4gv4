@@ -3133,11 +3133,6 @@ export function RepairFormDialogV2({
         setEditingCustomer(null)
       }}
       onCreated={(_id, customer) => handleQuickCustomerCreated(customer)}
-      onSelectExisting={(customer) => {
-        handleQuickCustomerCreated(customer)
-        setShowQuickCustomerModal(false)
-        setEditingCustomer(null)
-      }}
       onUpdated={handleQuickCustomerUpdated}
       customerToEdit={editingCustomer}
     />
