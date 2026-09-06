@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
   let query = db
     .from('customer_carts')
-    .select('id, organization_id, last_verified_at, updated_at, items:customer_cart_items(id, product_id, variant_id, quantity, observed_unit_price)')
+    .select('id, organization_id, last_verified_at, updated_at, organization:organizations(id, name, slug, logo_url), items:customer_cart_items(id, product_id, variant_id, quantity, observed_unit_price)')
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false })
   const organizationId = request.nextUrl.searchParams.get('organizationId')

@@ -1,188 +1,18 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ShoppingCart, ArrowRight, Trash2, Store, Package } from 'lucide-react'
+import { ShoppingCart, ArrowRight, Trash2, Store, Package, RefreshCw, CloudOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney } from '@/components/dashboard/orders/format'
-import { PUBLIC_CART_EVENT, type PublicCartItem } from '@/lib/public-cart'
+import { useSyncedMarketplaceCarts } from '@/hooks/use-synced-marketplace-carts'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 
-export interface ActiveStoreCart {
-  tenantSlug: string
-  displayName: string
-  itemCount: number
-  totalAmount: number
-  items: PublicCartItem[]
-  href: string
-  logoUrl?: string | null
-  changedPrices?: number
-  unavailableItems?: number
-  syncFailed?: boolean
-}
-
-type CartProductMetadata = {
-  name: string
-  image: string | null
-  price: number | null
-  hasOffer: boolean
-  offerPrice: number | null
-  isActive: boolean
-  stockQuantity: number
-}
-
-type CartVariantMetadata = {
-  productId: string
-  name: string
-  price: number
-  isActive: boolean
-  stockQuantity: number
-}
-
-function getStoreDisplayName(slug: string): string {
-  if (!slug || slug === 'default') return 'Tienda Principal'
-  return slug
-    .split('-')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
-}
-
 export function ProfileStoreCarts() {
-  const [carts, setCarts] = useState<ActiveStoreCart[]>([])
-
-  const scanCarts = useCallback(() => {
-    if (typeof window === 'undefined') return
-    const activeCarts: ActiveStoreCart[] = []
-
-    try {
-      const keys = new Set<string>()
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i)
-        if (k) keys.add(k)
-      }
-      Object.keys(localStorage).forEach((k) => keys.add(k))
-
-      for (const key of keys) {
-        if (key && key.startsWith('mipos-public-cart:')) {
-          const raw = localStorage.getItem(key)
-          if (!raw) continue
-
-          const items: PublicCartItem[] = JSON.parse(raw)
-          if (Array.isArray(items) && items.length > 0) {
-            const slug = key.replace('mipos-public-cart:', '')
-            const itemCount = items.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)
-            const totalAmount = items.reduce(
-              (sum, item) => sum + (Number(item.quantity) || 1) * (Number(item.unitPrice) || 0),
-              0
-            )
-            const href = !slug || slug === 'default' ? '/carrito' : `/${slug}/carrito`
-
-            activeCarts.push({
-              tenantSlug: slug,
-              displayName: getStoreDisplayName(slug),
-              itemCount,
-              totalAmount,
-              items,
-              href,
-            })
-          }
-        }
-      }
-    } catch {
-      // Ignorar errores de parseo
-    }
-
-    setCarts(activeCarts)
-
-    void Promise.all(activeCarts.map(async (cart) => {
-      try {
-        const response = await fetch(`/api/public/favorites/metadata?org=${encodeURIComponent(cart.tenantSlug)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            productIds: [...new Set(cart.items.map((item) => item.productId))],
-            variantIds: cart.items.flatMap((item) => item.variantId ? [item.variantId] : []),
-          }),
-        })
-        if (!response.ok) throw new Error('catalog unavailable')
-        const payload = await response.json() as {
-          metadata?: Record<string, CartProductMetadata>
-          variants?: Record<string, CartVariantMetadata>
-          organization?: { name?: string; logo_url?: string | null } | null
-        }
-        const metadata = payload.metadata ?? {}
-        let changedPrices = 0
-        let unavailableItems = 0
-        const syncedItems = cart.items.map((item) => {
-          const current = metadata[item.productId]
-          if (!current) {
-            unavailableItems += 1
-            return { ...item, availableStock: 0 }
-          }
-          const currentVariant = item.variantId ? payload.variants?.[item.variantId] : null
-          const currentPrice = currentVariant
-            ? currentVariant.price
-            : current.hasOffer && current.offerPrice != null ? current.offerPrice : current.price
-          const currentStock = currentVariant?.stockQuantity ?? current.stockQuantity
-          const currentActive = current.isActive && (currentVariant?.isActive ?? true)
-          if (currentPrice != null && currentPrice !== item.unitPrice) changedPrices += 1
-          if (!currentActive || currentStock <= 0) unavailableItems += 1
-          return {
-            ...item,
-            name: currentVariant ? `${current.name} (${currentVariant.name})` : current.name || item.name,
-            image: current.image || item.image,
-            unitPrice: currentPrice ?? item.unitPrice,
-            availableStock: currentActive ? currentStock : 0,
-            quantity: Math.min(item.quantity, currentActive ? currentStock : 0),
-          }
-        }).filter((item) => item.quantity > 0)
-        const totalAmount = syncedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
-        const itemCount = syncedItems.reduce((sum, item) => sum + item.quantity, 0)
-
-        setCarts((current) => current.map((entry) => entry.tenantSlug === cart.tenantSlug ? {
-          ...entry,
-          displayName: payload.organization?.name || entry.displayName,
-          logoUrl: payload.organization?.logo_url,
-          items: syncedItems,
-          totalAmount,
-          itemCount,
-          changedPrices,
-          unavailableItems,
-        } : entry))
-      } catch {
-        setCarts((current) => current.map((entry) => entry.tenantSlug === cart.tenantSlug ? { ...entry, syncFailed: true } : entry))
-      }
-    }))
-  }, [])
-
-  useEffect(() => {
-    const initialScan = window.setTimeout(scanCarts, 0)
-
-    const handleUpdate = () => scanCarts()
-    window.addEventListener(PUBLIC_CART_EVENT, handleUpdate)
-    window.addEventListener('storage', handleUpdate)
-
-    return () => {
-      window.clearTimeout(initialScan)
-      window.removeEventListener(PUBLIC_CART_EVENT, handleUpdate)
-      window.removeEventListener('storage', handleUpdate)
-    }
-  }, [scanCarts])
-
-  const handleClearCart = (tenantSlug: string) => {
-    try {
-      const key = `mipos-public-cart:${tenantSlug}`
-      localStorage.removeItem(key)
-      window.dispatchEvent(new Event(PUBLIC_CART_EVENT))
-      scanCarts()
-    } catch {
-      // Noop
-    }
-  }
+  const { carts, status, retry, clearCart } = useSyncedMarketplaceCarts()
 
   return (
     <div id="carritos" className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
@@ -208,6 +38,15 @@ export function ProfileStoreCarts() {
       </div>
 
       <div className="p-5">
+        <div className="mb-4 flex min-h-6 items-center justify-end gap-2 text-xs text-muted-foreground" aria-live="polite">
+          {status === 'syncing' && <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Sincronizando…</>}
+          {status === 'synced' && <span>Sincronizado entre dispositivos</span>}
+          {status === 'conflict' && <span className="font-semibold text-amber-700 dark:text-amber-300">Revisamos cambios de precio o stock</span>}
+          {(status === 'error' || status === 'pending') && <>
+            <CloudOff className="h-3.5 w-3.5" /> Se conserva en este dispositivo
+            <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => void retry()}>Reintentar</Button>
+          </>}
+        </div>
         {carts.length === 0 ? (
           <div className="py-6 text-center text-muted-foreground">
             <ShoppingCart className="mx-auto h-8 w-8 opacity-40 mb-2" />
@@ -240,9 +79,7 @@ export function ProfileStoreCarts() {
                     </Badge>
                   </div>
 
-                  {(cart.changedPrices ?? 0) > 0 && <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Se actualizaron precios según el catálogo actual.</p>}
-                  {(cart.unavailableItems ?? 0) > 0 && <p className="text-xs font-semibold text-destructive">Hay productos sin stock o que ya no están disponibles.</p>}
-                  {cart.syncFailed && <p className="text-xs text-muted-foreground">No pudimos verificar precio y stock ahora. Se confirmarán al continuar.</p>}
+                  {cart.conflicts > 0 && <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Ajustamos {cart.conflicts} ítem según el catálogo actual.</p>}
 
                   {/* Previews de productos */}
                   <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -303,7 +140,7 @@ export function ProfileStoreCarts() {
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Conservar carrito</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleClearCart(cart.tenantSlug)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        <AlertDialogAction onClick={() => void clearCart(cart.tenantSlug)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                           Vaciar carrito
                         </AlertDialogAction>
                       </AlertDialogFooter>
