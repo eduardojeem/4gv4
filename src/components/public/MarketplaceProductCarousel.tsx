@@ -165,7 +165,7 @@ export function MarketplaceProductCarousel({
                 key={`${product.organization_slug}-${product.id}`}
                 data-carousel-card
                 className={cn(
-                  'group relative flex w-[78vw] max-w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 sm:w-64 bg-card shadow-2xs',
+                  'group relative flex w-[45vw] min-w-[148px] max-w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 sm:w-64 bg-card shadow-2xs',
                   isOffers
                     ? 'border-rose-200/70 hover:border-rose-300 hover:shadow-xl hover:shadow-rose-500/10 dark:border-rose-900/40 dark:hover:border-rose-700'
                     : isFeatured
@@ -219,11 +219,11 @@ export function MarketplaceProductCarousel({
                 </div>
 
                 {/* Info */}
-                <div className="flex flex-1 flex-col p-4 justify-between">
+                <div className="flex flex-1 flex-col justify-between p-2.5 sm:p-4">
                   <div>
                     <Link
                       href={`/${product.organization_slug}/inicio`}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold hover:underline"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold hover:underline sm:gap-1.5 sm:text-xs"
                     >
                       <Store className={cn(
                         'h-3.5 w-3.5 shrink-0',
@@ -248,13 +248,13 @@ export function MarketplaceProductCarousel({
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelected(product) }}
-                      className="mt-1.5 line-clamp-2 text-sm font-semibold leading-snug text-foreground transition-colors hover:text-primary cursor-pointer"
+                      className="mt-1 line-clamp-2 cursor-pointer text-xs font-semibold leading-snug text-foreground transition-colors hover:text-primary sm:mt-1.5 sm:text-sm"
                     >
                       {product.name}
                     </h3>
                   </div>
 
-                  <div className="mt-3.5 space-y-3 border-t border-border/40 pt-2.5">
+                  <div className="mt-2 space-y-2 border-t border-border/40 pt-2 sm:mt-3.5 sm:space-y-3 sm:pt-2.5">
                     <div className="flex items-baseline gap-2">
                       <p
                         className={cn(
@@ -276,13 +276,13 @@ export function MarketplaceProductCarousel({
                     </div>
 
                     {/* Botones de acción: Ver detalle + Ir a tienda */}
-                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <div className="grid grid-cols-2 gap-1 pt-0.5 sm:gap-1.5 sm:pt-1">
                       <Button
                         type="button"
                         variant="secondary"
                         size="sm"
                         onClick={() => setSelected(product)}
-                        className="h-8 rounded-xl text-xs font-semibold gap-1 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
+                        className="h-7 gap-1 rounded-lg px-2 text-[11px] font-semibold transition-colors hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:text-xs"
                       >
                         <Eye className="h-3.5 w-3.5" />
                         <span>Detalle</span>
@@ -292,11 +292,12 @@ export function MarketplaceProductCarousel({
                         asChild
                         variant="outline"
                         size="sm"
-                        className="h-8 rounded-xl text-xs font-semibold gap-1 px-2 border-border/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-colors"
+                        className="h-7 gap-1 rounded-lg border-border/80 px-2 text-[11px] font-semibold transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:text-xs"
                       >
                         <Link href={`/${product.organization_slug}/productos/${product.id}`}>
-                          <span>Ir a tienda</span>
-                          <ArrowRight className="h-3 w-3" />
+                          <span className="sm:hidden">Tienda</span>
+                          <span className="hidden sm:inline">Ir a tienda</span>
+                          <ArrowRight className="hidden h-3 w-3 sm:inline" />
                         </Link>
                       </Button>
                     </div>
