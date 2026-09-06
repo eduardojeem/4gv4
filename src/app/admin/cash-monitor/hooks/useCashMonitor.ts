@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
 import { calculateSessionFigures, openDurationHours } from '@/lib/cash/session-figures'
+import { buildSessionPeriodFilter } from '@/lib/cash/session-period-filter'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import type {
   CashSession,
@@ -102,30 +103,15 @@ export function useCashMonitor() {
           q = q.eq('register_id', filter.registerId)
         }
 
-        let periodCutoff: Date | null = null
-        const now = new Date()
-        if (filter.period === 'today') {
-          periodCutoff = new Date(now)
-          periodCutoff.setHours(0, 0, 0, 0)
-        } else if (filter.period === 'week' || !filter.period) {
-          periodCutoff = new Date(now)
-          periodCutoff.setDate(now.getDate() - 7)
-        } else if (filter.period === 'month') {
-          periodCutoff = new Date(now)
-          periodCutoff.setMonth(now.getMonth() - 1)
-        } else if (filter.period === 'year') {
-          periodCutoff = new Date(now)
-          periodCutoff.setFullYear(now.getFullYear() - 1)
-        }
+        // Rango de fechas, y por que una caja abierta se lo saltea: ver
+        // `lib/cash/session-period-filter`.
+        const rango = buildSessionPeriodFilter(filter)
 
-        if (filter.dateFrom) {
-          q = q.gte('created_at', filter.dateFrom)
-        } else if (periodCutoff && filter.period !== 'all') {
-          q = q.gte('created_at', periodCutoff.toISOString())
-        }
-
-        if (filter.dateTo) {
-          q = q.lte('created_at', filter.dateTo)
+        if (rango.orExpression) {
+          q = q.or(rango.orExpression)
+        } else {
+          if (rango.from) q = q.gte('created_at', rango.from)
+          if (rango.to) q = q.lte('created_at', rango.to)
         }
 
         return q
@@ -149,6 +135,7 @@ export function useCashMonitor() {
 
         collected.push(...page)
         if (page.length < PAGE_SIZE) break
+        if (totalAvailable > 0 && collected.length >= totalAvailable) break
       }
 
       setTruncatedSessions(Math.max(0, totalAvailable - collected.length))
