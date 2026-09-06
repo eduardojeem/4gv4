@@ -1161,14 +1161,27 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         periodLabel: `${format(selectedFrom, 'dd MMM')} - ${format(selectedTo, 'dd MMM')}`,
         quickStats,
         headlineCards: [
+          // Los nombres dicen que incluye cada cifra. «Total vendido» a secas
+          // se compara con «Ventas Totales» de /dashboard/reports y no coincide:
+          // aquel es solo POS y este suma el taller. La tarjeta de POS existe
+          // justamente para que las dos secciones se puedan cuadrar.
           {
             id: 'gross',
-            label: 'Total vendido',
+            label: 'Facturación total (POS + taller)',
             value: formatMoney(currentGrossRevenue),
             rawValue: currentGrossRevenue,
             delta: financeGrowth,
             tone: currentGrossRevenue > 0 ? 'info' : 'neutral',
-            helper: 'Ventas + reparaciones del periodo',
+            helper: `POS ${formatMoney(selectedPosRevenue)} · Taller ${formatMoney(selectedRepairRevenue)}`,
+          },
+          {
+            id: 'pos-revenue',
+            label: 'Facturado en POS',
+            value: formatMoney(selectedPosRevenue),
+            rawValue: selectedPosRevenue,
+            delta: percentChange(selectedPosRevenue, sumSales(previousSales)),
+            tone: selectedPosRevenue > 0 ? 'info' : 'neutral',
+            helper: 'Es la misma cifra que «Ventas Totales» en Reportes',
           },
           {
             id: 'sales',
@@ -1177,16 +1190,16 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
             rawValue: selectedOrderCount,
             delta: percentChange(selectedOrderCount, previousSales.length),
             tone: selectedOrderCount > 0 ? 'success' : 'neutral',
-            helper: `${formatMoney(selectedPosRevenue)} facturados`,
+            helper: 'Ventas POS del periodo, sin contar reparaciones',
           },
           {
             id: 'ticket',
-            label: 'Promedio por venta',
+            label: 'Promedio por venta (POS)',
             value: formatMoney(averageTicket),
             rawValue: averageTicket,
             delta: percentChange(averageTicket, previousSales.length > 0 ? sumSales(previousSales) / previousSales.length : 0),
             tone: 'neutral',
-            helper: 'Cuánto gasta cada cliente en promedio',
+            helper: 'Facturado en POS dividido por cantidad de ventas',
           },
           {
             id: 'margin',

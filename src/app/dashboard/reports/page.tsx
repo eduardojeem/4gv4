@@ -640,7 +640,9 @@ export default function ReportsPage() {
         const completionRate = completion.completionRate
         // Cada promedio divide por cuantas reparaciones tienen ESE monto: ver
         // `lib/reports/repair-costs`.
-        const costAverages = calculateRepairCostAverages(safeRepairs)
+        const costAverages = calculateRepairCostAverages(
+          safeRepairs.filter((repair: any) => String(repair.status || '').trim().toLowerCase() !== 'cancelado')
+        )
         const avgCost = costAverages.avgFinal
         const avgLabor = costAverages.avgLabor
         const avgParts = costAverages.avgParts
@@ -1073,7 +1075,7 @@ export default function ReportsPage() {
               title={`Reporte de Gestión - ${reportBrand}`}
               data={salesData}
               metrics={{
-                'Ventas Totales': formatFullPrice(totalSales),
+                'Ventas Totales (POS)': formatFullPrice(totalSales),
                 'Órdenes': totalOrders,
                 'Clientes que compraron': buyersCount,
                 'Clientes nuevos': totalCustomers,
@@ -1129,6 +1131,12 @@ export default function ReportsPage() {
                 </p>
                 <p className="text-2xl font-extrabold font-mono text-slate-900 dark:text-white tracking-tight">
                   {formatFullPrice(totalSales)}
+                </p>
+                {/* En /admin/analytics «Facturación total» suma POS y taller, y
+                    no coincide con esta cifra. Decir cual es cual evita que se
+                    lean como el mismo numero mal calculado. */}
+                <p className="text-[11px] text-muted-foreground">
+                  Solo ventas POS; las reparaciones van aparte
                 </p>
               </div>
               <div className="h-10 w-10 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">

@@ -336,7 +336,7 @@ export async function exportSalesSectionPDF(params: {
   const coveredRevenue = params.metrics.profitCoveredRevenue ?? 0
   const showProfit = params.metrics.totalProfit !== undefined && params.metrics.totalProfit > 0
   const kpiMap: Record<string, any> = {
-    'Ventas Totales': formatGs(params.metrics.totalSales),
+    'Ventas Totales (POS)': formatGs(params.metrics.totalSales),
     'Órdenes': formatNumber(params.metrics.totalOrders),
     'Clientes que compraron': formatNumber(params.metrics.buyers),
     'Clientes nuevos': formatNumber(params.metrics.newCustomers),
