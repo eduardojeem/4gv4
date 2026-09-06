@@ -148,7 +148,7 @@ export function MarketplaceProductCarousel({
         {/* ── Track de la Pasarela ──────────────────────────────────────── */}
         <div
           ref={trackRef}
-          className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 pt-1 scrollbar-hide scroll-smooth"
+          className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-4 pt-1 scrollbar-hide scroll-smooth sm:gap-4"
           aria-label="Pasarela de productos del marketplace"
         >
           {normalizedProducts.map((product, idx) => {
@@ -165,7 +165,7 @@ export function MarketplaceProductCarousel({
                 key={`${product.organization_slug}-${product.id}`}
                 data-carousel-card
                 className={cn(
-                  'group relative flex w-[45vw] min-w-[148px] max-w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 sm:w-64 bg-card shadow-2xs',
+                  'group relative flex w-[calc((100%-0.5rem)/2)] max-w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 sm:w-64 bg-card shadow-2xs',
                   isOffers
                     ? 'border-rose-200/70 hover:border-rose-300 hover:shadow-xl hover:shadow-rose-500/10 dark:border-rose-900/40 dark:hover:border-rose-700'
                     : isFeatured

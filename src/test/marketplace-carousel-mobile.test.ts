@@ -8,26 +8,43 @@ const CARRUSEL = readFileSync(
 )
 
 /**
- * En /marketplace cada tarjeta medía `w-[78vw]`: en un teléfono de 375px eso
- * son 292px, o sea que entraba una sola y no se veía que el carrusel se
- * deslizaba. Medido en el navegador a 375px: 292px de ancho y 1,28 tarjetas por
- * pantalla antes; 169px y 2,22 después.
+ * En /marketplace cada tarjeta medía `w-[78vw]`: en un teléfono de 375px son
+ * 292px, así que entraba una sola y no se veía que el carrusel se deslizaba.
+ *
+ * El primer intento fue `w-[45vw]`, y no alcanzó: la pista del carrusel no mide
+ * lo que la pantalla —el contenedor tiene su propio margen— sino 309px de 375.
+ * A 45vw entraban 1,8 tarjetas, no dos. Medir contra el viewport fue el error.
+ *
+ * Medido en el navegador a 375px:
+ *
+ *   ancho    292px → 151px
+ *   completas  1   →   2
+ *   alto     399px → 349px
  */
-describe('las tarjetas del carrusel entran de a dos en el teléfono', () => {
-  it('el ancho ya no es de casi toda la pantalla', () => {
+describe('entran dos tarjetas completas en el teléfono', () => {
+  it('el ancho se calcula sobre la pista, no sobre la pantalla', () => {
     expect(CARRUSEL).not.toContain('w-[78vw]')
-    expect(CARRUSEL).toContain('w-[45vw] min-w-[148px] max-w-[280px]')
+    expect(CARRUSEL).not.toContain('w-[45vw]')
+    expect(CARRUSEL).toContain('w-[calc((100%-0.5rem)/2)] max-w-[280px]')
   })
 
-  it('el mínimo evita que se aplaste en pantallas muy angostas', () => {
-    // A 45vw, un teléfono de 320px daría 144px: por debajo de eso el precio y
-    // los botones no entran.
-    expect(CARRUSEL).toContain('min-w-[148px]')
+  it('el hueco entre tarjetas también baja en el teléfono', () => {
+    // 16px se comían 5% de una pista de 309px: con dos tarjetas, eso es la
+    // diferencia entre que entren y que no.
+    expect(CARRUSEL).toContain('gap-2 overflow-x-auto pb-4 pt-1 scrollbar-hide scroll-smooth sm:gap-4')
+  })
+
+  it('el cálculo y el hueco tienen que coincidir', () => {
+    // `calc((100% - 0.5rem) / 2)` descuenta exactamente un `gap-2`. Si uno
+    // cambia sin el otro, la segunda tarjeta vuelve a quedar cortada.
+    expect(CARRUSEL).toContain('0.5rem')
+    expect(CARRUSEL).toContain('gap-2 ')
   })
 
   it('en escritorio queda como estaba', () => {
-    // Medido: 256px a 1280px de viewport, igual que antes.
+    // Medido: 256px de ancho y 16px de hueco a 1280px, igual que antes.
     expect(CARRUSEL).toContain('sm:w-64')
+    expect(CARRUSEL).toContain('sm:gap-4')
   })
 })
 
