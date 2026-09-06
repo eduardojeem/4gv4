@@ -587,8 +587,10 @@ export async function exportRepairsSectionPDF(params: {
   statusDist: any[]
   metrics: {
     total: number
-    completed?: number
-    inProgress?: number
+    // Obligatorios a proposito: cuando eran opcionales, nadie los pasaba y
+    // `formatNumber(undefined)` los imprimia como «0» sin que nada avisara.
+    completed: number
+    inProgress: number
     completionRate: number
     avgCost?: number
     avgTATDays?: number

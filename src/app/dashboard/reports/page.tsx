@@ -168,7 +168,7 @@ export default function ReportsPage() {
   const [selectedProductTrend, setSelectedProductTrend] = useState<{ date: string; sales: number; qty: number }[]>([])
   const [repairsTrend, setRepairsTrend] = useState<{ date: string; count: number }[]>([])
   const [repairsStatusDist, setRepairsStatusDist] = useState<{ name: string; value: number; color: string }[]>([])
-  const [repairsMetrics, setRepairsMetrics] = useState<{ total: number; completionRate: number; avgCost: number; avgTATDays: number; avgLabor: number; avgParts: number }>({ total: 0, completionRate: 0, avgCost: 0, avgTATDays: 0, avgLabor: 0, avgParts: 0 })
+  const [repairsMetrics, setRepairsMetrics] = useState<{ total: number; completed: number; inProgress: number; completionRate: number; avgCost: number; avgTATDays: number; avgLabor: number; avgParts: number }>({ total: 0, completed: 0, inProgress: 0, completionRate: 0, avgCost: 0, avgTATDays: 0, avgLabor: 0, avgParts: 0 })
   const [creditReport, setCreditReport] = useState<CreditReport | null>(null)
   const [creditReportLoading, setCreditReportLoading] = useState(false)
   const [creditReportError, setCreditReportError] = useState<string | null>(null)
@@ -608,7 +608,18 @@ export default function ReportsPage() {
         const avgLabor = costedCount > 0 ? totalLabor / costedCount : 0
         const avgParts = costedCount > 0 ? totalParts / costedCount : 0
         const avgTATDays = completion.averageTurnaroundDays
-        setRepairsMetrics({ total: totalRepairs, completionRate, avgCost, avgTATDays, avgLabor, avgParts })
+        setRepairsMetrics({
+          total: totalRepairs,
+          // El PDF ya pedia estos dos; nadie los calculaba y salian en cero al
+          // lado de una tasa de finalizacion que si era real.
+          completed: completion.deliveredCount,
+          inProgress: completion.inProgressCount,
+          completionRate,
+          avgCost,
+          avgTATDays,
+          avgLabor,
+          avgParts,
+        })
 
         // Procesar datos de productos
         const productStats: Record<string, { id?: string; name: string; sales: number; quantity: number; category: string; profit: number }> = {}
