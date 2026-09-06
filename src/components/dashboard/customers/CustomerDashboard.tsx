@@ -808,8 +808,12 @@ export function CustomerDashboard() {
                       suggestions={searchSuggestions}
                     />
                     
+                    {/* Los dos campos manejan la misma busqueda: el de abajo
+                        filtraba solo la pagina visible y con otras reglas. */}
                     <CustomerListView
                       customers={paginatedCustomers}
+                      searchTerm={filters.search}
+                      onSearchChange={(term) => updateFilters({ search: term })}
                       selectedCustomers={selectedCustomers}
                       creditSummaries={creditSummaries}
                       viewMode={viewMode}

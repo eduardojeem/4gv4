@@ -59,6 +59,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { CustomerCreditBadge } from './CustomerCreditBadge'
 import { CustomerCreditSummary } from '@/hooks/use-customer-credits'
 import { customerSegmentLabel } from '@/lib/i18n/labels'
+import { searchCustomers } from '@/lib/customers/search'
 
 interface CustomerListViewProps {
   customers: Customer[]
@@ -79,9 +80,57 @@ interface CustomerListViewProps {
   onBulkStatusChange?: (customerIds: string[], status: 'active' | 'inactive' | 'suspended' | 'pending') => void
   loading?: boolean
   compact?: boolean
+  /**
+   * Termino de busqueda del panel. Cuando viene, este campo deja de filtrar por
+   * su cuenta y pasa a manejar la busqueda de verdad.
+   *
+   * Antes filtraba `customers`, que es SOLO la pagina visible: parecia un
+   * buscador de clientes pero no podia encontrar a nadie que no estuviera ya en
+   * pantalla. Y usaba sus propias reglas —`includes` crudo, sin tildes, sin
+   * normalizar telefonos— distintas a las del buscador de arriba.
+   */
+  searchTerm?: string
+  onSearchChange?: (term: string) => void
 }
 type SortField = 'name' | 'email' | 'phone' | 'status' | 'lifetime_value' | 'last_activity' | 'total_purchases'
 type SortOrder = 'asc' | 'desc'
+
+const NUMERIC_SORT_FIELDS = new Set<SortField>(['lifetime_value', 'total_purchases'])
+
+/**
+ * Compara dos clientes por la columna elegida.
+ *
+ * El comparador anterior pasaba todo por `String(...)` salvo dos casos, asi que
+ * las compras se ordenaban como texto: «100» quedaba antes que «20». Tampoco
+ * devolvia nunca 0, asi que dos iguales se intercambiaban de lugar en cada
+ * render.
+ */
+function compareCustomers(a: Customer, b: Customer, field: SortField, order: SortOrder): number {
+  const direction = order === 'asc' ? 1 : -1
+
+  if (NUMERIC_SORT_FIELDS.has(field)) {
+    const left = Number(a[field] ?? 0)
+    const right = Number(b[field] ?? 0)
+    return (left - right) * direction || compareByName(a, b)
+  }
+
+  if (field === 'last_activity') {
+    const left = new Date(a.last_activity || 0).getTime()
+    const right = new Date(b.last_activity || 0).getTime()
+    return (left - right) * direction || compareByName(a, b)
+  }
+
+  // `localeCompare` con `sensitivity: 'base'` ignora tildes y mayusculas: en
+  // una lista de nombres, «Ángel» tiene que caer junto a «Angela».
+  const left = String(a[field] ?? '')
+  const right = String(b[field] ?? '')
+  return left.localeCompare(right, 'es', { sensitivity: 'base' }) * direction || compareByName(a, b)
+}
+
+/** Desempate estable: sin esto, dos iguales bailan de lugar entre renders. */
+function compareByName(a: Customer, b: Customer): number {
+  return String(a.name ?? '').localeCompare(String(b.name ?? ''), 'es', { sensitivity: 'base' })
+}
 
 export function CustomerListView({
   customers,
@@ -100,55 +149,28 @@ export function CustomerListView({
   bulkDeleting = false,
   onToggleCustomerStatus,
   onBulkStatusChange,
-  compact = false
+  compact = false,
+  searchTerm: controlledSearchTerm,
+  onSearchChange
 }: CustomerListViewProps) {
   const { isAdmin, isManager } = useAuth()
   const canDelete = isAdmin || isManager
-  const [searchTerm, setSearchTerm] = useState('')
+  const isControlled = typeof controlledSearchTerm === 'string' && typeof onSearchChange === 'function'
+  const [localSearchTerm, setLocalSearchTerm] = useState('')
+  const searchTerm = isControlled ? controlledSearchTerm : localSearchTerm
+  const setSearchTerm = isControlled ? onSearchChange : setLocalSearchTerm
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
   const effectiveViewMode = viewMode === 'grid' ? 'grid' : 'table'
 
   // Filtrar y ordenar clientes
   const processedCustomers = useMemo(() => {
-    let filtered = [...customers]
+    // Controlado: el panel ya busco sobre TODO el padron con las reglas buenas
+    // y ordeno por relevancia. Volver a filtrar aca solo podria sacar gente.
+    const filtered = isControlled || !searchTerm ? [...customers] : searchCustomers(customers, searchTerm)
 
-    // Aplicar búsqueda
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase()
-      filtered = filtered.filter(customer =>
-        (customer.name && customer.name.toLowerCase().includes(search)) ||
-        (customer.email && customer.email.toLowerCase().includes(search)) ||
-        (customer.phone && customer.phone.includes(search))
-      )
-    }
-
-    // Aplicar ordenamiento
-    filtered.sort((a, b) => {
-      let aValue: unknown = a[sortField as keyof Customer]
-      let bValue: unknown = b[sortField as keyof Customer]
-
-      // Manejar valores especiales
-      if (sortField === 'lifetime_value') {
-        aValue = a.lifetime_value || 0
-        bValue = b.lifetime_value || 0
-      } else if (sortField === 'last_activity') {
-        aValue = new Date(a.last_activity || 0).getTime()
-        bValue = new Date(b.last_activity || 0).getTime()
-      } else {
-        aValue = String(aValue || '').toLowerCase()
-        bValue = String(bValue || '').toLowerCase()
-      }
-
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1
-      } else {
-        return aValue < bValue ? 1 : -1
-      }
-    })
-
-    return filtered
-  }, [customers, searchTerm, sortField, sortOrder])
+    return filtered.sort((a, b) => compareCustomers(a, b, sortField, sortOrder))
+  }, [customers, searchTerm, sortField, sortOrder, isControlled])
 
   const metricsMap = useCustomerSalesMetricsMap(processedCustomers.map(c => c.id))
 
@@ -173,7 +195,7 @@ export function CustomerListView({
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar clientes..."
+              placeholder="Nombre, teléfono, CI/RUC, correo o código..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
