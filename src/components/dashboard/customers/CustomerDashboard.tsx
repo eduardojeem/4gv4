@@ -836,8 +836,17 @@ export function CustomerDashboard() {
                       compact={compactMode}
                     />
                     
-                    {/* Paginación */}
-                    {!loading && !error && filteredCustomers.length > 0 && (
+                    {/* Al buscar no se pagina: la lista ya viene recortada y
+                        ordenada por relevancia, y el hook devuelve una sola
+                        pagina. Si el tope dejo gente afuera, se avisa. */}
+                    {!loading && !error && filters.search && filteredCustomers.length > paginatedCustomers.length && (
+                      <p className="mt-4 text-center text-sm text-muted-foreground">
+                        Mostrando {paginatedCustomers.length} de {filteredCustomers.length} coincidencias.
+                        Afiná la búsqueda para ver el resto.
+                      </p>
+                    )}
+
+                    {!loading && !error && pagination.totalPages > 1 && (
                       <div className="mt-6">
                         <Pagination
                           currentPage={pagination.currentPage}

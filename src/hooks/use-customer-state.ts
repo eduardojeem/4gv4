@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { useDebounce } from "./use-debounce"
 import { searchCustomers } from '@/lib/customers/search'
+import { paginateCustomers } from '@/lib/customers/pagination'
 
 export interface Customer {
   id: string  // UUID from Supabase
@@ -407,29 +408,32 @@ export function useCustomerState() {
     return filtered
   }, [state.customers, debouncedSearchTerm, state.filters, state.sortBy, state.sortOrder, performIntelligentSearch])
 
-  // Derive pagination metadata from filtered results
-  const totalItems = filteredCustomers.length
-  const totalPages = Math.ceil(totalItems / state.pagination.itemsPerPage)
-  
-  // Auto-correct currentPage if it exceeds totalPages
-  const currentPage = state.pagination.currentPage > totalPages && totalPages > 0
-    ? 1
-    : state.pagination.currentPage
+  // Buscar y paginar son dos cosas distintas: ver `lib/customers/pagination`.
+  const isSearching = debouncedSearchTerm.trim().length > 0
 
-  // Derive paginated customers (not stored in state)
-  const paginatedCustomers = useMemo(() => {
-    const startIndex = (currentPage - 1) * state.pagination.itemsPerPage
-    const endIndex = startIndex + state.pagination.itemsPerPage
-    return filteredCustomers.slice(startIndex, endIndex)
-  }, [filteredCustomers, currentPage, state.pagination.itemsPerPage])
+  const visiblePage = useMemo(
+    () =>
+      paginateCustomers(filteredCustomers, {
+        isSearching,
+        currentPage: state.pagination.currentPage,
+        itemsPerPage: state.pagination.itemsPerPage,
+      }),
+    [filteredCustomers, isSearching, state.pagination.currentPage, state.pagination.itemsPerPage]
+  )
 
-  // Compose the full pagination object for consumers
-  const pagination = useMemo(() => ({
-    currentPage,
-    itemsPerPage: state.pagination.itemsPerPage,
-    totalItems,
-    totalPages
-  }), [currentPage, state.pagination.itemsPerPage, totalItems, totalPages])
+  const paginatedCustomers = visiblePage.visible
+  const totalPages = visiblePage.totalPages
+  const currentPage = visiblePage.currentPage
+
+  const pagination = useMemo(
+    () => ({
+      currentPage: visiblePage.currentPage,
+      itemsPerPage: visiblePage.itemsPerPage,
+      totalItems: visiblePage.totalItems,
+      totalPages: visiblePage.totalPages,
+    }),
+    [visiblePage]
+  )
 
   // Pagination functions
   const setPage = useCallback((page: number) => {
