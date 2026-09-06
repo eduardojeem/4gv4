@@ -19,14 +19,23 @@ export async function GET(request: NextRequest) {
 
   let query = db
     .from('customer_carts')
-    .select('id, organization_id, last_verified_at, updated_at, organization:organizations(id, name, slug, logo_url), items:customer_cart_items(id, product_id, variant_id, quantity, observed_unit_price)')
+    .select('id, organization_id, last_verified_at, updated_at, items:customer_cart_items(id, product_id, variant_id, quantity, observed_unit_price)')
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false })
   const organizationId = request.nextUrl.searchParams.get('organizationId')
   if (organizationId) query = query.eq('organization_id', organizationId)
   const { data, error } = await query
   if (error) return NextResponse.json({ error: 'No se pudieron cargar los carritos' }, { status: 500 })
-  return NextResponse.json({ carts: data ?? [] })
+  const organizationIds = [...new Set((data ?? []).map((cart) => cart.organization_id))]
+  const { data: organizations, error: organizationError } = organizationIds.length > 0
+    ? await createAdminSupabase().from('organizations').select('id, name, slug, logo_url').in('id', organizationIds).eq('storefront_public', true)
+    : { data: [], error: null }
+  if (organizationError) return NextResponse.json({ error: 'No se pudieron cargar las tiendas' }, { status: 500 })
+  const organizationMap = new Map((organizations ?? []).map((organization) => [organization.id, organization]))
+  return NextResponse.json({ carts: (data ?? []).flatMap((cart) => {
+    const organization = organizationMap.get(cart.organization_id)
+    return organization ? [{ ...cart, organization }] : []
+  }) })
 }
 
 export async function PUT(request: NextRequest) {
