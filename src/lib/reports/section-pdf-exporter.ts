@@ -122,6 +122,16 @@ function renderOmittedNote(doc: jsPDF, omitidas: number, margin: number) {
   )
 }
 
+/** Aclaracion al pie de los KPI. Devuelve la nueva `y`. */
+function renderKpiNote(doc: jsPDF, text: string, y: number, margin: number, contentWidth: number): number {
+  doc.setFontSize(7.5)
+  doc.setFont('helvetica', 'italic')
+  doc.setTextColor(100, 116, 139)
+  const lines = doc.splitTextToSize(text, contentWidth)
+  doc.text(lines, margin, y)
+  return y + (lines.length * 9) + 6
+}
+
 // ── RENDERIZADOR DE CABECERA Y FOOTER ESTÁNDAR ────────────────────────────────
 function setupDocPageHeadersAndFooters(
   doc: jsPDF,
@@ -293,9 +303,21 @@ export async function exportSalesSectionPDF(params: {
   metrics: {
     totalSales: number
     totalOrders: number
-    totalCustomers: number
+    /** Clientes distintos que compraron. NO son las altas nuevas del periodo. */
+    buyers: number
+    /** Fichas de cliente creadas en el periodo. */
+    newCustomers: number
     avgOrderValue: number
     totalProfit?: number
+    /**
+     * Facturacion de la que si se conoce el costo historico. El margen se
+     * calcula sobre esto, no sobre el total: dividir por la facturacion entera
+     * cuando solo se conoce el costo de una parte da un margen mas bajo que el
+     * de la pantalla, y el PDF es el que se comparte.
+     */
+    profitCoveredRevenue?: number
+    profitCoveredItems?: number
+    profitTotalItems?: number
   }
   chartRef?: React.RefObject<HTMLDivElement | null>
   context?: ReportContext
@@ -311,17 +333,36 @@ export async function exportSalesSectionPDF(params: {
   renderExecutiveCoverHeader(doc, params.title, 'Informe Específico de Ventas y Facturación', dateLabel, margin, contentWidth, pageWidth, params.context)
 
   let y = coverBottom(params.context)
+  const coveredRevenue = params.metrics.profitCoveredRevenue ?? 0
+  const showProfit = params.metrics.totalProfit !== undefined && params.metrics.totalProfit > 0
   const kpiMap: Record<string, any> = {
     'Ventas Totales': formatGs(params.metrics.totalSales),
     'Órdenes': formatNumber(params.metrics.totalOrders),
-    'Clientes': formatNumber(params.metrics.totalCustomers),
+    'Clientes que compraron': formatNumber(params.metrics.buyers),
+    'Clientes nuevos': formatNumber(params.metrics.newCustomers),
     'Ticket Promedio': formatGs(params.metrics.avgOrderValue),
-    ...(params.metrics.totalProfit !== undefined && params.metrics.totalProfit > 0 ? {
+    ...(showProfit ? {
       'Ganancia Estimada': formatGs(params.metrics.totalProfit),
-      'Margen Bruto': `${params.metrics.totalSales > 0 ? ((params.metrics.totalProfit / params.metrics.totalSales) * 100).toFixed(1) : 0}%`,
+      'Margen Bruto': coveredRevenue > 0
+        ? `${((params.metrics.totalProfit! / coveredRevenue) * 100).toFixed(1)}%`
+        : 'Sin costos',
     } : {}),
   }
   y = renderKpiCardsGrid(doc, kpiMap, y, margin, contentWidth)
+
+  if (showProfit) {
+    const cubiertos = params.metrics.profitCoveredItems ?? 0
+    const totales = params.metrics.profitTotalItems ?? 0
+    y = renderKpiNote(
+      doc,
+      totales > 0
+        ? `La ganancia y el margen se calculan sobre los ${formatNumber(cubiertos)} de ${formatNumber(totales)} items con costo historico registrado (${formatGs(coveredRevenue)} de facturacion). El resto no tiene costo cargado y queda fuera del calculo.`
+        : 'La ganancia y el margen se calculan solo sobre los items con costo historico registrado.',
+      y,
+      margin,
+      contentWidth
+    )
+  }
 
   // Gráfico Canvas de Alta Definición
   if (params.salesData.length > 0) {

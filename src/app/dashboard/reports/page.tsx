@@ -74,6 +74,7 @@ import {
   exportRepairsSectionPDF
 } from '@/lib/reports/section-pdf-exporter'
 import { calculateRepairCompletion } from '@/lib/reports/repair-report'
+import { calculateRepairCostAverages } from '@/lib/reports/repair-costs'
 import {
   buildSalesActivitySummary,
   calculateAveragePurchasesPerIdentifiedCustomer,
@@ -159,6 +160,10 @@ export default function ReportsPage() {
   const [categoryData, setCategoryData] = useState<CategoryData[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [customersNewCount, setCustomersNewCount] = useState(0)
+  // Clientes distintos que efectivamente compraron. Se calculaba para la tasa de
+  // retencion y se tiraba: el KPI «Clientes» del bloque de ventas mostraba las
+  // altas nuevas, que es otra cosa.
+  const [buyersCount, setBuyersCount] = useState(0)
   const [retentionRate, setRetentionRate] = useState(0)
   const [avgPurchasesPerCustomer, setAvgPurchasesPerCustomer] = useState(0)
   const [productTopCount, setProductTopCount] = useState(5)
@@ -532,6 +537,7 @@ export default function ReportsPage() {
         const customersWithOrders = Object.keys(ordersByCustomer)
         const repeatCustomers = customersWithOrders.filter(k => (ordersByCustomer[k] || 0) >= 2)
         const uniqueCustomersCount = customersWithOrders.length
+        setBuyersCount(uniqueCustomersCount)
         setRetentionRate(uniqueCustomersCount > 0 ? (repeatCustomers.length / uniqueCustomersCount) * 100 : 0)
         setAvgPurchasesPerCustomer(calculateAveragePurchasesPerIdentifiedCustomer(ordersByCustomer))
 
@@ -550,10 +556,6 @@ export default function ReportsPage() {
 
         const trendMap: Record<string, number> = {}
         const statusMap: Record<string, number> = {}
-        let totalCost = 0
-        let totalLabor = 0
-        let totalParts = 0
-        let costedCount = 0
 
         safeRepairs.forEach((r: any) => {
           // Se agrupa por created_at, el mismo campo que filtra la consulta
@@ -566,18 +568,6 @@ export default function ReportsPage() {
 
           const st = r.status || 'desconocido'
           statusMap[st] = (statusMap[st] || 0) + 1
-
-          const fc = Number(r.final_cost) || 0
-          const lc = Number(r.labor_cost) || 0
-          const pc = Number(r.parts_cost) || 0
-          totalCost += fc
-          totalLabor += lc
-          totalParts += pc
-          // Solo cuenta para el promedio de costo si ya tiene costo cargado:
-          // si no, dividir por el total de reparaciones (incluidas las que
-          // todavía están en diagnóstico/reparación, sin cotizar) hundía el
-          // promedio artificialmente.
-          if (fc > 0 || lc > 0 || pc > 0) costedCount += 1
 
         })
 
@@ -604,9 +594,12 @@ export default function ReportsPage() {
           completedAt: repair.completed_at,
         })))
         const completionRate = completion.completionRate
-        const avgCost = costedCount > 0 ? totalCost / costedCount : 0
-        const avgLabor = costedCount > 0 ? totalLabor / costedCount : 0
-        const avgParts = costedCount > 0 ? totalParts / costedCount : 0
+        // Cada promedio divide por cuantas reparaciones tienen ESE monto: ver
+        // `lib/reports/repair-costs`.
+        const costAverages = calculateRepairCostAverages(safeRepairs)
+        const avgCost = costAverages.avgFinal
+        const avgLabor = costAverages.avgLabor
+        const avgParts = costAverages.avgParts
         const avgTATDays = completion.averageTurnaroundDays
         setRepairsMetrics({
           total: totalRepairs,
@@ -1037,7 +1030,8 @@ export default function ReportsPage() {
               metrics={{
                 'Ventas Totales': formatFullPrice(totalSales),
                 'Órdenes': totalOrders,
-                'Clientes': totalCustomers,
+                'Clientes que compraron': buyersCount,
+                'Clientes nuevos': totalCustomers,
                 'Valor Promedio': formatFullPrice(avgOrderValue),
                 ...(canViewCost ? {
                   'Margen Histórico': profitCoverage.coveredItems > 0 ? formatFullPrice(totalProfit) : 'Sin costos históricos',
@@ -1323,9 +1317,15 @@ export default function ReportsPage() {
                         metrics: {
                           totalSales,
                           totalOrders,
-                          totalCustomers,
+                          buyers: buyersCount,
+                          newCustomers: totalCustomers,
                           avgOrderValue,
                           totalProfit: canViewCost ? totalProfit : undefined,
+                          // El margen se calcula sobre la facturacion con costo
+                          // conocido, igual que en pantalla.
+                          profitCoveredRevenue: profitCoverage.coveredRevenue,
+                          profitCoveredItems: profitCoverage.coveredItems,
+                          profitTotalItems: profitCoverage.totalItems,
                         },
                         chartRef: salesChartRef,
                       })}
