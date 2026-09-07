@@ -198,16 +198,16 @@ const MockAccessibleModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   
   return (
     <div 
+      ref={modalRef}
       className="modal-overlay" 
       role="dialog" 
+      tabIndex={-1}
       aria-modal="true"
       aria-labelledby="modal-title"
       aria-describedby="modal-description"
     >
       <div 
-        ref={modalRef}
         className="modal-content"
-        tabIndex={-1}
       >
         <header>
           <h2 id="modal-title">Confirmar Acción</h2>
@@ -361,7 +361,7 @@ describe('Accessibility Tests', () => {
       expect(screen.getByRole('button', { name: 'Eliminar Producto 1' })).toBeInTheDocument()
       
       // Verificar estado de disponibilidad
-      expect(screen.getByLabelText('Disponible')).toBeInTheDocument()
+      expect(screen.getAllByLabelText('Disponible')).toHaveLength(2)
       expect(screen.getByLabelText('Sin stock')).toBeInTheDocument()
     })
   })
@@ -427,7 +427,7 @@ describe('Accessibility Tests', () => {
       render(<MockAccessibleTable />)
       
       // Verificar que el estado se comunica con texto y símbolos, no solo color
-      expect(screen.getByLabelText('Disponible')).toHaveTextContent('✓')
+      screen.getAllByLabelText('Disponible').forEach((status) => expect(status).toHaveTextContent('✓'))
       expect(screen.getByLabelText('Sin stock')).toHaveTextContent('✗')
     })
 
@@ -436,8 +436,8 @@ describe('Accessibility Tests', () => {
       // Por ahora, verificamos que los elementos críticos están presentes
       render(<MockAccessibleForm />)
       
-      const requiredFields = screen.getAllByText('*')
-      expect(requiredFields.length).toBeGreaterThan(0)
+      expect(screen.getByLabelText('Nombre *')).toHaveAttribute('aria-required', 'true')
+      expect(screen.getByLabelText('Email *')).toHaveAttribute('aria-required', 'true')
     })
   })
 

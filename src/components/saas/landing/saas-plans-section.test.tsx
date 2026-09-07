@@ -30,7 +30,7 @@ describe('SaaSPlansSection', () => {
   it('shows contextual mascot guidance and compares active plans only', () => {
     render(<SaaSPlansSection initialPlans={plans} />)
 
-    expect(screen.getByText('Te ayudo a comparar')).toBeInTheDocument()
+    expect(screen.getByText('¿Necesitás ayuda para elegir un plan?')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'FREE' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'PRO' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'ENTERPRISE' })).not.toBeInTheDocument()
