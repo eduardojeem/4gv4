@@ -34,6 +34,7 @@ const { baseManagement, baseFiltering } = vi.hoisted(() => ({
       }
     ],
     selectedProducts: [] as unknown[],
+    loadingState: { loading: false, error: null },
     loading: false,
     error: null as string | null,
     totalCount: 2,
@@ -49,6 +50,8 @@ const { baseManagement, baseFiltering } = vi.hoisted(() => ({
     bulkDelete: vi.fn(),
     bulkUpdate: vi.fn(),
     sortConfig: { field: 'name', direction: 'asc' },
+    sort: { field: 'name', direction: 'asc' },
+    setSort: vi.fn(),
     pagination: { page: 1, limit: 10 }
   },
   baseFiltering: {

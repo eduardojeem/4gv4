@@ -257,7 +257,7 @@ export const ProductAnalyticsDashboard = ({
     dashboardStats,
     categoryAnalytics,
     supplierAnalytics,
-    alerts,
+    alerts = [],
     loading,
     refreshAnalytics
   } = useProductAnalytics([], {

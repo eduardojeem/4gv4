@@ -126,8 +126,8 @@ export const AdvancedProductFilters = ({
     priceRange,
     stockRange,
     marginRange,
-    categories,
-    suppliers
+    categories = [],
+    suppliers = []
   } = useProductFiltering({
     onFiltersChange
   })

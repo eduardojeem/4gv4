@@ -541,7 +541,7 @@ export const EnhancedProductList = ({
     setSort({ field: field as import('@/hooks/products/types').ProductSort['field'], direction: newDirection })
   }
 
-  if (loadingState.loading) {
+  if (loadingState?.loading) {
     return (
       <div className={cn("space-y-4", className)}>
         <ProductCardSkeletonGrid count={6} />
