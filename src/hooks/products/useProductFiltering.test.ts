@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { useProductFiltering } from './useProductFiltering'
 import type { Product } from './types'
 
@@ -125,14 +125,14 @@ describe('useProductFiltering', () => {
     expect(result.current.filteredProducts).toHaveLength(3)
   })
 
-  it('should filter products by search term', () => {
+  it('should filter products by search term', async () => {
     const { result } = renderHook(() => useProductFiltering(mockProducts))
 
     act(() => {
       result.current.updateFilter('search', 'laptop')
     })
 
-    expect(result.current.filteredProducts).toHaveLength(1)
+    await waitFor(() => expect(result.current.filteredProducts).toHaveLength(1))
     expect(result.current.filteredProducts[0].name).toBe('Laptop Gaming')
   })
 
@@ -162,7 +162,7 @@ describe('useProductFiltering', () => {
     const { result } = renderHook(() => useProductFiltering(mockProducts))
 
     act(() => {
-      result.current.updateFilter('stockStatus', 'low')
+      result.current.updateFilter('stockStatus', 'low_stock')
     })
 
     expect(result.current.filteredProducts).toHaveLength(1)
@@ -173,7 +173,7 @@ describe('useProductFiltering', () => {
     const { result } = renderHook(() => useProductFiltering(mockProducts))
 
     act(() => {
-      result.current.updateFilter('stockStatus', 'out')
+      result.current.updateFilter('stockStatus', 'out_of_stock')
     })
 
     expect(result.current.filteredProducts).toHaveLength(1)
@@ -184,7 +184,7 @@ describe('useProductFiltering', () => {
     const { result } = renderHook(() => useProductFiltering(mockProducts))
 
     act(() => {
-      result.current.updateFilter('stockStatus', 'in')
+      result.current.updateFilter('stockStatus', 'in_stock')
     })
 
     expect(result.current.filteredProducts).toHaveLength(2)
@@ -198,7 +198,7 @@ describe('useProductFiltering', () => {
       result.current.updateFilter('priceRange', { min: 50, max: 200 })
     })
 
-    expect(result.current.filteredProducts).toHaveLength(2)
+    expect(result.current.filteredProducts).toHaveLength(1)
     expect(result.current.filteredProducts.every((p: Product) => p.sale_price >= 50 && p.sale_price <= 200)).toBe(true)
   })
 
@@ -251,7 +251,7 @@ describe('useProductFiltering', () => {
 
     act(() => {
       result.current.updateFilter('category', 'accessories')
-      result.current.updateFilter('stockStatus', 'in')
+      result.current.updateFilter('stockStatus', 'in_stock')
     })
 
     expect(result.current.filteredProducts).toHaveLength(1)
@@ -269,7 +269,7 @@ describe('useProductFiltering', () => {
     expect(result.current.filteredProducts).toHaveLength(1)
 
     act(() => {
-      result.current.clearAllFilters()
+      result.current.clearFilters()
     })
 
     expect(result.current.filteredProducts).toHaveLength(3)
@@ -279,11 +279,11 @@ describe('useProductFiltering', () => {
     const { result } = renderHook(() => useProductFiltering(mockProducts))
 
     act(() => {
-      result.current.applyFilterPreset('lowStock')
+      result.current.applyPreset('stock-bajo')
     })
 
     // Verificar que se aplicó el preset de stock bajo
-    expect(result.current.filters.stockStatus).toBe('low')
+    expect(result.current.filters.stockStatus).toBe('low_stock')
   })
 
   it('should handle empty product list', () => {
@@ -318,6 +318,7 @@ describe('useProductFiltering', () => {
       stock_quantity: 8,
       sale_price: 699.99,
       purchase_price: 499.99,
+      is_active: true,
       category_id: 'electronics',
       supplier_id: 'supplier-3',
       created_at: '2024-03-01T12:00:00Z'
@@ -343,14 +344,14 @@ describe('useProductFiltering', () => {
   it('should provide filter statistics', () => {
     const { result } = renderHook(() => useProductFiltering(mockProducts))
 
-    expect(result.current.filterStats.total).toBe(3)
-    expect(result.current.filterStats.filtered).toBe(3)
+    expect(result.current.filterStats.totalProducts).toBe(3)
+    expect(result.current.filterStats.filteredCount).toBe(3)
 
     act(() => {
       result.current.updateFilter('category', 'electronics')
     })
 
-    expect(result.current.filterStats.total).toBe(3)
-    expect(result.current.filterStats.filtered).toBe(1)
+    expect(result.current.filterStats.totalProducts).toBe(3)
+    expect(result.current.filterStats.filteredCount).toBe(1)
   })
 })

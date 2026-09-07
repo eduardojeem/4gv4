@@ -77,7 +77,8 @@ describe('POSErrorHandler', () => {
       POSErrorHandler.handle(new Error('JWT expired'), 'auth')
       
       expect(toast.error).toHaveBeenCalledWith(
-        expect.stringContaining('sesión')
+        expect.stringContaining('sesión'),
+        expect.objectContaining({ duration: 10000 })
       )
     })
 
@@ -103,7 +104,7 @@ describe('POSErrorHandler', () => {
         'sync'
       )
       
-      expect(toast.error).toHaveBeenCalledWith(
+      expect(toast.warning).toHaveBeenCalledWith(
         expect.stringContaining('no disponible')
       )
     })
@@ -217,9 +218,14 @@ describe('POSErrorHandler', () => {
       it(`should include context in message for ${context}`, () => {
         POSErrorHandler.handle('Test error', context as any)
         
-        expect(toast.error).toHaveBeenCalledWith(
-          expect.stringContaining(expected)
-        )
+        if (context === 'sale' || context === 'payment') {
+          expect(toast.error).toHaveBeenCalledWith(
+            expect.stringContaining(expected),
+            expect.objectContaining({ duration: 10000 })
+          )
+        } else {
+          expect(toast.error).toHaveBeenCalledWith(expect.stringContaining(expected))
+        }
       })
     })
   })

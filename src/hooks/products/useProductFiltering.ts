@@ -171,14 +171,11 @@ export function useProductFiltering(
     const config: SearchConfig = { fields: ['name', 'sku', 'description'], minLength: 2, debounceMs: 300 }
     
     try {
-      setLastError(null)
-
       if (!Array.isArray(productsStable)) {
         throw createProductError.invalidProductData({ products: productsStable }, ['all'])
       }
 
       if (!debouncedSearch || debouncedSearch.length < (config.minLength ?? 2)) {
-        console.log('Returning productsStable because no search:', productsStable.length)
         return productsStable
       }
 
@@ -286,6 +283,38 @@ export function useProductFiltering(
         product.sale_price >= filters.priceRange!.min &&
         product.sale_price <= filters.priceRange!.max
       )
+    }
+
+    if (typeof filters.priceMin === 'number') {
+      result = result.filter((product: Product) => product.sale_price >= filters.priceMin!)
+    }
+
+    if (typeof filters.priceMax === 'number') {
+      result = result.filter((product: Product) => product.sale_price <= filters.priceMax!)
+    }
+
+    if (filters.stockRange) {
+      result = result.filter((product: Product) =>
+        product.stock_quantity >= filters.stockRange!.min &&
+        product.stock_quantity <= filters.stockRange!.max
+      )
+    }
+
+    if (filters.marginRange) {
+      result = result.filter((product: Product) => {
+        const margin = product.sale_price > 0
+          ? ((product.sale_price - product.purchase_price) / product.sale_price) * 100
+          : 0
+        return margin >= filters.marginRange!.min && margin <= filters.marginRange!.max
+      })
+    }
+
+    if (filters.dateRange?.start || filters.dateRange?.end) {
+      result = result.filter((product: Product) => {
+        const productDate = new Date(product.created_at)
+        return (!filters.dateRange?.start || productDate >= filters.dateRange.start) &&
+          (!filters.dateRange?.end || productDate <= filters.dateRange.end)
+      })
     }
 
     const duration = performance.now() - startTime

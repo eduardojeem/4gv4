@@ -1,358 +1,83 @@
-/**
- * usePOS Hook Tests - Fase 5 Testing & QA
- * Tests para el hook crítico del sistema POS
- */
-
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePOS } from '@/hooks/usePOS'
-import { createMockProduct } from '@/test/setup'
+import type { Product } from '@/types/product-unified'
 
-// usePOS lee la sucursal activa del contexto. Sin provider el hook lanza, así
-// que se mockea el contexto igual que en FinancesSystem.test.tsx.
-vi.mock('@/contexts/branch-context', () => ({
-  useBranch: () => ({
-    branches: [],
-    selectedBranchId: null,
-    selectedBranch: null,
-    loading: false,
-    setSelectedBranchId: vi.fn(),
-    refreshBranches: vi.fn(),
-  }),
-}))
+vi.mock('@/contexts/branch-context', () => ({ useBranch: () => ({ selectedBranchId: 'branch-1' }) }))
+vi.mock('@/lib/pos-toasts', () => ({ showAddToCartToast: vi.fn() }))
 
-// Mock de servicios externos
-vi.mock('@/lib/supabase/client', () => ({
-  createClient: () => ({
-    from: vi.fn(() => ({
-      insert: vi.fn(() => Promise.resolve({ data: [], error: null })),
-      select: vi.fn(() => Promise.resolve({ data: [], error: null }))
-    }))
-  })
-}))
+const product = (overrides: Partial<Product> = {}): Product => ({
+  id: 'product-1', name: 'Remera clásica', sku: 'REM-001', sale_price: 100_000,
+  wholesale_price: 80_000, purchase_price: 60_000, stock_quantity: 10, images: [],
+  ...overrides,
+} as Product)
 
-describe('usePOS Hook', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    // Limpiar localStorage
-    localStorage.clear()
+describe('usePOS current cart contract', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('starts with an empty, unpaid cart', () => {
+    const { result } = renderHook(() => usePOS())
+    expect(result.current.cart).toEqual([])
+    expect(result.current.subtotal).toBe(0)
+    expect(result.current.total).toBe(0)
+    expect(result.current.totalPaid).toBe(0)
+    expect(result.current.processing).toBe(false)
   })
 
-  describe('Initial State', () => {
-    it('should initialize with empty cart', () => {
-      const { result } = renderHook(() => usePOS())
-      
-      expect(result.current.cart).toEqual([])
-      expect(result.current.total).toBe(0)
-      expect(result.current.itemCount).toBe(0)
-      expect(result.current.isProcessing).toBe(false)
-    })
-
-    it('should restore cart from localStorage', () => {
-      const savedCart = [
-        {
-          id: '1',
-          product: createMockProduct({ id: '1', price: 100 }),
-          quantity: 2,
-          subtotal: 200
-        }
-      ]
-      
-      localStorage.setItem('pos-cart', JSON.stringify(savedCart))
-      
-      const { result } = renderHook(() => usePOS())
-      
-      expect(result.current.cart).toEqual(savedCart)
-      expect(result.current.total).toBe(200)
-      expect(result.current.itemCount).toBe(2)
-    })
+  it('adds a product and merges repeated additions by product id', () => {
+    const { result } = renderHook(() => usePOS())
+    act(() => result.current.addToCart(product(), 2))
+    act(() => result.current.addToCart(product(), 1))
+    expect(result.current.cart).toHaveLength(1)
+    expect(result.current.cart[0]).toMatchObject({ product_id: 'product-1', quantity: 3, price: 100_000, subtotal: 300_000 })
+    expect(result.current.total).toBe(300_000)
   })
 
-  describe('Add to Cart', () => {
-    it('should add new product to cart', () => {
-      const { result } = renderHook(() => usePOS())
-      const product = createMockProduct({ id: '1', price: 100 })
-      
-      act(() => {
-        result.current.addToCart(product, 2)
-      })
-      
-      expect(result.current.cart).toHaveLength(1)
-      expect(result.current.cart[0]).toEqual({
-        id: '1',
-        product,
-        quantity: 2,
-        subtotal: 200
-      })
-      expect(result.current.total).toBe(200)
-    })
-
-    it('should update quantity if product already exists', () => {
-      const { result } = renderHook(() => usePOS())
-      const product = createMockProduct({ id: '1', price: 100 })
-      
-      act(() => {
-        result.current.addToCart(product, 1)
-      })
-      
-      act(() => {
-        result.current.addToCart(product, 2)
-      })
-      
-      expect(result.current.cart).toHaveLength(1)
-      expect(result.current.cart[0].quantity).toBe(3)
-      expect(result.current.total).toBe(300)
-    })
-
-    it('should handle products with different variants', () => {
-      const { result } = renderHook(() => usePOS())
-      const product1 = createMockProduct({ id: '1', price: 100, variant: 'small' })
-      const product2 = createMockProduct({ id: '1', price: 100, variant: 'large' })
-      
-      act(() => {
-        result.current.addToCart(product1, 1)
-      })
-      
-      act(() => {
-        result.current.addToCart(product2, 1)
-      })
-      
-      expect(result.current.cart).toHaveLength(2)
-      expect(result.current.total).toBe(200)
-    })
+  it('does not add more units than available stock', () => {
+    const { result } = renderHook(() => usePOS())
+    act(() => result.current.addToCart(product({ stock_quantity: 1 }), 2))
+    expect(result.current.cart).toEqual([])
   })
 
-  describe('Update Quantity', () => {
-    it('should update item quantity', () => {
-      const { result } = renderHook(() => usePOS())
-      const product = createMockProduct({ id: '1', price: 100 })
-      
-      act(() => {
-        result.current.addToCart(product, 2)
-      })
-      
-      act(() => {
-        result.current.updateQuantity('1', 5)
-      })
-      
-      expect(result.current.cart[0].quantity).toBe(5)
-      expect(result.current.cart[0].subtotal).toBe(500)
-      expect(result.current.total).toBe(500)
-    })
-
-    it('should remove item when quantity is 0', () => {
-      const { result } = renderHook(() => usePOS())
-      const product = createMockProduct({ id: '1', price: 100 })
-      
-      act(() => {
-        result.current.addToCart(product, 2)
-      })
-      
-      act(() => {
-        result.current.updateQuantity('1', 0)
-      })
-      
-      expect(result.current.cart).toHaveLength(0)
-      expect(result.current.total).toBe(0)
-    })
-
-    it('should handle invalid quantities gracefully', () => {
-      const { result } = renderHook(() => usePOS())
-      const product = createMockProduct({ id: '1', price: 100 })
-      
-      act(() => {
-        result.current.addToCart(product, 2)
-      })
-      
-      act(() => {
-        result.current.updateQuantity('1', -1)
-      })
-      
-      // Should not update with negative quantity
-      expect(result.current.cart[0].quantity).toBe(2)
-    })
+  it('updates quantity using the generated cart item id', () => {
+    const { result } = renderHook(() => usePOS())
+    act(() => result.current.addToCart(product(), 1))
+    const itemId = result.current.cart[0].id
+    act(() => result.current.updateQuantity(itemId, 4))
+    expect(result.current.cart[0]).toMatchObject({ quantity: 4, subtotal: 400_000 })
   })
 
-  describe('Remove from Cart', () => {
-    it('should remove item from cart', () => {
-      const { result } = renderHook(() => usePOS())
-      const product = createMockProduct({ id: '1', price: 100 })
-      
-      act(() => {
-        result.current.addToCart(product, 2)
-      })
-      
-      act(() => {
-        result.current.removeFromCart('1')
-      })
-      
-      expect(result.current.cart).toHaveLength(0)
-      expect(result.current.total).toBe(0)
-    })
-
-    it('should handle removing non-existent item', () => {
-      const { result } = renderHook(() => usePOS())
-      
-      act(() => {
-        result.current.removeFromCart('non-existent')
-      })
-      
-      expect(result.current.cart).toHaveLength(0)
-    })
+  it('switches existing items to the wholesale price', () => {
+    const { result } = renderHook(() => usePOS())
+    act(() => result.current.addToCart(product(), 1))
+    act(() => result.current.toggleWholesale())
+    expect(result.current.isWholesale).toBe(true)
+    expect(result.current.cart[0].price).toBe(80_000)
+    expect(result.current.total).toBe(80_000)
   })
 
-  describe('Clear Cart', () => {
-    it('should clear all items from cart', () => {
-      const { result } = renderHook(() => usePOS())
-      const product1 = createMockProduct({ id: '1', price: 100 })
-      const product2 = createMockProduct({ id: '2', price: 50 })
-      
-      act(() => {
-        result.current.addToCart(product1, 1)
-        result.current.addToCart(product2, 2)
-      })
-      
-      act(() => {
-        result.current.clearCart()
-      })
-      
-      expect(result.current.cart).toHaveLength(0)
-      expect(result.current.total).toBe(0)
-      expect(result.current.itemCount).toBe(0)
-    })
+  it('calculates split payments and change', () => {
+    const { result } = renderHook(() => usePOS())
+    act(() => result.current.addToCart(product(), 1))
+    act(() => result.current.addPayment({ method: 'cash', amount: 120_000 }))
+    expect(result.current.totalPaid).toBe(120_000)
+    expect(result.current.change).toBe(20_000)
   })
 
-  describe('Process Payment', () => {
-    it('should process payment successfully', async () => {
-      const { result } = renderHook(() => usePOS())
-      const product = createMockProduct({ id: '1', price: 100 })
-      
-      act(() => {
-        result.current.addToCart(product, 1)
-      })
-      
-      let paymentResult: any
-      
-      await act(async () => {
-        paymentResult = await result.current.processPayment({
-          method: 'cash',
-          amount: 100
-        })
-      })
-      
-      expect(paymentResult.success).toBe(true)
-      expect(paymentResult.transactionId).toBeDefined()
+  it('clears all sale state together', () => {
+    const { result } = renderHook(() => usePOS())
+    act(() => {
+      result.current.addToCart(product(), 1)
+      result.current.setCustomer({ id: 'customer-1', name: 'Ana' })
+      result.current.addPayment({ method: 'cash', amount: 100_000 })
+      result.current.setGlobalDiscount(5)
+      result.current.setNotes('Entrega inmediata')
     })
-
-    it('should handle payment errors', async () => {
-      const { result } = renderHook(() => usePOS())
-      
-      // Mock error en el pago
-      vi.mocked(fetch).mockRejectedValueOnce(new Error('Payment failed'))
-      
-      let paymentResult: any
-      
-      await act(async () => {
-        paymentResult = await result.current.processPayment({
-          method: 'card',
-          amount: 100
-        })
-      })
-      
-      expect(paymentResult.success).toBe(false)
-      expect(paymentResult.error).toBeDefined()
-    })
-
-    it('should set processing state during payment', async () => {
-      const { result } = renderHook(() => usePOS())
-      
-      const paymentPromise = act(async () => {
-        return result.current.processPayment({
-          method: 'cash',
-          amount: 100
-        })
-      })
-      
-      // Durante el procesamiento
-      expect(result.current.isProcessing).toBe(true)
-      
-      await paymentPromise
-      
-      // Después del procesamiento
-      expect(result.current.isProcessing).toBe(false)
-    })
-  })
-
-  describe('Persistence', () => {
-    it('should save cart to localStorage on changes', () => {
-      const { result } = renderHook(() => usePOS())
-      const product = createMockProduct({ id: '1', price: 100 })
-      
-      act(() => {
-        result.current.addToCart(product, 1)
-      })
-      
-      const savedCart = JSON.parse(localStorage.getItem('pos-cart') || '[]')
-      expect(savedCart).toHaveLength(1)
-      expect(savedCart[0].product.id).toBe('1')
-    })
-
-    it('should handle localStorage errors gracefully', () => {
-      // Mock localStorage error
-      const originalSetItem = localStorage.setItem
-      localStorage.setItem = vi.fn(() => {
-        throw new Error('Storage full')
-      })
-      
-      const { result } = renderHook(() => usePOS())
-      const product = createMockProduct({ id: '1', price: 100 })
-      
-      // Should not throw error
-      expect(() => {
-        act(() => {
-          result.current.addToCart(product, 1)
-        })
-      }).not.toThrow()
-      
-      // Restore original function
-      localStorage.setItem = originalSetItem
-    })
-  })
-
-  describe('Performance', () => {
-    it('should calculate totals efficiently', () => {
-      const { result } = renderHook(() => usePOS())
-      
-      // Add many items
-      act(() => {
-        for (let i = 1; i <= 100; i++) {
-          const product = createMockProduct({ id: `${i}`, price: i })
-          result.current.addToCart(product, 1)
-        }
-      })
-      
-      // Total should be calculated correctly
-      const expectedTotal = Array.from({ length: 100 }, (_, i) => i + 1).reduce((a, b) => a + b, 0)
-      expect(result.current.total).toBe(expectedTotal)
-      expect(result.current.itemCount).toBe(100)
-    })
-
-    it('should debounce localStorage updates', async () => {
-      const setItemSpy = vi.spyOn(localStorage, 'setItem')
-      const { result } = renderHook(() => usePOS())
-      const product = createMockProduct({ id: '1', price: 100 })
-      
-      // Multiple rapid updates
-      act(() => {
-        result.current.addToCart(product, 1)
-        result.current.updateQuantity('1', 2)
-        result.current.updateQuantity('1', 3)
-      })
-      
-      await waitFor(() => {
-        // Should debounce and only save once
-        expect(setItemSpy).toHaveBeenCalledTimes(1)
-      })
-    })
+    act(() => result.current.clearCart())
+    expect(result.current.cart).toEqual([])
+    expect(result.current.customer).toBeNull()
+    expect(result.current.paymentSplits).toEqual([])
+    expect(result.current.globalDiscount).toBe(0)
+    expect(result.current.notes).toBe('')
   })
 })

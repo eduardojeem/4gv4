@@ -187,11 +187,16 @@ const CartItemRow = memo<{
                   size="icon"
                   onClick={() => onUpdateQuantity(item.id, Math.max(0, item.quantity - 1))}
                   className="h-6 w-6 hover:bg-background hover:text-destructive rounded-md"
+                  aria-label={`Reducir cantidad de ${item.name}`}
                 >
                   <Minus className="h-3 w-3" />
                 </Button>
                 
                 <Input
+                  type="number"
+                  min={1}
+                  max={item.stock}
+                  aria-label={`Cantidad de ${item.name}`}
                   className="h-6 w-9 p-0 text-center border-none bg-transparent text-xs font-bold tabular-nums focus-visible:ring-0 shadow-none"
                   value={localQty}
                   onChange={(e) => setLocalQty(e.target.value)}
@@ -212,6 +217,7 @@ const CartItemRow = memo<{
                   onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
                   className="h-6 w-6 hover:bg-background hover:text-primary rounded-md"
                   disabled={typeof item.stock === 'number' && item.quantity >= item.stock}
+                  aria-label={`Aumentar cantidad de ${item.name}`}
                 >
                   <Plus className="h-3 w-3" />
                 </Button>
@@ -275,6 +281,7 @@ const CartItemRow = memo<{
                 size="icon"
                 onClick={() => onRemoveItem(item.id)}
                 className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                aria-label={`Eliminar ${item.name}`}
               >
                 <Trash2 className="h-3 w-3" />
               </Button>
@@ -491,6 +498,11 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                 </span>
                 {showPricingOptions ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </Button>
+              {!canCheckout && checkoutDisabledReason && (
+                <p className="text-center text-[11px] text-amber-700 dark:text-amber-300" role="status">
+                  {checkoutDisabledReason}
+                </p>
+              )}
             </div>
 
             {showPricingOptions && (

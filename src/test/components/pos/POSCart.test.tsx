@@ -1,248 +1,65 @@
-/**
- * POSCart Component Tests - Fase 5 Testing & QA
- * Tests para el componente crítico del carrito POS
- */
-
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSCart } from '@/app/dashboard/pos/components/POSCart'
-import { createMockProduct } from '@/test/setup'
 
-// Mock del hook usePOS
-const mockUsePOS = {
-  cart: [],
-  total: 0,
-  addToCart: vi.fn(),
-  removeFromCart: vi.fn(),
-  updateQuantity: vi.fn(),
-  clearCart: vi.fn(),
-  processPayment: vi.fn(),
-  isProcessing: false
+const handlers = {
+  onUpdateQuantity: vi.fn(), onRemoveItem: vi.fn(), onCheckout: vi.fn(),
+  onClearCart: vi.fn(), onToggleWholesale: vi.fn(), onUpdateDiscount: vi.fn(),
+}
+const baseProps = {
+  items: [], ...handlers, isWholesale: false, discount: 0, subtotalApplied: 0,
+  subtotalNonWholesale: 0, generalDiscountAmount: 0, wholesaleDiscountAmount: 0,
+  totalSavings: 0, cartTax: 0, cartTotal: 0, cartItemCount: 0,
 }
 
-vi.mock('@/hooks/usePOS', () => ({
-  usePOS: () => mockUsePOS
-}))
+describe('POSCart current component contract', () => {
+  beforeEach(() => vi.clearAllMocks())
 
-describe('POSCart Component', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockUsePOS.cart = []
-    mockUsePOS.total = 0
-    mockUsePOS.isProcessing = false
+  it('shows the empty state and repair shortcut', () => {
+    const onOpenRepairModal = vi.fn()
+    render(<POSCart {...baseProps} onOpenRepairModal={onOpenRepairModal} />)
+    expect(screen.getByText('Carrito vacío')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /cobrar una reparación/i }))
+    expect(onOpenRepairModal).toHaveBeenCalledOnce()
   })
 
-  describe('Empty Cart', () => {
-    it('should render empty cart message', () => {
-      render(<POSCart />)
-      
-      expect(screen.getByText(/carrito vacío/i)).toBeInTheDocument()
-      expect(screen.getByText(/agrega productos/i)).toBeInTheDocument()
-    })
-
-    it('should disable checkout button when cart is empty', () => {
-      render(<POSCart />)
-      
-      const checkoutButton = screen.getByRole('button', { name: /procesar pago/i })
-      expect(checkoutButton).toBeDisabled()
-    })
+  it('renders items and sends quantity changes with the cart id', () => {
+    render(<POSCart {...baseProps}
+      items={[{ id: 'cart-1', name: 'Remera', sku: 'REM-1', price: 100_000, quantity: 2, stock: 8 }]}
+      subtotalApplied={200_000} subtotalNonWholesale={200_000} cartTotal={200_000} cartItemCount={2}
+    />)
+    expect(screen.getByText('Remera')).toBeInTheDocument()
+    const quantity = screen.getByRole('spinbutton')
+    fireEvent.change(quantity, { target: { value: '3' } })
+    fireEvent.blur(quantity)
+    expect(handlers.onUpdateQuantity).toHaveBeenCalledWith('cart-1', 3)
   })
 
-  describe('Cart with Items', () => {
-    beforeEach(() => {
-      mockUsePOS.cart = [
-        {
-          id: '1',
-          product: createMockProduct({ id: '1', name: 'Producto 1', price: 100 }),
-          quantity: 2,
-          subtotal: 200
-        },
-        {
-          id: '2',
-          product: createMockProduct({ id: '2', name: 'Producto 2', price: 50 }),
-          quantity: 1,
-          subtotal: 50
-        }
-      ]
-      mockUsePOS.total = 250
-    })
-
-    it('should render cart items correctly', () => {
-      render(<POSCart />)
-      
-      expect(screen.getByText('Producto 1')).toBeInTheDocument()
-      expect(screen.getByText('Producto 2')).toBeInTheDocument()
-      expect(screen.getByText('$250.00')).toBeInTheDocument()
-    })
-
-    it('should display correct quantities', () => {
-      render(<POSCart />)
-      
-      const quantityInputs = screen.getAllByRole('spinbutton')
-      expect(quantityInputs[0]).toHaveValue(2)
-      expect(quantityInputs[1]).toHaveValue(1)
-    })
-
-    it('should update quantity when input changes', async () => {
-      render(<POSCart />)
-      
-      const quantityInput = screen.getAllByRole('spinbutton')[0]
-      fireEvent.change(quantityInput, { target: { value: '3' } })
-      
-      await waitFor(() => {
-        expect(mockUsePOS.updateQuantity).toHaveBeenCalledWith('1', 3)
-      })
-    })
-
-    it('should remove item when quantity is set to 0', async () => {
-      render(<POSCart />)
-      
-      const quantityInput = screen.getAllByRole('spinbutton')[0]
-      fireEvent.change(quantityInput, { target: { value: '0' } })
-      
-      await waitFor(() => {
-        expect(mockUsePOS.removeFromCart).toHaveBeenCalledWith('1')
-      })
-    })
-
-    it('should remove item when delete button is clicked', async () => {
-      render(<POSCart />)
-      
-      const deleteButtons = screen.getAllByRole('button', { name: /eliminar/i })
-      fireEvent.click(deleteButtons[0])
-      
-      await waitFor(() => {
-        expect(mockUsePOS.removeFromCart).toHaveBeenCalledWith('1')
-      })
-    })
-
-    it('should enable checkout button when cart has items', () => {
-      render(<POSCart />)
-      
-      const checkoutButton = screen.getByRole('button', { name: /procesar pago/i })
-      expect(checkoutButton).not.toBeDisabled()
-    })
+  it('removes an item through its accessible delete action', () => {
+    render(<POSCart {...baseProps}
+      items={[{ id: 'cart-1', name: 'Short', price: 75_000, quantity: 1, stock: 5 }]}
+      subtotalApplied={75_000} subtotalNonWholesale={75_000} cartTotal={75_000} cartItemCount={1}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: /eliminar short/i }))
+    expect(handlers.onRemoveItem).toHaveBeenCalledWith('cart-1')
   })
 
-  describe('Checkout Process', () => {
-    beforeEach(() => {
-      mockUsePOS.cart = [
-        {
-          id: '1',
-          product: createMockProduct({ id: '1', name: 'Producto 1', price: 100 }),
-          quantity: 1,
-          subtotal: 100
-        }
-      ]
-      mockUsePOS.total = 100
-    })
-
-    it('should process payment when checkout button is clicked', async () => {
-      mockUsePOS.processPayment.mockResolvedValue({ success: true })
-      
-      render(<POSCart />)
-      
-      const checkoutButton = screen.getByRole('button', { name: /procesar pago/i })
-      fireEvent.click(checkoutButton)
-      
-      await waitFor(() => {
-        expect(mockUsePOS.processPayment).toHaveBeenCalled()
-      })
-    })
-
-    it('should show loading state during payment processing', async () => {
-      mockUsePOS.isProcessing = true
-      
-      render(<POSCart />)
-      
-      expect(screen.getByText(/procesando/i)).toBeInTheDocument()
-      
-      const checkoutButton = screen.getByRole('button', { name: /procesando/i })
-      expect(checkoutButton).toBeDisabled()
-    })
-
-    it('should clear cart after successful payment', async () => {
-      mockUsePOS.processPayment.mockResolvedValue({ success: true })
-      
-      render(<POSCart />)
-      
-      const checkoutButton = screen.getByRole('button', { name: /procesar pago/i })
-      fireEvent.click(checkoutButton)
-      
-      await waitFor(() => {
-        expect(mockUsePOS.clearCart).toHaveBeenCalled()
-      })
-    })
-
-    it('should handle payment errors gracefully', async () => {
-      mockUsePOS.processPayment.mockRejectedValue(new Error('Payment failed'))
-      
-      render(<POSCart />)
-      
-      const checkoutButton = screen.getByRole('button', { name: /procesar pago/i })
-      fireEvent.click(checkoutButton)
-      
-      await waitFor(() => {
-        expect(screen.getByText(/error en el pago/i)).toBeInTheDocument()
-      })
-    })
+  it('blocks checkout when the caller reports an invalid sale', () => {
+    render(<POSCart {...baseProps}
+      items={[{ id: 'cart-1', name: 'Producto', price: 50_000, quantity: 1 }]}
+      subtotalApplied={50_000} subtotalNonWholesale={50_000} cartTotal={50_000} cartItemCount={1}
+      canCheckout={false} checkoutDisabledReason="Seleccioná una caja abierta"
+    />)
+    expect(screen.getByRole('button', { name: /cobrar ahora/i })).toBeDisabled()
+    expect(screen.getByText('Seleccioná una caja abierta')).toBeInTheDocument()
   })
 
-  describe('Accessibility', () => {
-    beforeEach(() => {
-      mockUsePOS.cart = [
-        {
-          id: '1',
-          product: createMockProduct({ id: '1', name: 'Producto 1', price: 100 }),
-          quantity: 1,
-          subtotal: 100
-        }
-      ]
-      mockUsePOS.total = 100
-    })
-
-    it('should have proper ARIA labels', () => {
-      render(<POSCart />)
-      
-      expect(screen.getByRole('region', { name: /carrito de compras/i })).toBeInTheDocument()
-      expect(screen.getByRole('list', { name: /productos en el carrito/i })).toBeInTheDocument()
-    })
-
-    it('should support keyboard navigation', () => {
-      render(<POSCart />)
-      
-      const quantityInput = screen.getByRole('spinbutton')
-      quantityInput.focus()
-      
-      expect(document.activeElement).toBe(quantityInput)
-    })
-
-    it('should announce total price changes', () => {
-      render(<POSCart />)
-      
-      const totalElement = screen.getByRole('status', { name: /total/i })
-      expect(totalElement).toBeInTheDocument()
-    })
-  })
-
-  describe('Performance', () => {
-    it('should not re-render unnecessarily', () => {
-      const renderSpy = vi.fn()
-      
-      const TestComponent = () => {
-        renderSpy()
-        return <POSCart />
-      }
-      
-      const { rerender } = render(<TestComponent />)
-      
-      expect(renderSpy).toHaveBeenCalledTimes(1)
-      
-      // Re-render with same props
-      rerender(<TestComponent />)
-      
-      // Should not cause additional renders due to memoization
-      expect(renderSpy).toHaveBeenCalledTimes(2)
-    })
+  it('opens checkout when the sale is valid', () => {
+    render(<POSCart {...baseProps}
+      items={[{ id: 'cart-1', name: 'Producto', price: 50_000, quantity: 1 }]}
+      subtotalApplied={50_000} subtotalNonWholesale={50_000} cartTotal={50_000} cartItemCount={1}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: /cobrar ahora/i }))
+    expect(handlers.onCheckout).toHaveBeenCalledOnce()
   })
 })

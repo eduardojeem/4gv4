@@ -96,7 +96,7 @@ export interface OfflineStats {
 // Offline Manager Class
 // ============================================================================
 
-class OfflineManager {
+export class OfflineManager {
   private db: IDBPDatabase<POSDatabase> | null = null
   private isOnline: boolean = true
   private syncInterval: NodeJS.Timeout | null = null
