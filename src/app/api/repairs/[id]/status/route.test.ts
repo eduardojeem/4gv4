@@ -8,6 +8,11 @@ vi.mock('@/lib/saas/context', () => ({
   getCurrentOrganizationContext: vi.fn(async () => ({ id: 'org-1', role: 'admin' })),
 }))
 vi.mock('@/lib/saas/permissions', () => ({ roleHasPermission: vi.fn(() => true) }))
+vi.mock('@/lib/saas/subscription-service', () => ({
+  getOrganizationPlanInfo: vi.fn(async () => ({
+    effectiveModules: ['repairs'], entitledModules: ['repairs'], moduleTrials: [],
+  })),
+}))
 
 describe('PATCH /api/repairs/:id/status', () => {
   beforeEach(() => vi.clearAllMocks())

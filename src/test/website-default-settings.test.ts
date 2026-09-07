@@ -10,10 +10,10 @@ describe('applyWebsiteSettingsDefaults', () => {
     expect(result.checkout.commerceMode).toBe('cart')
   })
 
-  it('keeps the process section hidden until an organization configures it', () => {
+  it('shows the guided process by default for the public storefront', () => {
     const result = applyWebsiteSettingsDefaults({} as Partial<WebsiteSettings>)
 
-    expect(result.company_info.processSectionEnabled).toBe(false)
+    expect(result.company_info.processSectionEnabled).toBe(true)
   })
 
   it('accepts the expanded offers accent palette', () => {

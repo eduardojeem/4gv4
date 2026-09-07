@@ -50,7 +50,7 @@ describe('HeroEditor visibility control', () => {
     expect(visibility).not.toBeChecked()
     expect(screen.getByText('Oculto en la Web')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar Hero' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar portada' }))
 
     await waitFor(() => expect(hookState.updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -73,7 +73,7 @@ describe('HeroEditor visibility control', () => {
     fireEvent.change(screen.getByLabelText('Título principal'), { target: { value: 'Corto' } })
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Botones' }), { button: 0, ctrlKey: false })
     expect(screen.getByRole('tab', { name: 'Botones' })).toHaveAttribute('aria-selected', 'true')
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar Hero' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar portada' }))
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Textos' })).toHaveAttribute('aria-selected', 'true'))
     expect(screen.getByLabelText('Título principal')).toHaveValue('Corto')
     expect(screen.getByText('El título debe tener al menos 10 caracteres.')).toBeInTheDocument()
@@ -88,7 +88,7 @@ describe('HeroEditor visibility control', () => {
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Confianza' }), { button: 0, ctrlKey: false })
     fireEvent.change(screen.getByLabelText('Insignia 2'), { target: { value: 'Envíos nacionales' } })
     fireEvent.change(screen.getByLabelText(/Métrica 1/), { target: { value: '500+' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar Hero' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar portada' }))
     await waitFor(() => expect(hookState.updateSettings).toHaveBeenCalledWith({
       hero_content: expect.objectContaining({
         title: 'Tu tienda de confianza', ctaPrimaryText: 'Explorar catálogo',
@@ -110,6 +110,6 @@ describe('HeroEditor visibility control', () => {
     expect(screen.getByLabelText(/Métrica 1/)).toHaveValue('100+')
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Textos' }), { button: 0, ctrlKey: false })
     expect(screen.getByLabelText('Título principal')).toHaveValue('Soluciones para tu celular')
-    expect(screen.getByRole('button', { name: 'Guardar Hero' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Guardar portada' })).toBeDisabled()
   })
 })

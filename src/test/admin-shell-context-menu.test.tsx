@@ -18,6 +18,8 @@ vi.mock('@/contexts/auth-context', () => ({
   }),
 }))
 
+vi.mock('@/hooks/use-admin-nav-badges', () => ({ useAdminNavBadges: () => ({}) }))
+
 vi.mock('next/navigation', () => ({
   usePathname: () => '/admin/users',
   useRouter: () => ({ refresh: vi.fn() }),

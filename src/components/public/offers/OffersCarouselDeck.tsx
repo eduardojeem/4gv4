@@ -306,7 +306,7 @@ export function OffersCarouselDeck({
       onTouchEnd={() => setIsCarouselPaused(false)}
     >
       {/* ── Controles Superiores de Navegación ── */}
-      <div className="flex items-center justify-between gap-3">
+      {offers.length > 1 && <div className="flex items-center justify-between gap-3">
         {/* Indicadores de Progreso */}
         <div className="flex items-center gap-1.5" role="tablist" aria-label="Indicadores de oferta">
           {offers.map((offer, idx) => (
@@ -363,7 +363,7 @@ export function OffersCarouselDeck({
             </Button>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ── Pista Deslizable de Tarjetas Premium ── */}
       <div

@@ -146,7 +146,7 @@ describe('OffersCarouselDeck', () => {
       />
     )
 
-    expect(screen.getByRole('link', { name: 'Ver detalle' }))
+    expect(screen.getByRole('link', { name: 'Ver' }))
       .toHaveAttribute('href', '/mi-tienda/productos/product-1')
   })
 

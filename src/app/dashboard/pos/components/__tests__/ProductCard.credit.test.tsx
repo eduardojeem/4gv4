@@ -34,7 +34,11 @@ describe('ProductCard financing summary', () => {
 
     expect(screen.getByText('Hasta 12 cuotas')).toBeInTheDocument()
     expect(screen.getByText(/Desde Gs\. 112\.000\/mes/)).toBeInTheDocument()
-    expect(screen.getByText('Tasa 12%')).toBeInTheDocument()
+    if (viewMode === 'list') {
+      expect(screen.getByText('Tasa 12%')).toBeInTheDocument()
+    } else {
+      expect(screen.queryByText('Tasa 12%')).not.toBeInTheDocument()
+    }
   })
 
   it('uses the effective wholesale price for the installment amount', () => {

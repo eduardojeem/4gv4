@@ -49,7 +49,7 @@ describe('FinanceBusinessGuideModal standalone component', () => {
     const user = userEvent.setup()
     render(<FinanceBusinessGuideModal open={true} initialTab="resumen" />)
 
-    expect(screen.getByText('Cómo Administrar las Finanzas de tu Negocio')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual Práctico de Gestión Financiera' })).toBeInTheDocument()
     expect(screen.getByText(/Manual Práctico de Gestión/i)).toBeInTheDocument()
 
     // 1. Resumen tab
@@ -107,7 +107,7 @@ describe('FinancesSystem integration with business guide across all sections', (
 
     await user.click(guideButton)
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByText('Cómo Administrar las Finanzas de tu Negocio')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual Práctico de Gestión Financiera' })).toBeInTheDocument()
   })
 
   it('allows opening the business guide from FinanceSummary quick actions', async () => {
@@ -126,7 +126,7 @@ describe('FinancesSystem integration with business guide across all sections', (
 
     await user.click(guideSummaryBtn)
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByText('Cómo Administrar las Finanzas de tu Negocio')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual Práctico de Gestión Financiera' })).toBeInTheDocument()
   })
 
   it('allows opening detailed section guide from FinanceSectionHelp in any active tab', async () => {

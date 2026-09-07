@@ -13,6 +13,8 @@ vi.mock('@/components/admin/SubscriptionChip', () => ({
   SubscriptionChip: () => null,
 }))
 
+vi.mock('@/hooks/use-admin-nav-badges', () => ({ useAdminNavBadges: () => ({}) }))
+
 vi.mock('@/components/branches/branch-selector', () => ({
   BranchSelector: () => null,
 }))

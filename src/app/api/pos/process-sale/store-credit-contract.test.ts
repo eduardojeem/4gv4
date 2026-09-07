@@ -33,20 +33,23 @@ describe('atomic POS store-credit contract', () => {
   })
 
   it('submits only the amount still due as an external POS payment', () => {
-    const page = readFileSync(resolve(workspace, 'src/app/dashboard/pos/page.tsx'), 'utf8')
+    const processor = readFileSync(resolve(workspace, 'src/app/dashboard/pos/hooks/usePOSSaleProcessor.ts'), 'utf8')
+    const summary = readFileSync(resolve(workspace, 'src/app/dashboard/pos/components/checkout/SaleSummary.tsx'), 'utf8')
 
-    expect(page).toContain('const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)')
-    expect(page).toContain('store_credit_amount: storeCreditApplied')
-    expect(page).not.toContain('await redeemStoreCredit({')
+    expect(summary).toContain('const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)')
+    expect(processor).toContain('store_credit_amount: storeCreditApplied')
+    expect(processor).not.toContain('await redeemStoreCredit({')
   })
 
   it('uses the post-credit balance for mixed validation and receipt payments', () => {
-    const page = readFileSync(resolve(workspace, 'src/app/dashboard/pos/page.tsx'), 'utf8')
+    const processor = readFileSync(resolve(workspace, 'src/app/dashboard/pos/hooks/usePOSSaleProcessor.ts'), 'utf8')
+    const summary = readFileSync(resolve(workspace, 'src/app/dashboard/pos/components/checkout/SaleSummary.tsx'), 'utf8')
+    const modal = readFileSync(resolve(workspace, 'src/app/dashboard/pos/components/CheckoutModal.tsx'), 'utf8')
 
-    expect(page).toContain('getMixedPaymentValidation(amountDueAfterStoreCredit, paymentSplit)')
-    expect(page).toContain('buildPosCreditSummary(amountDueAfterStoreCredit, creditTerms)')
-    expect(page).toContain('const receiptPaymentAmount = creditSummaryForReceipt?.financedTotal ?? amountDueAfterStoreCredit')
-    expect(page).toContain("method: 'store_credit' as const")
+    expect(modal).toContain('getMixedPaymentValidation(amountDue, paymentSplit)')
+    expect(summary).toContain('buildPosCreditSummary(creditPrincipal, creditTerms)')
+    expect(processor).toContain('const receiptPaymentAmount = creditSummary?.financedTotal ?? amountDue')
+    expect(processor).toContain("method: 'store_credit' as const")
   })
 
   it('never falls back to v3 when store credit must be debited', () => {
