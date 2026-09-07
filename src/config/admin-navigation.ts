@@ -21,6 +21,12 @@ import type { OrganizationModule } from '@/lib/organization/business-profile'
  * Centraliza todos los items de navegación con sus permisos y categorías
  */
 
+/**
+ * Contadores que puede mostrar el menu. El numero no vive aca —cambia solo—:
+ * la clave dice de donde sacarlo y `useAdminNavBadges` lo resuelve.
+ */
+export type NavBadgeKey = 'cash-alerts'
+
 export interface NavItem {
     key: string
     label: string
@@ -32,6 +38,11 @@ export interface NavItem {
     superAdminOnly?: boolean
     /** Módulo del plan requerido para ver este item. Si el plan activo (efectivo) no lo incluye, se oculta. */
     module?: OrganizationModule
+    /**
+     * Contador a mostrar al lado del nombre. El monitor de cajas era la unica
+     * seccion que generaba alertas y no habia forma de saberlo sin entrar.
+     */
+    badge?: NavBadgeKey
 }
 
 export interface NavCategory {
@@ -87,7 +98,8 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Monitor,
                 href: '/admin/cash-monitor',
                 description: 'Control y monitoreo de cajas en tiempo real',
-                permissions: [] // Visible para todos los admins
+                permissions: [], // Visible para todos los admins
+                badge: 'cash-alerts'
             },
             {
                 key: 'inventory',

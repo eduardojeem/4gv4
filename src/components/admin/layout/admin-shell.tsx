@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
+import { useAdminNavBadges } from '@/hooks/use-admin-nav-badges'
 import { cn } from '@/lib/utils'
 
 interface AdminShellProps {
@@ -42,6 +43,7 @@ export function AdminShell({ active, onNavigate, topRightActions, onContextActio
   )
 
   const currentItem = useMemo(() => getNavItemByKey(active), [active])
+  const navBadges = useAdminNavBadges()
 
   const toggleCategory = useCallback((categoryId: string) => {
     setExpandedCategories(prev =>
@@ -130,7 +132,9 @@ export function AdminShell({ active, onNavigate, topRightActions, onContextActio
                 {/* Category Items */}
                 {(collapsed || isExpanded) && (
                   <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className={cn("space-y-0.5", !collapsed && "pl-1")}>
-                    {category.items.map(({ key, label, icon: Icon, description }) => (
+                    {category.items.map(({ key, label, icon: Icon, description, badge }) => {
+                      const pendientes = badge ? navBadges[badge] ?? 0 : 0
+                      return (
                       <motion.button
                         key={key}
                         onClick={() => onNavigate(key)}
@@ -146,14 +150,35 @@ export function AdminShell({ active, onNavigate, topRightActions, onContextActio
                         )}
                         aria-current={active === key ? 'page' : undefined}
                         title={collapsed ? `${label}${description ? ': ' + description : ''}` : description}
+                        aria-label={pendientes > 0 ? `${label}: ${pendientes} sin resolver` : undefined}
                       >
-                        <Icon className={cn("flex-shrink-0", compact ? "h-3.5 w-3.5" : "h-4 w-4")} aria-hidden />
+                        <span className="relative flex-shrink-0">
+                          <Icon className={cn(compact ? "h-3.5 w-3.5" : "h-4 w-4")} aria-hidden />
+                          {/* Plegado no hay lugar para el numero, pero el punto
+                              tiene que verse igual: es todo el sentido de esto. */}
+                          {collapsed && pendientes > 0 && (
+                            <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-rose-500" aria-hidden />
+                          )}
+                        </span>
                         {!collapsed && <span className="truncate">{label}</span>}
-                        {!collapsed && active === key && (
+                        {!collapsed && pendientes > 0 && (
+                          <span
+                            className={cn(
+                              'ml-auto min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums',
+                              active === key
+                                ? 'bg-primary-foreground text-primary'
+                                : 'bg-rose-500 text-white'
+                            )}
+                          >
+                            {pendientes > 99 ? '99+' : pendientes}
+                          </span>
+                        )}
+                        {!collapsed && pendientes === 0 && active === key && (
                           <div className="ml-auto h-2 w-2 rounded-full bg-primary-foreground" aria-hidden />
                         )}
                       </motion.button>
-                    ))}
+                      )
+                    })}
                   </motion.div>
                 )}
               </div>

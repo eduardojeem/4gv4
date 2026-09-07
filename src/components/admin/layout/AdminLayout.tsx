@@ -37,6 +37,7 @@ import { Input } from '@/components/ui/input'
 import { NotificationBell } from '@/components/ui/notification-bell'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
+import { useAdminNavBadges } from '@/hooks/use-admin-nav-badges'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
@@ -61,6 +62,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
 
   const active = searchParams.get('tab') ?? 'overview'
   const currentItem = useMemo(() => getNavItemByKey(active), [active])
+  const navBadges = useAdminNavBadges()
 
   // Oculta del menú las secciones cuyo módulo no está incluido en el plan activo
   // (ej. Analytics, Inventario avanzado, Seguridad si el plan no las trae).
@@ -230,10 +232,11 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
 
                 {(collapsed || isExpanded) && (
                   <div className="space-y-1">
-                    {category.items.map(({ key, label, icon: Icon, description, href }) => {
+                    {category.items.map(({ key, label, icon: Icon, description, href, badge }) => {
                       const isActive = href === '/admin'
                         ? pathname === href
                         : pathname.startsWith(href || '')
+                      const pendientes = badge ? navBadges[badge] ?? 0 : 0
 
                       return (
                         <Link
@@ -248,18 +251,31 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                               : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                           )}
                           title={collapsed ? label : description}
+                          aria-label={pendientes > 0 ? `${label}: ${pendientes} sin resolver` : undefined}
                         >
-                          <Icon
-                            className={cn(
-                              'flex-shrink-0 transition-colors',
-                              collapsed ? 'h-6 w-6' : 'h-5 w-5',
-                              isActive
-                                ? 'text-blue-600 dark:text-blue-400'
-                                : 'text-muted-foreground group-hover:text-foreground'
+                          <span className="relative flex-shrink-0">
+                            <Icon
+                              className={cn(
+                                'transition-colors',
+                                collapsed ? 'h-6 w-6' : 'h-5 w-5',
+                                isActive
+                                  ? 'text-blue-600 dark:text-blue-400'
+                                  : 'text-muted-foreground group-hover:text-foreground'
+                              )}
+                            />
+                            {/* Plegado no entra el numero, pero el punto tiene
+                                que verse igual: es todo el sentido de esto. */}
+                            {collapsed && pendientes > 0 && (
+                              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-rose-500" aria-hidden />
                             )}
-                          />
+                          </span>
                           {!collapsed && <span>{label}</span>}
-                          {!collapsed && isActive && <div className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />}
+                          {!collapsed && pendientes > 0 && (
+                            <span className="ml-auto min-w-5 rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums text-white">
+                              {pendientes > 99 ? '99+' : pendientes}
+                            </span>
+                          )}
+                          {!collapsed && pendientes === 0 && isActive && <div className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />}
                         </Link>
                       )
                     })}
