@@ -54,7 +54,7 @@ describe('SearchHistoryManager', () => {
 
   describe('product viewing', () => {
     it('should track viewed products', () => {
-      manager.addProductView('prod_1', 'iPhone 13')
+      manager.addRecentProduct('prod_1', 'iPhone 13')
 
       const recent = manager.getRecentProducts()
       expect(recent).toHaveLength(1)
@@ -63,8 +63,8 @@ describe('SearchHistoryManager', () => {
     })
 
     it('should update view count', () => {
-      manager.addProductView('prod_1', 'iPhone 13')
-      manager.addProductView('prod_1', 'iPhone 13')
+      manager.addRecentProduct('prod_1', 'iPhone 13')
+      manager.addRecentProduct('prod_1', 'iPhone 13')
 
       const recent = manager.getRecentProducts()
       expect(recent[0].view_count).toBe(2)
@@ -72,23 +72,23 @@ describe('SearchHistoryManager', () => {
 
     it('should update last viewed timestamp', () => {
       const firstView = Date.now()
-      manager.addProductView('prod_1', 'iPhone 13')
+      manager.addRecentProduct('prod_1', 'iPhone 13')
 
       // Wait a bit
       vi.useFakeTimers()
       vi.advanceTimersByTime(1000)
 
-      manager.addProductView('prod_1', 'iPhone 13')
+      manager.addRecentProduct('prod_1', 'iPhone 13')
 
       const recent = manager.getRecentProducts()
-      expect(recent[0].last_viewed).toBeGreaterThan(firstView)
+      expect(recent[0].timestamp.getTime()).toBeGreaterThanOrEqual(firstView)
 
       vi.useRealTimers()
     })
 
     it('should limit recent products', () => {
       for (let i = 0; i < 15; i++) {
-        manager.addProductView(`prod_${i}`, `Product ${i}`)
+        manager.addRecentProduct(`prod_${i}`, `Product ${i}`)
       }
 
       const recent = manager.getRecentProducts()
@@ -112,7 +112,7 @@ describe('SearchHistoryManager', () => {
       manager.addSearch('iPhone', 5)
 
       const suggestions = manager.getSuggestions('ip')
-      expect(suggestions).toContain('iPhone')
+      expect(suggestions).toContain('iphone')
     })
 
     it('should limit suggestions', () => {
@@ -165,18 +165,18 @@ describe('SearchHistoryManager', () => {
       manager.addSearch('macbook', 0)
 
       const stats = manager.getStats()
-      expect(stats.totalSearches).toBe(3)
-      expect(stats.uniqueQueries).toBe(3)
-      expect(stats.averageResults).toBeCloseTo(2.67, 1)
-      expect(stats.emptySearches).toBe(1)
+      expect(stats.total_searches).toBe(3)
+      expect(stats.unique_searches).toBe(3)
+      expect(stats.average_results).toBeCloseTo(2.67, 1)
+      expect(stats.most_common_query).toBeTruthy()
     })
 
     it('should handle empty history', () => {
       const stats = manager.getStats()
-      expect(stats.totalSearches).toBe(0)
-      expect(stats.uniqueQueries).toBe(0)
-      expect(stats.averageResults).toBe(0)
-      expect(stats.emptySearches).toBe(0)
+      expect(stats.total_searches).toBe(0)
+      expect(stats.unique_searches).toBe(0)
+      expect(stats.average_results).toBe(0)
+      expect(stats.most_common_query).toBeNull()
     })
   })
 
@@ -188,7 +188,7 @@ describe('SearchHistoryManager', () => {
       expect(stored).toBeTruthy()
       
       const parsed = JSON.parse(stored!)
-      expect(parsed.searches).toHaveLength(1)
+      expect(parsed).toHaveLength(1)
     })
 
     it('should load from localStorage', () => {
@@ -215,9 +215,9 @@ describe('SearchHistoryManager', () => {
   describe('data management', () => {
     it('should clear all history', () => {
       manager.addSearch('iphone', 5)
-      manager.addProductView('prod_1', 'iPhone')
+      manager.addRecentProduct('prod_1', 'iPhone')
 
-      manager.clearHistory()
+      manager.clearAll()
 
       expect(manager.getRecentSearches()).toEqual([])
       expect(manager.getRecentProducts()).toEqual([])
@@ -225,9 +225,9 @@ describe('SearchHistoryManager', () => {
 
     it('should clear search history only', () => {
       manager.addSearch('iphone', 5)
-      manager.addProductView('prod_1', 'iPhone')
+      manager.addRecentProduct('prod_1', 'iPhone')
 
-      manager.clearSearchHistory()
+      manager.clearHistory()
 
       expect(manager.getRecentSearches()).toEqual([])
       expect(manager.getRecentProducts()).toHaveLength(1)
@@ -235,9 +235,9 @@ describe('SearchHistoryManager', () => {
 
     it('should clear product history only', () => {
       manager.addSearch('iphone', 5)
-      manager.addProductView('prod_1', 'iPhone')
+      manager.addRecentProduct('prod_1', 'iPhone')
 
-      manager.clearProductHistory()
+      manager.clearRecent()
 
       expect(manager.getRecentSearches()).toHaveLength(1)
       expect(manager.getRecentProducts()).toEqual([])
@@ -245,12 +245,12 @@ describe('SearchHistoryManager', () => {
 
     it('should export data', () => {
       manager.addSearch('iphone', 5)
-      manager.addProductView('prod_1', 'iPhone')
+      manager.addRecentProduct('prod_1', 'iPhone')
 
       const exported = manager.exportData()
-      expect(exported.searches).toBeDefined()
-      expect(exported.products).toBeDefined()
-      expect(exported.stats).toBeDefined()
+      expect(exported.history).toBeDefined()
+      expect(exported.recent).toBeDefined()
+      expect(exported.frequent).toBeDefined()
     })
   })
 

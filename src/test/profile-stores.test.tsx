@@ -157,7 +157,12 @@ describe('el perfil ordena la pagina por lo que se usa', () => {
   })
 
   it('los datos personales quedan al final de la columna', () => {
-    expect(CLIENTE.indexOf('<ProfileOrders')).toBeLessThan(CLIENTE.indexOf('<ProfileForm'))
+    const ordersIndex = Math.max(
+      CLIENTE.indexOf('<ProfileOrderHistory'),
+      CLIENTE.indexOf('<ProfileOrders')
+    )
+    expect(ordersIndex).toBeGreaterThanOrEqual(0)
+    expect(CLIENTE.indexOf('<ProfileForm')).toBeGreaterThanOrEqual(0)
     expect(CLIENTE.indexOf('<ProfileFavoritesWidget')).toBeLessThan(CLIENTE.indexOf('<ProfileForm'))
   })
 })

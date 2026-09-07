@@ -55,7 +55,7 @@ export interface ProductAssociation {
 // Recommendation Engine Class
 // ============================================================================
 
-class RecommendationEngine {
+export class RecommendationEngine {
   // Purchase patterns (products bought together)
   private patterns: Map<string, PurchasePattern> = new Map()
 

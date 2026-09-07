@@ -69,13 +69,13 @@ class SearchHistory {
   addSearch(query: string, resultsCount: number): void {
     if (!query.trim()) return
 
-    const normalizedQuery = query.trim().toLowerCase()
+    const normalizedQuery = query.trim().slice(0, 100).toLowerCase()
 
     // Add to history
     this.history.unshift({
       query: normalizedQuery,
       timestamp: new Date(),
-      results_count: resultsCount,
+      results_count: Math.max(0, resultsCount),
     })
 
     // Keep only MAX_HISTORY entries
@@ -399,6 +399,8 @@ class SearchHistory {
     }
   }
 }
+
+export { SearchHistory as SearchHistoryManager }
 
 // ============================================================================
 // Singleton Instance
