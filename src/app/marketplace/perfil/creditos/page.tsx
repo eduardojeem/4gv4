@@ -1,1 +1,5 @@
-export { default, metadata } from '@/app/(public)/perfil/creditos/page'
+import { redirect } from 'next/navigation'
+
+export default function MarketplaceCreditsPage() {
+  redirect('/marketplace/perfil#tiendas')
+}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { HelpCircle } from 'lucide-react'
+import { BookOpenCheck, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
@@ -13,7 +13,7 @@ const topics = [
   { title: 'Sucursal, período y actualización', text: 'Elegí una sucursal para operar sobre ella, o la vista consolidada para consultar la organización. Seleccioná el período y usá Actualizar para consultar nuevamente los datos.', note: 'Los indicadores corresponden al período seleccionado. La lista de obligaciones pendientes usa el saldo actual; registrar pagos requiere los permisos y la caja abierta que correspondan.' },
 ]
 
-export function FinanceHelp() {
+export function FinanceHelp({ onOpenBusinessGuide }: { onOpenBusinessGuide?: () => void }) {
   const [open, setOpen] = useState(false)
   return <>
     <Button variant="outline" size="sm" onClick={() => setOpen(true)} className="gap-2"><HelpCircle className="h-4 w-4" />Cómo funciona</Button>
@@ -30,7 +30,23 @@ export function FinanceHelp() {
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{topic.note}</p>
           </section>)}
         </div>
-        <div className="shrink-0 border-t pt-3"><Button onClick={() => setOpen(false)} className="w-full sm:w-auto">Entendido</Button></div>
+        <div className="flex flex-wrap items-center justify-between gap-2 shrink-0 border-t pt-3">
+          {onOpenBusinessGuide && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setOpen(false)
+                onOpenBusinessGuide()
+              }}
+              className="gap-1.5 text-xs text-primary border-primary/30"
+            >
+              <BookOpenCheck className="h-3.5 w-3.5" />
+              Ver Guía de Administración del Negocio
+            </Button>
+          )}
+          <Button onClick={() => setOpen(false)} size="sm" className="w-full sm:w-auto">Entendido</Button>
+        </div>
       </DialogContent>
     </Dialog>
   </>

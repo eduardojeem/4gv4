@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { ProfileActivity } from '@/components/profile/profile-activity'
 import { ProfileOrders, type ProfileOrder } from '@/components/profile/profile-orders'
 import { ProfileAccountSummary } from '@/components/profile/profile-account-summary'
+import { ProfileStores } from '@/components/profile/profile-stores'
 import {
   customerOrderTrackHref,
   customerRepairHref,
@@ -207,6 +208,28 @@ describe('el saldo a favor se muestra por tienda', () => {
 
     expect(screen.getByText('Saldo disponible a favor')).toBeInTheDocument()
     expect(screen.queryByText(/no se puede usar en otra/i)).not.toBeInTheDocument()
+  })
+
+  it('cada tienda ofrece acceso a sus creditos dentro de su propio contexto', () => {
+    render(<ProfileStores stores={[{
+      organizationId: 'b',
+      organization: { id: 'b', name: 'Tienda B', slug: 'tienda-b' },
+      summary: {
+        equipment: { total: 0, active: 0, ready: 0, delivered: 0 },
+        repairs: { pendingCount: 0, paidCount: 0, pendingAmount: 0 },
+        orders: { pendingCount: 0, paidCount: 0, pendingAmount: 0 },
+        financing: { pendingAmount: 120_000, overdueAmount: 0, overdueCount: 0 },
+        storeCredit: 0,
+        totalDue: 120_000,
+        netBalance: -120_000,
+      },
+      needsAttention: true,
+    }]} />)
+
+    expect(screen.getByRole('link', { name: /Ver créditos de Tienda B/i })).toHaveAttribute(
+      'href',
+      '/tienda-b/perfil/creditos'
+    )
   })
 
   it('con varias, aclara que no es un total usable y las lista', () => {

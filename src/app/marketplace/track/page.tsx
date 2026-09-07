@@ -1,1 +1,5 @@
-export { default, metadata } from '@/app/(public)/track/page'
+import { redirect } from 'next/navigation'
+
+export default function MarketplaceTrackPage() {
+  redirect('/marketplace/perfil#tiendas')
+}

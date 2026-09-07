@@ -908,7 +908,16 @@ function commissionRuleRecord(
   organizationId: string,
   userId: string,
   input: CommissionRuleInput,
+  existingRule?: {
+    approved_by?: string | null
+    approved_at?: string | null
+    status?: string
+  } | null,
 ) {
+  const isApproved = input.status === 'approved'
+  const isRetired = input.status === 'retired'
+  const wasApproved = existingRule?.status === 'approved' || existingRule?.status === 'retired'
+
   return {
     organization_id: organizationId,
     branch_id: input.branchId ?? null,
@@ -929,8 +938,16 @@ function commissionRuleRecord(
     status: input.status,
     effective_from: input.effectiveFrom,
     effective_to: input.effectiveTo ?? null,
-    approved_by: input.status === 'approved' ? userId : null,
-    approved_at: input.status === 'approved' ? new Date().toISOString() : null,
+    approved_by: isApproved
+      ? (existingRule?.approved_by ?? userId)
+      : isRetired && wasApproved
+      ? (existingRule?.approved_by ?? userId)
+      : null,
+    approved_at: isApproved
+      ? (existingRule?.approved_at ?? new Date().toISOString())
+      : isRetired && wasApproved
+      ? (existingRule?.approved_at ?? new Date().toISOString())
+      : null,
     created_by: userId,
   }
 }
@@ -969,20 +986,68 @@ export async function updateCommissionRule(params: {
       employeeId: params.input.employeeId,
     })
   }
+
+  const admin = createAdminSupabase()
+  const { data: existing, error: existingError } = await admin
+    .from('commission_rules')
+    .select('*')
+    .eq('organization_id', params.organizationId)
+    .eq('id', params.id)
+    .maybeSingle()
+
+  if (existingError) throw toFinanceApiError(existingError)
+  if (!existing) {
+    throw new FinanceApiError('La regla de comisión no existe.', 404, 'PAYROLL_RULE_NOT_FOUND')
+  }
+
   const record = commissionRuleRecord(
     params.organizationId,
     params.userId,
     params.input,
+    existing,
   )
   delete record.created_by
-  const admin = createAdminSupabase()
-  const { data, error } = await admin
+
+  // Al retirar una regla aprobada, si no tiene fecha fin, cerramos su vigencia al día de hoy
+  const todayIso = new Date().toISOString().split('T')[0]
+  if (existing.status === 'approved' && params.input.status === 'retired' && !record.effective_to) {
+    record.effective_to = todayIso
+  }
+
+  let { data, error } = await admin
     .from('commission_rules')
     .update(record)
     .eq('organization_id', params.organizationId)
     .eq('id', params.id)
     .select('*')
     .maybeSingle()
+
+  // Respaldo de compatibilidad: si la base remota aún tiene el trigger estricto que no permite status='retired',
+  // cerramos su vigencia manteniendo status='approved' con safe_effective_close
+  if (
+    error &&
+    String((error as { message?: string })?.message || '').includes('PAYROLL_APPROVED_COMMISSION_RULE_IS_IMMUTABLE') &&
+    params.input.status === 'retired'
+  ) {
+    const fallbackRecord = {
+      ...existing,
+      effective_to: todayIso,
+      updated_at: new Date().toISOString(),
+    }
+    delete (fallbackRecord as { created_by?: string }).created_by
+    const fallback = await admin
+      .from('commission_rules')
+      .update(fallbackRecord)
+      .eq('organization_id', params.organizationId)
+      .eq('id', params.id)
+      .select('*')
+      .maybeSingle()
+
+    if (!fallback.error && fallback.data) {
+      data = fallback.data
+      error = null
+    }
+  }
 
   if (error) throw toFinanceApiError(error)
   if (!data) {

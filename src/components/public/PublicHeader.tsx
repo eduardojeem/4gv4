@@ -1,8 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
-import { Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag, ChevronRight, Search, MapPin, Sparkles, Flame, Mail, MessageCircle, ShieldCheck, Heart } from 'lucide-react'
+import { Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag, ChevronRight, Search, MapPin, Mail, MessageCircle, ShieldCheck, Heart } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
@@ -601,12 +600,12 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
                     <span>Rastrear Pedidos</span>
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
+                {tenantPrefix && <DropdownMenuItem asChild>
                   <Link href={withTenantPrefix('/perfil/autorizados')} className="flex items-center gap-2.5 cursor-pointer">
                     <Shield className="h-4 w-4 text-muted-foreground" />
                     <span>Personas Autorizadas</span>
                   </Link>
-                </DropdownMenuItem>
+                </DropdownMenuItem>}
                 {canAccessDashboard && (
                   <>
                     <DropdownMenuSeparator />
@@ -798,14 +797,14 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
                       <Truck className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span className="leading-tight">Rastrear</span>
                     </Link>
-                    <Link
+                    {tenantPrefix && <Link
                       href={withTenantPrefix('/perfil/autorizados')}
                       onClick={() => setMobileMenuOpen(false)}
                       className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-background px-1 py-2 text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-center"
                     >
                       <Shield className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span className="leading-tight">Autorizados</span>
-                    </Link>
+                    </Link>}
                     <Link
                       href={tenantPrefix ? `${tenantPrefix}/favoritos` : '/marketplace/favoritos'}
                       onClick={() => setMobileMenuOpen(false)}
@@ -1050,4 +1049,3 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
     </header>
   )
 }
-

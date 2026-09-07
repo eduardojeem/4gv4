@@ -70,6 +70,17 @@ describe('el perfil del marketplace vive dentro del marketplace', () => {
     expect(hay('src/app/marketplace/track/page.tsx')).toBe(true)
   })
 
+  it('personas autorizadas pertenece a cada tienda y no al perfil global', () => {
+    const marketplaceAuthorized = leer('src/app/marketplace/perfil/autorizados/page.tsx')
+    expect(marketplaceAuthorized).toContain("redirect('/marketplace/perfil')")
+    expect(marketplaceAuthorized).not.toContain("export { default }")
+  })
+
+  it('los creditos y el seguimiento global obligan a elegir una tienda', () => {
+    expect(leer('src/app/marketplace/perfil/creditos/page.tsx')).toContain("redirect('/marketplace/perfil#tiendas')")
+    expect(leer('src/app/marketplace/track/page.tsx')).toContain("redirect('/marketplace/perfil#tiendas')")
+  })
+
   it('reusan la misma pagina, no una copia', () => {
     // Si algun dia se duplican, las dos versiones se van a separar sin que nadie
     // lo note hasta que una muestre datos distintos que la otra.

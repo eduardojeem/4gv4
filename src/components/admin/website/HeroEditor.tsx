@@ -1269,38 +1269,57 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
       </Tabs>
       </div>
       {/* Save bar */}
-      <div className="sticky bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/95 p-3 shadow-lg backdrop-blur">
-        <div className="hidden min-w-0 md:block">
-          <p className="text-sm font-medium">{hasChanges ? 'Cambios pendientes' : 'Hero actualizado'}</p>
-          <p className="text-xs text-muted-foreground">{heroContent.enabled !== false ? 'La sección se mostrará al guardar.' : 'La sección se ocultará al guardar.'}</p>
+      <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full shrink-0',
+              hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+            )}
+            aria-hidden="true"
+          />
+          <div>
+            <p className="font-semibold text-foreground">
+              {hasChanges ? 'Cambios pendientes en la portada' : 'Portada actualizada'}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {heroContent.enabled !== false ? 'La sección se mostrará al guardar.' : 'La sección se ocultará al guardar.'}
+            </p>
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-        {hasChanges && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setHeroContentDraft(null)
-              setHeroStatsDraft(null)
-              setErrors({})
-            }}
-          >
-            Descartar
-          </Button>
-        )}
-        <Button type="submit" disabled={isSaving || !hasChanges}>
-          {isSaving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Guardando...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              Guardar Hero
-            </>
+
+        <div className="flex items-center gap-2 justify-end">
+          {hasChanges && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setHeroContentDraft(null)
+                setHeroStatsDraft(null)
+                setErrors({})
+              }}
+              className="h-10 px-4 rounded-xl text-xs font-semibold flex-1 sm:flex-none"
+            >
+              Descartar
+            </Button>
           )}
-        </Button>
+          <Button
+            type="submit"
+            disabled={isSaving || !hasChanges}
+            className="h-10 px-5 rounded-xl text-xs font-bold gap-2 flex-1 sm:flex-none"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Guardando...</span>
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                <span>Guardar portada</span>
+              </>
+            )}
+          </Button>
         </div>
       </div>
     </form>

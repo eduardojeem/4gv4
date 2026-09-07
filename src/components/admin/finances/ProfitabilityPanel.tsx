@@ -6,11 +6,13 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  BookOpenCheck,
   Building2,
   CheckCircle2,
   Coins,
   Download,
   Eye,
+  FileDown,
   Info,
   Landmark,
   Layers,
@@ -40,6 +42,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import type { AdminFinanceFilters } from '@/hooks/use-admin-finances'
 import { formatCurrency, getLocaleConfig } from '@/lib/currency'
+import { exportProfitabilityPdf } from '@/lib/finances/finance-reports-pdf-exporter'
 import { cn } from '@/lib/utils'
 
 type Group = 'sale' | 'repair' | 'product' | 'employee' | 'branch'
@@ -406,10 +409,12 @@ export function ProfitabilityPanel({
   organizationId,
   filters,
   refreshVersion = 0,
+  onOpenGuide,
 }: {
   organizationId: string
   filters: AdminFinanceFilters
   refreshVersion?: number
+  onOpenGuide?: (section?: string) => void
 }) {
   const [group, setGroup] = useState<Group>('sale')
   const [rows, setRows] = useState<Row[]>([])
@@ -417,6 +422,8 @@ export function ProfitabilityPanel({
   const [error, setError] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const [exportPdfError, setExportPdfError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [coverageFilter, setCoverageFilter] = useState<CoverageFilter>('all')
   const [sortKey, setSortKey] = useState<SortKey>('revenue')
@@ -577,6 +584,26 @@ export function ProfitabilityPanel({
     }
   }
 
+  async function handleExportPdf() {
+    if (isExportingPdf) return
+    setIsExportingPdf(true)
+    setExportPdfError(null)
+    try {
+      await exportProfitabilityPdf({
+        rows: visibleRows,
+        group,
+        totals,
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      })
+    } catch (err) {
+      console.error('Error al exportar rentabilidad en PDF:', err)
+      setExportPdfError('No se pudo generar el reporte PDF.')
+    } finally {
+      setIsExportingPdf(false)
+    }
+  }
+
   const hasRows = rows.length > 0
   const isFiltered = search.trim() !== '' || coverageFilter !== 'all'
   const emptyMessage =
@@ -615,24 +642,54 @@ export function ProfitabilityPanel({
           </div>
         </div>
 
-        <div className="flex flex-col items-start gap-1 sm:items-end">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleExport}
-            disabled={isExporting}
-            aria-busy={isExporting}
-            className="gap-1.5 shadow-sm"
-          >
-            <Download className="h-4 w-4" />
-            {isExporting ? 'Exportando…' : 'Exportar rentabilidad'}
-          </Button>
-          {exportError && (
-            <p role="alert" className="text-xs text-destructive">
-              {exportError}
-            </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenGuide && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenGuide('rentabilidad')}
+              className="gap-1.5 shadow-xs border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold"
+              title="Cómo administrar la Rentabilidad del Negocio"
+            >
+              <BookOpenCheck className="h-4 w-4" />
+              <span className="hidden sm:inline">Guía de Rentabilidad</span>
+            </Button>
           )}
+          <div className="flex flex-col items-start gap-1 sm:items-end">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExportPdf}
+                disabled={isExportingPdf}
+                aria-busy={isExportingPdf}
+                className="gap-1.5 shadow-xs border-primary/40 hover:bg-primary/5 text-primary text-xs font-semibold"
+                title="Descargar reporte de rentabilidad en PDF"
+              >
+                <FileDown className="h-4 w-4" />
+                {isExportingPdf ? 'Generando PDF…' : 'Exportar PDF'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={isExporting}
+                aria-busy={isExporting}
+                className="gap-1.5 shadow-sm text-xs"
+              >
+                <Download className="h-4 w-4" />
+                {isExporting ? 'Exportando…' : 'Exportar rentabilidad'}
+              </Button>
+            </div>
+            {(exportError || exportPdfError) && (
+              <p role="alert" className="text-xs text-destructive">
+                {exportPdfError || exportError}
+              </p>
+            )}
+          </div>
         </div>
       </section>
 

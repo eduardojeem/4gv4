@@ -20,6 +20,7 @@ interface AvatarUploadProps {
   userEmail?: string
   onAvatarChange?: (url: string) => void
   size?: 'sm' | 'md' | 'lg'
+  compact?: boolean
   className?: string
 }
 
@@ -29,6 +30,7 @@ export function AvatarUpload({
   userId,
   onAvatarChange,
   size = 'md',
+  compact = false,
   className,
 }: AvatarUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -100,25 +102,27 @@ export function AvatarUpload({
   }, [avatarUrl, userName])
 
   return (
-    <div className={cn('flex flex-col items-center gap-4', className)}>
+    <div className={cn('flex flex-col items-center gap-3', className)}>
       <div 
-        className="group relative cursor-pointer" 
+        className="group relative cursor-pointer rounded-full focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2"
         onClick={() => !isLoading && fileInputRef.current?.click()}
       >
-        {/* Borde con degradado de doble anillo */}
         <div className={cn(
-          "rounded-full p-[3px] transition-all duration-500 bg-gradient-to-tr shadow-sm",
+          'rounded-full transition-colors',
+          compact ? 'border border-border bg-card p-1' : 'bg-gradient-to-tr p-[3px] shadow-sm',
+          !compact && (
           avatarUrl 
             ? "from-slate-200 via-slate-300 to-slate-200 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 group-hover:scale-[1.02] group-hover:shadow-md group-hover:from-indigo-500 group-hover:via-purple-500 group-hover:to-pink-500" 
             : "from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-700 group-hover:from-indigo-400 group-hover:to-purple-500"
+          )
         )}>
-          <div className="rounded-full p-[2px] bg-background">
+          <div className={cn('rounded-full bg-background', compact ? '' : 'p-[2px]')}>
             <Avatar className={cn(sizeClasses[size], "relative border border-slate-100 dark:border-slate-800")}>
               {avatarUrl && (
                 <AvatarImage
                   src={avatarUrl}
                   alt={userName}
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                  className="object-cover"
                 />
               )}
               <AvatarFallback className="font-semibold bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400">
@@ -130,9 +134,9 @@ export function AvatarUpload({
 
         {/* Overlay hover para subir foto */}
         {!isLoading && (
-          <div className="absolute inset-[5px] flex flex-col items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100 backdrop-blur-[2px]">
-            <Camera className="h-6 w-6 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300 text-slate-100" />
-            <span className="text-[10px] font-bold tracking-wider mt-1.5 text-slate-200">SUBIR FOTO</span>
+          <div className="absolute inset-[5px] flex flex-col items-center justify-center rounded-full bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100">
+            <Camera className="h-5 w-5 text-white" />
+            {!compact && <span className="mt-1.5 text-[10px] font-bold tracking-wider">SUBIR FOTO</span>}
           </div>
         )}
 
@@ -188,24 +192,26 @@ export function AvatarUpload({
             className="h-8 px-3 text-xs font-semibold shadow-sm hover:bg-slate-50 dark:hover:bg-slate-900"
           >
             <Camera className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
-            {avatarUrl ? 'Cambiar' : 'Elegir foto'}
+            {avatarUrl ? 'Cambiar foto' : 'Agregar foto'}
           </Button>
 
           {avatarUrl && (
             <>
               <Button
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 type="button"
                 onClick={handleRemoveAvatar}
                 disabled={isLoading}
-                className="h-8 px-3 text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/20 border-red-100 dark:border-red-950/50"
+                className={cn('h-8 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/20', compact ? 'w-8 p-0' : 'px-3')}
+                aria-label="Eliminar foto de perfil"
+                title="Eliminar foto"
               >
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                Eliminar
+                <Trash2 className={cn('h-3.5 w-3.5', !compact && 'mr-1.5')} />
+                {!compact && 'Eliminar'}
               </Button>
 
-              <Button
+              {!compact && <Button
                 size="sm"
                 variant="ghost"
                 type="button"
@@ -215,13 +221,13 @@ export function AvatarUpload({
                 title="Descargar foto"
               >
                 <Download className="h-4 w-4" />
-              </Button>
+              </Button>}
             </>
           )}
         </div>
 
         <p className="text-[10px] text-muted-foreground text-center">
-          Formatos: JPG, PNG o WebP (Máx: 10MB).
+          JPG, PNG o WebP · máximo 10 MB
         </p>
 
         {error && (

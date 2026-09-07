@@ -20,6 +20,16 @@ export type CustomerDuplicate = {
   value: string
   customerId: string
   customerName: string
+  phone?: string | null
+  alternatePhone?: string | null
+  alternatePhoneLabel?: string | null
+  email?: string | null
+  ruc?: string | null
+  customerCode?: string | null
+  customerType?: string | null
+  isWholesale?: boolean
+  address?: string | null
+  city?: string | null
 }
 
 const FIELD_LABEL: Record<DuplicateField, string> = {
@@ -65,7 +75,19 @@ export type DuplicateCandidate = {
   excludeId?: string | null
 }
 
-type CustomerRow = { id: string; name: string | null }
+type CustomerRow = {
+  id: string
+  name: string | null
+  phone?: string | null
+  alternate_phone?: string | null
+  alternate_phone_label?: string | null
+  email?: string | null
+  ruc?: string | null
+  customer_code?: string | null
+  customer_type?: string | null
+  address?: string | null
+  city?: string | null
+}
 
 /**
  * Lo minimo que se le pide al cliente de Supabase, para poder probar esto sin
@@ -112,11 +134,11 @@ export async function findCustomerDuplicates(
 
   if (checks.length === 0) return []
 
-  const results = await Promise.all(checks.map(async (check) => {
+  const results = await Promise.all(checks.map(async (check): Promise<CustomerDuplicate | null> => {
     const run = (column: string, value: string) =>
       supabase
         .from('customers')
-        .select('id, name')
+        .select('id, name, phone, alternate_phone, alternate_phone_label, email, ruc, customer_code, customer_type, address, city')
         .eq('organization_id', organizationId)
         .eq(column, value)
         .limit(5)
@@ -128,7 +150,19 @@ export async function findCustomerDuplicates(
     // formato— pero sigue atajando el caso comun, en vez de reventar el alta.
     if (error) {
       ;({ data, error } = await run(check.fallback, check.raw))
-      if (error) throw error
+      if (error) {
+        // Respaldo minimo por si alguna columna extendida no existiera
+        const minimalRun = (column: string, value: string) =>
+          supabase
+            .from('customers')
+            .select('id, name')
+            .eq('organization_id', organizationId)
+            .eq(column, value)
+            .limit(5)
+        const minRes = await minimalRun(check.fallback, check.raw)
+        if (minRes.error) throw minRes.error
+        data = minRes.data
+      }
     }
 
     const rows = (data ?? []) as CustomerRow[]
@@ -140,7 +174,17 @@ export async function findCustomerDuplicates(
       value: check.raw,
       customerId: match.id,
       customerName: (match.name || '').trim() || 'un cliente sin nombre',
-    } satisfies CustomerDuplicate
+      phone: match.phone ?? null,
+      alternatePhone: match.alternate_phone ?? null,
+      alternatePhoneLabel: match.alternate_phone_label ?? null,
+      email: match.email ?? null,
+      ruc: match.ruc ?? null,
+      customerCode: match.customer_code ?? null,
+      customerType: match.customer_type ?? null,
+      isWholesale: Boolean(match.customer_type === 'wholesale' || match.customer_type === 'mayorista'),
+      address: match.address ?? null,
+      city: match.city ?? null,
+    }
   }))
 
   return results.filter((result): result is CustomerDuplicate => result !== null)

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { 
   CheckCircle2, Circle, Compass, ChevronDown, ChevronUp, Sparkles,
   Building2, Tag, Briefcase, Footprints, ShoppingCart, Info, GalleryHorizontalEnd,
-  ArrowRight, Lightbulb
+  ArrowRight, Lightbulb, ShieldCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -30,6 +30,7 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
     return null
   }
 
+  const trustBar = settings.trust_bar
   const company = settings.company_info
   const heroContent = settings.hero_content
   const offers = settings.offers_section
@@ -50,12 +51,40 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
       tip: 'Completa estos datos para que los clientes puedan contactarte directamente y ver tu logo oficial en el encabezado.',
     },
     {
+      id: 'checkout',
+      label: 'Pagos y Entregas',
+      icon: ShoppingCart,
+      description: 'Métodos de pago, delivery o retiro en local',
+      isCompleted: !!(
+        checkout &&
+        (
+          checkout.commerceMode !== 'cart' ||
+          (
+            (checkout.payment.cash.enabled ||
+              checkout.payment.card.enabled ||
+              checkout.payment.transfer.enabled ||
+              checkout.payment.digital_wallet.enabled) &&
+            (checkout.delivery.enabled || checkout.pickup.enabled)
+          )
+        )
+      ),
+      tip: 'Elige si la tienda venderá con carrito tradicional, recibirá pedidos automáticos por WhatsApp o funcionará como catálogo.',
+    },
+    {
       id: 'hero',
       label: 'Portada (Hero)',
       icon: Sparkles,
       description: 'Título principal y garantías de confianza',
       isCompleted: !!(heroContent?.title?.trim() && heroContent.title !== 'Reparación profesional para tu equipo'),
       tip: 'Personaliza el mensaje principal del banner para llamar la atención del cliente al entrar al sitio.',
+    },
+    {
+      id: 'trust_bar',
+      label: 'Beneficios y Garantías',
+      icon: ShieldCheck,
+      description: 'Barra de confianza: envíos, garantía y soporte',
+      isCompleted: trustBar?.enabled !== false && (trustBar?.items?.length ?? 0) > 0,
+      tip: 'La barra de confianza destaca que ofreces garantía, envíos seguros y atención personalizada para transmitir seguridad.',
     },
     {
       id: 'carousel',
@@ -95,26 +124,6 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
         ),
       tip: 'Esta sección es opcional. Puedes ocultarla o personalizar los pasos para generar máxima confianza al cliente.',
     },
-    {
-      id: 'checkout',
-      label: 'Pagos y Entregas',
-      icon: ShoppingCart,
-      description: 'Métodos de pago, delivery o retiro en local',
-      isCompleted: !!(
-        checkout &&
-        (
-          checkout.commerceMode !== 'cart' ||
-          (
-            (checkout.payment.cash.enabled ||
-              checkout.payment.card.enabled ||
-              checkout.payment.transfer.enabled ||
-              checkout.payment.digital_wallet.enabled) &&
-            (checkout.delivery.enabled || checkout.pickup.enabled)
-          )
-        )
-      ),
-      tip: 'Elige si la tienda venderá con carrito tradicional, recibirá pedidos automáticos por WhatsApp o funcionará como catálogo.',
-    }
   ]
 
   const completedCount = steps.filter(s => s.isCompleted).length
@@ -130,73 +139,82 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
         ? 'border-emerald-300/80 dark:border-emerald-800/80 bg-emerald-50/10' 
         : 'border-border/80 bg-card'
     )}>
-      <CardHeader className="p-4 sm:p-5 pb-3 flex flex-row items-start justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className={cn(
-            "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border shadow-xs transition-colors",
-            allCompleted 
-              ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800" 
-              : "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800"
-          )}>
-            {allCompleted ? <Sparkles className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
+      <CardHeader className="p-3 sm:p-3.5 pb-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border shadow-2xs transition-colors",
+              allCompleted 
+                ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800" 
+                : "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800"
+            )}>
+              {allCompleted ? <Sparkles className="h-4 w-4" /> : <Compass className="h-4 w-4" />}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-xs sm:text-sm font-bold text-foreground truncate">
+                  Guía de Configuración
+                </CardTitle>
+                {allCompleted ? (
+                  <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white border-0 text-[9px] font-black uppercase px-1.5 py-0">
+                    100%
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground border-border px-1.5 py-0">
+                    {completedCount}/{steps.length}
+                  </Badge>
+                )}
+              </div>
+            </div>
           </div>
-          <div>
-            <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
-              <span>Guía de Configuración de la Tienda</span>
-              {allCompleted ? (
-                <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white border-0 text-[10px] font-black uppercase px-2 py-0.5">
-                  100% Lista
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-[10px] font-bold text-muted-foreground border-border px-2 py-0.5">
-                  {completedCount} de {steps.length} completados
-                </Badge>
-              )}
-            </CardTitle>
-            <CardDescription className="text-xs text-muted-foreground mt-0.5">
-              {allCompleted 
-                ? "¡Excelente trabajo! Tu portal público tiene todos sus componentes esenciales listos para recibir clientes." 
-                : "Haz clic en cada sección a continuación para completarla y dejar tu sitio web impecable."}
-            </CardDescription>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* Indicador de % compacto en el header */}
+            <div className="hidden sm:flex items-center gap-2 text-xs">
+              <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div 
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500 ease-out",
+                    allCompleted ? "bg-emerald-500" : "bg-primary"
+                  )}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <span className="font-bold text-[11px] text-muted-foreground">{progressPercent}%</span>
+            </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={toggleCollapse}
+              aria-label={isCollapsed ? 'Expandir guía' : 'Contraer guía'}
+              aria-expanded={!isCollapsed}
+              className="h-7 w-7 text-muted-foreground hover:text-foreground rounded-lg"
+            >
+              {isCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+            </Button>
           </div>
         </div>
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={toggleCollapse}
-          aria-label={isCollapsed ? 'Expandir guía' : 'Contraer guía'}
-          aria-expanded={!isCollapsed}
-          className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-xl shrink-0"
-        >
-          {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-        </Button>
       </CardHeader>
 
-      <CardContent className="p-4 sm:p-5 pt-0 space-y-4">
-        {/* Barra de Progreso Mejorada */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-muted-foreground">Avance general de tu sitio</span>
-            <span className="font-extrabold text-foreground">{progressPercent}% completado</span>
-          </div>
-          <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden p-0.5">
+      <CardContent className="p-3 sm:p-3.5 pt-0 space-y-2.5">
+        {/* Barra de Progreso Móvil cuando está colapsado */}
+        <div className="sm:hidden">
+          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
             <div 
               className={cn(
-                "h-full rounded-full transition-all duration-700 ease-out",
-                allCompleted 
-                  ? "bg-emerald-500 shadow-sm" 
-                  : "bg-gradient-to-r from-blue-600 via-indigo-600 to-primary shadow-xs"
+                "h-full rounded-full transition-all duration-500 ease-out",
+                allCompleted ? "bg-emerald-500" : "bg-primary"
               )} 
               style={{ width: `${progressPercent}%` }}
             />
           </div>
         </div>
 
-        {/* Grilla de Pasos / Secciones */}
+        {/* Grilla de Pasos Compacta */}
         {!isCollapsed && (
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 pt-1">
+          <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 pt-0.5">
             {steps.map((step) => {
               const StepIcon = step.icon
               const isActive = activeTab === step.id
@@ -206,43 +224,41 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
                   type="button"
                   onClick={() => onTabChange(step.id)}
                   className={cn(
-                    "text-left flex items-start gap-3 rounded-2xl border p-3 sm:p-3.5 transition-all relative overflow-hidden group",
+                    "text-left flex flex-col justify-between gap-1.5 rounded-xl border p-2 transition-all relative group",
                     isActive 
-                      ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs" 
-                      : "border-border/80 bg-card hover:bg-muted/40 hover:border-primary/30",
-                    step.isCompleted && !isActive && "border-emerald-200/60 dark:border-emerald-900/30 bg-emerald-50/10"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary shadow-2xs" 
+                      : "border-border/70 bg-card hover:bg-muted/40 hover:border-primary/40",
+                    step.isCompleted && !isActive && "border-emerald-200/50 dark:border-emerald-900/20 bg-emerald-50/5"
                   )}
                 >
-                  <div className="mt-0.5 shrink-0">
+                  <div className="flex items-center justify-between w-full">
+                    <div className={cn(
+                      "p-1 rounded-md",
+                      isActive ? "text-primary bg-primary/10" : "text-muted-foreground"
+                    )}>
+                      <StepIcon className="h-3.5 w-3.5" />
+                    </div>
                     {step.isCompleted ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-500 fill-emerald-100 dark:fill-transparent" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                     ) : (
-                      <Circle className="h-5 w-5 text-muted-foreground/40 group-hover:text-muted-foreground/80 transition-colors" />
+                      <Circle className="h-3.5 w-3.5 text-muted-foreground/30" />
                     )}
                   </div>
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <p className={cn(
-                        "text-xs font-bold leading-tight flex items-center gap-1.5 truncate",
-                        step.isCompleted ? "text-emerald-700 dark:text-emerald-400" : "text-foreground",
-                        isActive && "text-primary"
-                      )}>
-                        <StepIcon className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{step.label}</span>
-                      </p>
-                      {step.isCompleted ? (
-                        <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-full shrink-0">
-                          Listo
-                        </span>
-                      ) : (
-                        <span className="text-[9px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full shrink-0">
-                          Configurar
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-normal line-clamp-2">
-                      {step.description}
+
+                  <div className="min-w-0 w-full">
+                    <p className={cn(
+                      "text-[11px] font-semibold leading-tight truncate",
+                      step.isCompleted ? "text-emerald-700 dark:text-emerald-400" : "text-foreground",
+                      isActive && "text-primary font-bold"
+                    )}>
+                      {step.label}
                     </p>
+                    <span className={cn(
+                      "text-[9px] block",
+                      step.isCompleted ? "text-emerald-600/80 dark:text-emerald-400/80" : "text-amber-600 dark:text-amber-400 font-medium"
+                    )}>
+                      {step.isCompleted ? 'Listo' : 'Pendiente'}
+                    </span>
                   </div>
                 </button>
               )
@@ -250,18 +266,13 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
           </div>
         )}
 
-        {/* Tarjeta de Consejo contextual para la pestaña activa */}
+        {/* Consejo contextual compacto */}
         {!isCollapsed && activeStepObj && (
-          <div className="flex items-start gap-3 rounded-2xl border border-indigo-100 dark:border-indigo-950/60 bg-indigo-50/40 dark:bg-indigo-950/20 p-3.5 text-xs text-muted-foreground">
-            <Lightbulb className="h-4.5 w-4.5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <span className="font-bold text-foreground">
-                Consejo para la sección {activeStepObj.label}:
-              </span>
-              <p className="leading-relaxed text-muted-foreground text-[11px] sm:text-xs">
-                {activeStepObj.tip}
-              </p>
-            </div>
+          <div className="flex items-center gap-2 rounded-xl border border-indigo-100 dark:border-indigo-950/60 bg-indigo-50/30 dark:bg-indigo-950/20 px-3 py-2 text-[11px] text-muted-foreground">
+            <Lightbulb className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <p className="truncate">
+              <strong className="text-foreground">{activeStepObj.label}:</strong> {activeStepObj.tip}
+            </p>
           </div>
         )}
       </CardContent>

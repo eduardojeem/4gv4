@@ -1,13 +1,14 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { CircleDollarSign, ReceiptText, UsersRound, ChartNoAxesCombined, Settings2, Plus } from 'lucide-react'
+import { CircleDollarSign, ReceiptText, UsersRound, ChartNoAxesCombined, Settings2, Plus, BookOpenCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAdminFinances } from '@/hooks/use-admin-finances'
 import { ExpensesPanel } from './ExpensesPanel'
 import { FinanceFilters } from './FinanceFilters'
 import { FinanceHelp } from './FinanceHelp'
+import { FinanceBusinessGuideModal } from './FinanceBusinessGuideModal'
 import { FinanceSectionHelp } from './FinanceSectionHelp'
 import { FinanceSettingsPanel } from './FinanceSettingsPanel'
 import { FinanceEmptyState, FinanceErrorState, FinanceLoadingState, FinanceStaleDataAlert } from './FinanceStates'
@@ -34,6 +35,8 @@ function isEmptySummary(summary: NonNullable<ReturnType<typeof useAdminFinances>
 export function FinancesSystem() {
   const [activeTab, setActiveTab] = useState<FinanceSection>('Resumen')
   const [refreshVersion, setRefreshVersion] = useState(0)
+  const [businessGuideOpen, setBusinessGuideOpen] = useState(false)
+  const [businessGuideTab, setBusinessGuideTab] = useState<string>('resumen')
   const [expenseAction, setExpenseAction] = useState<{ mode: ExpenseAction; nonce: number }>({ mode: 'all', nonce: 0 })
   const finances = useAdminFinances()
   const summary = finances.summary
@@ -44,6 +47,10 @@ export function FinancesSystem() {
   const viewExpenses = (mode: ExpenseAction = 'all') => {
     setExpenseAction((current) => ({ mode, nonce: current.nonce + 1 }))
     setActiveTab('Gastos')
+  }
+  const openBusinessGuide = (section?: string) => {
+    if (section) setBusinessGuideTab(section)
+    setBusinessGuideOpen(true)
   }
   const refreshAll = () => {
     setRefreshVersion((value) => value + 1)
@@ -57,7 +64,16 @@ export function FinancesSystem() {
         <p className="mt-1 max-w-xl text-sm text-muted-foreground">Tomá decisiones con una vista clara del negocio: resultados, dinero y pagos pendientes.</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <FinanceHelp />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => openBusinessGuide(activeTab)}
+          className="gap-2 border-primary/30 hover:border-primary text-foreground bg-background/80 shadow-xs"
+        >
+          <BookOpenCheck className="h-4 w-4 text-primary" />
+          Guía de Administración
+        </Button>
+        <FinanceHelp onOpenBusinessGuide={() => openBusinessGuide('resumen')} />
         <Button size="sm" onClick={() => viewExpenses('new')} disabled={!organizationId} className="gap-2"><Plus className="h-4 w-4" />Nuevo gasto</Button>
       </div>
     </header>
@@ -71,18 +87,19 @@ export function FinancesSystem() {
           </TabsTrigger>)}
         </TabsList>
       </div>
-      <FinanceSectionHelp key={activeTab} section={activeTab} />
+      <FinanceSectionHelp key={activeTab} section={activeTab} onOpenGuide={openBusinessGuide} />
       <TabsContent value="Resumen" className="mt-0 space-y-4">
         {finances.isLoading && !summary ? <FinanceLoadingState /> : null}
         {!finances.isLoading && finances.error && !summary ? <FinanceErrorState error={finances.error} onRetry={refreshAll} /> : null}
         {finances.error && summary ? <FinanceStaleDataAlert error={finances.error} generatedAt={summary.generatedAt} onRetry={refreshAll} /> : null}
         {summary && isEmptySummary(summary) && !finances.isLoading ? <FinanceEmptyState /> : null}
-        {summary && !isEmptySummary(summary) ? <FinanceSummary summary={summary} onViewExpenses={viewExpenses} onViewProfitability={() => setActiveTab('Rentabilidad')} onViewPayroll={() => setActiveTab('Nómina')} /> : null}
+        {summary && !isEmptySummary(summary) ? <FinanceSummary summary={summary} onViewExpenses={viewExpenses} onViewProfitability={() => setActiveTab('Rentabilidad')} onViewPayroll={() => setActiveTab('Nómina')} onOpenBusinessGuide={() => openBusinessGuide('resumen')} /> : null}
       </TabsContent>
-      <TabsContent value="Gastos" className="mt-0">{organizationId ? <ExpensesPanel key={scopeKey} organizationId={organizationId} branchId={branchId} filters={finances.filters} onChanged={finances.refresh} refreshVersion={refreshVersion} action={expenseAction} onActionHandled={consumeNewExpense} /> : <FinanceLoadingState />}</TabsContent>
-      <TabsContent value="Nómina" className="mt-0">{organizationId ? <PayrollPanel key={scopeKey} organizationId={organizationId} branchId={branchId} filters={finances.filters} onChanged={finances.refresh} refreshVersion={refreshVersion} /> : <FinanceLoadingState />}</TabsContent>
-      <TabsContent value="Rentabilidad" className="mt-0">{organizationId ? <ProfitabilityPanel key={scopeKey} organizationId={organizationId} filters={finances.filters} refreshVersion={refreshVersion} /> : <FinanceLoadingState />}</TabsContent>
-      <TabsContent value="Configuración" className="mt-0">{organizationId ? <FinanceSettingsPanel key={scopeKey} organizationId={organizationId} branchId={branchId} refreshVersion={refreshVersion} /> : <FinanceLoadingState />}</TabsContent>
+      <TabsContent value="Gastos" className="mt-0">{organizationId ? <ExpensesPanel key={scopeKey} organizationId={organizationId} branchId={branchId} filters={finances.filters} onChanged={finances.refresh} refreshVersion={refreshVersion} action={expenseAction} onActionHandled={consumeNewExpense} onOpenGuide={openBusinessGuide} /> : <FinanceLoadingState />}</TabsContent>
+      <TabsContent value="Nómina" className="mt-0">{organizationId ? <PayrollPanel key={scopeKey} organizationId={organizationId} branchId={branchId} filters={finances.filters} onChanged={finances.refresh} refreshVersion={refreshVersion} onOpenGuide={openBusinessGuide} /> : <FinanceLoadingState />}</TabsContent>
+      <TabsContent value="Rentabilidad" className="mt-0">{organizationId ? <ProfitabilityPanel key={scopeKey} organizationId={organizationId} filters={finances.filters} refreshVersion={refreshVersion} onOpenGuide={openBusinessGuide} /> : <FinanceLoadingState />}</TabsContent>
+      <TabsContent value="Configuración" className="mt-0">{organizationId ? <FinanceSettingsPanel key={scopeKey} organizationId={organizationId} branchId={branchId} refreshVersion={refreshVersion} onOpenGuide={openBusinessGuide} /> : <FinanceLoadingState />}</TabsContent>
     </Tabs>
+    <FinanceBusinessGuideModal open={businessGuideOpen} onOpenChange={setBusinessGuideOpen} initialTab={businessGuideTab} />
   </div>
 }

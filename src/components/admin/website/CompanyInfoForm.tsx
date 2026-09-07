@@ -1043,34 +1043,52 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Save bar */}
-      <div className="sticky bottom-4 z-30 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-background/95 p-3 shadow-lg backdrop-blur">
-        {hasChanges && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setDraft(null)
-              setErrors({})
-            }}
-            className="h-10 px-4"
-          >
-            Descartar
-          </Button>
-        )}
-        <Button type="submit" disabled={isSaving || isSyncing || !hasChanges} className="h-10 px-4">
-          {isSaving || isSyncing ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              <span className="hidden md:inline">Guardando...</span>
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-5 w-5" />
-              <span className="hidden md:inline">Guardar cambios</span>
-              <span className="md:hidden">Guardar</span>
-            </>
+      <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full shrink-0',
+              hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+            )}
+            aria-hidden="true"
+          />
+          <span className="font-semibold text-foreground">
+            {hasChanges ? 'Hay cambios sin guardar' : 'Configuración de empresa al día'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 justify-end">
+          {hasChanges && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDraft(null)
+                setErrors({})
+              }}
+              className="h-10 px-4 rounded-xl text-xs font-semibold flex-1 sm:flex-none"
+            >
+              Descartar
+            </Button>
           )}
-        </Button>
+          <Button
+            type="submit"
+            disabled={isSaving || isSyncing || !hasChanges}
+            className="h-10 px-5 rounded-xl text-xs font-bold gap-2 flex-1 sm:flex-none"
+          >
+            {isSaving || isSyncing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Guardando...</span>
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                <span>Guardar cambios</span>
+              </>
+            )}
+          </Button>
+        </div>
       </div>
       <Dialog open={confirmPublication} onOpenChange={(open) => { if (!isSyncing) setConfirmPublication(open) }}>
         <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">

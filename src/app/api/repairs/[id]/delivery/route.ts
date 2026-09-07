@@ -14,6 +14,10 @@ import {
   closeUnrepairedRepair,
   UnrepairedCloseoutRpcError,
 } from '@/lib/repairs/unrepaired-closeout-rpc'
+import { createClient } from '@/lib/supabase/server'
+import { awardPaidRepairLoyaltyPoints } from '@/lib/loyalty/repair-points'
+import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
+import { logger } from '@/lib/logger'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -126,10 +130,25 @@ export async function POST(request: NextRequest, context: RouteParams) {
     if (error) throw error
     if (!repair) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
 
+    const loyalty = await awardPaidRepairLoyaltyPoints(await createClient(), {
+      organizationId: ctx.organizationId,
+      repairId: id,
+      customerId: repair.customer_id ?? null,
+      total: Number(operation.total ?? repair.final_cost ?? 0),
+      paymentStatus: operation.payment_status ?? repair.payment_status ?? 'pendiente',
+    })
+    if (loyalty.reason === 'error' && !isLoyaltyModuleMissing(loyalty.error)) {
+      logger.warn('No se pudieron acreditar los puntos de la reparación entregada', {
+        repairId: id,
+        error: loyalty.error?.message,
+      })
+    }
+
     return NextResponse.json({
       repair,
       payment: operation.payment_id ? { id: operation.payment_id } : null,
       idempotent: operation.idempotent,
+      loyalty: { awarded: loyalty.awarded },
     })
   } catch (error) {
     if (error instanceof UnrepairedCloseoutRpcError) {

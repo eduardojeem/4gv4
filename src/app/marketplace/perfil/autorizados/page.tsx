@@ -1,1 +1,5 @@
-export { default } from '@/app/(public)/perfil/autorizados/page'
+import { redirect } from 'next/navigation'
+
+export default function MarketplaceAuthorizedPersonsPage() {
+  redirect('/marketplace/perfil')
+}

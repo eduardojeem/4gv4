@@ -200,21 +200,49 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
         </Button>
       </div>
 
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 md:sticky md:bottom-6 md:justify-end">
-        {hasChanges && (
+      <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full shrink-0',
+              hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+            )}
+            aria-hidden="true"
+          />
+          <span className="font-semibold text-foreground">
+            {hasChanges ? 'Hay cambios en ofertas sin guardar' : 'Configuración de ofertas al día'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 justify-end">
+          {hasChanges && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDraft(null)}
+              className="h-10 px-4 rounded-xl text-xs font-semibold flex-1 sm:flex-none"
+            >
+              Descartar
+            </Button>
+          )}
           <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setDraft(null)}
-            className="h-14 rounded-full px-6 shadow-2xl bg-background/80 backdrop-blur border md:h-12 md:rounded-xl md:px-4"
+            onClick={handleSave}
+            disabled={isSaving || !hasChanges}
+            className="h-10 px-5 rounded-xl text-xs font-bold gap-2 flex-1 sm:flex-none"
           >
-            Descartar
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Guardando...</span>
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                <span>Guardar ofertas</span>
+              </>
+            )}
           </Button>
-        )}
-        <Button onClick={handleSave} disabled={isSaving || !hasChanges} size="lg" className="h-14 rounded-full px-8 shadow-2xl md:h-12 md:rounded-xl">
-          {isSaving ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-          Guardar ofertas
-        </Button>
+        </div>
       </div>
     </div>
   )

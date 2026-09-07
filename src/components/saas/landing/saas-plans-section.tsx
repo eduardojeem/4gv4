@@ -24,7 +24,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { planNotes } from './saas-landing-data'
 import { cn } from '@/lib/utils'
-import { SaaSBrandAssistant } from './saas-brand-assistant'
 import {
   buildPlanFeatureRows,
   buildPlanLimitRows,
@@ -124,7 +123,7 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
   )
 
   return (
-    <section id="planes" className="relative py-20 sm:py-28 overflow-hidden bg-slate-50/50 dark:bg-slate-950/60">
+    <section id="planes" className="relative scroll-mt-24 py-14 sm:py-20 overflow-hidden bg-slate-50/50 dark:bg-slate-950/60">
       {/* Background aesthetics */}
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-50/60 via-white to-white dark:from-slate-900/60 dark:via-slate-950 dark:to-slate-950" />
 
@@ -149,7 +148,7 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
             transition={{ delay: 0.1 }}
             className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl dark:text-white"
           >
-            Elegí el plan perfecto para tu negocio
+            Elegí cómo empezar
           </motion.h2>
 
           <motion.p 
@@ -184,15 +183,11 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
           </motion.div>
         </div>
 
-        <SaaSBrandAssistant
-          title="Te ayudo a comparar"
-          description="Revisá los límites y funciones vigentes de cada plan antes de elegir."
-          className="mx-auto mt-8 max-w-4xl border-cyan-400/30 bg-slate-950 text-left shadow-sm dark:bg-slate-900"
-        />
-
         {/* Recomendador Interactivo de Plan */}
         {availableProfiles.length > 0 && (
-        <div className="mt-6 mx-auto max-w-4xl rounded-3xl border border-slate-200/90 bg-white/90 p-5 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+        <details className="mt-8 mx-auto max-w-4xl rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <summary className="cursor-pointer text-sm font-semibold">¿Necesitás ayuda para elegir un plan?</summary>
+          <div className="pt-5">
           <div className="flex items-center gap-2 mb-3">
             <Compass className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
             <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -200,7 +195,7 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             {availableProfiles.map((profile) => {
               const Icon = profile.icon
               const isSelected = selectedProfile === profile.id
@@ -210,6 +205,7 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
                   key={profile.id}
                   type="button"
                   onClick={() => setSelectedProfile(isSelected ? null : profile.id)}
+                  aria-pressed={isSelected}
                   className={cn(
                     "flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all cursor-pointer text-xs font-semibold gap-1.5",
                     isSelected
@@ -239,7 +235,8 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
               </Badge>
             </motion.div>
           )}
-        </div>
+          </div>
+        </details>
         )}
 
 
@@ -263,11 +260,11 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
                 viewport={{ once: true }}
                 transition={{ delay: 0.1 * i }}
                 className={cn(
-                  "group relative flex flex-col justify-between rounded-3xl p-6 sm:p-7 backdrop-blur-xl transition-all duration-200 hover:shadow-xl",
+                  "group relative flex flex-col justify-between rounded-xl p-5 sm:p-6 transition-colors",
                   isHighlightedByQuiz
-                    ? "bg-white dark:bg-slate-900 ring-2 ring-cyan-500 shadow-2xl dark:shadow-cyan-950/40 scale-[1.02]"
+                    ? "bg-white dark:bg-slate-900 ring-2 ring-cyan-600"
                     : isPopular
-                    ? "bg-white dark:bg-slate-900 ring-2 ring-violet-500 shadow-xl dark:shadow-violet-950/30" 
+                    ? "bg-white dark:bg-slate-900 ring-2 ring-cyan-600"
                     : "bg-white/80 dark:bg-slate-900/70 border border-slate-200/90 dark:border-slate-800/80 shadow-sm"
                 )}
               >
@@ -519,13 +516,15 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
                   <button
                     type="button"
                     onClick={() => setOpenFaq(isOpen ? null : index)}
+                    aria-expanded={isOpen}
+                    aria-controls={`saas-faq-${index}`}
                     className="flex w-full items-center justify-between text-left text-sm font-bold text-slate-900 dark:text-slate-50 cursor-pointer"
                   >
                     <span>{faq.q}</span>
                     <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform text-slate-400", isOpen && "rotate-180")} />
                   </button>
                   {isOpen && (
-                    <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <p id={`saas-faq-${index}`} className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
                       {faq.a}
                     </p>
                   )}

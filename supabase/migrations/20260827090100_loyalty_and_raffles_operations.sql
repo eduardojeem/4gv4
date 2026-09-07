@@ -83,7 +83,10 @@ begin
   -- cajero, vendedor, encargado, admin y dueño. Con un nombre que
   -- has_org_permission no conozca, solo pasarían dueño y admin y el POS
   -- dejaría de acreditar.
-  if not public.has_org_permission(p_organization_id, 'pos.sales.create') then
+  if not (
+    public.has_org_permission(p_organization_id, 'pos.sales.create')
+    or public.has_org_permission(p_organization_id, 'repairs.orders.update')
+  ) then
     raise exception 'No tenés permiso para acreditar puntos en esta organización.'
       using errcode = 'insufficient_privilege';
   end if;

@@ -22,6 +22,7 @@ describe('ProfileAccountSummary', () => {
 
     expect(screen.getByText('Saldo neto por pagar')).toBeInTheDocument()
     expect(screen.getByText('1 cuota vencida')).toBeInTheDocument()
+    expect(screen.getByText(/Vencido:/i)).toHaveTextContent('Gs. 80.000')
     expect(screen.getByRole('link', { name: /Ver reparaciones/i })).toHaveAttribute(
       'href',
       '/4g-celulares/mis-reparaciones'

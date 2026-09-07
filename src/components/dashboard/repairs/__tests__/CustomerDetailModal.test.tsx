@@ -83,15 +83,14 @@ describe('CustomerDetailModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.open = vi.fn()
-    vi.stubGlobal('fetch', vi.fn((url: string) => {
-      if (url.includes('/sales')) {
-        return Promise.resolve({ ok: true, status: 200, json: async () => ({ stats: { totalPurchases: 0, totalSpent: 0, posSpent: 0, ordersSpent: 0 } }) })
-      }
-      if (url.includes('/repairs')) {
-        return Promise.resolve({ ok: true, status: 200, json: async () => ({ stats: { totalRepairs: 0, totalSpent: 0 } }) })
-      }
-      return Promise.resolve({ ok: true, status: 200, json: async () => ({ moduleInstalled: true, account: null }) })
-    }))
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ metrics: {
+        repairs: 0, purchases: 0, billed: 0, posBilled: 0, webBilled: 0,
+        repairsBilled: 0, loyaltyPoints: 0, loyaltyModuleInstalled: true,
+      } }),
+    })))
   })
 
   afterEach(() => {
@@ -156,15 +155,15 @@ describe('CustomerDetailModal', () => {
    * reparaciones y la cuenta de puntos reales.
    */
   it('muestra las metricas reales, no las columnas congeladas', async () => {
-    const fetchMock = vi.fn((url: string) => {
-      if (url.includes('/sales')) {
-        return Promise.resolve({ ok: true, json: async () => ({ stats: { totalPurchases: 7, totalSpent: 1_200_000, posSpent: 900_000, ordersSpent: 300_000 } }) })
-      }
-      if (url.includes('/repairs')) {
-        return Promise.resolve({ ok: true, json: async () => ({ stats: { totalRepairs: 3, totalSpent: 800_000 } }) })
-      }
-      return Promise.resolve({ ok: true, json: async () => ({ moduleInstalled: true, account: { balance: 45 } }) })
-    })
+    const fetchMock = vi.fn(() => Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ metrics: {
+        repairs: 3, purchases: 7, billed: 2_000_000, posBilled: 900_000,
+        webBilled: 300_000, repairsBilled: 800_000, loyaltyPoints: 45,
+        loyaltyModuleInstalled: true,
+      } }),
+    }))
     vi.stubGlobal('fetch', fetchMock)
 
     render(
@@ -199,7 +198,7 @@ describe('CustomerDetailModal', () => {
 
   it('no muestra un cero cuando la consulta falla', async () => {
     // Un 0 se lee como dato bueno. Si no se pudo contar, va un guion.
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: false, json: async () => ({}) })))
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: false, status: 500, json: async () => ({}) })))
 
     render(
       <CustomerDetailModal
@@ -211,10 +210,26 @@ describe('CustomerDetailModal', () => {
 
     // El aviso ahora nombra que fallo y con que codigo, para no tener que abrir
     // la consola para saber por donde empezar a mirar.
-    expect(await screen.findByText(/No pudimos cargar compras .*ni reparaciones/)).toBeInTheDocument()
+    expect(await screen.findByText(/No pudimos cargar actividad \(HTTP 500\)/)).toBeInTheDocument()
     expect(screen.queryByText('14')).not.toBeInTheDocument()
 
     vi.unstubAllGlobals()
+  })
+
+  it('oculta métricas comerciales cuando el servidor niega acceso', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+      ok: false,
+      status: 403,
+      json: async () => ({ code: 'FORBIDDEN' }),
+    })))
+
+    render(
+      <CustomerDetailModal open={true} onClose={vi.fn()} customer={mockCustomer} />
+    )
+
+    expect(await screen.findByText('Datos comerciales solo para administradores')).toBeInTheDocument()
+    expect(screen.queryByText('Total registrado')).not.toBeInTheDocument()
+    expect(screen.queryByText('Puntos Fidelidad')).not.toBeInTheDocument()
   })
 
   it('calls onEdit when clicking "Editar Datos"', () => {

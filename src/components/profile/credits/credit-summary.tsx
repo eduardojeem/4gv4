@@ -10,6 +10,7 @@ interface CreditSummaryProps {
   totalPrincipal: number
   totalPaid: number
   totalPending: number
+  overdueAmount: number
   nextPaymentAmount: number | null
   nextPaymentDate: string | null
   hasLateInstallments: boolean
@@ -19,6 +20,7 @@ export function CreditSummary({
   totalPrincipal,
   totalPaid,
   totalPending,
+  overdueAmount,
   nextPaymentAmount,
   nextPaymentDate,
   hasLateInstallments
@@ -41,7 +43,7 @@ export function CreditSummary({
           {hasLateInstallments && (
             <p className="text-xs text-destructive mt-1 font-medium flex items-center gap-1">
               <AlertTriangle className="h-3 w-3" />
-              Cuotas atrasadas
+              Vencido: Gs. {overdueAmount.toLocaleString('es-PY')}
             </p>
           )}
           {!hasLateInstallments && (

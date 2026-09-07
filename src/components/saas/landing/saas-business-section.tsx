@@ -1,12 +1,11 @@
 import Link from 'next/link'
 import { ArrowRight, CheckCircle2, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { businessTypes } from './saas-landing-data'
 
 export function SaaSBusinessSection() {
   return (
-    <section id="negocios" className="border-y border-slate-200 bg-slate-50/70 py-20 dark:border-slate-800 dark:bg-slate-900/40">
+    <section id="negocios" className="scroll-mt-24 border-y border-slate-200 bg-slate-50/70 py-14 sm:py-20 dark:border-slate-800 dark:bg-slate-900/40">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         
         {/* Header */}
@@ -14,13 +13,13 @@ export function SaaSBusinessSection() {
           <div className="max-w-2xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
               <Building2 className="h-3.5 w-3.5" />
-              Soluciones por Industria
+              Para distintos rubros
             </div>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white">
-              Diseñado para el flujo real de tu negocio
+              Una plataforma que se adapta a vos
             </h2>
             <p className="mt-3 text-base text-slate-600 dark:text-slate-400">
-              El sistema se adapta a la operativa diaria: tiendas de mostrador, talleres técnicos, comercio electrónico y cadenas con múltiples depósitos.
+              Ropa, cosméticos, ferretería, tecnología o servicios técnicos. Elegí tu rubro y activá los módulos que necesitás dentro de tu plan.
             </p>
           </div>
 
@@ -41,7 +40,7 @@ export function SaaSBusinessSection() {
             return (
               <div 
                 key={business.title} 
-                className="group relative flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg dark:border-slate-800 dark:bg-slate-950"
+                className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"
               >
                 <div>
                   <div className="flex items-center justify-between">
@@ -73,7 +72,7 @@ export function SaaSBusinessSection() {
 
                 <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                  <span>{business.result}</span>
+                  <span>{business.fit}</span>
                 </div>
               </div>
             )

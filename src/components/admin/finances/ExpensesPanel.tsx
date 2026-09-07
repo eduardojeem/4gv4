@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ExpenseAction } from './FinancesSystem'
 import { format, isValid, parseISO } from 'date-fns'
-import { Coins, Hash, Loader2, ReceiptText, RefreshCw, Search, Wallet, X } from 'lucide-react'
+import { BookOpenCheck, Coins, Hash, Loader2, ReceiptText, RefreshCw, Search, Wallet, X } from 'lucide-react'
 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -71,6 +71,7 @@ export function ExpensesPanel({
   refreshVersion = 0,
   action,
   onActionHandled,
+  onOpenGuide,
 }: {
   organizationId: string
   branchId: string | null | undefined
@@ -79,6 +80,7 @@ export function ExpensesPanel({
   refreshVersion?: number
   action?: { mode: ExpenseAction; nonce: number }
   onActionHandled?: () => void
+  onOpenGuide?: (section?: string) => void
 }) {
   const [categories, setCategories] = useState<FinanceCategory[]>([])
   const categoriesLoadedRef = useRef(false)
@@ -294,6 +296,19 @@ export function ExpensesPanel({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {onOpenGuide && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenGuide('gastos')}
+              className="h-9 gap-1.5 shadow-xs border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold"
+              title="Cómo administrar Gastos y Cuentas por Pagar"
+            >
+              <BookOpenCheck className="h-4 w-4" />
+              <span className="hidden sm:inline">Guía de Gastos</span>
+            </Button>
+          )}
+
           <Button
             variant="outline"
             size="sm"

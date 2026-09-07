@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const closeFinancial = vi.fn()
 const registerUnpricedDeposit = vi.fn()
 const fetchRepair = vi.fn()
+const awardRepairPoints = vi.fn()
 
 function queryResult(result: { data: unknown; error: null }) {
   const query = {
@@ -48,12 +49,18 @@ vi.mock('@/app/api/repairs/_lib', () => ({
   isNextResponse: vi.fn(() => false),
   fetchRepairById: (...args: unknown[]) => fetchRepair(...args),
 }))
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: vi.fn(async () => ctx.supabase),
+}))
 vi.mock('@/lib/repairs/financial-closure-rpc', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/repairs/financial-closure-rpc')>()
   return { ...actual, closeRepairAndRegisterPayment: (...args: unknown[]) => closeFinancial(...args) }
 })
 vi.mock('@/lib/repairs/unpriced-deposit-rpc', () => ({
   registerUnpricedRepairDeposit: (...args: unknown[]) => registerUnpricedDeposit(...args),
+}))
+vi.mock('@/lib/loyalty/repair-points', () => ({
+  awardPaidRepairLoyaltyPoints: (...args: unknown[]) => awardRepairPoints(...args),
 }))
 describe('POST /api/repairs/:id/payment', () => {
   beforeEach(() => {
@@ -62,9 +69,14 @@ describe('POST /api/repairs/:id/payment', () => {
       paid_amount: 0, final_cost: 100_000, estimated_cost: 100_000,
       pricing_mode: 'automatic', labor_cost: 100_000, discount_amount: 0, parts: [],
     })
-    closeFinancial.mockResolvedValue({ payment_id: 'payment-1', idempotent: false })
+    closeFinancial.mockResolvedValue({
+      payment_id: 'payment-1', idempotent: false, total: 100_000, payment_status: 'pagado',
+    })
     registerUnpricedDeposit.mockResolvedValue({ payment_id: 'deposit-1', idempotent: false })
-    fetchRepair.mockResolvedValue({ data: { id: 'repair-1', payment_status: 'pagado' }, error: null })
+    awardRepairPoints.mockResolvedValue({ awarded: true, reason: 'awarded' })
+    fetchRepair.mockResolvedValue({ data: {
+      id: 'repair-1', customer_id: 'customer-1', payment_status: 'pagado', final_cost: 100_000,
+    }, error: null })
   })
 
   it('rejects requests without an idempotency key', async () => {
@@ -87,6 +99,10 @@ describe('POST /api/repairs/:id/payment', () => {
       repairId: 'repair-1', deliver: false, cashSessionId: 'cash-1',
       payment: expect.objectContaining({ idempotencyKey: 'payment-123' }),
     }))
+    expect(awardRepairPoints).toHaveBeenCalledWith(expect.anything(), {
+      organizationId: 'org-1', repairId: 'repair-1', customerId: 'customer-1',
+      total: 100_000, paymentStatus: 'pagado',
+    })
   })
 
   it('returns the authoritative balance before an oversized payment reaches the RPC', async () => {
@@ -161,7 +177,7 @@ describe('POST /api/repairs/:id/payment', () => {
   it('delegates repair credit creation to the atomic financial operation', async () => {
     closeFinancial.mockResolvedValue({
       payment_id: 'payment-1', credit_id: 'atomic-credit', credit_total: 112_000,
-      idempotent: false,
+      idempotent: false, total: 100_000, payment_status: 'pagado',
     })
     const { POST } = await import('./route')
     const request = { json: async () => ({

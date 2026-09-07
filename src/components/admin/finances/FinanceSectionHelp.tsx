@@ -1,4 +1,4 @@
-import { ChevronDown, Lightbulb } from 'lucide-react'
+import { BookOpenCheck, ChevronDown, Lightbulb } from 'lucide-react'
 
 const guides = {
   Resumen: {
@@ -33,7 +33,13 @@ const guides = {
   },
 } as const
 
-export function FinanceSectionHelp({ section }: { section: keyof typeof guides }) {
+export function FinanceSectionHelp({
+  section,
+  onOpenGuide,
+}: {
+  section: keyof typeof guides
+  onOpenGuide?: (section: keyof typeof guides) => void
+}) {
   const guide = guides[section]
   return (
     <details className="group rounded-lg border border-primary/20 bg-primary/5">
@@ -51,7 +57,19 @@ export function FinanceSectionHelp({ section }: { section: keyof typeof guides }
             <p className="leading-relaxed">{guide.example}</p>
           </div>
         </div>
-        <p className="text-xs leading-relaxed text-muted-foreground">{guide.note} Ejemplo ilustrativo: no modifica tus registros.</p>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-primary/10">
+          <p className="text-xs leading-relaxed text-muted-foreground">{guide.note} Ejemplo ilustrativo: no modifica tus registros.</p>
+          {onOpenGuide && (
+            <button
+              type="button"
+              onClick={() => onOpenGuide(section)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+            >
+              <BookOpenCheck className="h-3.5 w-3.5" />
+              <span>Ver Guía Detallada de {section}</span>
+            </button>
+          )}
+        </div>
       </div>
     </details>
   )

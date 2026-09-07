@@ -156,6 +156,7 @@ describe('finance operational dialogs', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
     await user.click(screen.getByRole('button', { name: /Reglas de Comisión/ }))
+    await user.click(await screen.findByRole('button', { name: /Nueva regla de comisión/i }))
 
     await user.selectOptions(await screen.findByLabelText('Alcance'), 'role')
     await user.selectOptions(screen.getByLabelText('Rol'), 'seller')
@@ -253,6 +254,7 @@ describe('finance operational dialogs', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
     await user.click(screen.getByRole('button', { name: /Reglas de Comisión/ }))
+    await user.click(await screen.findByRole('button', { name: /Nueva regla de comisión/i }))
 
     await user.selectOptions(await screen.findByLabelText('Alcance'), 'role')
     await user.selectOptions(screen.getByLabelText('Rol'), 'seller')
@@ -276,6 +278,7 @@ describe('finance operational dialogs', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<FinanceSettingsPanel organizationId={uuid} branchId={null} />)
     await user.click(screen.getByRole('button', { name: /Reglas de Comisión/ }))
+    await user.click(await screen.findByRole('button', { name: /Nueva regla de comisión/i }))
 
     await user.selectOptions(await screen.findByLabelText('Alcance'), 'role')
     await user.selectOptions(screen.getByLabelText('Rol'), 'seller')

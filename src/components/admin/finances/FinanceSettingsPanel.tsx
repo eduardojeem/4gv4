@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
+  BookOpenCheck,
   Building2,
   Ban,
+  Calculator,
   Calendar,
   CheckCircle2,
+  Clock,
   Coins,
   DollarSign,
+  Eye,
   FileText,
   Filter,
   Info,
@@ -15,9 +19,11 @@ import {
   Percent,
   Plus,
   ScrollText,
+  Search,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
+  Trash2,
   TrendingUp,
   User,
   Users,
@@ -25,6 +31,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -272,10 +279,14 @@ export function FinanceSettingsPanel({
   organizationId,
   branchId,
   refreshVersion = 0,
+  onOpenGuide,
+  defaultCreateRuleOpen = false,
 }: {
   organizationId: string
   branchId: string | null | undefined
   refreshVersion?: number
+  onOpenGuide?: (section?: string) => void
+  defaultCreateRuleOpen?: boolean
 }) {
   const [activeSubTab, setActiveSubTab] = useState<'rules' | 'personnel'>('personnel')
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -287,6 +298,10 @@ export function FinanceSettingsPanel({
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [ruleFilter, setRuleFilter] = useState<'all' | 'sale' | 'repair' | 'employee' | 'role'>('all')
   const [editingSalaryEmp, setEditingSalaryEmp] = useState<Employee | null>(null)
+  const [isCreateRuleOpen, setIsCreateRuleOpen] = useState(defaultCreateRuleOpen)
+  const [selectedRuleForDetail, setSelectedRuleForDetail] = useState<Rule | null>(null)
+  const [ruleSearchQuery, setRuleSearchQuery] = useState('')
+  const [simulationAmount, setSimulationAmount] = useState('1000000')
 
   // Campos de formulario para nueva regla
   const [scopeType, setScopeType] = useState<ScopeType>('employee')
@@ -404,6 +419,7 @@ export function FinanceSettingsPanel({
         return
       }
       resetForm()
+      setIsCreateRuleOpen(false)
       await load()
     } catch {
       setError('No se pudo confirmar el guardado. Verificá el estado de las reglas antes de volver a intentar.')
@@ -438,29 +454,35 @@ export function FinanceSettingsPanel({
       })
       const payload = (await response.json().catch(() => null)) as { error?: string } | null
       if (!response.ok) {
-        setError(payload?.error ?? 'No se pudo aprobar la regla.')
+        const msg = payload?.error ?? 'No se pudo aprobar la regla.'
+        setError(msg)
+        toast.error(msg)
         return
+      }
+      toast.success('Regla de comisión aprobada exitosamente')
+      if (selectedRuleForDetail?.id === rule.id) {
+        setSelectedRuleForDetail((prev) => (prev ? { ...prev, status: 'approved' } : null))
       }
       await load()
     } catch {
-      setError('No se pudo confirmar la aprobación. Verificá el estado de la regla antes de volver a intentar.')
+      const msg = 'No se pudo confirmar la aprobación. Verificá el estado de la regla antes de volver a intentar.'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setApprovingId(null)
     }
   }
 
   /**
-   * Retira una regla aprobada: deja de comisionar de aca en adelante.
-   *
-   * No se borra. La base tiene `on delete restrict` sobre los devengados, asi
-   * que una regla que ya genero comisiones no se puede eliminar —y esta bien:
-   * borrarla dejaria sin explicacion las comisiones que ya se pagaron.
+   * Retira una regla aprobada: deja de comisionar de acá en adelante.
+   * Cierra su vigencia al día de hoy para proteger la inmutabilidad de comisiones previas.
    */
   async function retireRule(rule: Rule) {
     if (approvingId) return
     setApprovingId(rule.id)
     setError(null)
     try {
+      const todayIso = new Date().toISOString().split('T')[0]
       const response = await fetch(`/api/admin/finances/commission-rules?organizationId=${organizationId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
@@ -477,17 +499,58 @@ export function FinanceSettingsPanel({
           value: Number(rule.value),
           status: 'retired',
           effectiveFrom: rule.effective_from,
-          effectiveTo: rule.effective_to ?? undefined,
+          effectiveTo: rule.effective_to ?? todayIso,
         }),
       })
       const payload = (await response.json().catch(() => null)) as { error?: string } | null
       if (!response.ok) {
-        setError(payload?.error ?? 'No se pudo retirar la regla.')
+        const msg = payload?.error ?? 'No se pudo retirar la regla.'
+        setError(msg)
+        toast.error(msg)
         return
+      }
+      toast.success('Regla de comisión retirada exitosamente. Ya no generará nuevas comisiones.')
+      if (selectedRuleForDetail?.id === rule.id) {
+        setSelectedRuleForDetail((prev) => (prev ? { ...prev, status: 'retired', effective_to: prev.effective_to ?? todayIso } : null))
       }
       await load()
     } catch {
-      setError('No se pudo confirmar el retiro. Verificá el estado de la regla antes de volver a intentar.')
+      const msg = 'No se pudo confirmar el retiro. Verificá el estado de la regla antes de volver a intentar.'
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setApprovingId(null)
+    }
+  }
+
+  /**
+   * Elimina permanentemente una regla en borrador (que nunca fue aprobada).
+   */
+  async function deleteDraftRule(rule: Rule) {
+    if (approvingId) return
+    setApprovingId(rule.id)
+    setError(null)
+    try {
+      const response = await fetch(
+        `/api/admin/finances/commission-rules?organizationId=${organizationId}&id=${rule.id}`,
+        { method: 'DELETE' },
+      )
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null
+        const msg = payload?.error ?? 'No se pudo eliminar el borrador.'
+        setError(msg)
+        toast.error(msg)
+        return
+      }
+      toast.success('Borrador eliminado correctamente.')
+      if (selectedRuleForDetail?.id === rule.id) {
+        setSelectedRuleForDetail(null)
+      }
+      await load()
+    } catch {
+      const msg = 'Error al eliminar el borrador de comisión.'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setApprovingId(null)
     }
@@ -538,14 +601,23 @@ export function FinanceSettingsPanel({
 
   // Filtrado de reglas
   const filteredRules = useMemo(() => {
-    return rules.filter((r) => {
-      if (ruleFilter === 'sale') return r.source_type === 'sale'
-      if (ruleFilter === 'repair') return r.source_type === 'repair' || r.source_type === 'repair_labor'
-      if (ruleFilter === 'employee') return r.scope_type === 'employee'
-      if (ruleFilter === 'role') return r.scope_type === 'role'
-      return true
-    })
-  }, [rules, ruleFilter])
+    return rules
+      .filter((r) => {
+        if (ruleFilter === 'sale') return r.source_type === 'sale'
+        if (ruleFilter === 'repair') return r.source_type === 'repair' || r.source_type === 'repair_labor'
+        if (ruleFilter === 'employee') return r.scope_type === 'employee'
+        if (ruleFilter === 'role') return r.scope_type === 'role'
+        return true
+      })
+      .filter((r) => {
+        if (!ruleSearchQuery.trim()) return true
+        const q = ruleSearchQuery.toLowerCase()
+        const empName = (employees.find((e) => e.user_id === r.employee_id)?.display_name ?? '').toLowerCase()
+        const roleName = (ROLE_LABEL[String(r.role)] ?? r.role ?? '').toLowerCase()
+        const srcName = (SOURCE_LABEL[r.source_type] ?? r.source_type).toLowerCase()
+        return empName.includes(q) || roleName.includes(q) || srcName.includes(q)
+      })
+  }, [rules, ruleFilter, ruleSearchQuery, employees])
 
   // Estadísticas del personal
   const totalBasePayroll = useMemo(() => {
@@ -596,44 +668,88 @@ export function FinanceSettingsPanel({
           </button>
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          {activeSubTab === 'rules'
-            ? 'Reglas automáticas de comisión para vendedores y técnicos.'
-            : 'Asignación de remuneración fija mensual por colaborador.'}
-        </p>
+        <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+          <p className="text-xs text-muted-foreground hidden md:inline">
+            {activeSubTab === 'rules'
+              ? 'Reglas automáticas de comisión para vendedores y técnicos.'
+              : 'Asignación de remuneración fija mensual por colaborador.'}
+          </p>
+          {onOpenGuide && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenGuide('configuracion')}
+              className="gap-1.5 shadow-xs border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold"
+              title="Cómo administrar la Configuración de Finanzas"
+            >
+              <BookOpenCheck className="h-4 w-4" />
+              <span>Guía de Configuración</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* ======================================================== */}
-      {error && activeSubTab === 'personnel' ? (
+      {error && (activeSubTab === 'personnel' || !isCreateRuleOpen) ? (
         <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</div>
       ) : null}
       {/* SECCIÓN 1: REGLAS DE COMISIÓN                            */}
       {/* ======================================================== */}
       {activeSubTab === 'rules' && (
-        <div className="space-y-6">
-          {/* Tarjeta de Creación de Regla */}
-          <Card className="border-border/80 shadow-md overflow-hidden sm:rounded-2xl">
-            <CardHeader className="p-6 pb-4 border-b bg-muted/20">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
-                  <Sparkles className="h-5 w-5" />
+        <div className="space-y-5">
+          {/* Header de la Sección con Botón para Abrir Modal */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-card p-4 sm:p-5 rounded-2xl border border-border/70 shadow-xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <ScrollText className="h-4 w-4" />
                 </div>
-                <div>
-                  <CardTitle className="text-lg font-bold">Nueva regla de comisión</CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                    Configura comisiones automáticas por ventas o servicios técnicos para motivar a tu equipo.
-                  </CardDescription>
-                </div>
+                <h2 id="rules-heading" className="text-base font-bold text-foreground">
+                  Reglas de comisión configuradas
+                </h2>
               </div>
-            </CardHeader>
+              <p className="text-xs text-muted-foreground mt-1">
+                Define incentivos automáticos por ventas o reparaciones. Solo las reglas aprobadas se materializan en nómina.
+              </p>
+            </div>
 
-            <CardContent className="p-6 space-y-6">
+            <Button
+              type="button"
+              onClick={() => {
+                setError(null)
+                setIsCreateRuleOpen(true)
+              }}
+              className="gap-2 text-xs font-bold shadow-xs shrink-0"
+            >
+              <Plus className="h-4 w-4" />
+              Nueva regla de comisión
+            </Button>
+          </div>
+
+          {/* Modal de Creación de Regla de Comisión */}
+          <Dialog open={isCreateRuleOpen} onOpenChange={setIsCreateRuleOpen}>
+            <DialogContent className="max-w-2xl sm:max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0 sm:rounded-2xl">
+              <DialogHeader className="p-6 pb-4 border-b bg-muted/20">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-lg font-bold">Nueva regla de comisión</DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                      Configura comisiones automáticas por ventas o servicios técnicos para motivar a tu equipo.
+                    </DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
               <form
                 onSubmit={(event) => {
                   event.preventDefault()
                   void submit('approved')
                 }}
-                className="space-y-5"
+                className="p-6 space-y-5"
               >
                 {/* Grid de Configuración de la Regla */}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -877,14 +993,26 @@ export function FinanceSettingsPanel({
                   </div>
                 </div>
 
-                {error ? (
+                {error && isCreateRuleOpen ? (
                   <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
                     {error}
                   </div>
                 ) : null}
 
-                {/* Botones de Guardado */}
-                <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-border/60 justify-end">
+                {/* Botones de Guardado en DialogFooter */}
+                <DialogFooter className="flex flex-wrap items-center gap-2 pt-3 border-t sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={isSaving}
+                    onClick={() => {
+                      setError(null)
+                      setIsCreateRuleOpen(false)
+                    }}
+                    className="text-xs"
+                  >
+                    Cancelar
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
@@ -903,48 +1031,95 @@ export function FinanceSettingsPanel({
                     <ShieldCheck className="h-4 w-4" />
                     {isSaving ? 'Guardando…' : 'Crear y aprobar regla'}
                   </Button>
-                </div>
+                </DialogFooter>
               </form>
-            </CardContent>
-          </Card>
+            </DialogContent>
+          </Dialog>
 
           {/* Reglas Existentes con Filtro Rápido */}
           <section aria-labelledby="rules-heading" className="space-y-3.5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <h2 id="rules-heading" className="text-base font-bold text-foreground">
-                  Reglas de comisión configuradas
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Solo las reglas aprobadas se materializan en las corridas de nómina.
-                </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 rounded-lg py-1 px-2.5 text-xs font-semibold bg-background border-border/70 text-foreground shadow-2xs whitespace-nowrap"
+                >
+                  <span className="font-bold">{rules.length}</span>
+                  <span className="text-muted-foreground font-normal">
+                    {rules.length === 1 ? 'regla registrada' : 'reglas registradas'}
+                  </span>
+                </Badge>
+
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 rounded-lg py-1 px-2.5 text-xs font-semibold border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 shadow-2xs whitespace-nowrap"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  <span className="font-bold">{rules.filter((r) => r.status === 'approved').length}</span>
+                  <span className="font-normal">activas</span>
+                </Badge>
+
+                {rules.some((r) => r.status === 'draft') && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1.5 rounded-lg py-1 px-2.5 text-xs font-semibold border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 shadow-2xs whitespace-nowrap"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    <span className="font-bold">{rules.filter((r) => r.status === 'draft').length}</span>
+                    <span className="font-normal">en borrador</span>
+                  </Badge>
+                )}
+
+                {rules.some((r) => r.status === 'retired') && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1.5 rounded-lg py-1 px-2.5 text-xs font-semibold border-border bg-muted/40 text-muted-foreground shadow-2xs whitespace-nowrap"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" />
+                    <span className="font-bold">{rules.filter((r) => r.status === 'retired').length}</span>
+                    <span className="font-normal">retiradas</span>
+                  </Badge>
+                )}
               </div>
 
-              {/* Filtros Rápidos */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {(
-                  [
-                    { id: 'all', label: 'Todas' },
-                    { id: 'sale', label: 'Ventas' },
-                    { id: 'repair', label: 'Reparaciones' },
-                    { id: 'employee', label: 'Por Empleado' },
-                    { id: 'role', label: 'Por Rol' },
-                  ] as const
-                ).map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setRuleFilter(f.id)}
-                    className={cn(
-                      'px-2.5 py-1 text-xs rounded-lg font-medium border transition-colors',
-                      ruleFilter === f.id
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-card text-muted-foreground border-border/60 hover:bg-muted/30',
-                    )}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+              {/* Filtros Rápidos y Búsqueda */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Buscar por nombre o rol…"
+                    value={ruleSearchQuery}
+                    onChange={(e) => setRuleSearchQuery(e.target.value)}
+                    className="h-7.5 w-44 sm:w-56 pl-8 pr-2.5 text-xs rounded-lg bg-card"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1">
+                  {(
+                    [
+                      { id: 'all', label: 'Todas' },
+                      { id: 'sale', label: 'Ventas' },
+                      { id: 'repair', label: 'Reparaciones' },
+                      { id: 'employee', label: 'Por Empleado' },
+                      { id: 'role', label: 'Por Rol' },
+                    ] as const
+                  ).map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setRuleFilter(f.id)}
+                      className={cn(
+                        'px-2.5 py-1 text-xs rounded-lg font-medium border transition-colors',
+                        ruleFilter === f.id
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-card text-muted-foreground border-border/60 hover:bg-muted/30',
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -957,8 +1132,20 @@ export function FinanceSettingsPanel({
             ) : filteredRules.length === 0 ? (
               <EmptyState
                 icon={ScrollText}
-                title="No se encontraron reglas con este filtro"
-                description="Ajusta el filtro o crea una regla arriba para incentivar a tu equipo."
+                title={rules.length === 0 ? 'No hay reglas de comisión configuradas' : 'No se encontraron reglas con este filtro'}
+                description={
+                  rules.length === 0
+                    ? 'Crea comisiones automáticas por ventas o servicios para incentivar y premiar a tu equipo.'
+                    : 'Ajustá el filtro o creá una nueva regla de comisión para tus colaboradores.'
+                }
+                action={{
+                  label: 'Crear primera regla',
+                  icon: Plus,
+                  onClick: () => {
+                    setError(null)
+                    setIsCreateRuleOpen(true)
+                  },
+                }}
                 className="rounded-xl border bg-card p-8"
               />
             ) : (
@@ -1013,19 +1200,44 @@ export function FinanceSettingsPanel({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
+                      <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
+                        {/* BOTÓN VER DETALLE */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 h-8 text-xs font-semibold shadow-2xs"
+                          onClick={() => setSelectedRuleForDetail(rule)}
+                          title="Ver especificaciones completas, simulador y auditoría"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-primary" />
+                          <span>Ver detalle</span>
+                        </Button>
+
                         {rule.status === 'draft' ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-1.5 h-8 text-xs font-semibold"
-                            onClick={() => void approveRule(rule)}
-                            disabled={approvingId === rule.id}
-                          >
-                            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                            {approvingId === rule.id ? 'Aprobando…' : 'Aprobar regla'}
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5 h-8 text-xs font-semibold"
+                              onClick={() => void approveRule(rule)}
+                              disabled={approvingId === rule.id}
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                              {approvingId === rule.id ? 'Aprobando…' : 'Aprobar regla'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => void deleteDraftRule(rule)}
+                              disabled={approvingId === rule.id}
+                              title="Eliminar borrador"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
                         ) : null}
+
                         {rule.status === 'approved' ? (
                           <Button
                             size="sm"
@@ -1046,6 +1258,244 @@ export function FinanceSettingsPanel({
               </ul>
             )}
           </section>
+
+          {/* Modal para Ver Detalle Completo de la Regla */}
+          <Dialog
+            open={Boolean(selectedRuleForDetail)}
+            onOpenChange={(open) => {
+              if (!open) setSelectedRuleForDetail(null)
+            }}
+          >
+            <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-0 gap-0 sm:rounded-2xl">
+              {selectedRuleForDetail && (() => {
+                const rule = selectedRuleForDetail
+                const who =
+                  rule.scope_type === 'employee'
+                    ? employees.find((e) => e.user_id === rule.employee_id)?.display_name ?? 'Empleado asignado'
+                    : `Rol: ${ROLE_LABEL[String(rule.role)] ?? rule.role}`
+                const source = SOURCE_LABEL[rule.source_type] ?? rule.source_type
+                const amount =
+                  rule.calculation_type === 'percentage'
+                    ? `${rule.value}% ${BASIS_LABEL[rule.source_type as SourceType] ?? 'del importe base'}`
+                    : formatCurrency(rule.value)
+                const isRepair = rule.source_type === 'repair' || rule.source_type === 'repair_labor'
+
+                const simAmountNum = Math.max(0, Number(simulationAmount) || 0)
+                const simResult =
+                  rule.calculation_type === 'percentage'
+                    ? (simAmountNum * rule.value) / 100
+                    : rule.value
+
+                return (
+                  <>
+                    <DialogHeader className="p-5 sm:p-6 border-b bg-muted/20">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
+                            {isRepair ? <Wrench className="h-5 w-5" /> : <ShoppingBag className="h-5 w-5" />}
+                          </div>
+                          <div>
+                            <DialogTitle className="text-base sm:text-lg font-bold text-foreground">
+                              {who}
+                            </DialogTitle>
+                            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                              {source} · {rule.calculation_type === 'percentage' ? 'Cálculo Porcentual' : 'Monto Fijo en Gs.'}
+                            </DialogDescription>
+                          </div>
+                        </div>
+                        <Badge
+                          variant={rule.status === 'retired' ? 'secondary' : 'outline'}
+                          className={cn('text-xs px-2.5 py-1 shrink-0', STATUS_BADGE_CLASS[rule.status])}
+                        >
+                          {statusLabel[rule.status]}
+                        </Badge>
+                      </div>
+                    </DialogHeader>
+
+                    <div className="p-5 sm:p-6 space-y-5 text-xs">
+                      {/* Resumen operativo destacado */}
+                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
+                        <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-bold text-foreground text-xs">Resumen operativo:</p>
+                          <p className="text-muted-foreground leading-relaxed">
+                            Aplica para <strong>{who}</strong>: percibirá{' '}
+                            <strong className="text-emerald-700 dark:text-emerald-300">{amount}</strong> por cada {source.toLowerCase()}
+                            {rule.accrual_status ? ` (al pasar a estado "${rule.accrual_status}")` : ''},{' '}
+                            desde el <strong>{rule.effective_from}</strong>
+                            {rule.effective_to ? ` hasta el ${rule.effective_to}` : ' (vigencia indefinida)'}.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Grid de especificaciones de la regla */}
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border border-border/70 bg-card p-3.5 space-y-1 shadow-2xs">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Users className="h-3.5 w-3.5 text-primary" />
+                            Alcance y Asignación
+                          </p>
+                          <p className="font-bold text-foreground text-sm pt-0.5">{who}</p>
+                          <p className="text-muted-foreground text-[11px]">
+                            Tipo de alcance: {rule.scope_type === 'employee' ? 'Colaborador individual' : 'Rol general de la empresa'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-border/70 bg-card p-3.5 space-y-1 shadow-2xs">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Coins className="h-3.5 w-3.5 text-primary" />
+                            Cálculo del Incentivo
+                          </p>
+                          <p className="font-bold text-emerald-600 dark:text-emerald-400 text-sm pt-0.5">
+                            {rule.calculation_type === 'percentage' ? `${rule.value}%` : formatCurrency(rule.value)}
+                          </p>
+                          <p className="text-muted-foreground text-[11px]">
+                            Base: {BASIS_LABEL[rule.source_type as SourceType] ?? 'del valor base'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-border/70 bg-card p-3.5 space-y-1 shadow-2xs">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-primary" />
+                            Período de Vigencia
+                          </p>
+                          <p className="font-medium text-foreground text-xs pt-0.5">
+                            Desde: <span className="font-bold">{rule.effective_from}</span>
+                          </p>
+                          <p className="text-muted-foreground text-[11px]">
+                            Hasta: {rule.effective_to ? <span className="font-bold text-foreground">{rule.effective_to}</span> : 'Indefinido (sin vencimiento)'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-border/70 bg-card p-3.5 space-y-1 shadow-2xs">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5 text-primary" />
+                            Devengo y Liquidación
+                          </p>
+                          <p className="font-medium text-foreground text-xs pt-0.5">
+                            {rule.accrual_status ? `Estado: ${rule.accrual_status}` : 'Inmediato al facturar'}
+                          </p>
+                          <p className="text-muted-foreground text-[11px]">
+                            {isRepair
+                              ? 'Se devenga cuando el servicio alcanza el estado configurado.'
+                              : 'Se computa automáticamente en las corridas mensuales de nómina.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Simulador Interactivo de Comisión */}
+                      <div className="rounded-xl border border-border/80 bg-muted/20 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                            <Calculator className="h-4 w-4 text-primary" />
+                            Simulador de comisión en tiempo real (Gs.)
+                          </h4>
+                          <Badge variant="outline" className="text-[10px] bg-background">
+                            Interactivo
+                          </Badge>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                          <div className="flex-1">
+                            <Label htmlFor="sim-input" className="text-[11px] text-muted-foreground">
+                              Monto facturado de prueba:
+                            </Label>
+                            <div className="relative mt-1">
+                              <Input
+                                id="sim-input"
+                                type="number"
+                                value={simulationAmount}
+                                onChange={(e) => setSimulationAmount(e.target.value)}
+                                placeholder="1000000"
+                                className="h-8 text-xs pr-8"
+                              />
+                              <span className="absolute right-2.5 top-2 text-[10px] text-muted-foreground font-semibold">
+                                Gs.
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="sm:w-1/2 rounded-lg bg-background p-2.5 border border-border/70">
+                            <p className="text-[10px] text-muted-foreground">Comisión calculada para el colaborador:</p>
+                            <p className="text-base font-extrabold text-primary mt-0.5">
+                              {formatCurrency(simResult)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Metadatos y Auditoría Inmutable */}
+                      <div className="rounded-lg border border-border/50 bg-card p-3 text-[11px] text-muted-foreground space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span>ID de auditoría:</span>
+                          <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-foreground">
+                            {rule.id}
+                          </code>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+                          🔒 <strong>Protección Contable:</strong> Las reglas aprobadas son inmutables sobre operaciones pasadas para garantizar la trazabilidad legal y fiscal de las nóminas pagadas. Al retirarla, deja de comisionar hacia el futuro.
+                        </p>
+                      </div>
+                    </div>
+
+                    <DialogFooter className="p-4 border-t bg-muted/10 flex flex-wrap items-center gap-2 sm:justify-between">
+                      <div>
+                        {rule.status === 'draft' ? (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-8 text-xs gap-1.5"
+                            onClick={() => void deleteDraftRule(rule)}
+                            disabled={approvingId === rule.id}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Eliminar borrador
+                          </Button>
+                        ) : null}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedRuleForDetail(null)}
+                          className="h-8 text-xs"
+                        >
+                          Cerrar
+                        </Button>
+
+                        {rule.status === 'draft' ? (
+                          <Button
+                            size="sm"
+                            className="gap-1.5 h-8 text-xs font-semibold shadow-xs"
+                            onClick={() => void approveRule(rule)}
+                            disabled={approvingId === rule.id}
+                          >
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            {approvingId === rule.id ? 'Aprobando…' : 'Aprobar regla'}
+                          </Button>
+                        ) : null}
+
+                        {rule.status === 'approved' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 h-8 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 border-rose-200 dark:border-rose-900/50"
+                            onClick={() => void retireRule(rule)}
+                            disabled={approvingId === rule.id}
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                            {approvingId === rule.id ? 'Retirando…' : 'Retirar regla'}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </DialogFooter>
+                  </>
+                )
+              })()}
+            </DialogContent>
+          </Dialog>
         </div>
       )}
 

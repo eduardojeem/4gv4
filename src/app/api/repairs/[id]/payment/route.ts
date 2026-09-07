@@ -11,6 +11,10 @@ import {
   FinancialClosureRpcError,
 } from '@/lib/repairs/financial-closure-rpc'
 import { registerUnpricedRepairDeposit } from '@/lib/repairs/unpriced-deposit-rpc'
+import { createClient } from '@/lib/supabase/server'
+import { awardPaidRepairLoyaltyPoints } from '@/lib/loyalty/repair-points'
+import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
+import { logger } from '@/lib/logger'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -166,6 +170,24 @@ export async function POST(request: NextRequest, context: RouteParams) {
     if (error) throw error
     if (!repair) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
 
+    const loyalty = isUnpricedDeposit
+      ? { awarded: false, reason: 'not-paid' as const }
+      : await awardPaidRepairLoyaltyPoints(await createClient(), {
+          organizationId: ctx.organizationId,
+          repairId: id,
+          customerId: repair.customer_id ?? null,
+          total: Number(('total' in operation ? operation.total : null) ?? repair.final_cost ?? 0),
+          paymentStatus: ('payment_status' in operation ? operation.payment_status : null)
+            ?? repair.payment_status
+            ?? 'pendiente',
+        })
+    if (loyalty.reason === 'error' && !isLoyaltyModuleMissing(loyalty.error)) {
+      logger.warn('No se pudieron acreditar los puntos de la reparación', {
+        repairId: id,
+        error: loyalty.error?.message,
+      })
+    }
+
     const creditId = 'credit_id' in operation ? operation.credit_id : null
     const creditTotal = 'credit_total' in operation ? operation.credit_total : null
 
@@ -177,6 +199,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
         financedTotal: Number(creditTotal ?? input.amount),
       } : null,
       idempotent: operation.idempotent,
+      loyalty: { awarded: loyalty.awarded },
     })
   } catch (error) {
     if (error instanceof FinancialClosureRpcError) {

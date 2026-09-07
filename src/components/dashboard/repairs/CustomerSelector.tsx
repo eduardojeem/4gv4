@@ -400,6 +400,10 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                 open={showQuickCreate}
                 onClose={() => setShowQuickCreate(false)}
                 onCreated={handleCustomerCreated}
+                onSelectExisting={(customer) => {
+                    handleCustomerCreated(customer.id, customer)
+                    setShowQuickCreate(false)
+                }}
             />
         </>
     )

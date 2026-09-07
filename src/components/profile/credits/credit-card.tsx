@@ -22,6 +22,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { CreditItem } from './credits-client'
+import { getCustomerInstallmentView } from '@/lib/credits/customer-portal'
 
 interface CreditCardProps {
   credit: CreditItem
@@ -30,15 +31,16 @@ interface CreditCardProps {
 export function CreditCard({ credit }: CreditCardProps) {
   const [isOpen, setIsOpen] = useState(false)
   
-  const paidCount = credit.installments.filter(i => i.status === 'paid').length
+  const installmentViews = credit.installments
+    .map((installment) => ({ installment, view: getCustomerInstallmentView(installment) }))
+    .sort((a, b) => a.installment.installment_number - b.installment.installment_number)
+  const paidCount = installmentViews.filter(({ view }) => view.status === 'paid').length
   const totalAmount = credit.installments.reduce((sum, i) => sum + i.amount, 0)
-  const paidAmount = credit.installments
-    .filter(i => i.status === 'paid')
-    .reduce((sum, i) => sum + i.amount, 0)
+  const paidAmount = installmentViews.reduce((sum, { view }) => sum + view.paid, 0)
   
-  const nextPending = credit.installments
-    .filter(i => i.status === 'pending' || i.status === 'late')
-    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0]
+  const nextPending = installmentViews
+    .filter(({ view }) => view.remaining > 0)
+    .sort((a, b) => a.view.dueDate.getTime() - b.view.dueDate.getTime())[0]
   
   const progress = totalAmount > 0 ? (paidAmount / totalAmount) * 100 : 0
   const progressColor = progress >= 70 ? 'var(--success)' : progress >= 30 ? 'var(--warning)' : 'var(--destructive)'
@@ -99,8 +101,8 @@ export function CreditCard({ credit }: CreditCardProps) {
             {nextPending && (
               <Badge variant="outline" className="mt-1 gap-1 bg-warning/10 border-warning/30 text-warning">
                 <Clock className="h-3 w-3" />
-                Próx. {new Date(nextPending.due_date).toLocaleDateString('es-PY', { day: '2-digit', month: 'short' })}
-                · Gs. {nextPending.amount.toLocaleString('es-PY')}
+                Próx. {nextPending.view.dueDate.toLocaleDateString('es-PY', { day: '2-digit', month: 'short' })}
+                · Gs. {nextPending.view.remaining.toLocaleString('es-PY')}
               </Badge>
             )}
           </div>
@@ -158,19 +160,19 @@ export function CreditCard({ credit }: CreditCardProps) {
         <CollapsibleContent>
           <div className="border-t border-border bg-muted/5">
             <div className="divide-y divide-border">
-              {credit.installments.sort((a, b) => a.installment_number - b.installment_number).map((installment) => (
+              {installmentViews.map(({ installment, view }) => (
                 <div 
                   key={installment.id} 
                   className={cn(
                     "flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 transition-colors hover:bg-muted/20",
-                    installment.status === 'late' && "bg-destructive/5 hover:bg-destructive/10"
+                    view.status === 'late' && "bg-destructive/5 hover:bg-destructive/10"
                   )}
                 >
                   <div className="flex items-center gap-4">
                     <div className={cn(
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold border",
-                      installment.status === 'paid' ? "bg-success/10 text-success border-success/20" : 
-                      installment.status === 'late' ? "bg-destructive/10 text-destructive border-destructive/20" :
+                      view.status === 'paid' ? "bg-success/10 text-success border-success/20" :
+                      view.status === 'late' ? "bg-destructive/10 text-destructive border-destructive/20" :
                       "bg-muted text-muted-foreground border-border"
                     )}>
                       {installment.installment_number}
@@ -186,16 +188,16 @@ export function CreditCard({ credit }: CreditCardProps) {
                   </div>
 
                   <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pl-12 sm:pl-0">
-                    {installment.amount_paid && installment.amount_paid > 0 && installment.status !== 'pending' && (
-                      <span className="text-xs text-muted-foreground hidden sm:inline-block">
-                        Pagado: Gs. {installment.amount_paid.toLocaleString('es-PY')}
+                    {view.paid > 0 && (
+                      <span className="text-xs text-muted-foreground sm:inline-block">
+                        Pagado: Gs. {view.paid.toLocaleString('es-PY')} · Resta: Gs. {view.remaining.toLocaleString('es-PY')}
                       </span>
                     )}
-                    <Badge variant="outline" className={cn("gap-1.5", getInstallmentStatusColor(installment.status))}>
-                      {getInstallmentStatusIcon(installment.status)}
+                    <Badge variant="outline" className={cn("gap-1.5", getInstallmentStatusColor(view.status))}>
+                      {getInstallmentStatusIcon(view.status)}
                       <span className="capitalize">
-                        {installment.status === 'paid' ? 'Pagado' : 
-                         installment.status === 'late' ? 'Atrasado' : 'Pendiente'}
+                        {view.status === 'paid' ? 'Pagado' :
+                         view.status === 'late' ? 'Atrasado' : 'Pendiente'}
                       </span>
                     </Badge>
                   </div>

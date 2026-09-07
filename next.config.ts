@@ -263,6 +263,14 @@ const nextConfig: NextConfig = {
       },
     ]
   },
+  async rewrites() {
+    return [
+      {
+        source: '/saas/Soluciones',
+        destination: '/saas/soluciones',
+      },
+    ];
+  },
 };
 
 export default withBundleAnalyzer(withPWAInit(nextConfig));

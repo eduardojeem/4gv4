@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { CreditCard, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -135,6 +136,7 @@ export function PaymentDialog({
 
   async function refreshAfterPayment() {
     try {
+      toast.success('Pago registrado con éxito.')
       await onSaved()
       idempotencyKeyRef.current = null
       onOpenChange(false)

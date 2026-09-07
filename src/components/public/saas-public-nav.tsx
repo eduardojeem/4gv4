@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils'
 
 const navLinks = [
   { label: 'Inicio', href: '/saas', icon: Sparkles, exact: true },
-  { label: 'Características', href: '/saas#caracteristicas', icon: Zap, exact: false },
+  { label: 'Soluciones', href: '/saas/Soluciones', icon: Zap, exact: false },
   { label: 'Negocios', href: '/saas/negocios', icon: Building2, exact: false },
   { label: 'Planes', href: '/saas/planes', icon: CreditCard, exact: false },
 ]
@@ -81,9 +81,11 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
     : 'U'
 
   function isActive(href: string, exact = false) {
-    if (exact) return pathname === href
-    if (href.includes('#')) return pathname === '/saas'
-    return pathname === href || pathname.startsWith(href + '/')
+    const lowerPath = (pathname || '').toLowerCase()
+    const lowerHref = href.toLowerCase()
+    if (exact) return lowerPath === lowerHref
+    if (href.includes('#')) return lowerPath === '/saas'
+    return lowerPath === lowerHref || lowerPath.startsWith(lowerHref + '/')
   }
 
   async function handleLogout() {

@@ -970,12 +970,50 @@ export function PromotionalCarouselEditor({
       </section>
 
       {/* Save bar */}
-      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 md:sticky md:bottom-6 md:justify-end">
-        {hasChanges && <Button type="button" variant="outline" onClick={discardDraft}>Descartar</Button>}
-        <Button type="button" onClick={() => void handleSave()} disabled={isSaving || !hasChanges} size="lg">
-          {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Guardar carrusel
-        </Button>
+      <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full shrink-0',
+              hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+            )}
+            aria-hidden="true"
+          />
+          <span className="font-semibold text-foreground">
+            {hasChanges ? 'Hay cambios en el carrusel sin guardar' : 'Banners actualizados'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 justify-end">
+          {hasChanges && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={discardDraft}
+              className="h-10 px-4 rounded-xl text-xs font-semibold flex-1 sm:flex-none"
+            >
+              Descartar
+            </Button>
+          )}
+          <Button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={isSaving || !hasChanges}
+            className="h-10 px-5 rounded-xl text-xs font-bold gap-2 flex-1 sm:flex-none"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Guardando...</span>
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                <span>Guardar carrusel</span>
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* ── Dialog ── */}

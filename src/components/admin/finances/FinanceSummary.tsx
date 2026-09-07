@@ -5,10 +5,12 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Banknote,
+  BookOpenCheck,
   CalendarClock,
   CheckCircle2,
   ChevronRight,
   CircleAlert,
+  FileDown,
   Landmark,
   Percent,
   PiggyBank,
@@ -23,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatCurrency } from '@/lib/currency'
+import { exportFinanceSummaryPdf } from '@/lib/finances/finance-reports-pdf-exporter'
 import type { FinanceSummaryReport } from '@/lib/finance/server'
 import { cn } from '@/lib/utils'
 
@@ -578,13 +581,35 @@ export function FinanceSummary({
   onViewExpenses,
   onViewProfitability,
   onViewPayroll,
+  onOpenBusinessGuide,
 }: {
   summary: FinanceSummaryReport
   onViewExpenses?: (action?: 'new' | 'overdue' | 'upcoming' | 'all') => void
   onViewProfitability?: () => void
   onViewPayroll?: () => void
+  onOpenBusinessGuide?: () => void
 }) {
   const [view, setView] = useState<'accrued' | 'cash'>('accrued')
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const [exportPdfError, setExportPdfError] = useState<string | null>(null)
+
+  async function handleExportPdf() {
+    if (isExportingPdf) return
+    setIsExportingPdf(true)
+    setExportPdfError(null)
+    try {
+      await exportFinanceSummaryPdf({
+        summary,
+        startDate: summary.filters?.startDate,
+        endDate: summary.filters?.endDate,
+      })
+    } catch (err) {
+      console.error('Error al exportar resumen en PDF:', err)
+      setExportPdfError('No se pudo generar el reporte PDF.')
+    } finally {
+      setIsExportingPdf(false)
+    }
+  }
   /**
    * Los avisos vienen de a uno por registro. Antes se deduplicaban por mensaje y
    * se descartaba el registro, asi que el panel decia que faltaba algo pero no
@@ -709,6 +734,32 @@ export function FinanceSummary({
             >
               <span>Ver nómina</span>
             </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              disabled={isExportingPdf}
+              aria-busy={isExportingPdf}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted hover:border-primary/40 transition-all active:scale-95 select-none disabled:opacity-50"
+              title="Descargar balance y resumen financiero en PDF"
+            >
+              <FileDown className="h-3.5 w-3.5 text-primary" />
+              <span>{isExportingPdf ? 'Generando…' : 'Exportar Resumen (PDF)'}</span>
+            </button>
+            {onOpenBusinessGuide && (
+              <button
+                type="button"
+                onClick={onOpenBusinessGuide}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-primary/30 bg-primary/5 px-3.5 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-all active:scale-95 select-none"
+              >
+                <BookOpenCheck className="h-3.5 w-3.5" />
+                <span>Guía de Gestión</span>
+              </button>
+            )}
+            {exportPdfError && (
+              <p role="alert" className="text-[11px] text-destructive font-medium">
+                {exportPdfError}
+              </p>
+            )}
           </div>
 
         </div>

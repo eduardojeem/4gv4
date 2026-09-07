@@ -32,6 +32,7 @@ describe('finance panel recovery', () => {
     }))
     const view = render(<FinanceSettingsPanel organizationId={uuid} branchId={null} refreshVersion={0} />)
     await user.click(screen.getByRole('button', { name: /Reglas de Comisión/ }))
+    await user.click(await screen.findByRole('button', { name: /Nueva regla de comisión/i }))
     await user.selectOptions(screen.getByLabelText('Alcance'), 'role')
     await user.selectOptions(screen.getByLabelText('Rol'), 'seller')
     await user.type(screen.getByLabelText('Valor'), '15')

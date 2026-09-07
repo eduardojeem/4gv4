@@ -1,175 +1,59 @@
 import Link from 'next/link'
-import { ArrowRight, Boxes, ExternalLink, ShieldCheck, ShoppingCart, Wrench, Sparkles, CheckCircle2, ReceiptText, Building2, Store } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { ArrowRight, Boxes, Check, ShoppingCart, Store, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { type PlatformBranding } from '@/lib/platform/branding'
-import { trustItems } from './saas-landing-data'
-import { SaaSBrandAssistant } from './saas-brand-assistant'
+
+const modules = [
+  { icon: ShoppingCart, title: 'Ventas y caja', detail: 'Cobrá y registrá cada operación.' },
+  { icon: Boxes, title: 'Productos e inventario', detail: 'Precios y existencias en un solo lugar.' },
+  { icon: Store, title: 'Tu tienda online', detail: 'Publicá tu catálogo cuando estés listo.' },
+  { icon: Wrench, title: 'Servicios y reparaciones', detail: 'Activá el taller si tu negocio lo necesita.' },
+]
 
 export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
   return (
-    <section className="relative overflow-hidden border-b border-slate-200 bg-slate-950 text-white dark:border-slate-800">
-      {/* Dynamic radial glow background */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_60%_-10%,rgba(6,182,212,0.18),transparent)] pointer-events-none" />
-      <div className="absolute top-1/4 -left-20 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 right-10 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="relative mx-auto grid min-h-[600px] max-w-7xl items-center gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
-        
-        {/* Left Column: Headline, Copy & CTAs */}
-        <div className="max-w-3xl">
-          <div className="flex flex-wrap items-center gap-2 mb-6">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-950/70 py-1 pl-1.5 pr-3 text-xs font-semibold text-cyan-300 shadow-md backdrop-blur-md">
-              {branding.faviconUrl || branding.logoDarkUrl || branding.logoUrl ? (
-                <img
-                  src={branding.faviconUrl || branding.logoDarkUrl || branding.logoUrl}
-                  alt={branding.platformName}
-                  className="h-5 w-5 rounded-full object-contain bg-slate-900/80 p-0.5 border border-cyan-500/40"
-                />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
-              )}
-              <span>{branding.platformName} · SaaS Multiempresa</span>
-            </div>
-            <Badge variant="outline" className="border-white/15 bg-white/5 text-slate-300 text-xs px-2.5 py-0.5">
-              📦 Físicos + ⚙️ Servicios
-            </Badge>
-          </div>
-
-          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl text-white leading-tight">
-            Administrá tu negocio <span className="bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 bg-clip-text text-transparent">sin complicaciones</span>.
+    <section className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+      <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-2 lg:gap-16 lg:px-8 lg:py-20">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700 dark:text-cyan-400">{branding.platformName} · Gestión para tu negocio</p>
+          <h1 className="mt-5 max-w-xl text-4xl font-bold leading-tight tracking-tight text-slate-950 sm:text-5xl lg:text-6xl dark:text-white">
+            Tu negocio, <span className="text-cyan-700 dark:text-cyan-400">más simple.</span><br />Todo conectado.
           </h1>
-
-          <p className="mt-6 max-w-2xl text-base sm:text-lg leading-relaxed text-slate-300">
-            Creá tu empresa en minutos, controlá tu inventario físico, gestioná servicios profesionales, vendé en caja diaria y atendé reparaciones técnicas desde un panel seguro y 100% aislado.
+          <p className="mt-6 max-w-lg text-base leading-7 text-slate-600 sm:text-lg dark:text-slate-400">
+            Organizá tus ventas, productos y clientes desde un mismo lugar. Elegí las herramientas que necesitás y crecé a tu ritmo.
           </p>
-
-          <div className="mt-8 flex flex-col gap-3.5 sm:flex-row">
-            <Button asChild size="lg" className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold shadow-lg shadow-cyan-500/25 transition-all text-sm rounded-xl h-12 px-6">
-              <Link href={branding.primaryCtaHref}>
-                {branding.primaryCtaLabel || 'Empezar Prueba Gratis'}
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg" className="h-12 gap-2 bg-cyan-700 px-6 text-white hover:bg-cyan-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300">
+              <Link href={branding.primaryCtaHref}>{branding.primaryCtaLabel || 'Crear mi negocio'}<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="gap-2 border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white rounded-xl h-12 px-6 text-sm">
-              <Link href={branding.secondaryCtaHref || '/marketplace/empresas'}>
-                <Store className="h-4 w-4" />
-                {branding.secondaryCtaLabel || 'Explorar Empresas'}
-              </Link>
+            <Button asChild size="lg" variant="outline" className="h-12 bg-transparent px-6">
+              <Link href="#planes">Conocer los planes</Link>
             </Button>
           </div>
-
-          {/* Trust bullet items */}
-          <div className="mt-10 grid gap-3 sm:grid-cols-3 pt-6 border-t border-white/10">
-            {trustItems.map((item) => (
-              <div key={item.label} className="flex items-center gap-2.5 text-xs text-slate-300">
-                <item.icon className="h-4 w-4 shrink-0 text-emerald-400" />
-                <span>{item.label}</span>
-              </div>
+          <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-600 dark:text-slate-400">
+            {['Módulos según tu rubro', 'Acceso desde el celular', 'Permisos para tu equipo'].map(item => (
+              <li key={item} className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" aria-hidden="true" />{item}</li>
             ))}
+          </ul>
+        </div>
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+            <span className="text-sm font-semibold">Así se organiza tu negocio</span>
+            <span className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">Vista ilustrativa</span>
+          </div>
+          <div className="p-5 sm:p-6">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Un panel, distintas herramientas</p>
+            <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
+              {modules.map(({ icon: Icon, title, detail }) => (
+                <div key={title} className="flex items-center gap-3 py-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-50 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-400"><Icon className="h-5 w-5" aria-hidden="true" /></div>
+                  <div><p className="text-sm font-semibold">{title}</p><p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{detail}</p></div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600 dark:bg-slate-950 dark:text-slate-400">Vos elegís qué módulos usar entre los disponibles en tu plan.</p>
           </div>
         </div>
-
-        {/* Right Column: Live Operation Interactive Preview Card */}
-        <div className="rounded-3xl border border-white/15 bg-gradient-to-b from-slate-900/90 to-slate-950 p-5 text-slate-50 shadow-2xl backdrop-blur-xl relative">
-          
-          {/* Header of the mock panel with official brand logo */}
-          <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
-            <div className="flex items-center gap-3">
-              {branding.logoDarkUrl || branding.logoUrl ? (
-                <div className="flex h-8 items-center bg-slate-950/80 px-2.5 py-1 rounded-lg border border-cyan-500/20 shadow-xs">
-                  <img
-                    src={branding.logoDarkUrl || branding.logoUrl}
-                    alt={branding.platformName}
-                    className="h-6 w-auto max-w-[120px] object-contain"
-                  />
-                </div>
-              ) : (
-                <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
-              )}
-              <div>
-                <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <span>Panel Central</span>
-                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-emerald-500/40 text-emerald-400 bg-emerald-950/40 font-semibold">
-                    En Vivo
-                  </Badge>
-                </div>
-                <div className="text-[11px] text-slate-400">Sucursal Central · Caja Activa</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-slate-400">
-              <Building2 className="h-4 w-4 text-cyan-400" />
-              <span>Multi-tenant</span>
-            </div>
-          </div>
-
-          {/* Key modules preview list */}
-          <div className="space-y-3">
-            {/* POS & Cash Module */}
-            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3.5 hover:bg-white/10 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-950/80 text-cyan-400 border border-cyan-500/30">
-                  <ShoppingCart className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white">Punto de Venta (POS)</div>
-                  <div className="text-[11px] text-slate-400">Ventas, turnos y tickets</div>
-                </div>
-              </div>
-              <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[10px]">
-                Caja y turnos
-              </Badge>
-            </div>
-
-            {/* Inventory: Products & Services */}
-            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3.5 hover:bg-white/10 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
-                  <Boxes className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white">Inventario Unificado</div>
-                  <div className="text-[11px] text-slate-400">📦 Productos físicos + ⚙️ Servicios</div>
-                </div>
-              </div>
-              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px]">
-                Multi-sucursal
-              </Badge>
-            </div>
-
-            {/* Repairs Module */}
-            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3.5 hover:bg-white/10 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-950/80 text-amber-400 border border-amber-500/30">
-                  <Wrench className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white">Taller & Reparaciones</div>
-                  <div className="text-[11px] text-slate-400">Órdenes con seguimiento público</div>
-                </div>
-              </div>
-              <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px]">
-                Seguimiento en línea
-              </Badge>
-            </div>
-          </div>
-
-          <SaaSBrandAssistant />
-
-          {/* Bottom highlight bar */}
-          <div className="mt-4 pt-3.5 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
-            <div className="flex items-center gap-1.5">
-              <ReceiptText className="h-3.5 w-3.5 text-slate-300" />
-              <span>Ventas · Caja · Inventario · Reparaciones</span>
-            </div>
-            <span className="text-emerald-400 font-semibold flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3" />
-              RLS Seguro
-            </span>
-          </div>
-
-        </div>
-
       </div>
     </section>
   )

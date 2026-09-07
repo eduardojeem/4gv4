@@ -168,4 +168,68 @@ describe('CustomerQuickCreateDialog', () => {
     await waitFor(() => expect(llamadaDeGuardado(fetchMock).method).toBe('POST'))
     expect(llamadaDeGuardado(fetchMock).body.name).toBe('Comercial San Miguel S.A.')
   })
+
+  it('detecta cliente existente por teléfono o RUC y permite seleccionarlo para la reparación', async () => {
+    const user = userEvent.setup()
+    const onSelectExisting = vi.fn()
+    const onClose = vi.fn()
+
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes('/api/customers/check-duplicate')) {
+        return jsonResponse({
+          success: true,
+          duplicates: [
+            {
+              field: 'phone',
+              value: '0981123456',
+              customerId: 'cust-existente-1',
+              customerName: 'María Gómez',
+              phone: '0981123456',
+              ruc: '4567890',
+              customerCode: 'CLI-00456',
+              customerType: 'wholesale',
+              isWholesale: true,
+            },
+          ],
+        })
+      }
+      return jsonResponse({ success: true, data: {} })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <CustomerQuickCreateDialog
+        open
+        onClose={onClose}
+        onCreated={vi.fn()}
+        onSelectExisting={onSelectExisting}
+      />
+    )
+
+    await user.type(screen.getByLabelText(/^Teléfono/i), '0981123456')
+
+    // Debe mostrar la tarjeta de cliente registrado encontrado con su nombre y RUC
+    expect(await screen.findByText(/Cliente Registrado Encontrado/i)).toBeInTheDocument()
+    expect(screen.getAllByText('María Gómez').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/CLI-00456/i)).toBeInTheDocument()
+    expect(screen.getByText(/4567890/i)).toBeInTheDocument()
+
+    // El botón para usar este cliente en la reparación
+    const btnUsar = screen.getByRole('button', { name: /Usar este cliente en la reparación/i })
+    expect(btnUsar).toBeInTheDocument()
+
+    await user.click(btnUsar)
+
+    expect(onSelectExisting).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'cust-existente-1',
+        name: 'María Gómez',
+        phone: '0981123456',
+        ruc: '4567890',
+        customerCode: 'CLI-00456',
+        is_wholesale: true,
+      })
+    )
+    expect(onClose).toHaveBeenCalled()
+  })
 })

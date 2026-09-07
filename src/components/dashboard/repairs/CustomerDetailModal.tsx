@@ -604,7 +604,17 @@ export function CustomerDetailModal({
             )}
           </section>
 
-          {/* Estadísticas de Taller y Métricas */}
+          {/* Estadísticas comerciales: el endpoint confirma el rol; no se
+              decide solo con información del cliente. */}
+          {metrics.canView === false ? (
+            <section className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 text-xs text-muted-foreground dark:border-slate-800 dark:bg-slate-900/40">
+              <div className="flex items-center gap-2 font-semibold text-foreground">
+                <ShieldCheck className="h-4 w-4 text-cyan-600" />
+                Datos comerciales solo para administradores
+              </div>
+              <p className="mt-1 pl-6">Las reparaciones, compras, importes y puntos se protegen por contener información financiera del cliente.</p>
+            </section>
+          ) : (
           <section className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between pb-1 border-b border-border/40">
               <div className="flex items-center gap-2">
@@ -720,6 +730,7 @@ export function CustomerDetailModal({
               </div>
             )}
           </section>
+          )}
 
           {/* Información de Registro y Notas Internas */}
           <section className="space-y-2.5 pt-1">

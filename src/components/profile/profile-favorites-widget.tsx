@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Heart, ArrowRight, Store, Package, Sparkles } from 'lucide-react'
+import { Heart, ArrowRight, Store, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useFavorites } from '@/lib/public/favorites-store'
@@ -20,15 +20,40 @@ import { resolveProductImageUrl } from '@/lib/images'
 export function ProfileFavoritesWidget({ linkPrefix = '' }: { linkPrefix?: string }) {
   const favoritesHref = linkPrefix ? `${linkPrefix}/favoritos` : '/marketplace/favoritos'
   const productsHref = linkPrefix ? `${linkPrefix}/productos` : '/marketplace/productos'
-  const [mounted, setMounted] = useState(false)
+  const [currentImages, setCurrentImages] = useState<Record<string, string | null>>({})
   const favoritesState = useFavorites()
   const items = favoritesState?.items || []
+  const productIdsKey = items.map((item) => item.productId).sort().join(',')
 
   useEffect(() => {
-    setMounted(true)
-  }, [])
+    if (!productIdsKey) return
 
-  if (!mounted) return null
+    const controller = new AbortController()
+    const productIds = productIdsKey.split(',')
+
+    fetch('/api/public/favorites/metadata', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productIds }),
+      signal: controller.signal,
+    })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!data?.metadata || typeof data.metadata !== 'object') return
+        const images: Record<string, string | null> = {}
+        for (const productId of productIds) {
+          const image = data.metadata[productId]?.image
+          images[productId] = typeof image === 'string' && image.trim() ? image : null
+        }
+        setCurrentImages(images)
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.name === 'AbortError') return
+      })
+
+    return () => controller.abort()
+  }, [productIdsKey])
 
   return (
     <div id="favoritos" className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
@@ -76,7 +101,8 @@ export function ProfileFavoritesWidget({ linkPrefix = '' }: { linkPrefix?: strin
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             {items.slice(0, 4).map((fav) => {
-              const imgUrl = fav.image ? resolveProductImageUrl(fav.image) : null
+              const image = currentImages[fav.productId] || fav.image
+              const imgUrl = image ? resolveProductImageUrl(image) : null
               const productHref = `/${fav.slug}/productos/${fav.productId}`
 
               return (

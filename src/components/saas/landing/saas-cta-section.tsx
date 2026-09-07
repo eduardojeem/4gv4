@@ -1,11 +1,11 @@
 import Link from 'next/link'
-import { ArrowRight, Sparkles, Store } from 'lucide-react'
+import { ArrowRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { type PlatformBranding } from '@/lib/platform/branding'
 
 export function SaaSCTASection({ branding }: { branding: PlatformBranding }) {
   return (
-    <section className="relative overflow-hidden border-t border-slate-800 bg-slate-950 py-16 text-white">
+    <section className="relative overflow-hidden border-t border-slate-200 bg-slate-900 text-white dark:border-slate-800 dark:bg-slate-950 py-16">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(6,182,212,0.15),transparent)] pointer-events-none" />
 
       <div className="relative mx-auto flex max-w-7xl flex-col gap-8 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
@@ -22,19 +22,19 @@ export function SaaSCTASection({ branding }: { branding: PlatformBranding }) {
             ) : null}
             <div className="inline-flex items-center gap-1.5 rounded-full bg-cyan-950/60 border border-cyan-500/30 px-3 py-1 text-xs font-semibold text-cyan-300">
               <Sparkles className="h-3 w-3 text-cyan-400" />
-              Comenzá en menos de 2 minutos
+              Tu próximo paso
             </div>
           </div>
           <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-white">
-            ¿Listo para digitalizar y ordenar tu empresa?
+            Dale más orden a tu negocio
           </h2>
           <p className="mt-3 text-sm sm:text-base leading-relaxed text-slate-300">
-            Registrá tu negocio hoy y comenzá con POS, inventario de productos y servicios, taller y catálogo público desde una plataforma moderna.
+            Creá tu organización, prepará tu catálogo y elegí las herramientas que acompañan tu forma de trabajar.
           </p>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row shrink-0">
-          <Button asChild size="lg" className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold shadow-lg shadow-cyan-500/20 text-sm rounded-xl h-12 px-6">
+          <Button asChild size="lg" className="gap-2 bg-cyan-500 text-slate-950 hover:bg-cyan-400 dark:bg-cyan-400 dark:hover:bg-cyan-300 font-semibold text-sm h-12 px-6 shadow-md shadow-cyan-500/20">
             <Link href={branding.primaryCtaHref}>
               {branding.primaryCtaLabel || 'Crear Cuenta Gratis'}
               <ArrowRight className="h-4 w-4" />

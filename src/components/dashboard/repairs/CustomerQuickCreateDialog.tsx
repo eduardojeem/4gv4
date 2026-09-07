@@ -12,7 +12,7 @@
  * agrego primero aca y tardo en llegar al otro.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -43,13 +43,14 @@ import {
     User,
     Phone,
     Mail,
-    Users
+    Users,
+    UserCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Customer } from '@/hooks/use-customers'
 import { validateCustomerContact, normalizePhone, MIN_PHONE_DIGITS, ALTERNATE_PHONE_LABELS } from '@/lib/customers/contact-rules'
 import { useCustomerDuplicates } from '@/hooks/use-customer-duplicates'
-import { duplicatesMessage } from '@/lib/customers/duplicate-check'
+import { duplicatesMessage, type CustomerDuplicate, type DuplicateField } from '@/lib/customers/duplicate-check'
 
 // Un solo campo de nombre en vez de nombre + apellido: la base guarda un solo
 // `name`, una empresa no tiene apellido, y partir el nombre para editarlo y
@@ -122,6 +123,8 @@ interface CustomerQuickCreateDialogProps {
     onCreated?: (customerId: string, customerData: Customer & { is_wholesale?: boolean }) => void
     /** Se llama al editar. Sin esto el dialogo solo da de alta. */
     onUpdated?: (customerData: Customer & { is_wholesale?: boolean }) => void
+    /** Se llama cuando se detecta un cliente existente y el usuario decide usarlo directamente. */
+    onSelectExisting?: (customerData: Customer & { is_wholesale?: boolean }) => void
     /** Con un cliente acá el dialogo pasa a modo edicion. */
     customerToEdit?: QuickCustomerData | null
 }
@@ -140,6 +143,7 @@ export function CustomerQuickCreateDialog({
     onClose,
     onCreated,
     onUpdated,
+    onSelectExisting,
     customerToEdit = null,
 }: CustomerQuickCreateDialogProps) {
     const isEditing = Boolean(customerToEdit)
@@ -167,6 +171,32 @@ export function CustomerQuickCreateDialog({
         ruc: watch('ruc'),
         excludeId: customerToEdit?.id ?? null,
     })
+
+    const phoneDuplicate = duplicates.find((d) => d.field === 'phone')
+    const rucDuplicate = duplicates.find((d) => d.field === 'ruc')
+
+    const uniqueMatchingCustomers = useMemo(() => {
+        const map = new Map<string, {
+            customer: CustomerDuplicate
+            fields: DuplicateField[]
+        }>()
+
+        for (const dup of duplicates) {
+            const existing = map.get(dup.customerId)
+            if (existing) {
+                if (!existing.fields.includes(dup.field)) {
+                    existing.fields.push(dup.field)
+                }
+            } else {
+                map.set(dup.customerId, {
+                    customer: dup,
+                    fields: [dup.field],
+                })
+            }
+        }
+
+        return Array.from(map.values())
+    }, [duplicates])
 
     // Al abrir se carga lo que hay que editar, o se limpia para un alta nueva.
     // Sin esto el formulario conservaba lo de la vez anterior.
@@ -246,6 +276,67 @@ export function CustomerQuickCreateDialog({
             last_purchase_amount: 0,
             total_spent_this_year: 0,
         }
+    }
+
+    /**
+     * Convierte un duplicado existente detectado en la base de datos a un cliente
+     * compatible para autoseleccionarlo en el formulario de reparación.
+     */
+    function duplicateToCustomer(dup: CustomerDuplicate): Customer & { is_wholesale?: boolean } {
+        const wholesale = Boolean(dup.isWholesale || dup.customerType === 'wholesale' || dup.customerType === 'mayorista')
+        const now = new Date().toISOString()
+        return {
+            id: dup.customerId,
+            customerCode: dup.customerCode || `CLI-${dup.customerId.slice(0, 6)}`,
+            name: dup.customerName,
+            phone: dup.phone || dup.value,
+            alternate_phone: dup.alternatePhone || null,
+            alternate_phone_label: dup.alternatePhoneLabel || null,
+            email: dup.email || '',
+            ruc: dup.ruc || '',
+            customer_type: (dup.customerType as Customer['customer_type']) || (wholesale ? 'wholesale' : 'regular'),
+            is_wholesale: wholesale,
+            status: 'active',
+            total_purchases: 0,
+            total_repairs: 0,
+            registration_date: now,
+            created_at: now,
+            last_visit: now,
+            last_activity: now,
+            address: dup.address || '',
+            city: dup.city || '',
+            credit_score: 0,
+            segment: wholesale ? 'wholesale' : 'regular',
+            satisfaction_score: 0,
+            lifetime_value: 0,
+            avg_order_value: 0,
+            purchase_frequency: 'low',
+            preferred_contact: 'email',
+            birthday: '',
+            loyalty_points: 0,
+            credit_limit: 0,
+            current_balance: 0,
+            pending_amount: 0,
+            notes: '',
+            tags: [],
+            referral_source: '',
+            discount_percentage: 0,
+            payment_terms: 'Contado',
+            assigned_salesperson: 'Sin asignar',
+            last_purchase_amount: 0,
+            total_spent_this_year: 0,
+        }
+    }
+
+    const handleSelectExisting = (dup: CustomerDuplicate) => {
+        const selected = duplicateToCustomer(dup)
+        toast.success(`Cliente "${selected.name}" seleccionado para la reparación`)
+        if (onSelectExisting) {
+            onSelectExisting(selected)
+        } else if (onCreated) {
+            onCreated(selected.id, selected)
+        }
+        handleClose()
     }
 
     const onSubmit = async (data: CustomerFormData) => {
@@ -378,9 +469,92 @@ export function CustomerQuickCreateDialog({
                             <div className="min-w-0 flex-1">
                                 <p className="text-xs font-bold leading-tight">{duplicatesMessage(duplicates)}</p>
                                 <p className="mt-1 text-[11px] opacity-85 leading-normal">
-                                    Buscalo en el selector en lugar de duplicarlo: registrarlo doble divide sus órdenes, garantías e historial.
+                                    {isEditing
+                                        ? 'Verificá los datos para no unificar clientes distintos por error.'
+                                        : 'Ya existe este cliente registrado. Podés seleccionarlo directamente abajo para usarlo en la nueva orden de reparación sin duplicar su historial.'}
                                 </p>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Tarjeta de acción inmediata si se encontró el cliente existente */}
+                    {!isEditing && uniqueMatchingCustomers.length > 0 && (
+                        <div className="space-y-3">
+                            {uniqueMatchingCustomers.map(({ customer, fields }) => (
+                                <div
+                                    key={customer.customerId}
+                                    className="relative overflow-hidden rounded-2xl border-2 border-emerald-500/50 bg-gradient-to-br from-emerald-50/95 via-white to-teal-50/80 p-3.5 sm:p-4 text-emerald-950 shadow-md dark:border-emerald-500/40 dark:from-emerald-950/40 dark:via-slate-900/80 dark:to-teal-950/30 dark:text-emerald-100 animate-in fade-in slide-in-from-top-2 duration-200"
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 shrink-0">
+                                                <UserCheck className="h-4 w-4" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                                                    Cliente Registrado Encontrado
+                                                </p>
+                                                <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                                                    Coincide por {fields.map((f) => f === 'phone' ? 'teléfono' : f === 'ruc' ? 'RUC / C.I.' : 'correo').join(' y ')}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 flex-wrap justify-end">
+                                            {customer.isWholesale && (
+                                                <Badge className="bg-violet-600 text-white text-[10px] font-bold py-0 h-4">
+                                                    Mayorista
+                                                </Badge>
+                                            )}
+                                            {customer.customerCode && (
+                                                <Badge variant="outline" className="text-[10px] font-mono border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300">
+                                                    {customer.customerCode}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-2.5 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-emerald-200/70 dark:border-emerald-800/50 p-2.5 sm:p-3 space-y-1.5">
+                                        <p className="text-sm font-black text-slate-900 dark:text-slate-100">
+                                            {customer.customerName}
+                                        </p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300 pt-1 border-t border-slate-100 dark:border-slate-800">
+                                            {customer.phone && (
+                                                <div className="flex items-center gap-1.5 truncate">
+                                                    <Phone className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                                    <span className="font-semibold text-foreground">{customer.phone}</span>
+                                                </div>
+                                            )}
+                                            {customer.ruc && (
+                                                <div className="flex items-center gap-1.5 truncate">
+                                                    <Building2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                                    <span>RUC/CI: <span className="font-mono font-semibold text-foreground">{customer.ruc}</span></span>
+                                                </div>
+                                            )}
+                                            {customer.email && (
+                                                <div className="flex items-center gap-1.5 truncate sm:col-span-2">
+                                                    <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                    <span className="truncate">{customer.email}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3">
+                                        <Button
+                                            type="button"
+                                            onClick={() => handleSelectExisting(customer)}
+                                            className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs gap-2 transition-all"
+                                        >
+                                            <UserCheck className="h-4 w-4" />
+                                            <span>Usar este cliente en la reparación</span>
+                                        </Button>
+                                        <p className="text-[10px] text-center text-emerald-700/90 dark:text-emerald-400/90 mt-1">
+                                            Selecciona a este cliente y completa el formulario de reparación automáticamente.
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
 
@@ -429,10 +603,19 @@ export function CustomerQuickCreateDialog({
                                     id="ruc"
                                     {...register('ruc')}
                                     placeholder="Ej: 4567890 o 80012345-6"
-                                    className="pl-9 h-10 text-xs sm:text-sm font-mono font-medium rounded-xl transition-all shadow-2xs"
+                                    className={cn(
+                                        "pl-9 h-10 text-xs sm:text-sm font-mono font-medium rounded-xl transition-all shadow-2xs",
+                                        rucDuplicate && "border-amber-400 focus-visible:ring-amber-400"
+                                    )}
                                     disabled={isSubmitting}
                                 />
                             </div>
+                            {rucDuplicate && (
+                                <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                                    <span>RUC/C.I. ya cargado en: <strong>{rucDuplicate.customerName}</strong></span>
+                                </p>
+                            )}
                         </div>
                     </div>
 
@@ -460,11 +643,18 @@ export function CustomerQuickCreateDialog({
                                         placeholder="Ej: 0981 123456"
                                         className={cn(
                                             "pl-9 h-10 text-xs sm:text-sm font-medium rounded-xl transition-all shadow-2xs",
+                                            (errors.phone || phoneDuplicate) && 'border-amber-500 focus-visible:ring-amber-500',
                                             errors.phone && 'border-red-500 focus-visible:ring-red-500'
                                         )}
                                         disabled={isSubmitting}
                                     />
                                 </div>
+                                {phoneDuplicate && !errors.phone && (
+                                    <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                                        <span>Teléfono ya cargado en: <strong>{phoneDuplicate.customerName}</strong></span>
+                                    </p>
+                                )}
                                 {errors.phone && (
                                     <p className="text-[11px] font-medium text-red-500 mt-1">{errors.phone.message}</p>
                                 )}

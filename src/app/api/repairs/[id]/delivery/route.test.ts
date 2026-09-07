@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const closeFinancial = vi.fn()
 const closeUnrepaired = vi.fn()
 const fetchRepair = vi.fn()
+const awardRepairPoints = vi.fn()
 const ctx = {
   supabase: { rpc: vi.fn() },
   userId: 'user-1',
@@ -17,6 +18,9 @@ vi.mock('@/app/api/repairs/_lib', () => ({
   isNextResponse: vi.fn(() => false),
   fetchRepairById: (...args: unknown[]) => fetchRepair(...args),
 }))
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: vi.fn(async () => ctx.supabase),
+}))
 vi.mock('@/lib/repairs/financial-closure-rpc', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/repairs/financial-closure-rpc')>()
   return { ...actual, closeRepairAndRegisterPayment: (...args: unknown[]) => closeFinancial(...args) }
@@ -25,13 +29,22 @@ vi.mock('@/lib/repairs/unrepaired-closeout-rpc', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/repairs/unrepaired-closeout-rpc')>()
   return { ...actual, closeUnrepairedRepair: (...args: unknown[]) => closeUnrepaired(...args) }
 })
+vi.mock('@/lib/loyalty/repair-points', () => ({
+  awardPaidRepairLoyaltyPoints: (...args: unknown[]) => awardRepairPoints(...args),
+}))
 
 describe('POST /api/repairs/:id/delivery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    closeFinancial.mockResolvedValue({ payment_id: null, idempotent: false })
+    closeFinancial.mockResolvedValue({
+      payment_id: null, idempotent: false, total: 250_000, payment_status: 'pagado',
+    })
     closeUnrepaired.mockResolvedValue({ closeout_id: 'closeout-1', payment_id: null, idempotent: false })
-    fetchRepair.mockResolvedValue({ data: { id: 'repair-1', status: 'entregado' }, error: null })
+    awardRepairPoints.mockResolvedValue({ awarded: true, reason: 'awarded' })
+    fetchRepair.mockResolvedValue({ data: {
+      id: 'repair-1', status: 'entregado', customer_id: 'customer-1',
+      payment_status: 'pagado', final_cost: 250_000,
+    }, error: null })
   })
 
   it('requires explicit outstanding balance consent', async () => {
@@ -90,5 +103,9 @@ describe('POST /api/repairs/:id/delivery', () => {
         interestRate: 10,
       }),
     }))
+    expect(awardRepairPoints).toHaveBeenCalledWith(expect.anything(), {
+      organizationId: 'org-1', repairId: 'repair-1', customerId: 'customer-1',
+      total: 250_000, paymentStatus: 'pagado',
+    })
   })
 })

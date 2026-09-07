@@ -4,7 +4,6 @@ import { SaaSBusinessSection } from '@/components/saas/landing/saas-business-sec
 import { SaaSCTASection } from '@/components/saas/landing/saas-cta-section'
 import { SaaSFeaturesSection } from '@/components/saas/landing/saas-features-section'
 import { SaaSHeroSection } from '@/components/saas/landing/saas-hero-section'
-import { SaaSEcosystemMarquee } from '@/components/saas/landing/saas-ecosystem-marquee'
 import { SaaSPlansSection } from '@/components/saas/landing/saas-plans-section'
 import { createClient } from '@/lib/supabase/server'
 import { getPlatformBranding } from '@/lib/platform/branding'
@@ -34,9 +33,8 @@ export default async function SaaSLandingPage() {
     <div className="min-h-screen bg-white text-slate-950 dark:bg-slate-950 dark:text-slate-50">
       <SaaSPublicNav />
 
-      <main>
+      <main id="contenido-principal">
         <SaaSHeroSection branding={branding} />
-        <SaaSEcosystemMarquee />
         <SaaSFeaturesSection />
         <SaaSBusinessSection />
         <SaaSPlansSection initialPlans={plans || []} />

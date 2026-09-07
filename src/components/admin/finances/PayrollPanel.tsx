@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  BookOpenCheck,
   Building2,
   Calendar,
   CheckCircle2,
@@ -12,9 +13,11 @@ import {
   Coins,
   CreditCard,
   DollarSign,
+  Download,
   Eye,
   Layers,
   Plus,
+  Search,
   ShieldCheck,
   ShoppingBag,
   User,
@@ -22,6 +25,7 @@ import {
   Wallet,
   Wrench,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import {
   AlertDialog,
@@ -44,6 +48,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import type { AdminFinanceFilters } from '@/hooks/use-admin-finances'
 import { formatCurrency, getLocaleConfig } from '@/lib/currency'
@@ -426,11 +431,56 @@ function PayrollDetailModal({
   onApproveRun: (runId: string) => void
   isApproving: boolean
 }) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [roleFilter, setRoleFilter] = useState<string>('all')
+
   const totalAuthorized = run.entries.reduce((sum, e) => sum + (Number(e.net_amount) || 0), 0)
   const totalPaid = run.entries.reduce((sum, e) => sum + (Number(e.paid_amount) || 0), 0)
   const totalOutstanding = run.entries.reduce((sum, e) => sum + (Number(e.outstanding_amount) || 0), 0)
   const paymentRate = totalAuthorized > 0 ? totalPaid / totalAuthorized : 0
   const statusConfig = payrollStatus[run.status]
+
+  const filteredEntries = useMemo(() => {
+    return run.entries.filter((entry) => {
+      const matchesSearch =
+        !searchTerm.trim() ||
+        entry.employee_display_name.toLowerCase().includes(searchTerm.toLowerCase().trim()) ||
+        (ROLE_LABELS[entry.employee_role] || entry.employee_role).toLowerCase().includes(searchTerm.toLowerCase().trim())
+      const matchesRole = roleFilter === 'all' || entry.employee_role === roleFilter
+      return matchesSearch && matchesRole
+    })
+  }, [run.entries, searchTerm, roleFilter])
+
+  const availableRoles = useMemo(() => {
+    const roles = new Set<string>()
+    for (const e of run.entries) {
+      if (e.employee_role) roles.add(e.employee_role)
+    }
+    return Array.from(roles)
+  }, [run.entries])
+
+  function exportPayrollCSV() {
+    const header = ['Colaborador', 'Rol', 'Autorizado Gs.', 'Pagado Gs.', 'Pendiente Gs.', 'Estado']
+    const rows = run.entries.map((e) => [
+      `"${(e.employee_display_name || '').replace(/"/g, '""')}"`,
+      `"${ROLE_LABELS[e.employee_role] || e.employee_role}"`,
+      e.net_amount || 0,
+      e.paid_amount || 0,
+      e.outstanding_amount || 0,
+      e.outstanding_amount <= 0 ? 'Pagado' : e.paid_amount > 0 ? 'Pago parcial' : 'Pendiente',
+    ])
+    const csvContent = [header.join(','), ...rows.map((r) => r.join(','))].join('\n')
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `nomina_${run.period_from}_${run.period_to}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    toast.success('Resumen de nómina exportado a CSV con éxito.')
+  }
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -560,89 +610,164 @@ function PayrollDetailModal({
             </div>
           )}
 
+          {/* Buscador y Filtro de Colaboradores */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Buscar colaborador o rol..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 h-8 text-xs bg-card"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              {availableRoles.length > 1 && (
+                <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+                  <Button
+                    size="sm"
+                    variant={roleFilter === 'all' ? 'default' : 'outline'}
+                    onClick={() => setRoleFilter('all')}
+                    className="h-7 text-[11px] px-2.5"
+                  >
+                    Todos
+                  </Button>
+                  {availableRoles.map((role) => (
+                    <Button
+                      key={role}
+                      size="sm"
+                      variant={roleFilter === role ? 'default' : 'outline'}
+                      onClick={() => setRoleFilter(role)}
+                      className="h-7 text-[11px] px-2.5 capitalize"
+                    >
+                      {ROLE_LABELS[role] || role}
+                    </Button>
+                  ))}
+                </div>
+              )}
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={exportPayrollCSV}
+                className="gap-1.5 h-8 text-xs font-semibold shrink-0"
+                title="Descargar detalle en formato CSV"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Exportar</span> CSV
+              </Button>
+            </div>
+          </div>
+
           {/* Desglose Individual de Colaboradores */}
           <div className="space-y-2.5">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Colaboradores y Liquidaciones
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Colaboradores y Liquidaciones
+              </h4>
+              <span className="text-[11px] text-muted-foreground font-medium">
+                {filteredEntries.length} de {run.entries.length} colaboradores
+              </span>
+            </div>
 
-            {run.entries.map((entry) => {
-              const isFullyPaid = entry.outstanding_amount <= 0
-              const isPartiallyPaid = entry.paid_amount > 0 && entry.outstanding_amount > 0
+            {filteredEntries.length > 0 ? (
+              filteredEntries.map((entry) => {
+                const isFullyPaid = entry.outstanding_amount <= 0
+                const isPartiallyPaid = entry.paid_amount > 0 && entry.outstanding_amount > 0
 
-              return (
-                <div
-                  key={entry.id}
-                  className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-3.5 shadow-xs sm:flex-row sm:items-center sm:justify-between transition-colors hover:bg-muted/20"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs">
-                      <User className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-foreground text-sm truncate">{entry.employee_display_name}</p>
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                          {ROLE_LABELS[entry.employee_role] || entry.employee_role}
-                        </Badge>
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-3.5 shadow-xs sm:flex-row sm:items-center sm:justify-between transition-colors hover:bg-muted/20"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs">
+                        <User className="h-4 w-4" />
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                        <span>
-                          Autorizado: <strong className="text-foreground">{formatCurrency(Number(entry.net_amount))}</strong>
-                        </span>
-                        <span>·</span>
-                        <span>
-                          Pagado: <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(Number(entry.paid_amount))}</strong>
-                        </span>
-                        <span>·</span>
-                        <span>
-                          Pendiente:{' '}
-                          <strong className={cn(entry.outstanding_amount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground')}>
-                            {formatCurrency(Number(entry.outstanding_amount))}
-                          </strong>
-                        </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-foreground text-sm truncate">{entry.employee_display_name}</p>
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                            {ROLE_LABELS[entry.employee_role] || entry.employee_role}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <span>
+                            Autorizado: <strong className="text-foreground">{formatCurrency(Number(entry.net_amount))}</strong>
+                          </span>
+                          <span>·</span>
+                          <span>
+                            Pagado: <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(Number(entry.paid_amount))}</strong>
+                          </span>
+                          <span>·</span>
+                          <span>
+                            Pendiente:{' '}
+                            <strong className={cn(entry.outstanding_amount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground')}>
+                              {formatCurrency(Number(entry.outstanding_amount))}
+                            </strong>
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onInspectEntry(entry)}
-                      className="gap-1.5 h-8 text-xs font-semibold"
-                    >
-                      <Coins className="h-3.5 w-3.5 text-emerald-500" />
-                      Ver comisiones
-                    </Button>
-
-                    <span
-                      className={cn(
-                        'inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
-                        isFullyPaid
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
-                          : isPartiallyPaid
-                          ? 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-300'
-                          : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300',
-                      )}
-                    >
-                      {isFullyPaid ? 'Pagado' : isPartiallyPaid ? 'Pago parcial' : 'Pendiente'}
-                    </span>
-
-                    {run.status === 'approved' && entry.outstanding_amount > 0 ? (
+                    <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
                       <Button
                         size="sm"
-                        onClick={() => onPayEntry(entry)}
-                        className="gap-1.5 h-8 text-xs font-semibold shadow-xs"
+                        variant="outline"
+                        onClick={() => onInspectEntry(entry)}
+                        className="gap-1.5 h-8 text-xs font-semibold"
                       >
-                        <CreditCard className="h-3.5 w-3.5" />
-                        Registrar pago
+                        <Coins className="h-3.5 w-3.5 text-emerald-500" />
+                        Ver comisiones
                       </Button>
-                    ) : null}
+
+                      <span
+                        className={cn(
+                          'inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
+                          isFullyPaid
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : isPartiallyPaid
+                            ? 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-300'
+                            : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300',
+                        )}
+                      >
+                        {isFullyPaid ? 'Pagado' : isPartiallyPaid ? 'Pago parcial' : 'Pendiente'}
+                      </span>
+
+                      {run.status === 'approved' && entry.outstanding_amount > 0 ? (
+                        <Button
+                          size="sm"
+                          onClick={() => onPayEntry(entry)}
+                          className="gap-1.5 h-8 text-xs font-semibold shadow-xs"
+                        >
+                          <CreditCard className="h-3.5 w-3.5" />
+                          Registrar pago
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })
+            ) : (
+              <div className="rounded-xl border border-dashed border-border/70 p-6 text-center space-y-1.5">
+                <p className="text-xs font-semibold text-foreground">No se encontraron colaboradores</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Ningún colaborador coincide con los criterios de búsqueda &quot;{searchTerm}&quot;.
+                </p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setSearchTerm('')
+                    setRoleFilter('all')
+                  }}
+                  className="text-xs h-7 mt-1 text-primary"
+                >
+                  Limpiar filtros
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Metadatos de la corrida */}
@@ -688,12 +813,14 @@ export function PayrollPanel({
   filters,
   onChanged,
   refreshVersion = 0,
+  onOpenGuide,
 }: {
   organizationId: string
   branchId: string | null | undefined
   filters: AdminFinanceFilters
   onChanged: () => unknown | Promise<unknown>
   refreshVersion?: number
+  onOpenGuide?: (section?: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [runs, setRuns] = useState<PayrollRun[]>([])
@@ -779,6 +906,7 @@ export function PayrollPanel({
         setError(payload?.error ?? 'No se pudo aprobar la nómina.')
         return false
       }
+      toast.success('Nómina autorizada y aprobada con éxito.')
       await changed()
       return true
     } catch {
@@ -854,10 +982,24 @@ export function PayrollPanel({
           </div>
         </div>
 
-        <Button onClick={() => setOpen(true)} className="gap-2 shadow-sm">
-          <Plus className="h-4 w-4" />
-          Preparar nómina
-        </Button>
+        <div className="flex items-center gap-2">
+          {onOpenGuide && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenGuide('nomina')}
+              className="gap-1.5 shadow-xs border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold"
+              title="Cómo administrar Nómina y Sueldos"
+            >
+              <BookOpenCheck className="h-4 w-4" />
+              <span className="hidden sm:inline">Guía de Nómina</span>
+            </Button>
+          )}
+          <Button onClick={() => setOpen(true)} className="gap-2 shadow-sm">
+            <Plus className="h-4 w-4" />
+            Preparar nómina
+          </Button>
+        </div>
       </section>
 
       {/* Tarjetas KPI de Totales */}

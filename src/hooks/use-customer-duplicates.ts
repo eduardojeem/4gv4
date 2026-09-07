@@ -20,9 +20,10 @@ import {
  * se adelanta.
  */
 
-const ESPERA_MS = 500
+const ESPERA_MS = 350
 /** Debajo de esto no vale la pena preguntar: todavia lo estan escribiendo. */
-const MIN_DIGITOS = 6
+const MIN_PHONE_DIGITOS = 6
+const MIN_RUC_DIGITOS = 4
 
 export type DuplicateCheckInput = {
   phone?: string
@@ -45,10 +46,10 @@ export function useCustomerDuplicates(input: DuplicateCheckInput): CustomerDupli
 
   useEffect(() => {
     const params = new URLSearchParams()
-    if (phone.length >= MIN_DIGITOS) params.set('phone', phone)
+    if (phone.length >= MIN_PHONE_DIGITOS) params.set('phone', phone)
     // Un correo a medio escribir no sirve para comparar.
     if (email.includes('@') && email.includes('.')) params.set('email', email)
-    if (ruc.length >= MIN_DIGITOS) params.set('ruc', ruc)
+    if (ruc.length >= MIN_RUC_DIGITOS) params.set('ruc', ruc)
     if (excludeId) params.set('excludeId', excludeId)
 
     if (!params.has('phone') && !params.has('email') && !params.has('ruc')) {
