@@ -429,6 +429,22 @@ export function ChartExporter({
         const cardWidth = (contentWidth - ((cardsPerRow - 1) * cardGap)) / cardsPerRow
         const cardHeight = 48
 
+        // La grilla crecio y no habia guarda de pagina: con suficientes KPI las
+        // ultimas tarjetas se dibujaban fuera de la hoja y desaparecian sin que
+        // nada avisara. Si no entran, se sigue en una pagina nueva.
+        const totalRowsPlanned = Math.ceil(metricEntries.length / cardsPerRow)
+        const gridHeight = totalRowsPlanned * (cardHeight + cardGap)
+        const pageBottom = doc.internal.pageSize.getHeight() - margin
+        if (currentY + gridHeight > pageBottom) {
+          doc.addPage()
+          currentY = margin + 20
+          doc.setFontSize(12)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(15, 23, 42)
+          doc.text('INDICADORES PRINCIPALES DE RENDIMIENTO (KPIS)', margin, currentY)
+          currentY += 12
+        }
+
         metricEntries.forEach(([key, val], idx) => {
           const row = Math.floor(idx / cardsPerRow)
           const col = idx % cardsPerRow

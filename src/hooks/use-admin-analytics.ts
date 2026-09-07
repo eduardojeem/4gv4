@@ -119,8 +119,22 @@ export interface AdminAnalyticsSnapshot {
     growth: number | null
   }
   repairs: {
+    /** Sin terminar y sin cancelar: siguen en el taller. */
     activeCount: number
+    /** Ingresadas en el periodo que HOY estan entregadas. */
     completedCount: number
+    /** Equipos que ingresaron en el periodo. */
+    receivedCount: number
+    /** Trabajo terminado: listas para retirar mas entregadas. */
+    finishedCount: number
+    /** Terminadas que el cliente todavia no retiro. */
+    readyForPickupCount: number
+    cancelledCount: number
+    /**
+     * Entregas hechas DENTRO del periodo, por `delivered_at`. Otra pregunta que
+     * `completedCount`. `null` si la instalacion no tiene esa fecha cargada.
+     */
+    deliveredInPeriodCount: number | null
     avgCycleDays: number
     revenue: number
   }
@@ -197,6 +211,11 @@ const EMPTY_SNAPSHOT: AdminAnalyticsSnapshot = {
   repairs: {
     activeCount: 0,
     completedCount: 0,
+    receivedCount: 0,
+    finishedCount: 0,
+    readyForPickupCount: 0,
+    cancelledCount: 0,
+    deliveredInPeriodCount: null,
     avgCycleDays: 0,
     revenue: 0,
   },
@@ -549,6 +568,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         salesWindowResponse,
         previousSalesResponse,
         repairsResponse,
+        deliveredInPeriodResponse,
         previousRepairsResponse,
         cashClosuresResponse,
         cashMovementsResponse,
@@ -575,6 +595,17 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           .select('id, created_at, received_at, completed_at, delivered_at, status, final_cost, estimated_cost, parts_cost, technician_id, branch_id, technician:profiles!technician_id(id, full_name, email)')
           .gte('created_at', selectedFrom.toISOString())
           .lte('created_at', selectedTo.toISOString()),
+        // Entregas hechas DENTRO del periodo, por su propia fecha. La consulta
+        // de arriba filtra por `created_at` —cuando ingreso el equipo— y lee el
+        // estado de hoy: eso responde «de las que entraron, cuantas ya
+        // entregamos», que no es «cuantas entregamos». Un equipo que ingreso el
+        // mes pasado y se entrego este no aparecia en ningun lado.
+        supabase
+          .from('repairs')
+          .select('id, delivered_at, branch_id, final_cost, estimated_cost')
+          .eq('status', 'entregado')
+          .gte('delivered_at', selectedFrom.toISOString())
+          .lte('delivered_at', selectedTo.toISOString()),
         // Previous repairs: only need counts and revenue, minimal fields
         supabase
           .from('repairs')
@@ -857,7 +888,31 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         const status = String(repair.status || '').toLowerCase()
         return !['entregado', 'listo'].includes(status) && !isCancelledRepairStatus(status)
       }).length
+      // Tres cosas distintas, que hasta ahora se resumian en una sola cifra:
+      //
+      //   ingresadas  → equipos que ENTRARON en el periodo
+      //   terminadas  → el trabajo tecnico se acabo: listas para retirar + ya
+      //                 entregadas. Es un superconjunto de las entregadas.
+      //   entregadas  → el cliente ya se lo llevo
+      //
+      // Las tres miran los equipos ingresados en el periodo y su estado de HOY,
+      // asi que la de entregadas sube sola con el tiempo. Por eso ademas se
+      // cuenta aparte cuantas entregas se hicieron DENTRO del periodo, que no
+      // cambia si se vuelve a mirar el mismo periodo mas adelante.
+      const receivedRepairs = selectedRepairs.length
       const completedRepairs = selectedRepairs.filter((repair) => String(repair.status || '').toLowerCase() === 'entregado').length
+      const finishedRepairs = selectedRepairs.filter((repair) => {
+        const status = String(repair.status || '').trim().toLowerCase()
+        return status === 'listo' || status === 'entregado'
+      }).length
+      const readyForPickupRepairs = finishedRepairs - completedRepairs
+      const cancelledRepairs = selectedRepairs.filter((repair) => isCancelledRepairStatus(repair.status)).length
+
+      const deliveredInPeriodRows = ((deliveredInPeriodResponse.data || []) as Array<{ branch_id?: string | null }>)
+        .filter((repair) => filters.branch === 'all' || String(repair.branch_id || 'principal') === filters.branch)
+      // Si la columna no esta poblada en esta instalacion, se avisa con null en
+      // vez de un cero que se leeria como «no entregamos nada».
+      const deliveredInPeriod = deliveredInPeriodResponse.error ? null : deliveredInPeriodRows.length
       const unresolvedAlerts = scopedAlerts.filter((alert) => !alert.is_resolved).length
       const criticalAlerts = scopedAlerts.filter((alert) => !alert.is_resolved && String(alert.severity) === 'critical').length
       const discrepancies = scopedClosures.reduce((sum, closure) => sum + Math.abs(toNumber(closure.discrepancy)), 0)
@@ -1274,6 +1329,11 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         repairs: {
           activeCount: activeRepairs,
           completedCount: completedRepairs,
+          receivedCount: receivedRepairs,
+          finishedCount: finishedRepairs,
+          readyForPickupCount: readyForPickupRepairs,
+          cancelledCount: cancelledRepairs,
+          deliveredInPeriodCount: deliveredInPeriod,
           avgCycleDays,
           revenue: selectedRepairRevenue,
         },

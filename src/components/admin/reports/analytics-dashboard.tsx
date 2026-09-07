@@ -352,7 +352,28 @@ export default function AnalyticsDashboard() {
     { id: 'generic', kind: 'donut', rows: snapshot.repairStatus, formatValue: (v) => `${v} equipos` },
     { id: 'generic', kind: 'bar', rows: snapshot.financeComparison, formatValue: formatCurrency },
   ]
-  const exportMetrics = Object.fromEntries(snapshot.headlineCards.map((c) => [c.label, c.value]))
+  // Los KPI del PDF salen de las tarjetas de arriba, mas el detalle de taller.
+  //
+  // Las tarjetas resumen las reparaciones en una sola cifra —las que estan en
+  // curso— y el informe se leia como si el taller no hubiera terminado nada.
+  // Estas cuatro dicen exactamente que mide cada una, porque «reparaciones» a
+  // secas puede significar cuatro cosas distintas y las cuatro dan numeros
+  // distintos.
+  const repairs = snapshot.repairs
+  const exportMetrics = {
+    ...Object.fromEntries(snapshot.headlineCards.map((c) => [c.label, c.value])),
+    'Reparaciones ingresadas': String(repairs.receivedCount),
+    'Reparaciones terminadas (listas + entregadas)': String(repairs.finishedCount),
+    'Reparaciones entregadas (de las ingresadas)': String(repairs.completedCount),
+    'Listas sin retirar': String(repairs.readyForPickupCount),
+    // Solo si la instalacion tiene la fecha de entrega cargada: un cero aca se
+    // leeria como «no entregamos nada» y seria mentira.
+    ...(repairs.deliveredInPeriodCount !== null
+      ? { 'Entregadas en el período': String(repairs.deliveredInPeriodCount) }
+      : {}),
+    ...(repairs.cancelledCount > 0 ? { 'Reparaciones canceladas': String(repairs.cancelledCount) } : {}),
+    'Facturado en taller': formatCurrency(repairs.revenue),
+  }
 
   const lastUpdatedLabel = snapshot.generatedAt
     ? new Date(snapshot.generatedAt).toLocaleTimeString('es-PY', {
