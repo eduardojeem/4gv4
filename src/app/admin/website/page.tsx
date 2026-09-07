@@ -18,6 +18,7 @@ import { WebsiteNavigation } from '@/components/admin/website/WebsiteNavigation'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { cn } from '@/lib/utils'
 
 export default function WebsiteAdminPage() {
   const { settings } = useAdminWebsiteSettings()
@@ -108,10 +109,33 @@ export default function WebsiteAdminPage() {
       </div>
 
       {/* Setup Guide */}
-      {settings && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3 text-sm">
-        <div><p className="font-medium">{settings.company_info.storefrontPublic ? 'Tienda publicada' : 'Tienda sin publicar'}</p><p className="text-xs text-muted-foreground">{settings.company_info.storefrontPublic ? (settings.company_info.marketplacePublic ? 'Enlace público y Marketplace activos.' : 'Enlace público activo. No aparece en Marketplace.') : 'Podés preparar tus secciones. Activarlas no publica la tienda automáticamente.'}</p></div>
-        <Button type="button" size="sm" variant="outline" onClick={() => handleTabChange('company')}>Configurar publicación</Button>
-      </div>}
+      {settings && (
+        <div role="status" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-muted/30 p-3.5 sm:p-4 text-sm">
+          <div className="space-y-0.5 min-w-0">
+            <p className="font-semibold text-foreground flex items-center gap-2">
+              <span className={cn(
+                'h-2 w-2 rounded-full shrink-0',
+                settings.company_info.storefrontPublic ? 'bg-emerald-500' : 'bg-amber-500'
+              )} />
+              {settings.company_info.storefrontPublic ? 'Tienda publicada' : 'Tienda sin publicar'}
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {settings.company_info.storefrontPublic
+                ? (settings.company_info.marketplacePublic ? 'Enlace público y Marketplace activos.' : 'Enlace público activo. No aparece en Marketplace.')
+                : 'Podés preparar tus secciones. Activarlas no publica la tienda automáticamente.'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => handleTabChange('company')}
+            className="w-full sm:w-auto shrink-0 rounded-xl text-xs h-8"
+          >
+            Configurar publicación
+          </Button>
+        </div>
+      )}
       <SetupGuide activeTab={tab} onTabChange={handleTabChange} />
 
       {/* Tabs */}

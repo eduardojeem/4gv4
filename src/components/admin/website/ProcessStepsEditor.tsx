@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { cn } from '@/lib/utils'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { SectionHowItWorks } from '@/components/admin/website/SectionHowItWorks'
 import { Button } from '@/components/ui/button'
@@ -684,44 +685,43 @@ export function ProcessStepsEditor() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="sticky bottom-0 z-30 -mx-2 border-t bg-background/95 px-2 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:-mx-4 sm:px-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                hasChanges ? 'bg-amber-500' : 'bg-emerald-500'
-              }`}
-              aria-hidden="true"
-            />
-            <span>
-              {hasChanges
-                ? 'Hay cambios en los procesos sin guardar'
-                : 'Los procesos están guardados'}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex">
+      <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full shrink-0',
+              hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+            )}
+            aria-hidden="true"
+          />
+          <span className="font-semibold text-foreground">
+            {hasChanges ? 'Hay cambios en los procesos sin guardar' : 'Procesos de atención guardados'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 justify-end">
+          {hasChanges && (
             <Button
               type="button"
               variant="outline"
               onClick={handleDiscard}
               disabled={isSaving || !hasChanges}
-              className="h-10 rounded-md"
+              className="h-10 px-4 rounded-xl text-xs font-semibold flex-1 sm:flex-none"
             >
               <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
               Descartar
             </Button>
-            <Button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || !hasChanges}
-              className="h-10 rounded-md"
-            >
-              {isSaving
-                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                : <Save className="mr-2 h-4 w-4" aria-hidden="true" />}
-              {isSaving ? 'Guardando...' : 'Guardar cambios'}
-            </Button>
-          </div>
+          )}
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving || !hasChanges}
+            className="h-10 px-5 rounded-xl text-xs font-bold gap-2 flex-1 sm:flex-none"
+          >
+            {isSaving
+              ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              : <Save className="h-4 w-4" aria-hidden="true" />}
+            <span>{isSaving ? 'Guardando...' : 'Guardar cambios'}</span>
+          </Button>
         </div>
       </div>
     </div>
