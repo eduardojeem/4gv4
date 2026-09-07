@@ -61,6 +61,7 @@ function formatDate(dateString: string) {
 export function ProfileActivity({ repairs, tenantPrefix = '', hideWhenEmpty = false }: ProfileActivityProps) {
   // El "ver todo" no puede llevar tienda: junta las de todas.
   const repairsHref = customerRepairsListHref(null, tenantPrefix)
+  if (hideWhenEmpty && repairs.length === 0) return null
 
   // De que taller es cada equipo solo aporta fuera de una tienda. Adentro, todo
   // lo listado es de ella: la etiqueta se repetiria igual en cada fila y el

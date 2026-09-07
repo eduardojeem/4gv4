@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Heart, ArrowRight, Store, Package } from 'lucide-react'
@@ -20,40 +20,29 @@ import { resolveProductImageUrl } from '@/lib/images'
 export function ProfileFavoritesWidget({ linkPrefix = '' }: { linkPrefix?: string }) {
   const favoritesHref = linkPrefix ? `${linkPrefix}/favoritos` : '/marketplace/favoritos'
   const productsHref = linkPrefix ? `${linkPrefix}/productos` : '/marketplace/productos'
-  const [currentImages, setCurrentImages] = useState<Record<string, string | null>>({})
+  const mounted = useSyncExternalStore(() => () => undefined, () => true, () => false)
   const favoritesState = useFavorites()
-  const items = favoritesState?.items || []
-  const productIdsKey = items.map((item) => item.productId).sort().join(',')
+  const items = useMemo(() => favoritesState?.items || [], [favoritesState])
+  const [currentImages, setCurrentImages] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    if (!productIdsKey) return
-
-    const controller = new AbortController()
-    const productIds = productIdsKey.split(',')
-
-    fetch('/api/public/favorites/metadata', {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productIds }),
-      signal: controller.signal,
-    })
-      .then(async (response) => response.ok ? response.json() : null)
-      .then((data) => {
-        if (!data?.metadata || typeof data.metadata !== 'object') return
-        const images: Record<string, string | null> = {}
-        for (const productId of productIds) {
-          const image = data.metadata[productId]?.image
-          images[productId] = typeof image === 'string' && image.trim() ? image : null
-        }
-        setCurrentImages(images)
+    const missing = items.filter((item) => !item.image)
+    if (missing.length === 0) return
+    const byStore = new Map<string, string[]>()
+    for (const item of missing) byStore.set(item.slug, [...(byStore.get(item.slug) ?? []), item.productId])
+    let active = true
+    void Promise.all([...byStore].map(async ([slug, productIds]) => {
+      const response = await fetch(`/api/public/favorites/metadata?org=${encodeURIComponent(slug)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productIds }),
       })
-      .catch((error: unknown) => {
-        if (error instanceof Error && error.name === 'AbortError') return
-      })
+      if (!response.ok) return {}
+      const body = await response.json() as { metadata?: Record<string, { image?: string | null }> }
+      return Object.fromEntries(Object.entries(body.metadata ?? {}).flatMap(([id, metadata]) => metadata.image ? [[`${slug}:${id}`, metadata.image]] : []))
+    })).then((groups) => { if (active) setCurrentImages(Object.assign({}, ...groups)) }).catch(() => undefined)
+    return () => { active = false }
+  }, [items])
 
-    return () => controller.abort()
-  }, [productIdsKey])
+  if (!mounted) return null
 
   return (
     <div id="favoritos" className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
@@ -101,8 +90,8 @@ export function ProfileFavoritesWidget({ linkPrefix = '' }: { linkPrefix?: strin
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             {items.slice(0, 4).map((fav) => {
-              const image = currentImages[fav.productId] || fav.image
-              const imgUrl = image ? resolveProductImageUrl(image) : null
+              const currentImage = fav.image || currentImages[`${fav.slug}:${fav.productId}`]
+              const imgUrl = currentImage ? resolveProductImageUrl(currentImage) : null
               const productHref = `/${fav.slug}/productos/${fav.productId}`
 
               return (

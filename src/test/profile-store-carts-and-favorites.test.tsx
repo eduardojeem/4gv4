@@ -28,19 +28,23 @@ describe('ProfileStoreCarts', () => {
       cartItemId: 'remera-1', productId: 'remera', name: 'Nombre anterior', unitPrice: 90000,
       quantity: 2, variantId: null, variantName: null, sku: null, image: null, availableStock: 8,
     }]))
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        organization: { name: 'Moda del Sur', logo_url: '/logo.webp' },
-        metadata: { remera: { name: 'Remera nueva', image: '/remera.webp', price: 100000, hasOffer: false, offerPrice: null, isActive: true, stockQuantity: 1 } },
-      }),
-    } as Response)
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ carts: [] }) } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          organization: { name: 'Moda del Sur', slug: 'moda-sur', logo_url: '/logo.webp' },
+          items: [{ productId: 'remera', variantId: null, quantity: 1, unitPrice: 100000, name: 'Remera nueva', image: '/remera.webp', availableStock: 1 }],
+          conflicts: [{ reason: 'quantity_adjusted' }],
+          lastVerifiedAt: '2026-09-06T20:00:00.000Z',
+        }),
+      } as Response)
 
     render(<ProfileStoreCarts />)
 
     expect(await screen.findByText('Moda del Sur')).toBeInTheDocument()
     expect(screen.getByText('Remera nueva')).toBeInTheDocument()
-    expect(screen.getByText(/Se actualizaron precios/i)).toBeInTheDocument()
+    expect(screen.getByText(/Ajustamos 1 ítem/i)).toBeInTheDocument()
     expect(screen.getByText(/Gs.\s*100.000/i)).toBeInTheDocument()
   })
 

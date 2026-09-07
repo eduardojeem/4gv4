@@ -13,6 +13,7 @@ import { ProfileForm } from '@/components/profile/profile-form'
 import { ProfileQuickActions } from '@/components/profile/profile-quick-actions'
 import { ProfileActivity } from '@/components/profile/profile-activity'
 import { ProfileOrders, type ProfileOrder } from '@/components/profile/profile-orders'
+import { ProfileOrderHistory } from '@/components/profile/profile-order-history'
 import { ProfileAccountSummary } from '@/components/profile/profile-account-summary'
 import { ProfileStoreCarts } from '@/components/profile/profile-store-carts'
 import { ProfileStores } from '@/components/profile/profile-stores'
@@ -227,7 +228,7 @@ export function ProfileClient({
                 <div className="flex min-w-0 flex-col gap-6">
                   <ProfileFavoritesWidget linkPrefix={linkPrefix} />
                   <ProfileStoreCarts />
-                  <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />
+                  <ProfileOrderHistory initialOrders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />
                 </div>
                 <div className="lg:sticky lg:top-24 lg:self-start">
                   <ProfileActivity repairs={recentRepairs} tenantPrefix={linkPrefix} hideWhenEmpty />

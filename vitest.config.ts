@@ -62,7 +62,8 @@ export default defineConfig({
       'node_modules',
       'dist',
       '.next',
-      'coverage'
+      'coverage',
+      'tests/e2e/**'
     ],
     // Configuración de mocks
     server: {
