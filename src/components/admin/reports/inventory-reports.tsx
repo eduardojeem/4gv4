@@ -361,7 +361,8 @@ const InventoryReports: React.FC = () => {
       const branchAwareProducts = applyBranchInventoryToProducts(
         (products || []) as Array<{ id: string; stock_quantity?: number | null } & Record<string, unknown>>,
         branchStock.stockMap,
-        branchStock.branchScoped
+        branchStock.branchScoped,
+        branchStock.thresholdMap
       )
 
       // 2. Fetch Suppliers (solo columnas usadas)

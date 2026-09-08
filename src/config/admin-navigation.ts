@@ -107,7 +107,11 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Package,
                 href: '/admin/inventory',
                 description: 'Gestión de productos y stock',
-                permissions: ['inventory.read'],
+                // `inventory.read` se satisface con `products.read` O con
+                // `inventory.stock.manage`, pero /api/products exige
+                // `products.read` a secas: quien tenia solo el permiso de stock
+                // veia la seccion en el menu y encontraba el catalogo vacio.
+                permissions: ['products.read'],
                 module: 'inventory_admin'
             },
             {

@@ -242,7 +242,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     
     const baseProducts = (products || []) as Array<Record<string, unknown> & { id: string; stock_quantity?: number | null }>
     const branchInventoryClient = supabase as unknown as Parameters<typeof loadBranchInventoryStockMap>[0]
-    const { stockMap, branchScoped, failed: branchStockFailed, error: branchStockError } =
+    const { stockMap, thresholdMap, reservedMap, branchScoped, failed: branchStockFailed, error: branchStockError } =
       await loadBranchInventoryStockMap(
         branchInventoryClient,
         branchScope.branchId,
@@ -273,9 +273,10 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
             ...product,
             stock_quantity: branchStock,
             branch_stock_quantity: branchStock,
+            reserved_quantity: Number(reservedMap.get(product.id) || 0),
           }
         })
-      : applyBranchInventoryToProducts(cappedProducts, stockMap, branchScoped)
+      : applyBranchInventoryToProducts(cappedProducts, stockMap, branchScoped, thresholdMap)
     const stockFilteredProducts = branchAwareProducts.filter((product) => {
       const stock = Number(product.stock_quantity || 0)
       if (stockStatus === 'in_stock' && stock <= 0) return false

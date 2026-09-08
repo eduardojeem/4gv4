@@ -44,6 +44,8 @@ export interface Product {
   stock_quantity: number
   min_stock: number
   max_stock: number
+  /** Unidades comprometidas por pedidos en la sucursal activa. */
+  reserved_quantity?: number
   description?: string
   status: 'active' | 'inactive' | 'discontinued'
   barcode?: string

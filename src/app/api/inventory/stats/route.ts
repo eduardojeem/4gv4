@@ -59,7 +59,7 @@ export const GET = withTenantAuth(
       const truncated = rows.length > STATS_SCAN_CAP
       const scanned = truncated ? rows.slice(0, STATS_SCAN_CAP) : rows
 
-      const { stockMap, branchScoped, failed, error: branchError } = await loadBranchInventoryStockMap(
+      const { stockMap, thresholdMap, branchScoped, failed, error: branchError } = await loadBranchInventoryStockMap(
         supabase as unknown as Parameters<typeof loadBranchInventoryStockMap>[0],
         branchScope.branchId,
         scanned.map((product) => product.id)
@@ -85,7 +85,8 @@ export const GET = withTenantAuth(
       const scopedProducts = applyBranchInventoryToProducts(
         scanned as Array<{ id: string; stock_quantity?: number | null } & Record<string, unknown>>,
         stockMap,
-        branchScoped
+        branchScoped,
+        thresholdMap
       ) as InventoryStatsInput[]
 
       return NextResponse.json({

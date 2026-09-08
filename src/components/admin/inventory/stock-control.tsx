@@ -227,7 +227,7 @@ const StockControl: React.FC = () => {
       setProductTotalCount(productsCount || 0)
 
       const productRows = (productsData || []) as unknown as ProductQueryRow[]
-      const { stockMap, branchScoped, failed: branchStockFailed, error: branchStockError } =
+      const { stockMap, thresholdMap, branchScoped, failed: branchStockFailed, error: branchStockError } =
         await loadBranchInventoryStockMap(
           supabase as unknown as BranchInventoryClient,
           selectedBranchId,
@@ -242,7 +242,7 @@ const StockControl: React.FC = () => {
           `No se pudo leer el stock de ${selectedBranch?.name || 'la sucursal activa'}. ${branchStockError || ''}`.trim()
         )
       }
-      const branchAwareProducts = applyBranchInventoryToProducts(productRows, stockMap, branchScoped)
+      const branchAwareProducts = applyBranchInventoryToProducts(productRows, stockMap, branchScoped, thresholdMap)
 
       const formattedProducts: Product[] = branchAwareProducts.map((p) => ({
         id: p.id,

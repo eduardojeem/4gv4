@@ -8,6 +8,16 @@ type ErrorLike = {
 type InventoryRow = {
   product_id: string
   stock_quantity: number | null
+  /** NULL usa el umbral del producto. Ver migracion 20260907130000. */
+  min_stock?: number | null
+  max_stock?: number | null
+  reserved_quantity?: number | null
+}
+
+export interface BranchStockEntry {
+  stock: number
+  minStock: number | null
+  maxStock: number | null
 }
 
 type QueryResult<T> = PromiseLike<{ data: T[] | null; error: ErrorLike }>
@@ -29,6 +39,17 @@ export type BranchInventoryClient = {
 
 export interface BranchInventoryMapResult {
   stockMap: Map<string, number>
+  /**
+   * Umbrales propios de la sucursal. Un minimo de 50 pensado para el deposito
+   * central dejaba al kiosco en «Stock bajo» permanente.
+   */
+  thresholdMap: Map<string, { minStock: number | null; maxStock: number | null }>
+  /**
+   * Unidades comprometidas por pedidos. La columna existia desde la migracion
+   * de multi-sucursal y no la leia nadie: la pantalla mostraba stock fisico
+   * donde el usuario lee «disponible».
+   */
+  reservedMap: Map<string, number>
   branchScoped: boolean
   /**
    * Se pidio el stock de una sucursal y no se pudo leer. Distinto de
@@ -59,13 +80,20 @@ export async function loadBranchInventoryStockMap(
   productIds?: string[]
 ): Promise<BranchInventoryMapResult> {
   if (!branchId) {
-    return { stockMap: new Map(), branchScoped: false, failed: false, error: null }
+    return {
+      stockMap: new Map(),
+      thresholdMap: new Map(),
+      reservedMap: new Map(),
+      branchScoped: false,
+      failed: false,
+      error: null,
+    }
   }
 
   try {
     const baseQuery = supabase
       .from('branch_inventory')
-      .select('product_id, stock_quantity')
+      .select('product_id, stock_quantity, min_stock, max_stock, reserved_quantity')
 
     const query = baseQuery.eq('branch_id', branchId)
     const response = productIds && productIds.length > 0 && typeof query.in === 'function'
@@ -79,6 +107,11 @@ export async function loadBranchInventoryStockMap(
     const rows = (response.data ?? []) as InventoryRow[]
     return {
       stockMap: new Map(rows.map((row) => [row.product_id, Number(row.stock_quantity || 0)])),
+      thresholdMap: new Map(rows.map((row) => [row.product_id, {
+        minStock: row.min_stock === null || row.min_stock === undefined ? null : Number(row.min_stock),
+        maxStock: row.max_stock === null || row.max_stock === undefined ? null : Number(row.max_stock),
+      }])),
+      reservedMap: new Map(rows.map((row) => [row.product_id, Number(row.reserved_quantity || 0)])),
       branchScoped: true,
       failed: false,
       error: null,
@@ -90,22 +123,39 @@ export async function loadBranchInventoryStockMap(
       ? error.message
       : 'No se pudo cargar el stock por sucursal.'
     console.warn('[branches/inventory] Branch stock read failed:', message)
-    return { stockMap: new Map(), branchScoped: false, failed: true, error: message }
+    return {
+      stockMap: new Map(),
+      thresholdMap: new Map(),
+      reservedMap: new Map(),
+      branchScoped: false,
+      failed: true,
+      error: message,
+    }
   }
 }
 
 export function applyBranchInventoryToProducts<T extends { id: string; stock_quantity?: number | null }>(
   products: T[],
   stockMap: Map<string, number>,
-  branchScoped: boolean
+  branchScoped: boolean,
+  thresholdMap?: Map<string, { minStock: number | null; maxStock: number | null }>
 ): Array<T & { branch_stock_quantity?: number }> {
   return products.map((product) => {
     if (stockMap.has(product.id)) {
       const branchStock = Number(stockMap.get(product.id) || 0)
+      // El umbral de la sucursal solo pisa al del producto cuando esta
+      // configurado: NULL significa «usar el del producto».
+      const thresholds = thresholdMap?.get(product.id)
       return {
         ...product,
         stock_quantity: branchStock,
         branch_stock_quantity: branchStock,
+        ...(thresholds?.minStock !== null && thresholds?.minStock !== undefined
+          ? { min_stock: thresholds.minStock }
+          : {}),
+        ...(thresholds?.maxStock !== null && thresholds?.maxStock !== undefined
+          ? { max_stock: thresholds.maxStock }
+          : {}),
       }
     }
 

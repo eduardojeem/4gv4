@@ -799,6 +799,16 @@ export default function InventoryManagement() {
                               <span className="min-w-6 font-bold tabular-nums text-xs text-slate-900 dark:text-white">{product.stock_quantity}</span>
                               <Badge className={`text-[10px] px-2 py-0.5 border-0 ${stockInfo.color}`}>{stockInfo.text}</Badge>
                             </div>
+                            {/* Lo comprometido por pedidos: la columna existia
+                                en la base y no la leia nadie, asi que se
+                                mostraba stock fisico donde se lee «disponible». */}
+                            {Number(product.reserved_quantity || 0) > 0 && (
+                              <p className="mt-1 text-[11px] tabular-nums text-amber-600 dark:text-amber-400">
+                                {product.reserved_quantity} reservado{Number(product.reserved_quantity) === 1 ? '' : 's'}
+                                {' · '}
+                                {Math.max(0, product.stock_quantity - Number(product.reserved_quantity || 0))} disponible
+                              </p>
+                            )}
                           </td>
                           <td className="p-3.5">
                             <Badge className={`text-[10px] px-2 py-0.5 border-0 ${getStatusBadge(product)}`}>
