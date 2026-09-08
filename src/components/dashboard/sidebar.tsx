@@ -17,7 +17,6 @@ import { usePermissions } from '@/hooks/use-permissions'
 import type { UserRole } from '@/lib/auth/roles-permissions'
 import { canRoleAccessSection } from '@/lib/auth/section-access'
 import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
-import { fetchOnboardingStatus } from '@/lib/onboarding/status-cache'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import type { LucideIcon } from 'lucide-react'
@@ -52,7 +51,10 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: 'Principal',
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor', 'tecnico'] },
-      { name: 'Onboarding', href: '/dashboard/onboarding', icon: Rocket, roles: ['admin', 'vendedor', 'tecnico'], description: 'Configuracion inicial' },
+      // La pagina exige ser dueño o administrador de la organizacion y devuelve
+      // al panel a cualquier otro con un redirect mudo. Ofrecersela a vendedores
+      // y tecnicos era una puerta que no abre.
+      { name: 'Configuración del negocio', href: '/dashboard/onboarding', icon: Rocket, roles: ['super_admin', 'admin'], description: 'Datos, rubro y tienda pública' },
       { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, permission: 'pos.read', requiredModule: 'pos' },
       { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, permission: 'pos.read', requiredModule: 'pos' },
       { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin'], description: 'Analíticas y ganancias', requiredModule: 'pos' },
@@ -118,7 +120,6 @@ export const Sidebar = memo(function Sidebar() {
   const { user, signOut } = useAuth()
   const { organizationName, organizationLogoUrl, effectiveModules } = useSubscriptionStatus()
   const [sidebarBadges, setSidebarBadges] = useState({ repairs: 0, lowStock: 0 })
-  const [onboardingDone, setOnboardingDone] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
   const { hasPermission } = usePermissions()
@@ -154,14 +155,6 @@ export const Sidebar = memo(function Sidebar() {
     return () => clearInterval(interval)
   }, [effectiveModules])
 
-  // Check onboarding completion once on mount to hide the sidebar item when done
-  useEffect(() => {
-    if (!config.supabase.isConfigured) return
-    fetchOnboardingStatus().then((data) => {
-      if (data?.completed) setOnboardingDone(true)
-    })
-  }, [])
-
   const handleQuickLogout = async () => {
     setIsSigningOut(true)
     try {
@@ -178,8 +171,9 @@ export const Sidebar = memo(function Sidebar() {
 
   const filteredGroups = useMemo(() => {
     const filterFn = (item: NavItem) => {
-      // Hide onboarding link once setup is complete
-      if (item.href === '/dashboard/onboarding' && onboardingDone) return false
+      // El item se queda despues de completar: la pantalla tiene un modo
+      // «revisita» entero —titulo propio, «Descartar», «Guardar cambios»— que
+      // antes solo se alcanzaba escribiendo la URL a mano.
 
       if (!isNavigationModuleAvailable(item.requiredModule, effectiveModules)) return false
 
@@ -195,7 +189,7 @@ export const Sidebar = memo(function Sidebar() {
       label: group.label,
       items: group.items.filter(filterFn)
     })).filter(group => group.items.length > 0)
-  }, [userRole, onboardingDone, hasPermission, effectiveModules])
+  }, [userRole, hasPermission, effectiveModules])
 
   return (
     <>

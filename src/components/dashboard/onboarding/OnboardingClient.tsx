@@ -56,6 +56,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { SUPPORTED_CURRENCIES, SUPPORTED_LANGUAGES, formatCurrency } from '@/lib/currency'
 import { getAdminSettingsText } from '@/lib/i18n/admin-settings'
 import { clearOnboardingStatusCache } from '@/lib/onboarding/status-cache'
+import { BRAND_COLORS } from '@/lib/website/brand-colors'
 import {
   BUSINESS_VERTICALS,
   OPERATING_MODELS,
@@ -96,6 +97,10 @@ type CompanyInfoForm = {
   ruc: string
   whatsapp: string
   businessType: string
+  /** El onboarding ya lo escribia: le fijaba 'blue' en cada guardado. */
+  brandColor: string
+  /** La tienda arranca sin publicar y nada lo decia. */
+  storefrontPublic: boolean
   businessVertical: string
   operatingModel: string
   instagram: string
@@ -244,7 +249,7 @@ function buildSteps(slug: string): OnboardingStep[] {
     },
     {
       title: 'Tienda pública',
-      description: 'Revisión de catálogo y carrito',
+      description: 'Publicada y visible para tus clientes',
       href: `/${slug}/inicio`,
       icon: Store,
       doneKey: 'hasPublicStore',
@@ -370,6 +375,11 @@ export function OnboardingClient({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasChanges])
 
+  const updateToggle = (field: 'storefrontPublic', value: boolean) => {
+    setForm((current) => ({ ...current, [field]: value }))
+    setError('')
+  }
+
   const updateField = (field: keyof CompanyInfoForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }))
     if (field === 'currency') setConfirmCurrencyChange(false)
@@ -413,11 +423,20 @@ export function OnboardingClient({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, confirmCurrencyChange }),
       })
-      const payload = await response.json().catch(() => null) as { error?: string } | null
+      const payload = await response.json().catch(() => null) as {
+        error?: string
+        websiteContentIncomplete?: boolean
+      } | null
       if (!response.ok) throw new Error(payload?.error || 'No se pudo guardar la configuración')
 
       clearOnboardingStatusCache()
       toast.success(isRevisit ? 'Cambios guardados' : 'Configuración inicial completada')
+      // El servidor ya no descarta el error de la siembra: si el contenido
+      // inicial del sitio no se pudo escribir, se dice en vez de responder
+      // «listo» y dejar la tienda vacia.
+      if (payload?.websiteContentIncomplete) {
+        toast.warning('Tu tienda quedó sin el contenido inicial. Podés cargarlo desde Diseño del sitio.')
+      }
       if (isRevisit) router.refresh()
       else router.push('/dashboard')
     } catch (caught) {
@@ -905,6 +924,84 @@ export function OnboardingClient({
                 </div>
               </div>
 
+              {/* Visibilidad de la tienda.
+                  Una organización nueva arranca con la tienda apagada y nada lo
+                  decía: la lista de preparación marcaba «Tienda pública · Listo»
+                  y el enlace llevaba a una página sin publicar. */}
+              <div className={cn(
+                'rounded-xl border p-4 transition-colors',
+                form.storefrontPublic
+                  ? 'border-emerald-500/40 bg-emerald-500/[0.06]'
+                  : 'border-border/80 bg-muted/20'
+              )}>
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="storefrontPublic"
+                    checked={form.storefrontPublic}
+                    onCheckedChange={(checked) => updateToggle('storefrontPublic', checked === true)}
+                    className="mt-0.5"
+                  />
+                  <div className="min-w-0 space-y-1">
+                    <Label htmlFor="storefrontPublic" className="text-sm font-semibold text-foreground cursor-pointer">
+                      Publicar mi tienda en internet
+                    </Label>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {form.storefrontPublic
+                        ? <>Cualquiera con el enlace va a poder ver tu catálogo en <code className="rounded bg-muted px-1 py-0.5 text-[11px]">{publicUrl}</code>. Podés apagarla cuando quieras.</>
+                        : <>Tu tienda existe pero <strong className="text-foreground">nadie puede verla todavía</strong>. Marcá esta casilla cuando quieras abrirla al público.</>}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Color de marca.
+                  El onboarding ya lo escribía: le fijaba 'blue' en cada
+                  guardado, pisando lo elegido en Diseño del sitio. */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-foreground">Color principal de tu tienda</Label>
+                <div className="flex flex-wrap gap-2">
+                  {BRAND_COLORS.map((color) => {
+                    const selected = form.brandColor === color.key
+                    return (
+                      <button
+                        key={color.key}
+                        type="button"
+                        onClick={() => updateField('brandColor', color.key)}
+                        aria-pressed={selected}
+                        title={color.name}
+                        className={cn(
+                          'flex flex-col items-center gap-1 rounded-lg border p-2 transition-all',
+                          selected
+                            ? 'border-primary ring-2 ring-primary/25'
+                            : 'border-border/80 hover:border-primary/40'
+                        )}
+                      >
+                        <span className={cn('h-6 w-6 rounded-md', color.swatch)} />
+                        <span className={cn(
+                          'text-[10px]',
+                          selected ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                        )}>
+                          {color.name}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                {form.brandColor === 'custom' ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Tenés un color propio configurado en Diseño del sitio. Elegí uno de acá solo si
+                    querés reemplazarlo.
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    El resto del diseño —encabezado, portada, servicios— se ajusta en{' '}
+                    <Link href="/admin/website" className="font-medium text-primary underline-offset-2 hover:underline">
+                      Diseño del sitio
+                    </Link>.
+                  </p>
+                )}
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="weekdays" className="text-xs font-medium text-foreground flex items-center gap-1.5">
@@ -1073,7 +1170,12 @@ export function OnboardingClient({
               {steps.map((step) => {
                 const Icon = step.icon
                 const done = stepProgress[step.doneKey]
-                const external = step.href.startsWith(`/${organization.slug}/`)
+                // Sin publicar, el enlace a la tienda lleva a una pagina que
+                // nadie puede ver: mientras el paso este pendiente, apunta al
+                // interruptor que lo resuelve.
+                const pendingStorefront = step.doneKey === 'hasPublicStore' && !done
+                const href = pendingStorefront ? '/dashboard/onboarding#company-info' : step.href
+                const external = href.startsWith(`/${organization.slug}/`)
                 return (
                   <li key={step.title} className="py-3 first:pt-0 last:pb-0">
                     <div className="flex gap-3">
@@ -1099,8 +1201,13 @@ export function OnboardingClient({
 
                         {step.doneKey !== 'hasCompanyInfo' ? (
                           <Button variant="link" size="sm" className="mt-1.5 h-auto p-0 text-xs font-medium text-primary" asChild>
-                            <Link href={step.href} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}>
-                              {done ? 'Revisar' : 'Configurar'}
+                            <Link
+                              href={href}
+                              target={external ? '_blank' : undefined}
+                              rel={external ? 'noopener noreferrer' : undefined}
+                              onClick={pendingStorefront ? () => setActiveTab('public') : undefined}
+                            >
+                              {done ? 'Revisar' : pendingStorefront ? 'Publicar' : 'Configurar'}
                               {external ? <ExternalLink className="ml-1 h-3 w-3" /> : <ArrowRight className="ml-1 h-3 w-3" />}
                             </Link>
                           </Button>
@@ -1149,8 +1256,12 @@ export function OnboardingClient({
               ) : null}
 
               <div className="border-t border-border/60 pt-2 text-[11px] text-muted-foreground space-y-0.5">
-                <p>🕒 {form.weekdays || 'Lun a Vie'}</p>
-                <p>🕒 {form.saturday || 'Sábados'}</p>
+                <p className="flex items-center gap-1.5">
+                  <Clock className="h-3 w-3 shrink-0" /> {form.weekdays || 'Lun a Vie'}
+                </p>
+                <p className="flex items-center gap-1.5">
+                  <Clock className="h-3 w-3 shrink-0" /> {form.saturday || 'Sábados'}
+                </p>
               </div>
             </div>
           </section>

@@ -59,7 +59,7 @@ export default async function DashboardOnboardingPage() {
       .maybeSingle(),
     admin
       .from('organizations')
-      .select('business_vertical, operating_model')
+      .select('business_vertical, operating_model, storefront_public')
       .eq('id', organization.id)
       .maybeSingle(),
   ])
@@ -109,10 +109,17 @@ export default async function DashboardOnboardingPage() {
     ruc?: string
     whatsapp?: string
     businessType?: string
+    brandColor?: string
     instagram?: string
     facebook?: string
     tiktok?: string
   }
+
+  // La tienda de una organizacion nueva arranca con `storefront_public = false`
+  // y el onboarding nunca la publica. El paso se marcaba listo con la sola
+  // existencia de la fila `company_info` —que crea el propio onboarding—, asi
+  // que decia «Listo» y su enlace llevaba a una tienda sin publicar.
+  const storefrontPublic = businessProfile?.storefront_public === true
 
   const hasCompanyInfo = Boolean(
     (settings?.display_name || organization.name) &&
@@ -137,7 +144,7 @@ export default async function DashboardOnboardingPage() {
       stepProgress={{
         hasCompanyInfo,
         hasProducts: (productsCount ?? 0) > 0,
-        hasPublicStore: Boolean(companyInfoSetting?.value),
+        hasPublicStore: storefrontPublic,
         hasTeam: (membersCount ?? 0) > 1,
       }}
       initialCompanyInfo={{
@@ -155,6 +162,10 @@ export default async function DashboardOnboardingPage() {
         ruc: adminSettings.companyRuc ?? companyInfo.ruc ?? '',
         whatsapp: companyInfo.whatsapp || '',
         businessType: companyInfo.businessType || '',
+        brandColor: typeof companyInfo.brandColor === 'string' && companyInfo.brandColor
+          ? companyInfo.brandColor
+          : 'blue',
+        storefrontPublic,
         businessVertical: businessProfile?.business_vertical || 'general',
         operatingModel: businessProfile?.operating_model || companyInfo.businessType || 'retail',
         instagram: companyInfo.instagram || '',

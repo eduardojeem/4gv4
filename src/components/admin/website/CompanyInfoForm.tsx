@@ -43,6 +43,7 @@ import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilit
 import { CompanyInfo } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
+import { BRAND_COLORS } from '@/lib/website/brand-colors'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
 import { cn } from '@/lib/utils'
@@ -50,20 +51,6 @@ import { getPublicationIssues } from '@/lib/website/publication'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
 // ── Brand-color catalog — single source of truth for swatches and live preview ──
-const BRAND_COLORS: Array<{ key: string; name: string; swatch: string }> = [
-  { key: 'blue', name: 'Azul', swatch: 'bg-blue-500' },
-  { key: 'green', name: 'Verde', swatch: 'bg-green-500' },
-  { key: 'purple', name: 'Morado', swatch: 'bg-purple-500' },
-  { key: 'orange', name: 'Naranja', swatch: 'bg-orange-500' },
-  { key: 'red', name: 'Rojo', swatch: 'bg-red-500' },
-  { key: 'indigo', name: 'Índigo', swatch: 'bg-indigo-500' },
-  { key: 'teal', name: 'Teal', swatch: 'bg-teal-500' },
-  { key: 'rose', name: 'Rosa', swatch: 'bg-rose-500' },
-  { key: 'amber', name: 'Ámbar', swatch: 'bg-amber-500' },
-  { key: 'emerald', name: 'Esmeralda', swatch: 'bg-emerald-500' },
-  { key: 'cyan', name: 'Cian', swatch: 'bg-cyan-500' },
-  { key: 'sky', name: 'Cielo', swatch: 'bg-sky-500' },
-]
 
 const BRAND_PREVIEW: Record<string, { header: string; cta: string; dot: string }> = {
   blue: { header: 'bg-blue-600 text-white border-blue-500', cta: 'bg-blue-600 hover:bg-blue-700 text-white', dot: 'bg-blue-500' },

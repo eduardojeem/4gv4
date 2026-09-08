@@ -18,6 +18,7 @@ import {
 import { BusinessProfileInputSchema, getSuggestedModules } from '@/lib/organization/business-profile'
 import { getWebsiteDefaultsForVertical } from '@/lib/website/default-settings'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
+import { DEFAULT_BRAND_COLOR, isKnownBrandColor } from '@/lib/website/brand-colors'
 
 type OnboardingMetadata = Record<string, unknown> & {
   onboarding?: Record<string, unknown>
@@ -35,7 +36,18 @@ const onboardingSchema = z.object({
   city: z.string().trim().min(2, 'Ciudad requerida').max(120),
   weekdays: z.string().trim().max(120).optional().or(z.literal('')),
   saturday: z.string().trim().max(120).optional().or(z.literal('')),
-  logoUrl: z.string().trim().max(500).optional().or(z.literal('')),
+  // El cliente exigia http/https y el servidor aceptaba cualquier cosa; lo que
+  // se guarda termina en el <Image> de la tienda publica.
+  logoUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .refine(
+      (value) => value === '' || /^https?:\/\/\S+$/i.test(value),
+      'La URL del logo debe empezar con http:// o https://'
+    )
+    .optional()
+    .or(z.literal('')),
   ruc: z.string().trim().max(50).optional().or(z.literal('')),
   whatsapp: z.string().trim().max(50).optional().or(z.literal('')),
   businessType: z.string().trim().max(50).optional().or(z.literal('')),
@@ -44,6 +56,11 @@ const onboardingSchema = z.object({
   instagram: z.string().trim().max(100).optional().or(z.literal('')),
   facebook: z.string().trim().max(100).optional().or(z.literal('')),
   tiktok: z.string().trim().max(100).optional().or(z.literal('')),
+  // El onboarding ya escribia el color de marca: le fijaba 'blue' a mano en
+  // cada guardado. Ahora es una eleccion del usuario, no una constante.
+  brandColor: z.string().trim().refine(isKnownBrandColor, 'Color de marca invalido').default(DEFAULT_BRAND_COLOR),
+  // La tienda de una organizacion nueva arranca sin publicar y nada lo decia.
+  storefrontPublic: z.boolean().default(false),
 })
 
 export async function POST(request: Request) {
@@ -135,9 +152,6 @@ export async function POST(request: Request) {
       completed_by: alreadyCompleted ? previousOnboarding.completed_by ?? user.id : user.id,
       last_updated_at: now,
       last_updated_by: user.id,
-      required_company_fields: [
-        'displayName', 'phone', 'address', 'city', 'currency', 'timezone', 'language',
-      ],
     },
   }
 
@@ -154,31 +168,63 @@ export async function POST(request: Request) {
     input.businessType
   )
 
-  const websiteCompanyInfo = {
+  // Solo lo que el onboarding realmente le pregunta al usuario. `headerStyle`,
+  // `headerColor` y `showTopBar` se mandaban como constantes y pisaban lo
+  // elegido en /admin/website; ahora ni siquiera viajan, y la RPC fusiona en
+  // vez de reemplazar, asi que el eslogan, la descripcion, el mapa y el color
+  // propio sobreviven.
+  const websiteCompanyInfo: Record<string, unknown> = {
     name: input.displayName,
     phone: input.phone,
     email: input.email || '',
     address: input.address,
+    // `sunday` no se manda: la RPC fusiona `hours` clave por clave y el
+    // domingo que el admin haya cargado se conserva.
     hours: {
       weekdays: input.weekdays || 'Lunes a viernes, 08:00 a 18:00',
       saturday: input.saturday || 'Sabado, 08:00 a 12:00',
-      sunday: '',
     },
     logoUrl: input.logoUrl || '',
-    brandColor: 'blue',
-    headerStyle: 'glass',
-    headerColor: '',
-    showTopBar: true,
+    brandColor: input.brandColor,
     ruc: input.ruc || '',
     whatsapp: input.whatsapp || '',
     businessType: input.businessType || '',
     instagram: input.instagram || '',
     facebook: input.facebook || '',
     tiktok: input.tiktok || '',
-    servicesPageEnabled: verticalDefaults.company_info?.servicesPageEnabled ?? false,
-    repairTrackingEnabled: verticalDefaults.company_info?.repairTrackingEnabled ?? false,
-    processSectionEnabled: verticalDefaults.company_info?.processSectionEnabled ?? true,
     // Publication is preserved by complete_organization_onboarding, never enabled here.
+  }
+
+  // Los interruptores derivados del rubro solo se proponen la primera vez: en
+  // una revisita son decisiones que el admin ya pudo cambiar a mano.
+  if (!alreadyCompleted) {
+    websiteCompanyInfo.servicesPageEnabled = verticalDefaults.company_info?.servicesPageEnabled ?? false
+    websiteCompanyInfo.repairTrackingEnabled = verticalDefaults.company_info?.repairTrackingEnabled ?? false
+    websiteCompanyInfo.processSectionEnabled = verticalDefaults.company_info?.processSectionEnabled ?? true
+  }
+
+  // La publicacion se aplica ANTES de la RPC: la funcion lee
+  // `storefront_public` de `organizations` para estamparlo en `company_info`.
+  // Escribirla despues dejaba la fila publica con el valor de la vez anterior.
+  const publicationUpdate: Record<string, unknown> = {
+    storefront_public: input.storefrontPublic,
+    updated_at: now,
+  }
+  if (!input.storefrontPublic) publicationUpdate.marketplace_public = false
+
+  const { error: publicationError } = await admin
+    .from('organizations')
+    .update(publicationUpdate)
+    .eq('id', organizationId)
+
+  if (publicationError) {
+    logger.error('Failed to apply storefront publication', {
+      error: publicationError.message,
+      organizationId,
+    })
+    return NextResponse.json({
+      error: 'No se pudo aplicar la visibilidad de la tienda. No se guardó nada.',
+    }, { status: 500 })
   }
 
   const { data: completion, error: updateError } = await admin.rpc(
@@ -201,21 +247,54 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No se pudo finalizar el onboarding.' }, { status: 500 })
   }
 
-  // Populate vertical-tailored website defaults (hero, stats, process)
-  const initialWebsiteRows = [
+  // El contenido del sitio se SIEMBRA, no se reaplica. El array se llamaba
+  // `initialWebsiteRows` —la intencion era «solo la primera vez»— pero el
+  // upsert corria en cada guardado y reemplazaba el encabezado y los pasos de
+  // proceso que el admin hubiera escrito en /admin/website.
+  const seedableKeys = [
     { key: 'hero_content', value: verticalDefaults.hero_content },
     { key: 'hero_stats', value: verticalDefaults.hero_stats },
     { key: 'process_steps', value: verticalDefaults.process_steps },
   ].filter((row) => row.value !== undefined)
 
-  for (const row of initialWebsiteRows) {
-    await admin.from('website_settings').upsert({
+  const { data: existingRows, error: existingRowsError } = await admin
+    .from('website_settings')
+    .select('key')
+    .eq('organization_id', organizationId)
+    .in('key', seedableKeys.map((row) => row.key))
+
+  if (existingRowsError) {
+    logger.error('Failed to check website content before seeding', {
+      error: existingRowsError.message,
+      organizationId,
+    })
+  }
+
+  const alreadyPresent = new Set((existingRows ?? []).map((row) => row.key))
+  const rowsToSeed = existingRowsError
+    // Sin saber que hay, no se escribe: perder contenido es peor que no sembrarlo.
+    ? []
+    : seedableKeys.filter((row) => !alreadyPresent.has(row.key))
+
+  const seedFailures: string[] = []
+  for (const row of rowsToSeed) {
+    const { error: seedError } = await admin.from('website_settings').insert({
       organization_id: organizationId,
       key: row.key,
       value: row.value,
       updated_by: user.id,
       updated_at: now,
-    }, { onConflict: 'organization_id,key' })
+    })
+    // El error se leia: antes el resultado se descartaba y el contenido podia
+    // no existir con la respuesta diciendo `success: true`.
+    if (seedError) {
+      seedFailures.push(row.key)
+      logger.error('Failed to seed website content', {
+        error: seedError.message,
+        organizationId,
+        key: row.key,
+      })
+    }
   }
 
   const planInfo = await getOrganizationPlanInfo(organizationId)
@@ -223,16 +302,24 @@ export async function POST(request: Request) {
     ...planInfo.entitledModules,
     ...planInfo.moduleTrials.map(trial => trial.module),
   ])
-  const enabledModules = getSuggestedModules(input.businessVertical, input.operatingModel)
+  const suggestedModules = getSuggestedModules(input.businessVertical, input.operatingModel)
     .filter(module => entitled.has(module))
+
+  // Los modulos se sugieren la primera vez. En una revisita, lo que el admin
+  // eligio a mano en /admin/organization-profile —con validacion de plan y
+  // auditoria— manda sobre la sugerencia del rubro.
+  const organizationUpdate: Record<string, unknown> = {
+    business_vertical: input.businessVertical,
+    operating_model: input.operatingModel,
+    updated_at: now,
+  }
+  if (!alreadyCompleted) {
+    organizationUpdate.enabled_modules = suggestedModules
+  }
+  const enabledModules = alreadyCompleted ? null : suggestedModules
   const { error: profileUpdateError } = await admin
     .from('organizations')
-    .update({
-      business_vertical: input.businessVertical,
-      operating_model: input.operatingModel,
-      enabled_modules: enabledModules,
-      updated_at: now,
-    })
+    .update(organizationUpdate)
     .eq('id', organizationId)
 
   if (profileUpdateError) {
@@ -242,7 +329,7 @@ export async function POST(request: Request) {
     }, { status: 500 })
   }
 
-  await admin.from('tenant_audit_log').insert({
+  const { error: auditError } = await admin.from('tenant_audit_log').insert({
     organization_id: organizationId,
     user_id: user.id,
     action: 'organization_business_profile.onboarding_saved',
@@ -252,11 +339,31 @@ export async function POST(request: Request) {
       business_vertical: input.businessVertical,
       operating_model: input.operatingModel,
       enabled_modules: enabledModules,
+      storefront_public: input.storefrontPublic,
+      seeded_website_keys: rowsToSeed.map((row) => row.key),
     },
   })
+
+  // No se revierte —a diferencia de /api/admin/organization-profile— porque a
+  // esta altura ya hay una transaccion confirmada detras; pero el hueco en la
+  // trazabilidad se registra en vez de descartarse en silencio.
+  if (auditError) {
+    logger.error('Onboarding saved without audit trail', {
+      error: auditError.message,
+      organizationId,
+    })
+  }
 
   const completedAt = completion && typeof completion === 'object' && !Array.isArray(completion)
     ? String((completion as Record<string, unknown>).completed_at || now)
     : now
-  return NextResponse.json({ success: true, completedAt })
+
+  return NextResponse.json({
+    success: true,
+    completedAt,
+    storefrontPublic: input.storefrontPublic,
+    // Con esto en true el sitio quedo sin su contenido inicial y la pantalla lo
+    // dice: antes el error se descartaba y la respuesta seguia siendo exitosa.
+    websiteContentIncomplete: seedFailures.length > 0,
+  })
 }
