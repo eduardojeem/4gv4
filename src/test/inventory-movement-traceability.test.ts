@@ -175,3 +175,37 @@ describe('el umbral de las alertas es el del producto', () => {
     expect(CONTROL).not.toContain('threshold: 5,')
   })
 })
+
+/**
+ * `process_pos_sale_atomic_v5` llama a v4 —que inserta las lineas— y despues
+ * BORRA y VUELVE A INSERTAR las lineas con variante para completarles los datos
+ * de la variante. Con un trigger que insertaba una fila por INSERT, eso dejaba
+ * dos movimientos por producto con variante, y ademas discrepantes: el primero
+ * leia el stock antes del descuento y el segundo despues.
+ */
+describe('el movimiento de venta no se duplica', () => {
+  const IDEMPOTENTE = leer('supabase/migrations/20260908020000_sale_movement_idempotent.sql')
+
+  it('refleja el total vigente en vez de acumular inserciones', () => {
+    // Acumular no servia: no hay forma de distinguir «otra linea del mismo
+    // producto» de «la misma linea reinsertada».
+    expect(IDEMPOTENTE).toContain('SELECT COALESCE(SUM(item.quantity), 0)')
+    expect(IDEMPOTENTE).toContain('AND item.product_id = v_product_id')
+    expect(IDEMPOTENTE).toContain('SET quantity = v_total,')
+  })
+
+  it('conserva el stock previo de la primera vez', () => {
+    // Recalcularlo en la reinsercion leeria el stock YA descontado.
+    expect(IDEMPOTENTE).toContain('new_stock = v_previous_stock - v_total')
+    expect(IDEMPOTENTE).toContain('ORDER BY movement.created_at ASC')
+  })
+
+  it('corre tambien al borrar y al cambiar la cantidad', () => {
+    expect(IDEMPOTENTE).toContain('AFTER INSERT OR UPDATE OF quantity OR DELETE ON public.sale_items')
+  })
+
+  it('si el producto sale de la venta, el movimiento se va con el', () => {
+    expect(IDEMPOTENTE).toContain('IF v_total <= 0 THEN')
+    expect(IDEMPOTENTE).toContain('DELETE FROM public.product_movements WHERE id = v_movement_id')
+  })
+})
