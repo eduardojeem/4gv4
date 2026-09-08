@@ -145,11 +145,23 @@ const StockMovements: React.FC = () => {
         query = query.lte('created_at', `${filterDateTo}T23:59:59`)
       }
 
-      // Si hay búsqueda por texto, necesitamos buscar en la relación o campos locales
-      // Supabase no soporta filtrado profundo en relaciones fácilmente con OR
-      // Por simplicidad, filtramos por razón o referencia aquí, y si es posible por producto
+      // Buscaba solo en `notes`. Lo que uno quiere buscar en un historial de
+      // stock es un producto o un SKU: se resuelven primero contra `products` y
+      // se filtra por sus ids, porque PostgREST no filtra por columnas de una
+      // relacion dentro de un OR.
       if (searchTerm) {
-        query = query.ilike('notes', `%${searchTerm}%`)
+        const termino = searchTerm.trim()
+        const seguro = termino.replace(/[,%()]/g, ' ')
+        const { data: coincidencias } = await supabase
+          .from('products')
+          .select('id')
+          .or(`name.ilike.%${seguro}%,sku.ilike.%${seguro}%`)
+          .limit(200)
+
+        const ids = (coincidencias || []).map((fila) => fila.id)
+        query = ids.length > 0
+          ? query.or(`notes.ilike.%${seguro}%,product_id.in.(${ids.join(',')})`)
+          : query.ilike('notes', `%${termino}%`)
       }
 
       // Paginación
@@ -384,7 +396,7 @@ const StockMovements: React.FC = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Razón, referencia..."
+                  placeholder="Producto, SKU o motivo..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 dark:bg-gray-700 dark:border-gray-600 dark:text-white"

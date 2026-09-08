@@ -61,6 +61,9 @@ export interface InventorySnapshot {
   stockCostValue: number
   weightedMargin: number | null
   totalUnits: number
+  /** Techos reales del catalogo para los filtros de rango. */
+  maxSalePrice: number
+  maxStockQuantity: number
   branchScoped: boolean
   /** Las cifras son parciales: el barrido llego al tope. */
   truncated: boolean
@@ -173,6 +176,10 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
   // La API avisa cuando un filtro de stock deja el listado y el total
   // incompletos; ese aviso se perdia al leer solo `products` y `total`.
   const [listTruncated, setListTruncated] = useState(false)
+  // Categorias y proveedores fallaban en `console.error`: los selectores
+  // quedaban vacios, el formulario de producto los exige, y la pantalla no
+  // decia por que no se podia crear nada.
+  const [referenceDataError, setReferenceDataError] = useState<string | null>(null)
   
   // Paginación y Filtros
   const [page, setPage] = useState(initialPage)
@@ -199,6 +206,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
   const hasLoadedProductsRef = useRef(false)
 
   const fetchCategories = useCallback(async () => {
+    setReferenceDataError(null)
     try {
       const response = await fetch('/api/categories', { cache: 'no-store' })
       const payload = await response.json().catch(() => null)
@@ -213,6 +221,9 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
       })) as Category[])
     } catch (err) {
       console.error('Error fetching categories:', err)
+      setReferenceDataError(
+        err instanceof Error ? err.message : 'No se pudieron cargar las categorías.'
+      )
     }
   }, [])
 
@@ -231,6 +242,9 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
       })) as Supplier[])
     } catch (err) {
       console.error('Error fetching suppliers:', err)
+      setReferenceDataError(
+        err instanceof Error ? err.message : 'No se pudieron cargar los proveedores.'
+      )
     }
   }, [])
 
@@ -258,6 +272,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
           ? null
           : Number(payload.data.weightedMargin),
         totalUnits: Number(payload.data.totalUnits) || 0,
+        maxSalePrice: Number(payload.data.maxSalePrice) || 0,
+        maxStockQuantity: Number(payload.data.maxStockQuantity) || 0,
         branchScoped: Boolean(payload.data.branchScoped),
         truncated: Boolean(payload.data.truncated),
       })
@@ -531,6 +547,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     suppliers,
     snapshot,
     listTruncated,
+    referenceDataError,
     loading,
     isRefreshing,
     error,

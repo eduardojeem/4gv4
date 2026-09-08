@@ -50,6 +50,13 @@ export interface InventoryStats {
   weightedMargin: number | null
   /** Unidades totales en existencia. */
   totalUnits: number
+  /**
+   * Techos reales del catalogo, para que los filtros de rango no tengan que
+   * inventar uno. El deslizador de precio iba de 0 a 5.000: un tope heredado de
+   * un catalogo en dolares que en guaranies no filtra nada.
+   */
+  maxSalePrice: number
+  maxStockQuantity: number
 }
 
 export function calculateInventoryStats(products: InventoryStatsInput[]): InventoryStats {
@@ -58,6 +65,8 @@ export function calculateInventoryStats(products: InventoryStatsInput[]): Invent
   let stockCostValue = 0
   let stockSaleValue = 0
   let totalUnits = 0
+  let maxSalePrice = 0
+  let maxStockQuantity = 0
 
   for (const product of products) {
     const level = resolveStockLevel(product)
@@ -71,6 +80,8 @@ export function calculateInventoryStats(products: InventoryStatsInput[]): Invent
     totalUnits += stock
     stockCostValue += stock * cost
     stockSaleValue += stock * sale
+    if (sale > maxSalePrice) maxSalePrice = sale
+    if (stock > maxStockQuantity) maxStockQuantity = stock
   }
 
   return {
@@ -82,5 +93,7 @@ export function calculateInventoryStats(products: InventoryStatsInput[]): Invent
       ? ((stockSaleValue - stockCostValue) / stockSaleValue) * 100
       : null,
     totalUnits,
+    maxSalePrice,
+    maxStockQuantity,
   }
 }

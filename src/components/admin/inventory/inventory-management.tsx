@@ -94,18 +94,6 @@ interface ValidationError {
   message: string
 }
 
-interface SearchResult {
-  id: string
-  name: string
-  sku: string
-  category: string
-  supplier: string
-  price: number
-  stock: number
-  status: string
-  lastMovement: Date
-}
-
 interface AdvancedSearchFilter {
   id: string
   type: string
@@ -120,6 +108,7 @@ export default function InventoryManagement() {
     suppliers,
     snapshot,
     listTruncated,
+    referenceDataError,
     loading,
     isRefreshing,
     error,
@@ -149,7 +138,6 @@ export default function InventoryManagement() {
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
   const [successMessage, setSuccessMessage] = useState('')
   const [actionError, setActionError] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const categoryOptions = useMemo(
     () => categories.map((category) => ({ label: category.name, value: category.id })),
     [categories]
@@ -342,14 +330,17 @@ export default function InventoryManagement() {
         : 'all'
     const productStatus = statusFilter.find((status) => ['active', 'inactive', 'discontinued'].includes(status)) || 'all'
 
-    setSearchResults([])
     setPage(1)
     setActiveTab('products')
+    setSuccessMessage('Filtros aplicados al catálogo')
+    setTimeout(() => setSuccessMessage(''), 3000)
     setFilters(prev => ({
       ...prev,
       search,
-      category: categoriesFilter[0] || 'all',
-      supplier: suppliersFilter[0] || 'all',
+      // La seleccion completa, no solo la primera: elegias tres categorias y se
+      // usaba una mientras las tres fichas seguian en pantalla.
+      category: categoriesFilter.length > 0 ? categoriesFilter.join(',') : 'all',
+      supplier: suppliersFilter.length > 0 ? suppliersFilter.join(',') : 'all',
       status: productStatus,
       stockStatus,
       minPrice: priceRange && typeof priceRange[0] === 'number' ? priceRange[0] : null,
@@ -363,7 +354,6 @@ export default function InventoryManagement() {
   }
 
   const clearAdvancedSearch = () => {
-    setSearchResults([])
     setPage(1)
     setFilters(prev => ({
       ...prev,
@@ -416,6 +406,10 @@ export default function InventoryManagement() {
   const hasNextPage = page * pageSize < totalCount
   const rangeStart = totalCount === 0 ? 0 : ((page - 1) * pageSize) + 1
   const rangeEnd = totalCount === 0 ? 0 : Math.min(page * pageSize, totalCount)
+  // `filters.category` puede traer varios ids separados por coma desde la
+  // busqueda avanzada.
+  const multiCategoryCount = filters.category !== 'all' ? filters.category.split(',').length : 0
+
   const hasCatalogFilters = Boolean(
     filters.search.trim() || filters.category !== 'all' || filters.stockStatus !== 'all'
   )
@@ -437,6 +431,15 @@ export default function InventoryManagement() {
         <Alert className="border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800">
           <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
           <AlertDescription className="text-green-800 dark:text-green-300">{successMessage}</AlertDescription>
+        </Alert>
+      )}
+      {referenceDataError && (
+        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertDescription className="text-amber-800 dark:text-amber-300">
+            {referenceDataError} Los selectores de categoría y proveedor van a quedar vacíos, y el
+            formulario de producto los exige.
+          </AlertDescription>
         </Alert>
       )}
       {(error || actionError) && (
@@ -703,6 +706,14 @@ export default function InventoryManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas las categorías</SelectItem>
+                    {/* La busqueda avanzada puede dejar varias categorias
+                        aplicadas; el selector simple no puede representarlas,
+                        pero tampoco puede mentir diciendo «Todas». */}
+                    {multiCategoryCount > 1 && (
+                      <SelectItem value={filters.category}>
+                        {multiCategoryCount} categorías (desde búsqueda avanzada)
+                      </SelectItem>
+                    )}
                     {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -890,10 +901,11 @@ export default function InventoryManagement() {
           <AdvancedSearch
             onSearch={handleAdvancedSearch}
             onClearFilters={clearAdvancedSearch}
-            results={searchResults}
             isLoading={loading}
             categoryOptions={categoryOptions}
             supplierOptions={supplierOptions}
+            priceCeiling={snapshot?.maxSalePrice}
+            stockCeiling={snapshot?.maxStockQuantity}
           />
         </TabsContent>
 

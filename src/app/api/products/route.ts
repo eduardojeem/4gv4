@@ -66,8 +66,12 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const { searchParams } = new URL(request.url)
     
     const query = searchParams.get('query')
-    const categoryId = searchParams.get('category_id')
-    const supplierId = searchParams.get('supplier_id')
+    const parseIdList = (raw: string | null) => (raw || '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+    const categoryIds = parseIdList(searchParams.get('category_id'))
+    const supplierIds = parseIdList(searchParams.get('supplier_id'))
     const brand = searchParams.get('brand')
     const requestedStockStatus = searchParams.get('stock_status')
     const stockStatus = requestedStockStatus === 'low_stock' ||
@@ -146,12 +150,19 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       )
     }
     
-    if (categoryId) {
-      queryBuilder = queryBuilder.eq('category_id', categoryId)
+    // Acepta varios ids separados por coma: la busqueda avanzada ofrece
+    // multi-seleccion y antes el cliente mandaba solo el primero, descartando
+    // el resto en silencio mientras las fichas seguian en pantalla.
+    if (categoryIds.length === 1) {
+      queryBuilder = queryBuilder.eq('category_id', categoryIds[0])
+    } else if (categoryIds.length > 1) {
+      queryBuilder = queryBuilder.in('category_id', categoryIds)
     }
 
-    if (supplierId) {
-      queryBuilder = queryBuilder.eq('supplier_id', supplierId)
+    if (supplierIds.length === 1) {
+      queryBuilder = queryBuilder.eq('supplier_id', supplierIds[0])
+    } else if (supplierIds.length > 1) {
+      queryBuilder = queryBuilder.in('supplier_id', supplierIds)
     }
     
     if (brand) {
