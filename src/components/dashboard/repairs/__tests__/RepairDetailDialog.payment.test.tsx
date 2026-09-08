@@ -109,6 +109,8 @@ describe('RepairDetailDialog payment summary', () => {
     )
 
     expect(screen.getByText('Pago parcial')).toBeInTheDocument()
+    expect(screen.getByText('Entregado con saldo pendiente')).toBeVisible()
+    expect(screen.getByText(/Falta.*60/)).toBeVisible()
     const paymentMessage = within(screen.getByRole('region', { name: 'Estado del pago' })).getByRole('status')
     expect(paymentMessage).toHaveTextContent(/Anticipo recibido:.*40/)
     expect(paymentMessage).toHaveTextContent(/Saldo pendiente al entregar:.*60/)

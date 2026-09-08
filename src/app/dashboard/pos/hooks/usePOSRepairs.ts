@@ -11,8 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { RealtimeChannel } from '@supabase/supabase-js'
-import { createClient as createSupabaseClient } from '@/lib/supabase/client'
+import { useBranch } from '@/contexts/branch-context'
 import { getRepairBalanceDue, type ChargeableRepair } from '../lib/repair-charge'
 import { calculateRepairTotal } from '@/lib/pos-calculator'
 import type { CartItem } from '../types'
@@ -77,6 +76,7 @@ export function usePOSRepairs({
   isCheckoutOpen,
   taxPercentage,
 }: UsePOSRepairsOptions): UsePOSRepairsReturn {
+  const { selectedBranchId } = useBranch()
   const [customerRepairs, setCustomerRepairs] = useState<any[]>([])
   const [manualRepairs, setManualRepairs] = useState<PosCartRepair[]>([])
   const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([])
@@ -91,72 +91,18 @@ export function usePOSRepairs({
       return
     }
 
-    const supabase = createSupabaseClient()
-    let canSubscribe = true
-
     const loadRepairs = async () => {
-      const { data, error }: any = await supabase
-        .from('repairs')
-        .select(
-          'id, device_brand, device_model, status, payment_status, paid_amount, created_at, final_cost, estimated_cost, notes:problem_description, customer_id'
-        )
-        .eq('customer_id', selectedCustomer)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        const msg: string = error.message || ''
-        const missingTable =
-          msg.includes("Could not find the table 'public.repairs'") ||
-          msg.includes('relation "repairs" does not exist')
-        if (missingTable) {
-          console.warn('Tabla repairs no encontrada en Supabase; usando lista vacía para el cliente.')
-          canSubscribe = false
-          setCustomerRepairs([])
-        } else {
-          console.error('Error cargando reparaciones del cliente:', msg)
-        }
-        return
-      }
-      setCustomerRepairs(data || [])
+      const branchQuery = selectedBranchId && selectedBranchId !== 'all' ? `&branch_id=${encodeURIComponent(selectedBranchId)}` : ''
+      const response = await fetch(`/api/customers/${selectedCustomer}/repairs?limit=20${branchQuery}`, { cache: 'no-store' })
+      const payload = await response.json().catch(() => null) as { repairs?: Array<Record<string, unknown>>; error?: string } | null
+      if (!response.ok || !Array.isArray(payload?.repairs)) throw new Error(payload?.error || 'No se pudieron cargar las reparaciones')
+      setCustomerRepairs(payload.repairs.map(repair => ({ ...repair, notes: repair.problem_description })))
     }
-
-    loadRepairs()
-
-    let channel: RealtimeChannel | null = null
-    if (canSubscribe) {
-      // Nombre único de canal por cliente para evitar mezclar eventos entre pestañas
-      channel = supabase
-        .channel(`repairs-pos-${selectedCustomer}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'repairs' },
-          (payload: any) => {
-            const row = payload.new || payload.old
-            if (!row || row.customer_id !== selectedCustomer) return
-
-            if (payload.eventType === 'DELETE') {
-              setCustomerRepairs(prev => prev.filter(r => r.id !== row.id))
-              setSelectedRepairIds(prev => prev.filter(id => id !== row.id))
-              return
-            }
-
-            setCustomerRepairs(prev => {
-              const idx = prev.findIndex(r => r.id === row.id)
-              const mapped = { ...row, notes: row.problem_description }
-              if (idx === -1) return [mapped, ...prev]
-              const copy = [...prev]
-              copy[idx] = mapped
-              return copy
-            })
-          }
-        )
-        .subscribe()
-    }
-
-    return () => {
-      if (channel) channel.unsubscribe()
-    }
-  }, [selectedCustomer])
+    loadRepairs().catch(error => {
+      console.warn('No se pudieron cargar reparaciones del cliente en el POS:', error)
+      setCustomerRepairs([])
+    })
+  }, [selectedCustomer, selectedBranchId])
 
   // --- Toggles de entrega ---
   useEffect(() => {

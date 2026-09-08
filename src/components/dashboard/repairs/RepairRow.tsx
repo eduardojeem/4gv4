@@ -29,6 +29,8 @@ import { printRepairReceipt, RepairPrintPayload } from '@/lib/repair-receipt'
 import { useWhatsApp } from '@/hooks/useWhatsApp'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
+import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
+import { RepairPaymentIndicator } from './RepairPaymentIndicator'
 
 interface RepairPrintCompanyInfo {
   name: string
@@ -97,7 +99,13 @@ export const RepairRow = memo<RepairRowProps>(
       toast.success(`${actionName} enviado por WhatsApp`)
     }
 
-    const pendingAmount = (repair.finalCost || 0) - (repair.paidAmount || 0)
+    const financial = getRepairFinancialPresentation({
+      status: repair.status,
+      finalCost: repair.finalCost,
+      estimatedCost: repair.estimatedCost,
+      paidAmount: repair.paidAmount,
+    })
+    const pendingAmount = financial.balance ?? 0
 
     const getPrintPayload = (): RepairPrintPayload => {
       return {
@@ -187,18 +195,27 @@ export const RepairRow = memo<RepairRowProps>(
         </TableCell>
 
         <TableCell>
-          <Badge
-            variant="outline"
-            className={cn(
-              'flex w-fit items-center gap-1.5 font-medium',
-              statusConfig[repair.status].color
-            )}
-          >
-            <StatusIcon className="h-3 w-3" />
-            <span className="hidden sm:inline">
-              {statusConfig[repair.status].label}
-            </span>
-          </Badge>
+          <div className="flex min-w-[150px] flex-col items-start gap-1.5">
+            <Badge
+              variant="outline"
+              className={cn(
+                'flex w-fit items-center gap-1.5 font-medium',
+                statusConfig[repair.status].color
+              )}
+            >
+              <StatusIcon className="h-3 w-3" />
+              <span className="hidden sm:inline">
+                {statusConfig[repair.status].label}
+              </span>
+            </Badge>
+            <RepairPaymentIndicator
+              compact
+              status={repair.status}
+              finalCost={repair.finalCost}
+              estimatedCost={repair.estimatedCost}
+              paidAmount={repair.paidAmount}
+            />
+          </div>
         </TableCell>
 
         <TableCell className="hidden lg:table-cell">
@@ -429,6 +446,9 @@ export const RepairRow = memo<RepairRowProps>(
     
     // Check most frequently changing properties first
     if (prev.status !== next.status) return false
+    if (prev.paidAmount !== next.paidAmount) return false
+    if (prev.finalCost !== next.finalCost) return false
+    if (prev.estimatedCost !== next.estimatedCost) return false
     if (prev.priority !== next.priority) return false
     if (prev.lastUpdate !== next.lastUpdate) return false
     

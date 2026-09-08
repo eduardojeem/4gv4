@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMockProduct } from '@/test/setup'
 
@@ -241,8 +241,7 @@ describe('POS Workflow Integration', () => {
       expect(quantityInput).toBeInTheDocument()
       expect(quantityInput).toHaveValue(1)
       
-      await user.clear(quantityInput)
-      await user.type(quantityInput, '3')
+      fireEvent.change(quantityInput, { target: { value: '3' } })
       
       // Verificar que se actualizó el total
       await waitFor(() => {
@@ -277,8 +276,7 @@ describe('POS Workflow Integration', () => {
       expect(quantityInput).toHaveValue(1)
       
       // Intentar modificar cantidad a 2 (dentro del stock disponible)
-      await user.clear(quantityInput)
-      await user.type(quantityInput, '2')
+      fireEvent.change(quantityInput, { target: { value: '2' } })
       
       // Verificar que el input se actualiza correctamente
       await waitFor(() => {

@@ -25,6 +25,10 @@ type RouteBody = {
 
 type NormalizedItem = {
   product_id: string
+  variant_id: string | null
+  variant_name: string | null
+  variant_sku: string | null
+  variant_attributes: unknown
   quantity: number
   discount_amount: number
 }
@@ -49,22 +53,31 @@ function finiteNumber(value: unknown) {
 }
 
 function normalizeItems(value: unknown): NormalizedItem[] | null {
-  if (!Array.isArray(value)) return null
+  if (!Array.isArray(value) || value.length > 200) return null
 
   const items: NormalizedItem[] = []
   for (const entry of value) {
     if (!entry || typeof entry !== 'object') return null
     const row = entry as JsonRecord
     const productId = typeof row.product_id === 'string' ? row.product_id.trim() : ''
+    const variantId = typeof row.variant_id === 'string' && row.variant_id.trim() ? row.variant_id.trim() : null
     const quantity = finiteNumber(row.quantity)
     const discountAmount = finiteNumber(row.discount_amount ?? 0)
 
-    if (!UUID_PATTERN.test(productId) || quantity === null || !Number.isInteger(quantity) || quantity <= 0) {
+    if (!UUID_PATTERN.test(productId) || (variantId !== null && !UUID_PATTERN.test(variantId)) || quantity === null || !Number.isInteger(quantity) || quantity <= 0) {
       return null
     }
     if (discountAmount === null || discountAmount < 0) return null
 
-    items.push({ product_id: productId, quantity, discount_amount: discountAmount })
+    items.push({
+      product_id: productId,
+      variant_id: variantId,
+      variant_name: typeof row.variant_name === 'string' ? row.variant_name.trim().slice(0, 160) || null : null,
+      variant_sku: typeof row.variant_sku === 'string' ? row.variant_sku.trim().slice(0, 120) || null : null,
+      variant_attributes: row.variant_attributes ?? null,
+      quantity,
+      discount_amount: discountAmount,
+    })
   }
   return items
 }
@@ -224,6 +237,10 @@ function errorResponse(error: { message?: string; details?: string; hint?: strin
     ['PAYMENTS_REQUIRED', 'Debés ingresar al menos una forma de pago para confirmar.', 400],
     ['INVALID_ORDER_QUANTITY', 'La cantidad de productos debe ser mayor a 0.', 400],
     ['PRODUCT_NOT_IN_ORGANIZATION', 'Uno de los productos no pertenece a esta organización.', 400],
+    ['VARIANT_NOT_IN_POS_SCOPE', 'La variante seleccionada no está activa o no tiene stock configurado en esta sucursal.', 409],
+    ['VARIANT_STOCK_INSUFFICIENT', 'No hay stock suficiente de la variante seleccionada.', 409],
+    ['VARIANT_PRICE_REQUIRES_SYNC', 'El precio de la variante no coincide con el precio del producto. Actualizá el catálogo antes de cobrar.', 409],
+    ['POS_VARIANT_MIXED_WITH_PARENT', 'No se puede cobrar el producto general y una de sus variantes en la misma venta.', 400],
     ['POS_TOTAL_MUST_BE_POSITIVE', 'El total de la venta debe ser mayor a 0.', 400],
     ['CREDIT_CUSTOMER_REQUIRED', 'Seleccioná un cliente para registrar una venta a crédito.', 400],
     ['CREDIT_LIMIT_EXCEEDED', 'El cliente no tiene límite de crédito suficiente disponible.', 409],
@@ -248,15 +265,15 @@ function errorResponse(error: { message?: string; details?: string; hint?: strin
   // separa el codigo tecnico del mensaje: la persona entiende que hacer y el
   // codigo queda disponible para reportarlo.
   const bareCode = rawMessage?.trim().match(/^[A-Z][A-Z0-9_]{4,}$/)?.[0] ?? null
+  const correlationId = crypto.randomUUID()
+  console.error('[pos/process-sale] Unexpected atomic sale error:', { correlationId, code: error?.code })
   const fallbackError = bareCode
     ? `La venta no se pudo registrar por una validación del sistema (${bareCode}). No se cobró nada. Revisá el estado de las reparaciones y del cliente, o pasá este código a soporte.`
-    : rawMessage
-      ? `No se pudo registrar la venta: ${rawMessage}`
-      : 'No se pudo completar la venta. Verificá los datos de la transacción.'
+    : `No se pudo completar la venta. No se cobró nada. Código: ${correlationId}`
 
   return NextResponse.json({ 
     success: false, 
-    code: bareCode,
+    code: bareCode || correlationId,
     error: fallbackError 
   }, { status: 500 })
 }
@@ -348,7 +365,7 @@ export const POST = withTenantAuth(
     const taxRate = await getTaxRate(supabase, organization.id)
     const code = `POS-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
     
-    let rpcResponse = await supabase.rpc('process_pos_sale_atomic_v4', {
+    let rpcResponse = await supabase.rpc('process_pos_sale_atomic_v5', {
       p_organization_id: organization.id,
       p_branch_id: branchScope.branchId,
       p_actor_id: user.id,
@@ -370,9 +387,10 @@ export const POST = withTenantAuth(
       p_store_credit_amount: storeCreditAmount,
     })
 
-    // Fallback a v3 si v4 aún no está cargada en la base de datos y no se utilizó saldo a favor
-    if (storeCreditAmount <= 0 && rpcResponse.error && (rpcResponse.error.message?.includes('process_pos_sale_atomic_v4') || rpcResponse.error.code === '42883')) {
-      rpcResponse = await supabase.rpc('process_pos_sale_atomic_v3', {
+    // Compatibilidad durante el despliegue: nunca degradar una venta con
+    // variantes a una función que no descuenta su inventario específico.
+    if (!items.some(item => item.variant_id) && rpcResponse.error && (rpcResponse.error.message?.includes('process_pos_sale_atomic_v5') || rpcResponse.error.code === '42883')) {
+      rpcResponse = await supabase.rpc('process_pos_sale_atomic_v4', {
         p_organization_id: organization.id,
         p_branch_id: branchScope.branchId,
         p_actor_id: user.id,
@@ -391,6 +409,7 @@ export const POST = withTenantAuth(
         p_repair_ids: repairIds,
         p_mark_repairs_delivered: body.p_mark_repairs_delivered === true,
         p_delivery_outcome: typeof body.p_delivery_outcome === 'string' ? body.p_delivery_outcome.slice(0, 120) : null,
+        p_store_credit_amount: storeCreditAmount,
       })
     }
 

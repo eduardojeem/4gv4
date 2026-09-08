@@ -26,19 +26,22 @@ export async function GET(
     const { id: customerId } = await context.params
     const { searchParams } = new URL(request.url)
     const requestedLimit = Number(searchParams.get('limit') || 10)
+    const branchId = searchParams.get('branch_id')?.trim() || null
     const limit = Number.isFinite(requestedLimit)
       ? Math.max(1, Math.min(Math.trunc(requestedLimit), 20))
       : 10
 
     const supabase = createAdminSupabase()
 
-    const { data: repairs, error } = await supabase
+    let repairsQuery = supabase
       .from('repairs')
       .select('id, ticket_number, device_brand, device_model, problem_description, status, final_cost, estimated_cost, paid_amount, payment_status, delivered_at, created_at')
       .eq('customer_id', customerId)
       .eq('organization_id', organization.id)
       .order('created_at', { ascending: false })
       .limit(limit)
+    if (branchId) repairsQuery = repairsQuery.eq('branch_id', branchId)
+    const { data: repairs, error } = await repairsQuery
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })

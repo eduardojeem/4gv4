@@ -66,6 +66,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { CustomerQuickCreateDialog, type QuickCustomerData } from './CustomerQuickCreateDialog'
 import { CustomerDetailModal } from './CustomerDetailModal'
 import { ReceptionSiblings } from './ReceptionSiblings'
+import { RepairPaymentIndicator } from './RepairPaymentIndicator'
 import type { Customer as FullCustomer } from '@/hooks/use-customers'
 
 interface RepairDetailDialogProps {
@@ -530,6 +531,14 @@ export function RepairDetailDialog({
                     <StatusIcon className="h-3 w-3" />
                     {statusConfig[repair.status]?.label || repair.status || 'En Proceso'}
                   </Badge>
+                  <RepairPaymentIndicator
+                    compact
+                    className="max-w-full"
+                    status={repair.status}
+                    finalCost={repair.finalCost}
+                    estimatedCost={repair.estimatedCost}
+                    paidAmount={repair.paidAmount}
+                  />
                   {(repair.priority ? priorityConfig[repair.priority] : null) ? (
                     <Badge variant="outline" className={cn('max-sm:hidden rounded-md text-[11px] font-semibold py-0', priorityConfig[repair.priority]?.color)}>
                       {priorityConfig[repair.priority]?.label}

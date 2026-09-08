@@ -7,6 +7,7 @@ const migrationPath = resolve(
   'supabase/migrations/20260811190000_create_finance_foundation.sql',
 )
 const sql = readFileSync(migrationPath, 'utf8').toLowerCase()
+const normalizedSql = sql.replace(/\s+/g, ' ')
 
 function tableDefinition(tableName: string): string {
   const definition = sql.match(
@@ -188,8 +189,8 @@ describe('admin finance database foundation', () => {
     expect(sql).toContain('function public.generate_all_recurring_finance_obligations')
     expect(sql).toContain('user_has_branch_access(template.branch_id, actor_id)')
     expect(sql).not.toContain('p_organization_id uuid default null')
-    expect(sql).toContain(
-      'grant execute on function public.generate_all_recurring_finance_obligations(date)\nto service_role',
+    expect(normalizedSql).toContain(
+      'grant execute on function public.generate_all_recurring_finance_obligations(date) to service_role',
     )
   })
 
@@ -212,7 +213,7 @@ describe('admin finance database foundation', () => {
     )
     expect(sql).toContain('p_idempotency_key text')
     expect(sql).toContain('finance_idempotency_key_reused')
-    expect(sql).toContain('if found then\n    return jsonb_build_object(')
+    expect(normalizedSql).toContain('if found then return jsonb_build_object(')
   })
 
   it('refreshes cash-session activity for finance cash postings', () => {

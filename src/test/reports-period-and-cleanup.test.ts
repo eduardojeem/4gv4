@@ -65,20 +65,17 @@ describe('el informe distingue ingresadas de entregadas', () => {
  */
 describe('los carritos ya no inventan el nombre de la tienda', () => {
   const CARRITOS = leer('src/components/profile/profile-store-carts.tsx')
+  const SYNC = leer('src/hooks/use-synced-marketplace-carts.ts')
 
-  it('usa el nombre real que guardan los favoritos', () => {
-    expect(CARRITOS).toContain("import { useFavorites } from '@/lib/public/favorites-store'")
-    expect(CARRITOS).toContain('if (favorite.slug && favorite.store) map.set(favorite.slug, favorite.store)')
+  it('usa el nombre real devuelto por la sincronizacion del carrito', () => {
+    expect(CARRITOS).toContain("import { useSyncedMarketplaceCarts } from '@/hooks/use-synced-marketplace-carts'")
+    expect(SYNC).toContain('displayName: result.organization.name')
   })
 
-  it('el nombre real gana al titulo armado desde el slug', () => {
-    // El titulo queda como respaldo: se lee mejor que un slug crudo, pero pierde
-    // los acentos y no es el nombre que la tienda eligio.
-    const bloque = CARRITOS.slice(CARRITOS.indexOf('function getStoreDisplayName'))
-    expect(bloque.indexOf('const realName = realNames.get(slug)')).toBeLessThan(
-      bloque.indexOf(".map((word) => word.charAt(0).toUpperCase() + word.slice(1))")
-    )
-    expect(bloque).toContain('if (realName) return realName')
+  it('renderiza el nombre y logo canonicos que entrega la API', () => {
+    expect(CARRITOS).toContain('{cart.displayName}')
+    expect(CARRITOS).toContain('{cart.logoUrl ? (')
+    expect(SYNC).toContain('logoUrl: result.organization.logo_url')
   })
 })
 

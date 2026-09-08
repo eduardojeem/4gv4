@@ -8,6 +8,7 @@ const migrationPath = resolve(
   'supabase/migrations/20260811193000_create_payroll_commissions.sql',
 )
 const sql = readFileSync(migrationPath, 'utf8').toLowerCase()
+const normalizedSql = sql.replace(/\s+/g, ' ')
 
 function tableDefinition(tableName: string): string {
   const definition = sql.match(
@@ -223,7 +224,7 @@ describe('organization payroll and commission database', () => {
     expect(sql).toMatch(
       /generate_series\(\s*p_period_from,\s*p_period_to,\s*interval '1 day'/,
     )
-    expect(sql).toContain('not exists (\n          select 1\n          from public.payroll_entry_commissions')
+    expect(normalizedSql).toContain('not exists ( select 1 from public.payroll_entry_commissions')
     expect(sql).toContain('payroll_generation_idempotency_key_reused')
     expect(sql).toContain('payroll_period_already_generated')
     expect(sql).toContain("p_organization_id::text || ':payroll-run'")
@@ -330,7 +331,7 @@ describe('organization payroll and commission database', () => {
     expect(sql).toContain('open_cash_session_not_found')
     expect(sql).toContain('payroll_overpayment')
     expect(sql).toContain('payroll_payment_idempotency_key_reused')
-    expect(sql).toContain('if found then\n    return jsonb_build_object(')
+    expect(normalizedSql).toContain('if found then return jsonb_build_object(')
   })
 
   it('enforces organization and branch isolation with least privileges', () => {
@@ -407,7 +408,7 @@ describe('organization payroll and commission database', () => {
 
   it('keeps payroll cash rows private from POS-only readers and writers', () => {
     expect(sql).toContain('cash_movements_authenticated_source_guard')
-    expect(sql).toContain('finance_payment_id is null\n  and payroll_payment_id is null')
+    expect(normalizedSql).toContain('finance_payment_id is null and payroll_payment_id is null')
     expect(sql).toContain('cash_movements_finance_aware_read')
     expect(sql).toContain('payroll_payment_id is not null')
     expect(sql).toContain("public.has_org_permission(organization_id, 'finances.read')")

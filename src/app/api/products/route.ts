@@ -231,11 +231,29 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     
     const baseProducts = (products || []) as Array<Record<string, unknown> & { id: string; stock_quantity?: number | null }>
     const branchInventoryClient = supabase as unknown as Parameters<typeof loadBranchInventoryStockMap>[0]
-    const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
-      branchInventoryClient,
-      branchScope.branchId,
-      baseProducts.map((product) => product.id)
-    )
+    const { stockMap, branchScoped, failed: branchStockFailed, error: branchStockError } =
+      await loadBranchInventoryStockMap(
+        branchInventoryClient,
+        branchScope.branchId,
+        baseProducts.map((product) => product.id)
+      )
+    // Se pidio el stock de una sucursal y no se pudo leer. Devolver el stock
+    // global bajo un encabezado que dice el nombre de la sucursal es peor que
+    // no devolver nada: el mismo criterio que ya usa POST /api/orders.
+    if (branchScope.branchId && branchStockFailed) {
+      logger.error('Branch stock read failed for products listing', {
+        branchId: branchScope.branchId,
+        error: branchStockError,
+      })
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'BRANCH_STOCK_UNAVAILABLE',
+          error: 'No se pudo leer el inventario de la sucursal activa. Reintenta o cambia de sucursal.',
+        },
+        { status: 503 }
+      )
+    }
     const cappedProducts = baseProducts.slice(0, IN_MEMORY_STOCK_FILTER_CAP)
     const branchAwareProducts = strictBranchStock && branchScope.branchId
       ? cappedProducts.map((product) => {

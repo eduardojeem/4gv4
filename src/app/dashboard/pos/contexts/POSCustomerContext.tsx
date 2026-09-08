@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, useMemo, useCallback, ReactNode } from 'react'
 import { toast } from 'sonner'
-import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 
 interface POSCustomerContextType {
@@ -70,6 +69,7 @@ interface ApiCustomerRow {
   total_repairs?: unknown
   current_balance?: unknown
   credit_limit?: unknown
+  discount_percentage?: unknown
 }
 
 function textValue(value: unknown) {
@@ -93,6 +93,7 @@ function mapApiCustomer(row: ApiCustomerRow) {
     total_repairs: Number(row.total_repairs) || 0,
     current_balance: Number(row.current_balance) || 0,
     credit_limit: Number(row.credit_limit) || 0,
+    discount_percentage: Math.min(100, Math.max(0, Number(row.discount_percentage) || 0)),
   }
 }
 
@@ -210,39 +211,14 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const supabase = createSupabaseClient()
-
-        // Execute all independent queries in parallel
-        const [salesResult, repairsResult, creditsResult] = await Promise.all([
-          supabase.from('sales').select('total_amount').eq('customer_id', selectedCustomer),
-          supabase.from('repairs').select('id', { count: 'exact', head: true }).eq('customer_id', selectedCustomer),
-          supabase.from('customer_credits').select('id,status').eq('customer_id', selectedCustomer),
-        ])
-
-        const totalPurchases = salesResult.data?.length || 0
-        const totalSpent = (salesResult.data || []).reduce((sum: number, s: any) => sum + (Number(s.total_amount) || 0), 0)
-        const totalRepairs = repairsResult.count || 0
-
-        // Only fetch installments if there are credits (avoids unnecessary query)
-        let outstanding = 0
-        const creditIds = (creditsResult.data || []).map((c: any) => c.id)
-        if (creditIds.length > 0) {
-          const { data: installments } = await supabase
-            .from('credit_installments')
-            .select('amount,status')
-            .in('credit_id', creditIds)
-            .eq('status', 'pending')
-
-          outstanding = (installments || []).reduce((sum: number, i: any) => sum + (Number(i.amount) || 0), 0)
-        }
-
-        const loyaltyPoints = Math.floor((totalSpent || 0) / 10)
-
+        const response = await fetch(`/api/customers/${selectedCustomer}/metrics`, { cache: 'no-store' })
+        const payload = await response.json().catch(() => null) as { metrics?: { purchases?: number; repairs?: number; creditBalance?: number; loyaltyPoints?: number | null }; error?: string } | null
+        if (!response.ok || !payload?.metrics) throw new Error(payload?.error || 'No se pudieron cargar las métricas')
         const metrics = {
-          total_purchases: totalPurchases,
-          total_repairs: totalRepairs,
-          current_balance: outstanding,
-          loyalty_points: loyaltyPoints,
+          total_purchases: Number(payload.metrics.purchases) || 0,
+          total_repairs: Number(payload.metrics.repairs) || 0,
+          current_balance: Number(payload.metrics.creditBalance) || 0,
+          ...(payload.metrics.loyaltyPoints == null ? {} : { loyalty_points: Number(payload.metrics.loyaltyPoints) || 0 }),
           last_visit: new Date().toISOString(),
         }
 

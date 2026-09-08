@@ -269,6 +269,7 @@ export function RepairDeliveryDialog({
 
   const parsedAmount = parseFloat(amount) || 0
   const wantsCharge = step === 'payment' && allowPayment && parsedAmount > 0
+  const amountExceedsBalance = wantsCharge && parsedAmount > balanceDue
   // Guardrail: si queda saldo y no se va a cobrar nada, hay que confirmar a
   // propósito que se entrega igual (fiado). Antes esto pasaba en silencio.
   // No aplica donde no se ofrece cobro (allowPayment=false): ahí la entrega
@@ -284,7 +285,8 @@ export function RepairDeliveryDialog({
   const creditCount = Math.max(1, Math.floor(Number(installmentCount) || 0))
 
   const canConfirm = !!selected && !isSubmitting && (selected === 'repaired'
-    ? (!needsUnpaidConfirm || deliverUnpaid) &&
+    ? !amountExceedsBalance &&
+      (!needsUnpaidConfirm || deliverUnpaid) &&
       (!wantsCharge || ((!selectedMethod?.requiresRef || reference.trim().length > 0) && (!isCredit || creditCount >= 1)))
     : !!unrepairedDraft && isUnrepairedCloseoutDraftComplete(repair!, unrepairedDraft)) &&
     (!requiresOpenRegister || cashStatus === 'open')
@@ -658,9 +660,16 @@ export function RepairDeliveryDialog({
                     onChange={e => setAmount(parseThousands(e.target.value).toString())}
                     placeholder={formatThousands(balanceDue)}
                     className="pl-7 font-bold font-mono text-sm"
+                    aria-invalid={amountExceedsBalance}
+                    aria-describedby={amountExceedsBalance ? 'delivery-pay-amount-error' : undefined}
                     disabled={isSubmitting}
                   />
                 </div>
+                {amountExceedsBalance && (
+                  <p id="delivery-pay-amount-error" role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                    El monto supera el saldo pendiente de {formatCurrency(balanceDue)}.
+                  </p>
+                )}
               </div>
 
               {isCredit && (

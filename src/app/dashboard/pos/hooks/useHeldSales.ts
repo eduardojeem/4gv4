@@ -22,9 +22,8 @@ export interface HeldSale {
   note?: string
 }
 
-const STORAGE_KEY = 'pos.heldSales'
-
-export function useHeldSales() {
+export function useHeldSales(storageScope = 'anonymous:unselected') {
+  const storageKey = `pos.heldSales:${storageScope}`
   const [heldSales, setHeldSales] = useState<HeldSale[]>([])
   const [isInitialized, setIsInitialized] = useState(false)
 
@@ -32,7 +31,7 @@ export function useHeldSales() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
+      const raw = localStorage.getItem(storageKey)
       if (raw) {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed)) {
@@ -44,18 +43,18 @@ export function useHeldSales() {
     } finally {
       setIsInitialized(true)
     }
-  }, [])
+  }, [storageKey])
 
   // Persist to localStorage whenever heldSales changes
   const persistSales = useCallback((sales: HeldSale[]) => {
     if (typeof window === 'undefined') return
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sales.slice(0, 30)))
+      localStorage.setItem(storageKey, JSON.stringify(sales.slice(0, 30)))
       setHeldSales(sales)
     } catch (e) {
       console.error('Error saving held sales to localStorage', e)
     }
-  }, [])
+  }, [storageKey])
 
   // Park / Hold current sale
   const parkSale = useCallback((

@@ -219,6 +219,29 @@ describe('RepairDeliveryDialog', () => {
     }))
   })
 
+  it('blocks confirmation and explains when the entered payment exceeds the balance', async () => {
+    const onConfirm = vi.fn().mockResolvedValue(undefined)
+    render(
+      <RepairDeliveryDialog
+        open
+        repair={{ ...repair, paidAmount: 40 }}
+        onOpenChange={vi.fn()}
+        onConfirm={onConfirm}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
+    expect(await screen.findByText('Caja abierta')).toBeVisible()
+    fireEvent.change(screen.getByLabelText('Monto a cobrar'), { target: { value: '70' } })
+
+    expect(screen.getByLabelText('Monto a cobrar')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('alert')).toHaveTextContent('El monto supera el saldo pendiente de 60.')
+    expect(screen.getByRole('button', { name: /Cobrar y Entregar/i })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Cobrar y Entregar/i }))
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
   it('opens the register without losing the delivery payment draft', async () => {
     cashRegisterMocks.checkOpenSession
       .mockResolvedValueOnce(null)

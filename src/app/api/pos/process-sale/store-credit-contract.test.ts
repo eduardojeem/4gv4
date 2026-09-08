@@ -9,7 +9,7 @@ describe('atomic POS store-credit contract', () => {
     const route = readFileSync(resolve(workspace, 'src/app/api/pos/process-sale/route.ts'), 'utf8')
 
     expect(route).toContain('p_store_credit_amount?: unknown')
-    expect(route).toContain("rpc('process_pos_sale_atomic_v4'")
+    expect(route).toContain("rpc('process_pos_sale_atomic_v5'")
     expect(route).toContain('p_store_credit_amount: storeCreditAmount')
     expect(route).toContain('STORE_CREDIT_CUSTOMER_REQUIRED')
     expect(route).toContain('STORE_CREDIT_EXCEEDS_BALANCE')
@@ -52,10 +52,11 @@ describe('atomic POS store-credit contract', () => {
     expect(processor).toContain("method: 'store_credit' as const")
   })
 
-  it('never falls back to v3 when store credit must be debited', () => {
+  it('never falls back to a transaction without store-credit support', () => {
     const route = readFileSync(resolve(workspace, 'src/app/api/pos/process-sale/route.ts'), 'utf8')
 
-    expect(route).toContain('storeCreditAmount <= 0 && rpcResponse.error')
+    expect(route).toContain("rpc('process_pos_sale_atomic_v4'")
+    expect(route).not.toContain("rpc('process_pos_sale_atomic_v3'")
   })
 
   it('keeps checkout open while processing and exposes a mobile action bar', () => {

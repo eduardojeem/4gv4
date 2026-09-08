@@ -12,6 +12,7 @@ interface CartConfig {
   taxRate?: number
   pricesIncludeTax?: boolean
   maxQuantityPerItem?: number
+  storageScope?: string
 }
 
 interface UseOptimizedCartReturn {
@@ -62,8 +63,10 @@ export const useOptimizedCart = (
   const { 
     taxRate = 0.19, 
     pricesIncludeTax = true,
-    maxQuantityPerItem = 999 
+    maxQuantityPerItem = 999,
+    storageScope = 'anonymous:unselected',
   } = config
+  const storageKey = `pos.cart:${storageScope}`
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [isWholesale, setIsWholesale] = useState(false)
@@ -74,7 +77,7 @@ export const useOptimizedCart = (
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      const savedCart = localStorage.getItem('pos.cart')
+      const savedCart = localStorage.getItem(storageKey)
       if (savedCart) {
         const parsed = JSON.parse(savedCart)
         if (Array.isArray(parsed)) {
@@ -86,17 +89,17 @@ export const useOptimizedCart = (
     } finally {
       setIsLoaded(true)
     }
-  }, [])
+  }, [storageKey])
 
   // Persistencia en localStorage: Guardar
   useEffect(() => {
     if (typeof window === 'undefined' || !isLoaded) return
     try {
-      localStorage.setItem('pos.cart', JSON.stringify(cart))
+      localStorage.setItem(storageKey, JSON.stringify(cart))
     } catch (e) {
       console.error('Error saving cart to localStorage:', e)
     }
-  }, [cart, isLoaded])
+  }, [cart, isLoaded, storageKey])
 
   /**
    * Helper para identificar ítems de servicio o reparaciones sin control de stock físico
@@ -210,6 +213,11 @@ export const useOptimizedCart = (
 
     const normalizedItem: CartItem = {
       id: cartItem.variant_id || cartItem.sku || cartItem.id,
+      productId: cartItem.product_id,
+      variantId: cartItem.variant_id,
+      variantName: cartItem.variant_name,
+      variantSku: cartItem.sku,
+      variantAttributes: cartItem.variant_attributes,
       name: cartItem.name || cartItem.product_name || productRef?.name || 'Producto',
       sku: cartItem.sku || productRef?.sku || '',
       price: Number(cartItem.price || productRef?.sale_price || 0),
@@ -253,9 +261,7 @@ export const useOptimizedCart = (
     setCart(prev => prev.filter(item => item.id !== productId))
   }, [])
 
-  /**
-   * Actualizar cantidad con descuentos automáticos
-   */
+  /** Actualizar cantidad. Los descuentos provienen del cliente o promociones configuradas. */
   const updateQuantity = useCallback((id: string, quantity: number) => {
     if (quantity <= 0) {
       setCart(prev => prev.filter(item => item.id !== id))
@@ -264,7 +270,13 @@ export const useOptimizedCart = (
     }
 
     const isService = isServiceItem(id)
-    if (!isService && !checkAvailability(id, quantity)) {
+    const currentCartItem = cart.find(item => item.id === id)
+    const availableStock = Number(currentCartItem?.stock ?? 0)
+    if (!isService && currentCartItem?.variantId && quantity > availableStock) {
+      toast.error(`Stock insuficiente para esta variante. Disponible: ${availableStock}`)
+      return
+    }
+    if (!isService && !currentCartItem?.variantId && !checkAvailability(id, quantity)) {
       const currentProduct = inventoryProducts.find(p => p.id === id)
       toast.error(`Stock insuficiente. Disponible: ${currentProduct?.stock_quantity || 0}`)
       return
@@ -272,29 +284,16 @@ export const useOptimizedCart = (
 
     setCart(prev => prev.map(item => {
       if (item.id === id) {
-        // LÃ³gica de descuento por volumen (bulk discount)
-        let autoDiscount = 0
-        if (quantity >= 50) autoDiscount = 15
-        else if (quantity >= 20) autoDiscount = 10
-        else if (quantity >= 10) autoDiscount = 5
-
-        // Mantener descuento manual si es mayor
-        const finalDiscount = Math.max(autoDiscount, item.discount || 0)
-
-        if (autoDiscount > (item.discount || 0)) {
-          // toast.success(`Â¡Descuento por cantidad aplicado: ${autoDiscount}%!`)
-        }
-
         return {
           ...item,
           quantity,
           subtotal: item.price * quantity,
-          discount: finalDiscount
+          discount: item.discount || 0,
         }
       }
       return item
     }))
-  }, [checkAvailability, inventoryProducts])
+  }, [cart, checkAvailability, inventoryProducts, isServiceItem])
 
   /**
    * Actualizar descuento de un item

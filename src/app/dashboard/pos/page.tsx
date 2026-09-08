@@ -157,6 +157,9 @@ export default function POSPage() {
 
 function POSPageContent() {
   const { settings } = useSharedSettings()
+  const { selectedBranchId } = useBranch()
+  const { user } = useAuth()
+  const posStorageScope = `${user?.id || 'anonymous'}:${selectedBranchId || 'unselected'}`
   const taxPercentage = Number.isFinite(settings.taxRate) ? settings.taxRate : 10
   const taxRate = taxPercentage / 100
   const formatCurrency = useCallback(
@@ -262,7 +265,7 @@ function POSPageContent() {
     taxPercentage,
   })
 
-  const { heldSales, heldSalesCount, parkSale, deleteSale, clearAllSales } = useHeldSales()
+  const { heldSales, heldSalesCount, parkSale, deleteSale, clearAllSales } = useHeldSales(posStorageScope)
   const [isHeldSalesModalOpen, setIsHeldSalesModalOpen] = useState(false)
   const [isRepairModalOpen, setIsRepairModalOpen] = useState(false)
   const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false)
@@ -376,7 +379,6 @@ function POSPageContent() {
   const { allPromotions } = usePromotions()
 
   // Descuento automático para clientes VIP
-  const VIP_DISCOUNT_RATE = 10
   const [vipAutoApplied, setVipAutoApplied] = useState(false)
 
 
@@ -394,8 +396,6 @@ function POSPageContent() {
     addMovement,
     openRegister
   } = useCashRegisterContext()
-  const { selectedBranchId } = useBranch()
-  const { user } = useAuth()
   const cashierName = user?.profile?.name || user?.email || 'Cajero'
   const canManageRegisters = user?.role === 'admin' || user?.role === 'super_admin'
 
@@ -538,7 +538,8 @@ function POSPageContent() {
     checkAvailability: checkCartAvailability
   } = useOptimizedCart(inventoryProducts, {
     taxRate,
-    pricesIncludeTax: config.pricesIncludeTax
+    pricesIncludeTax: config.pricesIncludeTax,
+    storageScope: posStorageScope,
   })
 
   const handleWholesaleToggle = useCallback((value: boolean) => {
@@ -713,10 +714,12 @@ function POSPageContent() {
         String((activeCustomer as any).priority || '').toLowerCase() === 'vip'
       )
 
-      if (isVip && generalDiscount === 0 && unifiedCalculations.subtotal > 0 && !vipAutoApplied) {
-        setGeneralDiscount(VIP_DISCOUNT_RATE)
+      const configuredDiscount = Math.min(100, Math.max(0, Number((activeCustomer as any)?.discount_percentage) || 0))
+
+      if (isVip && configuredDiscount > 0 && generalDiscount === 0 && unifiedCalculations.subtotal > 0 && !vipAutoApplied) {
+        setGeneralDiscount(configuredDiscount)
         setVipAutoApplied(true)
-        toast.success(`Descuento VIP aplicado (${VIP_DISCOUNT_RATE}%)`)
+        toast.success(`Descuento del cliente aplicado (${configuredDiscount}%)`)
       }
 
       if (!isVip && vipAutoApplied) {
@@ -972,16 +975,6 @@ function POSPageContent() {
 
     return true
   }, [combinedCartItems, allPromotions, isWholesale, updateItemDiscount])
-
-  const calculateLoyaltyPoints = useCallback((total: number) => {
-    // 1 punto por cada $10 gastados
-    const basePoints = Math.floor(total / 10)
-
-    // Bonificación por monto alto
-    const bonusMultiplier = total >= 500 ? 2 : total >= 200 ? 1.5 : 1
-
-    return Math.floor(basePoints * bonusMultiplier)
-  }, [])
 
   // ── Wrappers de procesamiento de venta (delegan a usePOSSaleProcessor) ──────
   //

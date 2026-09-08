@@ -275,6 +275,11 @@ export function usePOSSaleProcessor() {
           const saleResult = await processInventorySale({
             items: productItems.map(item => ({
               id: item.id,
+              product_id: item.productId,
+              variant_id: item.variantId,
+              variant_name: item.variantName,
+              variant_sku: item.variantSku,
+              variant_attributes: item.variantAttributes,
               name: item.name,
               sku: item.sku,
               price: item.price,
@@ -349,6 +354,9 @@ export function usePOSSaleProcessor() {
 
           const persistedReceipt = {
             ...receiptData,
+            total: Number.isFinite(Number(saleResult?.data?.total))
+              ? Number(saleResult.data.total)
+              : receiptData.total,
             creditInfo: receiptData.creditInfo ? withPersistedCreditSchedule(receiptData.creditInfo, saleResult?.data?.creditSchedule) : undefined,
             receiptNumber: saleResult?.saleId
               ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
@@ -363,7 +371,7 @@ export function usePOSSaleProcessor() {
 
           setPaymentStatus('success')
           toast.success(
-            `¡Venta completada! Comprobante #${persistedReceipt.receiptNumber || 'POS'} generado (${formatCurrency(receiptCalculations.total)})`,
+            `¡Venta completada! Comprobante #${persistedReceipt.receiptNumber || 'POS'} generado (${formatCurrency(persistedReceipt.total)})`,
             { duration: 4500 }
           )
           addPaymentAttempt({
@@ -504,6 +512,11 @@ export function usePOSSaleProcessor() {
         const saleResult = await processInventorySale({
           items: productItems.map(item => ({
             id: item.id,
+            product_id: item.productId,
+            variant_id: item.variantId,
+            variant_name: item.variantName,
+            variant_sku: item.variantSku,
+            variant_attributes: item.variantAttributes,
             name: item.name,
             sku: item.sku,
             price: item.price,
@@ -564,6 +577,9 @@ export function usePOSSaleProcessor() {
 
         const persistedReceipt = {
           ...receiptData,
+          total: Number.isFinite(Number(saleResult?.data?.total))
+            ? Number(saleResult.data.total)
+            : receiptData.total,
           creditInfo: receiptData.creditInfo ? withPersistedCreditSchedule(receiptData.creditInfo, saleResult?.data?.creditSchedule) : undefined,
           receiptNumber: saleResult?.saleId
             ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
@@ -578,7 +594,7 @@ export function usePOSSaleProcessor() {
 
         setPaymentStatus('success')
         toast.success(
-          `¡Venta completada! Comprobante #${persistedReceipt.receiptNumber || 'POS'} generado (${formatCurrency(cartCalculations.total)})`,
+          `¡Venta completada! Comprobante #${persistedReceipt.receiptNumber || 'POS'} generado (${formatCurrency(persistedReceipt.total)})`,
           { duration: 4500 }
         )
         addPaymentAttempt({

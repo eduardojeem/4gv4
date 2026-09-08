@@ -127,8 +127,8 @@ describe('/dashboard/promotions — reparto en pestañas', () => {
     await renderPage()
     await userEvent.click(screen.getByRole('tab', { name: /Página pública/ }))
 
-    expect(screen.getByText(/Carrusel automático de productos rebajados/)).toBeInTheDocument()
-    expect(screen.getByText('Carrusel de campañas')).toBeInTheDocument()
+    expect(screen.getByText(/Carrusel Automático de Productos Rebajados/)).toBeInTheDocument()
+    expect(screen.getByText('Carrusel de Banners y Campañas Gráficas')).toBeInTheDocument()
   })
 
   it('deja las alertas fuera de las pestañas, para que no se pierdan', async () => {
@@ -158,7 +158,7 @@ describe('/dashboard/promotions — reparto en pestañas', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: /Página pública/ }))
 
-    expect(await screen.findByText(/No tenés permiso para editar la página pública/)).toBeInTheDocument()
+    expect(await screen.findByText(/No tienes permisos para editar la página pública/)).toBeInTheDocument()
     expect(screen.queryByText('BLOQUE Editor de sección pública')).toBeNull()
   })
 })

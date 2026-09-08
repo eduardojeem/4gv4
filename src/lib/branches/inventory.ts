@@ -30,6 +30,15 @@ export type BranchInventoryClient = {
 export interface BranchInventoryMapResult {
   stockMap: Map<string, number>
   branchScoped: boolean
+  /**
+   * Se pidio el stock de una sucursal y no se pudo leer. Distinto de
+   * `branchScoped: false`, que tambien es lo que se devuelve cuando no hay
+   * ninguna sucursal seleccionada: sin esta marca, un fallo de RLS o de red
+   * quedaba indistinguible de "esta pantalla es global" y se pintaba el stock
+   * global bajo un cartel que decia el nombre de la sucursal.
+   */
+  failed: boolean
+  error: string | null
 }
 
 export function formatBranchInventoryError(error: ErrorLike) {
@@ -50,7 +59,7 @@ export async function loadBranchInventoryStockMap(
   productIds?: string[]
 ): Promise<BranchInventoryMapResult> {
   if (!branchId) {
-    return { stockMap: new Map(), branchScoped: false }
+    return { stockMap: new Map(), branchScoped: false, failed: false, error: null }
   }
 
   try {
@@ -64,17 +73,24 @@ export async function loadBranchInventoryStockMap(
       : await query
 
     if (response.error) {
-      throw new Error(response.error.message || 'No se pudo cargar el stock por sucursal.')
+      throw new Error(formatBranchInventoryError(response.error))
     }
 
     const rows = (response.data ?? []) as InventoryRow[]
     return {
       stockMap: new Map(rows.map((row) => [row.product_id, Number(row.stock_quantity || 0)])),
       branchScoped: true,
+      failed: false,
+      error: null,
     }
   } catch (error) {
-    console.warn('[branches/inventory] Falling back to global stock:', error)
-    return { stockMap: new Map(), branchScoped: false }
+    // No se cae al stock global en silencio: quien llama decide si corta o si
+    // avisa, pero nadie muestra el numero equivocado sin saberlo.
+    const message = error instanceof Error
+      ? error.message
+      : 'No se pudo cargar el stock por sucursal.'
+    console.warn('[branches/inventory] Branch stock read failed:', message)
+    return { stockMap: new Map(), branchScoped: false, failed: true, error: message }
   }
 }
 

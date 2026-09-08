@@ -17,7 +17,7 @@ const amount = (value: unknown) => Math.max(0, Number(value) || 0)
 
 /** Resumen comercial sensible usado por la ficha de reparaciones. */
 export const GET = withTenantAuth(
-  { permission: 'settings.manage' },
+  { permission: ['settings.manage', 'pos.sales.create'] },
   async (_request: NextRequest, { organization }, routeContext) => {
     const customerId = await getCustomerId(routeContext)
     if (!customerId) return NextResponse.json({ error: 'Falta el cliente' }, { status: 400 })
@@ -33,15 +33,16 @@ export const GET = withTenantAuth(
     if (customer.error) return NextResponse.json({ error: 'No se pudo validar el cliente' }, { status: 500 })
     if (!customer.data) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
 
-    const [sales, orders, repairs, loyaltySettings, loyaltyAccount] = await Promise.all([
+    const [sales, orders, repairs, loyaltySettings, loyaltyAccount, credits] = await Promise.all([
       admin.from('sales').select('total_amount, status').eq('customer_id', customerId).eq('organization_id', organization.id),
       admin.from('customer_orders').select('total, status').eq('customer_id', customerId).eq('organization_id', organization.id),
       admin.from('repairs').select('final_cost, estimated_cost, status').eq('customer_id', customerId).eq('organization_id', organization.id),
       admin.from('loyalty_settings').select('enabled').eq('organization_id', organization.id).maybeSingle(),
       admin.from('loyalty_accounts').select('balance').eq('customer_id', customerId).eq('organization_id', organization.id).maybeSingle(),
+      admin.from('customer_credits').select('id').eq('customer_id', customerId).eq('organization_id', organization.id),
     ])
 
-    const activityError = sales.error || orders.error || repairs.error
+    const activityError = sales.error || orders.error || repairs.error || credits.error
     if (activityError) {
       return NextResponse.json({ error: 'No se pudo calcular la actividad del cliente' }, { status: 500 })
     }
@@ -69,6 +70,16 @@ export const GET = withTenantAuth(
       .some((error) => isLoyaltyModuleMissing(error))
     const loyaltyAvailable = !loyaltyMissing && !loyaltySettings.error && !loyaltyAccount.error
       && loyaltySettings.data?.enabled === true
+    const creditIds = (credits.data ?? []).map((credit) => credit.id)
+    const installments = creditIds.length
+      ? await admin.from('credit_installments').select('amount, amount_paid, status').in('credit_id', creditIds)
+      : { data: [], error: null }
+    if (installments.error) return NextResponse.json({ error: 'No se pudo calcular el saldo del cliente' }, { status: 500 })
+    const creditBalance = (installments.data ?? []).reduce((sum, installment) => {
+      const installmentAmount = amount(installment.amount)
+      const paidAmount = installment.status === 'paid' ? installmentAmount : amount(installment.amount_paid)
+      return sum + Math.max(0, installmentAmount - paidAmount)
+    }, 0)
 
     return NextResponse.json({
       metrics: {
@@ -80,6 +91,7 @@ export const GET = withTenantAuth(
         repairsBilled,
         loyaltyPoints: loyaltyAvailable ? amount(loyaltyAccount.data?.balance) : null,
         loyaltyModuleInstalled: loyaltyAvailable,
+        creditBalance,
       },
     })
   },

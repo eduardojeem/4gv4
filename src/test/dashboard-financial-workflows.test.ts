@@ -240,13 +240,17 @@ describe('dashboard financial workflow contracts', () => {
 
   it('feeds a selected service price into the new-repair calculator', () => {
     const repairForm = readFileSync(resolve(workspace, 'src/components/dashboard/repair-form-dialog-v2.tsx'), 'utf8')
+    const catalogSelection = readFileSync(
+      resolve(workspace, 'src/components/dashboard/repairs/new-repair/repair-catalog-selection.ts'),
+      'utf8'
+    )
 
-    expect(repairForm).toContain('resolveServicePricingSelection({')
-    expect(repairForm).toContain('deviceCount: fields.length')
-    expect(repairForm).toContain("setValue('laborCost', selection.laborCost")
-    expect(repairForm).toContain("setValue('finalCost', selection.finalCost")
-    expect(repairForm).toContain("setValue('pricingMode', selection.pricingMode")
-    expect(repairForm).toContain('setCalculationMode(selection.pricingMode)')
+    expect(repairForm).toContain('addRepairService(currentParts, item, customerIsWholesale)')
+    expect(repairForm).toContain("setCalculationMode('automatic')")
+    expect(repairForm).toContain("setValue('pricingMode', 'automatic'")
+    expect(catalogSelection).toContain('cost: catalogItemPrice(item, wholesale)')
+    expect(catalogSelection).toContain("lineType: 'service' as const")
+    expect(catalogSelection).toContain('parts: [...existingParts, ...toRepairServiceLines(item, wholesale)]')
   })
 
   it('commits payment metadata and paid-repair protection in the POS transaction', () => {
@@ -278,7 +282,7 @@ describe('dashboard financial workflow contracts', () => {
 
     expect(posPage).toContain('discount={generalDiscount}')
     expect(posPage).toContain('onDiscountChange={setGeneralDiscount}')
-    expect(posPage).toContain('payment_status')
+    expect(checkout).toContain('payment_status?: string | null')
     expect(checkout).toContain("repair.payment_status !== 'pagado'")
   })
 

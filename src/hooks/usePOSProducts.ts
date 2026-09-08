@@ -24,6 +24,11 @@ type Product = DbProductRow & {
 
 interface CartItem {
   id: string
+  product_id?: string
+  variant_id?: string
+  variant_name?: string
+  variant_sku?: string
+  variant_attributes?: unknown
   name: string
   sku: string
   price: number
@@ -210,16 +215,28 @@ export function usePOSProducts() {
           }
 
           const firstPage = await loadPage(1)
-          const pageCount = Math.max(1, Math.ceil(firstPage.total / 100))
-          const remainingPages = pageCount > 1
-            ? await Promise.all(Array.from({ length: pageCount - 1 }, (_, index) => loadPage(index + 2)))
-            : []
-          const dbProducts = [firstPage, ...remainingPages].flatMap(page => page.products)
+          let dbProducts = [...firstPage.products]
+          const publishProducts = (rows: Array<PosProductRow & { category?: { name?: string } | null }>) => {
+            const mapped = rows.map((product) => mapProductForPOS({
+              ...product,
+              categories: product.categories ?? (product.category?.name ? { name: product.category.name } : null),
+            } as PosProductRow))
+            setProducts(mapped)
+            setProductsCache(selectedBranchId, mapped)
+            return mapped
+          }
 
-          return dbProducts.map((product) => mapProductForPOS({
-            ...product,
-            categories: product.categories ?? (product.category?.name ? { name: product.category.name } : null),
-          } as PosProductRow))
+          // La primera tanda se muestra de inmediato; el catálogo restante se
+          // incorpora progresivamente para no bloquear la caja.
+          publishProducts(dbProducts)
+          setLoading(false)
+          const pageCount = Math.max(1, Math.ceil(firstPage.total / 100))
+          for (let page = 2; page <= pageCount; page += 1) {
+            const nextPage = await loadPage(page)
+            dbProducts = [...dbProducts, ...nextPage.products]
+            publishProducts(dbProducts)
+          }
+          return publishProducts(dbProducts)
         })().finally(() => {
           delete productsFetchPromisesByBranch[cacheKey]
         })
@@ -352,7 +369,11 @@ export function usePOSProducts() {
 
     try {
       const saleItems = (saleData.items || cart).map(item => ({
-        product_id: item.id,
+        product_id: item.product_id || item.id,
+        variant_id: item.variant_id || null,
+        variant_name: item.variant_name || null,
+        variant_sku: item.variant_sku || null,
+        variant_attributes: item.variant_attributes || null,
         quantity: item.quantity,
         discount_amount: item.discount_amount || 0,
       }))

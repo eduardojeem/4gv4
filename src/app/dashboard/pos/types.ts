@@ -15,6 +15,11 @@ export interface Customer {
 
 export interface CartItem {
   id: string
+  productId?: string
+  variantId?: string
+  variantName?: string
+  variantSku?: string
+  variantAttributes?: unknown
   name: string
   sku: string
   price: number
