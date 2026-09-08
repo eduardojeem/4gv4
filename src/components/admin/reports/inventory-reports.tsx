@@ -28,6 +28,7 @@ import {
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
+import { isCompletedSaleStatus } from '@/lib/sales-status'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
 import { formatCurrency } from '@/lib/currency'
@@ -149,6 +150,9 @@ type ReportProductRow = {
 }
 
 const REPORT_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16']
+
+/** Tope del barrido de productos del informe. */
+const PRODUCT_SCAN_CAP = 2000
 
 const REPORT_DATE_SLUG = () => new Date().toISOString().slice(0, 10)
 
@@ -278,21 +282,26 @@ function InventoryKpiCard({
   value,
   accent,
   icon: Icon,
+  hint,
 }: {
   title: string
   value: string
   accent: { border: string; icon: string }
   icon: LucideIcon
+  hint?: string
 }) {
   return (
     <Card className={cn('border-l-4 shadow-sm', accent.border)}>
       <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{title}</p>
-            <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-50">{value}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-gray-900 dark:text-gray-50">{value}</p>
+            {/* De que universo habla la cifra: los selectores de categoria y
+                proveedor filtran las tablas de abajo pero no estas tarjetas. */}
+            {hint && <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">{hint}</p>}
           </div>
-          <Icon className={cn('h-5 w-5', accent.icon)} />
+          <Icon className={cn('h-5 w-5 shrink-0', accent.icon)} />
         </div>
       </CardContent>
     </Card>
@@ -314,6 +323,8 @@ const InventoryReports: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // Las cifras son parciales: el catalogo supera el tope del barrido.
+  const [isPartial, setIsPartial] = useState(false)
 
   const generateReport = useCallback(async () => {
     setIsGenerating(true)
@@ -326,9 +337,14 @@ const InventoryReports: React.FC = () => {
           id, name, stock_quantity, sale_price, purchase_price, min_stock, is_active,
           category:categories(name)
         `)
-        .limit(2000)
+        // Una fila de mas para saber si el barrido quedo corto: con `.limit(2000)`
+        // a secas, el valor del inventario de una empresa con 2.400 productos
+        // salia mal y parecia bien.
+        .limit(PRODUCT_SCAN_CAP + 1)
 
       if (productsError) throw productsError
+      const productsTruncated = (products || []).length > PRODUCT_SCAN_CAP
+      setIsPartial(productsTruncated)
 
       const branchStock = await loadBranchInventoryStockMap(
         supabase as unknown as BranchInventoryClient,
@@ -387,6 +403,7 @@ const InventoryReports: React.FC = () => {
         .select(`
           id,
           total_amount,
+          status,
           sale_items (
             product_id,
             quantity,
@@ -457,7 +474,13 @@ const InventoryReports: React.FC = () => {
         cost: number 
       }>()
 
-      ;((salesData || []) as ReportSaleRow[]).forEach((sale) => {
+      // Sumaba TODAS las ventas del periodo, anuladas incluidas, mientras
+      // /dashboard/reports filtra por `isCompletedSaleStatus`. El mismo periodo
+      // daba dos cifras de ingresos y la diferencia eran las anulaciones.
+      const completedSales = ((salesData || []) as ReportSaleRow[])
+        .filter((sale) => isCompletedSaleStatus((sale as { status?: string | null }).status))
+
+      completedSales.forEach((sale) => {
         totalRevenue += Number(sale.total_amount || 0)
         const items = sale.sale_items || []
         if (Array.isArray(items)) {
@@ -607,6 +630,13 @@ const InventoryReports: React.FC = () => {
     ),
     [reportData, selectedSupplier]
   )
+
+  // Los selectores de categoria y proveedor filtran las tablas de abajo, no las
+  // tarjetas de arriba: elegir una categoria achicaba las tablas y dejaba los
+  // indicadores hablando del total sin decirlo.
+  const kpiScopeHint = selectedCategory !== 'all' || selectedSupplier !== 'all'
+    ? 'De toda la empresa (los filtros aplican a las tablas)'
+    : 'De toda la empresa'
 
   const exportReport = async (exportFormat: 'pdf' | 'excel') => {
     if (!reportData) return
@@ -780,29 +810,43 @@ const InventoryReports: React.FC = () => {
         </CardContent>
       </Card>
 
+      {isPartial && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            El catálogo supera los {PRODUCT_SCAN_CAP.toLocaleString()} productos que se recorren de
+            una vez: las cifras de inventario de este informe son parciales.
+          </span>
+        </div>
+      )}
+
       {/* KPIs Principales (estilo dashboard: borde lateral + acento -500) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <InventoryKpiCard
           title="Total productos"
           value={reportData.totalProducts.toLocaleString()}
+          hint={kpiScopeHint}
           accent={{ border: 'border-l-blue-500', icon: 'text-blue-500' }}
           icon={Package}
         />
         <InventoryKpiCard
           title="Valor inventario"
           value={formatCurrency(reportData.totalValue)}
+          hint={`A costo · ${kpiScopeHint}`}
           accent={{ border: 'border-l-emerald-500', icon: 'text-emerald-500' }}
           icon={Wallet}
         />
         <InventoryKpiCard
           title="Margen promedio"
           value={`${reportData.averageMargin}%`}
+          hint={`Sin ponderar · ${kpiScopeHint}`}
           accent={{ border: 'border-l-violet-500', icon: 'text-violet-500' }}
           icon={Target}
         />
         <InventoryKpiCard
           title="Ventas del período"
           value={formatCurrency(reportData.totalRevenue)}
+          hint="Solo ventas completadas"
           accent={{ border: 'border-l-amber-500', icon: 'text-amber-500' }}
           icon={TrendingUp}
         />

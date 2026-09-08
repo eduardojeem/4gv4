@@ -54,6 +54,18 @@ export interface Product {
   updated_at: string
 }
 
+export interface InventorySnapshot {
+  totalProducts: number
+  outOfStock: number
+  lowStock: number
+  stockCostValue: number
+  weightedMargin: number | null
+  totalUnits: number
+  branchScoped: boolean
+  /** Las cifras son parciales: el barrido llego al tope. */
+  truncated: boolean
+}
+
 interface UseInventoryProps {
   initialPage?: number
   initialPageSize?: number
@@ -154,6 +166,13 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
   const [loading, setLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Los indicadores del encabezado se calculaban sobre la pagina actual y
+  // cambiaban al pasar de pagina. Ahora vienen del servidor, sobre toda la
+  // empresa y la sucursal activa.
+  const [snapshot, setSnapshot] = useState<InventorySnapshot | null>(null)
+  // La API avisa cuando un filtro de stock deja el listado y el total
+  // incompletos; ese aviso se perdia al leer solo `products` y `total`.
+  const [listTruncated, setListTruncated] = useState(false)
   
   // Paginación y Filtros
   const [page, setPage] = useState(initialPage)
@@ -214,6 +233,39 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
       console.error('Error fetching suppliers:', err)
     }
   }, [])
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const response = await fetch('/api/inventory/stats', {
+        cache: 'no-store',
+        headers: branchHeaders(selectedBranchId),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.success) {
+        // Sin cifras es mejor no mostrar tarjetas que mostrar las de la pagina:
+        // `null` deja al encabezado decir que no pudo calcularlas.
+        setSnapshot(null)
+        return
+      }
+
+      setSnapshot({
+        totalProducts: Number(payload.data.totalProducts) || 0,
+        outOfStock: Number(payload.data.outOfStock) || 0,
+        lowStock: Number(payload.data.lowStock) || 0,
+        stockCostValue: Number(payload.data.stockCostValue) || 0,
+        weightedMargin: payload.data.weightedMargin === null
+          ? null
+          : Number(payload.data.weightedMargin),
+        totalUnits: Number(payload.data.totalUnits) || 0,
+        branchScoped: Boolean(payload.data.branchScoped),
+        truncated: Boolean(payload.data.truncated),
+      })
+    } catch (err) {
+      console.error('Error fetching inventory stats:', err)
+      setSnapshot(null)
+    }
+  }, [selectedBranchId])
 
   const fetchProducts = useCallback(async () => {
     productRequestRef.current?.abort()
@@ -278,6 +330,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
         status: product.status || (product.is_active === false ? 'inactive' : 'active'),
       })))
       setTotalCount(Number(payload.data.total) || 0)
+      setListTruncated(Boolean(payload.data.truncated))
       hasLoadedProductsRef.current = true
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return
@@ -312,6 +365,12 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     fetchCategories()
     fetchSuppliers()
   }, [fetchCategories, fetchSuppliers])
+
+  // Los indicadores dependen de la sucursal, no de la pagina ni de los filtros:
+  // se recalculan cuando cambia la sucursal y despues de cada alta o baja.
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -363,7 +422,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
         return { success: false, error: payload?.error || 'No se pudo crear el producto' }
       }
 
-      await fetchProducts()
+      await Promise.all([fetchProducts(), fetchStats()])
       return { success: true }
     } catch (err: unknown) {
       return { success: false, error: getErrorMessage(err, 'No se pudo crear el producto') }
@@ -383,7 +442,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
         return { success: false, error: payload?.error || 'No se pudo actualizar el producto' }
       }
 
-      await fetchProducts()
+      await Promise.all([fetchProducts(), fetchStats()])
       return { success: true }
     } catch (err: unknown) {
       return { success: false, error: getErrorMessage(err, 'No se pudo actualizar el producto') }
@@ -402,7 +461,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
         return { success: false, error: payload?.error || 'No se pudo eliminar el producto' }
       }
 
-      await fetchProducts()
+      await Promise.all([fetchProducts(), fetchStats()])
       return { success: true }
     } catch (err: unknown) {
       return { success: false, error: getErrorMessage(err, 'No se pudo eliminar el producto') }
@@ -470,6 +529,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     products,
     categories,
     suppliers,
+    snapshot,
+    listTruncated,
     loading,
     isRefreshing,
     error,
@@ -484,6 +545,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     updateProduct,
     deleteProduct,
     refreshProducts: fetchProducts,
+    refreshStats: fetchStats,
     createSupplier,
     updateSupplier,
     deleteSupplier,

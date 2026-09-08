@@ -27,6 +27,7 @@ import InventoryReports from '@/components/admin/reports/inventory-reports'
 import SupplierManagement from '@/components/admin/inventory/supplier-management'
 import { PromotionManager } from '@/components/admin/inventory/PromotionManager'
 import { VariantManager } from '@/components/admin/inventory/VariantManager'
+import { InventoryAlertsPanel } from '@/components/admin/inventory/InventoryAlertsPanel'
 import { ProductModal } from '@/components/dashboard/product-modal'
 import { useInventory, Product } from '@/hooks/use-inventory'
 import { useBranch } from '@/contexts/branch-context'
@@ -63,6 +64,14 @@ import {
 import { GSIcon } from '@/components/ui/standardized-components'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatCurrency } from '@/lib/currency'
+import { resolveStockLevel } from '@/lib/inventory/stock-status'
+import { exportInventoryCsvRows } from '@/lib/inventory/export'
+
+// Excel en espanol necesita las dos cosas para abrir bien el archivo: BOM
+// para las tildes y CRLF como fin de linea. Van como constantes con nombre
+// para que no se pierdan en un reformateo.
+const BOM_UTF8 = String.fromCharCode(0xfeff)
+const LINE_BREAK_CRLF = String.fromCharCode(13, 10)
 
 const operationTabs = [
   { value: 'products', label: 'Catálogo', icon: Package },
@@ -104,11 +113,13 @@ interface AdvancedSearchFilter {
 }
 
 export default function InventoryManagement() {
-  const { selectedBranch, loading: branchLoading } = useBranch()
+  const { selectedBranch, selectedBranchId, loading: branchLoading } = useBranch()
   const {
     products,
     categories,
     suppliers,
+    snapshot,
+    listTruncated,
     loading,
     isRefreshing,
     error,
@@ -131,6 +142,7 @@ export default function InventoryManagement() {
   const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   // Estados del formulario
   const [formData, setFormData] = useState<Partial<Product>>({})
@@ -173,12 +185,17 @@ export default function InventoryManagement() {
   }
 
   // Helpers UI
-  const getStockStatus = (product: Product) => {
-    if (product.stock_quantity === 0) return { color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300', text: 'Agotado', icon: XCircle }
-    if (product.stock_quantity <= product.min_stock) return { color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300', text: 'Bajo', icon: AlertTriangle }
-    if (product.stock_quantity >= product.max_stock) return { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300', text: 'Alto', icon: TrendingUp }
-    return { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300', text: 'Normal', icon: CheckCircle }
-  }
+  // El nivel sale de `resolveStockLevel`, que trata `max_stock: 0` como «sin
+  // maximo definido». La regla anterior era `stock >= max_stock`: con el 0 por
+  // defecto del modal de producto, casi todo el catalogo decia «Stock alto».
+  const STOCK_LEVEL_BADGE = {
+    out: { color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300', text: 'Agotado', icon: XCircle },
+    low: { color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300', text: 'Bajo', icon: AlertTriangle },
+    high: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300', text: 'Alto', icon: TrendingUp },
+    normal: { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300', text: 'Normal', icon: CheckCircle },
+  } as const
+
+  const getStockStatus = (product: Product) => STOCK_LEVEL_BADGE[resolveStockLevel(product)]
 
   const getStatusBadge = (product: Product) => {
     const isActive = product.status === 'active'
@@ -187,20 +204,50 @@ export default function InventoryManagement() {
       : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
   }
 
-  // KPIs calculados sobre la página actual (idealmente deberían venir del backend para total global)
-  // Nota: Para una app real grande, estos KPIs deben ser endpoints dedicados.
-  const stats = useMemo(() => {
-    const lowStock = products.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0).length
-    const outStock = products.filter(p => p.stock_quantity === 0).length
-    const totalValue = products.reduce((sum, p) => sum + (p.stock_quantity * p.purchase_price), 0)
-    // Margen promedio simple de la vista actual
-    const avgMargin = products.length ? products.reduce((sum, p) => {
-      const margin = p.sale_price > 0 ? ((p.sale_price - p.purchase_price) / p.sale_price) * 100 : 0
-      return sum + margin
-    }, 0) / products.length : 0
+  // Los indicadores vienen del servidor, sobre toda la empresa y la sucursal
+  // activa. Antes se calculaban sobre `products` —la pagina actual, diez
+  // filas— y cambiaban al pasar de pagina, al lado de un «Total de productos»
+  // que si era global.
+  const kpiCards = useMemo(() => {
+    const alcance = snapshot?.branchScoped
+      ? `En ${selectedBranch?.name || 'la sucursal activa'}`
+      : 'En toda la empresa'
 
-    return { lowStock, outStock, totalValue, avgMargin }
-  }, [products])
+    return [
+      {
+        label: 'Productos en catálogo',
+        value: snapshot ? snapshot.totalProducts.toLocaleString() : null,
+        hint: 'Compartido entre sucursales',
+        icon: Package,
+        tone: 'text-blue-600 dark:text-blue-400',
+        bg: 'bg-blue-100 dark:bg-blue-500/20',
+      },
+      {
+        label: 'Sin stock',
+        value: snapshot ? snapshot.outOfStock.toLocaleString() : null,
+        hint: alcance,
+        icon: XCircle,
+        tone: 'text-rose-600 dark:text-rose-400',
+        bg: 'bg-rose-100 dark:bg-rose-500/20',
+      },
+      {
+        label: 'Stock bajo',
+        value: snapshot ? snapshot.lowStock.toLocaleString() : null,
+        hint: alcance,
+        icon: AlertTriangle,
+        tone: 'text-amber-600 dark:text-amber-400',
+        bg: 'bg-amber-100 dark:bg-amber-500/20',
+      },
+      {
+        label: 'Valor a costo',
+        value: snapshot ? formatCurrency(snapshot.stockCostValue) : null,
+        hint: alcance,
+        icon: GSIcon,
+        tone: 'text-emerald-600 dark:text-emerald-400',
+        bg: 'bg-emerald-100 dark:bg-emerald-500/20',
+      },
+    ]
+  }, [snapshot, selectedBranch?.name])
 
   // Handlers CRUD
   const handleAddProduct = async () => {
@@ -335,32 +382,35 @@ export default function InventoryManagement() {
     }))
   }
 
-  const handleExportProducts = () => {
-    const rows = [
-      ['Nombre', 'SKU', 'Categoria', 'Proveedor', 'Precio Venta', 'Costo', 'Stock', 'Estado'],
-      ...products.map((product) => [
-        product.name,
-        product.sku,
-        product.category?.name || '',
-        product.supplier?.name || '',
-        String(product.sale_price),
-        String(product.purchase_price),
-        String(product.stock_quantity),
-        product.status
-      ])
-    ]
+  // Exportaba `products`, o sea las filas de la pagina actual, en un archivo
+  // llamado «inventario_<fecha>.csv». Quien lo abria creia tener el inventario.
+  const handleExportProducts = async () => {
+    if (isExporting) return
+    setIsExporting(true)
+    setActionError('')
+    try {
+      const rows = await exportInventoryCsvRows(filters, selectedBranchId)
 
-    const csv = rows
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
+      const csv = rows
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+        .join(LINE_BREAK_CRLF)
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `inventario_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
-    URL.revokeObjectURL(url)
+      // Separador `;` y BOM: es lo que Excel en español necesita para no meter
+      // todo en una sola columna ni romper las tildes.
+      const blob = new Blob([BOM_UTF8 + csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `inventario_${new Date().toISOString().split('T')[0]}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+      setSuccessMessage(`Se exportaron ${rows.length - 1} productos`)
+      setTimeout(() => setSuccessMessage(''), 4000)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'No se pudo exportar el inventario.')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const hasNextPage = page * pageSize < totalCount
@@ -433,10 +483,15 @@ export default function InventoryManagement() {
             <Button
               variant="outline"
               onClick={handleExportProducts}
+              disabled={isExporting}
               className="h-9 rounded-xl border-slate-200 bg-white text-xs dark:border-white/10 dark:bg-[#0d1117]"
             >
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Exportar CSV
+              {isExporting ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {isExporting ? 'Exportando...' : 'Exportar CSV'}
             </Button>
             <Button
               onClick={() => {
@@ -501,17 +556,19 @@ export default function InventoryManagement() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {[
-          { label: 'Total de productos', value: totalCount.toLocaleString(), icon: Package, tone: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-500/20' },
-          { label: 'Stock bajo (Lote)', value: stats.lowStock.toLocaleString(), icon: AlertTriangle, tone: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-500/20' },
-          { label: 'Valor del Lote (Costo)', value: formatCurrency(stats.totalValue), icon: GSIcon, tone: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-500/20' },
-          { label: 'Margen Promedio', value: `${stats.avgMargin.toFixed(1)}%`, icon: TrendingUp, tone: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-100 dark:bg-purple-500/20' },
-        ].map(({ label, value, icon: Icon, tone, bg }) => (
+        {kpiCards.map(({ label, value, hint, icon: Icon, tone, bg }) => (
           <Card key={label} className="border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div className="space-y-1">
+            <CardContent className="p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-1">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</p>
-                <p className="text-xl font-bold tracking-tight text-slate-900 dark:text-white tabular-nums">{value}</p>
+                {value === null ? (
+                  <p className="text-sm font-medium text-slate-400 dark:text-slate-500">Sin datos</p>
+                ) : (
+                  <p className="text-xl font-bold tracking-tight text-slate-900 dark:text-white tabular-nums">{value}</p>
+                )}
+                {/* Cada cifra dice de que universo habla: eran cuatro tarjetas
+                    identicas, una global y tres de la pagina que estabas viendo. */}
+                <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">{hint}</p>
               </div>
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${bg}`}>
                 <Icon className={`h-5 w-5 ${tone}`} />
@@ -520,6 +577,16 @@ export default function InventoryManagement() {
           </Card>
         ))}
       </div>
+
+      {snapshot?.truncated && (
+        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertDescription className="text-amber-800 dark:text-amber-300">
+            El catálogo supera el máximo que se puede recorrer de una vez: los indicadores de arriba
+            son parciales.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0 space-y-5">
@@ -758,9 +825,16 @@ export default function InventoryManagement() {
               </table>
             </div>
             {/* Paginación */}
-            <div className="flex items-center justify-between border-t p-3 dark:border-gray-700">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t p-3 dark:border-gray-700">
               <span className="text-xs text-muted-foreground">
                 Mostrando {rangeStart} - {rangeEnd} de {totalCount}
+                {/* La API avisa cuando el filtro de stock barrió hasta su tope y
+                    quedaron productos sin evaluar: el total es parcial. */}
+                {listTruncated && (
+                  <span className="ml-2 font-medium text-amber-600 dark:text-amber-400">
+                    (parcial: quedaron productos sin evaluar por el filtro de stock)
+                  </span>
+                )}
               </span>
               <div className="flex gap-2">
                 <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading} aria-label="Página anterior">
@@ -832,66 +906,20 @@ export default function InventoryManagement() {
         </TabsContent>
 
         <TabsContent value="alerts" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
-            {/* Out of Stock Card */}
-            <Card className="border-red-200 dark:border-red-800 dark:bg-gray-800">
-              <CardHeader className="bg-red-50/50 dark:bg-red-950/10 border-b dark:border-red-900/20">
-                <CardTitle className="text-red-800 dark:text-red-400 flex items-center text-base">
-                  <XCircle className="h-5 w-5 mr-2 shrink-0" />
-                  Productos Agotados ({products.filter(p => p.stock_quantity === 0).length})
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">Artículos sin inventario disponible para la venta</CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
-                {products.filter(p => p.stock_quantity === 0).length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-6">No hay productos agotados. ¡Excelente!</p>
-                ) : (
-                  products.filter(p => p.stock_quantity === 0).map(product => (
-                    <div key={product.id} className="flex justify-between items-center p-3 rounded-lg border bg-card dark:border-gray-700 hover:bg-muted/10 transition-colors">
-                      <div>
-                        <p className="font-semibold text-sm">{product.name}</p>
-                        <p className="text-xs text-muted-foreground">SKU: {product.sku}</p>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => openEditDialog(product)} className="h-8 rounded-lg text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-950/20">
-                        Reabastecer
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Low Stock Card */}
-            <Card className="border-yellow-200 dark:border-yellow-800 dark:bg-gray-800">
-              <CardHeader className="bg-yellow-50/50 dark:bg-yellow-950/10 border-b dark:border-yellow-900/20">
-                <CardTitle className="text-yellow-800 dark:text-yellow-400 flex items-center text-base">
-                  <AlertTriangle className="h-5 w-5 mr-2 shrink-0" />
-                  Stock Bajo ({products.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0).length})
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">Artículos cerca o por debajo de su cantidad mínima</CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
-                {products.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0).length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-6">No hay productos con stock bajo.</p>
-                ) : (
-                  products.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0).map(product => (
-                    <div key={product.id} className="flex justify-between items-center p-3 rounded-lg border bg-card dark:border-gray-700 hover:bg-muted/10 transition-colors">
-                      <div>
-                        <p className="font-semibold text-sm">{product.name}</p>
-                        <div className="flex gap-2 items-center mt-1">
-                          <Badge variant="outline" className="text-[10px] h-4 py-0 dark:border-gray-600">SKU: {product.sku}</Badge>
-                          <span className="text-xs text-amber-600 font-medium">Stock: {product.stock_quantity} (Min: {product.min_stock})</span>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => openEditDialog(product)} className="h-8 rounded-lg text-xs border-yellow-200 text-yellow-600 hover:bg-yellow-50 hover:text-yellow-700 dark:border-yellow-900/30 dark:text-yellow-400 dark:hover:bg-yellow-950/20">
-                        Modificar
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <InventoryAlertsPanel
+            branchName={snapshot?.branchScoped ? selectedBranch?.name : null}
+            onRestock={(productId) => {
+              const product = products.find((item) => item.id === productId)
+              if (product) {
+                openEditDialog(product)
+                return
+              }
+              // La alerta puede ser de un producto que no esta en la pagina
+              // cargada: se lo busca por su id en el catalogo.
+              setFilters((current) => ({ ...current, search: productId }))
+              setActiveTab('products')
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="reports">
