@@ -28,6 +28,7 @@ import SupplierManagement from '@/components/admin/inventory/supplier-management
 import { PromotionManager } from '@/components/admin/inventory/PromotionManager'
 import { VariantManager } from '@/components/admin/inventory/VariantManager'
 import { InventoryAlertsPanel } from '@/components/admin/inventory/InventoryAlertsPanel'
+import { InventoryGuide } from '@/components/admin/inventory/InventoryGuide'
 import { ProductModal } from '@/components/dashboard/product-modal'
 import { useInventory, type Product, type InventorySort, type InventorySortColumn } from '@/hooks/use-inventory'
 import { useBranch } from '@/contexts/branch-context'
@@ -48,7 +49,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
-  Info,
   Building2,
   ArrowUpRight,
   Warehouse,
@@ -492,50 +492,7 @@ export default function InventoryManagement() {
         </div>
       </div>
 
-      <Card className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]">
-        <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
-              <Info className="h-4 w-4 text-blue-500" /> ¿Cómo funciona la Gestión de Inventario?
-            </div>
-            <div className="select-none text-xs font-semibold text-slate-400">
-              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-            </div>
-          </summary>
-          <CardContent className="pt-0 pb-4">
-            <div className="grid gap-4 text-xs sm:grid-cols-3">
-              <div className="space-y-1 border-l-2 border-blue-500 pl-3">
-                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">1</Badge>
-                  Productos y Catálogo
-                </h4>
-                <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
-                  El producto, SKU, precios y categoría forman parte del catálogo compartido entre sucursales.
-                </p>
-              </div>
-              <div className="space-y-1 border-l-2 border-amber-500 pl-3">
-                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center rounded-full text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">2</Badge>
-                  Control y Alertas de Stock
-                </h4>
-                <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
-                  Las existencias corresponden a la sucursal activa seleccionada en la cabecera.
-                </p>
-              </div>
-              <div className="space-y-1 border-l-2 border-emerald-500 pl-3">
-                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center rounded-full text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">3</Badge>
-                  Movimientos e Historial
-                </h4>
-                <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
-                  Cada venta, ajuste y transferencia queda registrada con el stock anterior y el nuevo.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </details>
-      </Card>
+      <InventoryGuide />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">

@@ -169,7 +169,9 @@ describe('la guia dice lo que el sistema hace', () => {
     // «Usa ajustes o transferencias para modificar stock de forma auditada» era
     // literalmente falso: el ajuste se escribia y nadie podia leerlo.
     expect(PANTALLA).not.toContain('Usa ajustes o transferencias para modificar stock de forma auditada')
-    expect(PANTALLA).toContain('Cada venta, ajuste y transferencia queda registrada')
+    // La guia vive ahora en su propio componente, con ejemplos.
+    const GUIA = leer('src/components/admin/inventory/InventoryGuide.tsx')
+    expect(GUIA).toContain('Las ventas no se cargan a mano')
   })
 })
 
