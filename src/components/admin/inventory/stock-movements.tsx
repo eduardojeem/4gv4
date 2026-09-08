@@ -27,6 +27,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { movementTypeAliases, normalizeMovementType } from '@/lib/inventory/movement-type'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
 import { format } from 'date-fns'
@@ -70,22 +71,7 @@ type ProductMovementRow = {
   created_at: string
 }
 
-const normalizeMovementType = (rawType: unknown): StockMovement['type'] => {
-  const value = String(rawType || '').toLowerCase()
-  if (value === 'entrada' || value === 'entry') return 'entrada'
-  if (value === 'salida' || value === 'exit' || value === 'sale') return 'salida'
-  if (value === 'transferencia' || value === 'transfer') return 'transferencia'
-  if (value === 'devolucion' || value === 'devolución' || value === 'return') return 'devolucion'
-  return 'ajuste'
-}
-
-const movementTypeFilters: Record<StockMovement['type'], string[]> = {
-  entrada: ['entrada', 'entry', 'in'],
-  salida: ['salida', 'exit', 'sale', 'out'],
-  ajuste: ['ajuste', 'adjustment'],
-  transferencia: ['transferencia', 'transfer'],
-  devolucion: ['devolucion', 'devolución', 'return']
-}
+// La traduccion vive en un solo lugar: habia dos, con reglas propias.
 
 const StockMovements: React.FC = () => {
   const [movements, setMovements] = useState<StockMovement[]>([])
@@ -133,7 +119,7 @@ const StockMovements: React.FC = () => {
 
       // Aplicar filtros
       if (filterType !== 'all') {
-        const rawValues = movementTypeFilters[filterType as StockMovement['type']] || [filterType]
+        const rawValues = movementTypeAliases(filterType as StockMovement['type'])
         query = query.in('movement_type', rawValues)
       }
 
@@ -220,10 +206,10 @@ const StockMovements: React.FC = () => {
 
       const [totalMovements, totalEntradas, totalSalidas, totalAjustes, totalTransferencias] = await Promise.all([
         countMovements(),
-        countMovements(movementTypeFilters.entrada),
-        countMovements(movementTypeFilters.salida),
-        countMovements(movementTypeFilters.ajuste),
-        countMovements(movementTypeFilters.transferencia),
+        countMovements(movementTypeAliases('entrada')),
+        countMovements(movementTypeAliases('salida')),
+        countMovements(movementTypeAliases('ajuste')),
+        countMovements(movementTypeAliases('transferencia')),
       ])
 
       setSummary({

@@ -46,15 +46,27 @@ interface SupplierProduct {
 
 const SUPPLIER_PRODUCTS_PAGE_SIZE = 10
 
-const SupplierManagement: React.FC = () => {
-  const { 
-    suppliers, 
-    loading, 
-    createSupplier, 
-    updateSupplier, 
+interface SupplierManagementProps {
+  /**
+   * El componente padre tiene su propia lista de proveedores para el formulario
+   * de producto. Sin este aviso, dar de alta un proveedor aca no lo hacia
+   * aparecer alli hasta recargar la pagina.
+   */
+  onSuppliersChanged?: () => void
+}
+
+const SupplierManagement: React.FC<SupplierManagementProps> = ({ onSuppliersChanged }) => {
+  // Sin catalogo ni indicadores: esta pantalla solo administra proveedores, y
+  // montar el hook completo volvia a traer todos los productos en cada entrada
+  // a la pestaña.
+  const {
+    suppliers,
+    loading,
+    createSupplier,
+    updateSupplier,
     deleteSupplier,
-    refreshSuppliers 
-  } = useInventory()
+    refreshSuppliers
+  } = useInventory({ loadProducts: false, loadStats: false })
 
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([])
@@ -127,6 +139,7 @@ const SupplierManagement: React.FC = () => {
     }
 
     const result = await createSupplier(supplierData)
+    if (result.success) onSuppliersChanged?.()
     
     if (result.success) {
       setNewSupplier({})
@@ -151,6 +164,7 @@ const SupplierManagement: React.FC = () => {
     }
 
     const result = await updateSupplier(editingSupplier.id, editingSupplier)
+    if (result.success) onSuppliersChanged?.()
 
     if (result.success) {
       setEditingSupplier({})
@@ -164,6 +178,7 @@ const SupplierManagement: React.FC = () => {
   const handleDeleteSupplier = async (supplierId: string) => {
     if (confirm('¿Estás seguro de que deseas eliminar este proveedor?')) {
       const result = await deleteSupplier(supplierId)
+      if (result.success) onSuppliersChanged?.()
       if (!result.success) {
         setErrors({ form: result.error || 'Error al eliminar proveedor' })
       }

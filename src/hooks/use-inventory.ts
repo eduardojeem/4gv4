@@ -56,6 +56,13 @@ export interface Product {
   updated_at: string
 }
 
+export type InventorySortColumn = 'name' | 'sku' | 'price' | 'stock' | 'created_at'
+
+export interface InventorySort {
+  column: InventorySortColumn
+  direction: 'asc' | 'desc'
+}
+
 export interface InventorySnapshot {
   totalProducts: number
   outOfStock: number
@@ -74,6 +81,14 @@ export interface InventorySnapshot {
 interface UseInventoryProps {
   initialPage?: number
   initialPageSize?: number
+  /**
+   * Quien solo necesita proveedores o categorias no tiene por que disparar una
+   * carga completa del catalogo. `supplier-management` montaba su propio
+   * `useInventory()` y cada entrada a la pestaña «Proveedores» volvia a traer
+   * productos, categorias y proveedores.
+   */
+  loadProducts?: boolean
+  loadStats?: boolean
 }
 
 const productApiFields = [
@@ -164,7 +179,12 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
-export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInventoryProps = {}) {
+export function useInventory({
+  initialPage = 1,
+  initialPageSize = 10,
+  loadProducts = true,
+  loadStats = true,
+}: UseInventoryProps = {}) {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -186,6 +206,9 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
   // Paginación y Filtros
   const [page, setPage] = useState(initialPage)
   const [pageSize, setPageSize] = useState(initialPageSize)
+  // La cabecera de la tabla no ordenaba aunque la API acepta nombre, SKU,
+  // precio y stock: estaba construido y no se usaba.
+  const [sort, setSort] = useState<InventorySort>({ column: 'created_at', direction: 'desc' })
   const [totalCount, setTotalCount] = useState(0)
   const [filters, setFilters] = useState({
     search: '',
@@ -298,8 +321,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
       const params = new URLSearchParams({
         page: String(page),
         per_page: String(pageSize),
-        sort: 'created_at',
-        direction: 'desc',
+        sort: sort.column,
+        direction: sort.direction,
       })
       if (selectedBranchId) params.set('strict_branch_stock', 'true')
       if (debouncedSearch.trim()) params.set('query', debouncedSearch.trim())
@@ -363,6 +386,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
   }, [
     page,
     pageSize,
+    sort.column,
+    sort.direction,
     selectedBranchId,
     debouncedSearch,
     filters.category,
@@ -387,8 +412,9 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
   // Los indicadores dependen de la sucursal, no de la pagina ni de los filtros:
   // se recalculan cuando cambia la sucursal y despues de cada alta o baja.
   useEffect(() => {
+    if (!loadStats) return
     fetchStats()
-  }, [fetchStats])
+  }, [fetchStats, loadStats])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -404,8 +430,12 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
   // Recargar productos cuando cambian dependencias
   useEffect(() => {
+    if (!loadProducts) {
+      setLoading(false)
+      return
+    }
     fetchProducts()
-  }, [fetchProducts])
+  }, [fetchProducts, loadProducts])
 
   useEffect(() => {
     setPage(1)
@@ -423,6 +453,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     filters.dateAdded,
     filters.lastMovement,
     pageSize,
+    sort.column,
+    sort.direction,
     selectedBranchId,
   ])
 
@@ -557,6 +589,8 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     setPage,
     pageSize,
     setPageSize,
+    sort,
+    setSort,
     totalCount,
     filters,
     setFilters,

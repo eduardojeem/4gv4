@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
+import { normalizeMovementType } from '@/lib/inventory/movement-type'
 import { useBranch } from '@/contexts/branch-context'
 import {
   applyBranchInventoryToProducts,
@@ -285,9 +286,9 @@ const StockControl: React.FC = () => {
           productId: m.product_id,
           productName: m.product?.name || 'Desconocido',
           productSku: m.product?.sku || '',
-          type: (m.movement_type === 'entry' || m.movement_type === 'entrada' || m.movement_type === 'in') ? 'entrada' :
-                (m.movement_type === 'exit' || m.movement_type === 'salida' || m.movement_type === 'sale' || m.movement_type === 'out') ? 'salida' :
-                (m.movement_type === 'transfer' || m.movement_type === 'transferencia') ? 'transferencia' : 'ajuste',
+          // Misma traduccion que usa la pestaña de Movimientos: eran dos, con
+          // reglas propias, y un tipo nuevo iba a caer en «ajuste» en una sola.
+          type: normalizeMovementType(m.movement_type) as StockMovement['type'],
           quantity: m.quantity,
           previousStock: m.previous_stock,
           newStock: m.new_stock,

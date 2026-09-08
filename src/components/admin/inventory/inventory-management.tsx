@@ -29,7 +29,7 @@ import { PromotionManager } from '@/components/admin/inventory/PromotionManager'
 import { VariantManager } from '@/components/admin/inventory/VariantManager'
 import { InventoryAlertsPanel } from '@/components/admin/inventory/InventoryAlertsPanel'
 import { ProductModal } from '@/components/dashboard/product-modal'
-import { useInventory, Product } from '@/hooks/use-inventory'
+import { useInventory, type Product, type InventorySort, type InventorySortColumn } from '@/hooks/use-inventory'
 import { useBranch } from '@/contexts/branch-context'
 import {
   Package,
@@ -59,7 +59,10 @@ import {
   Percent,
   BarChart3,
   SlidersHorizontal,
-  RotateCcw
+  RotateCcw,
+  ArrowUpDown,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -80,6 +83,11 @@ const operationTabs = [
   { value: 'alerts', label: 'Alertas', icon: Bell },
 ] as const
 
+const INVENTORY_TAB_VALUES = new Set([
+  'products', 'stock-control', 'movements', 'alerts',
+  'suppliers', 'categories', 'variants', 'promotions', 'reports', 'search',
+])
+
 const managementTabs = [
   { value: 'suppliers', label: 'Proveedores', icon: Truck },
   { value: 'categories', label: 'Categorías', icon: FolderTree },
@@ -89,15 +97,39 @@ const managementTabs = [
   { value: 'search', label: 'Búsqueda avanzada', icon: SlidersHorizontal },
 ] as const
 
-interface ValidationError {
-  field: string
-  message: string
-}
-
 interface AdvancedSearchFilter {
   id: string
   type: string
   value: unknown
+}
+
+/** Cabecera que ordena. Antes eran texto plano y el orden estaba fijo. */
+function SortableHeader({
+  column,
+  label,
+  sort,
+  onSort,
+}: {
+  column: InventorySortColumn
+  label: string
+  sort: InventorySort
+  onSort: (column: InventorySortColumn) => void
+}) {
+  const active = sort.column === column
+  return (
+    <th className="p-0 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        aria-label={`Ordenar por ${label}`}
+        aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+        className="flex w-full items-center gap-1 p-3.5 text-left transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:text-slate-200"
+      >
+        {label}
+        <ArrowUpDown className={`h-3 w-3 shrink-0 transition-opacity ${active ? 'opacity-100 text-blue-500' : 'opacity-30'}`} />
+      </button>
+    </th>
+  )
 }
 
 export default function InventoryManagement() {
@@ -120,11 +152,31 @@ export default function InventoryManagement() {
     setFilters,
     createProduct,
     updateProduct,
-    deleteProduct
+    deleteProduct,
+    refreshSuppliers,
+    sort,
+    setSort,
+    setPageSize
   } = useInventory()
 
   // Estados de interfaz locales
-  const [activeTab, setActiveTab] = useState('products')
+  // La pestaña viaja en la URL: con diez secciones y `useState`, recargar,
+  // volver desde el detalle de un producto o compartir un enlace te devolvia
+  // siempre a «Catalogo».
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === 'undefined') return 'products'
+    const desdeUrl = new URLSearchParams(window.location.search).get('tab')
+    return INVENTORY_TAB_VALUES.has(desdeUrl || '') ? (desdeUrl as string) : 'products'
+  })
+
+  const changeTab = (value: string) => {
+    setActiveTab(value)
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (value === 'products') url.searchParams.delete('tab')
+    else url.searchParams.set('tab', value)
+    window.history.replaceState(null, '', url)
+  }
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -134,8 +186,6 @@ export default function InventoryManagement() {
   const [isExporting, setIsExporting] = useState(false)
 
   // Estados del formulario
-  const [formData, setFormData] = useState<Partial<Product>>({})
-  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
   const [successMessage, setSuccessMessage] = useState('')
   const [actionError, setActionError] = useState('')
   const categoryOptions = useMemo(
@@ -146,31 +196,6 @@ export default function InventoryManagement() {
     () => suppliers.map((supplier) => ({ label: supplier.name, value: supplier.id })),
     [suppliers]
   )
-
-  const parseNumberInput = (rawValue: string, parser: (value: string) => number) => {
-    const trimmed = rawValue.trim()
-    if (trimmed === '') return undefined
-    const parsed = parser(trimmed)
-    return Number.isFinite(parsed) ? parsed : undefined
-  }
-
-  // Validaciones
-  const validateProduct = (data: Partial<Product>): ValidationError[] => {
-    const errors: ValidationError[] = []
-    const salePrice = Number(data.sale_price)
-    const purchasePrice = Number(data.purchase_price)
-    const stockQuantity = Number(data.stock_quantity)
-
-    if (!data.name?.trim()) errors.push({ field: 'name', message: 'El nombre es requerido' })
-    if (!data.sku?.trim()) errors.push({ field: 'sku', message: 'El SKU es requerido' })
-    if (!data.category_id) errors.push({ field: 'category_id', message: 'La categoría es requerida' })
-    if (!data.supplier_id) errors.push({ field: 'supplier_id', message: 'El proveedor es requerido' })
-    if (!Number.isFinite(salePrice) || salePrice <= 0) errors.push({ field: 'sale_price', message: 'Precio inválido' })
-    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) errors.push({ field: 'purchase_price', message: 'Costo inválido' })
-    if (!Number.isFinite(stockQuantity) || stockQuantity < 0) errors.push({ field: 'stock_quantity', message: 'Stock inválido' })
-
-    return errors
-  }
 
   // Helpers UI
   // El nivel sale de `resolveStockLevel`, que trata `max_stock: 0` como «sin
@@ -189,7 +214,7 @@ export default function InventoryManagement() {
     const isActive = product.status === 'active'
     return isActive 
       ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-      : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+      : 'bg-muted text-muted-foreground'
   }
 
   // Los indicadores vienen del servidor, sobre toda la empresa y la sucursal
@@ -238,54 +263,6 @@ export default function InventoryManagement() {
   }, [snapshot, selectedBranch?.name])
 
   // Handlers CRUD
-  const handleAddProduct = async () => {
-    setValidationErrors([])
-    setActionError('')
-    setIsSubmitting(true)
-    const errors = validateProduct(formData)
-    if (errors.length > 0) {
-      setValidationErrors(errors)
-      setIsSubmitting(false)
-      return
-    }
-
-    const result = await createProduct(formData)
-    if (result.success) {
-      setSuccessMessage('Producto creado correctamente')
-      setIsAddDialogOpen(false)
-      setFormData({})
-      setTimeout(() => setSuccessMessage(''), 3000)
-    } else {
-      setActionError(result.error || 'No fue posible crear el producto')
-    }
-    setIsSubmitting(false)
-  }
-
-  const handleEditProduct = async () => {
-    if (!selectedProduct) return
-    setValidationErrors([])
-    setActionError('')
-    setIsSubmitting(true)
-
-    const errors = validateProduct(formData)
-    if (errors.length > 0) {
-      setValidationErrors(errors)
-      setIsSubmitting(false)
-      return
-    }
-
-    const result = await updateProduct(selectedProduct.id, formData)
-    if (result.success) {
-      setSuccessMessage('Producto actualizado')
-      setIsEditDialogOpen(false)
-      setSelectedProduct(null)
-      setTimeout(() => setSuccessMessage(''), 3000)
-    } else {
-      setActionError(result.error || 'No fue posible actualizar el producto')
-    }
-    setIsSubmitting(false)
-  }
-
   const handleDeleteProduct = async () => {
     if (!selectedProduct) return
     setActionError('')
@@ -304,13 +281,9 @@ export default function InventoryManagement() {
 
   const openEditDialog = (product: Product) => {
     setSelectedProduct(product)
-    setFormData({ ...product })
-    setValidationErrors([])
     setActionError('')
     setIsEditDialogOpen(true)
   }
-
-  const getFieldError = (field: string) => validationErrors.find(e => e.field === field)?.message
 
   const handleAdvancedSearch = (activeFilters: AdvancedSearchFilter[]) => {
     const byId = new Map(activeFilters.map((f) => [f.id, f]))
@@ -331,7 +304,7 @@ export default function InventoryManagement() {
     const productStatus = statusFilter.find((status) => ['active', 'inactive', 'discontinued'].includes(status)) || 'all'
 
     setPage(1)
-    setActiveTab('products')
+    changeTab('products')
     setSuccessMessage('Filtros aplicados al catálogo')
     setTimeout(() => setSuccessMessage(''), 3000)
     setFilters(prev => ({
@@ -403,6 +376,15 @@ export default function InventoryManagement() {
     }
   }
 
+  // Ordenar por stock es lo primero que se busca en una pantalla de inventario,
+  // y la API ya lo soportaba.
+  const toggleSort = (column: InventorySortColumn) => {
+    setSort((current) => current.column === column
+      ? { column, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+      : { column, direction: column === 'stock' ? 'asc' : 'asc' })
+  }
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
   const hasNextPage = page * pageSize < totalCount
   const rangeStart = totalCount === 0 ? 0 : ((page - 1) * pageSize) + 1
   const rangeEnd = totalCount === 0 ? 0 : Math.min(page * pageSize, totalCount)
@@ -498,8 +480,6 @@ export default function InventoryManagement() {
             </Button>
             <Button
               onClick={() => {
-                setFormData({})
-                setValidationErrors([])
                 setActionError('')
                 setIsAddDialogOpen(true)
               }}
@@ -549,7 +529,7 @@ export default function InventoryManagement() {
                   Movimientos e Historial
                 </h4>
                 <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
-                  Usa ajustes o transferencias para modificar stock de forma auditada.
+                  Cada venta, ajuste y transferencia queda registrada con el stock anterior y el nuevo.
                 </p>
               </div>
             </div>
@@ -592,9 +572,9 @@ export default function InventoryManagement() {
       )}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0 space-y-5">
+      <Tabs value={activeTab} onValueChange={changeTab} className="min-w-0 space-y-5">
         <div className="lg:hidden">
-          <Select value={activeTab} onValueChange={setActiveTab}>
+          <Select value={activeTab} onValueChange={changeTab}>
             <SelectTrigger className="h-11 w-full rounded-lg border-border bg-card px-3 shadow-sm" aria-label="Seleccionar sección de inventario">
               <SelectValue placeholder="Seleccionar sección" />
             </SelectTrigger>
@@ -733,15 +713,19 @@ export default function InventoryManagement() {
             </div>
 
           {/* Tabla */}
-            <div className="overflow-x-auto">
+            {/* La tabla de siete columnas resolvia el celular con scroll
+                horizontal. En movil se cambia por tarjetas, que es el patron
+                que ya usaba la pestaña de Alertas dentro de esta misma
+                pantalla. */}
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm text-left">
                 <thead className="border-b border-slate-100 bg-slate-50/50 dark:border-white/5 dark:bg-white/[0.02]">
                   <tr>
-                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Producto</th>
-                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">SKU</th>
+                    <SortableHeader column="name" label="Producto" sort={sort} onSort={toggleSort} />
+                    <SortableHeader column="sku" label="SKU" sort={sort} onSort={toggleSort} />
                     <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Categoría</th>
-                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Precio / Costo</th>
-                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Stock</th>
+                    <SortableHeader column="price" label="Precio / Costo" sort={sort} onSort={toggleSort} />
+                    <SortableHeader column="stock" label="Stock" sort={sort} onSort={toggleSort} />
                     <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado</th>
                     <th className="p-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Acciones</th>
                   </tr>
@@ -768,8 +752,6 @@ export default function InventoryManagement() {
                             : {
                                 label: 'Nuevo producto',
                                 onClick: () => {
-                                  setFormData({})
-                                  setValidationErrors([])
                                   setActionError('')
                                   setIsAddDialogOpen(true)
                                 },
@@ -845,8 +827,70 @@ export default function InventoryManagement() {
                 </tbody>
               </table>
             </div>
+
+            {/* Misma informacion, apilada, para pantallas angostas. */}
+            <div className="divide-y divide-slate-100 dark:divide-white/5 md:hidden">
+              {loading && (
+                <div className="p-8 text-center text-slate-400">
+                  <Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin text-blue-500" />
+                  Cargando catálogo...
+                </div>
+              )}
+              {!loading && products.length === 0 && (
+                <EmptyState
+                  icon={Package}
+                  title={hasCatalogFilters ? 'No hay resultados' : 'Todavía no hay productos'}
+                  description={hasCatalogFilters
+                    ? 'Probá con otros términos o quitá los filtros aplicados.'
+                    : 'Creá el primer producto para comenzar a controlar existencias.'}
+                  className="py-12"
+                />
+              )}
+              {!loading && products.map((product) => {
+                const stockInfo = getStockStatus(product)
+                return (
+                  <div key={product.id} className="space-y-2 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{product.name}</p>
+                        <p className="mt-0.5 font-mono text-[11px] text-slate-400">{product.sku}</p>
+                      </div>
+                      <Badge className={`shrink-0 border-0 px-2 py-0.5 text-[10px] ${stockInfo.color}`}>{stockInfo.text}</Badge>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="font-semibold tabular-nums text-slate-900 dark:text-white">{formatCurrency(product.sale_price)}</span>
+                      <span className="tabular-nums">Stock {product.stock_quantity}</span>
+                      {product.category?.name && <span className="truncate">{product.category.name}</span>}
+                    </div>
+                    <div className="flex gap-1 pt-1">
+                      <Button variant="outline" size="sm" className="h-8 flex-1 rounded-lg text-xs" onClick={() => openEditDialog(product)}>
+                        <Edit className="mr-1.5 h-3.5 w-3.5" /> Editar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-lg text-xs"
+                        onClick={() => { setSelectedProduct(product); setIsVariantDialogOpen(true) }}
+                        aria-label={`Gestionar variantes de ${product.name}`}
+                      >
+                        <Layers className="h-3.5 w-3.5 text-purple-500" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-lg text-xs"
+                        onClick={() => { setSelectedProduct(product); setIsDeleteDialogOpen(true) }}
+                        aria-label={`Eliminar ${product.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
             {/* Paginación */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t p-3 dark:border-gray-700">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
               <span className="text-xs text-muted-foreground">
                 Mostrando {rangeStart} - {rangeEnd} de {totalCount}
                 {/* La API avisa cuando el filtro de stock barrió hasta su tope y
@@ -857,12 +901,33 @@ export default function InventoryManagement() {
                   </span>
                 )}
               </span>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+                  <SelectTrigger className="h-8 w-[112px] rounded-md text-xs" aria-label="Productos por página">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Con 10 filas fijas, revisar 400 productos eran 40 clics. */}
+                    {[10, 25, 50, 100].map((size) => (
+                      <SelectItem key={size} value={String(size)}>{size} por página</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(1)} disabled={page === 1 || loading} aria-label="Primera página">
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
                 <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading} aria-label="Página anterior">
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
+                {/* Eran dos flechas sin numero: no habia forma de saber donde estabas. */}
+                <span className="min-w-[86px] text-center text-xs tabular-nums text-muted-foreground">
+                  Página {page} de {totalPages}
+                </span>
                 <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(p => p + 1)} disabled={!hasNextPage || loading} aria-label="Página siguiente">
                   <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(totalPages)} disabled={!hasNextPage || loading} aria-label="Última página">
+                  <ChevronsRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -904,7 +969,7 @@ export default function InventoryManagement() {
         </TabsContent>
 
         <TabsContent value="suppliers">
-          <SupplierManagement />
+          <SupplierManagement onSuppliersChanged={refreshSuppliers} />
         </TabsContent>
 
         <TabsContent value="search">
@@ -939,7 +1004,7 @@ export default function InventoryManagement() {
               // La alerta puede ser de un producto que no esta en la pagina
               // cargada: se lo busca por su id en el catalogo.
               setFilters((current) => ({ ...current, search: productId }))
-              setActiveTab('products')
+              changeTab('products')
             }}
           />
         </TabsContent>
@@ -981,10 +1046,10 @@ export default function InventoryManagement() {
 
       {/* Delete Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="dark:bg-gray-800 dark:border-gray-700">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="dark:text-gray-100">Confirmar Eliminación</DialogTitle>
-            <DialogDescription className="dark:text-gray-400">
+            <DialogTitle >Confirmar Eliminación</DialogTitle>
+            <DialogDescription >
               ¿Está seguro de que desea eliminar <strong>{selectedProduct?.name}</strong>? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
@@ -999,13 +1064,13 @@ export default function InventoryManagement() {
 
       {/* Variant Dialog */}
       <Dialog open={isVariantDialogOpen} onOpenChange={setIsVariantDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="dark:text-gray-100 flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2">
               <Layers className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               Variantes para: {selectedProduct?.name}
             </DialogTitle>
-            <DialogDescription className="dark:text-gray-400">
+            <DialogDescription >
               Administre variantes y opciones personalizadas (ej: Talla, Color, Capacidad) para este producto.
             </DialogDescription>
           </DialogHeader>
