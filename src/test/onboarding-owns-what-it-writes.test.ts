@@ -144,7 +144,8 @@ describe('el color de marca es el mismo conjunto en las dos pantallas', () => {
 
   it('la pantalla avisa cuando ya hay un color propio en vez de pisarlo', () => {
     expect(CLIENTE).toContain("form.brandColor === 'custom' ?")
-    expect(CLIENTE).toContain('Tenés un color propio configurado en Diseño del sitio')
+    expect(CLIENTE).toContain('Ya tenés un color propio configurado en')
+    expect(CLIENTE).toContain('Elegí uno de acá solo si querés reemplazarlo')
   })
 })
 
@@ -185,5 +186,47 @@ describe('validacion y limpieza', () => {
   it('el hueco en la auditoria se registra en vez de descartarse', () => {
     expect(RUTA).toContain('const { error: auditError }')
     expect(RUTA).toContain('Onboarding saved without audit trail')
+  })
+})
+
+/**
+ * El formulario puede tener cambios sin guardar y hay un `beforeunload` que lo
+ * protege, pero la navegacion interna de Next es del lado del cliente: no lo
+ * dispara. Cualquier enlace que saque de esta pantalla perdia lo cargado en
+ * silencio.
+ */
+describe('salir de la pantalla no cuesta lo que cargaste', () => {
+  it('el sitio completo se abre en otra pestaña', () => {
+    expect(CLIENTE).toContain('Abrir Sitio Web en otra pestaña')
+    expect(CLIENTE).toContain('<Link href="/admin/website" target="_blank" rel="noopener noreferrer">')
+    expect(CLIENTE).toContain('Se abre en una pestaña nueva para que no pierdas lo que cargaste acá')
+  })
+
+  it('y los pasos que llevan a otras secciones también', () => {
+    // Antes solo la tienda publica abria pestaña nueva; «Productos» y «Equipo»
+    // navegaban encima del formulario.
+    expect(CLIENTE).toContain("const leavesOnboarding = !pendingStorefront && !href.startsWith('/dashboard/onboarding')")
+    expect(CLIENTE).toContain("target={leavesOnboarding ? '_blank' : undefined}")
+  })
+
+  it('el enlace que vuelve a esta misma pantalla no abre pestaña', () => {
+    expect(CLIENTE).toContain("!href.startsWith('/dashboard/onboarding')")
+  })
+})
+
+describe('el enlace dice qué se configura del otro lado', () => {
+  it('enumera las secciones en vez de mandar a ciegas', () => {
+    expect(CLIENTE).toContain('Acá elegís lo esencial. El sitio completo se configura aparte.')
+    expect(CLIENTE).toContain('el encabezado y la')
+    expect(CLIENTE).toContain('catálogo de servicios, los pasos del proceso y las formas de pago y entrega')
+  })
+
+  it('usa el nombre que la sección tiene en el menú', () => {
+    // Se llama «Sitio Web» en admin-navigation; «Diseño del sitio» era un
+    // nombre inventado que el usuario no iba a encontrar en ningún lado.
+    const NAV = leer('src/config/admin-navigation.ts')
+    expect(NAV).toContain("label: 'Sitio Web'")
+    expect(CLIENTE).not.toContain('Diseño del sitio')
+    expect(CLIENTE).toContain('Sitio Web')
   })
 })

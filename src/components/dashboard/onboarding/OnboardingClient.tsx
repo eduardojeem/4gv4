@@ -435,7 +435,7 @@ export function OnboardingClient({
       // inicial del sitio no se pudo escribir, se dice en vez de responder
       // «listo» y dejar la tienda vacia.
       if (payload?.websiteContentIncomplete) {
-        toast.warning('Tu tienda quedó sin el contenido inicial. Podés cargarlo desde Diseño del sitio.')
+        toast.warning('Tu tienda quedó sin el contenido inicial. Podés cargarlo desde Sitio Web.')
       }
       if (isRevisit) router.refresh()
       else router.push('/dashboard')
@@ -956,7 +956,7 @@ export function OnboardingClient({
 
               {/* Color de marca.
                   El onboarding ya lo escribía: le fijaba 'blue' en cada
-                  guardado, pisando lo elegido en Diseño del sitio. */}
+                  guardado, pisando lo elegido en Sitio Web. */}
               <div className="space-y-2">
                 <Label className="text-xs font-medium text-foreground">Color principal de tu tienda</Label>
                 <div className="flex flex-wrap gap-2">
@@ -989,17 +989,33 @@ export function OnboardingClient({
                 </div>
                 {form.brandColor === 'custom' ? (
                   <p className="text-[11px] text-muted-foreground">
-                    Tenés un color propio configurado en Diseño del sitio. Elegí uno de acá solo si
-                    querés reemplazarlo.
+                    Ya tenés un color propio configurado en <strong className="text-foreground">Sitio Web</strong>.
+                    Elegí uno de acá solo si querés reemplazarlo.
                   </p>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground">
-                    El resto del diseño —encabezado, portada, servicios— se ajusta en{' '}
-                    <Link href="/admin/website" className="font-medium text-primary underline-offset-2 hover:underline">
-                      Diseño del sitio
-                    </Link>.
+                ) : null}
+
+                {/* Se abre en otra pestaña a proposito: el formulario de esta
+                    pantalla tiene cambios sin guardar, y la navegacion interna
+                    de Next no dispara el aviso de `beforeunload`. */}
+                <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5">
+                  <p className="text-xs font-semibold text-foreground">
+                    Acá elegís lo esencial. El sitio completo se configura aparte.
                   </p>
-                )}
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    En <strong className="text-foreground">Sitio Web</strong> están el encabezado y la
+                    portada, la barra de confianza, el carrusel de promociones, las ofertas, el
+                    catálogo de servicios, los pasos del proceso y las formas de pago y entrega.
+                  </p>
+                  <Button variant="outline" size="sm" className="mt-2.5 h-8 gap-1.5 text-xs" asChild>
+                    <Link href="/admin/website" target="_blank" rel="noopener noreferrer">
+                      Abrir Sitio Web en otra pestaña
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Se abre en una pestaña nueva para que no pierdas lo que cargaste acá.
+                  </p>
+                </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1175,7 +1191,11 @@ export function OnboardingClient({
                 // interruptor que lo resuelve.
                 const pendingStorefront = step.doneKey === 'hasPublicStore' && !done
                 const href = pendingStorefront ? '/dashboard/onboarding#company-info' : step.href
-                const external = href.startsWith(`/${organization.slug}/`)
+                // Todo lo que saca de esta pantalla se abre en otra pestaña: el
+                // formulario puede tener cambios sin guardar, y la navegacion
+                // interna de Next no dispara el aviso de `beforeunload`. La
+                // unica excepcion es el enlace que lleva a esta misma pantalla.
+                const leavesOnboarding = !pendingStorefront && !href.startsWith('/dashboard/onboarding')
                 return (
                   <li key={step.title} className="py-3 first:pt-0 last:pb-0">
                     <div className="flex gap-3">
@@ -1203,12 +1223,12 @@ export function OnboardingClient({
                           <Button variant="link" size="sm" className="mt-1.5 h-auto p-0 text-xs font-medium text-primary" asChild>
                             <Link
                               href={href}
-                              target={external ? '_blank' : undefined}
-                              rel={external ? 'noopener noreferrer' : undefined}
+                              target={leavesOnboarding ? '_blank' : undefined}
+                              rel={leavesOnboarding ? 'noopener noreferrer' : undefined}
                               onClick={pendingStorefront ? () => setActiveTab('public') : undefined}
                             >
                               {done ? 'Revisar' : pendingStorefront ? 'Publicar' : 'Configurar'}
-                              {external ? <ExternalLink className="ml-1 h-3 w-3" /> : <ArrowRight className="ml-1 h-3 w-3" />}
+                              {leavesOnboarding ? <ExternalLink className="ml-1 h-3 w-3" /> : <ArrowRight className="ml-1 h-3 w-3" />}
                             </Link>
                           </Button>
                         ) : null}
