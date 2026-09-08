@@ -330,16 +330,22 @@ const InventoryReports: React.FC = () => {
 
       if (productsError) throw productsError
 
-      const branchAwareProducts = await loadBranchInventoryStockMap(
+      const branchStock = await loadBranchInventoryStockMap(
         supabase as unknown as BranchInventoryClient,
         selectedBranchId,
         (products || []).map((product) => product.id)
-      ).then(({ stockMap, branchScoped }) =>
-        applyBranchInventoryToProducts(
-          (products || []) as Array<{ id: string; stock_quantity?: number | null } & Record<string, unknown>>,
-          stockMap,
-          branchScoped
+      )
+      // Un informe con el stock global bajo el nombre de una sucursal no es un
+      // informe incompleto: es uno equivocado.
+      if (selectedBranchId && branchStock.failed) {
+        throw new Error(
+          `No se pudo leer el stock de la sucursal activa, asi que el informe no se genera. ${branchStock.error || ''}`.trim()
         )
+      }
+      const branchAwareProducts = applyBranchInventoryToProducts(
+        (products || []) as Array<{ id: string; stock_quantity?: number | null } & Record<string, unknown>>,
+        branchStock.stockMap,
+        branchStock.branchScoped
       )
 
       // 2. Fetch Suppliers (solo columnas usadas)

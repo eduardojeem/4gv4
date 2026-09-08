@@ -227,12 +227,54 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     }
 
     if (branchScope.branchId && desiredStockQuantity !== undefined) {
+      const adminSupabase = createAdminSupabase()
+
+      // El stock previo se lee antes de escribir: es lo que va a la fila del
+      // movimiento. Sin esto, reponer desde «Alertas → Reabastecer» cambiaba el
+      // stock sin dejar rastro, mientras el mismo cambio hecho desde «Stock por
+      // sucursal» sí quedaba registrado. La misma accion por dos puertas
+      // distintas tenia dos historiales distintos.
+      const { data: previousRow } = await adminSupabase
+        .from('branch_inventory')
+        .select('stock_quantity')
+        .eq('branch_id', branchScope.branchId)
+        .eq('product_id', id)
+        .maybeSingle()
+      const previousStock = Number(previousRow?.stock_quantity ?? 0)
+      const nextStock = Number(desiredStockQuantity)
+
       await upsertBranchInventoryStock({
-        supabase: createAdminSupabase() as unknown as BranchInventoryClient,
+        supabase: adminSupabase as unknown as BranchInventoryClient,
         branchId: branchScope.branchId,
         productId: id,
-        stockQuantity: Number(desiredStockQuantity),
+        stockQuantity: nextStock,
       })
+
+      if (nextStock !== previousStock) {
+        const { error: movementError } = await adminSupabase
+          .from('product_movements')
+          .insert({
+            organization_id: organization.id,
+            branch_id: branchScope.branchId,
+            product_id: id,
+            movement_type: 'adjustment',
+            quantity: Math.abs(nextStock - previousStock),
+            previous_stock: previousStock,
+            new_stock: nextStock,
+            notes: 'Ajuste desde la ficha del producto',
+            user_id: user.id,
+          })
+
+        // El stock ya se guardo: no se revierte por el historial, pero tampoco
+        // se calla, porque un hueco en la trazabilidad no se recupera despues.
+        if (movementError) {
+          logger.error('Stock updated without movement record', {
+            productId: id,
+            branchId: branchScope.branchId,
+            error: movementError.message,
+          })
+        }
+      }
     }
 
     const { data: refreshedProduct, error: refreshedProductError } = await supabase

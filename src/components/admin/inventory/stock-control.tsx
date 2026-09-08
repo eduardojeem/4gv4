@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -111,6 +112,20 @@ interface ProductQueryRow {
 
 const PRODUCT_PAGE_SIZE = 25
 
+/**
+ * `STOCK_CHANGED|esperado|real` sale de set_branch_inventory_stock cuando el
+ * stock se movio mientras el dialogo estaba abierto. Sin traducirlo, el cajero
+ * leia el codigo crudo de Postgres.
+ */
+function describeStockRpcError(error: { message?: string | null } | null): string {
+  const raw = String(error?.message || '')
+  const match = raw.match(/STOCK_CHANGED\|(-?\d+)\|(-?\d+)/)
+  if (match) {
+    return `El stock cambió mientras tenías el formulario abierto: era ${match[1]} y ahora es ${match[2]}. Cerrá y volvé a hacer el movimiento sobre el valor actual.`
+  }
+  return raw || 'No se pudo registrar el movimiento.'
+}
+
 const MOVEMENT_TYPE_OPTIONS = [
   { value: 'entrada', label: 'Entrada', description: 'Suma unidades recibidas', icon: PackagePlus, activeClass: 'border-emerald-600 bg-emerald-50 text-emerald-700 dark:border-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-300' },
   { value: 'salida', label: 'Salida', description: 'Descuenta unidades', icon: PackageMinus, activeClass: 'border-rose-600 bg-rose-50 text-rose-700 dark:border-rose-500 dark:bg-rose-500/10 dark:text-rose-300' },
@@ -151,7 +166,10 @@ const StockControl: React.FC = () => {
   const [productPage, setProductPage] = useState(1)
   const [productTotalCount, setProductTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
-  
+  // Un fallo de RLS, una caida de red y un catalogo realmente vacio se veian
+  // los tres iguales: "no hay productos".
+  const [loadError, setLoadError] = useState<string | null>(null)
+
   const supabase = createClient()
   const { branches, selectedBranch, selectedBranchId } = useBranch()
   const destinationBranch = branches.find((branch) => branch.id === transferToBranchId) || null
@@ -176,6 +194,7 @@ const StockControl: React.FC = () => {
   // Cargar datos de Supabase
   const fetchData = useCallback(async () => {
     setIsLoading(true)
+    setLoadError(null)
     try {
       // 1. Cargar Productos
       const productFrom = (productPage - 1) * PRODUCT_PAGE_SIZE
@@ -208,11 +227,21 @@ const StockControl: React.FC = () => {
       setProductTotalCount(productsCount || 0)
 
       const productRows = (productsData || []) as unknown as ProductQueryRow[]
-      const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
-        supabase as unknown as BranchInventoryClient,
-        selectedBranchId,
-        productRows.map((product) => product.id)
-      )
+      const { stockMap, branchScoped, failed: branchStockFailed, error: branchStockError } =
+        await loadBranchInventoryStockMap(
+          supabase as unknown as BranchInventoryClient,
+          selectedBranchId,
+          productRows.map((product) => product.id)
+        )
+      // Pintar el stock global bajo el nombre de la sucursal es peor que no
+      // pintar nada: quien lo mire va a ajustar contra un numero que no es.
+      if (selectedBranchId && branchStockFailed) {
+        setProducts([])
+        setProductTotalCount(0)
+        throw new Error(
+          `No se pudo leer el stock de ${selectedBranch?.name || 'la sucursal activa'}. ${branchStockError || ''}`.trim()
+        )
+      }
       const branchAwareProducts = applyBranchInventoryToProducts(productRows, stockMap, branchScoped)
 
       const formattedProducts: Product[] = branchAwareProducts.map((p) => ({
@@ -279,7 +308,7 @@ const StockControl: React.FC = () => {
         .from('product_alerts')
         .select(`
           *,
-          product:products(name, sku, stock_quantity)
+          product:products(name, sku, stock_quantity, min_stock)
         `)
         .eq('is_resolved', false)
         .in('alert_type', ['low_stock', 'out_of_stock'])
@@ -305,7 +334,9 @@ const StockControl: React.FC = () => {
                 ? 'expiring'
                 : 'low_stock',
           currentStock: (branchStockByProductId.get(a.product_id) ?? a.product?.stock_quantity) || 0,
-          threshold: 5, // Valor por defecto o del producto si estuviera disponible en join
+          // El minimo real del producto: `5` fijo mostraba el mismo umbral para
+          // un cargador y para un celular.
+          threshold: Number(a.product?.min_stock ?? 0),
           severity: a.alert_type === 'out_of_stock' ? 'critical' : 'medium',
           message: a.message,
           isActive: !a.is_resolved,
@@ -335,10 +366,11 @@ const StockControl: React.FC = () => {
 
     } catch (error) {
       console.error('Error fetching data:', error)
+      setLoadError(error instanceof Error ? error.message : 'No se pudo cargar el control de stock.')
     } finally {
       setIsLoading(false)
     }
-  }, [productPage, productSearch, selectedBranchId, supabase])
+  }, [productPage, productSearch, selectedBranchId, selectedBranch?.name, supabase])
 
   // Efectos
   useEffect(() => {
@@ -447,16 +479,20 @@ const StockControl: React.FC = () => {
       const newStock = movementProjection.finalStock
 
       if (selectedBranchId) {
+        // Se manda el stock que la pantalla tenia a la vista: si entre medio
+        // hubo una venta, la RPC rechaza en vez de pisarla. El absoluto se
+        // calculaba en el navegador sobre un valor leido al cargar la lista.
         const { error: branchError } = await supabase.rpc('set_branch_inventory_stock', {
           p_product_id: selectedProduct.id,
           p_branch_id: selectedBranchId,
           p_new_stock: newStock,
           p_movement_type: movementType === 'entrada' ? 'in' : movementType === 'salida' ? 'out' : 'adjustment',
           p_reason: movementReason || null,
-          p_reference_id: movementReference || null
+          p_reference_id: movementReference || null,
+          p_expected_previous_stock: selectedProduct.stock,
         })
 
-        if (branchError) throw branchError
+        if (branchError) throw new Error(describeStockRpcError(branchError))
       } else {
         const { error: rpcError } = await supabase.rpc('update_product_stock', {
           product_id: selectedProduct.id,
@@ -613,6 +649,18 @@ const StockControl: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <Alert className="border-rose-200 bg-rose-50 dark:border-rose-900/40 dark:bg-rose-950/20">
+          <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+          <AlertDescription className="flex flex-wrap items-center gap-3 text-rose-800 dark:text-rose-300">
+            <span>{loadError}</span>
+            <Button variant="outline" size="sm" className="h-7 rounded-lg text-xs" onClick={() => fetchData()}>
+              Reintentar
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Alertas Críticas */}
       {criticalAlerts.length > 0 && (
