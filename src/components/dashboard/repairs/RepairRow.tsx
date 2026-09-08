@@ -30,7 +30,6 @@ import { useWhatsApp } from '@/hooks/useWhatsApp'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
 import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
-import { RepairPaymentIndicator } from './RepairPaymentIndicator'
 
 interface RepairPrintCompanyInfo {
   name: string
@@ -195,7 +194,7 @@ export const RepairRow = memo<RepairRowProps>(
         </TableCell>
 
         <TableCell>
-          <div className="flex min-w-[150px] flex-col items-start gap-1.5">
+          <div className="flex min-w-[150px] items-center">
             <Badge
               variant="outline"
               className={cn(
@@ -208,13 +207,6 @@ export const RepairRow = memo<RepairRowProps>(
                 {statusConfig[repair.status].label}
               </span>
             </Badge>
-            <RepairPaymentIndicator
-              compact
-              status={repair.status}
-              finalCost={repair.finalCost}
-              estimatedCost={repair.estimatedCost}
-              paidAmount={repair.paidAmount}
-            />
           </div>
         </TableCell>
 

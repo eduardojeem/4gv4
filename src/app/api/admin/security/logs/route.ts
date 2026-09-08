@@ -155,42 +155,63 @@ async function countFailedAttempts(
   return error ? null : count ?? 0
 }
 
-async function loadOrganizationUserIds(admin: ReturnType<typeof createAdminSupabase>, organizationId: string) {
+type MemberData = {
+  user_id: string
+  role?: string | null
+  status?: string | null
+}
+
+type ProfileData = {
+  id: string
+  email?: string | null
+  full_name?: string | null
+  role?: string | null
+  status?: string | null
+  avatar_url?: string | null
+}
+
+async function loadOrganizationMembers(admin: ReturnType<typeof createAdminSupabase>, organizationId: string) {
   const { data, error } = await admin
     .from('organization_members')
-    .select('user_id')
+    .select('user_id, role, status')
     .eq('organization_id', organizationId)
 
   if (error) throw error
-  return new Set((data || []).map((member) => member.user_id).filter(Boolean))
+  return (data || []) as MemberData[]
 }
 
 async function loadProfiles(admin: ReturnType<typeof createAdminSupabase>, userIds: string[]) {
-  const profilesById = new Map<string, string>()
+  const profilesById = new Map<string, ProfileData>()
 
   if (userIds.length === 0) return profilesById
 
   const { data } = await admin
     .from('profiles')
-    .select('id, email, full_name')
+    .select('id, email, full_name, role, status, avatar_url')
     .in('id', userIds)
 
   for (const profile of data || []) {
-    const name = profile.full_name || ''
-    const email = profile.email || ''
-    profilesById.set(profile.id, name && email ? `${name} (${email})` : name || email || 'Usuario desconocido')
+    profilesById.set(profile.id, profile)
   }
 
   return profilesById
 }
 
-function mapLog(row: AuditLogRow, profilesById: Map<string, string>): SecurityLog {
+function formatProfileDisplayName(profile?: ProfileData): string {
+  if (!profile) return 'Usuario desconocido'
+  const name = profile.full_name || ''
+  const email = profile.email || ''
+  return name && email ? `${name} (${email})` : name || email || 'Usuario desconocido'
+}
+
+function mapLog(row: AuditLogRow, profilesById: Map<string, ProfileData>): SecurityLog {
   const mapped = describeAuditEvent(row.action)
+  const profile = row.user_id ? profilesById.get(row.user_id) : undefined
 
   return {
     id: row.id,
     event: mapped.event,
-    user: row.user_id ? profilesById.get(row.user_id) || 'Usuario desconocido' : 'Sistema',
+    user: row.user_id ? formatProfileDisplayName(profile) : 'Sistema',
     timestamp: row.created_at || new Date().toISOString(),
     ip: row.ip_address || 'N/A',
     severity: normalizeSeverity(row.severity, mapped.severity),
@@ -297,10 +318,12 @@ export async function GET(request: NextRequest) {
   const startDate = timeRangeToDate(timeRange)
   const admin = createAdminSupabase()
 
+  let organizationMembers: MemberData[] | null = null
   let organizationUserIds: Set<string> | null = null
   if (organizationId) {
     try {
-      organizationUserIds = await loadOrganizationUserIds(admin, organizationId)
+      organizationMembers = await loadOrganizationMembers(admin, organizationId)
+      organizationUserIds = new Set(organizationMembers.map((m) => m.user_id).filter(Boolean))
     } catch {
       return NextResponse.json({ error: 'No se pudieron cargar los miembros de la organizacion.' }, { status: 500 })
     }
@@ -336,17 +359,44 @@ export async function GET(request: NextRequest) {
   const logs = scopedRows.map((row) => mapLog(row, profilesById))
   const totalCount = response.count ?? logs.length
 
-  const users = organizationUserIds
-    ? Array.from(organizationUserIds)
-      .map((id) => ({ id, name: profilesById.get(id) || 'Usuario desconocido' }))
-      .sort((a, b) => a.name.localeCompare(b.name))
+  const users = organizationMembers
+    ? organizationMembers
+        .map((m) => {
+          const prof = profilesById.get(m.user_id)
+          const name = prof?.full_name || prof?.email || 'Usuario desconocido'
+          const role = m.role || prof?.role || 'staff'
+          const status = m.status || prof?.status || 'active'
+          return {
+            id: m.user_id,
+            name,
+            email: prof?.email || undefined,
+            role,
+            status,
+            avatarUrl: prof?.avatar_url || undefined,
+          }
+        })
+        .sort((a, b) => a.name.localeCompare(b.name))
     : Array.from(
-      new Map(
-        logs
-          .filter((log) => log.user_id)
-          .map((log) => [log.user_id as string, { id: log.user_id as string, name: log.user }])
-      ).values()
-    ).sort((a, b) => a.name.localeCompare(b.name))
+        new Map(
+          logs
+            .filter((log) => log.user_id)
+            .map((log) => {
+              const prof = log.user_id ? profilesById.get(log.user_id) : undefined
+              const name = prof?.full_name || log.user
+              return [
+                log.user_id as string,
+                {
+                  id: log.user_id as string,
+                  name,
+                  email: prof?.email || undefined,
+                  role: prof?.role || 'staff',
+                  status: prof?.status || 'active',
+                  avatarUrl: prof?.avatar_url || undefined,
+                },
+              ]
+            })
+        ).values()
+      ).sort((a, b) => a.name.localeCompare(b.name))
 
   // Los tres conteos van sobre el rango completo, no sobre la pagina. Si alguno
   // falla se devuelve null en vez de un cero: un cero afirmaria que no hay

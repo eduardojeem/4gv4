@@ -56,34 +56,21 @@ function renderRow(value: Repair) {
   )
 }
 
-describe('RepairRow payment status', () => {
-  it('identifies a delivered repair that still has an outstanding balance', () => {
+describe('RepairRow financial visibility', () => {
+  it('keeps payment status out of the table row', () => {
     renderRow(repair)
 
-    expect(screen.getByText('Entregado con saldo pendiente')).toBeVisible()
-    expect(screen.getByText(/Falta.*105[.]000/)).toBeVisible()
+    expect(screen.queryByLabelText('Estado financiero de la reparación')).not.toBeInTheDocument()
+    expect(screen.queryByText('Entregado con saldo pendiente')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Falta.*105[.]000/)).not.toBeInTheDocument()
+    expect(screen.getByText('Entregado')).toBeVisible()
   })
 
-  it('does not treat an advance without a final price as a fully paid repair', () => {
+  it('does not show an advance or a paid label in the table row', () => {
     renderRow({ ...repair, status: 'reparacion', finalCost: null, estimatedCost: 0, paidAmount: 95_000 })
 
-    expect(screen.getByText('Anticipo · precio pendiente')).toBeVisible()
+    expect(screen.queryByText('Anticipo · precio pendiente')).not.toBeInTheDocument()
     expect(screen.queryByText('Pagado')).not.toBeInTheDocument()
-  })
-
-  it('refreshes the financial indicator when a payment changes', () => {
-    const view = renderRow({ ...repair, status: 'reparacion' })
-
-    expect(screen.getByText('Pago parcial')).toBeVisible()
-    view.rerender(
-      <Table>
-        <TableBody>
-          <RepairRow repair={{ ...repair, status: 'reparacion', paidAmount: 200_000 }} onEdit={vi.fn()} />
-        </TableBody>
-      </Table>,
-    )
-
-    expect(screen.getByText('Pagado')).toBeVisible()
-    expect(screen.queryByText('Pago parcial')).not.toBeInTheDocument()
+    expect(screen.getByText('En Reparación')).toBeVisible()
   })
 })

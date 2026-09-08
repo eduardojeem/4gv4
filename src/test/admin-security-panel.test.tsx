@@ -43,8 +43,9 @@ const mockLogs = [
 ]
 
 const mockUsers = [
-  { id: 'user-1', name: 'Juan Pérez' },
-  { id: 'user-2', name: 'Carlos López' },
+  { id: 'user-1', name: 'Juan Pérez', role: 'admin', email: 'juan@example.com' },
+  { id: 'user-2', name: 'Carlos López', role: 'seller', email: 'carlos@example.com' },
+  { id: 'user-3', name: 'María Gomez', role: 'cliente', email: 'maria@cliente.com' },
 ]
 
 vi.mock('@/hooks/use-security-logs', () => ({
@@ -113,15 +114,34 @@ describe('Panel de Seguridad Administrativo (/admin/security)', () => {
     expect(scanBtn).toBeInTheDocument()
   })
 
-  it('permite ver la lista de usuarios y accesos en la pestaña de Usuarios', () => {
+  it('permite ver la lista de usuarios separando personal del sistema y clientes', () => {
     render(<SecurityPanel />)
 
     const usersTab = screen.getByRole('tab', { name: /Usuarios & Accesos/i })
     fireEvent.click(usersTab)
 
     expect(screen.getByText('Personal con Acceso al Sistema')).toBeInTheDocument()
+    expect(screen.getByText('Personal y Empleados del Sistema')).toBeInTheDocument()
+    expect(screen.getByText('Clientes Registrados con Acceso')).toBeInTheDocument()
+
+    // Ambos grupos visibles en la vista inicial (Todos)
     expect(screen.getByText('Juan Pérez')).toBeInTheDocument()
     expect(screen.getByText('Carlos López')).toBeInTheDocument()
+    expect(screen.getByText('María Gomez')).toBeInTheDocument()
+
+    // Filtrar solo por Personal / Empleados
+    const staffFilterBtn = screen.getByRole('button', { name: /Personal \/ Empleados/i })
+    fireEvent.click(staffFilterBtn)
+    expect(screen.getByText('Juan Pérez')).toBeInTheDocument()
+    expect(screen.getByText('Carlos López')).toBeInTheDocument()
+    expect(screen.queryByText('María Gomez')).not.toBeInTheDocument()
+
+    // Filtrar solo por Clientes
+    const customersFilterBtn = screen.getByRole('button', { name: /Clientes/i })
+    fireEvent.click(customersFilterBtn)
+    expect(screen.getByText('María Gomez')).toBeInTheDocument()
+    expect(screen.queryByText('Juan Pérez')).not.toBeInTheDocument()
+    expect(screen.queryByText('Carlos López')).not.toBeInTheDocument()
   })
 
   it('permite ver las recomendaciones de blindaje', () => {

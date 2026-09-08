@@ -16,6 +16,16 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -26,7 +36,7 @@ import {
   Edit, Printer, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
   PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown,
-  Loader2, Sparkles, History, FileCheck2, User, TrendingUp, ShieldCheck, UserCheck
+  Loader2, Sparkles, History, FileCheck2, User, TrendingUp, ShieldCheck, UserCheck, ArrowRight
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -36,6 +46,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Repair, RepairDeliveryOutcome, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { getAvailableTransitions } from '@/lib/repairs/state-machine'
+import { getRepairStatusGuidance } from '@/lib/repairs/status-guidance'
 import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
 import { normalizeRepairLineType } from '@/lib/repairs/line-types'
 import { cn } from '@/lib/utils'
@@ -109,7 +120,8 @@ export function RepairDetailDialog({
   const [warrantyCaseVersion, setWarrantyCaseVersion] = useState(0)
   const [showSensitiveData, setShowSensitiveData] = useState(false)
   const [isSendingStatusWhatsApp, setIsSendingStatusWhatsApp] = useState(false)
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState<RepairStatus | null>(null)
+  const [pendingStatus, setPendingStatus] = useState<RepairStatus | null>(null)
   const [isCostsEditorOpen, setIsCostsEditorOpen] = useState(false)
   const [isInternalCostCorrectionOpen, setIsInternalCostCorrectionOpen] = useState(false)
   const [isFinalPriceCorrectionOpen, setIsFinalPriceCorrectionOpen] = useState(false)
@@ -241,6 +253,43 @@ export function RepairDetailDialog({
   const isPaused = activeRepair.status === 'pausado'
   const isCancelled = activeRepair.status === 'cancelado'
   const currentStepIndex = isPaused ? 2 : STATUS_FLOW.indexOf(activeRepair.status)
+  const statusGuidance = getRepairStatusGuidance(activeRepair.status)
+  const availableTransitions = getAvailableTransitions(activeRepair.status)
+  const recommendedStatus = statusGuidance.recommended && availableTransitions.includes(statusGuidance.recommended)
+    ? statusGuidance.recommended
+    : null
+  const alternativeStatuses = availableTransitions.filter(status => status !== recommendedStatus && status !== 'cancelado')
+
+  const performStatusChange = async (nextStatus: RepairStatus) => {
+    const cfg = statusConfig[nextStatus]
+    if (nextStatus === 'entregado') {
+      if (onDeliver) {
+        onClose()
+        onDeliver(repair)
+      }
+      return
+    }
+
+    if (!onStatusChange) return
+    setUpdatingStatus(nextStatus)
+    try {
+      const success = await onStatusChange(repair.id, nextStatus)
+      if (success) toast.success(nextStatus === 'cancelado' ? 'Reparación cancelada' : `Estado actualizado a ${cfg?.label || nextStatus}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el estado')
+    } finally {
+      setUpdatingStatus(null)
+      setPendingStatus(null)
+    }
+  }
+
+  const requestStatusChange = (nextStatus: RepairStatus) => {
+    if (statusGuidance.requiresConfirmation(nextStatus)) {
+      setPendingStatus(nextStatus)
+      return
+    }
+    void performStatusChange(nextStatus)
+  }
   const lineTotals = (activeRepair.parts || []).reduce((totals, part) => {
     const amount = Math.max(0, part.cost * part.quantity - (part.discountAmount ?? 0))
     const lineType = normalizeRepairLineType(part.lineType)
@@ -820,87 +869,86 @@ export function RepairDetailDialog({
           )}
         </div>
 
-        {/* Quick status transitions container */}
-        {repair && onStatusChange && !isCancelled && (
-          <div className="border-b bg-slate-50/50 dark:bg-slate-900/10 px-2.5 py-1.5 flex items-center gap-1.5 shrink-0 sm:flex-wrap sm:justify-between sm:px-6 sm:py-2">
-            <span className="max-sm:hidden text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
-              Cambio rápido:
-            </span>
-            <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto no-scrollbar sm:flex-wrap">
-              {getAvailableTransitions(repair.status).map((nextStatus) => {
-                const cfg = statusConfig[nextStatus]
-                if (!cfg) return null
-                const NextIcon = cfg.icon
+        {/* Guía de estado: una acción principal y alternativas comprensibles. */}
+        {repair && onStatusChange && !isCancelled && availableTransitions.length > 0 && (
+          <section aria-labelledby="repair-next-step-title" className="shrink-0 border-b bg-slate-50/70 px-3 py-2.5 dark:bg-slate-900/20 sm:px-6 sm:py-3">
+            <div className="mx-auto flex max-w-4xl flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={cn('shrink-0 text-[10px] font-semibold sm:text-xs', statusConfig[repair.status]?.color)}>
+                    {statusConfig[repair.status]?.label || repair.status}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground sm:hidden">
+                    Paso {Math.max(1, currentStepIndex + 1)} de {STATUS_FLOW.length}
+                  </span>
+                </div>
+                <h3 id="repair-next-step-title" className="mt-1 text-xs font-bold text-foreground sm:text-sm">Siguiente paso</h3>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground sm:text-xs">
+                  {statusGuidance.currentDescription} {statusGuidance.actionDescription}
+                </p>
+              </div>
 
-                return (
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                {recommendedStatus && (() => {
+                  const cfg = statusConfig[recommendedStatus]
+                  const NextIcon = cfg.icon
+                  const missingTechnician = recommendedStatus === 'reparacion' && !repair.technician?.id
+                  return (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => requestStatusChange(recommendedStatus)}
+                      disabled={Boolean(updatingStatus) || missingTechnician}
+                      title={missingTechnician ? 'Asigná un técnico para iniciar la reparación' : statusGuidance.actionDescription}
+                      className="h-9 gap-1.5 bg-cyan-700 px-3 text-xs font-bold text-white hover:bg-cyan-800"
+                    >
+                      {updatingStatus === recommendedStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <NextIcon className="h-3.5 w-3.5" />}
+                      {statusGuidance.actionLabel}
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  )
+                })()}
+
+                {alternativeStatuses.map(nextStatus => {
+                  const cfg = statusConfig[nextStatus]
+                  const NextIcon = cfg.icon
+                  return (
+                    <Button
+                      key={nextStatus}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => requestStatusChange(nextStatus)}
+                      disabled={Boolean(updatingStatus)}
+                      className="h-9 gap-1.5 px-2.5 text-xs"
+                    >
+                      {updatingStatus === nextStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <NextIcon className="h-3.5 w-3.5" />}
+                      {cfg.label}
+                    </Button>
+                  )
+                })}
+
+                {availableTransitions.includes('cancelado') && (
                   <Button
-                    key={nextStatus}
+                    type="button"
                     size="sm"
-                    variant="outline"
-                    className={cn(
-                      "h-8 shrink-0 rounded-lg text-xs font-bold gap-1 transition-all shadow-xs active:scale-95 px-2.5",
-                      cfg.color,
-                      "hover:bg-slate-100 dark:hover:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
-                    )}
-                    onClick={async () => {
-                      if (nextStatus === 'entregado') {
-                        if (onDeliver) {
-                          onClose()
-                          onDeliver(repair)
-                        }
-                        return
-                      }
-                      setIsUpdatingStatus(true)
-                      try {
-                        const success = await onStatusChange(repair.id, nextStatus)
-                        if (success) {
-                          toast.success(`Estado actualizado a ${cfg.label}`)
-                        }
-                      } catch (error) {
-                        toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el estado')
-                      } finally {
-                        setIsUpdatingStatus(false)
-                      }
-                    }}
-                    disabled={isUpdatingStatus}
+                    variant="ghost"
+                    onClick={() => requestStatusChange('cancelado')}
+                    disabled={Boolean(updatingStatus)}
+                    className="h-9 px-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/30"
                   >
-                    {isUpdatingStatus ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <NextIcon className="h-3 w-3" />
-                    )}
-                    {cfg.label}
+                    {updatingStatus === 'cancelado' ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <XCircle className="mr-1 h-3.5 w-3.5" />}
+                    Cancelar
                   </Button>
-                )
-              })}
-              
-              {repair.status !== 'entregado' && repair.status !== 'cancelado' && !getAvailableTransitions(repair.status).includes('cancelado') && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 shrink-0 rounded-lg text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 px-2"
-                  onClick={async () => {
-                    setIsUpdatingStatus(true)
-                    try {
-                      const success = await onStatusChange(repair.id, 'cancelado')
-                      if (success) {
-                        toast.success('Reparación cancelada')
-                      }
-                    } catch (error) {
-                      toast.error(error instanceof Error ? error.message : 'No se pudo cancelar')
-                    } finally {
-                      setIsUpdatingStatus(false)
-                    }
-                  }}
-                  disabled={isUpdatingStatus}
-                >
-                  <XCircle className="h-3 w-3 mr-1" />
-                  Cancelar
-                </Button>
-              )}
+                )}
+              </div>
             </div>
-          </div>
+            {recommendedStatus === 'reparacion' && !repair.technician?.id && (
+              <p role="status" className="mx-auto mt-2 max-w-4xl text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                Asigná un técnico desde “Editar” para habilitar el inicio de la reparación.
+              </p>
+            )}
+          </section>
         )}
 
         <ScrollArea className="flex-1 min-h-0 bg-background w-full">
@@ -2134,6 +2182,35 @@ export function RepairDetailDialog({
         }}
       />
     )}
+
+    <AlertDialog open={pendingStatus !== null} onOpenChange={(nextOpen) => !nextOpen && setPendingStatus(null)}>
+      <AlertDialogContent className="max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {pendingStatus === 'cancelado' ? '¿Cancelar esta reparación?' : '¿Volver a una etapa anterior?'}
+          </AlertDialogTitle>
+          <AlertDialogDescription className="leading-relaxed">
+            {pendingStatus === 'cancelado'
+              ? 'La orden quedará fuera del flujo de trabajo. El historial y los datos registrados se conservarán.'
+              : `El estado cambiará de “${statusConfig[repair.status]?.label || repair.status}” a “${pendingStatus ? statusConfig[pendingStatus]?.label : ''}”. Usá esta opción solamente si el equipo necesita volver a trabajarse.`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={Boolean(updatingStatus)}>Mantener estado actual</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!pendingStatus || Boolean(updatingStatus)}
+            onClick={(event) => {
+              event.preventDefault()
+              if (pendingStatus) void performStatusChange(pendingStatus)
+            }}
+            className={pendingStatus === 'cancelado' ? 'bg-rose-600 text-white hover:bg-rose-700' : undefined}
+          >
+            {updatingStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {pendingStatus === 'cancelado' ? 'Sí, cancelar reparación' : 'Confirmar cambio de etapa'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </>
   )
 }

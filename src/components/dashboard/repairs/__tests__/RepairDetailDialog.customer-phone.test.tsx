@@ -123,4 +123,42 @@ describe('RepairDetailDialog Customer Alternate Phone', () => {
     expect(openUrl).toContain('983333444')
     expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('Esposa'))
   })
+
+  it('muestra un siguiente paso claro en lugar de una lista de estados equivalentes', () => {
+    render(
+      <RepairDetailDialog
+        repair={sampleRepair}
+        open={true}
+        onClose={vi.fn()}
+        onStatusChange={vi.fn()}
+        onDeliver={vi.fn()}
+      />
+    )
+
+    expect(screen.getByRole('heading', { name: 'Siguiente paso' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Cobrar y entregar/i })).toBeInTheDocument()
+    expect(screen.getByText(/proceso de cobro y entrega/i)).toBeInTheDocument()
+    expect(screen.queryByText('Cambio rápido:')).not.toBeInTheDocument()
+  })
+
+  it('permite abrir editores rápidos de técnico y garantía desde el detalle', () => {
+    render(
+      <RepairDetailDialog
+        repair={sampleRepair}
+        open={true}
+        onClose={vi.fn()}
+        technicians={[{ id: 'tech-1', name: 'Ana Técnica' }]}
+        onTechnicianChange={vi.fn()}
+        onWarrantyChange={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Asignar técnico/i }))
+    expect(screen.getByRole('heading', { name: /Asignar técnico/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: /Editar garantía/i }))
+    expect(screen.getByRole('heading', { name: /Editar garantía/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/Duración de garantía/i)).toHaveValue('3')
+  })
 })

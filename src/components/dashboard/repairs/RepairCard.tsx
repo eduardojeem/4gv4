@@ -19,6 +19,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { WarrantyBadge } from './WarrantyBadge'
+import { RepairPaymentIndicator } from './RepairPaymentIndicator'
 
 interface RepairCardProps {
   repair: Repair
@@ -135,6 +136,14 @@ export const RepairCard = memo<RepairCardProps>(
             </div>
           </div>
 
+          <RepairPaymentIndicator
+            compact
+            status={repair.status}
+            finalCost={repair.finalCost}
+            estimatedCost={repair.estimatedCost}
+            paidAmount={repair.paidAmount}
+          />
+
           {/* Footer: Status + Date + Cost + Warranty */}
           <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-slate-800 gap-1 flex-wrap">
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -179,6 +188,9 @@ export const RepairCard = memo<RepairCardProps>(
     return (
       prev.id === next.id &&
       prev.status === next.status &&
+      prev.paidAmount === next.paidAmount &&
+      prev.finalCost === next.finalCost &&
+      prev.estimatedCost === next.estimatedCost &&
       prev.priority === next.priority &&
       prev.urgency === next.urgency &&
       prev.lastUpdate === next.lastUpdate &&

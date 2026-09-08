@@ -38,6 +38,15 @@ describe('una sola garantía predeterminada, la de la empresa', () => {
     expect(HOOK).toContain('defaultWarrantyMonths: next.months')
   })
 
+  it('vuelve a cargar al habilitarse para no aplicar primero el respaldo de 3 meses', () => {
+    const efectoDeCarga = HOOK.slice(
+      HOOK.indexOf('useEffect(() => {'),
+      HOOK.indexOf('return () => { vigente = false }'),
+    )
+
+    expect(efectoDeCarga).toContain('setLoading(true)')
+  })
+
   it('al guardar manda el comprobante completo, no solo la garantía', () => {
     // La API normaliza contra los valores por defecto, no contra lo guardado:
     // un PUT parcial reseteaba el formato de papel, el logo y el texto legal.

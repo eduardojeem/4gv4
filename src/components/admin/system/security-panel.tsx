@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Ban,
+  Briefcase,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -31,11 +32,13 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  ShoppingBag,
   Smartphone,
   Sparkles,
   Terminal,
   User,
   UserCheck,
+  UserCog,
   UserX,
   Users,
   XCircle,
@@ -122,6 +125,88 @@ function csvCell(value: string | number | undefined) {
   return `"${seguro.replace(/"/g, '""')}"`
 }
 
+function isCustomerRole(role?: string): boolean {
+  if (!role) return false
+  const r = role.toLowerCase().trim()
+  return (
+    r === 'cliente' ||
+    r === 'customer' ||
+    r === 'viewer' ||
+    r === 'client_normal' ||
+    r === 'mayorista' ||
+    r === 'client_mayorista'
+  )
+}
+
+function getRoleConfig(role?: string) {
+  if (!role) {
+    return {
+      label: 'Personal / Empleado',
+      badgeClass: 'bg-slate-100 text-slate-800 dark:bg-slate-800/70 dark:text-slate-200 border-slate-200 dark:border-slate-700',
+      icon: Briefcase,
+    }
+  }
+
+  const r = role.toLowerCase().trim()
+  switch (r) {
+    case 'super_admin':
+      return {
+        label: 'Super Admin',
+        badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-900',
+        icon: ShieldAlert,
+      }
+    case 'owner':
+      return {
+        label: 'Propietario',
+        badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200 dark:border-purple-900',
+        icon: ShieldCheck,
+      }
+    case 'admin':
+      return {
+        label: 'Administrador',
+        badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-900',
+        icon: Shield,
+      }
+    case 'seller':
+    case 'vendedor':
+    case 'cashier':
+      return {
+        label: 'Ventas / Vendedor',
+        badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900',
+        icon: Briefcase,
+      }
+    case 'technician':
+    case 'tecnico':
+      return {
+        label: 'Servicio Técnico',
+        badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-900',
+        icon: Terminal,
+      }
+    case 'mayorista':
+    case 'client_mayorista':
+      return {
+        label: 'Cliente Mayorista',
+        badgeClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-900',
+        icon: ShoppingBag,
+      }
+    case 'cliente':
+    case 'customer':
+    case 'viewer':
+    case 'client_normal':
+      return {
+        label: 'Cliente Registrado',
+        badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border-sky-200 dark:border-sky-900',
+        icon: ShoppingBag,
+      }
+    default:
+      return {
+        label: role,
+        badgeClass: 'bg-muted text-muted-foreground border-border',
+        icon: User,
+      }
+  }
+}
+
 export function SecurityPanel() {
   const [activeTab, setActiveTab] = useState('audit')
   const [searchTerm, setSearchTerm] = useState('')
@@ -137,6 +222,8 @@ export function SecurityPanel() {
   const [exporting, setExporting] = useState(false)
   const [scanScore, setScanScore] = useState(98)
   const [lastScanDate, setLastScanDate] = useState<string | null>(null)
+  const [usersSearchTerm, setUsersSearchTerm] = useState('')
+  const [usersCategory, setUsersCategory] = useState<'all' | 'staff' | 'customers'>('all')
 
   const { logs, stats, totalCount, users, isLoading, error, fetchSecurityLogs } = useSecurityLogs()
   const { user, isAdmin, isSuperAdmin } = useAuth()
@@ -192,7 +279,35 @@ export function SecurityPanel() {
     toast.success('Diagnóstico completado', { description: 'Todos los mecanismos de defensa y RLS se encuentran operativos.' })
   }
 
-  async function blockUser(userId?: string) {
+  const { staffUsers, customerUsers } = useMemo(() => {
+    const staff: typeof users = []
+    const customers: typeof users = []
+    for (const u of users) {
+      if (isCustomerRole(u.role)) {
+        customers.push(u)
+      } else {
+        staff.push(u)
+      }
+    }
+    return { staffUsers: staff, customerUsers: customers }
+  }, [users])
+
+  const filterUserList = useCallback((list: typeof users) => {
+    if (!usersSearchTerm.trim()) return list
+    const q = usersSearchTerm.toLowerCase().trim()
+    return list.filter((u) => {
+      const matchName = u.name.toLowerCase().includes(q)
+      const matchEmail = u.email ? u.email.toLowerCase().includes(q) : false
+      const matchRole = u.role ? u.role.toLowerCase().includes(q) : false
+      const matchId = u.id.toLowerCase().includes(q)
+      return matchName || matchEmail || matchRole || matchId
+    })
+  }, [usersSearchTerm])
+
+  const filteredStaff = useMemo(() => filterUserList(staffUsers), [filterUserList, staffUsers])
+  const filteredCustomers = useMemo(() => filterUserList(customerUsers), [filterUserList, customerUsers])
+
+  async function blockUser(userId?: string, currentStatus?: string) {
     if (!userId) return
 
     if (userId === user?.id) {
@@ -201,12 +316,18 @@ export function SecurityPanel() {
     }
 
     if (!isAdmin && !isSuperAdmin) {
-      toast.error('Sin permisos', { description: 'Solo administradores pueden suspender usuarios.' })
+      toast.error('Sin permisos', { description: 'Solo administradores pueden suspender o reactivar usuarios.' })
       return
     }
 
+    const isSuspended = currentStatus === 'suspended' || currentStatus === 'inactive'
+    const nextStatus = isSuspended ? 'active' : 'suspended'
+    const actionLabel = isSuspended ? 'reactivar' : 'suspender'
+
     const confirmed = window.confirm(
-      'Vas a suspender este usuario. La cuenta no podrá acceder hasta que un administrador la reactive. ¿Quieres continuar?'
+      isSuspended
+        ? 'Vas a reactivar el acceso de este usuario al sistema. ¿Deseas continuar?'
+        : 'Vas a suspender este usuario. La cuenta no podrá acceder hasta que un administrador la reactive. ¿Quieres continuar?'
     )
     if (!confirmed) return
 
@@ -215,21 +336,24 @@ export function SecurityPanel() {
       const response = await fetch(`/api/admin/users/${userId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'suspended' }),
+        body: JSON.stringify({ status: nextStatus }),
       })
       const payload = await response.json().catch(() => ({}))
 
       if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || 'No se pudo suspender al usuario.')
+        throw new Error(payload?.error || `No se pudo ${actionLabel} al usuario.`)
       }
 
-      toast.success('Usuario suspendido', { description: 'La cuenta quedó inactiva para nuevos accesos.' })
+      toast.success(
+        isSuspended ? 'Usuario reactivado' : 'Usuario suspendido',
+        { description: isSuspended ? 'El acceso al sistema fue restablecido.' : 'La cuenta quedó inactiva para nuevos accesos.' }
+      )
       await fetchSecurityLogs(requestFilters, true)
-      if (selectedLog?.user_id === userId) {
+      if (selectedLog?.user_id === userId && !isSuspended) {
         setSelectedLog(null)
       }
     } catch (err) {
-      toast.error('No se pudo suspender', {
+      toast.error(`No se pudo ${actionLabel}`, {
         description: err instanceof Error ? err.message : 'Error inesperado.',
       })
     } finally {
@@ -788,56 +912,188 @@ export function SecurityPanel() {
            ══════════════════════════════════════════════════════ */}
         <TabsContent value="users" className="space-y-4 m-0">
           <Card className="border-border/80 shadow-sm bg-card rounded-2xl">
-            <CardHeader className="border-b bg-muted/20 px-6 py-4">
-              <div className="flex items-center justify-between">
+            <CardHeader className="border-b bg-muted/20 px-6 py-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <Users className="h-4 w-4 text-primary" />
+                  <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary" />
                     <span>Personal con Acceso al Sistema</span>
                   </CardTitle>
-                  <CardDescription className="text-xs">
-                    Revisa qué usuarios tienen credenciales activas y realiza acciones de bloqueo si detectas anomalías.
+                  <CardDescription className="text-xs sm:text-sm mt-1">
+                    Supervisa y audita las cuentas activas divididas entre el equipo de trabajo y clientes registrados.
                   </CardDescription>
                 </div>
-                <Badge variant="secondary" className="rounded-lg text-xs font-semibold">
-                  {users.length} usuarios registrados
-                </Badge>
+
+                {/* Quick stats badges */}
+                <div className="flex items-center flex-wrap gap-2">
+                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 bg-background/80">
+                    Total: <span className="ml-1 text-foreground font-bold">{users.length}</span>
+                  </Badge>
+                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800">
+                    <Briefcase className="h-3 w-3 mr-1" />
+                    Equipo: <span className="ml-1 font-bold">{staffUsers.length}</span>
+                  </Badge>
+                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800">
+                    <ShoppingBag className="h-3 w-3 mr-1" />
+                    Clientes: <span className="ml-1 font-bold">{customerUsers.length}</span>
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
 
-            <CardContent className="p-6">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {users.map((u) => {
+            <CardContent className="p-6 space-y-6">
+              {/* Barra de Filtros y Búsqueda */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/30 p-3 rounded-2xl border border-border/70">
+                {/* Selector de Categoría */}
+                <div className="flex items-center gap-1.5 p-1 bg-background/80 rounded-xl border border-border/60 overflow-x-auto">
+                  <Button
+                    type="button"
+                    variant={usersCategory === 'all' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setUsersCategory('all')}
+                    className="h-8 text-xs font-semibold rounded-lg px-3"
+                  >
+                    Todos ({users.length})
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={usersCategory === 'staff' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setUsersCategory('staff')}
+                    className="h-8 text-xs font-semibold rounded-lg px-3 flex items-center gap-1.5"
+                  >
+                    <Briefcase className="h-3.5 w-3.5" />
+                    <span>Personal / Empleados</span>
+                    <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4">
+                      {staffUsers.length}
+                    </Badge>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={usersCategory === 'customers' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setUsersCategory('customers')}
+                    className="h-8 text-xs font-semibold rounded-lg px-3 flex items-center gap-1.5"
+                  >
+                    <ShoppingBag className="h-3.5 w-3.5" />
+                    <span>Clientes</span>
+                    <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4">
+                      {customerUsers.length}
+                    </Badge>
+                  </Button>
+                </div>
+
+                {/* Búsqueda de Usuarios */}
+                <div className="relative flex-1 sm:max-w-xs">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-8 pr-8 text-xs h-9 rounded-xl bg-background"
+                    placeholder="Buscar nombre, correo, rol..."
+                    value={usersSearchTerm}
+                    onChange={(e) => setUsersSearchTerm(e.target.value)}
+                  />
+                  {usersSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setUsersSearchTerm('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <FilterX className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Helper para renderizar cada tarjeta de usuario */}
+              {(() => {
+                const renderUserCard = (u: typeof users[number], type: 'staff' | 'customer') => {
                   const isCurrent = u.id === user?.id
+                  const roleCfg = getRoleConfig(u.role)
+                  const RoleIcon = roleCfg.icon
+                  const isSuspended = u.status === 'suspended' || u.status === 'inactive'
+
                   return (
                     <div
                       key={u.id}
-                      className="rounded-xl border border-border/80 bg-muted/20 p-4 space-y-3 hover:border-primary/40 transition-colors"
+                      className={cn(
+                        'group rounded-2xl border bg-card p-4 space-y-3.5 transition-all hover:shadow-md',
+                        isCurrent ? 'border-primary/50 bg-primary/[0.02]' : 'border-border/80 hover:border-primary/40',
+                        isSuspended && 'opacity-75 bg-muted/30 border-dashed border-destructive/40'
+                      )}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="h-9 w-9 shrink-0 rounded-full bg-primary/10 flex items-center justify-center font-bold text-xs text-primary">
-                            {u.name.slice(0, 2).toUpperCase()}
+                      {/* Cabecera con Avatar, Nombre, Email, Estado */}
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div
+                            className={cn(
+                              'h-10 w-10 shrink-0 rounded-xl flex items-center justify-center font-bold text-xs shadow-xs',
+                              type === 'staff'
+                                ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300 ring-1 ring-purple-500/20'
+                                : 'bg-sky-500/10 text-sky-700 dark:text-sky-300 ring-1 ring-sky-500/20'
+                            )}
+                          >
+                            {u.avatarUrl ? (
+                              <img src={u.avatarUrl} alt={u.name} className="h-full w-full object-cover rounded-xl" />
+                            ) : (
+                              u.name.slice(0, 2).toUpperCase()
+                            )}
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-bold text-xs truncate text-foreground flex items-center gap-1.5">
-                              <span>{u.name}</span>
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-bold text-xs sm:text-sm truncate text-foreground" title={u.name}>
+                                {u.name}
+                              </p>
                               {isCurrent && (
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 border-primary/40 text-primary">
+                                <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0 border-primary/50 text-primary bg-primary/10">
                                   Tú
                                 </Badge>
                               )}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground font-mono truncate">ID: {u.id.slice(0, 8)}...</p>
+                            </div>
+                            {u.email ? (
+                              <p className="text-[11px] text-muted-foreground truncate" title={u.email}>
+                                {u.email}
+                              </p>
+                            ) : (
+                              <p className="text-[10px] text-muted-foreground font-mono truncate">
+                                ID: {u.id.slice(0, 8)}...
+                              </p>
+                            )}
                           </div>
                         </div>
 
-                        <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400">
-                          Activo
-                        </Badge>
+                        {/* Badge de Estado de Cuenta */}
+                        {isSuspended ? (
+                          <Badge variant="secondary" className="text-[10px] shrink-0 font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-900">
+                            Suspendido
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px] shrink-0 font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900">
+                            Activo
+                          </Badge>
+                        )}
                       </div>
 
-                      <div className="pt-2 border-t border-border/60 flex items-center justify-between gap-2">
+                      {/* Rol e ID */}
+                      <div className="flex items-center justify-between gap-2 text-xs pt-1">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'text-[10px] font-semibold px-2 py-0.5 rounded-lg flex items-center gap-1.5 border shadow-2xs',
+                            roleCfg.badgeClass
+                          )}
+                        >
+                          <RoleIcon className="h-3 w-3 shrink-0" />
+                          <span>{roleCfg.label}</span>
+                        </Badge>
+                        {u.email && (
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            ID: {u.id.slice(0, 8)}...
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Acciones */}
+                      <div className="pt-2.5 border-t border-border/70 flex items-center justify-between gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -845,7 +1101,7 @@ export function SecurityPanel() {
                             setUserFilter(u.id)
                             setActiveTab('audit')
                           }}
-                          className="text-xs h-7 px-2 font-semibold text-primary hover:bg-primary/10"
+                          className="text-xs h-7 px-2.5 font-semibold text-primary hover:bg-primary/10 rounded-lg"
                         >
                           <Eye className="h-3 w-3 mr-1" />
                           Ver auditoría
@@ -855,19 +1111,126 @@ export function SecurityPanel() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => blockUser(u.id)}
+                            onClick={() => blockUser(u.id, u.status)}
                             disabled={isBlocking === u.id}
-                            className="text-xs h-7 px-2 text-destructive hover:bg-destructive/10 border-destructive/30 rounded-lg"
+                            className={cn(
+                              'text-xs h-7 px-2.5 rounded-lg transition-colors font-semibold',
+                              isSuspended
+                                ? 'text-emerald-600 hover:bg-emerald-500/10 border-emerald-500/30'
+                                : 'text-destructive hover:bg-destructive/10 border-destructive/30'
+                            )}
                           >
-                            {isBlocking === u.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Ban className="h-3 w-3 mr-1" />}
-                            Suspender
+                            {isBlocking === u.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                            ) : isSuspended ? (
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                            ) : (
+                              <Ban className="h-3 w-3 mr-1" />
+                            )}
+                            {isSuspended ? 'Reactivar' : 'Suspender'}
                           </Button>
                         )}
                       </div>
                     </div>
                   )
-                })}
-              </div>
+                }
+
+                return (
+                  <>
+                    {/* SECCIÓN 1: PERSONAL Y EMPLEADOS DEL SISTEMA */}
+                    {(usersCategory === 'all' || usersCategory === 'staff') && (
+                      <div className="space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-border/60">
+                          <div className="flex items-center gap-2">
+                            <div className="h-7 w-7 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                              <Briefcase className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                                <span>Personal y Empleados del Sistema</span>
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-bold">
+                                  {filteredStaff.length}
+                                </Badge>
+                              </h3>
+                              <p className="text-xs text-muted-foreground">
+                                Cuentas con acceso a paneles administrativos, ventas en caja, inventario o servicio técnico.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {filteredStaff.length > 0 ? (
+                          <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                            {filteredStaff.map((u) => renderUserCard(u, 'staff'))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 px-4 rounded-xl border border-dashed border-border/80 bg-muted/10">
+                            <Briefcase className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                            <p className="text-xs font-semibold text-foreground">No se encontró personal que coincida</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              {usersSearchTerm ? `No hay empleados con el filtro "${usersSearchTerm}".` : 'No hay personal registrado.'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* SEPARADOR SI AMBAS SECCIONES ESTÁN VISIBLES */}
+                    {usersCategory === 'all' && (
+                      <div className="relative py-2">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-border/80" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                          <span className="bg-card px-3 text-muted-foreground text-[11px] font-semibold tracking-wider">
+                            Cuentas de Clientes
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SECCIÓN 2: CLIENTES REGISTRADOS */}
+                    {(usersCategory === 'all' || usersCategory === 'customers') && (
+                      <div className="space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-border/60">
+                          <div className="flex items-center gap-2">
+                            <div className="h-7 w-7 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+                              <ShoppingBag className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                                <span>Clientes Registrados con Acceso</span>
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-bold">
+                                  {filteredCustomers.length}
+                                </Badge>
+                              </h3>
+                              <p className="text-xs text-muted-foreground">
+                                Cuentas de clientes con credenciales para compras en la tienda en línea o seguimiento de reparaciones.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {filteredCustomers.length > 0 ? (
+                          <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                            {filteredCustomers.map((u) => renderUserCard(u, 'customer'))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 px-4 rounded-xl border border-dashed border-border/80 bg-muted/10">
+                            <ShoppingBag className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                            <p className="text-xs font-semibold text-foreground">No se encontraron clientes registrados</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              {usersSearchTerm
+                                ? `No hay clientes que coincidan con "${usersSearchTerm}".`
+                                : 'No se registran clientes con credenciales activas en la organización.'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

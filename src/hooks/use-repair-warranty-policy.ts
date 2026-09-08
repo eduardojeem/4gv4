@@ -111,6 +111,13 @@ export function useRepairWarrantyPolicy(enabled = true): RepairWarrantyPolicySta
     if (!enabled) return
     let vigente = true
 
+    // El hook suele montarse con el diálogo cerrado (`enabled = false`). Al
+    // abrirlo debemos volver a entrar en carga antes de exponer el respaldo de
+    // 3 meses; de lo contrario, el formulario lo toma como definitivo y ya no
+    // aplica la política real cuando llega del servidor.
+    setLoading(true)
+    setError(null)
+
     void (async () => {
       try {
         const response = await fetch('/api/repairs/receipt-settings')

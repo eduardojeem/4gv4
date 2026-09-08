@@ -45,6 +45,10 @@ export type SecurityLogFilters = {
 export type SecurityLogUserOption = {
   id: string
   name: string
+  email?: string
+  role?: string
+  status?: string
+  avatarUrl?: string
 }
 
 type SecurityLogsResponse = {
