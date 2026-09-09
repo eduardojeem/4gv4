@@ -70,23 +70,50 @@ export function getRecommendation(subscription: SuperAdminSubscription) {
 
   if (['past_due', 'unpaid'].includes(subscription.status)) return 'Contactar por cobro pendiente'
   if (subscription.cancel_at_period_end) return 'Revisar retención antes del cierre'
+
+  // Una cuenta abandonada casi siempre tiene ademas el periodo vencido. Estando
+  // esta regla al final, la respuesta era «Actualizar periodo o estado» —un
+  // tramite— en vez de «nunca empezo a usar el sistema», que es la unica de las
+  // dos que le dice al superadmin que hacer.
+  if ((subscription.products_count ?? 0) === 0 && (subscription.sales_count ?? 0) === 0) {
+    return 'Cuenta sin actividad — seguimiento'
+  }
+
   if (subscription.status === 'trialing' && trialDays !== null && trialDays <= 7 && trialDays >= 0) return 'Convertir trial a plan pago'
   if (renewalDays !== null && renewalDays <= 7 && renewalDays >= 0) return 'Confirmar renovación'
   if (renewalDays !== null && renewalDays < 0) return 'Actualizar periodo o estado'
-  // Detect abandoned accounts: has subscription but no products or sales
-  if ((subscription.products_count ?? 0) === 0 && (subscription.sales_count ?? 0) === 0) return 'Cuenta sin actividad — seguimiento'
   return 'Sin acción crítica'
 }
 
-export function isAttention(subscription: SuperAdminSubscription) {
+/**
+ * Cuanto corre. `isAttention` metia en la misma bolsa «renueva en tres dias» y
+ * «vencio hace dos años»: las dos pintaban la fila del mismo ambar, asi que la
+ * pestaña «Atención» no distinguia lo que hay que hacer hoy de lo que arrastra
+ * meses.
+ *
+ * El conjunto no cambia —quien estaba en «Atención» sigue estando—, cambia que
+ * ahora se puede saber cual es cual.
+ */
+export type AttentionLevel = 'none' | 'watch' | 'urgent'
+
+export function getAttentionLevel(subscription: SuperAdminSubscription): AttentionLevel {
   const renewalDays = daysUntil(subscription.current_period_ends_at)
   const trialDays = daysUntil(subscription.trial_ends_at)
-  return (
-    ['past_due', 'unpaid'].includes(subscription.status) ||
-    subscription.cancel_at_period_end ||
-    (renewalDays !== null && renewalDays <= 14) ||
-    (trialDays !== null && trialDays >= 0 && trialDays <= 14)
-  )
+
+  // Ya paso algo: no cobra, o el periodo quedo atras.
+  if (['past_due', 'unpaid'].includes(subscription.status)) return 'urgent'
+  if (renewalDays !== null && renewalDays < 0) return 'urgent'
+
+  // Va a pasar: hay margen para actuar.
+  if (subscription.cancel_at_period_end) return 'watch'
+  if (renewalDays !== null && renewalDays <= 14) return 'watch'
+  if (trialDays !== null && trialDays >= 0 && trialDays <= 14) return 'watch'
+
+  return 'none'
+}
+
+export function isAttention(subscription: SuperAdminSubscription) {
+  return getAttentionLevel(subscription) !== 'none'
 }
 
 export function normalizeLimitValue(value: unknown) {

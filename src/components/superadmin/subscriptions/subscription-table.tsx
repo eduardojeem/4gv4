@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import {
   AlertTriangle,
-  ArrowRight,
   Boxes,
+  CircleAlert,
   Clock,
   Copy,
   ExternalLink,
@@ -23,7 +23,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { SuperAdminSubscription } from './types'
@@ -33,9 +32,10 @@ import {
   daysLabel,
   formatDate,
   formatMoney,
+  getAttentionLevel,
   getRecommendation,
-  isAttention,
   periodProgress,
+  type AttentionLevel,
 } from './utils'
 
 type Props = {
@@ -44,45 +44,54 @@ type Props = {
   onCopyValue: (value: string | null) => void
 }
 
+/**
+ * Franja lateral en vez de fondo de color.
+ *
+ * La tabla pintaba tres fondos a la vez —cebra por fila par/impar, ambar por
+ * «requiere atención» y violeta al pasar el mouse—, y competian: una fila con
+ * problema en posicion par se veia casi igual que una normal. La franja no
+ * compite con nada y deja el fondo libre para el hover.
+ */
+const ATTENTION_STRIPE: Record<AttentionLevel, string> = {
+  urgent: 'before:bg-rose-500',
+  watch: 'before:bg-amber-400',
+  none: 'before:bg-transparent',
+}
+
+const CELL = 'py-3 align-top'
+
 export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
   return (
-    <div className="max-h-[calc(100vh-320px)] overflow-auto">
-      <Table>
+    // El alto era `calc(100vh-320px)`: un numero magico que quedaba mal en
+    // cuanto cambiaba cualquier cosa arriba. `min-h-0` deja que el contenedor
+    // padre reparta el espacio.
+    <div className="min-h-0 overflow-auto">
+      <Table className="min-w-[1000px]">
         <TableHeader className="sticky top-0 z-10">
-          <TableRow className="border-b border-slate-200 bg-slate-50 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/80">
-            <TableHead className="w-[260px] py-2.5 pl-6 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Organización / Tenant
-            </TableHead>
-            <TableHead className="w-[120px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Plan
-            </TableHead>
-            <TableHead className="w-[150px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Estado
-            </TableHead>
-            <TableHead className="w-[200px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Ciclo &amp; Renovación
-            </TableHead>
-            <TableHead className="w-[140px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Actividad
-            </TableHead>
-            <TableHead className="w-[170px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Owner
-            </TableHead>
-            <TableHead className="w-[170px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Diagnóstico
-            </TableHead>
-            <TableHead className="w-14 py-2.5 pr-6 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Acción
-            </TableHead>
+          <TableRow className="border-b border-slate-200 bg-slate-50 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/95">
+            <Th className="w-[280px] pl-6">Organización</Th>
+            <Th className="w-[132px]">Plan</Th>
+            <Th className="w-[150px]">Estado</Th>
+            <Th className="w-[190px]">Ciclo</Th>
+            <Th className="w-[120px]">Uso</Th>
+            {/* Decia «Owner» en una interfaz en castellano. */}
+            <Th className="w-[180px]">Responsable</Th>
+            {/* Sin ancho fijo: es la columna que dice QUE HACER y era la unica
+                que venia truncada, con el texto completo escondido en un
+                `title` que en tactil no existe. */}
+            <Th>Qué hacer</Th>
+            <Th className="w-16 pr-6 text-right">Acción</Th>
           </TableRow>
         </TableHeader>
+
         <TableBody>
-          {items.map((sub, idx) => {
+          {items.map((sub) => {
             const renewalDays = daysUntil(sub.current_period_ends_at)
             const trialDays = daysUntil(sub.trial_ends_at)
-            const attention = isAttention(sub)
+            const level = getAttentionLevel(sub)
             const progress = periodProgress(sub)
             const recommendation = getRecommendation(sub)
+            const hasPeriod = Boolean(sub.current_period_starts_at && sub.current_period_ends_at)
 
             const initials = (sub.organization_name || 'OR')
               .trim()
@@ -100,69 +109,57 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
               <TableRow
                 key={sub.id}
                 className={cn(
-                  'group cursor-pointer border-b border-slate-100/80 transition-colors duration-100',
-                  'hover:bg-violet-50/50 dark:border-slate-800/60 dark:hover:bg-violet-950/20',
-                  attention
-                    ? 'bg-amber-50/30 dark:bg-amber-950/10'
-                    : idx % 2 === 0
-                      ? 'bg-white dark:bg-slate-900'
-                      : 'bg-slate-50/60 dark:bg-slate-900/50'
+                  'group relative cursor-pointer border-b border-slate-100 transition-colors dark:border-slate-800/60',
+                  'hover:bg-violet-50/60 dark:hover:bg-violet-950/20',
+                  // La franja de severidad, sin tocar el fondo.
+                  'before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-[""]',
+                  ATTENTION_STRIPE[level]
                 )}
-                tabIndex={0}
                 aria-label={`Ver suscripción de ${sub.organization_name}`}
                 onClick={() => onOpenDetail(sub)}
-                onKeyDown={(event) => {
-                  if (event.target !== event.currentTarget) return
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    onOpenDetail(sub)
-                  }
-                }}
               >
-                {/* 1. Organización / Tenant */}
-                <TableCell className="py-3 pl-6">
-                  <div className="flex items-center gap-3">
-                    {/* Avatar Badge */}
+                {/* Organización */}
+                <TableCell className={cn(CELL, 'pl-6')}>
+                  <div className="flex items-start gap-3">
                     <div
                       className={cn(
-                        'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-bold text-xs shadow-xs ring-1',
-                        attention
-                          ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white ring-amber-300 dark:ring-amber-800'
-                          : 'bg-gradient-to-br from-violet-600 to-indigo-700 text-white ring-violet-300 dark:ring-violet-800'
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white',
+                        level === 'urgent'
+                          ? 'bg-rose-600'
+                          : level === 'watch'
+                            ? 'bg-amber-500'
+                            : 'bg-violet-600'
                       )}
                     >
                       {initials}
-                      {attention && (
-                        <span
-                          className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white dark:ring-slate-900"
-                          title="Requiere atención"
-                        />
-                      )}
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-bold text-sm text-slate-900 group-hover:text-violet-700 dark:text-slate-100 dark:group-hover:text-violet-300 transition-colors">
+                      {/* El nombre es el control: la fila entera sigue siendo
+                          clicable, pero antes cada fila era una parada de
+                          tabulador y con 50 suscripciones eran 50 paradas antes
+                          de llegar a lo siguiente. */}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onOpenDetail(sub)
+                        }}
+                        className="block max-w-full truncate text-left text-sm font-bold text-slate-900 transition-colors hover:text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-slate-100 dark:hover:text-violet-300"
+                      >
                         {sub.organization_name}
-                      </p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                      </button>
+                      <div className="mt-0.5 flex items-center gap-1.5">
                         <span className="truncate font-mono text-[11px] text-slate-400 dark:text-slate-500">
-                          {sub.organization_slug ? `/${sub.organization_slug}` : sub.organization_id.slice(0, 8) + '…'}
+                          {sub.organization_slug ? `/${sub.organization_slug}` : `${sub.organization_id.slice(0, 8)}…`}
                         </span>
-
-                        {/* Storefront status pill */}
                         {sub.storefront_public ? (
-                          <span
-                            title="Tienda pública activa en web"
-                            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/60"
-                          >
-                            <Globe className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                            <Globe className="h-2.5 w-2.5" />
                             Pública
                           </span>
                         ) : (
-                          <span
-                            title="Tienda privada / no publicada"
-                            className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                          >
+                          <span className="inline-flex shrink-0 items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                             Privada
                           </span>
                         )}
@@ -171,230 +168,207 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                   </div>
                 </TableCell>
 
-                {/* 2. Plan */}
-                <TableCell className="py-3" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex flex-col items-start gap-1">
-                    <PlanBadge plan={sub.plan} />
+                {/* Plan */}
+                <TableCell className={CELL}>
+                  <PlanBadge plan={sub.plan} />
+                  <p className="mt-1 text-[11px] font-bold tabular-nums text-slate-600 dark:text-slate-300">
                     {priceFormatted ? (
-                      <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                      <>
                         {priceFormatted}
-                        <span className="text-[10px] font-normal text-slate-400">/mes</span>
-                      </span>
+                        <span className="font-normal text-slate-400">/mes</span>
+                      </>
                     ) : (
-                      <span className="text-[11px] text-slate-400">Sin costo</span>
+                      <span className="font-normal text-slate-400">Sin costo</span>
                     )}
-                  </div>
+                  </p>
                 </TableCell>
 
-                {/* 3. Estado — badge + cancel/trial sub-line + provider */}
-                <TableCell className="py-3" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex flex-col items-start gap-1">
-                    <StatusBadge status={sub.status} />
-
+                {/* Estado */}
+                <TableCell className={CELL}>
+                  <StatusBadge status={sub.status} />
+                  <p className="mt-1 text-[10px]">
                     {sub.cancel_at_period_end ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                      <span className="inline-flex items-center gap-1 font-bold text-rose-600 dark:text-rose-400">
                         <XCircle className="h-3 w-3 shrink-0" />
                         Cancela al ciclo
                       </span>
                     ) : sub.status === 'trialing' && trialDays !== null ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-cyan-700 dark:text-cyan-300">
-                        <Clock className="h-2.5 w-2.5" />
+                      <span className="inline-flex items-center gap-1 font-semibold text-cyan-700 dark:text-cyan-300">
+                        <Clock className="h-2.5 w-2.5 shrink-0" />
                         {daysLabel(trialDays, 'trial')}
                       </span>
                     ) : (
-                      <span className="text-[10px] capitalize text-slate-400">
-                        Vía {sub.provider || 'manual'}
-                      </span>
+                      <span className="capitalize text-slate-400">Vía {sub.provider || 'manual'}</span>
                     )}
-                  </div>
+                  </p>
                 </TableCell>
 
-                {/* 4. Ciclo & Renovación */}
-                <TableCell className="py-3">
-                  <div className="space-y-1.5 pr-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">
-                        {sub.current_period_ends_at ? formatDate(sub.current_period_ends_at) : 'Sin cierre'}
-                      </span>
-                      <span
-                        className={cn(
-                          'text-[11px] font-bold',
-                          renewalDays !== null && renewalDays < 0
-                            ? 'text-rose-600 dark:text-rose-400'
-                            : renewalDays !== null && renewalDays <= 7
-                              ? 'text-amber-600 dark:text-amber-400'
-                              : 'text-slate-500 dark:text-slate-400'
-                        )}
-                      >
-                        {renewalDays === null
-                          ? 'Perpetuo'
-                          : renewalDays < 0
-                            ? `${Math.abs(renewalDays)}d vencido`
-                            : renewalDays === 0
-                              ? 'Vence hoy'
-                              : `${renewalDays}d restantes`}
-                      </span>
-                    </div>
-
-                    {/* Visual Progress Bar */}
-                    <div className="relative w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                      <Progress
-                        value={progress}
-                        className={cn(
-                          'h-1.5 transition-all',
-                          renewalDays !== null && renewalDays < 0
-                            ? '[&>div]:bg-rose-500'
-                            : renewalDays !== null && renewalDays <= 7
-                              ? '[&>div]:bg-amber-500'
-                              : '[&>div]:bg-emerald-500'
-                        )}
-                      />
-                    </div>
-
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
-                      {sub.current_period_starts_at ? `Inicio: ${formatDate(sub.current_period_starts_at)}` : 'Sin fecha inicio'}
-                    </p>
-                  </div>
-                </TableCell>
-
-                {/* 5. Actividad */}
-                <TableCell className="py-3">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span
-                      title="Usuarios / Miembros"
-                      className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                    >
-                      <Users className="h-3 w-3 text-slate-400" />
-                      {sub.members_count ?? 0}
+                {/* Ciclo */}
+                <TableCell className={CELL}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {sub.current_period_ends_at ? formatDate(sub.current_period_ends_at) : 'Sin cierre'}
                     </span>
-                    <span
-                      title="Productos en catálogo"
-                      className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                    >
-                      <Boxes className="h-3 w-3 text-slate-400" />
-                      {sub.products_count ?? 0}
-                    </span>
-                    <span
-                      title="Ventas realizadas"
-                      className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                    >
-                      <Receipt className="h-3 w-3 text-slate-400" />
-                      {sub.sales_count ?? 0}
-                    </span>
-                  </div>
-                </TableCell>
-
-                {/* 6. Owner — name + email + Trial badge if trialing */}
-                <TableCell className="py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-slate-800 dark:text-slate-200">
-                      {sub.owner_name || 'Sin owner asignado'}
-                    </p>
-                    <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">
-                      {sub.owner_email || sub.owner_id || 'Sin email'}
-                    </p>
-                    {sub.status === 'trialing' && (
-                      <span className="mt-0.5 inline-flex items-center gap-0.5 rounded-full bg-cyan-50 px-1.5 py-0.5 text-[9px] font-bold text-cyan-700 ring-1 ring-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:ring-cyan-800/60">
-                        Trial
-                      </span>
-                    )}
-                  </div>
-                </TableCell>
-
-                {/* 7. Diagnóstico — colored dot + truncated text, no pill */}
-                <TableCell className="py-3">
-                  <div className="flex items-start gap-1.5">
-                    {attention ? (
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
-                    ) : (
-                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-                    )}
                     <span
                       className={cn(
-                        'truncate text-xs leading-relaxed',
-                        attention
-                          ? 'font-semibold text-amber-800 dark:text-amber-200'
-                          : 'text-slate-600 dark:text-slate-400'
+                        'shrink-0 text-[11px] font-bold tabular-nums',
+                        renewalDays !== null && renewalDays < 0
+                          ? 'text-rose-600 dark:text-rose-400'
+                          : renewalDays !== null && renewalDays <= 7
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-slate-500 dark:text-slate-400'
                       )}
-                      title={recommendation}
+                    >
+                      {renewalDays === null
+                        ? 'Perpetuo'
+                        : renewalDays < 0
+                          ? `${Math.abs(renewalDays)}d vencido`
+                          : renewalDays === 0
+                            ? 'Vence hoy'
+                            : `${renewalDays}d`}
+                    </span>
+                  </div>
+
+                  {/* Sin fechas, `periodProgress` devuelve 0 — y una barra en 0
+                      se lee como «recien empieza», que es lo contrario de «no se
+                      sabe». Sin periodo no se dibuja barra. */}
+                  {hasPeriod ? (
+                    <>
+                      <div
+                        role="progressbar"
+                        aria-valuenow={progress}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label="Avance del ciclo"
+                        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+                      >
+                        <div
+                          className={cn(
+                            'h-full rounded-full transition-all',
+                            renewalDays !== null && renewalDays < 0
+                              ? 'bg-rose-500'
+                              : renewalDays !== null && renewalDays <= 7
+                                ? 'bg-amber-500'
+                                : 'bg-emerald-500'
+                          )}
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                      <p className="mt-1 truncate text-[10px] text-slate-400 dark:text-slate-500">
+                        Desde {formatDate(sub.current_period_starts_at)}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+                      Sin ciclo definido
+                    </p>
+                  )}
+                </TableCell>
+
+                {/* Uso */}
+                <TableCell className={CELL}>
+                  <div className="flex flex-wrap gap-1">
+                    <UsageChip icon={Users} label="usuarios" value={sub.members_count} />
+                    <UsageChip icon={Boxes} label="productos" value={sub.products_count} />
+                    <UsageChip icon={Receipt} label="ventas" value={sub.sales_count} />
+                  </div>
+                </TableCell>
+
+                {/* Responsable */}
+                <TableCell className={CELL}>
+                  <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    {sub.owner_name || 'Sin responsable'}
+                  </p>
+                  <p className="truncate text-[11px] text-slate-400 dark:text-slate-500" title={sub.owner_email || undefined}>
+                    {sub.owner_email || sub.owner_id || 'Sin correo'}
+                  </p>
+                </TableCell>
+
+                {/* Qué hacer */}
+                <TableCell className={CELL}>
+                  <div className="flex items-start gap-1.5">
+                    {level === 'urgent' ? (
+                      <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500" />
+                    ) : level === 'watch' ? (
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                    ) : (
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                    )}
+                    {/* Se envuelve en dos lineas en vez de truncarse. */}
+                    <span
+                      className={cn(
+                        'text-xs leading-snug',
+                        level === 'urgent'
+                          ? 'font-semibold text-rose-800 dark:text-rose-200'
+                          : level === 'watch'
+                            ? 'font-semibold text-amber-800 dark:text-amber-200'
+                            : 'text-slate-600 dark:text-slate-400'
+                      )}
                     >
                       {recommendation}
                     </span>
                   </div>
                 </TableCell>
 
-                {/* 8. Quick Actions */}
-                <TableCell className="py-2.5 pr-4 text-right" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-violet-100 hover:text-violet-700 dark:hover:bg-violet-950/50 dark:hover:text-violet-300 cursor-pointer"
-                      onClick={() => onOpenDetail(sub)}
-                      title="Ver detalle"
-                    >
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 cursor-pointer"
-                          title="Más opciones"
+                {/* Acción */}
+                <TableCell className={cn(CELL, 'pr-6 text-right')} onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      {/* Estaba en `opacity-0 group-hover:opacity-100`: en una
+                          pantalla tactil no hay hover, asi que el menu era
+                          invisible e inalcanzable. */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                        aria-label={`Opciones de ${sub.organization_name}`}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-lg">
+                      <DropdownMenuItem onClick={() => onOpenDetail(sub)} className="cursor-pointer font-semibold">
+                        <UserCheck className="mr-2 h-4 w-4 text-violet-600" />
+                        Ver ficha y gestionar
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => onCopyValue(sub.id)} className="cursor-pointer">
+                        <Copy className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                        Copiar ID de suscripción
+                      </DropdownMenuItem>
+                      {(sub.provider_subscription_id || sub.provider_customer_id) && (
+                        <DropdownMenuItem
+                          onClick={() => onCopyValue(sub.provider_subscription_id || sub.provider_customer_id)}
+                          className="cursor-pointer"
                         >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56 shadow-lg rounded-xl">
-                        <DropdownMenuItem onClick={() => onOpenDetail(sub)} className="font-semibold cursor-pointer">
-                          <UserCheck className="mr-2 h-4 w-4 text-violet-600" />
-                          Ver ficha &amp; Gestionar
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => onCopyValue(sub.id)} className="cursor-pointer">
                           <Copy className="mr-2 h-3.5 w-3.5 text-slate-400" />
-                          Copiar Subscription ID
+                          Copiar ID externo ({sub.provider})
                         </DropdownMenuItem>
-                        {(sub.provider_subscription_id || sub.provider_customer_id) && (
-                          <DropdownMenuItem
-                            onClick={() =>
-                              onCopyValue(sub.provider_subscription_id || sub.provider_customer_id)
-                            }
-                            className="cursor-pointer"
-                          >
-                            <Copy className="mr-2 h-3.5 w-3.5 text-slate-400" />
-                            Copiar ID externo ({sub.provider})
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuSeparator />
-                        {sub.organization_slug && (
-                          <DropdownMenuItem asChild className="cursor-pointer">
-                            <Link href={`/${sub.organization_slug}/inicio`} target="_blank">
-                              <Globe className="mr-2 h-3.5 w-3.5 text-emerald-600" />
-                              Abrir tienda pública
-                              <ExternalLink className="ml-auto h-3 w-3 text-slate-400" />
-                            </Link>
-                          </DropdownMenuItem>
-                        )}
+                      )}
+                      <DropdownMenuSeparator />
+                      {sub.organization_slug && (
                         <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link
-                            href={`/superadmin/organizations?query=${encodeURIComponent(sub.organization_name)}`}
-                          >
-                            <Users className="mr-2 h-3.5 w-3.5 text-indigo-500" />
-                            Ver en Organizaciones
+                          <Link href={`/${sub.organization_slug}/inicio`} target="_blank" rel="noopener noreferrer">
+                            <Globe className="mr-2 h-3.5 w-3.5 text-emerald-600" />
+                            Abrir tienda pública
+                            <ExternalLink className="ml-auto h-3 w-3 text-slate-400" />
                           </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link href="/superadmin/plans">
-                            <Boxes className="mr-2 h-3.5 w-3.5 text-amber-500" />
-                            Gestionar planes SaaS
-                          </Link>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                      )}
+                      <DropdownMenuItem asChild className="cursor-pointer">
+                        <Link href={`/superadmin/organizations?query=${encodeURIComponent(sub.organization_name)}`}>
+                          <Users className="mr-2 h-3.5 w-3.5 text-indigo-500" />
+                          Ver en Organizaciones
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className="cursor-pointer">
+                        <Link href="/superadmin/plans">
+                          <Boxes className="mr-2 h-3.5 w-3.5 text-amber-500" />
+                          Gestionar planes SaaS
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             )
@@ -406,7 +380,7 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                 <div className="flex flex-col items-center justify-center gap-2 text-slate-400 dark:text-slate-500">
                   <Boxes className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                   <p className="text-sm font-semibold">No hay suscripciones que coincidan con los filtros seleccionados.</p>
-                  <p className="text-xs text-slate-400">Intenta limpiar los filtros o buscar con otro término.</p>
+                  <p className="text-xs">Probá limpiar los filtros o buscar con otro término.</p>
                 </div>
               </TableCell>
             </TableRow>
@@ -414,5 +388,49 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
         </TableBody>
       </Table>
     </div>
+  )
+}
+
+function Th({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <TableHead
+      className={cn(
+        'py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400',
+        className
+      )}
+    >
+      {children}
+    </TableHead>
+  )
+}
+
+/**
+ * Los tres numeros de uso solo se explicaban con un `title`. Un cero sin
+ * etiqueta al lado de otros dos ceros no dice nada; el nombre corto abajo sí.
+ */
+function UsageChip({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  value?: number | null
+}) {
+  const count = value ?? 0
+  return (
+    <span
+      title={`${count} ${label}`}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums',
+        count === 0
+          ? 'bg-slate-50 text-slate-400 dark:bg-slate-800/50 dark:text-slate-500'
+          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+      )}
+    >
+      <Icon className="h-3 w-3 shrink-0 opacity-60" />
+      {count}
+      <span className="sr-only">{label}</span>
+    </span>
   )
 }
