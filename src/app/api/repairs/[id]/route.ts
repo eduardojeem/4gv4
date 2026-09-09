@@ -159,6 +159,39 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
 
     const body = await request.json().catch(() => ({})) as Record<string, unknown>
     const { parts, notes, images, ...repairPayload } = body
+
+    if (repairPayload.warrantyMonths !== undefined) {
+      const months = Number(repairPayload.warrantyMonths)
+      if (!Number.isInteger(months) || months < 0 || months > 36) {
+        return NextResponse.json({ error: 'La garantía debe estar entre 0 y 36 meses.' }, { status: 422 })
+      }
+    }
+    if (repairPayload.warrantyType !== undefined && !['labor', 'parts', 'full'].includes(String(repairPayload.warrantyType))) {
+      return NextResponse.json({ error: 'El tipo de garantía no es válido.' }, { status: 422 })
+    }
+    if (repairPayload.warrantyNotes !== undefined && String(repairPayload.warrantyNotes).length > 1000) {
+      return NextResponse.json({ error: 'Las condiciones de garantía no pueden superar 1000 caracteres.' }, { status: 422 })
+    }
+
+    if (repairPayload.technician_id !== undefined) {
+      const technicianId = typeof repairPayload.technician_id === 'string' ? repairPayload.technician_id.trim() : ''
+      if (!technicianId) {
+        return NextResponse.json({ error: 'Seleccioná un técnico válido.' }, { status: 422 })
+      }
+      const [memberResult, assignmentResult] = await Promise.all([
+        ctx.supabase.from('organization_members').select('user_id')
+          .eq('organization_id', ctx.organizationId).eq('user_id', technicianId).eq('status', 'active').maybeSingle(),
+        ctx.supabase.from('user_branch_assignments').select('user_id')
+          .eq('branch_id', ctx.branchId).eq('user_id', technicianId).eq('is_active', true).maybeSingle(),
+      ])
+      if (memberResult.error) throw memberResult.error
+      if (assignmentResult.error) throw assignmentResult.error
+      if (!memberResult.data || !assignmentResult.data) {
+        return NextResponse.json({ error: 'El técnico seleccionado no está activo en esta sucursal.' }, { status: 422 })
+      }
+      repairPayload.technician_id = technicianId
+    }
+
     const parsedParts = Array.isArray(parts)
       ? parseRepairPartsInput(normalizeParts(parts as RepairPartInput[]))
       : null

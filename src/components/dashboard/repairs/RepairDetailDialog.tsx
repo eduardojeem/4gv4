@@ -89,6 +89,9 @@ interface RepairDetailDialogProps {
   onQuickPay?: (repair: Repair) => void
   onCostSaved?: () => void | Promise<void>
   onStatusChange?: (id: string, status: RepairStatus) => Promise<boolean>
+  technicians?: Array<{ id: string; name: string }>
+  onTechnicianChange?: (id: string, technicianId: string) => Promise<boolean>
+  onWarrantyChange?: (id: string, warranty: { months: number; type: 'labor' | 'parts' | 'full'; notes: string }) => Promise<boolean>
 }
 
 // Flujo lineal de estados para el stepper de progreso.
@@ -110,7 +113,10 @@ export function RepairDetailDialog({
   onDeliver,
   onQuickPay,
   onCostSaved,
-  onStatusChange
+  onStatusChange,
+  technicians = [],
+  onTechnicianChange,
+  onWarrantyChange,
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
   const { isAdmin } = useAuth()
@@ -122,6 +128,11 @@ export function RepairDetailDialog({
   const [isSendingStatusWhatsApp, setIsSendingStatusWhatsApp] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState<RepairStatus | null>(null)
   const [pendingStatus, setPendingStatus] = useState<RepairStatus | null>(null)
+  const [technicianEditorOpen, setTechnicianEditorOpen] = useState(false)
+  const [warrantyEditorOpen, setWarrantyEditorOpen] = useState(false)
+  const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
+  const [warrantyDraft, setWarrantyDraft] = useState({ months: 0, type: 'full' as 'labor' | 'parts' | 'full', notes: '' })
+  const [savingQuickEdit, setSavingQuickEdit] = useState(false)
   const [isCostsEditorOpen, setIsCostsEditorOpen] = useState(false)
   const [isInternalCostCorrectionOpen, setIsInternalCostCorrectionOpen] = useState(false)
   const [isFinalPriceCorrectionOpen, setIsFinalPriceCorrectionOpen] = useState(false)
@@ -1533,7 +1544,7 @@ export function RepairDetailDialog({
                     <div className="h-9 w-9 shrink-0 rounded-lg bg-muted flex items-center justify-center">
                       <Wrench className="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Técnico asignado</p>
                       <p className={cn(
                         "text-sm font-medium truncate",
@@ -1542,6 +1553,21 @@ export function RepairDetailDialog({
                         {repair.technician?.name || 'Sin asignar'}
                       </p>
                     </div>
+                    {onTechnicianChange && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={repair.status === 'entregado' || repair.status === 'cancelado'}
+                        onClick={() => {
+                          setSelectedTechnicianId(repair.technician?.id || '')
+                          setTechnicianEditorOpen(true)
+                        }}
+                        className="h-8 shrink-0 text-xs"
+                      >
+                        {repair.technician ? 'Cambiar técnico' : 'Asignar técnico'}
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -1565,13 +1591,30 @@ export function RepairDetailDialog({
                           Garantía
                         </span>
                       </div>
-                      <Badge variant="outline" className="bg-background text-[10px]">
-                        {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired'
-                          ? 'Vencida'
-                          : getWarrantyStatus(repair.warrantyExpiresAt) === 'expiring'
-                          ? 'Por vencer'
-                          : 'Activa'}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="bg-background text-[10px]">
+                          {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired'
+                            ? 'Vencida'
+                            : getWarrantyStatus(repair.warrantyExpiresAt) === 'expiring'
+                            ? 'Por vencer'
+                            : 'Activa'}
+                        </Badge>
+                        {onWarrantyChange && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={repair.status === 'entregado' || repair.status === 'cancelado'}
+                            onClick={() => {
+                              setWarrantyDraft({ months: repair.warrantyMonths || 0, type: repair.warrantyType || 'full', notes: repair.warrantyNotes || '' })
+                              setWarrantyEditorOpen(true)
+                            }}
+                            className="h-7 px-2 text-[11px]"
+                          >
+                            Editar garantía
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     <div className="text-xs space-y-1.5">
                       <div className="flex justify-between">
@@ -1617,10 +1660,25 @@ export function RepairDetailDialog({
                 ) : (
                   <div className="rounded-xl border border-dashed bg-muted/10 p-4 flex items-center gap-3">
                     <Shield className="h-5 w-5 text-slate-400 shrink-0" />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Sin garantía</p>
                       <p className="text-xs text-muted-foreground">No incluye garantía.</p>
                     </div>
+                    {onWarrantyChange && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={repair.status === 'entregado' || repair.status === 'cancelado'}
+                        onClick={() => {
+                          setWarrantyDraft({ months: 0, type: 'full', notes: '' })
+                          setWarrantyEditorOpen(true)
+                        }}
+                        className="h-8 shrink-0 text-xs"
+                      >
+                        Editar garantía
+                      </Button>
+                    )}
                   </div>
                 )}
               </aside>
@@ -2182,6 +2240,92 @@ export function RepairDetailDialog({
         }}
       />
     )}
+
+    <Dialog open={technicianEditorOpen} onOpenChange={setTechnicianEditorOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{repair.technician ? 'Cambiar técnico' : 'Asignar técnico'}</DialogTitle>
+          <DialogDescription>Seleccioná quién estará a cargo de esta reparación.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 py-2">
+          <label htmlFor="repair-technician" className="text-sm font-medium">Técnico disponible</label>
+          <select
+            id="repair-technician"
+            value={selectedTechnicianId}
+            onChange={(event) => setSelectedTechnicianId(event.target.value)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">Seleccionar técnico</option>
+            {technicians.map(technician => <option key={technician.id} value={technician.id}>{technician.name}</option>)}
+          </select>
+          {technicians.length === 0 && <p className="text-xs text-amber-700 dark:text-amber-300">No hay técnicos activos disponibles en esta sucursal.</p>}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setTechnicianEditorOpen(false)}>Cancelar</Button>
+          <Button
+            type="button"
+            disabled={!selectedTechnicianId || savingQuickEdit}
+            onClick={async () => {
+              if (!onTechnicianChange || !selectedTechnicianId) return
+              setSavingQuickEdit(true)
+              const success = await onTechnicianChange(repair.id, selectedTechnicianId)
+              setSavingQuickEdit(false)
+              if (success) setTechnicianEditorOpen(false)
+            }}
+          >
+            {savingQuickEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Guardar técnico
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={warrantyEditorOpen} onOpenChange={setWarrantyEditorOpen}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Editar garantía</DialogTitle>
+          <DialogDescription>Este cambio se aplica solamente a esta reparación; no modifica la configuración predeterminada del taller.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-2 sm:grid-cols-2">
+          <div className="space-y-2">
+            <label htmlFor="repair-warranty-months" className="text-sm font-medium">Duración de garantía</label>
+            <select id="repair-warranty-months" value={warrantyDraft.months} onChange={(event) => setWarrantyDraft(prev => ({ ...prev, months: Number(event.target.value) }))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+              {[0, 1, 2, 3, 6, 12, 24, 36].map(months => <option key={months} value={months}>{months === 0 ? 'Sin garantía' : `${months} ${months === 1 ? 'mes' : 'meses'}`}</option>)}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="repair-warranty-type" className="text-sm font-medium">Tipo de cobertura</label>
+            <select id="repair-warranty-type" value={warrantyDraft.type} disabled={warrantyDraft.months === 0} onChange={(event) => setWarrantyDraft(prev => ({ ...prev, type: event.target.value as typeof prev.type }))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
+              <option value="full">Mano de obra y repuestos</option>
+              <option value="labor">Solo mano de obra</option>
+              <option value="parts">Solo repuestos</option>
+            </select>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <label htmlFor="repair-warranty-notes" className="text-sm font-medium">Condiciones de la garantía</label>
+            <textarea id="repair-warranty-notes" value={warrantyDraft.notes} disabled={warrantyDraft.months === 0} maxLength={1000} onChange={(event) => setWarrantyDraft(prev => ({ ...prev, notes: event.target.value }))} className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50" placeholder="Ej.: No cubre golpes, humedad ni daños posteriores." />
+            <p className="text-right text-[11px] text-muted-foreground">{warrantyDraft.notes.length}/1000</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setWarrantyEditorOpen(false)}>Cancelar</Button>
+          <Button
+            type="button"
+            disabled={savingQuickEdit}
+            onClick={async () => {
+              if (!onWarrantyChange) return
+              setSavingQuickEdit(true)
+              const success = await onWarrantyChange(repair.id, warrantyDraft)
+              setSavingQuickEdit(false)
+              if (success) setWarrantyEditorOpen(false)
+            }}
+          >
+            {savingQuickEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Guardar garantía
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <AlertDialog open={pendingStatus !== null} onOpenChange={(nextOpen) => !nextOpen && setPendingStatus(null)}>
       <AlertDialogContent className="max-w-md">

@@ -55,9 +55,9 @@ describe('la ficha del cliente usa los números reales', () => {
   const hook = leer('src/hooks/use-customer-live-metrics.ts')
   const modal = leer('src/components/dashboard/repairs/CustomerDetailModal.tsx')
 
-  it('usa un resumen protegido exclusivo de administradores', () => {
+  it('usa un resumen protegido para personal autorizado', () => {
     const route = leer('src/app/api/customers/[id]/metrics/route.ts')
-    expect(route).toContain("permission: 'settings.manage'")
+    expect(route).toContain("permission: ['settings.manage', 'pos.sales.create']")
     expect(route).toContain(".eq('organization_id', organization.id)")
     expect(hook).toContain('/api/customers/${customerId}/metrics')
     expect(hook).toContain('canView: false')

@@ -49,6 +49,7 @@ const sampleRepair: Repair = {
   estimatedCost: 250000,
   finalCost: 250000,
   laborCost: 100000,
+  warrantyMonths: 3,
   parts: [],
   notes: [],
   images: [],

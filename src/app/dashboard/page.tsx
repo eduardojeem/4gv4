@@ -55,6 +55,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useCashRegister } from '@/hooks/useCashRegister'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { StoreSetupAlert } from '@/components/dashboard/StoreSetupAlert'
 
 // Dynamic imports
 const RecentActivity = dynamic(
@@ -655,6 +656,9 @@ export default function DashboardPage() {
           <HelpButton guideKey="overview" variant="outline" size="sm" className="gap-2" showLabel />
         </div>
       </header>
+
+      {/* Alerta de tienda pública no configurada o sin publicar */}
+      <StoreSetupAlert />
 
       {/* KPI grid */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

@@ -30,6 +30,8 @@ export type SuperAdminSubscription = {
   members_count?: number
   products_count?: number
   sales_count?: number
+  storefront_public?: boolean | null
+  marketplace_public?: boolean | null
 }
 
 export type TabValue = 'all' | 'attention' | 'renewals' | 'trials' | 'canceling'
@@ -43,4 +45,6 @@ export type EditForm = {
   current_period_starts_at: string
   current_period_ends_at: string
   cancel_at_period_end: boolean
+  storefront_public: boolean
+  marketplace_public: boolean
 }

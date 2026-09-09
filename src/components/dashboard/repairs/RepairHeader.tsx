@@ -56,9 +56,18 @@ export function RepairHeader({
             </div>
 
             <div className="space-y-1">
-              <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
-                Reparaciones
-              </h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
+                  Reparaciones
+                </h1>
+                <HelpButton
+                  guideKey="repairs"
+                  showLabel
+                  buttonLabel="¿Cómo funciona?"
+                  variant="outline"
+                  className="h-8 px-3.5 rounded-full border-emerald-400/40 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35 hover:text-white text-xs font-bold gap-1.5 shadow-xs backdrop-blur-sm transition-all"
+                />
+              </div>
               <p className="max-w-2xl text-sm leading-6 text-white/70">
                 Prioriza urgentes, sigue estados y entrega equipos desde una sola vista.
               </p>
@@ -108,18 +117,12 @@ export function RepairHeader({
                     variant="outline"
                     onClick={onOpenReceiptSettings}
                     title="Configurar opciones de comprobante, términos y papel"
-                    className="h-10 px-3 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white text-xs font-semibold gap-1.5"
+                    className="h-10 flex-1 px-3 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white text-xs font-semibold gap-1.5"
                   >
                     <Sliders className="h-4 w-4 text-emerald-300" />
-                    <span className="hidden sm:inline">Comprobantes</span>
+                    <span>Comprobantes</span>
                   </Button>
                 )}
-                <HelpButton
-                  guideKey="repairs"
-                  showLabel
-                  variant="outline"
-                  className="h-10 w-10 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white sm:w-auto [&>span]:hidden sm:[&>span]:inline"
-                />
               </div>
             </div>
 

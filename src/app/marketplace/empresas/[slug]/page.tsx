@@ -80,8 +80,19 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
         <div className="absolute inset-0 top-1 bg-[radial-gradient(ellipse_70%_60%_at_50%_0%,rgba(6,182,212,0.06),transparent)]" />
 
         <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          {/* Breadcrumb & Volver al Marketplace */}
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <Button
+            asChild
+            variant="outline"
+            className="mb-4 h-11 w-full gap-2 rounded-xl border-cyan-500/40 text-sm font-semibold text-cyan-700 shadow-2xs hover:bg-cyan-50 md:hidden dark:text-cyan-400 dark:hover:bg-cyan-950/40"
+          >
+            <Link href="/marketplace">
+              <ArrowLeft className="h-4 w-4" />
+              <span>Volver al Marketplace</span>
+            </Link>
+          </Button>
+
+          {/* Navegación contextual */}
+          <div className="mb-6 flex items-center justify-between gap-3">
             <nav className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <Link href="/marketplace" className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-300">
                 <Store className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
@@ -95,7 +106,7 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
               <span className="max-w-[180px] truncate font-medium text-slate-700 dark:text-slate-200">{org.name}</span>
             </nav>
 
-            <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-xl border-cyan-500/40 text-xs font-semibold text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 shadow-2xs">
+            <Button asChild size="sm" variant="outline" className="hidden md:inline-flex h-8 gap-1.5 rounded-xl border-cyan-500/40 text-xs font-semibold text-cyan-700 shadow-2xs hover:bg-cyan-50 dark:text-cyan-400 dark:hover:bg-cyan-950/40">
               <Link href="/marketplace">
                 <Store className="h-3.5 w-3.5" />
                 <span>Volver al Marketplace</span>

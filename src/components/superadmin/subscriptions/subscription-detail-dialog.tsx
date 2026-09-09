@@ -22,6 +22,7 @@ import {
   Shield,
   ShieldCheck,
   Sparkles,
+  Store,
   UserRound,
   Wrench,
   X,
@@ -222,6 +223,17 @@ export function SubscriptionDetailDialog({
                 <div className="flex flex-wrap items-center gap-2">
                   <PlanBadge plan={sub.plan} />
                   <StatusBadge status={sub.status} />
+                  {sub.storefront_public ? (
+                    <Badge className="border-emerald-300 bg-emerald-100/90 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 font-bold text-[10px] gap-1">
+                      <Globe className="h-3 w-3 text-emerald-600" />
+                      Tienda Pública
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 font-bold text-[10px] gap-1">
+                      <Globe className="h-3 w-3 text-slate-400" />
+                      Tienda Privada
+                    </Badge>
+                  )}
                   {sub.cancel_at_period_end && (
                     <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-400 font-bold text-[10px]">
                       Cancela al cierre
@@ -283,9 +295,10 @@ export function SubscriptionDetailDialog({
         <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50 dark:bg-slate-950/40">
 
           {/* Quick Summary Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <SummaryTile icon={CreditCard} label="Plan Actual" value={sub.plan.toUpperCase()} helper={monthlyPrice} />
             <SummaryTile icon={CalendarClock} label="Vencimiento" value={formatDayCounter(renewalDays)} helper={formatDate(sub.current_period_ends_at)} />
+            <SummaryTile icon={Globe} label="Tienda Online" value={sub.storefront_public ? 'PÚBLICA' : 'PRIVADA'} helper={sub.marketplace_public ? 'En marketplace' : 'Solo link directo'} />
             <SummaryTile icon={Building2} label="Personal" value={`${sub.members_count ?? 0} miembros`} helper="En la tienda" />
             <SummaryTile icon={Layers3} label="Catálogo" value={`${sub.products_count ?? 0} productos`} helper={`${sub.sales_count ?? 0} ventas`} />
           </div>
@@ -448,6 +461,64 @@ export function SubscriptionDetailDialog({
                   />
                 </div>
 
+                {/* Tienda Pública y Marketplace */}
+                <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4.5 dark:border-slate-800 dark:bg-slate-950/50 space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400">
+                        <Globe className="h-4 w-4" />
+                      </div>
+                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                        Página Pública & Presencia Online
+                      </h4>
+                    </div>
+                    {sub.organization_slug && (
+                      <Button asChild variant="outline" size="sm" className="h-7 text-xs font-bold gap-1 rounded-xl bg-white dark:bg-slate-900">
+                        <a href={`/${sub.organization_slug}/inicio`} target="_blank" rel="noreferrer">
+                          <ExternalLink className="h-3 w-3 text-cyan-600" />
+                          Probar Tienda Live
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="flex items-center justify-between gap-3.5 rounded-xl border border-slate-200/80 bg-white p-3.5 dark:border-slate-800 dark:bg-slate-900">
+                      <div className="space-y-0.5 min-w-0 flex-1">
+                        <Label htmlFor="edit-storefront-public" className="text-xs font-bold cursor-pointer text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                          <span className={cn("h-2 w-2 rounded-full", editForm.storefront_public ? "bg-emerald-500" : "bg-slate-400")} />
+                          Habilitar Tienda Pública
+                        </Label>
+                        <p className="text-[11px] text-slate-500 font-medium leading-snug">
+                          Permite a clientes entrar a <span className="font-mono text-[10px] font-bold">/{sub.organization_slug || 'tienda'}/inicio</span>, ver productos y consultar reparaciones.
+                        </p>
+                      </div>
+                      <Switch
+                        id="edit-storefront-public"
+                        checked={editForm.storefront_public}
+                        onCheckedChange={(checked) => onEditFormChange({ ...editForm, storefront_public: checked })}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3.5 rounded-xl border border-slate-200/80 bg-white p-3.5 dark:border-slate-800 dark:bg-slate-900">
+                      <div className="space-y-0.5 min-w-0 flex-1">
+                        <Label htmlFor="edit-marketplace-public" className="text-xs font-bold cursor-pointer text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                          <span className={cn("h-2 w-2 rounded-full", editForm.marketplace_public ? "bg-cyan-500" : "bg-slate-400")} />
+                          Visible en Marketplace
+                        </Label>
+                        <p className="text-[11px] text-slate-500 font-medium leading-snug">
+                          Muestra la empresa en el catálogo comercial general <span className="font-mono text-[10px] font-bold">/marketplace</span>.
+                        </p>
+                      </div>
+                      <Switch
+                        id="edit-marketplace-public"
+                        checked={editForm.marketplace_public}
+                        onCheckedChange={(checked) => onEditFormChange({ ...editForm, marketplace_public: checked })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 {saveError && (
                   <Alert variant="destructive" className="rounded-2xl">
                     <AlertTriangle className="h-4 w-4" />
@@ -486,6 +557,57 @@ export function SubscriptionDetailDialog({
                         <Copy className="h-3.5 w-3.5 text-slate-400" />
                       </Button>
                     }
+                  />
+                </div>
+              </div>
+
+              {/* Presencia Web & Tienda Pública */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 text-cyan-600" />
+                    Presencia Web & Tienda Pública
+                  </h4>
+                  {sub.organization_slug && (
+                    <Button asChild variant="outline" size="sm" className="h-7 text-xs font-bold gap-1 rounded-xl">
+                      <a href={`/${sub.organization_slug}/inicio`} target="_blank" rel="noreferrer">
+                        <ExternalLink className="h-3 w-3 text-cyan-600" />
+                        Visitar Tienda
+                      </a>
+                    </Button>
+                  )}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InfoRow
+                    icon={Globe}
+                    label="Estado de Tienda Pública"
+                    value={sub.storefront_public ? 'Habilitada (Pública)' : 'Deshabilitada (Privada)'}
+                  />
+                  <InfoRow
+                    icon={Store}
+                    label="Visibilidad en Marketplace"
+                    value={sub.marketplace_public ? 'Visible en directorio /marketplace' : 'Oculto en marketplace'}
+                  />
+                  <InfoRow
+                    icon={ExternalLink}
+                    label="Ruta Pública (Slug)"
+                    value={sub.organization_slug ? `/${sub.organization_slug}/inicio` : 'Sin slug configurado'}
+                    action={sub.organization_slug ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 cursor-pointer"
+                        onClick={() => onCopyValue(typeof window !== 'undefined' ? `${window.location.origin}/${sub.organization_slug}/inicio` : `/${sub.organization_slug}/inicio`)}
+                        aria-label="Copiar URL de la tienda"
+                      >
+                        <Copy className="h-3.5 w-3.5 text-slate-400" />
+                      </Button>
+                    ) : undefined}
+                  />
+                  <InfoRow
+                    icon={Layers3}
+                    label="Productos en Catálogo"
+                    value={`${sub.products_count ?? 0} artículos cargados`}
                   />
                 </div>
               </div>

@@ -27,6 +27,8 @@ interface HelpButtonProps {
   className?: string
   /** Variante del botón */
   variant?: 'ghost' | 'outline' | 'secondary'
+  /** Texto personalizado para el botón */
+  buttonLabel?: string
 }
 
 export function HelpButton({
@@ -36,6 +38,7 @@ export function HelpButton({
   showLabel = false,
   className,
   variant = 'ghost',
+  buttonLabel,
 }: HelpButtonProps) {
   const [open, setOpen] = useState(false)
   const [tourTask, setTourTask] = useState<RepairGuideTask | null>(null)
@@ -66,7 +69,7 @@ export function HelpButton({
         title="Guía de ayuda"
       >
         <HelpCircle className="h-4 w-4" />
-        {showLabel && <span className="text-sm">{guideKey === 'repairs' ? 'Guía y ayuda' : 'Ayuda'}</span>}
+        {showLabel && <span className="text-sm">{buttonLabel ?? (guideKey === 'repairs' ? '¿Cómo funciona?' : 'Ayuda')}</span>}
       </Button>
 
       {guideKey === 'repairs' ? (

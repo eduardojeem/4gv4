@@ -47,7 +47,6 @@ import { RepairPaymentDialog, type RepairPaymentResult } from '@/components/dash
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
 import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
 import { getWarrantyStatus, formatWarrantyExpiration } from '@/lib/warranty-utils'
-import type { WarrantyFilterType } from '@/hooks/use-repair-filters'
 import type { RepairFormData } from '@/schemas'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
 import { hasSingleDeviceOnlyData } from '@/lib/repairs/multi-device-guard'
@@ -92,6 +91,7 @@ function RepairsPageContent() {
     updateStatus,
     createRepair,
     updateRepair,
+    assignTechnician,
     deleteRepair,
     refreshRepairs
   } = useRepairs()
@@ -538,16 +538,20 @@ function RepairsPageContent() {
               if (!createdRepair) return null
 
               const techName = technicianOptions.find(t => t.id === deviceFormData.technician)?.name || 'Sin asignar'
+              const receiptDevice = deviceFormData as typeof deviceFormData & {
+                imei?: string
+                accessories?: string
+              }
               
               return {
                 typeLabel: deviceTypeConfig[deviceFormData.deviceType]?.label || deviceFormData.deviceType,
                 brand: deviceFormData.brand,
                 model: deviceFormData.model,
                 serialNumber: deviceFormData.serialNumber,
-                imei: (deviceFormData as any).imei || deviceFormData.serialNumber,
+                imei: receiptDevice.imei || deviceFormData.serialNumber,
                 accessType: deviceFormData.accessType,
                 accessPassword: deviceFormData.accessPassword,
-                accessories: (deviceFormData as any).accessories,
+                accessories: receiptDevice.accessories,
                 issue: deviceFormData.issue,
                 description: deviceFormData.description,
                 technician: techName,
@@ -1104,6 +1108,13 @@ function RepairsPageContent() {
         onQuickPay={(repair) => setPayTarget(repair)}
         onCostSaved={refreshRepairs}
         onStatusChange={updateStatus}
+        technicians={technicianOptions}
+        onTechnicianChange={async (repairId, technicianId) => assignTechnician(repairId, technicianId)}
+        onWarrantyChange={async (repairId, warranty) => Boolean(await updateRepair(repairId, {
+          warrantyMonths: warranty.months,
+          warrantyType: warranty.type,
+          warrantyNotes: warranty.months === 0 ? '' : warranty.notes,
+        }))}
       />
 
       <RepairDeleteDialog
