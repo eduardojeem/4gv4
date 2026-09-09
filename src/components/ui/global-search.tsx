@@ -64,7 +64,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: G
         <div className="space-y-3">
           <div className="flex gap-2">
             <Input
-              placeholder="Buscar en todo el sistema (Ctrl+K)"
+              placeholder="Buscar sección, ajuste o reporte..."
               value={query}
               onChange={e => setQuery(e.target.value)}
               aria-label="Buscar"

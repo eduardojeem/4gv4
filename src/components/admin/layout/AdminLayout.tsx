@@ -33,7 +33,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { GlobalSearch } from '@/components/ui/global-search'
-import { Input } from '@/components/ui/input'
+import { normalizeText, primaryModifierLabel } from '@/lib/text/normalize'
 import { NotificationBell } from '@/components/ui/notification-bell'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
@@ -71,15 +71,29 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
     [hasPermission, isAdmin, isSuperAdmin, planModules]
   )
 
+  // El manejador acepta Ctrl y Cmd; el cartel decia «Ctrl» siempre.
+  const [shortcutHint, setShortcutHint] = useState('Ctrl+K')
+  useEffect(() => {
+    setShortcutHint(`${primaryModifierLabel()}${primaryModifierLabel() === '⌘' ? 'K' : '+K'}`)
+  }, [])
+
   const searchableItems = useMemo(
     () =>
       visibleCategories.flatMap(category =>
-        category.items.map(item => ({
-          title: item.label,
-          subtitle: `${category.label}${item.description ? ` - ${item.description}` : ''}`,
-          href: item.href || '#',
-          type: category.id,
-        }))
+        category.items.map(item => {
+          const href = item.href || '#'
+          const subtitle = `${category.label}${item.description ? ` - ${item.description}` : ''}`
+          return {
+            title: item.label,
+            subtitle,
+            href,
+            type: category.id,
+            // Se compara contra esto, no contra el texto con tildes: «analisis»
+            // tiene que encontrar «Análisis». Incluye la ruta porque quien
+            // conoce la URL escribe «inventory» antes que «Inventario».
+            haystack: normalizeText(`${item.label} ${subtitle} ${href}`),
+          }
+        })
       ),
     [visibleCategories]
   )
@@ -117,18 +131,15 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
   }, [])
 
   const handleSearch = useCallback((input: { query: string; filters?: { type?: string } }) => {
-    const query = input.query.trim().toLowerCase()
     const type = input.filters?.type ?? 'todos'
+    // Cada palabra por separado: «config sitio» encuentra «Sitio Web ·
+    // Configuración del sitio web público», que con la frase entera no salia.
+    const terms = normalizeText(input.query).split(/\s+/).filter(Boolean)
 
     return searchableItems
       .filter(item => {
-        const matchesType = type === 'todos' || item.type === type
-        const matchesQuery =
-          query.length === 0 ||
-          item.title.toLowerCase().includes(query) ||
-          item.subtitle.toLowerCase().includes(query)
-
-        return matchesType && matchesQuery
+        if (type !== 'todos' && item.type !== type) return false
+        return terms.every(term => item.haystack.includes(term))
       })
       .slice(0, 25)
   }, [searchableItems])
@@ -317,7 +328,12 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                 <Menu className="h-5 w-5" />
               </Button>
 
-              <div className="min-w-0 flex-1">
+              {/* En 375px «Inicio / Admin / Seccion» compite con el boton de
+                  menu y tres iconos. Lo que importa es donde estas. */}
+              <p className="min-w-0 flex-1 truncate text-base font-semibold text-foreground md:hidden">
+                {currentItem?.label ?? 'Administración'}
+              </p>
+              <div className="hidden min-w-0 flex-1 md:block">
                 <Breadcrumbs items={[
                   { label: 'Inicio', href: '/dashboard' },
                   { label: 'Admin', href: '/admin' },
@@ -327,20 +343,33 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
             </div>
 
             <div className="flex items-center gap-2 md:gap-3">
-              <div className="group relative hidden md:flex">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-blue-500" />
-                <Input
-                  className="w-64 border-border/60 bg-muted/50 pl-10 transition-all duration-200 focus-visible:bg-background"
-                  placeholder="Buscar (Ctrl+K)"
-                  readOnly
-                  onClick={() => setSearchOpen(true)}
-                />
-                <div className="absolute right-3 top-1/2 flex -translate-y-1/2 gap-1">
-                  <kbd className="hidden h-5 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex">
-                    Ctrl+K
-                  </kbd>
-                </div>
-              </div>
+              {/* Era un <input readOnly> con onClick: recibia el foco pero no
+                  se abria con Enter. Un boton lo hace alcanzable por teclado y
+                  se anuncia como lo que es. */}
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                aria-haspopup="dialog"
+                className="group hidden h-9 w-56 items-center gap-2 rounded-md border border-border/60 bg-muted/50 pl-3 pr-2 text-sm text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:flex lg:w-64"
+              >
+                <Search className="h-4 w-4 shrink-0 transition-colors group-hover:text-foreground" />
+                {/* El cartel decia «Ctrl+K» y adentro habia otro «Ctrl+K». */}
+                <span className="flex-1 text-left">Buscar</span>
+                <kbd className="inline-flex h-5 shrink-0 items-center rounded border bg-background px-1.5 font-mono text-[10px] font-medium">
+                  {shortcutHint}
+                </kbd>
+              </button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 md:hidden"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Buscar en el panel"
+                aria-haspopup="dialog"
+              >
+                <Search className="h-5 w-5" />
+              </Button>
 
               {user?.role === 'super_admin' && (
                 <Button asChild variant="outline" size="sm" className="hidden h-9 gap-1.5 border-purple-200/60 text-purple-600 shadow-sm hover:bg-purple-50 dark:border-purple-800/40 dark:text-purple-400 dark:hover:bg-purple-950/20 sm:inline-flex">
@@ -488,36 +517,20 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
             </div>
           </div>
 
-          <div className="space-y-2 px-4 pb-3 md:hidden">
-            <Button
-              variant="outline"
-              className="h-10 w-full justify-start gap-3 rounded-xl border-border/70 bg-muted/40 px-3 text-left text-sm font-normal text-muted-foreground shadow-none"
-              onClick={() => setSearchOpen(true)}
-            >
-              <Search className="h-4 w-4 shrink-0" />
-              <span className="truncate">Buscar en admin</span>
-            </Button>
+          {/* Esta fila duplicaba cuatro componentes que ya estan arriba:
+              el selector de organizacion, el de sucursal, «Inicio» y «Super
+              Admin». Con el buscador aparte, el encabezado movil ocupaba unos
+              150px fijos de una pantalla de 812.
 
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <OrganizationSwitcher compact />
-              <BranchSelector compact className="shrink-0" />
-              {(user?.role === 'admin' || user?.role === 'super_admin') && (
-                <Button asChild variant="outline" size="sm" className="h-9 shrink-0 gap-1.5 border-border/80 shadow-sm">
-                  <Link href="/dashboard" className="flex items-center gap-1.5">
-                    <LayoutDashboard className="h-4 w-4 shrink-0" />
-                    <span className="font-medium">Inicio</span>
-                  </Link>
-                </Button>
-              )}
-              {user?.role === 'super_admin' && (
-                <Button asChild variant="outline" size="sm" className="h-9 shrink-0 gap-1.5 border-purple-200/60 text-purple-600 shadow-sm hover:bg-purple-50 dark:border-purple-800/40 dark:text-purple-400 dark:hover:bg-purple-950/20">
-                  <Link href="/superadmin" className="flex items-center gap-1.5">
-                    <Crown className="h-4 w-4 shrink-0" />
-                    <span className="font-medium">Super Admin</span>
-                  </Link>
-                </Button>
-              )}
-            </div>
+              «Inicio» y «Super Admin» estaban de hecho TRES veces cada uno:
+              el boton del encabezado, esta fila, y el menu del avatar. Con
+              sacar esta copia siguen alcanzables desde los otros dos lados.
+
+              Queda solo el contexto —en que empresa y en que sucursal estas—,
+              que es lo unico que hay que poder ver sin abrir nada. */}
+          <div className="flex items-center gap-2 px-4 pb-2.5 md:hidden">
+            <OrganizationSwitcher compact />
+            <BranchSelector compact className="min-w-0 flex-1" />
           </div>
         </header>
 
