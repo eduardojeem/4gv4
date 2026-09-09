@@ -167,6 +167,26 @@ describe('el menu ofrece la pantalla a quien puede entrar', () => {
     expect(principal).toContain("href: '/dashboard/onboarding'")
   })
 
+  it('la cadena que esconde el item esta completa', () => {
+    // Se habia quedado a medias: la variable existia y el filtro la leia, pero
+    // nada la ponia en `true`, asi que el item no se escondia nunca. Un test
+    // que solo mirara el filtro no lo habria detectado.
+    expect(MENU).toContain('const [onboardingDone, setOnboardingDone] = useState(false)')
+    expect(MENU).toContain('fetchOnboardingStatus().then((data) => {')
+    expect(MENU).toContain('if (data?.completed) setOnboardingDone(true)')
+    expect(MENU).toContain("if (item.href === '/dashboard/onboarding' && onboardingDone) return false")
+    // Sin la dependencia, el menu no se recalcula cuando llega la respuesta.
+    expect(MENU).toContain('onboardingDone, hasPermission')
+  })
+
+  it('el rol se filtra donde el menu de verdad lo consulta', () => {
+    // `item.roles` no lo lee nadie en la barra lateral: el filtro real es
+    // `canRoleAccessSection`. Cambiar solo el primero no hacia nada.
+    const ACCESO = leer('src/lib/auth/section-access.ts')
+    expect(ACCESO).not.toContain("'/dashboard/onboarding'")
+    expect(MENU).toContain('canRoleAccessSection(userRole, item.href)')
+  })
+
   it('completa, sale del menu diario y queda con el resto de los ajustes', () => {
     // Esconderla en los dos lados dejaba el modo «revisita» inalcanzable;
     // dejarla en «Principal» para siempre era ruido permanente.

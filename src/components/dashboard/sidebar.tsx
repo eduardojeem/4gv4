@@ -133,6 +133,16 @@ export const Sidebar = memo(function Sidebar() {
   // Read role directly from auth context — single source of truth
   const userRole = (user?.role ?? 'vendedor') as UserRole
 
+  // Una vez completa, la configuracion inicial deja de ser una tarea del dia a
+  // dia y sale de este menu: sigue disponible desde Administración. La consulta
+  // comparte cache con DashboardGuard, asi que no agrega un pedido.
+  useEffect(() => {
+    if (!config.supabase.isConfigured) return
+    fetchOnboardingStatus().then((data) => {
+      if (data?.completed) setOnboardingDone(true)
+    })
+  }, [])
+
   // Load dynamic badge counts
   useEffect(() => {
     if (!config.supabase.isConfigured) return
