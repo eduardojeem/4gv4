@@ -5,64 +5,38 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
-  ArrowUpRight,
-  Building2,
-  CalendarDays,
-  CheckCircle2,
-  Clock,
-  Copy,
+  ArrowRight,
   CreditCard,
   Download,
-  ExternalLink,
-  Globe,
-  Layers,
-  LayoutGrid,
-  List,
-  Minus,
   RefreshCw,
-  Search,
-  Shield,
   Sparkles,
-  Users,
-  Wrench,
   X,
-  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Pagination } from '@/components/ui/pagination'
-import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useUrlListState } from '@/hooks/useUrlListState'
 import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagination'
-import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
-import { MonitoringRobotMascot, type RobotMood } from '../MonitoringRobotMascot'
 
 import type { EditForm, SuperAdminSubscription, SortValue, TabValue } from './types'
 import {
   csvCell,
   daysUntil,
-  formatDate,
   formatMoney,
   getRecommendation,
   isAttention,
   periodLabel,
-  periodProgress,
   toDateTimeLocalValue,
-  PLAN_STYLES,
-  STATUS_STYLES,
 } from './utils'
 import { SubscriptionStats } from './subscription-stats'
 import { SubscriptionFilters } from './subscription-filters'
 import { SubscriptionTable } from './subscription-table'
 import { SubscriptionCard } from './subscription-card'
 import { SubscriptionDetailDialog } from './subscription-detail-dialog'
-import { SubscriptionSidebar } from './subscription-sidebar'
-import { PlanBadge, StatusBadge } from './subscription-badges'
-import { cn } from '@/lib/utils'
 
 // Re-export type for the page
 export type { SuperAdminSubscription }
@@ -81,171 +55,10 @@ function toEditForm(sub: SuperAdminSubscription): EditForm {
     current_period_starts_at: toDateTimeLocalValue(sub.current_period_starts_at),
     current_period_ends_at: toDateTimeLocalValue(sub.current_period_ends_at),
     cancel_at_period_end: sub.cancel_at_period_end,
+    storefront_public: Boolean(sub.storefront_public),
+    marketplace_public: Boolean(sub.marketplace_public),
   }
 }
-
-// ---------------------------------------------------------------------------
-// Subscription Focus Hero Component
-// ---------------------------------------------------------------------------
-
-function SubscriptionFocusHero({
-  subscription: sub,
-  onOpenEdit,
-  onClearFilter,
-  onCopy,
-}: {
-  subscription: SuperAdminSubscription
-  onOpenEdit: () => void
-  onClearFilter: () => void
-  onCopy: (val: string | null) => void
-}) {
-  const renewalDays = daysUntil(sub.current_period_ends_at)
-  const trialDays = daysUntil(sub.trial_ends_at)
-  const progress = periodProgress(sub)
-  const priceFormatted = sub.plan_details?.price_monthly
-    ? formatMoney(sub.plan_details.price_monthly, sub.plan_details.currency || 'PYG')
-    : 'Gratuito / N/A'
-
-  return (
-    <div className="space-y-6">
-      {/* Top Banner Navigation */}
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50/80 via-white to-indigo-50/80 p-3.5 dark:border-violet-800/60 dark:from-violet-950/40 dark:via-slate-900 dark:to-indigo-950/40 shadow-xs">
-        <div className="flex items-center gap-2 text-xs font-bold text-violet-900 dark:text-violet-200">
-          <Sparkles className="h-4 w-4 text-violet-600" />
-          <span>Mostrando Suscripción de Tenant Seleccionado</span>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onClearFilter}
-          className="h-8 gap-1.5 rounded-xl text-xs font-bold border-violet-300 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/50 cursor-pointer"
-        >
-          <X className="h-3.5 w-3.5" />
-          Ver todas las suscripciones
-        </Button>
-      </div>
-
-      {/* Main Focus Card */}
-      <section className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 shadow-md dark:border-slate-800 dark:bg-slate-900/95">
-
-        {/* Header Hero */}
-        <div className="flex flex-col gap-5 border-b border-slate-100 bg-slate-50/60 p-6 dark:border-slate-800 dark:bg-slate-950/40 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-violet-600 text-white text-xl font-black shadow-md ring-2 ring-white dark:ring-slate-800">
-              {sub.organization_name.slice(0, 2).toUpperCase()}
-            </div>
-
-            <div className="space-y-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
-                  {sub.organization_name}
-                </h2>
-                <PlanBadge plan={sub.plan} />
-                <StatusBadge status={sub.status} />
-                <Badge variant="outline" className="rounded-full text-xs font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700">
-                  {priceFormatted}
-                </Badge>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
-                {sub.organization_slug && (
-                  <button
-                    type="button"
-                    onClick={() => onCopy(`${window.location.origin}/${sub.organization_slug}/inicio`)}
-                    className="inline-flex items-center gap-1 font-mono font-bold text-slate-600 dark:text-slate-300 hover:text-cyan-600 transition-colors cursor-pointer"
-                    title="Copiar URL pública"
-                  >
-                    <span>/{sub.organization_slug}</span>
-                    <Copy className="h-3.5 w-3.5 text-slate-400" />
-                  </button>
-                )}
-                <span className="text-slate-300 dark:text-slate-700">·</span>
-                <span className="text-slate-500 font-medium">Proveedor: <strong className="text-slate-800 dark:text-slate-200">{sub.provider.toUpperCase()}</strong></span>
-                <span className="text-slate-300 dark:text-slate-700">·</span>
-                <button
-                  type="button"
-                  onClick={() => onCopy(sub.id)}
-                  className="inline-flex items-center gap-1 font-mono text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
-                  title="Copiar UUID de suscripción"
-                >
-                  <span className="truncate max-w-[120px] sm:max-w-[200px]">ID: {sub.id}</span>
-                  <Copy className="h-3 w-3 text-slate-400" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Toolbar */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={onOpenEdit}
-              size="sm"
-              className="gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer"
-            >
-              <Wrench className="h-3.5 w-3.5" />
-              Editar Suscripción
-            </Button>
-            <EnterSupportButton organizationId={sub.organization_id} organizationName={sub.organization_name} />
-            {sub.organization_slug && (
-              <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer">
-                <a href={`/${sub.organization_slug}/inicio`} target="_blank" rel="noreferrer">
-                  <Globe className="h-3.5 w-3.5 text-cyan-600" />
-                  Abrir tienda
-                  <ExternalLink className="h-3 w-3 text-slate-400" />
-                </a>
-              </Button>
-            )}
-            <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer">
-              <Link href={`/superadmin/organizations?q=${encodeURIComponent(sub.organization_slug || sub.organization_name)}`}>
-                <Building2 className="h-3.5 w-3.5 text-violet-600" />
-                Ficha Empresa
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        {/* Focus KPI Bar */}
-        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4 border-b border-slate-100 dark:border-slate-800">
-          <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Plan & Facturación</p>
-            <p className="truncate text-base font-black text-slate-900 dark:text-slate-100">{sub.plan_details?.name || sub.plan}</p>
-            <p className="truncate text-xs text-slate-500 font-medium">{priceFormatted}</p>
-          </div>
-
-          <div className="p-5 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Vigencia del Período</p>
-              <span className={cn('text-xs font-extrabold', renewalDays !== null && renewalDays <= 7 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400')}>
-                {renewalDays === null ? 'Sin vencimiento' : renewalDays < 0 ? `${Math.abs(renewalDays)}d vencido` : `${renewalDays}d restantes`}
-              </span>
-            </div>
-            <Progress value={progress} className="h-1.5" />
-            <p className="text-[11px] text-slate-400 font-medium">{periodLabel(sub)}</p>
-          </div>
-
-          <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Uso Operativo del Tenant</p>
-            <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
-              {sub.members_count ?? 0} miembros · {sub.products_count ?? 0} productos
-            </p>
-            <p className="text-xs text-slate-500 font-medium">{sub.sales_count ?? 0} ventas registradas</p>
-          </div>
-
-          <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Acción Recomendada</p>
-            <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">{getRecommendation(sub)}</p>
-            <p className="text-xs text-slate-500 font-medium">Owner: {sub.owner_email || 'Sin email'}</p>
-          </div>
-        </div>
-
-      </section>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Main Dashboard
-// ---------------------------------------------------------------------------
 
 export function SubscriptionsDashboard({ subscriptions, planOptions: configuredPlanOptions, loadError }: Props) {
   const router = useRouter()
@@ -283,6 +96,9 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
   const [editForm, setEditForm] = useState<EditForm | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Risk banner dismissal
+  const [riskBannerDismissed, setRiskBannerDismissed] = useState(false)
 
   // Derived filter options
   const planOptions = useMemo(
@@ -366,8 +182,6 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     [filtered, state.page, state.size]
   )
 
-  const focusedSubscription = query.trim() && filtered.length === 1 ? filtered[0] ?? null : null
-
   // Stats
   const stats = useMemo(() => {
     const active = subscriptions.filter((s) => s.status === 'active').length
@@ -383,8 +197,6 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
 
     return { active, activeRate, atRisk, canceling, estimatedMrr, renewingSoon, trialing, total: subscriptions.length }
   }, [subscriptions, tabCounts.renewals])
-
-  const attentionList = useMemo(() => filtered.filter(isAttention).slice(0, 5), [filtered])
 
   // Handlers
   function clearFilters() {
@@ -471,6 +283,8 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
           current_period_starts_at: editForm.current_period_starts_at || null,
           current_period_ends_at: editForm.current_period_ends_at || null,
           cancel_at_period_end: editForm.cancel_at_period_end,
+          storefront_public: editForm.storefront_public,
+          marketplace_public: editForm.marketplace_public,
         }),
       })
       const payload = (await response.json().catch(() => null)) as { error?: string } | null
@@ -491,45 +305,36 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     }
   }
 
-  const TABS: { value: TabValue; label: string }[] = [
-    { value: 'all', label: `Todas (${tabCounts.all})` },
-    { value: 'attention', label: `Atención (${tabCounts.attention})` },
-    { value: 'renewals', label: `Renovaciones (${tabCounts.renewals})` },
-    { value: 'trials', label: `Trials (${tabCounts.trials})` },
-    { value: 'canceling', label: `Cancelan (${tabCounts.canceling})` },
+  const TABS: { value: TabValue; label: string; count: number; alertColor?: string }[] = [
+    { value: 'all', label: 'Todas', count: tabCounts.all },
+    { value: 'attention', label: 'Atención', count: tabCounts.attention, alertColor: tabCounts.attention > 0 ? 'rose' : undefined },
+    { value: 'renewals', label: 'Renovaciones', count: tabCounts.renewals, alertColor: tabCounts.renewals > 0 ? 'amber' : undefined },
+    { value: 'trials', label: 'Trials', count: tabCounts.trials },
+    { value: 'canceling', label: 'Cancelan', count: tabCounts.canceling },
   ]
 
-  // Robot Mascot Mood & Insight
-  const robotMood: RobotMood = focusedSubscription
-    ? focusedSubscription.status === 'active' ? 'healthy' : 'warning'
-    : stats.atRisk > 0 ? 'warning' : 'healthy'
-
-  const robotMessage = focusedSubscription
-    ? `Suscripción de ${focusedSubscription.organization_name} · Plan ${focusedSubscription.plan} (${formatMoney(focusedSubscription.plan_details?.price_monthly ?? 0, 'PYG')}) · ${getRecommendation(focusedSubscription)}`
-    : `MRR Estimado: ${formatMoney(stats.estimatedMrr, 'PYG')} · ${stats.active} suscripciones activas (${stats.activeRate}% tasa de conversión). ${stats.atRisk} cuentas requieren atención.`
+  const hasActiveFilters = query !== '' || plan !== 'ALL' || status !== 'ALL' || provider !== 'ALL' || sort !== 'attention'
 
   return (
-    <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      {/* Page header */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-400">
+    <div className="mx-auto flex max-w-[1600px] flex-col gap-5">
+
+      {/* ── Page header ───────────────────────────────────────────── */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-400">
             <CreditCard className="h-3.5 w-3.5 text-violet-500" />
             Superadmin · Facturación & Planes SaaS
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-50">
-            Control de Suscripciones
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-50 sm:text-3xl">
+            Suscripciones
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-            Monitoreo operativo de planes, trials, renovaciones y cuentas en riesgo.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer"
+            className="h-8 gap-1.5 rounded-lg text-xs font-semibold cursor-pointer"
             onClick={() => router.refresh()}
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -538,14 +343,18 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer"
+            className="h-8 gap-1.5 rounded-lg text-xs font-semibold cursor-pointer"
             onClick={exportCsv}
             disabled={filtered.length === 0}
           >
             <Download className="h-3.5 w-3.5" />
             Exportar CSV
           </Button>
-          <Button asChild size="sm" className="gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer">
+          <Button
+            asChild
+            size="sm"
+            className="h-8 gap-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 shadow-sm cursor-pointer"
+          >
             <Link href="/superadmin/plans">
               <Sparkles className="h-3.5 w-3.5" />
               Catálogo de Planes
@@ -554,30 +363,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
         </div>
       </header>
 
-      {/* 🤖 ROBOT MASCOT GUARDIAN */}
-      <MonitoringRobotMascot
-        mood={robotMood}
-        statusText={robotMessage}
-        headline={focusedSubscription ? `Auditoría: ${focusedSubscription.organization_name}` : 'Analista Financiero SaaS'}
-        metrics={{
-          healthScore: stats.activeRate,
-          activeAlerts: stats.atRisk,
-        }}
-        onQuickAction={() => router.refresh()}
-        actionLabel="Sincronizar Datos"
-      />
-
-      {/* Focused Subscription Hero Panel */}
-      {focusedSubscription && (
-        <SubscriptionFocusHero
-          subscription={focusedSubscription}
-          onOpenEdit={() => openDetail(focusedSubscription)}
-          onClearFilter={() => setQuery('')}
-          onCopy={copyValue}
-        />
-      )}
-
-      {/* Load error */}
+      {/* ── Load error ────────────────────────────────────────────── */}
       {loadError && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -586,130 +372,188 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
         </Alert>
       )}
 
-      {/* Stats */}
-      {!focusedSubscription && <SubscriptionStats stats={stats} />}
+      {/* ── KPI Strip ─────────────────────────────────────────────── */}
+      <SubscriptionStats
+        stats={stats}
+        onNavigate={(targetTab) => {
+          setTab(targetTab as TabValue)
+          setRiskBannerDismissed(false)
+        }}
+      />
 
-      {/* Main content + sidebar */}
-      <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
-        {/* Table card */}
-        <Card className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 shadow-sm dark:border-slate-800 dark:bg-slate-900/95">
-          <CardHeader className="border-b border-slate-100 bg-slate-50/50 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40 space-y-3">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-50">
-                    Cartera de Suscripciones
-                  </CardTitle>
-                  <Badge variant="outline" className="text-xs font-bold px-2 py-0.5 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800">
-                    {filtered.length} de {subscriptions.length}
-                  </Badge>
-                </div>
-                <CardDescription className="text-xs">
-                  Segmenta la cartera, ordena por urgencia y edita sin salir del flujo.
-                </CardDescription>
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <SubscriptionFilters
-                query={query}
-                plan={plan}
-                status={status}
-                provider={provider}
-                sort={sort}
-                planOptions={planOptions}
-                statusOptions={statusOptions}
-                providerOptions={providerOptions}
-                filteredCount={filtered.length}
-                totalCount={subscriptions.length}
-                onQueryChange={setQuery}
-                onPlanChange={setPlan}
-                onStatusChange={setStatus}
-                onProviderChange={setProvider}
-                onSortChange={setSort}
-                onClear={clearFilters}
-              />
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-0">
-            <Tabs
-              value={tab}
-              onValueChange={(v) => setTab(v as TabValue)}
-            >
-              {/* Tab list */}
-              <div className="overflow-x-auto border-b border-slate-100 bg-slate-50/60 px-6 dark:border-slate-800 dark:bg-slate-900/30">
-                <TabsList className="h-11 gap-2 rounded-none bg-transparent p-0">
-                  {TABS.map(({ value, label }) => (
-                    <TabsTrigger
-                      key={value}
-                      value={value}
-                      className="h-11 rounded-none border-b-2 border-transparent px-3 text-xs font-bold text-slate-500 data-[state=active]:border-violet-600 data-[state=active]:bg-transparent data-[state=active]:text-violet-600 dark:text-slate-400 dark:data-[state=active]:border-violet-400 dark:data-[state=active]:text-violet-300 transition-all cursor-pointer"
-                    >
-                      {label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
-
-              {/* Tab content */}
-              {TABS.map(({ value }) => (
-                <TabsContent key={value} value={value} className="m-0">
-                  {/* Desktop table */}
-                  <div className="hidden lg:block">
-                    <SubscriptionTable
-                      items={pagination.items}
-                      onOpenDetail={openDetail}
-                      onCopyValue={copyValue}
-                    />
-                  </div>
-
-                  {/* Mobile/tablet cards */}
-                  <div className="grid gap-3 p-4 lg:hidden">
-                    {filtered.length > 0 ? (
-                      pagination.items.map((sub) => (
-                        <SubscriptionCard
-                          key={sub.id}
-                          subscription={sub}
-                          onOpenDetail={openDetail}
-                        />
-                      ))
-                    ) : (
-                      <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800">
-                        <p className="text-xs font-bold text-slate-400">
-                          No hay suscripciones que coincidan con los filtros.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-              ))}
-            </Tabs>
-            <Pagination
-              className="border-t border-slate-100 dark:border-slate-800 px-6 py-4"
-              currentPage={pagination.page}
-              totalPages={pagination.totalPages}
-              itemsPerPage={pagination.pageSize}
-              totalItems={filtered.length}
-              itemsPerPageOptions={[...SUPERADMIN_PAGE_SIZES]}
-              onPageChange={(page) => setValue('page', String(page))}
-              onItemsPerPageChange={(size) => {
-                setValue('size', String(size))
-                setValue('page', '1')
+      {/* ── Risk alert banner ─────────────────────────────────────── */}
+      {stats.atRisk > 0 && !riskBannerDismissed && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50/80 px-4 py-3 dark:border-rose-900/60 dark:bg-rose-950/30">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+            <p className="text-sm font-semibold text-rose-800 dark:text-rose-200">
+              {stats.atRisk} {stats.atRisk === 1 ? 'cuenta requiere' : 'cuentas requieren'} atención inmediata —{' '}
+              <span className="underline underline-offset-2">cobros pendientes o sin pagar</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="h-7 gap-1 rounded-lg bg-rose-600 px-3 text-xs font-bold text-white hover:bg-rose-700 cursor-pointer"
+              onClick={() => {
+                setTab('attention')
+                setRiskBannerDismissed(true)
               }}
+            >
+              Ver ahora
+              <ArrowRight className="h-3 w-3" />
+            </Button>
+            <button
+              type="button"
+              onClick={() => setRiskBannerDismissed(true)}
+              className="rounded-lg p-1 text-rose-500 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-900/40 cursor-pointer"
+              title="Cerrar alerta"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Main card (full-width) ─────────────────────────────────── */}
+      <Card className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+
+        {/* Card header: title + count + filters */}
+        <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-3.5 dark:border-slate-800 dark:bg-slate-950/40">
+          <div className="flex flex-col gap-3">
+            {/* Title row */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <CardTitle className="text-sm font-bold text-slate-900 dark:text-slate-50">
+                  Cartera de Suscripciones
+                </CardTitle>
+                <Badge
+                  variant="outline"
+                  className="h-5 rounded-md bg-violet-50 px-1.5 text-[11px] font-bold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 border-violet-200 dark:border-violet-800"
+                >
+                  {filtered.length} / {subscriptions.length}
+                </Badge>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <X className="h-3 w-3" />
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
+              <CardDescription className="hidden text-xs sm:block">
+                Ordena por urgencia, filtra por plan o estado y gestiona sin salir del flujo.
+              </CardDescription>
+            </div>
+
+            {/* Filters row */}
+            <SubscriptionFilters
+              query={query}
+              plan={plan}
+              status={status}
+              provider={provider}
+              sort={sort}
+              planOptions={planOptions}
+              statusOptions={statusOptions}
+              providerOptions={providerOptions}
+              filteredCount={filtered.length}
+              totalCount={subscriptions.length}
+              onQueryChange={setQuery}
+              onPlanChange={setPlan}
+              onStatusChange={setStatus}
+              onProviderChange={setProvider}
+              onSortChange={setSort}
+              onClear={clearFilters}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </CardHeader>
 
-        {/* Sidebar */}
-        <SubscriptionSidebar
-          attentionList={attentionList}
-          stats={stats}
-          onOpenDetail={openDetail}
-        />
-      </div>
+        <CardContent className="p-0">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as TabValue)}>
 
-      {/* Detail dialog */}
+            {/* Tab list */}
+            <div className="overflow-x-auto border-b border-slate-100 bg-white px-1 dark:border-slate-800 dark:bg-slate-900">
+              <TabsList className="h-10 gap-0 rounded-none bg-transparent p-0">
+                {TABS.map(({ value, label, count, alertColor }) => (
+                  <TabsTrigger
+                    key={value}
+                    value={value}
+                    className="relative h-10 rounded-none border-b-2 border-transparent px-3.5 text-xs font-semibold text-slate-500 transition-all data-[state=active]:border-violet-600 data-[state=active]:bg-transparent data-[state=active]:text-violet-700 dark:text-slate-400 dark:data-[state=active]:border-violet-400 dark:data-[state=active]:text-violet-300 cursor-pointer"
+                  >
+                    {label}
+                    {count > 0 && (
+                      <span
+                        className={`ml-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[10px] font-bold ${
+                          alertColor === 'rose'
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                            : alertColor === 'amber'
+                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+
+            {/* Tab content */}
+            {TABS.map(({ value }) => (
+              <TabsContent key={value} value={value} className="m-0">
+                {/* Desktop table */}
+                <div className="hidden lg:block">
+                  <SubscriptionTable
+                    items={pagination.items}
+                    onOpenDetail={openDetail}
+                    onCopyValue={copyValue}
+                  />
+                </div>
+
+                {/* Mobile/tablet cards */}
+                <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
+                  {pagination.items.length > 0 ? (
+                    pagination.items.map((sub) => (
+                      <SubscriptionCard
+                        key={sub.id}
+                        subscription={sub}
+                        onOpenDetail={openDetail}
+                      />
+                    ))
+                  ) : (
+                    <div className="col-span-2 rounded-xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800">
+                      <p className="text-sm font-semibold text-slate-400">
+                        No hay suscripciones que coincidan con los filtros.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
+
+          {/* Pagination */}
+          <Pagination
+            className="border-t border-slate-100 dark:border-slate-800 px-5 py-3.5"
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            itemsPerPage={pagination.pageSize}
+            totalItems={filtered.length}
+            itemsPerPageOptions={[...SUPERADMIN_PAGE_SIZES]}
+            onPageChange={(page) => setValue('page', String(page))}
+            onItemsPerPageChange={(size) => {
+              setValue('size', String(size))
+              setValue('page', '1')
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      {/* ── Detail dialog ─────────────────────────────────────────── */}
       <SubscriptionDetailDialog
         subscription={selected}
         editForm={editForm}
