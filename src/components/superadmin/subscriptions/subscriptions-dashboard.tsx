@@ -8,6 +8,8 @@ import {
   ArrowRight,
   CreditCard,
   Download,
+  LayoutGrid,
+  LayoutList,
   RefreshCw,
   Sparkles,
   X,
@@ -99,6 +101,9 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
 
   // Risk banner dismissal
   const [riskBannerDismissed, setRiskBannerDismissed] = useState(false)
+
+  // View mode toggle: table (default on desktop) or grid cards
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
 
   // Derived filter options
   const planOptions = useMemo(
@@ -444,9 +449,38 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
                   </button>
                 )}
               </div>
-              <CardDescription className="hidden text-xs sm:block">
-                Ordena por urgencia, filtra por plan o estado y gestiona sin salir del flujo.
-              </CardDescription>
+              <div className="flex items-center gap-2">
+                <CardDescription className="hidden text-xs sm:block">
+                  Ordena por urgencia, filtra y gestiona sin salir del flujo.
+                </CardDescription>
+                {/* View mode toggle — only visible on desktop */}
+                <div className="hidden items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800 lg:flex">
+                  <button
+                    type="button"
+                    title="Vista tabla"
+                    onClick={() => setViewMode('table')}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md transition-all cursor-pointer ${
+                      viewMode === 'table'
+                        ? 'bg-white text-violet-700 shadow-sm dark:bg-slate-700 dark:text-violet-300'
+                        : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                    }`}
+                  >
+                    <LayoutList className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Vista tarjetas"
+                    onClick={() => setViewMode('grid')}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md transition-all cursor-pointer ${
+                      viewMode === 'grid'
+                        ? 'bg-white text-violet-700 shadow-sm dark:bg-slate-700 dark:text-violet-300'
+                        : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                    }`}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Filters row */}
@@ -505,16 +539,36 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
             {/* Tab content */}
             {TABS.map(({ value }) => (
               <TabsContent key={value} value={value} className="m-0">
-                {/* Desktop table */}
-                <div className="hidden lg:block">
-                  <SubscriptionTable
-                    items={pagination.items}
-                    onOpenDetail={openDetail}
-                    onCopyValue={copyValue}
-                  />
-                </div>
+                {/* Desktop: table or grid based on viewMode */}
+                {viewMode === 'table' ? (
+                  <div className="hidden lg:block">
+                    <SubscriptionTable
+                      items={pagination.items}
+                      onOpenDetail={openDetail}
+                      onCopyValue={copyValue}
+                    />
+                  </div>
+                ) : (
+                  <div className="hidden gap-4 p-4 lg:grid lg:grid-cols-2 xl:grid-cols-3">
+                    {pagination.items.length > 0 ? (
+                      pagination.items.map((sub) => (
+                        <SubscriptionCard
+                          key={sub.id}
+                          subscription={sub}
+                          onOpenDetail={openDetail}
+                        />
+                      ))
+                    ) : (
+                      <div className="col-span-3 rounded-xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800">
+                        <p className="text-sm font-semibold text-slate-400">
+                          No hay suscripciones que coincidan con los filtros.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                {/* Mobile/tablet cards */}
+                {/* Mobile/tablet: always cards, 2 cols on sm */}
                 <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
                   {pagination.items.length > 0 ? (
                     pagination.items.map((sub) => (

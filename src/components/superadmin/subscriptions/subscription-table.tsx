@@ -48,36 +48,36 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
   return (
     <div className="max-h-[calc(100vh-320px)] overflow-auto">
       <Table>
-        <TableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-          <TableRow className="border-slate-200/80 bg-slate-50/75 dark:border-slate-800 dark:bg-slate-900/60">
-            <TableHead className="w-[260px] py-3 pl-6 font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <TableHeader className="sticky top-0 z-10">
+          <TableRow className="border-b border-slate-200 bg-slate-50 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/80">
+            <TableHead className="w-[260px] py-2.5 pl-6 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Organización / Tenant
             </TableHead>
-            <TableHead className="w-[120px] py-3 font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <TableHead className="w-[120px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Plan
             </TableHead>
-            <TableHead className="w-[150px] py-3 font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <TableHead className="w-[150px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Estado
             </TableHead>
-            <TableHead className="w-[210px] py-3 font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <TableHead className="w-[200px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Ciclo &amp; Renovación
             </TableHead>
-            <TableHead className="w-[150px] py-3 font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <TableHead className="w-[140px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Actividad
             </TableHead>
-            <TableHead className="w-[180px] py-3 font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <TableHead className="w-[170px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Owner
             </TableHead>
-            <TableHead className="w-[170px] py-3 font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <TableHead className="w-[170px] py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Diagnóstico
             </TableHead>
-            <TableHead className="w-16 py-3 pr-6 text-right font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Acciones
+            <TableHead className="w-14 py-2.5 pr-6 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Acción
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((sub) => {
+          {items.map((sub, idx) => {
             const renewalDays = daysUntil(sub.current_period_ends_at)
             const trialDays = daysUntil(sub.trial_ends_at)
             const attention = isAttention(sub)
@@ -100,10 +100,13 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
               <TableRow
                 key={sub.id}
                 className={cn(
-                  'group cursor-pointer border-b border-slate-100/90 transition-all duration-150',
-                  'hover:bg-violet-50/40 dark:border-slate-800/60 dark:hover:bg-slate-800/40',
-                  'focus-visible:bg-violet-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400',
-                  attention && 'bg-amber-50/25 dark:bg-amber-950/10'
+                  'group cursor-pointer border-b border-slate-100/80 transition-colors duration-100',
+                  'hover:bg-violet-50/50 dark:border-slate-800/60 dark:hover:bg-violet-950/20',
+                  attention
+                    ? 'bg-amber-50/30 dark:bg-amber-950/10'
+                    : idx % 2 === 0
+                      ? 'bg-white dark:bg-slate-900'
+                      : 'bg-slate-50/60 dark:bg-slate-900/50'
                 )}
                 tabIndex={0}
                 aria-label={`Ver suscripción de ${sub.organization_name}`}
@@ -321,17 +324,16 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                 </TableCell>
 
                 {/* 8. Quick Actions */}
-                <TableCell className="py-3 pr-6 text-right" onClick={(e) => e.stopPropagation()}>
+                <TableCell className="py-2.5 pr-4 text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-1">
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="h-8 px-2.5 text-xs font-bold text-violet-700 hover:bg-violet-100 hover:text-violet-800 dark:text-violet-400 dark:hover:bg-violet-950/50 cursor-pointer"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-violet-100 hover:text-violet-700 dark:hover:bg-violet-950/50 dark:hover:text-violet-300 cursor-pointer"
                       onClick={() => onOpenDetail(sub)}
-                      title="Ver y editar suscripción"
+                      title="Ver detalle"
                     >
-                      Detalle
-                      <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                      <ArrowRight className="h-4 w-4" />
                     </Button>
 
                     <DropdownMenu>
