@@ -112,6 +112,18 @@ export function getAttentionLevel(subscription: SuperAdminSubscription): Attenti
   return 'none'
 }
 
+/**
+ * Trial EN CURSO. La pestaña contaba `status === 'trialing'` sin mirar la
+ * fecha, asi que un trial terminado hace un año que quedo en ese estado seguia
+ * contando: el numero no bajaba nunca.
+ */
+export function isRunningTrial(subscription: SuperAdminSubscription) {
+  const trialDays = daysUntil(subscription.trial_ends_at)
+  if (trialDays !== null) return trialDays >= 0
+  // Sin fecha de fin, el estado es lo unico que hay.
+  return subscription.status === 'trialing'
+}
+
 export function isAttention(subscription: SuperAdminSubscription) {
   return getAttentionLevel(subscription) !== 'none'
 }

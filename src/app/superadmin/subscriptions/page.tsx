@@ -163,7 +163,12 @@ export default async function SuperAdminSubscriptionsPage() {
         ? {
             code: planDetails.code,
             name: commercialPlan?.name || planDetails.name,
-            price_monthly: Number(commercialPlan?.price || 0),
+            // Sin fila comercial no se sabe cuanto cuesta. Un 0 aca hacia que
+            // un plan pago mal configurado se viera igual que uno gratuito, y
+            // ademas restaba en silencio del MRR.
+            price_monthly: commercialPlan?.price === null || commercialPlan?.price === undefined
+              ? null
+              : Number(commercialPlan.price),
             currency: 'PYG',
             limits: planDetails.limits || {},
             modules: planDetails.modules || [],

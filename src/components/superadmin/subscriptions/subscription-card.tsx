@@ -48,9 +48,14 @@ export function SubscriptionCard({ subscription: sub, onOpenDetail }: Props) {
     .toUpperCase()
     .slice(0, 2)
 
-  const priceFormatted = sub.plan_details?.price_monthly
-    ? formatMoney(sub.plan_details.price_monthly, sub.plan_details.currency || 'PYG')
-    : null
+  // Mismo criterio que la tabla: un plan sin precio configurado no es un plan
+  // gratuito, y callarlo no lo arregla.
+  const price = sub.plan_details?.price_monthly ?? null
+  const priceLabel = !sub.plan_details || price === null
+    ? { text: 'Precio sin definir', warn: true }
+    : price === 0
+      ? { text: 'Gratuito', warn: false }
+      : { text: formatMoney(price, sub.plan_details.currency || 'PYG'), warn: false }
 
   return (
     <div
@@ -137,11 +142,16 @@ export function SubscriptionCard({ subscription: sub, onOpenDetail }: Props) {
           )}
           <span className="truncate">{recommendation}</span>
         </div>
-        {priceFormatted && (
-          <span className="shrink-0 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-            {priceFormatted}
-          </span>
-        )}
+        <span
+          className={cn(
+            'shrink-0 text-[11px]',
+            priceLabel.warn
+              ? 'font-semibold text-amber-600 dark:text-amber-400'
+              : 'font-bold text-slate-600 dark:text-slate-300'
+          )}
+        >
+          {priceLabel.text}
+        </span>
       </div>
 
       {/* Period Progress Bar */}

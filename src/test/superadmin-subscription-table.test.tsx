@@ -178,9 +178,9 @@ describe('lo que no se sabe no se muestra como un dato', () => {
     expect(screen.getByText('Sin correo')).toBeInTheDocument()
   })
 
-  it('sin plan pago dice «Sin costo» y no un cero', () => {
+  it('sin plan configurado lo dice, en vez de pasar por gratuito', () => {
     pintar([sub({ plan_details: null })])
-    expect(screen.getByText('Sin costo')).toBeInTheDocument()
+    expect(screen.getByText('Plan sin configurar')).toBeInTheDocument()
   })
 
   it('sin slug cae al identificador, recortado', () => {
@@ -204,5 +204,35 @@ describe('el uso se entiende sin pasar el mouse', () => {
     expect(within(fila).getByTitle('6 usuarios')).toBeInTheDocument()
     expect(within(fila).getByTitle('240 productos')).toBeInTheDocument()
     expect(within(fila).getByTitle('1820 ventas')).toBeInTheDocument()
+  })
+})
+
+/**
+ * `price_monthly` colapsaba tres situaciones en un solo 0: plan gratuito, plan
+ * sin fila comercial y plan que no existe en la tabla técnica. Las tres se
+ * pintaban «Sin costo», así que un PRO mal configurado se veía igual que uno
+ * gratis — y aportaba 0 al MRR sin que nada lo dijera.
+ */
+describe('el precio distingue gratis de no configurado', () => {
+  it('un plan gratuito dice que es gratuito', () => {
+    pintar([sub({ plan: 'FREE', plan_details: { price_monthly: 0, currency: 'PYG' } } as Partial<SuperAdminSubscription>)])
+    expect(screen.getByText('Gratuito')).toBeInTheDocument()
+  })
+
+  it('un precio sin definir se marca, no se disfraza de gratis', () => {
+    pintar([sub({ plan_details: { price_monthly: null, currency: 'PYG' } } as Partial<SuperAdminSubscription>)])
+    expect(screen.getByText('Precio sin definir')).toBeInTheDocument()
+    expect(screen.queryByText('Gratuito')).not.toBeInTheDocument()
+  })
+
+  it('un plan que no existe en la tabla de planes también', () => {
+    pintar([sub({ plan_details: null })])
+    expect(screen.getByText('Plan sin configurar')).toBeInTheDocument()
+  })
+
+  it('un precio real se muestra con la moneda', () => {
+    pintar([sub({})])
+    expect(screen.getByText(/350\.000/)).toBeInTheDocument()
+    expect(screen.getByText('/mes')).toBeInTheDocument()
   })
 })

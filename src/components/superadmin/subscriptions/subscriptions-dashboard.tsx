@@ -31,9 +31,11 @@ import {
   formatMoney,
   getRecommendation,
   isAttention,
+  isRunningTrial,
   periodLabel,
   toDateTimeLocalValue,
 } from './utils'
+import { normalizeText } from '@/lib/text/normalize'
 import { SubscriptionStats } from './subscription-stats'
 import { SubscriptionFilters } from './subscription-filters'
 import { SubscriptionTable } from './subscription-table'
@@ -61,6 +63,9 @@ function toEditForm(sub: SuperAdminSubscription): EditForm {
     marketplace_public: Boolean(sub.marketplace_public),
   }
 }
+
+const CSV_BOM = String.fromCharCode(0xfeff)
+const CSV_EOL = String.fromCharCode(13, 10)
 
 export function SubscriptionsDashboard({ subscriptions, planOptions: configuredPlanOptions, loadError }: Props) {
   const router = useRouter()
@@ -128,15 +133,14 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
       const d = daysUntil(s.current_period_ends_at)
       return d !== null && d >= 0 && d <= 14
     }).length,
-    trials: subscriptions.filter((s) => {
-      const d = daysUntil(s.trial_ends_at)
-      return s.status === 'trialing' || (d !== null && d >= 0 && d <= 14)
-    }).length,
+    // Un trial terminado hace un año que quedo en estado `trialing` no es un
+    // trial en curso: la pestaña lo contaba igual y el numero no bajaba nunca.
+    trials: subscriptions.filter(isRunningTrial).length,
   }), [subscriptions])
 
   // Filtered + sorted list
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeText(query)
 
     return subscriptions
       .filter((s) => {
@@ -155,7 +159,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
             s.provider_subscription_id,
             s.id,
             s.organization_id,
-          ].some((v) => v?.toLowerCase().includes(q))
+          ].some((v) => normalizeText(v).includes(q))
 
         const matchesPlan = plan === 'ALL' || s.plan.toUpperCase() === plan
         const matchesStatus = status === 'ALL' || s.status === status
@@ -165,8 +169,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
           tab === 'all' ||
           (tab === 'attention' && isAttention(s)) ||
           (tab === 'renewals' && renewalDays !== null && renewalDays >= 0 && renewalDays <= 14) ||
-          (tab === 'trials' &&
-            (s.status === 'trialing' || (trialDays !== null && trialDays >= 0 && trialDays <= 14))) ||
+          (tab === 'trials' && isRunningTrial(s)) ||
           (tab === 'canceling' && s.cancel_at_period_end)
 
         return matchesQuery && matchesPlan && matchesStatus && matchesProvider && matchesTab
@@ -194,13 +197,25 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     const atRisk = subscriptions.filter((s) => ['past_due', 'unpaid'].includes(s.status)).length
     const canceling = subscriptions.filter((s) => s.cancel_at_period_end).length
     const renewingSoon = tabCounts.renewals
-    const estimatedMrr = subscriptions
-      .filter((s) => ['active', 'trialing'].includes(s.status))
-      .reduce((sum, s) => sum + (s.plan_details?.price_monthly ?? 0), 0)
-    const conversionBase = active + trialing
-    const activeRate = conversionBase ? Math.round((active / conversionBase) * 100) : 0
+    // El MRR sumaba tambien los trials: plata que todavia no existe, contada
+    // como si el 100% fuera a convertir. Solo cobra lo que esta activo.
+    const paying = subscriptions.filter((s) => s.status === 'active')
+    const estimatedMrr = paying.reduce((sum, s) => sum + (s.plan_details?.price_monthly ?? 0), 0)
 
-    return { active, activeRate, atRisk, canceling, estimatedMrr, renewingSoon, trialing, total: subscriptions.length }
+    // Y un plan sin precio configurado aportaba 0 en silencio, asi que el MRR
+    // podia estar bajo por datos faltantes sin que nada lo dijera.
+    const missingPrice = paying.filter(
+      (s) => !s.plan_details || s.plan_details.price_monthly === null
+    ).length
+
+    // `active / (active + trialing)` no es una conversion: es la proporcion
+    // entre dos estados actuales, ignorando cancelados, vencidos e impagos. Con
+    // 100 activas, 5 trials y 400 canceladas daba 95%.
+    const activeRate = subscriptions.length
+      ? Math.round((active / subscriptions.length) * 100)
+      : 0
+
+    return { active, activeRate, atRisk, canceling, estimatedMrr, missingPrice, renewingSoon, trialing, total: subscriptions.length }
   }, [subscriptions, tabCounts.renewals])
 
   // Handlers
@@ -235,8 +250,10 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
         s.owner_email || '',
       ]),
     ]
+    // Separador `;` y BOM: es lo que Excel en espanol necesita para no meter
+    // todo en una columna ni romper las tildes de «Organización».
     const blob = new Blob(
-      [rows.map((row) => row.map(csvCell).join(',')).join('\n')],
+      [CSV_BOM + rows.map((row) => row.map(csvCell).join(";")).join(CSV_EOL)],
       { type: 'text/csv;charset=utf-8;' }
     )
     const url = URL.createObjectURL(blob)

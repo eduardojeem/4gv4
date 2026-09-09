@@ -101,9 +101,17 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
               .toUpperCase()
               .slice(0, 2)
 
-            const priceFormatted = sub.plan_details?.price_monthly
-              ? formatMoney(sub.plan_details.price_monthly, sub.plan_details.currency || 'PYG')
-              : null
+            // Tres situaciones daban todas «Sin costo»: plan gratuito, plan sin
+            // fila comercial, y plan que no existe en la tabla tecnica. Solo la
+            // primera es un dato; las otras dos son configuracion faltante.
+            const price = sub.plan_details?.price_monthly ?? null
+            const priceLabel = !sub.plan_details
+              ? { text: 'Plan sin configurar', muted: true, warn: true }
+              : price === null
+                ? { text: 'Precio sin definir', muted: true, warn: true }
+                : price === 0
+                  ? { text: 'Gratuito', muted: true, warn: false }
+                  : { text: formatMoney(price, sub.plan_details.currency || 'PYG'), muted: false, warn: false }
 
             return (
               <TableRow
@@ -171,15 +179,18 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                 {/* Plan */}
                 <TableCell className={CELL}>
                   <PlanBadge plan={sub.plan} />
-                  <p className="mt-1 text-[11px] font-bold tabular-nums text-slate-600 dark:text-slate-300">
-                    {priceFormatted ? (
-                      <>
-                        {priceFormatted}
-                        <span className="font-normal text-slate-400">/mes</span>
-                      </>
-                    ) : (
-                      <span className="font-normal text-slate-400">Sin costo</span>
+                  <p
+                    className={cn(
+                      'mt-1 text-[11px] tabular-nums',
+                      priceLabel.warn
+                        ? 'font-semibold text-amber-600 dark:text-amber-400'
+                        : priceLabel.muted
+                          ? 'font-normal text-slate-400'
+                          : 'font-bold text-slate-600 dark:text-slate-300'
                     )}
+                  >
+                    {priceLabel.text}
+                    {!priceLabel.muted && <span className="font-normal text-slate-400">/mes</span>}
                   </p>
                 </TableCell>
 

@@ -11,6 +11,8 @@ type Stats = {
   atRisk: number
   canceling: number
   estimatedMrr: number
+  /** Activas cuyo plan no tiene precio configurado: no suman al MRR. */
+  missingPrice: number
   activeRate: number
   total: number
 }
@@ -30,6 +32,8 @@ type KpiItem = {
   Icon: React.ComponentType<{ className?: string }>
   navigateTo?: string
   highlight?: boolean
+  /** La cifra esta incompleta por datos faltantes, no por el negocio. */
+  warn?: boolean
 }
 
 export function SubscriptionStats({ stats, onNavigate }: SubscriptionStatsProps) {
@@ -37,14 +41,17 @@ export function SubscriptionStats({ stats, onNavigate }: SubscriptionStatsProps)
     {
       label: 'Activas',
       value: stats.active,
-      helper: `${stats.activeRate}% conversión`,
+      // Decia «N% conversión» sobre `active / (active + trialing)`, que no es
+      // una conversion: no mira cuantos trials terminaron pagando, y al ignorar
+      // canceladas y vencidas daba 95% con 400 bajas.
+      helper: `${stats.activeRate}% del total`,
       colorClass: 'text-emerald-700 dark:text-emerald-300',
       bgClass: 'bg-emerald-50 dark:bg-emerald-950/30',
       iconClass: 'text-emerald-600 dark:text-emerald-400',
       Icon: CheckCircle2,
     },
     {
-      label: 'En Trial',
+      label: 'En trial',
       value: stats.trialing,
       helper: 'Evaluando plan',
       colorClass: 'text-cyan-700 dark:text-cyan-300',
@@ -64,9 +71,10 @@ export function SubscriptionStats({ stats, onNavigate }: SubscriptionStatsProps)
       navigateTo: 'renewals',
     },
     {
-      label: 'En Riesgo',
+      label: 'En riesgo',
       value: stats.atRisk,
-      helper: stats.atRisk > 0 ? 'past_due / unpaid' : 'Todo al día',
+      // Mostraba los nombres crudos de la base al usuario.
+      helper: stats.atRisk > 0 ? 'Con cobro pendiente' : 'Todo al día',
       colorClass: stats.atRisk > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-slate-600 dark:text-slate-400',
       bgClass: stats.atRisk > 0 ? 'bg-rose-50 dark:bg-rose-950/30' : 'bg-slate-50 dark:bg-slate-800/30',
       iconClass: stats.atRisk > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400',
@@ -75,9 +83,15 @@ export function SubscriptionStats({ stats, onNavigate }: SubscriptionStatsProps)
       highlight: stats.atRisk > 0,
     },
     {
-      label: 'MRR Estimado',
+      label: 'MRR de activas',
       value: formatMoney(stats.estimatedMrr),
-      helper: `${stats.canceling} cancelan al cierre`,
+      // Se llamaba «MRR Estimado» y sumaba tambien los trials, o sea plata que
+      // todavia no existe contada como si el 100% fuera a convertir. Ahora dice
+      // que suma, y avisa cuando hay planes sin precio que no estan contados.
+      helper: stats.missingPrice > 0
+        ? `${stats.missingPrice} sin precio configurado`
+        : `${stats.canceling} cancelan al cierre`,
+      warn: stats.missingPrice > 0,
       colorClass: 'text-violet-700 dark:text-violet-300',
       bgClass: 'bg-violet-50 dark:bg-violet-950/30',
       iconClass: 'text-violet-600 dark:text-violet-400',
@@ -123,7 +137,14 @@ export function SubscriptionStats({ stats, onNavigate }: SubscriptionStatsProps)
               <p className={cn('mt-0.5 text-lg font-black leading-none tracking-tight', item.colorClass)}>
                 {item.value}
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-slate-400 dark:text-slate-500">
+              <p
+                className={cn(
+                  'mt-0.5 truncate text-[11px]',
+                  item.warn
+                    ? 'font-semibold text-amber-600 dark:text-amber-400'
+                    : 'text-slate-400 dark:text-slate-500'
+                )}
+              >
                 {item.helper}
               </p>
             </div>
