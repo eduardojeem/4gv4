@@ -37,12 +37,21 @@ import {
   Users,
   Wrench,
   XCircle,
+  Wallet,
+  TrendingUp,
+  Activity,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  ACTIVITY_LABELS,
+  getActivityLevel,
+  limitUsage,
+  type OrganizationActivity,
+} from '@/lib/superadmin/organization-activity'
 import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
 import { RobotGuide } from '@/components/common/RobotGuide'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
@@ -61,6 +70,8 @@ export type FullOrganizationDetail = {
     business_vertical?: string | null
     operating_model?: string | null
     enabled_modules?: string[] | null
+    storefront_public?: boolean | null
+    marketplace_public?: boolean | null
   }
   owner: {
     id: string
@@ -125,9 +136,17 @@ export type FullOrganizationDetail = {
   }>
   counts: {
     products: number
+    /** Sin inactivos ni lo archivado por baja de plan. */
+    activeProducts: number
     sales: number
     customers: number
+    /** `null` cuando el modulo de taller no esta disponible. */
+    repairs: number | null
   }
+  /** Como le va al negocio, no como esta configurado. */
+  activity: OrganizationActivity
+  /** El barrido de ventas llego al tope: la facturacion es parcial. */
+  activityTruncated: boolean
 }
 
 type Props = {
@@ -373,12 +392,118 @@ export const MODULE_CATEGORIES = [
   },
 ]
 
+/* --------------------------------------------------------- piezas nuevas */
+
+/** Una cifra con su explicacion al lado. `warn` marca lo que hay que mirar. */
+function MetricTile({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  warn,
+  muted,
+}: {
+  label: string
+  value: string
+  hint: string
+  icon: React.ComponentType<{ className?: string }>
+  warn?: boolean
+  muted?: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        'rounded-2xl border p-4',
+        warn
+          ? 'border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20'
+          : 'border-border bg-card'
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+        <Icon className={cn('h-4 w-4 shrink-0', warn ? 'text-amber-500' : 'text-muted-foreground/50')} />
+      </div>
+      <p
+        className={cn(
+          'mt-1.5 text-lg font-bold leading-tight tracking-tight',
+          muted ? 'text-muted-foreground' : 'text-foreground'
+        )}
+      >
+        {value}
+      </p>
+      <p className={cn('mt-0.5 text-[11px]', warn ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
+        {hint}
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Uso contra el limite del plan. Sin limite definido se muestra la cifra sola:
+ * una barra al 0% se leeria como «no usa nada», que es lo contrario de «no hay
+ * tope».
+ */
+function UsageBar({
+  label,
+  used,
+  total,
+  limit,
+  hint,
+  totalNote,
+}: {
+  label: string
+  used: number
+  total?: number
+  limit?: unknown
+  hint?: string
+  totalNote?: string
+}) {
+  const percent = limitUsage(used, limit)
+  const cerca = percent !== null && percent >= 80
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-xl font-bold tabular-nums leading-none text-foreground">
+        {used.toLocaleString('es-PY')}
+        {percent !== null && (
+          <span className="ml-1 text-xs font-normal text-muted-foreground">
+            de {Number(limit).toLocaleString('es-PY')}
+          </span>
+        )}
+      </p>
+
+      {percent !== null ? (
+        <>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn('h-full rounded-full', cerca ? 'bg-amber-500' : 'bg-violet-500')}
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          <p className={cn('text-[11px]', cerca ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+            {cerca ? `${percent}% del plan — cerca del tope` : `${percent}% del plan`}
+          </p>
+        </>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">
+          {hint ?? (total !== undefined && total !== used ? `${total.toLocaleString('es-PY')} en total${totalNote ? `, ${totalNote}` : ''}` : 'Sin tope en el plan')}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function OrganizationDetailView({ data }: Props) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('overview')
   const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  const { organization: org, owner, settings, members, subscription, plan_details, branches, counts } = data
+  const { organization: org, owner, settings, members, subscription, plan_details, branches, counts, activity, activityTruncated } = data
+
+  const activityLevel = getActivityLevel(activity.daysSinceLastSale)
+  const currency = settings?.currency || 'PYG'
+  const storefrontPublic = org.storefront_public === true
 
   const effectivePlan = (subscription?.plan || org.plan || 'FREE').toUpperCase()
   const effectiveStatus = subscription?.status || 'active'
@@ -651,6 +776,96 @@ export function OrganizationDetailView({ data }: Props) {
 
         {/* Tab 1: Overview */}
         <TabsContent value="overview" className="space-y-6 m-0">
+          {/* Como le va al negocio.
+              El resumen abria con dos tarjetas de metadatos —nombre, slug,
+              UUID, zona horaria— que son configuracion. Nada decia cuanto
+              factura ni cuando vendio por ultima vez, asi que una empresa que
+              dejo de operar hace ocho meses se veia igual que una que vendio
+              hoy. */}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricTile
+              label="Facturado"
+              value={formatMoney(activity.revenueTotal, currency)}
+              hint={
+                activityTruncated
+                  ? 'Parcial: hay más ventas de las que se pueden sumar de una vez'
+                  : `${activity.completedSales.toLocaleString('es-PY')} ventas cobradas`
+              }
+              warn={activityTruncated}
+              icon={Wallet}
+            />
+            <MetricTile
+              label="Últimos 30 días"
+              value={formatMoney(activity.revenueLast30, currency)}
+              hint={
+                activity.revenueTotal > 0
+                  ? `${Math.round((activity.revenueLast30 / activity.revenueTotal) * 100)}% de lo histórico`
+                  : 'Sin facturación'
+              }
+              icon={TrendingUp}
+            />
+            <MetricTile
+              label="Actividad"
+              value={ACTIVITY_LABELS[activityLevel]}
+              hint={
+                activity.daysSinceLastSale === null
+                  ? 'Nunca registró una venta'
+                  : activity.daysSinceLastSale === 0
+                    ? 'Vendió hoy'
+                    : `Última venta hace ${activity.daysSinceLastSale} días`
+              }
+              warn={activityLevel === 'dormant' || activityLevel === 'never'}
+              icon={Activity}
+            />
+            <MetricTile
+              label="Tienda pública"
+              value={storefrontPublic ? 'Publicada' : 'Sin publicar'}
+              hint={
+                storefrontPublic
+                  ? `Visible en /${org.slug}`
+                  : 'Nadie puede verla todavía'
+              }
+              muted={!storefrontPublic}
+              icon={Globe}
+            />
+          </div>
+
+          {/* Lo que la organizacion tiene cargado, contra lo que su plan
+              permite. El uso vivia escondido en otra pestaña. */}
+          <Card className="rounded-2xl border border-border bg-card">
+            <CardHeader className="border-b border-border py-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <Boxes className="h-4 w-4 text-violet-500" />
+                Qué tiene cargado
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+              <UsageBar
+                label="Productos"
+                used={counts.activeProducts}
+                total={counts.products}
+                limit={plan_details?.limits?.max_products}
+                totalNote="incluye inactivos"
+              />
+              <UsageBar
+                label="Usuarios"
+                used={members.length}
+                limit={plan_details?.limits?.max_users}
+              />
+              <UsageBar
+                label="Sucursales"
+                used={branches.length}
+                limit={plan_details?.limits?.max_branches}
+              />
+              <UsageBar
+                label={counts.repairs === null ? 'Clientes' : 'Reparaciones'}
+                used={counts.repairs === null ? counts.customers : counts.repairs}
+                limit={null}
+                hint={counts.repairs === null ? undefined : `${counts.customers.toLocaleString('es-PY')} clientes`}
+              />
+            </CardContent>
+          </Card>
+
           <div className="grid gap-6 md:grid-cols-2">
             {/* Identity & Legal Card */}
             <Card className="rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xs dark:border-slate-800 dark:bg-slate-900/95">

@@ -1,6 +1,10 @@
 import { notFound } from 'next/navigation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { OrganizationDetailView, type FullOrganizationDetail } from '@/components/superadmin/organizations/OrganizationDetailView'
+import { summarizeOrganizationActivity } from '@/lib/superadmin/organization-activity'
+
+/** Tope del barrido de ventas para calcular facturacion. */
+const SALES_SCAN_CAP = 20000
 
 type Props = {
   params: Promise<{ id: string }>
@@ -30,8 +34,10 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     { data: settings },
     { data: branches },
     { count: productsCount },
-    { count: salesCount },
+    { count: activeProductsCount },
     { count: customersCount },
+    { data: salesRows },
+    { count: repairsCount, error: repairsError },
   ] = await Promise.all([
     admin
       .from('organization_members')
@@ -55,12 +61,29 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       .from('products')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', org.id),
+    // Se cuentan aparte los que estan activos: el total incluia inactivos y lo
+    // archivado por baja de plan, asi que el uso contra el limite del plan
+    // salia inflado.
     admin
-      .from('sales')
+      .from('products')
       .select('id', { count: 'exact', head: true })
-      .eq('organization_id', org.id),
+      .eq('organization_id', org.id)
+      .eq('is_active', true)
+      .is('archived_by_plan_at', null),
     admin
       .from('customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', org.id),
+    // Con importe y estado: el conteo pelado no distinguia una venta cobrada de
+    // una anulada, y no habia forma de saber cuanto factura la organizacion.
+    admin
+      .from('sales')
+      .select('total_amount, status, created_at')
+      .eq('organization_id', org.id)
+      .order('created_at', { ascending: false })
+      .limit(SALES_SCAN_CAP + 1),
+    admin
+      .from('repairs')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', org.id),
   ])
@@ -88,6 +111,12 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     ownerProfile = owner
   }
 
+  const sales = salesRows ?? []
+  const activityTruncated = sales.length > SALES_SCAN_CAP
+  const activity = summarizeOrganizationActivity(
+    activityTruncated ? sales.slice(0, SALES_SCAN_CAP) : sales
+  )
+
   const detailData: FullOrganizationDetail = {
     organization: org,
     owner: ownerProfile,
@@ -105,9 +134,15 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     branches: branches ?? [],
     counts: {
       products: productsCount ?? 0,
-      sales: salesCount ?? 0,
+      activeProducts: activeProductsCount ?? 0,
+      sales: activity.totalSales,
       customers: customersCount ?? 0,
+      // El modulo puede no estar instalado en esta organizacion: `null` no es
+      // lo mismo que cero reparaciones.
+      repairs: repairsError ? null : repairsCount ?? 0,
     },
+    activity,
+    activityTruncated,
   }
 
   return <OrganizationDetailView data={detailData} />
