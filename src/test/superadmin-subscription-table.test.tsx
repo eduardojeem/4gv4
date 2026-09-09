@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -234,5 +236,34 @@ describe('el precio distingue gratis de no configurado', () => {
     pintar([sub({})])
     expect(screen.getByText(/350\.000/)).toBeInTheDocument()
     expect(screen.getByText('/mes')).toBeInTheDocument()
+  })
+})
+
+/**
+ * `TableCell` y `TableHead` traen `whitespace-nowrap` de fábrica
+ * (src/components/ui/table.tsx). Con eso, el mínimo de cada columna es el ancho
+ * COMPLETO de su contenido: ni recortar el nombre ni dejar que el diagnóstico
+ * se envuelva servían de nada, y el piso de la tabla no bajaba de 959px por más
+ * columnas que se ocultaran.
+ */
+describe('las celdas pueden envolverse', () => {
+  it('la tabla anula el nowrap del primitivo', () => {
+    const FUENTE = readFileSync(
+      resolve(process.cwd(), 'src/components/superadmin/subscriptions/subscription-table.tsx'),
+      'utf8'
+    )
+    expect(FUENTE).toContain("const CELL = 'py-2 align-top whitespace-normal'")
+    expect(FUENTE).toContain("'whitespace-normal',")
+  })
+
+  it('el primitivo sigue trayéndolo: si eso cambia, esta anulación sobra', () => {
+    const PRIMITIVO = readFileSync(resolve(process.cwd(), 'src/components/ui/table.tsx'), 'utf8')
+    expect(PRIMITIVO).toContain('whitespace-nowrap')
+  })
+
+  it('el diagnóstico se envuelve en vez de ensanchar la columna', () => {
+    pintar([sub({ cancel_at_period_end: true })])
+    const texto = screen.getByText('Revisar retención antes del cierre')
+    expect(texto.className).toContain('min-w-0')
   })
 })

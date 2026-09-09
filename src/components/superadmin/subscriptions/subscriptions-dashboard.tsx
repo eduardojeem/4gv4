@@ -558,16 +558,18 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
             {TABS.map(({ value }) => (
               <TabsContent key={value} value={value} className="m-0">
                 {/* Desktop: table or grid based on viewMode */}
-                {/* Medido: la tabla necesita 959px como piso y respira a partir
-                    de 1000. La barra lateral del panel ocupa 288px abierta, asi
-                    que a 1280 quedan ~944 utiles y aparecia el scroll de costado.
-                    A 1536 quedan ~1200 y entra holgada.
+                {/* Si elegiste tabla, ves la tabla. Cambiarla por tarjetas sin
+                    avisar —lo que hacia el corte en 2xl— es peor que un poco de
+                    arrastre: el control decia una cosa y la pantalla mostraba
+                    otra.
 
-                    Debajo de eso van las tarjetas, que muestran lo mismo sin
-                    obligar a arrastrar. Si preferis la tabla en una pantalla mas
-                    chica, plegar la barra lateral libera 208px y alcanza. */}
+                    Medido: la tabla necesita 959px. Con la barra lateral abierta
+                    (288px) a 1280 quedan ~944 utiles, o sea unos 15px de
+                    arrastre en el peor caso; plegarla libera 208px y desaparece.
+                    Debajo de 1280 si van tarjetas, porque ahi la diferencia deja
+                    de ser de quince pixeles. */}
                 {viewMode === 'table' ? (
-                  <div className="hidden 2xl:block">
+                  <div className="hidden xl:block">
                     <SubscriptionTable
                       items={pagination.items}
                       onOpenDetail={openDetail}
@@ -595,7 +597,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
                 )}
 
                 {/* Mobile/tablet: always cards, 2 cols on sm */}
-                <div className={cn('grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-2', viewMode === 'table' ? '2xl:hidden' : 'lg:hidden')}>
+                <div className={cn('grid gap-3 p-4 sm:grid-cols-2', viewMode === 'table' ? 'xl:hidden' : 'lg:hidden')}>
                   {pagination.items.length > 0 ? (
                     pagination.items.map((sub) => (
                       <SubscriptionCard

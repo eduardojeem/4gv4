@@ -60,7 +60,11 @@ const ATTENTION_STRIPE: Record<AttentionLevel, string> = {
 
 // Medido: con `py-3`, tres lineas en «Ciclo» y el avatar de 36px, cada fila
 // ocupaba 92px. En una pantalla normal entraban seis suscripciones.
-const CELL = 'py-2 align-top'
+// `whitespace-normal` anula el `whitespace-nowrap` que traen de fabrica
+// `TableCell` y `TableHead`. Eso era lo que sostenia el piso de 959px: con
+// nowrap, el minimo de cada columna es el ancho COMPLETO de su contenido, asi
+// que ni recortar el nombre ni dejar envolver el diagnostico servian de nada.
+const CELL = 'py-2 align-top whitespace-normal'
 
 /**
  * «Uso» y «Responsable» son detalle: estan en la ficha de cada suscripcion.
@@ -430,6 +434,7 @@ function Th({ children, className }: { children: React.ReactNode; className?: st
     <TableHead
       className={cn(
         'py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400',
+        'whitespace-normal',
         className
       )}
     >
