@@ -12,6 +12,7 @@ import {
   Clock,
   Crown,
   Download,
+  LayoutGrid,
   LayoutList,
   Minus,
   Network,
@@ -149,44 +150,38 @@ function RoleSubSection({ roleGroup }: { roleGroup: { roleKey: string; label: st
   const RoleIcon = roleGroup.icon
 
   return (
-    <div className="border-b border-slate-100/80 last:border-0 dark:border-slate-800/80">
-      {/* Role Subheader — clickable */}
+    <div className="mt-1">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 bg-slate-100/50 px-4 py-1.5 pl-9 text-left transition-colors hover:bg-slate-100 dark:bg-slate-800/40 dark:hover:bg-slate-800/70"
+        className="flex w-full items-center gap-2 rounded-r-lg bg-transparent px-3 py-1.5 text-left transition-colors hover:bg-slate-100/50 dark:hover:bg-slate-800/40"
       >
         <span className="text-slate-400">
           {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         </span>
-        <RoleIcon className="h-3.5 w-3.5 text-slate-500" />
+        <RoleIcon className="h-3 w-3 text-slate-500" />
         <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
           {roleGroup.label}s
         </span>
-        <Badge variant="outline" className={cn('rounded-full text-[10px] h-4 px-1.5 font-bold', roleGroup.color)}>
+        <Badge variant="outline" className={cn('rounded-full text-[9px] h-4 px-1.5 font-bold shadow-sm', roleGroup.color)}>
           {roleGroup.members.length}
         </Badge>
       </button>
 
-      {/* Members in role */}
       {open && (
-        <div>
-          {roleGroup.members.map((row, idx) => {
+        <div className="mt-1 space-y-0.5 pl-6">
+          {roleGroup.members.map((row) => {
             const statusMeta = STATUS_META[row.memberStatus ?? 'inactive'] ?? { label: row.memberStatus ?? '—', color: 'border-slate-200 bg-slate-50 text-slate-500', icon: XCircle }
             const StatusIcon = statusMeta.icon
             const displayName = row.name || row.email?.split('@')[0] || 'Usuario'
-            const isLast = idx === roleGroup.members.length - 1
 
             return (
               <div
                 key={row.memberId}
-                className={cn(
-                  'flex items-center gap-3 py-2 pl-14 pr-4 transition-colors hover:bg-slate-100/50 dark:hover:bg-slate-800/50',
-                  !isLast && 'border-b border-slate-100/50 dark:border-slate-800/50'
-                )}
+                className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-white dark:hover:bg-slate-800"
               >
                 <div className={cn(
-                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold',
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold shadow-sm',
                   row.memberRole === 'owner' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' :
                   row.memberRole === 'admin' ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' :
                   'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
@@ -195,26 +190,27 @@ function RoleSubSection({ roleGroup }: { roleGroup: { roleKey: string; label: st
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">{displayName}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-xs font-bold text-slate-800 dark:text-slate-200">{displayName}</p>
+                    {row.profileStatus && row.profileStatus !== 'active' && (
+                      <span className="shrink-0 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[9px] font-bold text-red-600 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-400">
+                        {row.profileStatus}
+                      </span>
+                    )}
+                  </div>
                   {row.email && (
                     <p className="truncate text-[11px] text-slate-400">{row.email}</p>
                   )}
                 </div>
 
-                <Badge variant="outline" className={cn('hidden shrink-0 gap-1 rounded-full text-[10px] md:flex', statusMeta.color)}>
+                <Badge variant="outline" className={cn('hidden shrink-0 gap-1 rounded-full text-[9px] px-1.5 py-0 md:flex', statusMeta.color)}>
                   <StatusIcon className="h-2.5 w-2.5" />
                   {statusMeta.label}
                 </Badge>
 
-                <span className="hidden shrink-0 text-[11px] text-slate-400 lg:block">
+                <span className="hidden w-20 shrink-0 text-right text-[10px] text-slate-400 lg:block">
                   {formatDate(row.memberSince)}
                 </span>
-
-                {row.profileStatus && row.profileStatus !== 'active' && (
-                  <span className="shrink-0 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-400">
-                    Cuenta {row.profileStatus}
-                  </span>
-                )}
               </div>
             )
           })}
@@ -258,83 +254,180 @@ function OrgGroupRow({ group }: { group: OrgGroup }) {
 
   const activeCount = group.members.filter((m) => m.memberStatus === 'active').length
   const orgStatus = group.members[0]?.organizationStatus
-  const isOrgProblem = Boolean(orgStatus && ['suspended', 'canceled', 'past_due', 'inactive'].includes(orgStatus))
-  const issueCount = group.members.filter(
-    (m) => m.memberStatus === 'suspended' || m.memberStatus === 'inactive' || (m.profileStatus && m.profileStatus !== 'active')
-  ).length
+  const isOrgSuspended = orgStatus === 'suspended' || orgStatus === 'canceled'
 
   return (
-    <div className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+    <div className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/30"
       >
-        <span className="text-slate-400">
-          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+          {open ? <Minus className="h-3 w-3" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </span>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
-          <Building2 className="h-4 w-4 text-slate-500" />
+        
+        <div className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl font-bold shadow-sm ring-1",
+          isOrgSuspended
+            ? "bg-gradient-to-br from-red-500 to-rose-600 text-white ring-red-300 dark:ring-red-800"
+            : "bg-gradient-to-br from-slate-700 to-slate-900 text-white ring-slate-400 dark:ring-slate-700"
+        )}>
+          {group.name ? group.name.substring(0, 2).toUpperCase() : 'OR'}
         </div>
+
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
-              {group.name ?? '(sin nombre)'}
+            <span className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">
+              {group.name || 'Sin Organización'}
             </span>
             {group.plan && (
               <Badge variant="outline" className={cn('rounded-full text-[10px] h-4 px-1.5', PLAN_COLORS[group.plan] ?? PLAN_COLORS.FREE)}>
                 {group.plan}
               </Badge>
             )}
-            {isOrgProblem && (
-              <Badge variant="outline" className="rounded-full border-red-200 bg-red-50 text-[10px] text-red-600 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-400 font-bold">
-                Org {orgStatus}
-              </Badge>
-            )}
-            {issueCount > 0 && (
-              <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300">
-                ⚠ {issueCount} inactivo{issueCount > 1 ? 's' : ''}/suspendido{issueCount > 1 ? 's' : ''}
+            {isOrgSuspended && (
+              <Badge variant="outline" className="h-4 rounded-full border-red-200 bg-red-50 px-1.5 text-[10px] text-red-600 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
+                Suspendida
               </Badge>
             )}
           </div>
           <div className="mt-0.5 flex items-center gap-2">
-            <span className="text-xs text-slate-400">/{group.slug}</span>
-            <span className="text-slate-300 dark:text-slate-600">·</span>
+            {group.slug && <span className="text-xs font-medium text-slate-500">/{group.slug}</span>}
+            {group.slug && <span className="text-slate-300 dark:text-slate-600">·</span>}
             <span className="text-xs text-slate-500">{group.members.length} miembro{group.members.length !== 1 ? 's' : ''}</span>
             <span className="text-slate-300 dark:text-slate-600">·</span>
             <span className="text-xs text-emerald-600 dark:text-emerald-400">{activeCount} activos</span>
           </div>
         </div>
-        <div className="hidden shrink-0 items-center gap-1 sm:flex">
+
+        <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
           {roleSubGroups.map(({ roleKey, members }) => {
             const meta = ROLE_META[roleKey]
             if (!meta) return null
             const RoleIcon = meta.icon
             return (
-              <span key={roleKey} className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium', meta.color)}>
+              <span key={roleKey} title={meta.label} className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold shadow-sm', meta.color)}>
                 <RoleIcon className="h-2.5 w-2.5" />
                 {members.length}
               </span>
             )
           })}
         </div>
+        
         <Link
           href={`/superadmin/users?organization=${group.id}`}
           onClick={(e) => e.stopPropagation()}
-          className="hidden shrink-0 rounded-lg border border-slate-200 bg-background px-2.5 py-1 text-xs font-medium text-slate-500 transition-colors hover:border-primary/40 hover:text-primary dark:border-slate-700 sm:block"
+          className="hidden shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 transition-all hover:bg-slate-50 hover:text-slate-900 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800 sm:flex"
         >
-          Ver sección
+          Ficha Org <ChevronRight className="h-3 w-3" />
         </Link>
       </button>
 
       {open && (
-        <div className="border-t border-slate-100 bg-slate-50/30 dark:border-slate-800 dark:bg-slate-900/20">
-          {roleSubGroups.map((roleGroup) => (
-            <RoleSubSection key={roleGroup.roleKey} roleGroup={roleGroup} />
-          ))}
+        <div className="bg-slate-50/50 pb-2 dark:bg-slate-900/10">
+          <div className="ml-6 border-l-2 border-slate-200/60 pl-2 dark:border-slate-800/80">
+            {roleSubGroups.map((roleGroup) => (
+              <RoleSubSection key={roleGroup.roleKey} roleGroup={roleGroup} />
+            ))}
+          </div>
         </div>
       )}
     </div>
+  )
+}
+
+function OrgGroupCard({ group }: { group: OrgGroup }) {
+  const activeCount = group.members.filter((m) => m.memberStatus === 'active').length
+  const orgStatus = group.members[0]?.organizationStatus
+  const isOrgSuspended = orgStatus === 'suspended' || orgStatus === 'canceled'
+
+  // Sort members within the card: owners/admins first, then by name
+  const sortedMembers = [...group.members].sort((a, b) => {
+    const roleRank = (role: string) => {
+      if (role === 'owner') return 1;
+      if (role === 'admin') return 2;
+      if (role === 'tecnico') return 3;
+      if (role === 'vendedor') return 4;
+      return 5;
+    }
+    const aRank = roleRank(a.memberRole);
+    const bRank = roleRank(b.memberRole);
+    if (aRank !== bRank) return aRank - bRank;
+    return (a.name || a.email || '').localeCompare(b.name || b.email || '');
+  });
+
+  return (
+    <Card className="flex h-full flex-col overflow-hidden transition-all hover:shadow-md dark:border-slate-800">
+      <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800/60 dark:bg-slate-900/40">
+        <div className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold shadow-sm ring-1",
+          isOrgSuspended
+            ? "bg-gradient-to-br from-red-500 to-rose-600 text-white ring-red-300 dark:ring-red-800"
+            : "bg-gradient-to-br from-slate-700 to-slate-900 text-white ring-slate-400 dark:ring-slate-700"
+        )}>
+          {group.name ? group.name.substring(0, 2).toUpperCase() : 'OR'}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate font-bold text-slate-900 dark:text-slate-100">
+            {group.name || 'Sin Organización'}
+          </h3>
+          <div className="flex items-center gap-2 mt-0.5">
+            {group.slug && <span className="text-[11px] font-medium text-slate-500">/{group.slug}</span>}
+            {group.plan && (
+              <Badge variant="outline" className={cn('rounded-full text-[9px] h-3.5 px-1', PLAN_COLORS[group.plan] ?? PLAN_COLORS.FREE)}>
+                {group.plan}
+              </Badge>
+            )}
+          </div>
+        </div>
+        <Link
+          href={`/superadmin/users?organization=${group.id}`}
+          className="shrink-0 rounded-full bg-white p-1.5 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-slate-700 dark:bg-slate-800 dark:ring-slate-700 dark:hover:text-slate-300"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Link>
+      </div>
+
+      <div className="flex items-center justify-between bg-white px-4 py-2 text-xs text-slate-500 dark:bg-slate-950/20 dark:text-slate-400">
+        <span className="font-medium">{group.members.length} miembros</span>
+        <span className="text-emerald-600 dark:text-emerald-400">{activeCount} activos</span>
+      </div>
+
+      <div className="flex-1 divide-y divide-slate-100 overflow-y-auto bg-white p-2 dark:divide-slate-800 dark:bg-slate-950/20" style={{ maxHeight: '280px' }}>
+        {sortedMembers.map((row) => {
+          const roleMeta = ROLE_META[row.memberRole] ?? { label: row.memberRole, color: 'border-slate-200 bg-slate-50 text-slate-600', icon: Users }
+          const statusMeta = STATUS_META[row.memberStatus ?? 'inactive'] ?? { label: row.memberStatus ?? '—', color: 'border-slate-200 bg-slate-50 text-slate-500', icon: XCircle }
+          const displayName = row.name || row.email?.split('@')[0] || 'Usuario'
+          const RoleIcon = roleMeta.icon;
+
+          return (
+            <div key={row.memberId} className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/50">
+              <div className={cn(
+                'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold shadow-sm',
+                row.memberRole === 'owner' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' :
+                row.memberRole === 'admin' ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' :
+                'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+              )}>
+                {getInitials(row.name, row.email)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">{displayName}</p>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <span className={cn('inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold', roleMeta.color)}>
+                    <RoleIcon className="h-2 w-2" />
+                    {roleMeta.label}
+                  </span>
+                  {statusMeta.label !== 'Activo' && (
+                    <span className="text-[10px] text-slate-400">• {statusMeta.label}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Card>
   )
 }
 
@@ -450,7 +543,7 @@ function RoleGroupRow({ group }: { group: RoleGroup }) {
 type SortKey = 'name' | 'role' | 'status' | 'org' | 'since'
 type FilterRole = 'all' | 'owner' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
 type FilterStatus = 'all' | 'active' | 'invited' | 'suspended' | 'inactive' | 'issues'
-type ViewMode = 'table' | 'tree' | 'role'
+type ViewMode = 'table' | 'tree' | 'role' | 'cards'
 
 export function UsersDashboard({ rows, filterOrg }: { rows: UserRow[]; filterOrg: FilterOrg }) {
   const router = useRouter()
@@ -731,7 +824,7 @@ export function UsersDashboard({ rows, filterOrg }: { rows: UserRow[]; filterOrg
             <div>
               <CardTitle>Directorio de usuarios</CardTitle>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {viewMode === 'tree'
+                {viewMode === 'tree' || viewMode === 'cards'
                   ? `${orgGroups.length} organizaciones · ${filtered.length} de ${rows.length} miembros`
                   : viewMode === 'role'
                   ? `${roleGroups.length} roles · ${filtered.length} de ${rows.length} miembros`
@@ -767,6 +860,21 @@ export function UsersDashboard({ rows, filterOrg }: { rows: UserRow[]; filterOrg
                   >
                     <Network className="h-3.5 w-3.5" />
                     Por org
+                  </button>
+                )}
+                {!filterOrg && (
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('cards')}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                      viewMode === 'cards'
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+                    )}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    Tarjetas
                   </button>
                 )}
                 <button
@@ -889,11 +997,37 @@ export function UsersDashboard({ rows, filterOrg }: { rows: UserRow[]; filterOrg
                   </div>
                 </div>
               ) : (
-                orgGroups.map((group) => <OrgGroupRow key={group.id} group={group} />)
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {orgGroups.map((group) => <OrgGroupRow key={group.id} group={group} />)}
+                </div>
               )}
               {orgGroups.length > 0 && (
                 <div className="border-t bg-slate-50/60 px-4 py-2.5 text-xs text-slate-400 dark:bg-slate-800/30">
                   {orgGroups.length} organizaciones · {filtered.length} miembros visibles
+                </div>
+              )}
+            </div>
+          ) : viewMode === 'cards' && !filterOrg ? (
+            <div className="p-4 bg-slate-50/50 dark:bg-slate-900/20">
+              {rows.length === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Users className="h-8 w-8 text-slate-300" />
+                    <p className="text-sm font-medium text-slate-500">No hay usuarios registrados</p>
+                    <p className="text-xs text-slate-400">Cuando se agreguen miembros a las organizaciones aparecerán aquí</p>
+                  </div>
+                </div>
+              ) : orgGroups.length === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Search className="h-8 w-8 text-slate-300" />
+                    <p className="text-sm font-medium text-slate-500">Sin resultados para estos filtros</p>
+                    <p className="text-xs text-slate-400">Probá limpiar la búsqueda o cambiar los filtros activos</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {orgGroups.map((group) => <OrgGroupCard key={group.id} group={group} />)}
                 </div>
               )}
             </div>
