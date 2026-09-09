@@ -1,6 +1,7 @@
 import {
     LayoutDashboard,
     Users,
+    Rocket,
     Settings,
     Shield,
     Package,
@@ -183,6 +184,17 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Settings,
                 href: '/admin/settings',
                 description: 'Configuración del sistema',
+                permissions: ['settings.read']
+            },
+            {
+                // Vive aca, y no en el menu del dia a dia, una vez que la
+                // configuracion inicial esta completa: deja de ser una tarea y
+                // pasa a ser algo que se busca junto al resto de los ajustes.
+                key: 'business-profile',
+                label: 'Configuración del negocio',
+                icon: Rocket,
+                href: '/dashboard/onboarding',
+                description: 'Datos, rubro, moneda y visibilidad de la tienda',
                 permissions: ['settings.read']
             }
         ]

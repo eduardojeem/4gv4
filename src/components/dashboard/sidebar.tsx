@@ -16,6 +16,7 @@ import { isNavigationModuleAvailable } from '@/lib/navigation/dashboard-navigati
 import { usePermissions } from '@/hooks/use-permissions'
 import type { UserRole } from '@/lib/auth/roles-permissions'
 import { canRoleAccessSection } from '@/lib/auth/section-access'
+import { fetchOnboardingStatus } from '@/lib/onboarding/status-cache'
 import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
@@ -54,6 +55,10 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       // La pagina exige ser dueño o administrador de la organizacion y devuelve
       // al panel a cualquier otro con un redirect mudo. Ofrecersela a vendedores
       // y tecnicos era una puerta que no abre.
+      //
+      // Mientras falta configurar es una TAREA y vive aca. Una vez completa es
+      // una CONFIGURACION: se filtra de este menu y queda en Administración,
+      // junto a «Sitio Web».
       { name: 'Configuración del negocio', href: '/dashboard/onboarding', icon: Rocket, roles: ['super_admin', 'admin'], description: 'Datos, rubro y tienda pública' },
       { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, permission: 'pos.read', requiredModule: 'pos' },
       { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, permission: 'pos.read', requiredModule: 'pos' },
@@ -122,6 +127,7 @@ export const Sidebar = memo(function Sidebar() {
   const [sidebarBadges, setSidebarBadges] = useState({ repairs: 0, lowStock: 0 })
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [onboardingDone, setOnboardingDone] = useState(false)
   const { hasPermission } = usePermissions()
 
   // Read role directly from auth context — single source of truth
@@ -171,9 +177,12 @@ export const Sidebar = memo(function Sidebar() {
 
   const filteredGroups = useMemo(() => {
     const filterFn = (item: NavItem) => {
-      // El item se queda despues de completar: la pantalla tiene un modo
-      // «revisita» entero —titulo propio, «Descartar», «Guardar cambios»— que
-      // antes solo se alcanzaba escribiendo la URL a mano.
+      // Completa, deja de ser una tarea diaria: sale del menu del dia a dia y
+      // sigue disponible desde Administración, que es donde se busca una
+      // configuracion. Esconderla en los dos lados dejaba el modo «revisita»
+      // inalcanzable; dejarla en «Principal» para siempre era ruido.
+      if (item.href === '/dashboard/onboarding' && onboardingDone) return false
+
 
       if (!isNavigationModuleAvailable(item.requiredModule, effectiveModules)) return false
 
@@ -189,7 +198,7 @@ export const Sidebar = memo(function Sidebar() {
       label: group.label,
       items: group.items.filter(filterFn)
     })).filter(group => group.items.length > 0)
-  }, [userRole, hasPermission, effectiveModules])
+  }, [userRole, onboardingDone, hasPermission, effectiveModules])
 
   return (
     <>

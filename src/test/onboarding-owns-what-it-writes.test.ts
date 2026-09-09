@@ -162,10 +162,28 @@ describe('el menu ofrece la pantalla a quien puede entrar', () => {
     expect(MENU).toContain("name: 'Configuración del negocio'")
   })
 
-  it('el item se queda despues de completar', () => {
-    // El modo «revisita» existia entero y solo se alcanzaba escribiendo la URL.
-    expect(MENU).not.toContain("item.href === '/dashboard/onboarding' && onboardingDone")
-    expect(MENU).not.toContain('setOnboardingDone')
+  it('mientras falta configurar es una tarea del dia a dia', () => {
+    const principal = MENU.slice(MENU.indexOf("label: 'Principal'"), MENU.indexOf("label: 'Operaciones'"))
+    expect(principal).toContain("href: '/dashboard/onboarding'")
+  })
+
+  it('completa, sale del menu diario y queda con el resto de los ajustes', () => {
+    // Esconderla en los dos lados dejaba el modo «revisita» inalcanzable;
+    // dejarla en «Principal» para siempre era ruido permanente.
+    expect(MENU).toContain("if (item.href === '/dashboard/onboarding' && onboardingDone) return false")
+
+    const NAV_ADMIN = leer('src/config/admin-navigation.ts')
+    const administracion = NAV_ADMIN.slice(NAV_ADMIN.indexOf("id: 'administration'"))
+    expect(administracion).toContain("key: 'business-profile'")
+    expect(administracion).toContain("href: '/dashboard/onboarding'")
+    // Junto a «Sitio Web», que es la otra mitad de lo mismo.
+    expect(administracion).toContain("label: 'Sitio Web'")
+  })
+
+  it('el mismo permiso que sus vecinos de Administración', () => {
+    const NAV_ADMIN = leer('src/config/admin-navigation.ts')
+    const item = NAV_ADMIN.slice(NAV_ADMIN.indexOf("key: 'business-profile'"))
+    expect(item.slice(0, 300)).toContain("permissions: ['settings.read']")
   })
 })
 
