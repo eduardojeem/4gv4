@@ -35,6 +35,7 @@ import { useUrlListState } from '@/hooks/useUrlListState'
 import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagination'
 import { cn } from '@/lib/utils'
 import { SortIndicator } from '@/components/superadmin/sort-indicator'
+import { UserDetailModal } from '@/components/superadmin/user-detail-modal'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -145,7 +146,7 @@ type OrgGroup = {
   members: UserRow[]
 }
 
-function RoleSubSection({ roleGroup }: { roleGroup: { roleKey: string; label: string; color: string; icon: React.ComponentType<{ className?: string }>; members: UserRow[] } }) {
+function RoleSubSection({ roleGroup, onUserClick }: { roleGroup: { roleKey: string; label: string; color: string; icon: React.ComponentType<{ className?: string }>; members: UserRow[] }; onUserClick: (u: UserRow) => void }) {
   const [open, setOpen] = useState(true)
   const RoleIcon = roleGroup.icon
 
@@ -178,7 +179,7 @@ function RoleSubSection({ roleGroup }: { roleGroup: { roleKey: string; label: st
             return (
               <div
                 key={row.memberId}
-                className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-white dark:hover:bg-slate-800"
+                className="flex items-center gap-3 rounded-lg px-2 py-1.5 cursor-pointer transition-colors hover:bg-white dark:hover:bg-slate-800" onClick={() => onUserClick(row)}
               >
                 <div className={cn(
                   'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold shadow-sm',
@@ -220,7 +221,7 @@ function RoleSubSection({ roleGroup }: { roleGroup: { roleKey: string; label: st
   )
 }
 
-function OrgGroupRow({ group }: { group: OrgGroup }) {
+function OrgGroupRow({ group, onUserClick }: { group: OrgGroup; onUserClick: (u: UserRow) => void }) {
   const [open, setOpen] = useState(true)
 
   const roleSubGroups = useMemo(() => {
@@ -328,7 +329,7 @@ function OrgGroupRow({ group }: { group: OrgGroup }) {
         <div className="bg-slate-50/50 pb-2 dark:bg-slate-900/10">
           <div className="ml-6 border-l-2 border-slate-200/60 pl-2 dark:border-slate-800/80">
             {roleSubGroups.map((roleGroup) => (
-              <RoleSubSection key={roleGroup.roleKey} roleGroup={roleGroup} />
+              <RoleSubSection key={roleGroup.roleKey} roleGroup={roleGroup} onUserClick={onUserClick} />
             ))}
           </div>
         </div>
@@ -337,7 +338,7 @@ function OrgGroupRow({ group }: { group: OrgGroup }) {
   )
 }
 
-function OrgGroupCard({ group }: { group: OrgGroup }) {
+function OrgGroupCard({ group, onUserClick }: { group: OrgGroup; onUserClick: (u: UserRow) => void }) {
   const activeCount = group.members.filter((m) => m.memberStatus === 'active').length
   const orgStatus = group.members[0]?.organizationStatus
   const isOrgSuspended = orgStatus === 'suspended' || orgStatus === 'canceled'
@@ -402,7 +403,7 @@ function OrgGroupCard({ group }: { group: OrgGroup }) {
           const RoleIcon = roleMeta.icon;
 
           return (
-            <div key={row.memberId} className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/50">
+            <div key={row.memberId} className="flex items-center gap-3 rounded-lg p-2 cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/50" onClick={() => onUserClick(row)}>
               <div className={cn(
                 'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold shadow-sm',
                 row.memberRole === 'owner' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' :
@@ -439,7 +440,7 @@ type RoleGroup = {
   members: UserRow[]
 }
 
-function RoleGroupRow({ group }: { group: RoleGroup }) {
+function RoleGroupRow({ group, onUserClick }: { group: RoleGroup; onUserClick: (u: UserRow) => void }) {
   const [open, setOpen] = useState(true)
   const RoleIcon = group.icon
   const activeCount = group.members.filter((m) => m.memberStatus === 'active').length
@@ -490,8 +491,9 @@ function RoleGroupRow({ group }: { group: RoleGroup }) {
                 key={row.memberId}
                 className={cn(
                   'flex items-center gap-3 py-2.5 pl-12 pr-4 transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/30',
-                  !isLast && 'border-b border-slate-100/60 dark:border-slate-800/60'
+                  !isLast && 'border-b border-slate-100/60 dark:border-slate-800/60', 'cursor-pointer'
                 )}
+                onClick={() => onUserClick(row)}
               >
                 <div className={cn(
                   'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
@@ -547,6 +549,7 @@ type ViewMode = 'table' | 'tree' | 'role' | 'cards'
 
 export function UsersDashboard({ rows, filterOrg }: { rows: UserRow[]; filterOrg: FilterOrg }) {
   const router = useRouter()
+  const [selectedUser, setSelectedUser] = useState<UserRow | null>(null)
   const { state, setValue } = useUrlListState({
     q: '',
     role: 'all',
@@ -998,7 +1001,7 @@ export function UsersDashboard({ rows, filterOrg }: { rows: UserRow[]; filterOrg
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {orgGroups.map((group) => <OrgGroupRow key={group.id} group={group} />)}
+                  {orgGroups.map((group) => <OrgGroupRow key={group.id} group={group} onUserClick={setSelectedUser} />)}
                 </div>
               )}
               {orgGroups.length > 0 && (
@@ -1027,7 +1030,7 @@ export function UsersDashboard({ rows, filterOrg }: { rows: UserRow[]; filterOrg
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {orgGroups.map((group) => <OrgGroupCard key={group.id} group={group} />)}
+                  {orgGroups.map((group) => <OrgGroupCard key={group.id} group={group} onUserClick={setSelectedUser} />)}
                 </div>
               )}
             </div>
@@ -1050,7 +1053,7 @@ export function UsersDashboard({ rows, filterOrg }: { rows: UserRow[]; filterOrg
                   </div>
                 </div>
               ) : (
-                roleGroups.map((group) => <RoleGroupRow key={group.roleKey} group={group} />)
+                roleGroups.map((group) => <RoleGroupRow key={group.roleKey} group={group} onUserClick={setSelectedUser} />)
               )}
               {roleGroups.length > 0 && (
                 <div className="border-t bg-slate-50/60 px-4 py-2.5 text-xs text-slate-400 dark:bg-slate-800/30">
@@ -1127,7 +1130,7 @@ export function UsersDashboard({ rows, filterOrg }: { rows: UserRow[]; filterOrg
                       return (
                         <tr
                           key={row.memberId}
-                          className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
+                          className="border-b border-slate-100 cursor-pointer transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40" onClick={() => setSelectedUser(row)}
                         >
                           {/* Usuario */}
                           <td className="py-3 pl-4 pr-3">
@@ -1222,6 +1225,7 @@ export function UsersDashboard({ rows, filterOrg }: { rows: UserRow[]; filterOrg
           )}
         </CardContent>
       </Card>
+      <UserDetailModal user={selectedUser} onClose={() => setSelectedUser(null)} />
     </div>
   )
 }
