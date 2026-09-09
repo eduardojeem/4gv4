@@ -134,10 +134,18 @@ export type FullOrganizationDetail = {
     is_default: boolean
     created_at: string | null
   }>
+  /**
+   * Los limites que el sistema realmente aplica (tabla `plans`), no los de la
+   * tabla comercial. `null` cuando el plan no tiene ninguno cargado.
+   */
+  plan_limits: Record<string, unknown> | null
+  plan_limits_source: 'technical' | 'commercial' | 'missing'
   counts: {
     products: number
-    /** Sin inactivos ni lo archivado por baja de plan. */
-    activeProducts: number
+    /** Los que ocupan cupo del plan: sin lo archivado por baja de plan. */
+    quotaProducts: number
+    /** Butacas ocupadas: staff activo, sin clientes de la publica. */
+    staffMembers: number
     sales: number
     customers: number
     /** `null` cuando el modulo de taller no esta disponible. */
@@ -483,13 +491,47 @@ function UsageBar({
           </div>
           <p className={cn('text-[11px]', cerca ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
             {cerca ? `${percent}% del plan — cerca del tope` : `${percent}% del plan`}
+            {total !== undefined && total !== used
+              ? ` · ${total.toLocaleString('es-PY')} en total${totalNote ? `, ${totalNote}` : ''}`
+              : ''}
           </p>
         </>
       ) : (
         <p className="text-[11px] text-muted-foreground">
-          {hint ?? (total !== undefined && total !== used ? `${total.toLocaleString('es-PY')} en total${totalNote ? `, ${totalNote}` : ''}` : 'Sin tope en el plan')}
+          {[
+            total !== undefined && total !== used
+              ? `${total.toLocaleString('es-PY')} en total${totalNote ? `, ${totalNote}` : ''}`
+              : null,
+            hint ?? 'Sin tope en el plan',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Una fila «usado / tope». El tope ausente se decia «Ilimitado», que es una
+ * afirmacion: el plan puede no tener ningun limite cargado, y entonces el
+ * sistema aplica los del plan Free sin que la pantalla lo diga.
+ */
+function LimitRow({ label, used, limit }: { label: string; used: number | null; limit: unknown }) {
+  const max = typeof limit === 'number' ? limit : Number(limit)
+  const tiene = Number.isFinite(max) && max > 0
+  const definido = limit !== null && limit !== undefined
+
+  return (
+    <div className="flex justify-between border-b border-slate-100 pb-2.5 dark:border-slate-800">
+      <span className="font-medium text-slate-400">{label}</span>
+      <span className="font-bold tabular-nums text-slate-800 dark:text-slate-200">
+        {used === null ? '—' : used.toLocaleString('es-PY')}
+        {' / '}
+        <span className={cn(!tiene && 'font-medium text-slate-400')}>
+          {tiene ? max.toLocaleString('es-PY') : definido ? 'Sin tope' : 'No definido'}
+        </span>
+      </span>
     </div>
   )
 }
@@ -499,7 +541,13 @@ export function OrganizationDetailView({ data }: Props) {
   const [activeTab, setActiveTab] = useState('overview')
   const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  const { organization: org, owner, settings, members, subscription, plan_details, branches, counts, activity, activityTruncated } = data
+  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, branches, counts, activity, activityTruncated } = data
+  // Sin fila en `plans` el sistema aplica los limites del plan Free. Decir
+  // «Sin tope» ahi seria falso.
+  const sinTope =
+    plan_limits_source === 'missing'
+      ? 'El plan no tiene límites cargados (se aplican los de Free)'
+      : 'Sin tope en el plan'
 
   const activityLevel = getActivityLevel(activity.daysSinceLastSale)
   const currency = settings?.currency || 'PYG'
@@ -842,20 +890,25 @@ export function OrganizationDetailView({ data }: Props) {
             <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <UsageBar
                 label="Productos"
-                used={counts.activeProducts}
+                used={counts.quotaProducts}
                 total={counts.products}
-                limit={plan_details?.limits?.max_products}
-                totalNote="incluye inactivos"
+                limit={plan_limits?.products}
+                totalNote="incluye archivados por baja de plan"
+                hint={sinTope}
               />
               <UsageBar
                 label="Usuarios"
-                used={members.length}
-                limit={plan_details?.limits?.max_users}
+                used={counts.staffMembers}
+                total={members.length}
+                limit={plan_limits?.users}
+                totalNote="incluye clientes y suspendidos"
+                hint={sinTope}
               />
               <UsageBar
                 label="Sucursales"
                 used={branches.length}
-                limit={plan_details?.limits?.max_branches}
+                limit={plan_limits?.branches}
+                hint={sinTope}
               />
               <UsageBar
                 label={counts.repairs === null ? 'Clientes' : 'Reparaciones'}
@@ -1253,30 +1306,22 @@ export function OrganizationDetailView({ data }: Props) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5 space-y-4 text-xs">
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Límite de Colaboradores</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">
-                    {members.length} / {String(plan_details?.limits?.max_users ?? 'Ilimitado')}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Límite de Sucursales</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">
-                    {branches.length} / {String(plan_details?.limits?.max_branches ?? 'Ilimitado')}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Límite de Productos en Catálogo</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">
-                    {counts.products} / {String(plan_details?.limits?.max_products ?? 'Ilimitado')}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pt-1">
-                  <span className="text-slate-400 font-medium">Soporte Técnico</span>
-                  <span className="font-bold text-emerald-600">
-                    Prioritario 24/7
-                  </span>
-                </div>
+                <LimitRow label="Colaboradores" used={counts.staffMembers} limit={plan_limits?.users} />
+                <LimitRow label="Sucursales" used={branches.length} limit={plan_limits?.branches} />
+                <LimitRow label="Cajas" used={null} limit={plan_limits?.cashRegisters} />
+                <LimitRow label="Productos en catálogo" used={counts.quotaProducts} limit={plan_limits?.products} />
+                <LimitRow
+                  label="Reparaciones"
+                  used={counts.repairs}
+                  limit={plan_limits?.repairs}
+                />
+                <p className="pt-1 text-[11px] text-slate-400">
+                  {plan_limits_source === 'missing'
+                    ? 'El plan no tiene límites cargados: el sistema aplica los del plan Free.'
+                    : plan_limits_source === 'commercial'
+                      ? 'Límites tomados de la ficha comercial: este plan no está en la tabla técnica.'
+                      : 'Son los límites que el sistema aplica al crear cada recurso.'}
+                </p>
               </CardContent>
             </Card>
           </div>

@@ -126,12 +126,22 @@ describe('el uso contra el límite del plan', () => {
 })
 
 describe('los conteos dejan de mezclar cosas distintas', () => {
-  it('los productos activos se cuentan aparte de los archivados', () => {
-    // El total incluía inactivos y lo archivado por baja de plan, así que el
-    // uso contra el límite del plan salía inflado.
-    expect(PAGINA).toContain(".eq('is_active', true)")
+  it('el consumo de cupo se cuenta con el mismo filtro que lo aplica', () => {
+    // `countActiveProducts` en subscription-service excluye SOLO lo archivado
+    // por baja de plan. Si la pantalla filtrara además por `is_active`, diría
+    // un consumo menor al que el sistema realmente aplica al crear el próximo
+    // producto.
     expect(PAGINA).toContain(".is('archived_by_plan_at', null)")
-    expect(PAGINA).toContain('activeProducts: activeProductsCount ?? 0')
+    expect(PAGINA).not.toContain(".eq('is_active', true)")
+    expect(PAGINA).toContain('quotaProducts: quotaProductsCount ?? 0')
+  })
+
+  it('las butacas cuentan staff activo, no todos los miembros', () => {
+    // `members.length` incluía clientes registrados desde la pública y staff
+    // suspendido: ninguno de los dos consume butaca.
+    expect(PAGINA).toContain(".neq('role', 'customer')")
+    expect(PAGINA).toContain(".eq('status', 'active')")
+    expect(VISTA).toContain('used={counts.staffMembers}')
   })
 
   it('las reparaciones distinguen «cero» de «el módulo no está»', () => {
@@ -163,6 +173,40 @@ describe('el resumen abre con el negocio, no con la configuración', () => {
 
   it('el uso del plan sube al resumen en vez de vivir en otra pestaña', () => {
     expect(VISTA).toContain('Qué tiene cargado')
-    expect(VISTA).toContain('plan_details?.limits?.max_products')
+    expect(VISTA).toContain('limit={plan_limits?.products}')
+  })
+})
+
+/**
+ * Los limites se leian de `subscription_plans.limits` con las claves
+ * `max_products` / `max_users` / `max_branches`, que no existen en ninguna
+ * parte del sistema. Todas las barras salian «Sin tope en el plan» y la ficha
+ * del plan decia «Ilimitado» para toda organizacion, incluidas las del plan
+ * Free con tope de 50 productos.
+ */
+describe('los límites del plan son los que el sistema aplica', () => {
+  it('se leen de la tabla técnica, que es la que gana en el merge', () => {
+    expect(PAGINA).toContain("admin.from('plans').select('code, name, limits, modules, is_active')")
+    expect(PAGINA).toContain('normalizePlanCode(planTier)')
+  })
+
+  it('usa las claves reales de `ResourceType`, no `max_*`', () => {
+    for (const clave of ['max_products', 'max_users', 'max_branches']) {
+      expect(VISTA).not.toContain(clave)
+    }
+    expect(VISTA).toContain('plan_limits?.products')
+    expect(VISTA).toContain('plan_limits?.users')
+    expect(VISTA).toContain('plan_limits?.branches')
+  })
+
+  it('un plan sin límites cargados no se muestra como «Ilimitado»', () => {
+    // Sin fila en `plans`, el servicio aplica los de Free: decir «sin tope»
+    // seria exactamente lo contrario de lo que pasa.
+    expect(VISTA).not.toContain("'Ilimitado'")
+    expect(VISTA).toContain('El plan no tiene límites cargados')
+  })
+
+  it('el soporte deja de anunciarse como 24/7 para todos los planes', () => {
+    expect(VISTA).not.toContain('Prioritario 24/7')
   })
 })
