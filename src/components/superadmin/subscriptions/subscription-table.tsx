@@ -58,7 +58,16 @@ const ATTENTION_STRIPE: Record<AttentionLevel, string> = {
   none: 'before:bg-transparent',
 }
 
-const CELL = 'py-3 align-top'
+// Medido: con `py-3`, tres lineas en «Ciclo» y el avatar de 36px, cada fila
+// ocupaba 92px. En una pantalla normal entraban seis suscripciones.
+const CELL = 'py-2 align-top'
+
+/**
+ * «Uso» y «Responsable» son detalle: estan en la ficha de cada suscripcion.
+ * Ocupaban 254px de los 1428 que la tabla necesitaba, y por eso habia que
+ * arrastrar de costado en cualquier pantalla que no fuera enorme.
+ */
+const SECONDARY = 'hidden 2xl:table-cell'
 
 export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
   return (
@@ -66,21 +75,31 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
     // cuanto cambiaba cualquier cosa arriba. `min-h-0` deja que el contenedor
     // padre reparta el espacio.
     <div className="min-h-0 overflow-auto">
-      <Table className="min-w-[1000px]">
+      {/* Ancho automatico, no `table-fixed` con porcentajes: con dos columnas
+          ocultas por `media query`, el reparto fijo les seguia reservando su
+          parte y «Qué hacer» quedaba en 52px para un texto de 119. Cada columna
+          se dimensiona por su contenido y una sola —la que dice que hacer—
+          absorbe el sobrante con `w-full`. */}
+      <Table className="w-full">
         <TableHeader className="sticky top-0 z-10">
           <TableRow className="border-b border-slate-200 bg-slate-50 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/95">
-            <Th className="w-[280px] pl-6">Organización</Th>
-            <Th className="w-[132px]">Plan</Th>
-            <Th className="w-[150px]">Estado</Th>
-            <Th className="w-[190px]">Ciclo</Th>
-            <Th className="w-[120px]">Uso</Th>
+            {/* Sin porcentajes: un ancho declarado convierte el minimo de la
+                celda mas ancha en un minimo de TODA la tabla —223px al 26% son
+                858px de piso—. Con ancho automatico el piso es la suma de los
+                minimos reales, que es la mitad. Solo «Qué hacer» absorbe el
+                sobrante. */}
+            <Th className="pl-5">Organización</Th>
+            <Th>Plan</Th>
+            <Th>Estado</Th>
+            <Th>Ciclo</Th>
+            <Th className={SECONDARY}>Uso</Th>
             {/* Decia «Owner» en una interfaz en castellano. */}
-            <Th className="w-[180px]">Responsable</Th>
-            {/* Sin ancho fijo: es la columna que dice QUE HACER y era la unica
-                que venia truncada, con el texto completo escondido en un
-                `title` que en tactil no existe. */}
-            <Th>Qué hacer</Th>
-            <Th className="w-16 pr-6 text-right">Acción</Th>
+            <Th className={SECONDARY}>Responsable</Th>
+            {/* Absorbe el sobrante: es la que dice QUE HACER y era la unica que
+                venia truncada, con el texto completo escondido en un `title`
+                que en tactil no existe. */}
+            <Th className="w-full">Qué hacer</Th>
+            <Th className="pr-3 text-right">Acción</Th>
           </TableRow>
         </TableHeader>
 
@@ -127,11 +146,11 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                 onClick={() => onOpenDetail(sub)}
               >
                 {/* Organización */}
-                <TableCell className={cn(CELL, 'pl-6')}>
-                  <div className="flex items-start gap-3">
+                <TableCell className={cn(CELL, 'pl-5')}>
+                  <div className="flex items-start gap-2.5">
                     <div
                       className={cn(
-                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white',
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white',
                         level === 'urgent'
                           ? 'bg-rose-600'
                           : level === 'watch'
@@ -142,7 +161,7 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                       {initials}
                     </div>
 
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 max-w-[200px] flex-1 2xl:max-w-[280px]">
                       {/* El nombre es el control: la fila entera sigue siendo
                           clicable, pero antes cada fila era una parada de
                           tabulador y con 50 suscripciones eran 50 paradas antes
@@ -153,24 +172,30 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                           event.stopPropagation()
                           onOpenDetail(sub)
                         }}
-                        className="block max-w-full truncate text-left text-sm font-bold text-slate-900 transition-colors hover:text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-slate-100 dark:hover:text-violet-300"
+                        className="block w-full min-w-0 truncate text-left text-sm font-bold text-slate-900 transition-colors hover:text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-slate-100 dark:hover:text-violet-300"
                       >
                         {sub.organization_name}
                       </button>
                       <div className="mt-0.5 flex items-center gap-1.5">
-                        <span className="truncate font-mono text-[11px] text-slate-400 dark:text-slate-500">
+                        <span className="hidden truncate font-mono text-[11px] text-slate-400 dark:text-slate-500 2xl:inline">
                           {sub.organization_slug ? `/${sub.organization_slug}` : `${sub.organization_id.slice(0, 8)}…`}
                         </span>
-                        {sub.storefront_public ? (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                            <Globe className="h-2.5 w-2.5" />
-                            Pública
+                        <span
+                          title={sub.storefront_public ? 'Tienda pública' : 'Tienda privada'}
+                          className={cn(
+                            'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
+                            sub.storefront_public
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                          )}
+                        >
+                          <Globe className="h-2.5 w-2.5 shrink-0" />
+                          {/* La palabra solo cuando sobra ancho: es lo que mas
+                              engorda el minimo de la columna mas ancha. */}
+                          <span className="hidden 2xl:inline">
+                            {sub.storefront_public ? 'Pública' : 'Privada'}
                           </span>
-                        ) : (
-                          <span className="inline-flex shrink-0 items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                            Privada
-                          </span>
-                        )}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -216,13 +241,13 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
 
                 {/* Ciclo */}
                 <TableCell className={CELL}>
-                  <div className="flex items-baseline justify-between gap-2">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                       {sub.current_period_ends_at ? formatDate(sub.current_period_ends_at) : 'Sin cierre'}
                     </span>
                     <span
                       className={cn(
-                        'shrink-0 text-[11px] font-bold tabular-nums',
+                        'text-[11px] font-bold tabular-nums',
                         renewalDays !== null && renewalDays < 0
                           ? 'text-rose-600 dark:text-rose-400'
                           : renewalDays !== null && renewalDays <= 7
@@ -246,12 +271,13 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                   {hasPeriod ? (
                     <>
                       <div
+                        title={`Desde ${formatDate(sub.current_period_starts_at)}`}
                         role="progressbar"
                         aria-valuenow={progress}
                         aria-valuemin={0}
                         aria-valuemax={100}
                         aria-label="Avance del ciclo"
-                        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+                        className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
                       >
                         <div
                           className={cn(
@@ -265,19 +291,16 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                           style={{ width: `${progress}%` }}
                         />
                       </div>
-                      <p className="mt-1 truncate text-[10px] text-slate-400 dark:text-slate-500">
-                        Desde {formatDate(sub.current_period_starts_at)}
-                      </p>
                     </>
                   ) : (
-                    <p className="mt-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+                    <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
                       Sin ciclo definido
                     </p>
                   )}
                 </TableCell>
 
                 {/* Uso */}
-                <TableCell className={CELL}>
+                <TableCell className={cn(CELL, SECONDARY)}>
                   <div className="flex flex-wrap gap-1">
                     <UsageChip icon={Users} label="usuarios" value={sub.members_count} />
                     <UsageChip icon={Boxes} label="productos" value={sub.products_count} />
@@ -286,7 +309,7 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                 </TableCell>
 
                 {/* Responsable */}
-                <TableCell className={CELL}>
+                <TableCell className={cn(CELL, SECONDARY)}>
                   <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-200">
                     {sub.owner_name || 'Sin responsable'}
                   </p>
@@ -308,7 +331,7 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                     {/* Se envuelve en dos lineas en vez de truncarse. */}
                     <span
                       className={cn(
-                        'text-xs leading-snug',
+                        'min-w-0 text-xs leading-snug',
                         level === 'urgent'
                           ? 'font-semibold text-rose-800 dark:text-rose-200'
                           : level === 'watch'
@@ -322,7 +345,7 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                 </TableCell>
 
                 {/* Acción */}
-                <TableCell className={cn(CELL, 'pr-6 text-right')} onClick={(e) => e.stopPropagation()}>
+                <TableCell className={cn(CELL, 'pr-4 text-right')} onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       {/* Estaba en `opacity-0 group-hover:opacity-100`: en una

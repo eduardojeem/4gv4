@@ -36,6 +36,7 @@ import {
   toDateTimeLocalValue,
 } from './utils'
 import { normalizeText } from '@/lib/text/normalize'
+import { cn } from '@/lib/utils'
 import { SubscriptionStats } from './subscription-stats'
 import { SubscriptionFilters } from './subscription-filters'
 import { SubscriptionTable } from './subscription-table'
@@ -557,8 +558,16 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
             {TABS.map(({ value }) => (
               <TabsContent key={value} value={value} className="m-0">
                 {/* Desktop: table or grid based on viewMode */}
+                {/* Medido: la tabla necesita 959px como piso y respira a partir
+                    de 1000. La barra lateral del panel ocupa 288px abierta, asi
+                    que a 1280 quedan ~944 utiles y aparecia el scroll de costado.
+                    A 1536 quedan ~1200 y entra holgada.
+
+                    Debajo de eso van las tarjetas, que muestran lo mismo sin
+                    obligar a arrastrar. Si preferis la tabla en una pantalla mas
+                    chica, plegar la barra lateral libera 208px y alcanza. */}
                 {viewMode === 'table' ? (
-                  <div className="hidden lg:block">
+                  <div className="hidden 2xl:block">
                     <SubscriptionTable
                       items={pagination.items}
                       onOpenDetail={openDetail}
@@ -566,7 +575,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
                     />
                   </div>
                 ) : (
-                  <div className="hidden gap-4 p-4 lg:grid lg:grid-cols-2 xl:grid-cols-3">
+                  <div className="hidden gap-4 p-4 lg:grid lg:grid-cols-2 2xl:grid-cols-3">
                     {pagination.items.length > 0 ? (
                       pagination.items.map((sub) => (
                         <SubscriptionCard
@@ -586,7 +595,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
                 )}
 
                 {/* Mobile/tablet: always cards, 2 cols on sm */}
-                <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
+                <div className={cn('grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-2', viewMode === 'table' ? '2xl:hidden' : 'lg:hidden')}>
                   {pagination.items.length > 0 ? (
                     pagination.items.map((sub) => (
                       <SubscriptionCard
