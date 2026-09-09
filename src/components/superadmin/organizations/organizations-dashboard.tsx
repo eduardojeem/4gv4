@@ -632,34 +632,26 @@ function StatCard({
   icon: React.ComponentType<{ className?: string }>
   tone?: 'default' | 'success' | 'warning' | 'info'
 }) {
-  const tones = {
-    default: 'bg-white/90 dark:bg-slate-900/80 border-slate-200/90 dark:border-slate-800',
-    success: 'border-emerald-200/80 bg-emerald-50/60 dark:border-emerald-900/50 dark:bg-emerald-950/20',
-    warning: 'border-amber-200/80 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20',
-    info:    'border-cyan-200/80 bg-cyan-50/60 dark:border-cyan-900/50 dark:bg-cyan-950/20',
-  }
   const iconTones = {
     default: 'text-slate-500 bg-slate-100 dark:bg-slate-800',
-    success: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300',
-    warning: 'text-amber-600 bg-amber-100 dark:bg-amber-950 dark:text-amber-300',
-    info:    'text-cyan-600 bg-cyan-100 dark:bg-cyan-950 dark:text-cyan-300',
+    success: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-300',
+    warning: 'text-amber-600 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-300',
+    info:    'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/50 dark:text-cyan-300',
   }
 
   return (
-    <Card className={cn('rounded-3xl border shadow-xs transition-all duration-200 hover:shadow-md backdrop-blur-md', tones[tone])}>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
-            <p className="text-2xl sm:text-3xl font-black tabular-nums text-slate-900 dark:text-slate-50">{value}</p>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{sub}</p>
-          </div>
-          <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-2xs', iconTones[tone])}>
-            <Icon className="h-5 w-5" />
-          </div>
+    <div className="flex flex-1 items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+      <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl', iconTones[tone])}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="flex flex-col min-w-0">
+        <p className="truncate text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
+        <div className="flex items-baseline gap-2">
+          <span className="text-xl font-black text-slate-900 dark:text-slate-50">{value}</span>
+          <span className="truncate text-xs text-slate-400">{sub}</span>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
@@ -852,19 +844,7 @@ export function OrganizationsDashboard({
         </div>
       </header>
 
-      {/* 🤖 ROBOT MASCOT GUARDIAN */}
-      <MonitoringRobotMascot
-        mood={robotMood}
-        statusText={robotMessage}
-        headline={focusedOrganization ? `Empresa Seleccionada: ${focusedOrganization.name}` : 'Supervisor de Empresas Activo'}
-        metrics={{
-          healthScore: stats.total > 0 ? Math.round((stats.activeSubscriptions / stats.total) * 100) : 100,
-          activeAlerts: organizations.filter(o => o.subscription_status === 'past_due' || o.subscription_status === 'unpaid').length,
-        }}
-        onQuickAction={() => router.refresh()}
-        actionLabel="Sincronizar Lista"
-      />
-
+      
       {/* Focused Organization Command Center */}
       {focusedOrganization && (
         <OrganizationFocusPanel
@@ -887,7 +867,7 @@ export function OrganizationsDashboard({
 
       {/* KPI Cards when not focused or when viewing all */}
       {!focusedOrganization && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="flex flex-wrap gap-4">
           <StatCard label="Total Empresas" value={organizations.length} sub={`${filtered.length} coincidentes`} icon={Building2} />
           <StatCard label="Planes Pagos" value={stats.paid} sub="BASIC, PRO o ENTERPRISE" icon={Sparkles} tone="info" />
           <StatCard label="Suscripciones Activas" value={stats.activeSubscriptions} sub="al día con cobros" icon={CheckCircle2} tone="success" />
@@ -1028,7 +1008,7 @@ export function OrganizationsDashboard({
           {viewMode === 'table' ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px]">
-                <thead className="border-b border-slate-100 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-950/40">
+                <thead className="sticky top-0 z-10 border-b border-slate-100 bg-slate-50/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
                   <tr>
                     <th className={cn(thClass, 'pl-6')}>
                       <button className={thBtn} onClick={() => toggleSort('name')}>
@@ -1213,11 +1193,11 @@ export function OrganizationsDashboard({
                 </div>
               ) : (
                 pagination.items.map((org) => (
-                  <Card key={org.id} className="rounded-2xl border border-slate-200/90 bg-white dark:border-slate-800 dark:bg-slate-900/90 p-5 shadow-2xs hover:shadow-md transition-all space-y-4">
-                    <div className="flex items-start justify-between gap-3">
+                  <Card key={org.id} className="flex flex-col overflow-hidden transition-all hover:shadow-md dark:border-slate-800">
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800/60 dark:bg-slate-900/40">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={cn(
-                          'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-black shadow-2xs',
+                          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-sm',
                           PLAN_AVATAR_BG[org.plan] ?? PLAN_AVATAR_BG.FREE
                         )}>
                           {getInitials(org.name)}
@@ -1225,49 +1205,45 @@ export function OrganizationsDashboard({
                         <div className="min-w-0">
                           <Link
                             href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`}
-                            className="truncate text-sm font-extrabold text-slate-900 dark:text-slate-100 hover:text-cyan-600 transition-colors block"
+                            className="truncate text-sm font-bold text-slate-900 dark:text-slate-100 hover:text-cyan-600 transition-colors block"
                           >
                             {org.name}
                           </Link>
-                          <p className="truncate text-xs text-slate-400 font-mono">/{org.slug}</p>
+                          <p className="truncate text-xs text-slate-400">/{org.slug}</p>
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <Badge variant="outline" className={cn('rounded-full text-[10px] font-bold px-2 py-0.5', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
-                          {org.plan}
-                        </Badge>
+                      <Badge variant="outline" className={cn('rounded-full text-[10px] font-bold px-2 py-0.5', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
+                        {org.plan}
+                      </Badge>
+                    </div>
+
+                    <div className="flex-1 space-y-3 p-4 bg-white dark:bg-slate-950/20">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-500">Suscripción</span>
+                          <SubscriptionBadge org={org} />
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-500">Rubro</span>
+                          <RubroBadge vertical={org.business_vertical} model={org.operating_model} />
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-3 dark:border-slate-800/60">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Personal: <strong className="text-slate-900 dark:text-slate-100">{org.staff_total}</strong></span>
+                          <span>Clientes: <strong className="text-slate-900 dark:text-slate-100">{org.customers_total}</strong></span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 pt-2.5">
-                      <RubroBadge vertical={org.business_vertical} model={org.operating_model} />
-                      <ModulesPreview modules={org.enabled_modules} />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 pt-1 text-xs border-t border-slate-100 dark:border-slate-800">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Suscripción</span>
-                        <SubscriptionBadge org={org} />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Personal</span>
-                        <MemberBar org={org} />
-                      </div>
-                    </div>
-
-                    {org.owner_email && (
-                      <div className="text-xs">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Owner</span>
-                        <p className="truncate font-semibold text-slate-700 dark:text-slate-300">{org.owner_email}</p>
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <EnterSupportButton organizationId={org.id} organizationName={org.name} />
+                    <div className="border-t border-slate-100 bg-slate-50 p-3 flex items-center justify-end gap-1 dark:border-slate-800 dark:bg-slate-900">
+                      <EnterSupportButton iconOnly organizationId={org.id} organizationName={org.name} />
                       <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs font-bold rounded-xl gap-1 text-slate-700 dark:text-slate-300 cursor-pointer"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400"
+                        title="Editar organización"
                         onClick={() => setEditingOrg({
                           id: org.id,
                           name: org.name,
@@ -1280,12 +1256,16 @@ export function OrganizationsDashboard({
                           cancel_at_period_end: org.cancel_at_period_end,
                         })}
                       >
-                        <Wrench className="h-3 w-3" />
-                        Editar
+                        <Wrench className="h-4 w-4" />
                       </Button>
-                      <Button asChild size="sm" className="h-8 text-xs font-bold rounded-xl flex-1 bg-violet-600 text-white hover:bg-violet-700 cursor-pointer">
-                        <Link href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`}>
-                          Detalle
+                      <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer" title="Gestionar usuarios">
+                        <Link href={`/superadmin/users?organization=${org.id}`}>
+                          <Users className="h-4 w-4 text-slate-500" />
+                        </Link>
+                      </Button>
+                      <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer" title="Suscripción y pagos">
+                        <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`}>
+                          <CreditCard className="h-4 w-4 text-slate-500" />
                         </Link>
                       </Button>
                     </div>
