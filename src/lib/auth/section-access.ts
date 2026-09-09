@@ -22,6 +22,9 @@ const BLOCKED_SECTIONS: string[] = [
   '/admin'
 ]
 
+// `/dashboard/onboarding` no esta aca a proposito: la pagina exige ser dueño o
+// administrador de la organizacion y devuelve al panel a cualquier otro con un
+// redirect mudo. Listarla les mostraba en el menu una puerta que no abre.
 const ALLOWED_SECTIONS: Record<RestrictedRole, string[]> = {
   vendedor: [
     '/dashboard/pos',
@@ -33,7 +36,6 @@ const ALLOWED_SECTIONS: Record<RestrictedRole, string[]> = {
     '/dashboard/repairs',
     '/dashboard/promotions',
     '/dashboard/profile',
-    '/dashboard/onboarding',
   ],
   tecnico: [
     '/dashboard/pos',
@@ -43,7 +45,6 @@ const ALLOWED_SECTIONS: Record<RestrictedRole, string[]> = {
     '/dashboard/repairs',
     '/dashboard/technician',
     '/dashboard/profile',
-    '/dashboard/onboarding',
   ],
 }
 
