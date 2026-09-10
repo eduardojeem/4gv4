@@ -59,6 +59,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     { data: repairRows, error: repairsError },
     { data: orderRows, error: ordersError },
     { data: creditRows, error: creditsError },
+    { data: trialRows },
     { data: paymentRows, error: paymentsError },
     { data: billing },
     { data: companyInfoRow },
@@ -145,6 +146,12 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       .eq('organization_id', org.id)
       .order('start_date', { ascending: false })
       .limit(CREDITS_SCAN_CAP),
+    // Pruebas de modulo vigentes: un modulo puede estar prendido por una prueba
+    // con fecha de vencimiento, no porque el plan lo incluya.
+    admin
+      .from('organization_module_trials')
+      .select('module, expires_at')
+      .eq('organization_id', org.id),
     // Lo que la organizacion pago por el servicio.
     admin
       .from('subscription_payments')
@@ -258,6 +265,22 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
   const billingSummary = paymentsError ? null : summarizeSubscriptionPayments(paymentRows ?? [])
 
   const branchList = branches ?? []
+
+  // Las cajas se cuentan por sucursal: `cash_registers` no tiene
+  // `organization_id`. Es el mismo camino que `countCashRegisters`.
+  const branchIds = branchList.map((b: any) => String(b.id)).filter(Boolean)
+  const { count: cashRegistersCount, error: cashRegistersError } = branchIds.length
+    ? await admin
+        .from('cash_registers')
+        .select('id', { count: 'exact', head: true })
+        .in('branch_id', branchIds)
+    : { count: 0, error: null }
+
+  // Solo las pruebas que siguen vigentes: una vencida ya no habilita nada.
+  const ahora = Date.now()
+  const activeTrials = (trialRows ?? [])
+    .filter((t: any) => !t.expires_at || new Date(t.expires_at).getTime() > ahora)
+    .map((t: any) => String(t.module))
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -285,6 +308,10 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     billing: billing ?? null,
     settings_modules: settings?.modules ?? null,
     plan_limits: planLimits,
+    // `plans.modules`: lo que el plan realmente habilita. Sin esto la pantalla
+    // no puede distinguir «lo apagaron» de «el plan no lo da».
+    plan_modules: Array.isArray(technicalPlan?.modules) ? technicalPlan.modules.map(String) : null,
+    module_trials: activeTrials,
     plan_limits_source: technicalPlan ? 'technical' : planRow?.limits ? 'commercial' : 'missing',
     counts: {
       products: productsCount ?? 0,
@@ -295,6 +322,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       // El modulo puede no estar instalado en esta organizacion: `null` no es
       // lo mismo que cero reparaciones.
       repairs: repairSummary?.total ?? null,
+      cashRegisters: cashRegistersError ? null : cashRegistersCount ?? 0,
     },
     repair_summary: repairSummary,
     credit_summary: creditSummary,

@@ -73,6 +73,16 @@ import {
   type ResolvedField,
 } from '@/lib/superadmin/organization-profile'
 import {
+  MODULE_STATE_LABELS,
+  activeModules,
+  moduleUsage,
+  planCoverage,
+  resolveModuleState,
+  unusedActiveModules,
+  type ModuleContext,
+  type ModuleState,
+} from '@/lib/superadmin/organization-modules'
+import {
   ORGANIZATION_ROLE_HINTS,
   memberStatusLabel,
   partitionMembers,
@@ -177,12 +187,18 @@ export type FullOrganizationDetail = {
    */
   plan_limits: Record<string, unknown> | null
   plan_limits_source: 'technical' | 'commercial' | 'missing'
+  /** `plans.modules`: lo que el plan habilita. `null` si el plan no está en la tabla técnica. */
+  plan_modules: string[] | null
+  /** Módulos con una prueba vigente. */
+  module_trials: string[]
   counts: {
     products: number
     /** Los que ocupan cupo del plan: sin lo archivado por baja de plan. */
     quotaProducts: number
     /** Butacas ocupadas: staff activo, sin clientes de la publica. */
     staffMembers: number
+    /** `null` cuando no se pudieron contar. */
+    cashRegisters: number | null
     sales: number
     customers: number
     /** `null` cuando el modulo de taller no esta disponible. */
@@ -799,6 +815,56 @@ function DataRow({
   )
 }
 
+/** Una fila «etiqueta / valor» que dice cuando el valor no existe. */
+function LimitLikeRow({
+  label,
+  value,
+  fallback = 'Sin dato',
+  warn,
+}: {
+  label: string
+  value?: string | null
+  fallback?: string
+  warn?: boolean
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-border/60 py-2.5 last:border-0">
+      <span className="font-medium text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          'text-right font-bold',
+          !value && 'font-medium text-muted-foreground/70',
+          warn && 'text-amber-600 dark:text-amber-400'
+        )}
+      >
+        {value || fallback}
+      </span>
+    </div>
+  )
+}
+
+const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
+  active: 'Activa',
+  trialing: 'En prueba',
+  past_due: 'Pago vencido',
+  paused: 'Pausada',
+  cancelled: 'Cancelada',
+  canceled: 'Cancelada',
+  expired: 'Expirada',
+  sin_registro: 'Sin suscripción',
+}
+
+const SUBSCRIPTION_STATUS_STYLES: Record<string, string> = {
+  active: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
+  trialing: 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300',
+  past_due: 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
+  paused: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+  cancelled: 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  canceled: 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  expired: 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
+  sin_registro: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+}
+
 /**
  * Una fila «usado / tope». El tope ausente se decia «Ilimitado», que es una
  * afirmacion: el plan puede no tener ningun limite cargado, y entonces el
@@ -823,6 +889,14 @@ function LimitRow({ label, used, limit }: { label: string; used: number | null; 
   )
 }
 
+const MODULE_STATE_STYLES: Record<ModuleState, string> = {
+  on: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
+  trial: 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300',
+  off_by_org: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+  not_in_plan: 'border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
+  on_outside_plan: 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
+}
+
 /** Clientes de la web que se listan antes de resumir: la lista puede tener
  *  cientos y el superadmin viene a mirar al equipo. */
 const MAX_CUSTOMERS_VISIBLE = 25
@@ -832,7 +906,7 @@ export function OrganizationDetailView({ data }: Props) {
   const [activeTab, setActiveTab] = useState('overview')
   const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules, repair_summary, online_summary, credit_summary, billing_summary } = data
+  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, plan_modules, module_trials, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules, repair_summary, online_summary, credit_summary, billing_summary } = data
   // Sin fila en `plans` el sistema aplica los limites del plan Free. Decir
   // «Sin tope» ahi seria falso.
   const sinTope =
@@ -869,7 +943,7 @@ export function OrganizationDetailView({ data }: Props) {
   const equipo = partitionMembers(members)
   const staffOrdenado = sortStaff(equipo.staff)
 
-  const cobertura = billingCoverage(
+  const coberturaPagos = billingCoverage(
     plan_details?.price_monthly,
     billing_summary?.paidTotal ?? 0,
     antiguedad?.days ?? null
@@ -889,17 +963,38 @@ export function OrganizationDetailView({ data }: Props) {
   const storefrontPublic = org.storefront_public === true
 
   const effectivePlan = (subscription?.plan || org.plan || 'FREE').toUpperCase()
-  const effectiveStatus = subscription?.status || 'active'
+  // `subscription?.status || 'active'` afirmaba «suscripcion activa» sobre una
+  // organizacion que no tiene fila en `subscriptions`: no hay nada activo, hay
+  // una cuenta sin suscripcion registrada.
+  const sinSuscripcion = !subscription
+  const effectiveStatus = subscription?.status || 'sin_registro'
   const renewalDays = daysUntil(subscription?.current_period_ends_at)
 
   const verticalMeta = VERTICAL_DESCRIPTIONS[org.business_vertical || 'general'] || VERTICAL_DESCRIPTIONS.general
-  const enabledModulesList = org.enabled_modules && org.enabled_modules.length > 0
-    ? org.enabled_modules
-    : ['pos', 'inventory', 'crm', 'ecommerce']
-  
-  const totalAvailableModules = MODULE_CATEGORIES.reduce((acc, cat) => acc + cat.modules.length, 0)
+  // `enabled_modules === null` significa «todos los del plan», que es la regla
+  // de `resolveEffectiveModules`. El codigo anterior lo reemplazaba por una
+  // lista fija de cuatro modulos: no solo era inventada, contradecia al
+  // sistema, asi que la pantalla mostraba apagados modulos que estaban activos.
+  const moduleCtx: ModuleContext = {
+    entitled: plan_modules ?? [],
+    trials: module_trials ?? [],
+    enabled: org.enabled_modules ?? null,
+  }
+  const allModuleKeys = MODULE_CATEGORIES.flatMap((cat) => cat.modules.map((m) => m.key))
+  const enabledModulesList = activeModules(allModuleKeys, moduleCtx)
+  const totalAvailableModules = allModuleKeys.length
   const activeCount = enabledModulesList.length
-  const coveragePercent = Math.round((activeCount / totalAvailableModules) * 100)
+  const cobertura = planCoverage(moduleCtx)
+
+  const usageSignals = {
+    sales: activity.completedSales,
+    products: counts.products,
+    customers: counts.customers,
+    orders: online_summary?.total ?? null,
+    repairs: repair_summary?.total ?? null,
+    credits: credit_summary?.total ?? null,
+  }
+  const modulosSinUsar = unusedActiveModules(allModuleKeys, moduleCtx, usageSignals)
 
   // El modulo de creditos puede estar apagado: «nunca financio» y «no lo tiene»
   // son cosas distintas.
@@ -1080,8 +1175,12 @@ export function OrganizationDetailView({ data }: Props) {
 
           <div className="p-5 space-y-1">
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Capacidad Funcional</p>
-            <p className="text-base font-black text-slate-900 dark:text-slate-100">{activeCount} de {totalAvailableModules} módulos</p>
-            <p className="text-xs text-slate-500 font-medium">{coveragePercent}% cobertura funcional activa</p>
+            <p className="text-base font-black text-slate-900 dark:text-slate-100">{activeCount} módulos activos</p>
+            <p className="text-xs font-medium text-slate-500">
+              {cobertura.percent === null
+                ? 'El plan no tiene módulos cargados'
+                : `${cobertura.active} de ${cobertura.entitled} que da el plan`}
+            </p>
           </div>
 
           <div className="p-5 space-y-1">
@@ -1480,17 +1579,17 @@ export function OrganizationDetailView({ data }: Props) {
                 <p
                   className={cn(
                     'text-xl font-bold tabular-nums leading-none',
-                    cobertura.behind ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'
+                    coberturaPagos.behind ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'
                   )}
                 >
-                  {cobertura.paidMonths === null
+                  {coberturaPagos.paidMonths === null
                     ? '—'
-                    : `${cobertura.paidMonths} de ${cobertura.expectedMonths} meses`}
+                    : `${coberturaPagos.paidMonths} de ${coberturaPagos.expectedMonths} meses`}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  {cobertura.paidMonths === null
+                  {coberturaPagos.paidMonths === null
                     ? 'El plan no tiene precio mensual: no hay contra qué comparar'
-                    : cobertura.behind
+                    : coberturaPagos.behind
                       ? 'Pagó menos meses de los que lleva la cuenta abierta'
                       : 'Al día con los meses transcurridos'}
                 </p>
@@ -1814,23 +1913,50 @@ export function OrganizationDetailView({ data }: Props) {
                 </div>
               </div>
 
-              {/* Progress Coverage Bar */}
-              <div className="mt-5 pt-4 border-t border-slate-200/70 dark:border-slate-800/70 space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+              {/* Cobertura contra lo que el plan da, no contra el catalogo.
+                  Antes se comparaba con los 20 modulos que existen, incluidos
+                  los que ese plan nunca va a dar: una cuenta Free al 35% no
+                  esta desaprovechando nada, esta en Free. */}
+              <div className="mt-5 space-y-2 border-t border-slate-200/70 pt-4 dark:border-slate-800/70">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
+                  <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    Módulos Operativos Habilitados
+                    Uso del plan {effectivePlan}
                   </span>
                   <span className="font-extrabold text-violet-600 dark:text-violet-400">
-                    {activeCount} de {totalAvailableModules} habilitados ({coveragePercent}%)
+                    {cobertura.percent === null
+                      ? 'El plan no tiene módulos cargados'
+                      : `${cobertura.active} de ${cobertura.entitled} módulos que incluye (${cobertura.percent}%)`}
                   </span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-violet-500 via-cyan-500 to-emerald-500 transition-all duration-500"
-                    style={{ width: `${coveragePercent}%` }}
-                  />
-                </div>
+                {cobertura.percent !== null && (
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-violet-500 via-cyan-500 to-emerald-500 transition-all duration-500"
+                      style={{ width: `${cobertura.percent}%` }}
+                    />
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-500">
+                  {org.enabled_modules === null
+                    ? 'Esta organización no eligió módulos: tiene activos todos los que su plan incluye.'
+                    : `Eligió ${activeCount} de los ${totalAvailableModules} módulos del catálogo.`}
+                </p>
+
+                {modulosSinUsar.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-900/60 dark:bg-amber-950/30">
+                    <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                      {modulosSinUsar.length === 1
+                        ? 'Hay 1 módulo activo que nunca se usó'
+                        : `Hay ${modulosSinUsar.length} módulos activos que nunca se usaron`}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                      {modulosSinUsar
+                        .map((key) => MODULE_CATEGORIES.flatMap((c) => c.modules).find((m) => m.key === key)?.name ?? key)
+                        .join(' · ')}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </Card>
@@ -1839,6 +1965,9 @@ export function OrganizationDetailView({ data }: Props) {
           <div className="space-y-6">
             {MODULE_CATEGORIES.map((category) => {
               const activeInCategory = category.modules.filter((m) => enabledModulesList.includes(m.key)).length
+              const enPlanCategoria = category.modules.filter(
+                (m) => resolveModuleState(m.key, moduleCtx) !== 'not_in_plan'
+              ).length
 
               return (
                 <div key={category.id} className="space-y-3">
@@ -1849,14 +1978,16 @@ export function OrganizationDetailView({ data }: Props) {
                       </h3>
                       <p className="text-[11px] text-slate-500">{category.description}</p>
                     </div>
-                    <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5">
-                      {activeInCategory} de {category.modules.length} activos
+                    <Badge variant="outline" className="px-2 py-0.5 text-[10px] font-bold">
+                      {activeInCategory} activos · {enPlanCategoria} en el plan
                     </Badge>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {category.modules.map((mod) => {
-                      const isEnabled = enabledModulesList.includes(mod.key)
+                      const estado = resolveModuleState(mod.key, moduleCtx)
+                      const isEnabled = estado === 'on' || estado === 'trial' || estado === 'on_outside_plan'
+                      const uso = moduleUsage(mod.key, usageSignals)
                       const ModIcon = mod.icon
 
                       return (
@@ -1876,31 +2007,43 @@ export function OrganizationDetailView({ data }: Props) {
                                   <ModIcon className="h-4 w-4" />
                                 </div>
                                 <div>
-                                  <h4 className="font-extrabold text-xs text-slate-900 dark:text-slate-100">
+                                  <h4 className="text-xs font-extrabold text-slate-900 dark:text-slate-100">
                                     {mod.name}
                                   </h4>
-                                  <span className="text-[10px] font-mono text-slate-400">
-                                    módulo: {mod.key}
-                                  </span>
+                                  <span className="font-mono text-[10px] text-slate-400">{mod.key}</span>
                                 </div>
                               </div>
 
                               <Badge
                                 variant="outline"
-                                className={cn(
-                                  'text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0',
-                                  isEnabled
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                                    : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                                )}
+                                className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold', MODULE_STATE_STYLES[estado])}
                               >
-                                {isEnabled ? 'Habilitado' : 'No contratado'}
+                                {MODULE_STATE_LABELS[estado]}
                               </Badge>
                             </div>
 
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
                               {mod.summary}
                             </p>
+
+                            {isEnabled && uso.label && (
+                              <p
+                                className={cn(
+                                  'text-[11px] font-semibold',
+                                  uso.used
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-amber-600 dark:text-amber-400'
+                                )}
+                              >
+                                {uso.used ? uso.label : `${uso.label} — activo pero sin usar`}
+                              </p>
+                            )}
+
+                            {estado === 'on_outside_plan' && (
+                              <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                                Está activo pero el plan {effectivePlan} no lo incluye: revisar.
+                              </p>
+                            )}
                           </div>
 
                           <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
@@ -2045,81 +2188,192 @@ export function OrganizationDetailView({ data }: Props) {
 
         {/* Tab 4: Subscription */}
         <TabsContent value="subscription" className="space-y-6 m-0">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xs dark:border-slate-800 dark:bg-slate-900/95">
-              <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-5 dark:border-slate-800 dark:bg-slate-950/40">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
+          {sinSuscripcion && (
+            <Card className="rounded-2xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/30">
+              <CardContent className="flex items-start gap-3 p-4">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <div>
+                  <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                    No hay una suscripción registrada
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                    El plan {effectivePlan} sale de <code className="font-mono">organizations.plan</code>, sin
+                    fila en <code className="font-mono">subscriptions</code>: no hay período, ni vencimiento, ni
+                    proveedor de cobro. La pantalla mostraba «activa» igual.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="rounded-2xl border border-border bg-card">
+              <CardHeader className="border-b border-border py-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-bold">
                   <CreditCard className="h-4 w-4 text-amber-500" />
-                  Detalle de Suscripción & Facturación
+                  La suscripción
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-5 space-y-4 text-xs">
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Nivel de Plan Activo</span>
-                  <Badge variant="outline" className={cn('text-xs font-extrabold px-2.5 py-0.5', PLAN_STYLES[effectivePlan])}>
-                    PLAN {effectivePlan}
+              <CardContent className="space-y-1 px-5 py-1 text-xs">
+                <div className="flex items-center justify-between border-b border-border/60 py-2.5">
+                  <span className="font-medium text-muted-foreground">Plan</span>
+                  <Badge variant="outline" className={cn('px-2.5 py-0.5 text-xs font-extrabold', PLAN_STYLES[effectivePlan])}>
+                    {effectivePlan}
                   </Badge>
                 </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Precio Mensual de Lista</span>
-                  <span className="font-extrabold text-slate-800 dark:text-slate-200">
-                    {formatMoney(plan_details?.price_monthly, plan_details?.currency || 'PYG')} / mes
-                  </span>
+
+                <div className="flex items-center justify-between border-b border-border/60 py-2.5">
+                  <span className="font-medium text-muted-foreground">Estado</span>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'px-2 py-0.5 text-[10px] font-extrabold uppercase',
+                      SUBSCRIPTION_STATUS_STYLES[effectiveStatus] ?? SUBSCRIPTION_STATUS_STYLES.sin_registro
+                    )}
+                  >
+                    {SUBSCRIPTION_STATUS_LABELS[effectiveStatus] ?? effectiveStatus}
+                  </Badge>
                 </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Proveedor de Pago</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">
-                    {subscription?.provider || 'Facturación Manual / Offline'}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Inicio del Período</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">
-                    {formatDate(subscription?.current_period_starts_at)}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Próximo Vencimiento</span>
-                  <span className="font-extrabold text-violet-600 dark:text-violet-400">
-                    {formatDate(subscription?.current_period_ends_at || subscription?.trial_ends_at)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pt-1">
-                  <span className="text-slate-400 font-medium">Cancelar al cierre del ciclo</span>
-                  <span className="font-bold">
-                    {subscription?.cancel_at_period_end ? 'Sí (Programada)' : 'No (Renovación continua)'}
+
+                <LimitLikeRow
+                  label="Precio de lista"
+                  value={
+                    plan_details?.price_monthly
+                      ? `${formatMoney(plan_details.price_monthly, plan_details.currency || currency)} / mes`
+                      : null
+                  }
+                  fallback="El plan no tiene precio cargado"
+                />
+                <LimitLikeRow
+                  label="Cobro"
+                  value={subscription?.provider}
+                  fallback={sinSuscripcion ? 'Sin suscripción' : 'Sin proveedor: se factura por fuera'}
+                />
+                <LimitLikeRow label="Inicio del período" value={subscription?.current_period_starts_at ? formatDate(subscription.current_period_starts_at) : null} />
+                <LimitLikeRow
+                  label="Próximo vencimiento"
+                  value={
+                    subscription?.current_period_ends_at
+                      ? `${formatDate(subscription.current_period_ends_at)}${
+                          renewalDays === null
+                            ? ''
+                            : renewalDays < 0
+                              ? ` · vencido hace ${Math.abs(renewalDays)} días`
+                              : ` · faltan ${renewalDays} días`
+                        }`
+                      : null
+                  }
+                  warn={renewalDays !== null && renewalDays < 0}
+                />
+                <LimitLikeRow
+                  label="Prueba gratuita"
+                  value={subscription?.trial_ends_at ? `Termina el ${formatDate(subscription.trial_ends_at)}` : null}
+                  fallback="Sin prueba en curso"
+                />
+                <div className="flex items-center justify-between py-2.5">
+                  <span className="font-medium text-muted-foreground">Al cierre del ciclo</span>
+                  <span className={cn('font-bold', subscription?.cancel_at_period_end && 'text-rose-600 dark:text-rose-400')}>
+                    {sinSuscripcion
+                      ? '—'
+                      : subscription?.cancel_at_period_end
+                        ? 'Se cancela'
+                        : 'Renueva'}
                   </span>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xs dark:border-slate-800 dark:bg-slate-900/95">
-              <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-5 dark:border-slate-800 dark:bg-slate-950/40">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-violet-500" />
-                  Límites Cuantitativos del Plan
+            <Card className="rounded-2xl border border-border bg-card">
+              <CardHeader className="border-b border-border py-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                  <Banknote className="h-4 w-4 text-emerald-500" />
+                  Historial de cobros
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-5 space-y-4 text-xs">
-                <LimitRow label="Colaboradores" used={counts.staffMembers} limit={plan_limits?.users} />
-                <LimitRow label="Sucursales" used={branches.length} limit={plan_limits?.branches} />
-                <LimitRow label="Cajas" used={null} limit={plan_limits?.cashRegisters} />
-                <LimitRow label="Productos en catálogo" used={counts.quotaProducts} limit={plan_limits?.products} />
-                <LimitRow
-                  label="Reparaciones"
-                  used={counts.repairs}
-                  limit={plan_limits?.repairs}
+              <CardContent className="space-y-1 px-5 py-1 text-xs">
+                <LimitLikeRow
+                  label="Total cobrado"
+                  value={
+                    billing_summary
+                      ? formatMoney(billing_summary.paidTotal, billing_summary.currency ?? currency)
+                      : null
+                  }
+                  fallback="No se pudieron leer los pagos"
                 />
-                <p className="pt-1 text-[11px] text-slate-400">
-                  {plan_limits_source === 'missing'
-                    ? 'El plan no tiene límites cargados: el sistema aplica los del plan Free.'
-                    : plan_limits_source === 'commercial'
-                      ? 'Límites tomados de la ficha comercial: este plan no está en la tabla técnica.'
-                      : 'Son los límites que el sistema aplica al crear cada recurso.'}
-                </p>
+                <LimitLikeRow
+                  label="Pagos registrados"
+                  value={billing_summary ? `${billing_summary.paidCount} cobrados` : null}
+                />
+                <LimitLikeRow
+                  label="Último pago"
+                  value={
+                    billing_summary?.lastPaidAt
+                      ? `${formatDate(billing_summary.lastPaidAt)}${billing_summary.lastPaidMethod ? ` · ${billing_summary.lastPaidMethod}` : ''}`
+                      : null
+                  }
+                  fallback="Nunca registró un pago"
+                  warn={billing_summary?.paidCount === 0}
+                />
+                <LimitLikeRow
+                  label="Meses cubiertos"
+                  value={
+                    coberturaPagos.paidMonths === null
+                      ? null
+                      : `${coberturaPagos.paidMonths} de ${coberturaPagos.expectedMonths} desde el alta`
+                  }
+                  fallback="El plan no tiene precio: no hay contra qué comparar"
+                  warn={coberturaPagos.behind}
+                />
+                {billing_summary && (billing_summary.pendingCount > 0 || billing_summary.failedCount > 0) && (
+                  <p className="py-2.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                    {[
+                      billing_summary.pendingCount > 0 && `${billing_summary.pendingCount} pendiente(s)`,
+                      billing_summary.failedCount > 0 && `${billing_summary.failedCount} fallido(s)`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                )}
+                <div className="py-2.5">
+                  <Button asChild variant="outline" size="sm" className="h-7 rounded-lg text-[11px] font-bold">
+                    <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`}>
+                      Ver en Facturación
+                      <ExternalLink className="ml-1 h-3 w-3" />
+                    </Link>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
+
+          <Card className="rounded-2xl border border-border bg-card">
+            <CardHeader className="border-b border-border py-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <Layers className="h-4 w-4 text-violet-500" />
+                Límites del plan y uso actual
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Son los topes que el sistema aplica al crear cada recurso, contra lo que la organización tiene hoy
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-x-8 px-5 py-1 text-xs md:grid-cols-2">
+              <LimitRow label="Colaboradores" used={counts.staffMembers} limit={plan_limits?.users} />
+              <LimitRow label="Sucursales" used={branches.length} limit={plan_limits?.branches} />
+              <LimitRow label="Cajas" used={counts.cashRegisters} limit={plan_limits?.cashRegisters} />
+              <LimitRow label="Productos en catálogo" used={counts.quotaProducts} limit={plan_limits?.products} />
+              <LimitRow label="Reparaciones" used={counts.repairs} limit={plan_limits?.repairs} />
+              <LimitRow label="Categorías" used={null} limit={plan_limits?.categories} />
+            </CardContent>
+            <CardContent className="border-t border-border px-5 py-3">
+              <p className="text-[11px] text-muted-foreground">
+                {plan_limits_source === 'missing'
+                  ? 'El plan no tiene límites cargados: el sistema aplica los del plan Free.'
+                  : plan_limits_source === 'commercial'
+                    ? 'Límites tomados de la ficha comercial: este plan no está en la tabla técnica.'
+                    : 'Un guion significa que ese recurso no se cuenta en esta pantalla, no que sea cero.'}
+              </p>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Tab 5: Branches */}
