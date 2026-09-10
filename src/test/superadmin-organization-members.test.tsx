@@ -120,12 +120,13 @@ const base = (over: Partial<FullOrganizationDetail> = {}): FullOrganizationDetai
   plan_limits_source: 'technical',
   plan_modules: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'promotions', 'security'],
   module_trials: [],
+  all_plans: [],
   branches: [{
     id: 'b1', name: 'Casa Central', code: 'CC', slug: 'casa-central',
     address: 'Mcal. López 1234', city: 'Asunción', phone: '021-555-100',
     email: null, is_active: true, is_default: true, created_at: '2025-02-14T10:00:00Z',
   }],
-  counts: { products: 47, quotaProducts: 47, staffMembers: 2, cashRegisters: 2, sales: 1, customers: 12, repairs: 3 },
+  counts: { products: 47, quotaProducts: 47, staffMembers: 2, cashRegisters: 2, sales: 1, customers: 12, repairs: 3, categories: 5, services: 0 },
   activity: {
     revenueTotal: 50_000, revenueLast30: 0, completedSales: 1, totalSales: 1,
     lastSaleAt: '2026-08-06T21:43:17Z', daysSinceLastSale: 34,

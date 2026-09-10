@@ -73,6 +73,15 @@ import {
   type ResolvedField,
 } from '@/lib/superadmin/organization-profile'
 import {
+  buildLimitRow,
+  countAttention,
+  nextPlan,
+  sortLimitRows,
+  upgradeLimit,
+  type LimitRowData,
+  type LimitState,
+} from '@/lib/superadmin/organization-limits'
+import {
   MODULE_STATE_LABELS,
   activeModules,
   moduleUsage,
@@ -191,6 +200,8 @@ export type FullOrganizationDetail = {
   plan_modules: string[] | null
   /** Módulos con una prueba vigente. */
   module_trials: string[]
+  /** Los planes activos, para decir a qué tope pasaría si sube. */
+  all_plans: Array<{ code: string; name: string; limits: unknown }>
   counts: {
     products: number
     /** Los que ocupan cupo del plan: sin lo archivado por baja de plan. */
@@ -199,6 +210,8 @@ export type FullOrganizationDetail = {
     staffMembers: number
     /** `null` cuando no se pudieron contar. */
     cashRegisters: number | null
+    categories: number | null
+    services: number | null
     sales: number
     customers: number
     /** `null` cuando el modulo de taller no esta disponible. */
@@ -815,6 +828,109 @@ function DataRow({
   )
 }
 
+const LIMIT_STATE_STYLES: Record<LimitState, { bar: string; text: string; chip: string | null; chipLabel: string }> = {
+  full: {
+    bar: 'bg-rose-500',
+    text: 'text-rose-600 dark:text-rose-400',
+    chip: 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
+    chipLabel: 'Sin cupo',
+  },
+  near: {
+    bar: 'bg-amber-500',
+    text: 'text-amber-600 dark:text-amber-400',
+    chip: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+    chipLabel: 'Cerca del tope',
+  },
+  ok: { bar: 'bg-violet-500', text: 'text-muted-foreground', chip: null, chipLabel: '' },
+  unlimited: { bar: '', text: 'text-muted-foreground', chip: null, chipLabel: '' },
+  undefined: { bar: '', text: 'text-muted-foreground', chip: null, chipLabel: '' },
+  uncounted: { bar: '', text: 'text-muted-foreground', chip: null, chipLabel: '' },
+}
+
+/**
+ * Un tope del plan contra lo que hay hoy. Antes era un renglon de texto plano:
+ * un catalogo al 99% se leia igual que uno al 2%.
+ */
+function LimitCard({
+  row,
+  upgrade,
+  nextPlanName,
+}: {
+  row: LimitRowData
+  upgrade: { limit: number | null; unlimited: boolean } | null
+  nextPlanName?: string | null
+}) {
+  const estilo = LIMIT_STATE_STYLES[row.state]
+  const numero = (n: number) => n.toLocaleString('es-PY')
+
+  return (
+    <div
+      className={cn(
+        'rounded-xl border p-4',
+        row.state === 'full'
+          ? 'border-rose-200 bg-rose-50/40 dark:border-rose-900/60 dark:bg-rose-950/20'
+          : row.state === 'near'
+            ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900/60 dark:bg-amber-950/20'
+            : 'border-border'
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{row.label}</p>
+        {estilo.chip && (
+          <Badge variant="outline" className={cn('shrink-0 px-1.5 py-0 text-[9px] font-black uppercase', estilo.chip)}>
+            {estilo.chipLabel}
+          </Badge>
+        )}
+      </div>
+
+      {row.state === 'uncounted' ? (
+        <>
+          <p className="mt-2 text-xl font-bold leading-none text-muted-foreground">Sin dato</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">Esta pantalla no cuenta este recurso</p>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-xl font-bold leading-none text-foreground tabular-nums">
+            {numero(row.used ?? 0)}
+            {row.limit !== null && row.state !== 'unlimited' && (
+              <span className="ml-1 text-xs font-normal text-muted-foreground">de {numero(row.limit)}</span>
+            )}
+          </p>
+
+          {row.percent !== null ? (
+            <>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div className={cn('h-full rounded-full', estilo.bar)} style={{ width: `${row.percent}%` }} />
+              </div>
+              <p className={cn('mt-1.5 text-[11px] font-medium', estilo.text)}>
+                {row.state === 'full'
+                  ? 'Llegó al tope del plan'
+                  : `${row.percent}% · quedan ${numero(row.remaining ?? 0)}`}
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {row.state === 'unlimited' ? 'Sin tope en el plan' : 'El plan no define este tope'}
+            </p>
+          )}
+        </>
+      )}
+
+      <p className="mt-2 border-t border-border/60 pt-2 text-[10px] leading-snug text-muted-foreground">{row.hint}</p>
+
+      {(row.state === 'full' || row.state === 'near') && row.atCap && (
+        <p className={cn('mt-1.5 text-[10px] font-semibold leading-snug', estilo.text)}>{row.atCap}</p>
+      )}
+
+      {(row.state === 'full' || row.state === 'near') && upgrade && nextPlanName && (
+        <p className="mt-1.5 text-[10px] leading-snug text-violet-600 dark:text-violet-400">
+          Con {nextPlanName}: {upgrade.unlimited ? 'sin tope' : numero(upgrade.limit ?? 0)}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /** Una fila «etiqueta / valor» que dice cuando el valor no existe. */
 function LimitLikeRow({
   label,
@@ -906,7 +1022,7 @@ export function OrganizationDetailView({ data }: Props) {
   const [activeTab, setActiveTab] = useState('overview')
   const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, plan_modules, module_trials, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules, repair_summary, online_summary, credit_summary, billing_summary } = data
+  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, plan_modules, module_trials, all_plans, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules, repair_summary, online_summary, credit_summary, billing_summary } = data
   // Sin fila en `plans` el sistema aplica los limites del plan Free. Decir
   // «Sin tope» ahi seria falso.
   const sinTope =
@@ -969,6 +1085,67 @@ export function OrganizationDetailView({ data }: Props) {
   const sinSuscripcion = !subscription
   const effectiveStatus = subscription?.status || 'sin_registro'
   const renewalDays = daysUntil(subscription?.current_period_ends_at)
+
+  // Los topes, ordenados por lo apretados que estan. Un catalogo al 99% no
+  // puede quedar sepultado debajo de uno al 2% solo porque se escribio antes.
+  const planSiguiente = nextPlan(effectivePlan, all_plans ?? [])
+  const filasLimite = sortLimitRows([
+    buildLimitRow({
+      key: 'users',
+      label: 'Colaboradores',
+      hint: 'Personas del equipo con acceso activo. Los clientes de la web no cuentan.',
+      used: counts.staffMembers,
+      limit: plan_limits?.users,
+      atCap: 'No se pueden invitar más personas hasta liberar una butaca.',
+    }),
+    buildLimitRow({
+      key: 'branches',
+      label: 'Sucursales',
+      hint: 'Locales registrados, activos o no.',
+      used: branches.length,
+      limit: plan_limits?.branches,
+      atCap: 'No se pueden abrir más sucursales.',
+    }),
+    buildLimitRow({
+      key: 'cashRegisters',
+      label: 'Cajas',
+      hint: 'Cajas registradoras de todas las sucursales.',
+      used: counts.cashRegisters,
+      limit: plan_limits?.cashRegisters,
+      atCap: 'No se pueden crear más cajas.',
+    }),
+    buildLimitRow({
+      key: 'products',
+      label: 'Productos',
+      hint: 'Los que ocupan cupo: lo archivado por baja de plan no cuenta.',
+      used: counts.quotaProducts,
+      limit: plan_limits?.products,
+      atCap: 'No se pueden cargar más productos. Al bajar de plan, el excedente se archiva y deja de venderse.',
+    }),
+    buildLimitRow({
+      key: 'categories',
+      label: 'Categorías',
+      hint: 'Categorías del catálogo.',
+      used: counts.categories,
+      limit: plan_limits?.categories,
+    }),
+    buildLimitRow({
+      key: 'repairs',
+      label: 'Reparaciones',
+      hint: 'Órdenes de taller registradas, en cualquier estado.',
+      used: counts.repairs,
+      limit: plan_limits?.repairs,
+      atCap: 'No se pueden abrir más órdenes de taller.',
+    }),
+    buildLimitRow({
+      key: 'services',
+      label: 'Servicios',
+      hint: 'Productos cargados con unidad «servicio».',
+      used: counts.services,
+      limit: plan_limits?.services,
+    }),
+  ])
+  const limitesEnRiesgo = countAttention(filasLimite)
 
   const verticalMeta = VERTICAL_DESCRIPTIONS[org.business_vertical || 'general'] || VERTICAL_DESCRIPTIONS.general
   // `enabled_modules === null` significa «todos los del plan», que es la regla
@@ -2348,30 +2525,61 @@ export function OrganizationDetailView({ data }: Props) {
 
           <Card className="rounded-2xl border border-border bg-card">
             <CardHeader className="border-b border-border py-3">
-              <CardTitle className="flex items-center gap-2 text-sm font-bold">
-                <Layers className="h-4 w-4 text-violet-500" />
-                Límites del plan y uso actual
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Son los topes que el sistema aplica al crear cada recurso, contra lo que la organización tiene hoy
-              </CardDescription>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                    <Layers className="h-4 w-4 text-violet-500" />
+                    Límites del plan {effectivePlan} y uso actual
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Los topes que el sistema aplica al crear cada recurso. Lo más apretado va primero.
+                  </CardDescription>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'px-2 py-0.5 text-[10px] font-bold',
+                    limitesEnRiesgo > 0
+                      ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                      : 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                  )}
+                >
+                  {limitesEnRiesgo === 0
+                    ? 'Con espacio en todo'
+                    : `${limitesEnRiesgo} ${limitesEnRiesgo === 1 ? 'recurso cerca del tope' : 'recursos cerca del tope'}`}
+                </Badge>
+              </div>
             </CardHeader>
-            <CardContent className="grid gap-x-8 px-5 py-1 text-xs md:grid-cols-2">
-              <LimitRow label="Colaboradores" used={counts.staffMembers} limit={plan_limits?.users} />
-              <LimitRow label="Sucursales" used={branches.length} limit={plan_limits?.branches} />
-              <LimitRow label="Cajas" used={counts.cashRegisters} limit={plan_limits?.cashRegisters} />
-              <LimitRow label="Productos en catálogo" used={counts.quotaProducts} limit={plan_limits?.products} />
-              <LimitRow label="Reparaciones" used={counts.repairs} limit={plan_limits?.repairs} />
-              <LimitRow label="Categorías" used={null} limit={plan_limits?.categories} />
+
+            <CardContent className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filasLimite.map((row) => (
+                <LimitCard
+                  key={row.key}
+                  row={row}
+                  upgrade={upgradeLimit(row.key, row.limit, planSiguiente)}
+                  nextPlanName={planSiguiente?.name ?? planSiguiente?.code}
+                />
+              ))}
             </CardContent>
-            <CardContent className="border-t border-border px-5 py-3">
+
+            <CardContent className="space-y-1 border-t border-border px-5 py-3">
               <p className="text-[11px] text-muted-foreground">
                 {plan_limits_source === 'missing'
                   ? 'El plan no tiene límites cargados: el sistema aplica los del plan Free.'
                   : plan_limits_source === 'commercial'
                     ? 'Límites tomados de la ficha comercial: este plan no está en la tabla técnica.'
-                    : 'Un guion significa que ese recurso no se cuenta en esta pantalla, no que sea cero.'}
+                    : 'Salen de la tabla técnica de planes, que es la que el sistema consulta al crear un recurso.'}
               </p>
+              {planSiguiente ? (
+                <p className="text-[11px] text-muted-foreground">
+                  El plan siguiente es <strong className="font-semibold text-foreground">{planSiguiente.name ?? planSiguiente.code}</strong>.
+                  Los topes que mejora se muestran en cada recurso que esté cerca del suyo.
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  No hay un plan superior: {effectivePlan} es el más alto.
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -55,6 +55,8 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     { count: quotaProductsCount },
     { count: staffMembersCount },
     { count: customersCount },
+    { count: categoriesCount, error: categoriesError },
+    { count: servicesCount, error: servicesError },
     { data: salesRows },
     { data: repairRows, error: repairsError },
     { data: orderRows, error: ordersError },
@@ -114,6 +116,17 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       .from('customers')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', org.id),
+    admin
+      .from('categories')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', org.id),
+    // Servicios: productos con `unit_measure = 'servicio'`, el mismo criterio
+    // que `countServices` en subscription-service.
+    admin
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', org.id)
+      .eq('unit_measure', 'servicio'),
     // Con importe y estado: el conteo pelado no distinguia una venta cobrada de
     // una anulada, y no habia forma de saber cuanto factura la organizacion.
     admin
@@ -195,9 +208,12 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
   // comercial seria mostrar un numero que nadie aplica.
   const planTier = (subscription?.plan || org.plan || 'FREE').toLowerCase()
   const planCode = normalizePlanCode(planTier)
-  const [{ data: planRow }, { data: technicalPlan }] = await Promise.all([
+  const [{ data: planRow }, { data: technicalPlan }, { data: allPlans }] = await Promise.all([
     admin.from('subscription_plans').select('*').eq('tier', planTier).maybeSingle(),
     admin.from('plans').select('code, name, limits, modules, is_active').eq('code', planCode).maybeSingle(),
+    // Para poder decir a que tope pasaria si sube de plan, sin salir de la
+    // pantalla. Son cuatro filas.
+    admin.from('plans').select('code, name, limits').eq('is_active', true),
   ])
 
   const isLimitMap = (value: unknown): value is Record<string, unknown> =>
@@ -312,6 +328,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     // no puede distinguir «lo apagaron» de «el plan no lo da».
     plan_modules: Array.isArray(technicalPlan?.modules) ? technicalPlan.modules.map(String) : null,
     module_trials: activeTrials,
+    all_plans: (allPlans ?? []) as Array<{ code: string; name: string; limits: unknown }>,
     plan_limits_source: technicalPlan ? 'technical' : planRow?.limits ? 'commercial' : 'missing',
     counts: {
       products: productsCount ?? 0,
@@ -323,6 +340,8 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       // lo mismo que cero reparaciones.
       repairs: repairSummary?.total ?? null,
       cashRegisters: cashRegistersError ? null : cashRegistersCount ?? 0,
+      categories: categoriesError ? null : categoriesCount ?? 0,
+      services: servicesError ? null : servicesCount ?? 0,
     },
     repair_summary: repairSummary,
     credit_summary: creditSummary,

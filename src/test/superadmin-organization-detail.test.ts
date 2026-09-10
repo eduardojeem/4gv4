@@ -131,8 +131,18 @@ describe('los conteos dejan de mezclar cosas distintas', () => {
     // por baja de plan. Si la pantalla filtrara además por `is_active`, diría
     // un consumo menor al que el sistema realmente aplica al crear el próximo
     // producto.
-    expect(PAGINA).toContain(".is('archived_by_plan_at', null)")
-    expect(PAGINA).not.toContain(".eq('is_active', true)")
+    // Se afirma sobre la consulta, no sobre el archivo ni sobre el comentario
+    // que la explica: la pagina tiene otras consultas con `is_active` —la
+    // tabla de planes— y el comentario de arriba nombra `is_active` justo para
+    // decir que NO va. Los dos hacen fallar una busqueda global por el motivo
+    // equivocado.
+    const desdeElComentario = PAGINA.indexOf('// Los que ocupan cupo del plan')
+    const consultaCupo = PAGINA.slice(
+      PAGINA.indexOf('admin', desdeElComentario),
+      PAGINA.indexOf('// Las butacas del plan cuentan solo staff activo')
+    )
+    expect(consultaCupo).toContain(".is('archived_by_plan_at', null)")
+    expect(consultaCupo).not.toContain('is_active')
     expect(PAGINA).toContain('quotaProducts: quotaProductsCount ?? 0')
   })
 

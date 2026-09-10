@@ -124,12 +124,16 @@ const base = (over: Partial<FullOrganizationDetail> = {}): FullOrganizationDetai
   plan_limits_source: 'technical',
   plan_modules: PLAN_PRO,
   module_trials: [],
+  all_plans: [
+    { code: 'PRO', name: 'Pro', limits: { users: 10, branches: 3, products: 5000, cashRegisters: 10, repairs: 500 } },
+    { code: 'ENTERPRISE', name: 'Enterprise', limits: { users: null, branches: null, products: null, cashRegisters: null, repairs: null } },
+  ],
   branches: [{
     id: 'b1', name: 'Casa Central', code: 'CC', slug: 'casa-central',
     address: 'Mcal. López 1234', city: 'Asunción', phone: '021-555-100',
     email: null, is_active: true, is_default: true, created_at: '2025-02-14T10:00:00Z',
   }],
-  counts: { products: 47, quotaProducts: 47, staffMembers: 2, cashRegisters: 2, sales: 1, customers: 12, repairs: 3 },
+  counts: { products: 47, quotaProducts: 47, staffMembers: 2, cashRegisters: 2, sales: 1, customers: 12, repairs: 3, categories: 5, services: 0 },
   activity: {
     revenueTotal: 50_000, revenueLast30: 0, completedSales: 1, totalSales: 1,
     lastSaleAt: '2026-08-06T21:43:17Z', daysSinceLastSale: 34,
@@ -237,13 +241,80 @@ describe('la pestaña de suscripción', () => {
     // Antes la fila decia «— / 10»: el recurso nunca se contaba.
     render(<OrganizationDetailView data={base()} />)
     await abrir(/Suscripción|Plan/)
-    const cajas = screen.getByText('Cajas').closest('div')!
-    expect(cajas.textContent).toContain('2 / 10')
+    const cajas = screen.getByText('Cajas').closest('div')!.parentElement!
+    expect(cajas.textContent).toContain('de 10')
+  })
+})
+
+/**
+ * La seccion listaba seis renglones «usado / tope» en texto plano, en el orden
+ * en que estaban escritos: un catalogo al 99% del tope se leia igual que uno al
+ * 2%, y no decia cuanto espacio queda ni que pasa al llegar al limite.
+ */
+describe('los límites del plan', () => {
+  const apretado = (over: Partial<FullOrganizationDetail> = {}) =>
+    base({
+      counts: { products: 4990, quotaProducts: 4990, staffMembers: 10, cashRegisters: 2, sales: 1, customers: 12, repairs: 3, categories: 5, services: 0 },
+      ...over,
+    })
+
+  it('lo más apretado va primero', async () => {
+    render(<OrganizationDetailView data={apretado()} />)
+    await abrir(/Suscripción|Plan/)
+    // Colaboradores esta 10/10 y Productos 4990/5000: los dos arriba.
+    expect(screen.getAllByText('Sin cupo').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Cerca del tope').length).toBeGreaterThan(0)
   })
 
-  it('un guion se explica: no significa cero', async () => {
+  it('dice cuánto espacio queda, no solo el porcentaje', async () => {
+    render(<OrganizationDetailView data={apretado()} />)
+    await abrir(/Suscripción|Plan/)
+    expect(screen.getByText(/quedan 10/)).toBeInTheDocument()
+  })
+
+  it('resume cuántos recursos hay que mirar', async () => {
+    render(<OrganizationDetailView data={apretado()} />)
+    await abrir(/Suscripción|Plan/)
+    expect(screen.getByText(/recursos cerca del tope/)).toBeInTheDocument()
+  })
+
+  it('con espacio en todo lo dice en verde, no deja el resumen vacío', async () => {
     render(<OrganizationDetailView data={base()} />)
     await abrir(/Suscripción|Plan/)
-    expect(screen.getByText(/no se cuenta en esta pantalla, no que sea cero/)).toBeInTheDocument()
+    expect(screen.getByText('Con espacio en todo')).toBeInTheDocument()
+  })
+
+  it('explica qué pasa al llegar al tope, solo donde importa', async () => {
+    render(<OrganizationDetailView data={apretado()} />)
+    await abrir(/Suscripción|Plan/)
+    expect(screen.getByText(/No se pueden invitar más personas/)).toBeInTheDocument()
+    // La reparacion esta lejos del tope: su aviso no aparece.
+    expect(screen.queryByText(/No se pueden abrir más órdenes de taller/)).not.toBeInTheDocument()
+  })
+
+  it('ofrece el plan siguiente donde el tope aprieta', async () => {
+    render(<OrganizationDetailView data={apretado({
+      all_plans: [
+        { code: 'PRO', name: 'Pro', limits: { users: 10, products: 5000 } },
+        { code: 'ENTERPRISE', name: 'Enterprise', limits: { users: null, products: null } },
+      ],
+    })} />)
+    await abrir(/Suscripción|Plan/)
+    expect(screen.getAllByText(/Con Enterprise: sin tope/).length).toBeGreaterThan(0)
+  })
+
+  it('un recurso sin contar dice «Sin dato», no cero', async () => {
+    render(<OrganizationDetailView data={base({
+      counts: { ...base().counts, cashRegisters: null },
+    })} />)
+    await abrir(/Suscripción|Plan/)
+    expect(screen.getByText('Esta pantalla no cuenta este recurso')).toBeInTheDocument()
+  })
+
+  it('cada recurso explica qué ocupa cupo exactamente', async () => {
+    render(<OrganizationDetailView data={base()} />)
+    await abrir(/Suscripción|Plan/)
+    expect(screen.getByText(/lo archivado por baja de plan no cuenta/)).toBeInTheDocument()
+    expect(screen.getByText(/Los clientes de la web no cuentan/)).toBeInTheDocument()
   })
 })
