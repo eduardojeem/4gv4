@@ -52,13 +52,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { Pagination } from '@/components/ui/pagination'
 import { cn } from '@/lib/utils'
@@ -301,7 +294,7 @@ export function NotificationsDashboard({
   const [pageSize, setPageSize] = useState(15)
 
   // Modals & Sheets
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [formDialogOpen, setFormDialogOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<GlobalNotification | null>(null)
   const [detailTarget, setDetailTarget] = useState<GlobalNotification | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<GlobalNotification | null>(null)
@@ -399,7 +392,7 @@ export function NotificationsDashboard({
     setForm(EMPTY_FORM)
     setFormError(null)
     setOrgSearch('')
-    setSheetOpen(true)
+    setFormDialogOpen(true)
   }, [])
 
   const openEdit = useCallback((n: GlobalNotification) => {
@@ -415,7 +408,7 @@ export function NotificationsDashboard({
     })
     setFormError(null)
     setOrgSearch('')
-    setSheetOpen(true)
+    setFormDialogOpen(true)
   }, [])
 
   const handleDuplicate = useCallback((n: GlobalNotification) => {
@@ -431,7 +424,7 @@ export function NotificationsDashboard({
     })
     setFormError(null)
     setOrgSearch('')
-    setSheetOpen(true)
+    setFormDialogOpen(true)
   }, [])
 
   const handleApplyTemplate = useCallback((tpl: typeof QUICK_TEMPLATES[0]) => {
@@ -497,7 +490,7 @@ export function NotificationsDashboard({
       setNotifications(prev =>
         editTarget ? prev.map(n => (n.id === saved.id ? saved : n)) : [saved, ...prev]
       )
-      setSheetOpen(false)
+      setFormDialogOpen(false)
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Error desconocido.')
     } finally {
@@ -1235,27 +1228,27 @@ export function NotificationsDashboard({
       )}
 
       {/* ------------------------------------------------------------------- */}
-      {/* Create / Edit Sheet                                                 */}
+      {/* Create / Edit Centered Dialog                                       */}
       {/* ------------------------------------------------------------------- */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="flex w-full flex-col gap-0 sm:max-w-xl overflow-hidden p-0">
-          <SheetHeader className="border-b p-5 pr-12 text-left bg-slate-50/50 dark:bg-slate-900/50">
-            <div className="flex items-center gap-2">
+      <Dialog open={formDialogOpen} onOpenChange={setFormDialogOpen}>
+        <DialogContent className="flex w-full flex-col gap-0 sm:max-w-2xl max-h-[90vh] overflow-hidden p-0">
+          <DialogHeader className="border-b p-5 pr-12 text-left bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
+            <div className="flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
                 <BellRing className="h-5 w-5" />
               </div>
               <div>
-                <SheetTitle className="text-base font-black">
+                <DialogTitle className="text-base font-black text-slate-900 dark:text-slate-100">
                   {editTarget ? 'Editar Notificación' : 'Nueva Notificación Global'}
-                </SheetTitle>
-                <SheetDescription className="text-xs">
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
                   {editTarget
                     ? 'Actualiza los parámetros o el alcance de este comunicado.'
                     : 'Redacta un anuncio para todos los tenants o clientes específicos.'}
-                </SheetDescription>
+                </DialogDescription>
               </div>
             </div>
-          </SheetHeader>
+          </DialogHeader>
 
           <div className="flex-1 space-y-5 overflow-y-auto p-5">
             {/* Quick Templates Picker (only when creating or draft) */}
@@ -1539,11 +1532,11 @@ export function NotificationsDashboard({
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t p-4 bg-slate-50/50 dark:bg-slate-900/50">
+          <DialogFooter className="flex items-center justify-end gap-2 border-t p-4 bg-slate-50/50 dark:bg-slate-900/50 shrink-0 sm:justify-end">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setSheetOpen(false)}
+              onClick={() => setFormDialogOpen(false)}
               className="text-xs"
             >
               Cancelar
@@ -1561,9 +1554,9 @@ export function NotificationsDashboard({
                 ? 'Programar Envío'
                 : 'Guardar Borrador'}
             </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ------------------------------------------------------------------- */}
       {/* Detail / In-App Preview Dialog                                      */}
