@@ -477,8 +477,8 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                         <Settings className="h-4 w-4" />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-medium">Configuracion</span>
-                        <span className="text-xs text-muted-foreground">Ajustes del sistema</span>
+                        <span className="text-sm font-medium">Configuración</span>
+                        <span className="text-xs text-muted-foreground">Datos de la empresa, impuestos y moneda</span>
                       </div>
                     </Link>
                   </DropdownMenuItem>

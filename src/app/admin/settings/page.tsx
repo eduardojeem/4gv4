@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
   AlertTriangle,
@@ -73,7 +72,6 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 }
 
 export default function AdminSettingsPage() {
-  const router = useRouter()
   const {
     settings,
     originalSettings,
@@ -85,16 +83,13 @@ export default function AdminSettingsPage() {
     saveSettings,
     resetSettings,
     reloadSettings,
+    scope,
   } = useSharedSettings()
-  const { loading: authLoading, isSuperAdmin } = useAuth()
+  const { loading: authLoading } = useAuth()
   const { setTheme, setColorScheme } = useTheme()
   const t = getAdminSettingsText('es')
   const [activeTab, setActiveTab] = useState('company')
   const [currencyChangeConfirmed, setCurrencyChangeConfirmed] = useState(false)
-
-  useEffect(() => {
-    if (!authLoading && isSuperAdmin) router.replace('/superadmin/settings')
-  }, [authLoading, isSuperAdmin, router])
 
   const validationErrors = useMemo<FieldErrors>(() => {
     const next: FieldErrors = {}
@@ -136,11 +131,13 @@ export default function AdminSettingsPage() {
   const savedThemeRef = useRef({ theme: originalSettings.theme, color: originalSettings.primaryColor })
 
   useEffect(() => {
-    if (isSuperAdmin || isLoading || initialSyncDone.current) return
+    // El tema se toma de la organizacion. Con valores globales no hay de
+    // donde tomarlo.
+    if (scope !== 'organization' || isLoading || initialSyncDone.current) return
     setTheme(settings.theme as 'light' | 'dark' | 'system')
     setColorScheme(isSystemColorScheme(settings.primaryColor) ? settings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME)
     initialSyncDone.current = true
-  }, [isSuperAdmin, isLoading, settings.theme, settings.primaryColor, setTheme, setColorScheme])
+  }, [scope, isLoading, settings.theme, settings.primaryColor, setTheme, setColorScheme])
 
   useEffect(() => {
     if (!themeDirtyRef.current) {
@@ -219,7 +216,7 @@ export default function AdminSettingsPage() {
     toast.info(t.discarded)
   }
 
-  if (authLoading || isLoading || isSuperAdmin) {
+  if (authLoading || isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6">
         <div className="flex flex-col items-center gap-4 text-center">
@@ -228,11 +225,45 @@ export default function AdminSettingsPage() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-foreground">
-              {isSuperAdmin ? 'Abriendo configuración global…' : authLoading ? t.loadingAuth : t.loadingSettings}
+              {authLoading ? t.loadingAuth : t.loadingSettings}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">Sincronizando preferencias del sistema...</p>
           </div>
         </div>
+      </div>
+    )
+  }
+
+  // Antes se redirigia a todo superadmin a /superadmin/settings, aunque
+  // estuviera dentro de su organizacion y quisiera configurar su empresa. Ahora
+  // se lo manda a la global solo si no forma parte de ninguna, y se dice por que.
+  if (scope === 'platform') {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center p-6">
+        <Card className="w-full max-w-lg">
+          <CardContent className="space-y-4 p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Info className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-foreground">No estás dentro de ninguna organización</h2>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  Esta pantalla configura los datos de una empresa: nombre, RUC, impuestos y moneda. Tu cuenta de
+                  superadmin no forma parte del equipo de ninguna, así que acá no hay nada que configurar.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm">
+                <Link href="/superadmin/settings">Ir a la configuración de la plataforma</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/superadmin/organizations">Ver organizaciones</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
-import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { resolveSettingsOrganizationId } from '@/lib/organization/resolve-settings-organization'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import {
   mapDBToSettings,
@@ -48,24 +48,19 @@ export async function GET() {
     )
   }
 
-  if (auth.user.role === 'super_admin') {
-    return NextResponse.json({ success: true, data: globalRow })
-  }
-
-  let organizationId = (await getCurrentOrganizationContext(auth.user.id))?.id ?? null
-  if (!organizationId) {
-    const { data: membership } = await admin
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', auth.user.id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-    organizationId = membership?.organization_id ?? null
-  }
+  // Un superadmin recibia siempre la fila global, aunque estuviera dentro de su
+  // organizacion: la pantalla de configuracion, el POS y los tickets mostraban
+  // los datos de la plataforma. Ahora se resuelve la organizacion para todos, y
+  // solo sin organizacion se devuelve la global, marcada como tal.
+  const isSuperAdmin = auth.user.role === 'super_admin'
+  const organizationId = await resolveSettingsOrganizationId(admin, auth.user.id, {
+    requireStaff: isSuperAdmin,
+  })
 
   if (!organizationId) {
+    if (isSuperAdmin) {
+      return NextResponse.json({ success: true, scope: 'platform', data: globalRow })
+    }
     return NextResponse.json(
       { success: false, error: 'No active organization found' },
       { status: 403 }
@@ -136,6 +131,7 @@ export async function GET() {
 
   return NextResponse.json({
     success: true,
+    scope: 'organization',
     data: responseRow,
   })
 }

@@ -13,6 +13,7 @@ import {
   mergeTenantAdminSettings,
   normalizeOrganizationModules,
 } from '@/lib/organization/admin-settings'
+import { resolveSettingsOrganizationId } from '@/lib/organization/resolve-settings-organization'
 
 const RATE_LIMIT = 20
 const RATE_LIMIT_WINDOW = 60 * 1000
@@ -201,6 +202,32 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
 
     if (context.user.role !== 'super_admin') {
       return handleTenantUpdate(context, validation.data, body?.confirmCurrencyChange === true)
+    }
+
+    // Un superadmin guardando la configuracion de SU organizacion. Sin este
+    // alcance explicito, todo lo que guardaba desde /admin/settings —nombre,
+    // RUC, IVA, moneda de su empresa— se escribia en la fila global de la
+    // plataforma. La pantalla global (/superadmin/settings) no manda `scope` y
+    // sigue escribiendo en `system_settings` como antes.
+    if (body?.scope === 'organization') {
+      const organizationId = await resolveSettingsOrganizationId(createAdminSupabase(), context.user.id, {
+        requireStaff: true,
+      })
+      if (!organizationId) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'NO_ORGANIZATION',
+            error: 'No estás dentro de ninguna organización. La configuración de la plataforma está en Super Admin.',
+          },
+          { status: 403 }
+        )
+      }
+      return handleTenantUpdate(
+        { ...context, organizationId },
+        validation.data,
+        body?.confirmCurrencyChange === true
+      )
     }
 
     const supabase = createAdminSupabase()

@@ -90,6 +90,12 @@ export interface SharedSettings {
 }
 
 export type SharedSettingsSource = 'remote' | 'default'
+/**
+ * De donde salio lo cargado. `platform` solo le llega a un superadmin que no
+ * forma parte de ninguna organizacion: son los valores globales, y una pantalla
+ * de organizacion no debe mostrarlos como si fueran de una empresa.
+ */
+export type SharedSettingsScope = 'organization' | 'platform'
 
 export interface SaveSettingsOptions {
   confirmCurrencyChange?: boolean
@@ -184,6 +190,7 @@ export function useSharedSettings() {
   const [settingsSource, setSettingsSource] = useState<SharedSettingsSource>(
     'default'
   )
+  const [scope, setScope] = useState<SharedSettingsScope | null>(null)
 
   // Track original settings as JSON for efficient comparison
   const originalRef = useRef<string>(JSON.stringify(DEFAULT_SHARED_SETTINGS))
@@ -207,6 +214,7 @@ export function useSharedSettings() {
         setOriginalSettings(mapped)
         originalRef.current = JSON.stringify(mapped)
         setSettingsSource('remote')
+        setScope(result.scope === 'platform' ? 'platform' : 'organization')
         return
       }
 
@@ -227,6 +235,7 @@ export function useSharedSettings() {
       setOriginalSettings(DEFAULT_SHARED_SETTINGS)
       originalRef.current = JSON.stringify(DEFAULT_SHARED_SETTINGS)
       setSettingsSource('default')
+      setScope(null)
     } finally {
       setIsLoading(false)
     }
@@ -278,6 +287,9 @@ export function useSharedSettings() {
         body: JSON.stringify({
           settings: changedSettings,
           confirmCurrencyChange: options.confirmCurrencyChange === true,
+          // Todos los que usan este hook trabajan dentro de una organizacion.
+          // Sin esto, un superadmin guardaba en la configuracion global.
+          scope: 'organization',
         })
       })
 
@@ -326,6 +338,7 @@ export function useSharedSettings() {
     isSaving,
     error,
     settingsSource,
+    scope,
     updateSetting,
     updateSettings,
     saveSettings,
