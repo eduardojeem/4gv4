@@ -40,6 +40,12 @@ import {
   Wallet,
   TrendingUp,
   Activity,
+  Phone,
+  Mail,
+  Receipt,
+  Clock,
+  CircleDashed,
+  Navigation,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -52,6 +58,16 @@ import {
   limitUsage,
   type OrganizationActivity,
 } from '@/lib/superadmin/organization-activity'
+import {
+  SOURCE_LABELS,
+  accountAge,
+  averageTicket,
+  configuredOr,
+  countMissingContact,
+  resolveOnboardingState,
+  resolveOrganizationContact,
+  type ResolvedField,
+} from '@/lib/superadmin/organization-profile'
 import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
 import { RobotGuide } from '@/components/common/RobotGuide'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
@@ -161,6 +177,14 @@ export type FullOrganizationDetail = {
    * consulta.
    */
   membersFailed: boolean
+  /** `organization_settings.modules.admin_settings` */
+  admin_settings: Record<string, unknown> | null
+  /** `website_settings` con key `company_info` */
+  company_info: Record<string, unknown> | null
+  /** `billing_profiles` */
+  billing: Record<string, unknown> | null
+  /** `organization_settings.modules`, para leer la marca de onboarding. */
+  settings_modules: unknown
 }
 
 type Props = {
@@ -519,6 +543,85 @@ function UsageBar({
 }
 
 /**
+ * Un dato de la ficha, con su procedencia y —cuando existe— la accion que se
+ * puede hacer con el. Un telefono que no se puede marcar y una direccion que no
+ * abre el mapa son texto, no informacion util.
+ */
+function DataRow({
+  icon: Icon,
+  label,
+  field,
+  href,
+  actionLabel,
+  fallback = 'Sin cargar',
+  mono,
+  onCopy,
+}: {
+  icon: React.ElementType
+  label: string
+  field: ResolvedField | { value: string | null; source?: null }
+  href?: string | null
+  actionLabel?: string
+  fallback?: string
+  mono?: boolean
+  onCopy?: () => void
+}) {
+  const source = 'source' in field ? field.source : null
+  const vacio = !field.value
+
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-border/60 py-2.5 last:border-0">
+      <div className="flex min-w-0 items-start gap-2">
+        <Icon className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', vacio ? 'text-muted-foreground/50' : 'text-violet-500')} />
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+          {vacio ? (
+            <p className="text-xs font-medium text-muted-foreground/70">{fallback}</p>
+          ) : (
+            <p className={cn('break-words text-xs font-bold text-foreground', mono && 'font-mono text-[11px]')}>
+              {field.value}
+            </p>
+          )}
+          {source && (
+            <p className="text-[10px] text-muted-foreground/70">{SOURCE_LABELS[source]}</p>
+          )}
+        </div>
+      </div>
+
+      {!vacio && (href || onCopy) && (
+        <div className="flex shrink-0 items-center gap-1">
+          {href && (
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="h-6 rounded-lg px-2 text-[10px] font-bold text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-950/40"
+            >
+              <a
+                href={href}
+                {...(href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}
+              >
+                {actionLabel ?? 'Abrir'}
+              </a>
+            </Button>
+          )}
+          {onCopy && (
+            <button
+              type="button"
+              onClick={onCopy}
+              aria-label={`Copiar ${label}`}
+              className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Copy className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * Una fila «usado / tope». El tope ausente se decia «Ilimitado», que es una
  * afirmacion: el plan puede no tener ningun limite cargado, y entonces el
  * sistema aplica los del plan Free sin que la pantalla lo diga.
@@ -547,13 +650,28 @@ export function OrganizationDetailView({ data }: Props) {
   const [activeTab, setActiveTab] = useState('overview')
   const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, branches, counts, activity, activityTruncated, membersFailed } = data
+  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules } = data
   // Sin fila en `plans` el sistema aplica los limites del plan Free. Decir
   // «Sin tope» ahi seria falso.
   const sinTope =
     plan_limits_source === 'missing'
       ? 'El plan no tiene límites cargados (se aplican los de Free)'
       : 'Sin tope en el plan'
+
+  const defaultBranch = branches.find((b) => b.is_default) ?? branches[0] ?? null
+  const contact = resolveOrganizationContact({
+    adminSettings: admin_settings,
+    companyInfo: company_info,
+    defaultBranch: defaultBranch as unknown as Record<string, unknown> | null,
+    billing,
+    owner: owner as unknown as Record<string, unknown> | null,
+  })
+  const contactoFaltante = countMissingContact(contact)
+  const ticket = averageTicket(activity.revenueTotal, activity.completedSales)
+  const antiguedad = accountAge(org.created_at)
+  const onboarding = resolveOnboardingState(settings_modules)
+  const monedaConfig = configuredOr(settings?.currency, 'PYG')
+  const zonaConfig = configuredOr(settings?.timezone, 'America/Asuncion')
 
   const activityLevel = getActivityLevel(activity.daysSinceLastSale)
   const currency = settings?.currency || 'PYG'
@@ -838,7 +956,7 @@ export function OrganizationDetailView({ data }: Props) {
               factura ni cuando vendio por ultima vez, asi que una empresa que
               dejo de operar hace ocho meses se veia igual que una que vendio
               hoy. */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <MetricTile
               label="Facturado"
               value={formatMoney(activity.revenueTotal, currency)}
@@ -859,6 +977,17 @@ export function OrganizationDetailView({ data }: Props) {
                   : 'Sin facturación'
               }
               icon={TrendingUp}
+            />
+            <MetricTile
+              label="Ticket promedio"
+              value={ticket === null ? 'Sin dato' : formatMoney(ticket, currency)}
+              hint={
+                ticket === null
+                  ? 'Todavía no cobró ninguna venta'
+                  : `Sobre ${activity.completedSales.toLocaleString('es-PY')} ventas cobradas`
+              }
+              muted={ticket === null}
+              icon={Receipt}
             />
             <MetricTile
               label="Actividad"
@@ -883,6 +1012,17 @@ export function OrganizationDetailView({ data }: Props) {
               }
               muted={!storefrontPublic}
               icon={Globe}
+            />
+            <MetricTile
+              label="Antigüedad"
+              value={antiguedad?.label ?? 'Sin fecha de alta'}
+              hint={
+                onboarding.completed
+                  ? `Configuración terminada${onboarding.completedAt ? ` el ${formatDate(onboarding.completedAt)}` : ''}`
+                  : 'Nunca terminó de configurar la cuenta'
+              }
+              warn={!onboarding.completed}
+              icon={Clock}
             />
           </div>
 
@@ -928,74 +1068,179 @@ export function OrganizationDetailView({ data }: Props) {
           </Card>
 
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Identity & Legal Card */}
-            <Card className="rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xs dark:border-slate-800 dark:bg-slate-900/95">
-              <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-5 dark:border-slate-800 dark:bg-slate-950/40">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-violet-500" />
-                  Identidad del Negocio
-                </CardTitle>
+            {/* Contacto real del negocio. No estaba en ninguna pestana: un
+                superadmin que necesitaba llamar al cliente no tenia donde
+                mirar, aunque el dato existe en la base. */}
+            <Card className="rounded-2xl border border-border bg-card">
+              <CardHeader className="border-b border-border py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                    <Phone className="h-4 w-4 text-violet-500" />
+                    Cómo contactar al negocio
+                  </CardTitle>
+                  {contactoFaltante > 0 && (
+                    <Badge variant="outline" className="gap-1 border-amber-300 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:text-amber-400">
+                      <CircleDashed className="h-3 w-3" />
+                      {contactoFaltante} sin cargar
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent className="p-5 space-y-4 text-xs">
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Nombre de la Empresa</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{org.name}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Subdominio Público</span>
-                  <span className="font-mono font-bold text-violet-600 dark:text-violet-400">/{org.slug}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Fecha de Alta / Creación</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{formatDate(org.created_at)}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Última Modificación</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{formatDate(org.updated_at)}</span>
-                </div>
-                <div className="flex justify-between items-center pt-1">
-                  <span className="text-slate-400 font-medium">UUID en Base de Datos</span>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(org.id, 'UUID')}
-                    className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
-                  >
-                    <span>{org.id}</span>
-                    <Copy className="h-3 w-3 text-slate-400" />
-                  </button>
-                </div>
+              <CardContent className="px-5 py-1">
+                <DataRow
+                  icon={Phone}
+                  label="Teléfono"
+                  field={contact.phone}
+                  href={contact.phone.value ? `tel:${contact.phone.value.replace(/[^+\d]/g, '')}` : null}
+                  actionLabel="Llamar"
+                  onCopy={contact.phone.value ? () => copyToClipboard(contact.phone.value!, 'Teléfono') : undefined}
+                />
+                <DataRow
+                  icon={Mail}
+                  label="Correo del negocio"
+                  field={contact.email}
+                  href={contact.email.value ? `mailto:${contact.email.value}` : null}
+                  actionLabel="Escribir"
+                  onCopy={contact.email.value ? () => copyToClipboard(contact.email.value!, 'Correo') : undefined}
+                />
+                <DataRow
+                  icon={MapPin}
+                  label="Dirección"
+                  field={contact.address}
+                  href={
+                    contact.mapsUrl.value
+                      ?? (contact.address.value
+                        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                            [contact.address.value, contact.city.value].filter(Boolean).join(', ')
+                          )}`
+                        : null)
+                  }
+                  actionLabel="Ver mapa"
+                />
+                <DataRow icon={Navigation} label="Ciudad" field={contact.city} />
+                <DataRow
+                  icon={UserRound}
+                  label="Propietario de la cuenta"
+                  field={{ value: owner?.full_name || owner?.email || null, source: null }}
+                  href={owner?.email ? `mailto:${owner.email}` : null}
+                  actionLabel="Escribir"
+                  fallback="Sin propietario asignado"
+                />
               </CardContent>
             </Card>
 
-            {/* Owner & Configuration Card */}
-            <Card className="rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xs dark:border-slate-800 dark:bg-slate-900/95">
-              <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-5 dark:border-slate-800 dark:bg-slate-950/40">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <UserRound className="h-4 w-4 text-cyan-500" />
-                  Propietario & Ajustes Regionales
+            {/* Identidad fiscal: lo que hace falta para facturarle. Vive en
+                `billing_profiles` y nunca llegaba a la pantalla. */}
+            <Card className="rounded-2xl border border-border bg-card">
+              <CardHeader className="border-b border-border py-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                  <Receipt className="h-4 w-4 text-cyan-500" />
+                  Datos para facturarle
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-5 space-y-4 text-xs">
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Propietario (Owner)</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{owner?.full_name || 'Sin nombre registrado'}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Email de Contacto</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{owner?.email || 'Sin email'}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Moneda Predeterminada</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{settings?.currency || 'PYG'}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                  <span className="text-slate-400 font-medium">Zona Horaria</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{settings?.timezone || 'America/Asuncion'}</span>
-                </div>
-                <div className="flex justify-between items-center pt-1">
-                  <span className="text-slate-400 font-medium">Nombre de Facturación</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{settings?.display_name || org.name}</span>
-                </div>
+              <CardContent className="px-5 py-1">
+                <DataRow
+                  icon={Building2}
+                  label="Razón social"
+                  field={contact.legalName}
+                  fallback={`Sin cargar — se usaría «${org.name}»`}
+                />
+                <DataRow
+                  icon={Receipt}
+                  label="RUC"
+                  field={contact.ruc}
+                  mono
+                  fallback="Sin RUC cargado"
+                  onCopy={contact.ruc.value ? () => copyToClipboard(contact.ruc.value!, 'RUC') : undefined}
+                />
+                <DataRow
+                  icon={Mail}
+                  label="Correo de facturación"
+                  field={contact.billingEmail}
+                  href={contact.billingEmail.value ? `mailto:${contact.billingEmail.value}` : null}
+                  actionLabel="Escribir"
+                />
+                <DataRow
+                  icon={Coins}
+                  label="Moneda"
+                  field={{ value: monedaConfig.value, source: null }}
+                />
+                <DataRow
+                  icon={Clock}
+                  label="Zona horaria"
+                  field={{ value: zonaConfig.value, source: null }}
+                />
+                {(monedaConfig.isDefault || zonaConfig.isDefault) && (
+                  <p className="pb-3 pt-1 text-[10px] text-muted-foreground">
+                    {monedaConfig.isDefault && zonaConfig.isDefault
+                      ? 'Moneda y zona horaria son los valores por defecto: la organización nunca los eligió.'
+                      : monedaConfig.isDefault
+                        ? 'La moneda es el valor por defecto: la organización nunca la eligió.'
+                        : 'La zona horaria es el valor por defecto: la organización nunca la eligió.'}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* La cuenta en si: cuando se dio de alta, donde vive, como se la
+                identifica. Reemplaza la tarjeta que repetia el encabezado. */}
+            <Card className="rounded-2xl border border-border bg-card md:col-span-2">
+              <CardHeader className="border-b border-border py-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                  <Building2 className="h-4 w-4 text-violet-500" />
+                  La cuenta
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-x-8 px-5 py-1 md:grid-cols-2">
+                <DataRow
+                  icon={Calendar}
+                  label="Alta"
+                  field={{
+                    value: `${formatDate(org.created_at)}${antiguedad ? ` · hace ${antiguedad.label}` : ''}`,
+                    source: null,
+                  }}
+                />
+                <DataRow
+                  icon={RefreshCw}
+                  label="Última modificación"
+                  field={{ value: formatDate(org.updated_at), source: null }}
+                />
+                <DataRow
+                  icon={CheckCircle2}
+                  label="Configuración inicial"
+                  field={{
+                    value: onboarding.completed
+                      ? `Terminada${onboarding.completedAt ? ` el ${formatDate(onboarding.completedAt)}` : ''}`
+                      : null,
+                    source: null,
+                  }}
+                  fallback="Nunca la terminó"
+                />
+                <DataRow
+                  icon={Store}
+                  label="Sucursal principal"
+                  field={{
+                    value: defaultBranch ? `${defaultBranch.name}${defaultBranch.city ? ` · ${defaultBranch.city}` : ''}` : null,
+                    source: null,
+                  }}
+                  fallback="Sin sucursal registrada"
+                />
+                <DataRow
+                  icon={Globe}
+                  label="Dirección pública"
+                  field={{ value: `/${org.slug}`, source: null }}
+                  mono
+                  href={`/${org.slug}/inicio`}
+                  actionLabel="Abrir tienda"
+                  onCopy={() => copyToClipboard(`${window.location.origin}/${org.slug}/inicio`, 'URL de tienda')}
+                />
+                <DataRow
+                  icon={Lock}
+                  label="Identificador interno"
+                  field={{ value: org.id, source: null }}
+                  mono
+                  onCopy={() => copyToClipboard(org.id, 'UUID')}
+                />
               </CardContent>
             </Card>
 

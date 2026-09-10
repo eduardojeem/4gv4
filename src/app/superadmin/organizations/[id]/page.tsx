@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { OrganizationDetailView, type FullOrganizationDetail } from '@/components/superadmin/organizations/OrganizationDetailView'
 import { summarizeOrganizationActivity } from '@/lib/superadmin/organization-activity'
 import { normalizePlanCode } from '@/lib/saas/subscription-service'
+import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 
 /** Tope del barrido de ventas para calcular facturacion. */
 const SALES_SCAN_CAP = 20000
@@ -40,6 +41,8 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     { count: customersCount },
     { data: salesRows },
     { count: repairsCount, error: repairsError },
+    { data: billing },
+    { data: companyInfoRow },
   ] = await Promise.all([
     // Sin `profiles(...)` embebido: `organization_members.user_id` referencia
     // `auth.users(id)`, no `public.profiles`. PostgREST no puede resolver esa
@@ -103,6 +106,19 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       .from('repairs')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', org.id),
+    // Identidad fiscal: RUC y razon social viven aca, no en `organizations`.
+    admin
+      .from('billing_profiles')
+      .select('business_name, ruc, billing_email, fiscal_address, phone')
+      .eq('organization_id', org.id)
+      .maybeSingle(),
+    // Contacto publico del negocio, cargado desde «Sitio Web».
+    admin
+      .from('website_settings')
+      .select('value')
+      .eq('organization_id', org.id)
+      .eq('key', 'company_info')
+      .maybeSingle(),
   ])
 
   // Los perfiles van en una segunda consulta, cruzada por id en memoria.
@@ -162,6 +178,10 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     activityTruncated ? sales.slice(0, SALES_SCAN_CAP) : sales
   )
 
+  const branchList = branches ?? []
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+
   const detailData: FullOrganizationDetail = {
     organization: org,
     owner: ownerProfile,
@@ -178,7 +198,13 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     membersFailed: Boolean(membersError),
     subscription: subscription ?? null,
     plan_details: planDetails,
-    branches: branches ?? [],
+    branches: branchList,
+    // Las tres fuentes de contacto se resuelven en la vista con el mismo orden
+    // de preferencia que usa /api/onboarding/status.
+    admin_settings: getTenantAdminSettings(settings?.modules) as Record<string, unknown>,
+    company_info: isRecord(companyInfoRow?.value) ? companyInfoRow.value : null,
+    billing: billing ?? null,
+    settings_modules: settings?.modules ?? null,
     plan_limits: planLimits,
     plan_limits_source: technicalPlan ? 'technical' : planRow?.limits ? 'commercial' : 'missing',
     counts: {
