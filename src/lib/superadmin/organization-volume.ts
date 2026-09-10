@@ -246,6 +246,8 @@ export function billingCoverage(
 export interface CreditLike {
   id?: string | null
   status?: string | null
+  /** `sale` | `repair` | `manual` | `migration` | `refinancing` */
+  origin_type?: string | null
   principal?: number | null
   term_months?: number | null
   interest_rate?: number | null
@@ -276,6 +278,13 @@ export interface CreditSummary {
   overdueInstallments: number
   /** Importe de esas cuotas. */
   overdueAmount: number
+  /**
+   * De donde salio cada credito. Sin esto, un capital prestado de 750.000
+   * junto a un facturado de 50.000 parece una contradiccion: no lo es si el
+   * credito financio una reparacion o es una linea manual, porque esos no
+   * generan una venta en el mostrador.
+   */
+  byOrigin: Record<string, number>
   /** Plazo promedio en meses de los creditos otorgados. */
   averageTerm: number | null
   lastCreditAt: string | null
@@ -299,8 +308,15 @@ export function summarizeCredits(
   let plazoTotal = 0
   let plazoCuenta = 0
   let lastCreditAt: string | null = null
+  const byOrigin: Record<string, number> = {}
 
   for (const credit of credits) {
+    // La columna tiene default y check constraint desde
+    // 20260616000000_split_customer_credits_by_sale: una fila sin valor es de
+    // antes de esa migracion.
+    const origen = String(credit.origin_type ?? 'sin_clasificar').toLowerCase()
+    byOrigin[origen] = (byOrigin[origen] ?? 0) + 1
+
     switch (String(credit.status ?? '').toLowerCase()) {
       case 'active': active += 1; break
       case 'completed': completed += 1; break
@@ -358,8 +374,28 @@ export function summarizeCredits(
     outstanding,
     overdueInstallments,
     overdueAmount,
+    byOrigin,
     averageTerm: plazoCuenta > 0 ? Math.round(plazoTotal / plazoCuenta) : null,
     lastCreditAt,
     installmentsTruncated,
   }
+}
+
+export const CREDIT_ORIGIN_LABELS: Record<string, string> = {
+  sale: 'venta',
+  repair: 'taller',
+  manual: 'manual',
+  migration: 'migrado',
+  refinancing: 'refinanciado',
+  sin_clasificar: 'sin clasificar',
+}
+
+/** «2 de venta · 1 de taller», para decir de donde sale la cartera. */
+export function describeCreditOrigins(byOrigin: Record<string, number>): string | null {
+  const partes = Object.entries(byOrigin)
+    .filter(([, cantidad]) => cantidad > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([origen, cantidad]) => `${cantidad} de ${CREDIT_ORIGIN_LABELS[origen] ?? origen}`)
+
+  return partes.length > 0 ? partes.join(' · ') : null
 }

@@ -141,7 +141,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     // del superadmin: no habia forma de saber si la organizacion usa el modulo.
     admin
       .from('customer_credits')
-      .select('id, status, principal, term_months, interest_rate, start_date, created_at')
+      .select('id, status, origin_type, principal, term_months, interest_rate, start_date, created_at')
       .eq('organization_id', org.id)
       .order('start_date', { ascending: false })
       .limit(CREDITS_SCAN_CAP),

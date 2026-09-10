@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   billingCoverage,
+  describeCreditOrigins,
   summarizeCredits,
   summarizeOnlineOrders,
   summarizeRepairs,
@@ -304,5 +305,40 @@ describe('la página lee la cartera respetando los límites de PostgREST', () =>
   it('una tanda que falla marca el saldo como parcial, no lo achica en silencio', () => {
     expect(PAGINA).toContain('if (error) { installmentsFailed = true; break }')
     expect(VISTA).toContain('no se pudieron leer todas las cuotas')
+  })
+})
+
+/**
+ * HCA Celular tiene ₲750.000 de capital prestado y ₲50.000 facturado. Los dos
+ * numeros son correctos y puestos uno al lado del otro parecen contradecirse:
+ * un credito de taller o una linea manual no generan una venta en el mostrador.
+ */
+describe('de dónde nació cada crédito', () => {
+  it('agrupa por origen', () => {
+    const r = summarizeCredits(
+      [
+        { id: 'a', status: 'active', principal: 100, origin_type: 'sale' },
+        { id: 'b', status: 'active', principal: 100, origin_type: 'sale' },
+        { id: 'c', status: 'active', principal: 100, origin_type: 'repair' },
+      ],
+      []
+    )
+    expect(r.byOrigin).toEqual({ sale: 2, repair: 1 })
+    expect(describeCreditOrigins(r.byOrigin)).toBe('2 de venta · 1 de taller')
+  })
+
+  it('una fila anterior a la migración que agregó la columna no se pierde', () => {
+    const r = summarizeCredits([{ id: 'a', status: 'active', principal: 1 }], [])
+    expect(r.byOrigin).toEqual({ sin_clasificar: 1 })
+    expect(describeCreditOrigins(r.byOrigin)).toBe('1 de sin clasificar')
+  })
+
+  it('sin créditos no arma una frase vacía', () => {
+    expect(describeCreditOrigins({})).toBeNull()
+  })
+
+  it('la vista explica por qué el capital puede superar lo facturado', () => {
+    expect(VISTA).toContain('no nació de una venta')
+    expect(VISTA).toContain("origen !== 'sale'")
   })
 })

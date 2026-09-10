@@ -65,6 +65,7 @@ const base = (over: Partial<FullOrganizationDetail> = {}): FullOrganizationDetai
     total: 4, active: 2, completed: 1, defaulted: 1, cancelled: 0,
     principal: 2_000_000, outstanding: 640_000,
     overdueInstallments: 2, overdueAmount: 200_000,
+    byOrigin: { sale: 3, repair: 1 },
     averageTerm: 6, lastCreditAt: '2026-06-01T00:00:00Z', installmentsTruncated: false,
   },
   billing_summary: {
@@ -259,7 +260,7 @@ describe('la sección de créditos', () => {
     const sinCreditos = {
       total: 0, active: 0, completed: 0, defaulted: 0, cancelled: 0,
       principal: 0, outstanding: 0, overdueInstallments: 0, overdueAmount: 0,
-      averageTerm: null, lastCreditAt: null, installmentsTruncated: false,
+      byOrigin: {}, averageTerm: null, lastCreditAt: null, installmentsTruncated: false,
     }
 
     const { unmount } = render(<OrganizationDetailView data={base({
@@ -291,5 +292,26 @@ describe('la sección de créditos', () => {
       credit_summary: { ...base().credit_summary!, installmentsTruncated: true },
     })} />)
     expect(screen.getByText(/no se pudieron leer todas las cuotas/)).toBeInTheDocument()
+  })
+})
+
+describe('el origen de la cartera se muestra', () => {
+  it('dice cuántos créditos vienen de cada lado', () => {
+    render(<OrganizationDetailView data={base()} />)
+    expect(screen.getByText('3 de venta · 1 de taller')).toBeInTheDocument()
+  })
+
+  it('explica por qué el capital prestado puede superar lo facturado', () => {
+    // Es exactamente el caso de HCA Celular: ₲750.000 prestados, ₲50.000
+    // facturados. Sin la nota, la pantalla parece contradecirse.
+    render(<OrganizationDetailView data={base()} />)
+    expect(screen.getByText(/no nació de una venta/)).toBeInTheDocument()
+  })
+
+  it('una cartera solo de ventas no muestra esa nota', () => {
+    render(<OrganizationDetailView data={base({
+      credit_summary: { ...base().credit_summary!, byOrigin: { sale: 4 } },
+    })} />)
+    expect(screen.queryByText(/no nació de una venta/)).not.toBeInTheDocument()
   })
 })

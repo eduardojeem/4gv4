@@ -74,6 +74,7 @@ import {
 } from '@/lib/superadmin/organization-profile'
 import {
   billingCoverage,
+  describeCreditOrigins,
   type BillingSummary,
   type CreditSummary,
   type OnlineSummary,
@@ -585,7 +586,7 @@ function StreamCard({
   headline,
   sub,
   rows,
-  note,
+  notes,
   disabled,
   disabledNote,
 }: {
@@ -595,7 +596,8 @@ function StreamCard({
   headline: string
   sub?: string
   rows?: Array<{ label: string; value: string; warn?: boolean }>
-  note?: string
+  /** Aclaraciones al pie. Varias, porque mas de una puede ser cierta a la vez. */
+  notes?: Array<string | false | undefined>
   disabled?: boolean
   disabledNote?: string
 }) {
@@ -633,7 +635,11 @@ function StreamCard({
             </dl>
           )}
 
-          {note && <p className="mt-2 text-[10px] leading-snug text-muted-foreground">{note}</p>}
+          {notes?.filter(Boolean).map((nota) => (
+            <p key={nota as string} className="mt-2 text-[10px] leading-snug text-muted-foreground">
+              {nota}
+            </p>
+          ))}
         </>
       )}
     </div>
@@ -770,6 +776,14 @@ export function OrganizationDetailView({ data }: Props) {
   const onboarding = resolveOnboardingState(settings_modules)
   const monedaConfig = configuredOr(settings?.currency, 'PYG')
   const zonaConfig = configuredOr(settings?.timezone, 'America/Asuncion')
+
+  // Un credito de taller o una linea manual no generan una venta en el
+  // mostrador: sin esto, «capital prestado» al lado de «facturado» parece una
+  // contradiccion.
+  const creditosSinVenta = Boolean(
+    credit_summary &&
+      Object.entries(credit_summary.byOrigin).some(([origen, cantidad]) => origen !== 'sale' && cantidad > 0)
+  )
 
   const cobertura = billingCoverage(
     plan_details?.price_monthly,
@@ -1187,11 +1201,10 @@ export function OrganizationDetailView({ data }: Props) {
                     ? [{ label: 'Cobro parcial', value: online_summary.partial.toLocaleString('es-PY'), warn: true }]
                     : []),
                 ]}
-                note={
-                  online_summary && online_summary.partial > 0
-                    ? 'Los pedidos con cobro parcial no suman al facturado: no cobraron su total.'
-                    : undefined
-                }
+                notes={[
+                  online_summary && online_summary.partial > 0 &&
+                    'Los pedidos con cobro parcial no suman al facturado: no cobraron su total.',
+                ]}
               />
 
               <StreamCard
@@ -1226,7 +1239,7 @@ export function OrganizationDetailView({ data }: Props) {
                     ? [{ label: 'Canceladas', value: repair_summary.cancelled.toLocaleString('es-PY') }]
                     : []),
                 ]}
-                note="Lo cobrado por mostrador ya está contado en Punto de venta: no se suma."
+                notes={['Lo cobrado por mostrador ya está contado en Punto de venta: no se suma.']}
               />
 
               <StreamCard
@@ -1264,17 +1277,21 @@ export function OrganizationDetailView({ data }: Props) {
                   ...(credit_summary && credit_summary.defaulted > 0
                     ? [{ label: 'Incobrables', value: credit_summary.defaulted.toLocaleString('es-PY'), warn: true }]
                     : []),
+                  ...(credit_summary && describeCreditOrigins(credit_summary.byOrigin)
+                    ? [{ label: 'Origen', value: describeCreditOrigins(credit_summary.byOrigin)! }]
+                    : []),
                   ...(credit_summary?.averageTerm
                     ? [{ label: 'Plazo promedio', value: `${credit_summary.averageTerm} meses` }]
                     : []),
                 ]}
-                note={
-                  credit_summary?.installmentsTruncated
-                    ? 'Parcial: no se pudieron leer todas las cuotas, el saldo puede ser mayor.'
-                    : credit_summary && credit_summary.overdueInstallments > 0
-                      ? 'Se cuenta vencida toda cuota impaga cuyo vencimiento ya pasó, esté marcada o no.'
-                      : undefined
-                }
+                notes={[
+                  credit_summary?.installmentsTruncated &&
+                    'Parcial: no se pudieron leer todas las cuotas, el saldo puede ser mayor.',
+                  creditosSinVenta &&
+                    'Parte de la cartera no nació de una venta (taller, manual o migrado): por eso el capital prestado puede superar lo facturado en el mostrador.',
+                  credit_summary && credit_summary.overdueInstallments > 0 &&
+                    'Se cuenta vencida toda cuota impaga cuyo vencimiento ya pasó, esté marcada o no.',
+                ]}
               />
 
               <StreamCard
