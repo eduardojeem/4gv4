@@ -73,6 +73,13 @@ import {
   type ResolvedField,
 } from '@/lib/superadmin/organization-profile'
 import {
+  ORGANIZATION_ROLE_HINTS,
+  memberStatusLabel,
+  partitionMembers,
+  roleLabel,
+  sortStaff,
+} from '@/lib/organization/member-roles'
+import {
   ACTIVITY_KIND_LABELS,
   billingCoverage,
   describeCreditOrigins,
@@ -577,6 +584,71 @@ function UsageBar({
   )
 }
 
+/** Una persona de la organizacion, con su rol en castellano. */
+function MemberRow({
+  member,
+  showHint,
+}: {
+  member: {
+    id: string
+    role: string
+    status: string
+    created_at: string | null
+    profiles?: { email?: string | null; full_name?: string | null } | null
+  }
+  showHint?: boolean
+}) {
+  const nombre = member.profiles?.full_name?.trim()
+  const correo = member.profiles?.email?.trim()
+  const iniciales = (nombre || correo || '??').slice(0, 2).toUpperCase()
+  const hint = showHint ? ORGANIZATION_ROLE_HINTS[String(member.role ?? '').toLowerCase()] : undefined
+  const estado = String(member.status ?? '').toLowerCase()
+
+  return (
+    <div className="flex items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/40">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+          {iniciales}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-bold text-foreground">
+            {nombre || (correo ? correo : 'Sin perfil cargado')}
+          </p>
+          <p className="truncate text-[11px] font-medium text-muted-foreground">
+            {nombre && correo ? correo : !correo ? 'Sin correo registrado' : ''}
+          </p>
+          {hint && <p className="mt-0.5 text-[10px] text-muted-foreground/80">{hint}</p>}
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2">
+        <Badge
+          variant="outline"
+          className={cn(
+            'px-2 py-0.5 text-[10px] font-black uppercase',
+            member.role === 'owner' && 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300'
+          )}
+        >
+          {roleLabel(member.role)}
+        </Badge>
+        {estado !== 'active' && (
+          <Badge
+            variant="outline"
+            className={cn(
+              'px-2 py-0.5 text-[10px] font-extrabold uppercase',
+              estado === 'suspended'
+                ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300'
+                : 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300'
+            )}
+          >
+            {memberStatusLabel(member.status)}
+          </Badge>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /**
  * Un canal de actividad: cuanto movio y en que estado esta. Un solo numero de
  * ventas no dejaba ver si la empresa vende por mostrador, por la web, o repara.
@@ -751,6 +823,10 @@ function LimitRow({ label, used, limit }: { label: string; used: number | null; 
   )
 }
 
+/** Clientes de la web que se listan antes de resumir: la lista puede tener
+ *  cientos y el superadmin viene a mirar al equipo. */
+const MAX_CUSTOMERS_VISIBLE = 25
+
 export function OrganizationDetailView({ data }: Props) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('overview')
@@ -786,6 +862,12 @@ export function OrganizationDetailView({ data }: Props) {
     credit_summary &&
       Object.entries(credit_summary.byOrigin).some(([origen, cantidad]) => origen !== 'sale' && cantidad > 0)
   )
+
+  // `organization_members` guarda al tecnico y al cliente de la web en la misma
+  // tabla. Listarlos juntos bajo «Colaboradores» hacia parecer que la empresa
+  // tiene 40 empleados cuando tiene 3.
+  const equipo = partitionMembers(members)
+  const staffOrdenado = sortStaff(equipo.staff)
 
   const cobertura = billingCoverage(
     plan_details?.price_monthly,
@@ -975,11 +1057,19 @@ export function OrganizationDetailView({ data }: Props) {
         {/* Operational Telemetry Metric Bar */}
         <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Equipo & Colaboradores</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Equipo</p>
             <p className="text-base font-black text-slate-900 dark:text-slate-100">
-              {membersFailed ? 'Sin dato' : `${members.length} usuarios`}
+              {membersFailed
+                ? 'Sin dato'
+                : `${equipo.staff.length} ${equipo.staff.length === 1 ? 'persona' : 'personas'}`}
             </p>
-            <p className="text-xs text-slate-500 font-medium">Owner: {owner?.full_name || owner?.email || 'Sin asignar'}</p>
+            <p className="text-xs font-medium text-slate-500">
+              {membersFailed
+                ? `Owner: ${owner?.full_name || owner?.email || 'Sin asignar'}`
+                : equipo.customers.length > 0
+                  ? `+ ${equipo.customers.length.toLocaleString('es-PY')} clientes con cuenta web`
+                  : `Owner: ${owner?.full_name || owner?.email || 'Sin asignar'}`}
+            </p>
           </div>
 
           <div className="p-5 space-y-1">
@@ -1012,7 +1102,7 @@ export function OrganizationDetailView({ data }: Props) {
           variant="navy-gold"
           size="md"
           speechTitle={`Supervisor de Organización: ${org.name}`}
-          speechText={`Esta empresa opera en el rubro ${verticalMeta.label} (${org.operating_model === 'wholesale' ? 'Venta Mayorista' : org.operating_model === 'repair' ? 'Taller SAT' : org.operating_model === 'service' ? 'Servicios' : 'Venta Minorista'}). Cuenta con ${activeCount} módulos operativos habilitados y ${members.length} colaboradores registrados.`}
+          speechText={`Esta empresa opera en el rubro ${verticalMeta.label} (${org.operating_model === 'wholesale' ? 'Venta Mayorista' : org.operating_model === 'repair' ? 'Taller SAT' : org.operating_model === 'service' ? 'Servicios' : 'Venta Minorista'}). Cuenta con ${activeCount} módulos operativos habilitados y ${equipo.staff.length} personas en el equipo.`}
         />
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <Button
@@ -1060,7 +1150,7 @@ export function OrganizationDetailView({ data }: Props) {
               className="gap-2 rounded-xl px-4 py-2 text-xs font-bold data-[state=active]:bg-violet-600 data-[state=active]:text-white cursor-pointer"
             >
               <Users className="h-3.5 w-3.5" />
-              Colaboradores{membersFailed ? '' : ` (${members.length})`}
+              Equipo{membersFailed ? '' : ` (${equipo.staff.length})`}
             </TabsTrigger>
 
             <TabsTrigger
@@ -1837,76 +1927,120 @@ export function OrganizationDetailView({ data }: Props) {
 
         </TabsContent>
 
-        {/* Tab 3: Members */}
+        {/* Tab 3: Members.
+            `organization_members` guarda al tecnico y al cliente de la tienda
+            publica en la misma tabla. La pestaña los listaba juntos bajo
+            «Colaboradores de la Empresa» y mostraba el nombre crudo de la
+            columna —`owner`, `seller`, `customer`— como si fuera un rotulo. */}
         <TabsContent value="members" className="space-y-4 m-0">
-          <Card className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xs dark:border-slate-800 dark:bg-slate-900/95">
-            <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-5 dark:border-slate-800 dark:bg-slate-950/40">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-bold">Colaboradores de la Empresa</CardTitle>
-                  <CardDescription className="text-xs">
-                    Usuarios con permisos activos dentro del tenant
-                  </CardDescription>
-                </div>
-                <Badge variant="outline" className={cn('text-xs font-bold', membersFailed && 'border-amber-300 text-amber-700')}>
-                  {membersFailed ? 'No se pudo cargar' : `${members.length} usuarios totales`}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {membersFailed ? (
-                <p className="p-8 text-center text-xs font-medium text-amber-600 dark:text-amber-400">
-                  No se pudo cargar el equipo. La organización puede tener colaboradores:
-                  esto es un fallo de la consulta, no una lista vacía.
-                </p>
-              ) : members.length === 0 ? (
-                <p className="p-8 text-center text-xs text-slate-400 font-medium">
-                  No hay miembros registrados en este tenant.
-                </p>
-              ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {members.map((m) => (
-                    <div key={m.id} className="flex items-center justify-between p-4 hover:bg-slate-50/50 dark:hover:bg-slate-950/30 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700 font-black text-xs dark:bg-violet-950/50 dark:text-violet-300">
-                          {m.profiles?.full_name?.slice(0, 2).toUpperCase() || m.profiles?.email?.slice(0, 2).toUpperCase() || 'US'}
-                        </div>
-                        <div>
-                          <p className="font-bold text-xs text-slate-900 dark:text-slate-100">
-                            {m.profiles?.full_name || 'Sin nombre'}
-                          </p>
-                          <p className="text-[11px] text-slate-400 font-medium">
-                            {m.profiles?.email || 'Sin email'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            'text-[10px] font-black uppercase px-2 py-0.5',
-                            m.role === 'owner' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-700 border-slate-200'
-                          )}
-                        >
-                          {m.role}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            'text-[10px] font-extrabold uppercase px-2 py-0.5',
-                            m.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'
-                          )}
-                        >
-                          {m.status}
-                        </Badge>
-                      </div>
+          {membersFailed ? (
+            <Card className="rounded-2xl border border-border bg-card">
+              <CardContent className="p-8 text-center text-xs font-medium text-amber-600 dark:text-amber-400">
+                No se pudo cargar el equipo. La organización puede tener colaboradores:
+                esto es un fallo de la consulta, no una lista vacía.
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card className="overflow-hidden rounded-2xl border border-border bg-card">
+                <CardHeader className="border-b border-border py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                        <Users className="h-4 w-4 text-violet-500" />
+                        Equipo de trabajo
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Personas que operan el sistema: propietario, administración, caja, ventas y taller
+                      </CardDescription>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px] font-bold">
+                        {equipo.staffActive} {equipo.staffActive === 1 ? 'butaca ocupada' : 'butacas ocupadas'}
+                        {plan_limits?.users ? ` de ${Number(plan_limits.users).toLocaleString('es-PY')}` : ''}
+                      </Badge>
+                      {equipo.staffInvited > 0 && (
+                        <Badge variant="outline" className="border-sky-200 text-[10px] font-bold text-sky-700 dark:border-sky-900 dark:text-sky-300">
+                          {equipo.staffInvited} sin aceptar
+                        </Badge>
+                      )}
+                      {equipo.staffSuspended > 0 && (
+                        <Badge variant="outline" className="border-rose-200 text-[10px] font-bold text-rose-700 dark:border-rose-900 dark:text-rose-300">
+                          {equipo.staffSuspended} suspendido{equipo.staffSuspended === 1 ? '' : 's'}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {staffOrdenado.length === 0 ? (
+                    <p className="p-8 text-center text-xs font-medium text-muted-foreground">
+                      Nadie del equipo está registrado todavía: la organización solo tiene clientes.
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {staffOrdenado.map((m) => (
+                        <MemberRow key={m.id} member={m} showHint />
+                      ))}
+                    </div>
+                  )}
+
+                  {equipo.staffWithoutRole > 0 && (
+                    <p className="border-t border-border px-4 py-3 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      {equipo.staffWithoutRole} {equipo.staffWithoutRole === 1 ? 'persona no tiene' : 'personas no tienen'} rol
+                      cargado. No consumen butaca del plan —el conteo las descarta— pero sí acceden al sistema.
+                    </p>
+                  )}
+
+                  <p className="border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
+                    Solo las personas <strong className="font-semibold text-foreground">activas</strong> ocupan
+                    butaca del plan. Las invitadas y las suspendidas no.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="overflow-hidden rounded-2xl border border-border bg-card">
+                <CardHeader className="border-b border-border py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                        <Globe className="h-4 w-4 text-cyan-500" />
+                        Clientes de la tienda pública
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Se registraron solos desde la web para comprar. No forman parte del equipo ni consumen butaca del plan.
+                      </CardDescription>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] font-bold">
+                      {equipo.customers.length.toLocaleString('es-PY')} con cuenta
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {equipo.customers.length === 0 ? (
+                    <p className="p-8 text-center text-xs font-medium text-muted-foreground">
+                      Nadie se registró todavía desde la tienda pública.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="divide-y divide-border">
+                        {equipo.customers.slice(0, MAX_CUSTOMERS_VISIBLE).map((m) => (
+                          <MemberRow key={m.id} member={m} />
+                        ))}
+                      </div>
+                      {equipo.customers.length > MAX_CUSTOMERS_VISIBLE && (
+                        <p className="border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
+                          Se muestran {MAX_CUSTOMERS_VISIBLE} de {equipo.customers.length.toLocaleString('es-PY')}.
+                          La organización tiene {counts.customers.toLocaleString('es-PY')} clientes cargados en total,
+                          incluidos los que se dieron de alta por mostrador y no tienen cuenta web.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
 
         {/* Tab 4: Subscription */}

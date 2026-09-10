@@ -241,7 +241,9 @@ describe('el equipo se carga sin depender de una relación que no existe', () =>
   })
 
   it('un fallo se dice, no se muestra como «0 usuarios»', () => {
-    expect(VISTA).toContain("membersFailed ? 'No se pudo cargar'")
     expect(VISTA).toContain('esto es un fallo de la consulta, no una lista vacía')
+    // El mosaico del encabezado tampoco inventa un conteo. Se compara sin
+    // espacios para no atarse al formato del JSX.
+    expect(VISTA.replace(/\s+/g, ' ')).toContain("membersFailed ? 'Sin dato'")
   })
 })
