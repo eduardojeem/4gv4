@@ -38,7 +38,7 @@ export async function GET(
 
   // Load associated data in parallel
   const [
-    { data: members },
+    { data: memberRows, error: membersError },
     { data: subscription },
     { data: settings },
     { data: branches },
@@ -46,9 +46,12 @@ export async function GET(
     { count: salesCount },
     { count: customersCount },
   ] = await Promise.all([
+    // `organization_members.user_id` referencia `auth.users(id)`, no
+    // `public.profiles`: PostgREST no puede resolver el embebido y devuelve un
+    // error, que aca se servia como `members: []`.
     admin
       .from('organization_members')
-      .select('id, user_id, role, status, created_at, profiles(id, email, full_name, avatar_url)')
+      .select('id, user_id, role, status, created_at')
       .eq('organization_id', org.id),
     admin
       .from('subscriptions')
@@ -78,6 +81,25 @@ export async function GET(
       .eq('organization_id', org.id),
   ])
 
+  if (membersError) {
+    return NextResponse.json(
+      { error: 'No se pudo cargar el equipo de la organizacion.' },
+      { status: 500 }
+    )
+  }
+
+  const memberList = memberRows ?? []
+  const memberUserIds = Array.from(
+    new Set(memberList.map((m: any) => String(m.user_id ?? '')).filter(Boolean))
+  )
+  const { data: memberProfiles } = memberUserIds.length
+    ? await admin
+        .from('profiles')
+        .select('id, email, full_name, avatar_url')
+        .in('id', memberUserIds)
+    : { data: [] as Array<{ id: string }> }
+  const profileById = new Map<string, any>((memberProfiles ?? []).map((p: any) => [String(p.id), p] as [string, any]))
+
   // Get plan details if subscription or org.plan exists
   let planDetails = null
   const planTier = (subscription?.plan || org.plan || 'FREE').toLowerCase()
@@ -105,7 +127,7 @@ export async function GET(
     organization: org,
     owner: ownerProfile,
     settings,
-    members: members ?? [],
+    members: memberList.map((m: any) => ({ ...m, profiles: profileById.get(String(m.user_id)) ?? null })),
     subscription,
     plan_details: planDetails,
     branches: branches ?? [],

@@ -30,7 +30,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
 
   // Parallel fetch associated telemetry and models
   const [
-    { data: members },
+    { data: memberRows, error: membersError },
     { data: subscription },
     { data: settings },
     { data: branches },
@@ -41,9 +41,14 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     { data: salesRows },
     { count: repairsCount, error: repairsError },
   ] = await Promise.all([
+    // Sin `profiles(...)` embebido: `organization_members.user_id` referencia
+    // `auth.users(id)`, no `public.profiles`. PostgREST no puede resolver esa
+    // relacion y devuelve un error, que aca se leia como una lista vacia: la
+    // pestaña decia «0 usuarios» en organizaciones con equipo cargado. El resto
+    // del sistema (`/api/admin/users`) ya carga los perfiles por separado.
     admin
       .from('organization_members')
-      .select('id, user_id, role, status, created_at, profiles(id, email, full_name, avatar_url)')
+      .select('id, user_id, role, status, created_at')
       .eq('organization_id', org.id),
     admin
       .from('subscriptions')
@@ -100,6 +105,20 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       .eq('organization_id', org.id),
   ])
 
+  // Los perfiles van en una segunda consulta, cruzada por id en memoria.
+  const memberList = memberRows ?? []
+  const memberUserIds = Array.from(
+    new Set(memberList.map((m: any) => String(m.user_id ?? '')).filter(Boolean))
+  )
+  const { data: memberProfiles } = memberUserIds.length
+    ? await admin
+        .from('profiles')
+        .select('id, email, full_name, avatar_url')
+        .in('id', memberUserIds)
+    : { data: [] as Array<{ id: string; email: string | null; full_name: string | null; avatar_url: string | null }> }
+
+  const profileById = new Map<string, any>((memberProfiles ?? []).map((p: any) => [String(p.id), p] as [string, any]))
+
   // El plan vive en dos tablas: `subscription_plans` es la comercial (precio,
   // nombre, features de marketing) y `plans` la tecnica (los limites que el
   // sistema realmente aplica). `mergeCommercialPlans` le da prioridad a los
@@ -147,14 +166,16 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     organization: org,
     owner: ownerProfile,
     settings,
-    members: (members ?? []).map((m: any) => ({
+    members: memberList.map((m: any) => ({
       id: m.id,
       user_id: m.user_id,
       role: m.role,
       status: m.status,
       created_at: m.created_at,
-      profiles: Array.isArray(m.profiles) ? m.profiles[0] ?? null : m.profiles ?? null,
+      profiles: profileById.get(String(m.user_id)) ?? null,
     })),
+    // Una consulta que fallo no es una organizacion sin equipo.
+    membersFailed: Boolean(membersError),
     subscription: subscription ?? null,
     plan_details: planDetails,
     branches: branches ?? [],

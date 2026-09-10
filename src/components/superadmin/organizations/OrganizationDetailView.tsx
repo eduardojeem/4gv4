@@ -155,6 +155,12 @@ export type FullOrganizationDetail = {
   activity: OrganizationActivity
   /** El barrido de ventas llego al tope: la facturacion es parcial. */
   activityTruncated: boolean
+  /**
+   * La consulta de miembros fallo. Sin esto, un error se renderizaba como
+   * «0 usuarios», que es una afirmacion sobre la organizacion y no sobre la
+   * consulta.
+   */
+  membersFailed: boolean
 }
 
 type Props = {
@@ -541,7 +547,7 @@ export function OrganizationDetailView({ data }: Props) {
   const [activeTab, setActiveTab] = useState('overview')
   const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, branches, counts, activity, activityTruncated } = data
+  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, branches, counts, activity, activityTruncated, membersFailed } = data
   // Sin fila en `plans` el sistema aplica los limites del plan Free. Decir
   // «Sin tope» ahi seria falso.
   const sinTope =
@@ -719,7 +725,9 @@ export function OrganizationDetailView({ data }: Props) {
         <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
           <div className="p-5 space-y-1">
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Equipo & Colaboradores</p>
-            <p className="text-base font-black text-slate-900 dark:text-slate-100">{members.length} usuarios</p>
+            <p className="text-base font-black text-slate-900 dark:text-slate-100">
+              {membersFailed ? 'Sin dato' : `${members.length} usuarios`}
+            </p>
             <p className="text-xs text-slate-500 font-medium">Owner: {owner?.full_name || owner?.email || 'Sin asignar'}</p>
           </div>
 
@@ -801,7 +809,7 @@ export function OrganizationDetailView({ data }: Props) {
               className="gap-2 rounded-xl px-4 py-2 text-xs font-bold data-[state=active]:bg-violet-600 data-[state=active]:text-white cursor-pointer"
             >
               <Users className="h-3.5 w-3.5" />
-              Colaboradores ({members.length})
+              Colaboradores{membersFailed ? '' : ` (${members.length})`}
             </TabsTrigger>
 
             <TabsTrigger
@@ -899,7 +907,7 @@ export function OrganizationDetailView({ data }: Props) {
               <UsageBar
                 label="Usuarios"
                 used={counts.staffMembers}
-                total={members.length}
+                total={membersFailed ? undefined : members.length}
                 limit={plan_limits?.users}
                 totalNote="incluye clientes y suspendidos"
                 hint={sinTope}
@@ -1192,13 +1200,18 @@ export function OrganizationDetailView({ data }: Props) {
                     Usuarios con permisos activos dentro del tenant
                   </CardDescription>
                 </div>
-                <Badge variant="outline" className="text-xs font-bold">
-                  {members.length} usuarios totales
+                <Badge variant="outline" className={cn('text-xs font-bold', membersFailed && 'border-amber-300 text-amber-700')}>
+                  {membersFailed ? 'No se pudo cargar' : `${members.length} usuarios totales`}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {members.length === 0 ? (
+              {membersFailed ? (
+                <p className="p-8 text-center text-xs font-medium text-amber-600 dark:text-amber-400">
+                  No se pudo cargar el equipo. La organización puede tener colaboradores:
+                  esto es un fallo de la consulta, no una lista vacía.
+                </p>
+              ) : members.length === 0 ? (
                 <p className="p-8 text-center text-xs text-slate-400 font-medium">
                   No hay miembros registrados en este tenant.
                 </p>

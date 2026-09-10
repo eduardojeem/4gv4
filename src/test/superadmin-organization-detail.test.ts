@@ -210,3 +210,37 @@ describe('los límites del plan son los que el sistema aplica', () => {
     expect(VISTA).not.toContain('Prioritario 24/7')
   })
 })
+
+/**
+ * «Equipo & Colaboradores» decia 0 en organizaciones con equipo cargado.
+ * `organization_members.user_id` referencia `auth.users(id)`, no
+ * `public.profiles`: PostgREST no puede resolver el embebido `profiles(...)`,
+ * devuelve un error, y la pagina descartaba el error quedandose con `data`,
+ * que en ese caso es `null`. Un fallo de consulta se renderizaba como una
+ * afirmacion sobre la organizacion.
+ */
+describe('el equipo se carga sin depender de una relación que no existe', () => {
+  const RUTA_API = leer('src/app/api/superadmin/organizations/[id]/route.ts')
+
+  it('ni la página ni la API embeben `profiles(...)` en los miembros', () => {
+    for (const fuente of [PAGINA, RUTA_API]) {
+      expect(fuente).not.toContain('created_at, profiles(id, email, full_name, avatar_url)')
+    }
+  })
+
+  it('los perfiles se cruzan en una segunda consulta, como en /api/admin/users', () => {
+    expect(PAGINA).toContain(".in('id', memberUserIds)")
+    expect(PAGINA).toContain('profileById.get(String(m.user_id))')
+  })
+
+  it('el error de la consulta no se descarta', () => {
+    expect(PAGINA).toContain('{ data: memberRows, error: membersError }')
+    expect(PAGINA).toContain('membersFailed: Boolean(membersError)')
+    expect(RUTA_API).toContain('if (membersError)')
+  })
+
+  it('un fallo se dice, no se muestra como «0 usuarios»', () => {
+    expect(VISTA).toContain("membersFailed ? 'No se pudo cargar'")
+    expect(VISTA).toContain('esto es un fallo de la consulta, no una lista vacía')
+  })
+})
