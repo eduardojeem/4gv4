@@ -377,7 +377,7 @@ function OrganizationFocusPanel({
             )}
             <Button asChild size="sm" className="gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer">
               <Link href={`/superadmin/organizations/${encodeURIComponent(organization.slug)}`}>
-                <Building2 className="h-3.5 w-3.5" />
+                <Building2 className="h-3 w-3" />
                 Expediente Completo
               </Link>
             </Button>
@@ -797,7 +797,7 @@ export function OrganizationsDashboard({
     { key: 'no_sub', label: 'Sin suscripción' },
   ]
 
-  const thClass = 'px-4 py-3.5 text-left text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400'
+  const thClass = 'px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400'
   const thBtn = 'flex cursor-pointer select-none items-center whitespace-nowrap hover:text-slate-900 dark:hover:text-slate-100 transition-colors'
 
   // Robot Mascot Mood & Insight
@@ -1010,7 +1010,7 @@ export function OrganizationsDashboard({
               <table className="w-full min-w-[900px]">
                 <thead className="sticky top-0 z-10 border-b border-slate-100 bg-slate-50/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
                   <tr>
-                    <th className={cn(thClass, 'pl-6')}>
+                    <th className={cn(thClass, 'pl-4')}>
                       <button className={thBtn} onClick={() => toggleSort('name')}>
                         Empresa <SortIndicator active={sortKey === 'name'} direction={sortDir} />
                       </button>
@@ -1038,7 +1038,7 @@ export function OrganizationsDashboard({
                         Creada <SortIndicator active={sortKey === 'created'} direction={sortDir} />
                       </button>
                     </th>
-                    <th className={cn(thClass, 'pr-6 text-right')}>Acciones</th>
+                    <th className={cn(thClass, 'pr-4 text-right')}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1056,10 +1056,10 @@ export function OrganizationsDashboard({
                         className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
                       >
                         {/* Empresa */}
-                        <td className="py-3.5 pl-6 pr-3">
+                        <td className="py-2 pl-4 pr-3">
                           <div className="flex items-center gap-3">
                             <div className={cn(
-                              'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-black shadow-2xs',
+                              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-black shadow-2xs',
                               PLAN_AVATAR_BG[org.plan] ?? PLAN_AVATAR_BG.FREE
                             )}>
                               {getInitials(org.name)}
@@ -1067,11 +1067,11 @@ export function OrganizationsDashboard({
                             <div className="min-w-0">
                               <Link
                                 href={`/superadmin/organizations?q=${encodeURIComponent(org.slug)}`}
-                                className="truncate text-sm font-extrabold text-slate-900 dark:text-slate-100 hover:text-cyan-600 transition-colors block"
+                                className="truncate text-xs font-extrabold text-slate-900 dark:text-slate-100 hover:text-cyan-600 transition-colors block"
                               >
                                 {org.name}
                               </Link>
-                              <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
                                 <span>/{org.slug}</span>
                                 <button
                                   type="button"
@@ -1088,57 +1088,57 @@ export function OrganizationsDashboard({
                         </td>
 
                         {/* Rubro Comercial */}
-                        <td className="px-4 py-3.5">
+                        <td className="px-3 py-2">
                           <RubroBadge vertical={org.business_vertical} model={org.operating_model} />
                         </td>
 
                         {/* Módulos Habilitados */}
-                        <td className="px-4 py-3.5">
+                        <td className="px-3 py-2">
                           <ModulesPreview modules={org.enabled_modules} />
                         </td>
 
                         {/* Plan */}
-                        <td className="px-4 py-3.5">
-                          <Badge variant="outline" className={cn('rounded-full text-[11px] font-bold', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
+                        <td className="px-3 py-2">
+                          <Badge variant="outline" className={cn('rounded-full text-[10px] font-bold px-2 py-0', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
                             {org.plan}
                           </Badge>
                         </td>
 
                         {/* Suscripción */}
-                        <td className="px-4 py-3.5">
+                        <td className="px-3 py-2">
                           <SubscriptionBadge org={org} />
                         </td>
 
                         {/* Owner */}
-                        <td className="px-4 py-3.5">
+                        <td className="px-3 py-2">
                           <div className="max-w-[180px]">
-                            <p className="truncate text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            <p className="truncate text-[11px] sm:text-xs font-semibold text-slate-700 dark:text-slate-300">
                               {org.owner_name || (org.owner_email?.split('@')[0]) || '—'}
                             </p>
                             {org.owner_email && (
-                              <p className="truncate text-[11px] text-slate-400">{org.owner_email}</p>
+                              <p className="truncate text-[10px] text-slate-400">{org.owner_email}</p>
                             )}
                           </div>
                         </td>
 
                         {/* Miembros */}
-                        <td className="px-4 py-3.5">
+                        <td className="px-3 py-2">
                           <MemberBar org={org} />
                         </td>
 
                         {/* Creada */}
-                        <td className="px-4 py-3.5 text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        <td className="px-3 py-2 text-[11px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
                           {formatDate(org.created_at)}
                         </td>
 
                         {/* Acciones */}
-                        <td className="py-3.5 pl-3 pr-6">
+                        <td className="py-2 pl-3 pr-4">
                           <div className="flex items-center justify-end gap-1">
                             <EnterSupportButton iconOnly organizationId={org.id} organizationName={org.name} />
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400"
+                              className="h-7 w-7 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400"
                               title="Editar organización"
                               aria-label={`Editar ${org.name}`}
                               onClick={() => setEditingOrg({
@@ -1153,26 +1153,26 @@ export function OrganizationsDashboard({
                                 cancel_at_period_end: org.cancel_at_period_end,
                               })}
                             >
-                              <Wrench className="h-3.5 w-3.5" />
+                              <Wrench className="h-3 w-3" />
                             </Button>
-                            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400" title="Ver detalle completo">
+                            <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400" title="Ver detalle completo">
                               <Link href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`} aria-label={`Ver detalle de ${org.name}`}>
-                                <Building2 className="h-3.5 w-3.5" />
+                                <Building2 className="h-3 w-3" />
                               </Link>
                             </Button>
-                            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer" title="Abrir tienda pública">
+                            <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Abrir tienda pública">
                               <a href={`/${org.slug}/inicio`} target="_blank" rel="noreferrer" aria-label={`Abrir tienda de ${org.name}`}>
-                                <Globe className="h-3.5 w-3.5 text-slate-500" />
+                                <Globe className="h-3 w-3 text-slate-500" />
                               </a>
                             </Button>
-                            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer" title="Gestionar usuarios">
+                            <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Gestionar usuarios">
                               <Link href={`/superadmin/users?organization=${org.id}`} aria-label={`Ver usuarios de ${org.name}`}>
-                                <Users className="h-3.5 w-3.5 text-slate-500" />
+                                <Users className="h-3 w-3 text-slate-500" />
                               </Link>
                             </Button>
-                            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer" title="Suscripción y pagos">
+                            <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Suscripción y pagos">
                               <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`} aria-label={`Ver suscripción de ${org.name}`}>
-                                <CreditCard className="h-3.5 w-3.5 text-slate-500" />
+                                <CreditCard className="h-3 w-3 text-slate-500" />
                               </Link>
                             </Button>
                           </div>
@@ -1242,7 +1242,7 @@ export function OrganizationsDashboard({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400"
+                        className="h-7 w-7 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400"
                         title="Editar organización"
                         onClick={() => setEditingOrg({
                           id: org.id,
@@ -1258,12 +1258,12 @@ export function OrganizationsDashboard({
                       >
                         <Wrench className="h-4 w-4" />
                       </Button>
-                      <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer" title="Gestionar usuarios">
+                      <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Gestionar usuarios">
                         <Link href={`/superadmin/users?organization=${org.id}`}>
                           <Users className="h-4 w-4 text-slate-500" />
                         </Link>
                       </Button>
-                      <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer" title="Suscripción y pagos">
+                      <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Suscripción y pagos">
                         <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`}>
                           <CreditCard className="h-4 w-4 text-slate-500" />
                         </Link>
