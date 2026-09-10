@@ -521,7 +521,7 @@ export const POS_DASHBOARD_GUIDE: SectionGuideData = {
   steps: [
     {
       title: 'Vistas Especializadas por Módulo',
-      description: 'Alterna entre "Vista General", "Ventas POS", "Reparaciones (Taller)" y "Ganancias & Márgenes" para auditar cada área de tu negocio.'
+      description: 'Alterna entre "Vista General", "Ventas POS", "Créditos", "Reparaciones (Taller)" y "Ganancias & Márgenes" para auditar cada área de tu negocio. Créditos y Taller aparecen solo si esos módulos están habilitados en tu organización.'
     },
     {
       title: 'Filtros Dinámicos de Fecha',

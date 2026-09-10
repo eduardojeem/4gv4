@@ -8,9 +8,15 @@ import { figuresForMode, type TaxMode } from "../lib/pos-profit"
 
 interface ProfitStatsCardsProps {
     stats: PosStats
+    /**
+     * La organizacion tiene el modulo de taller. Sin el, la tarjeta «Ganancia
+     * por Taller» mostraba un cero permanente que se leia como «el taller no
+     * gano nada» en un negocio que no tiene taller.
+     */
+    showRepairs?: boolean
 }
 
-export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
+export function ProfitStatsCards({ stats, showRepairs = true }: ProfitStatsCardsProps) {
     const { profitStats } = stats
 
     // El hook va antes que cualquier return: `costUnavailable` se recalcula
@@ -40,7 +46,9 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                         </p>
                         <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
                             La ganancia y el margen no se muestran para no informar cifras sin respaldo.
-                            La facturación y las reparaciones del período siguen siendo válidas.
+                            {showRepairs
+                                ? 'La facturación y las reparaciones del período siguen siendo válidas.'
+                                : 'La facturación del período sigue siendo válida.'}
                         </p>
                     </CardContent>
                 </Card>
@@ -95,7 +103,7 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                 </div>
             </h3>
 
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className={`grid gap-4 ${showRepairs ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
                 {/* Ganancia Bruta Ventas */}
                 <Card className="border border-emerald-200/80 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50/60 to-transparent dark:from-emerald-950/20 shadow-sm hover:shadow-md transition-shadow">
                     <CardContent className="p-5">
@@ -142,7 +150,8 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                     </CardContent>
                 </Card>
 
-                {/* Ganancia por Reparaciones */}
+                {/* Ganancia por Reparaciones: solo con el modulo de taller */}
+                {showRepairs && (
                 <Card className="border border-amber-200/80 dark:border-amber-800/60 bg-gradient-to-br from-amber-50/60 to-transparent dark:from-amber-950/20 shadow-sm hover:shadow-md transition-shadow">
                     <CardContent className="p-5">
                         <div className="flex items-start justify-between mb-2">
@@ -161,6 +170,7 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                         </p>
                     </CardContent>
                 </Card>
+                )}
 
                 {/* Ganancia Total Combinada */}
                 <Card className="border border-indigo-200/80 dark:border-indigo-800/60 bg-gradient-to-br from-indigo-50/60 to-transparent dark:from-indigo-950/20 shadow-sm hover:shadow-md transition-shadow">
@@ -177,7 +187,9 @@ export function ProfitStatsCards({ stats }: ProfitStatsCardsProps) {
                             {formatCurrency(figures.totalProfit)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            Ventas + Reparaciones Entregadas
+                            {showRepairs || profitStats.repairProfit > 0
+                                ? 'Ventas + Reparaciones Entregadas'
+                                : 'Ventas del período'}
                         </p>
                     </CardContent>
                 </Card>

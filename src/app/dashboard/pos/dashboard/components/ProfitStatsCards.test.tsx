@@ -116,3 +116,26 @@ describe('ProfitStatsCards', () => {
     expect(screen.getByRole('button', { name: 'Con IVA' })).toBeInTheDocument()
   })
 })
+
+/**
+ * Sin el modulo de taller, la tarjeta «Ganancia por Taller» mostraba un cero
+ * permanente que se leia como «el taller no gano nada» en un negocio sin taller.
+ */
+describe('ProfitStatsCards sin el módulo de taller', () => {
+  it('no muestra la ganancia por taller', () => {
+    render(<ProfitStatsCards stats={statsWith({ repairDeliveredAmount: 0 })} showRepairs={false} />)
+    expect(screen.queryByText('Ganancia por Taller')).not.toBeInTheDocument()
+    expect(screen.getByText('Ventas del período')).toBeInTheDocument()
+  })
+
+  it('con datos viejos de taller el total sigue diciendo que los incluye', () => {
+    // Si el módulo se apagó después, lo entregado sigue sumando: se dice.
+    render(<ProfitStatsCards stats={statsWith()} showRepairs={false} />)
+    expect(screen.getByText('Ventas + Reparaciones Entregadas')).toBeInTheDocument()
+  })
+
+  it('por defecto la tarjeta del taller sigue estando', () => {
+    render(<ProfitStatsCards stats={statsWith()} />)
+    expect(screen.getByText('Ganancia por Taller')).toBeInTheDocument()
+  })
+})

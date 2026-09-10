@@ -6,6 +6,7 @@ import { DateRange } from 'react-day-picker'
 import { AlertTriangle, Loader2, RefreshCw, Info, Shield, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { usePosStats } from './hooks/usePosStats'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/currency'
@@ -22,6 +23,9 @@ import { RecentTransactionsList } from './components/RecentTransactionsList'
 import { CreditStatsCards } from './components/CreditStatsCards'
 import { RepairPosStatsCards } from './components/RepairPosStatsCards'
 import { ProfitStatsCards } from './components/ProfitStatsCards'
+import { CreditPortfolioCards } from './components/CreditPortfolioCards'
+import { useCreditPortfolio } from './hooks/useCreditPortfolio'
+import { availablePosDashboardTabs, resolveActiveTab, showsSection } from './lib/dashboard-tabs'
 
 import { DetailedSalesTable } from './components/DetailedSalesTable'
 
@@ -36,6 +40,16 @@ export default function POSDashboard() {
   const [activeViewTab, setActiveViewTab] = useState<PosDashboardViewTab>('all')
 
   const { stats, loading, error, refetch } = usePosStats(dateRange)
+
+  // Pestañas segun los modulos de la organizacion. Se leen del contexto que el
+  // layout arma en el servidor: no hay estado de carga ni parpadeo.
+  const { effectiveModules } = useSubscriptionStatus()
+  const availableTabs = availablePosDashboardTabs(effectiveModules)
+  const hasRepairs = availableTabs.some((tab) => tab.value === 'repairs')
+  const hasCredits = availableTabs.some((tab) => tab.value === 'credits')
+  const viewTab = resolveActiveTab(activeViewTab, availableTabs)
+  // La cartera completa solo se pide al abrir la pestaña de creditos.
+  const creditPortfolio = useCreditPortfolio(dateRange, hasCredits && viewTab === 'credits')
   const [refreshing, setRefreshing] = useState(false)
 
   const handleExport = () => {
@@ -78,7 +92,7 @@ export default function POSDashboard() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await refetch()
+    await Promise.all([refetch(), hasCredits && viewTab === 'credits' ? creditPortfolio.refetch() : null])
     setRefreshing(false)
     toast.success('Datos actualizados')
   }
@@ -151,8 +165,9 @@ export default function POSDashboard() {
           dateRange={dateRange}
           setDateRange={setDateRange}
           onExport={handleExport}
-          activeViewTab={activeViewTab}
+          activeViewTab={viewTab}
           setActiveViewTab={setActiveViewTab}
+          availableTabs={availableTabs}
         />
       </div>
 
@@ -173,27 +188,35 @@ export default function POSDashboard() {
       </div>
 
       {/* 1. KPIs Generales de Ventas (visible en 'all' o 'sales') */}
-      {(activeViewTab === 'all' || activeViewTab === 'sales') && (
+      {showsSection('sales', viewTab) && (
         <PosStatsGrid stats={stats} />
       )}
 
-      {/* 2. Tarjetas de Reparaciones / Taller (visible en 'all' o 'repairs') */}
-      {(activeViewTab === 'all' || activeViewTab === 'repairs') && (
+      {/* 2. Taller: solo si la organizacion tiene el modulo de reparaciones. */}
+      {hasRepairs && showsSection('repairs', viewTab) && (
         <RepairPosStatsCards stats={stats} />
       )}
 
       {/* 3. Tarjetas de Ganancias & Rentabilidad (visible en 'all' o 'profit') */}
-      {(activeViewTab === 'all' || activeViewTab === 'profit') && (
-        <ProfitStatsCards stats={stats} />
+      {showsSection('profit', viewTab) && (
+        <ProfitStatsCards stats={stats} showRepairs={hasRepairs} />
       )}
 
-      {/* 4. Créditos (visible en 'all' o 'sales') */}
-      {(activeViewTab === 'all' || activeViewTab === 'sales') && (
+      {/* 4. Créditos: pestaña propia, solo con el modulo de creditos. Antes
+          vivian dentro de «Ventas POS» y aparecian aunque la organizacion no
+          vendiera a credito. */}
+      {hasCredits && viewTab === 'credits' && (
+        <CreditPortfolioCards
+          portfolio={creditPortfolio}
+          repairCredits={hasRepairs ? stats.repairCreditStats : null}
+        />
+      )}
+      {hasCredits && showsSection('credits', viewTab) && (
         <CreditStatsCards stats={stats} />
       )}
 
       {/* 5. Gráficos y Tablas */}
-      {(activeViewTab === 'all' || activeViewTab === 'sales' || activeViewTab === 'profit') && (
+      {(showsSection('sales', viewTab) || viewTab === 'profit') && (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
             <SalesTrendChart data={stats.dailySales} />
