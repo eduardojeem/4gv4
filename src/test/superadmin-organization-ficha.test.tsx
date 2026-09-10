@@ -61,6 +61,12 @@ const base = (over: Partial<FullOrganizationDetail> = {}): FullOrganizationDetai
   online_summary: {
     total: 0, paid: 0, revenue: 0, partial: 0, open: 0, cancelled: 0, lastOrderAt: null,
   },
+  credit_summary: {
+    total: 4, active: 2, completed: 1, defaulted: 1, cancelled: 0,
+    principal: 2_000_000, outstanding: 640_000,
+    overdueInstallments: 2, overdueAmount: 200_000,
+    averageTerm: 6, lastCreditAt: '2026-06-01T00:00:00Z', installmentsTruncated: false,
+  },
   billing_summary: {
     paidTotal: 500_000, paidCount: 2, pendingCount: 0, failedCount: 0, refundedCount: 0,
     lastPaidAt: '2026-08-01T00:00:00Z', lastPaidAmount: 250_000, lastPaidMethod: 'transferencia',
@@ -235,5 +241,55 @@ describe('lo que pagó por el servicio', () => {
     })} />)
     expect(screen.getByText('2 pendientes')).toBeInTheDocument()
     expect(screen.getByText('1 fallido')).toBeInTheDocument()
+  })
+})
+
+describe('la sección de créditos', () => {
+  it('muestra la cartera: capital, saldo y mora', () => {
+    render(<OrganizationDetailView data={base()} />)
+    expect(screen.getByText('Créditos y cuotas')).toBeInTheDocument()
+    expect(screen.getByText('4 créditos')).toBeInTheDocument()
+    expect(screen.getByText('2 vigentes · 1 saldados')).toBeInTheDocument()
+    expect(screen.getByText('Capital prestado')).toBeInTheDocument()
+    expect(screen.getByText('2 cuotas vencidas')).toBeInTheDocument()
+    expect(screen.getByText('Incobrables')).toBeInTheDocument()
+  })
+
+  it('distingue «tiene el módulo y no lo usa» de «no lo tiene»', () => {
+    const sinCreditos = {
+      total: 0, active: 0, completed: 0, defaulted: 0, cancelled: 0,
+      principal: 0, outstanding: 0, overdueInstallments: 0, overdueAmount: 0,
+      averageTerm: null, lastCreditAt: null, installmentsTruncated: false,
+    }
+
+    const { unmount } = render(<OrganizationDetailView data={base({
+      credit_summary: sinCreditos,
+      organization: { ...base().organization, enabled_modules: ['pos', 'inventory', 'credits'] } as never,
+    })} />)
+    expect(screen.getByText('Tiene el módulo habilitado pero nunca financió una venta')).toBeInTheDocument()
+    unmount()
+
+    render(<OrganizationDetailView data={base({
+      credit_summary: sinCreditos,
+      organization: { ...base().organization, enabled_modules: ['pos', 'inventory'] } as never,
+    })} />)
+    expect(screen.getByText('No usa financiación: el módulo no está habilitado en su plan')).toBeInTheDocument()
+  })
+
+  it('un fallo de lectura no se muestra como «no usa créditos»', () => {
+    render(<OrganizationDetailView data={base({ credit_summary: null })} />)
+    expect(screen.getByText('No se pudo leer la cartera de créditos')).toBeInTheDocument()
+  })
+
+  it('explica cómo cuenta la mora', () => {
+    render(<OrganizationDetailView data={base()} />)
+    expect(screen.getByText(/toda cuota impaga cuyo vencimiento ya pasó/)).toBeInTheDocument()
+  })
+
+  it('un saldo parcial se avisa en vez de pasar por total', () => {
+    render(<OrganizationDetailView data={base({
+      credit_summary: { ...base().credit_summary!, installmentsTruncated: true },
+    })} />)
+    expect(screen.getByText(/no se pudieron leer todas las cuotas/)).toBeInTheDocument()
   })
 })

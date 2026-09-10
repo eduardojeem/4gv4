@@ -5,6 +5,7 @@ import { summarizeOrganizationActivity } from '@/lib/superadmin/organization-act
 import { normalizePlanCode } from '@/lib/saas/subscription-service'
 import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 import {
+  summarizeCredits,
   summarizeOnlineOrders,
   summarizeRepairs,
   summarizeSubscriptionPayments,
@@ -14,6 +15,14 @@ import {
 const SALES_SCAN_CAP = 20000
 /** Tope de los barridos de pedidos y reparaciones. */
 const ROWS_SCAN_CAP = 20000
+/** Tope de creditos leidos para calcular la cartera. */
+const CREDITS_SCAN_CAP = 5000
+/**
+ * `credit_installments` no tiene `organization_id`: las cuotas se piden por
+ * `credit_id`. Un `.in()` con miles de UUID no entra en una URL, asi que se
+ * pide de a tandas.
+ */
+const INSTALLMENT_CHUNK = 200
 
 type Props = {
   params: Promise<{ id: string }>
@@ -49,6 +58,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     { data: salesRows },
     { data: repairRows, error: repairsError },
     { data: orderRows, error: ordersError },
+    { data: creditRows, error: creditsError },
     { data: paymentRows, error: paymentsError },
     { data: billing },
     { data: companyInfoRow },
@@ -127,6 +137,14 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       .eq('organization_id', org.id)
       .order('created_at', { ascending: false })
       .limit(ROWS_SCAN_CAP),
+    // Creditos y cuotas. La cartera financiada no estaba en ninguna pantalla
+    // del superadmin: no habia forma de saber si la organizacion usa el modulo.
+    admin
+      .from('customer_credits')
+      .select('id, status, principal, term_months, interest_rate, start_date, created_at')
+      .eq('organization_id', org.id)
+      .order('start_date', { ascending: false })
+      .limit(CREDITS_SCAN_CAP),
     // Lo que la organizacion pago por el servicio.
     admin
       .from('subscription_payments')
@@ -206,6 +224,33 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     activityTruncated ? sales.slice(0, SALES_SCAN_CAP) : sales
   )
 
+  // Las cuotas de los creditos de esta organizacion, en tandas.
+  let creditSummary = null
+  if (!creditsError) {
+    const creditIds = (creditRows ?? []).map((c: any) => String(c.id)).filter(Boolean)
+    const installments: Array<{ status: string | null; amount: number | null; amount_paid: number | null; due_date: string | null }> = []
+    let installmentsFailed = false
+
+    for (let i = 0; i < creditIds.length; i += INSTALLMENT_CHUNK) {
+      const { data, error } = await admin
+        .from('credit_installments')
+        .select('status, amount, amount_paid, due_date')
+        .in('credit_id', creditIds.slice(i, i + INSTALLMENT_CHUNK))
+
+      // Una tanda que falla deja el saldo incompleto: se dice, en vez de
+      // mostrar un numero menor al real como si fuera el total.
+      if (error) { installmentsFailed = true; break }
+      installments.push(...((data ?? []) as never[]))
+    }
+
+    creditSummary = summarizeCredits(
+      creditRows ?? [],
+      installments,
+      Date.now(),
+      installmentsFailed || creditIds.length >= CREDITS_SCAN_CAP
+    )
+  }
+
   // Un modulo puede no estar instalado en esta organizacion: `null` no es lo
   // mismo que cero.
   const repairSummary = repairsError ? null : summarizeRepairs(repairRows ?? [])
@@ -252,6 +297,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       repairs: repairSummary?.total ?? null,
     },
     repair_summary: repairSummary,
+    credit_summary: creditSummary,
     online_summary: onlineSummary,
     billing_summary: billingSummary,
     activity,

@@ -240,3 +240,126 @@ export function billingCoverage(
   const paidMonths = Math.floor(paidTotal / precio)
   return { expectedMonths, paidMonths, behind: paidMonths < expectedMonths }
 }
+
+// ── Creditos y cuotas ───────────────────────────────────────────────────────
+
+export interface CreditLike {
+  id?: string | null
+  status?: string | null
+  principal?: number | null
+  term_months?: number | null
+  interest_rate?: number | null
+  start_date?: string | null
+  created_at?: string | null
+}
+
+export interface InstallmentLike {
+  status?: string | null
+  amount?: number | null
+  amount_paid?: number | null
+  due_date?: string | null
+}
+
+export interface CreditSummary {
+  /** Creditos otorgados, en cualquier estado. */
+  total: number
+  active: number
+  completed: number
+  /** Marcados como incobrables. */
+  defaulted: number
+  cancelled: number
+  /** Capital prestado, sin intereses. */
+  principal: number
+  /** Lo que falta cobrar, cuota por cuota. */
+  outstanding: number
+  /** Cuotas que ya vencieron y siguen sin pagarse. */
+  overdueInstallments: number
+  /** Importe de esas cuotas. */
+  overdueAmount: number
+  /** Plazo promedio en meses de los creditos otorgados. */
+  averageTerm: number | null
+  lastCreditAt: string | null
+  /** No se pudieron leer todas las cuotas: el saldo es parcial. */
+  installmentsTruncated: boolean
+}
+
+const CUOTA_PENDIENTE = new Set(['pending', 'late'])
+
+export function summarizeCredits(
+  credits: CreditLike[],
+  installments: InstallmentLike[],
+  now: number = Date.now(),
+  installmentsTruncated = false
+): CreditSummary {
+  let active = 0
+  let completed = 0
+  let defaulted = 0
+  let cancelled = 0
+  let principal = 0
+  let plazoTotal = 0
+  let plazoCuenta = 0
+  let lastCreditAt: string | null = null
+
+  for (const credit of credits) {
+    switch (String(credit.status ?? '').toLowerCase()) {
+      case 'active': active += 1; break
+      case 'completed': completed += 1; break
+      case 'defaulted': defaulted += 1; break
+      case 'cancelled': cancelled += 1; break
+    }
+
+    principal += numero(credit.principal)
+
+    const plazo = numero(credit.term_months)
+    if (plazo > 0) {
+      plazoTotal += plazo
+      plazoCuenta += 1
+    }
+
+    lastCreditAt = masReciente(lastCreditAt, credit.start_date ?? credit.created_at)
+  }
+
+  let outstanding = 0
+  let overdueInstallments = 0
+  let overdueAmount = 0
+
+  for (const cuota of installments) {
+    const estado = String(cuota.status ?? '').toLowerCase()
+    if (!CUOTA_PENDIENTE.has(estado)) continue
+
+    // El saldo de la cuota, no su importe entero: una cuota abonada a medias no
+    // debe contar completa. Es la misma regla que `sumInstallmentsOutstanding`
+    // usa para decidir si se aprueba una venta a credito.
+    const importe = numero(cuota.amount)
+    const pagado = Math.min(importe, numero(cuota.amount_paid))
+    const saldo = Math.max(0, importe - pagado)
+    outstanding += saldo
+
+    // Una cuota `pending` cuyo vencimiento ya paso esta vencida aunque nadie
+    // haya corrido el proceso que la marca `late`. Contar solo las `late`
+    // subestimaria la mora.
+    const vencida =
+      estado === 'late' ||
+      (typeof cuota.due_date === 'string' && new Date(cuota.due_date).getTime() < now)
+
+    if (vencida && saldo > 0) {
+      overdueInstallments += 1
+      overdueAmount += saldo
+    }
+  }
+
+  return {
+    total: credits.length,
+    active,
+    completed,
+    defaulted,
+    cancelled,
+    principal,
+    outstanding,
+    overdueInstallments,
+    overdueAmount,
+    averageTerm: plazoCuenta > 0 ? Math.round(plazoTotal / plazoCuenta) : null,
+    lastCreditAt,
+    installmentsTruncated,
+  }
+}

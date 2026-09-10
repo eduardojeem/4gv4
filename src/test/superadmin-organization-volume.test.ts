@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   billingCoverage,
+  summarizeCredits,
   summarizeOnlineOrders,
   summarizeRepairs,
   summarizeSubscriptionPayments,
@@ -188,5 +189,120 @@ describe('la página trae los tres canales', () => {
   it('un módulo que no responde no se muestra como cero', () => {
     expect(PAGINA).toContain('const onlineSummary = ordersError ? null : summarizeOnlineOrders')
     expect(PAGINA).toContain('const billingSummary = paymentsError ? null : summarizeSubscriptionPayments')
+  })
+})
+
+/**
+ * La cartera financiada no estaba en ninguna pantalla del superadmin: no habia
+ * forma de saber si una organizacion vende a credito, cuanto presto, ni cuanto
+ * de eso esta vencido.
+ */
+describe('los créditos y sus cuotas', () => {
+  const AHORA = new Date('2026-09-09T12:00:00Z').getTime()
+  const hace = (dias: number) => new Date(AHORA - dias * 86_400_000).toISOString()
+  const dentro = (dias: number) => new Date(AHORA + dias * 86_400_000).toISOString()
+
+  it('cuenta los créditos por estado y suma el capital', () => {
+    const r = summarizeCredits(
+      [
+        { id: 'c1', status: 'active', principal: 1_000_000, term_months: 6, start_date: hace(30) },
+        { id: 'c2', status: 'completed', principal: 500_000, term_months: 3, start_date: hace(200) },
+        { id: 'c3', status: 'defaulted', principal: 300_000, term_months: 12, start_date: hace(400) },
+        { id: 'c4', status: 'cancelled', principal: 200_000, term_months: 6, start_date: hace(10) },
+      ],
+      [],
+      AHORA
+    )
+    expect(r.total).toBe(4)
+    expect(r.active).toBe(1)
+    expect(r.completed).toBe(1)
+    expect(r.defaulted).toBe(1)
+    expect(r.cancelled).toBe(1)
+    expect(r.principal).toBe(2_000_000)
+    expect(r.averageTerm).toBe(7)
+  })
+
+  it('el saldo es lo que falta de cada cuota, no su importe entero', () => {
+    // Es la misma regla que `sumInstallmentsOutstanding` usa para aprobar o
+    // rechazar una venta a credito.
+    const r = summarizeCredits(
+      [{ id: 'c1', status: 'active', principal: 300_000 }],
+      [
+        { status: 'paid', amount: 100_000, amount_paid: 100_000, due_date: hace(60) },
+        { status: 'pending', amount: 100_000, amount_paid: 40_000, due_date: dentro(30) },
+        { status: 'pending', amount: 100_000, amount_paid: null, due_date: dentro(60) },
+      ],
+      AHORA
+    )
+    expect(r.outstanding).toBe(160_000)
+  })
+
+  it('una cuota impaga cuyo vencimiento ya pasó está vencida, esté marcada o no', () => {
+    // Contar solo las `late` subestima la mora: depende de que alguien haya
+    // corrido el proceso que las marca.
+    const r = summarizeCredits(
+      [{ id: 'c1', status: 'active', principal: 200_000 }],
+      [
+        { status: 'pending', amount: 100_000, amount_paid: 0, due_date: hace(5) },
+        { status: 'pending', amount: 100_000, amount_paid: 0, due_date: dentro(25) },
+      ],
+      AHORA
+    )
+    expect(r.overdueInstallments).toBe(1)
+    expect(r.overdueAmount).toBe(100_000)
+    expect(r.outstanding).toBe(200_000)
+  })
+
+  it('una cuota marcada `late` cuenta aunque no tenga fecha legible', () => {
+    const r = summarizeCredits(
+      [{ id: 'c1', status: 'active', principal: 50_000 }],
+      [{ status: 'late', amount: 50_000, amount_paid: 0, due_date: null }],
+      AHORA
+    )
+    expect(r.overdueInstallments).toBe(1)
+  })
+
+  it('una cuota vencida ya saldada no suma a la mora', () => {
+    const r = summarizeCredits(
+      [{ id: 'c1', status: 'active', principal: 50_000 }],
+      [{ status: 'paid', amount: 50_000, amount_paid: 50_000, due_date: hace(90) }],
+      AHORA
+    )
+    expect(r.overdueInstallments).toBe(0)
+    expect(r.outstanding).toBe(0)
+  })
+
+  it('un cobro de más no genera saldo negativo', () => {
+    const r = summarizeCredits(
+      [{ id: 'c1', status: 'active', principal: 50_000 }],
+      [{ status: 'pending', amount: 50_000, amount_paid: 80_000, due_date: hace(1) }],
+      AHORA
+    )
+    expect(r.outstanding).toBe(0)
+    expect(r.overdueInstallments).toBe(0)
+  })
+
+  it('sin créditos no inventa un plazo promedio', () => {
+    const r = summarizeCredits([], [], AHORA)
+    expect(r.averageTerm).toBeNull()
+    expect(r.lastCreditAt).toBeNull()
+    expect(r.total).toBe(0)
+  })
+
+  it('si no se pudieron leer todas las cuotas, lo dice', () => {
+    const r = summarizeCredits([{ id: 'c1', status: 'active', principal: 1 }], [], AHORA, true)
+    expect(r.installmentsTruncated).toBe(true)
+  })
+})
+
+describe('la página lee la cartera respetando los límites de PostgREST', () => {
+  it('las cuotas se piden por tandas: `credit_installments` no tiene organization_id', () => {
+    expect(PAGINA).toContain('const INSTALLMENT_CHUNK = 200')
+    expect(PAGINA).toContain("creditIds.slice(i, i + INSTALLMENT_CHUNK)")
+  })
+
+  it('una tanda que falla marca el saldo como parcial, no lo achica en silencio', () => {
+    expect(PAGINA).toContain('if (error) { installmentsFailed = true; break }')
+    expect(VISTA).toContain('no se pudieron leer todas las cuotas')
   })
 })

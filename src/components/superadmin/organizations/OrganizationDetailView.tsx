@@ -49,6 +49,7 @@ import {
   Monitor,
   Hammer,
   Banknote,
+  HandCoins,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -74,6 +75,7 @@ import {
 import {
   billingCoverage,
   type BillingSummary,
+  type CreditSummary,
   type OnlineSummary,
   type RepairSummary,
 } from '@/lib/superadmin/organization-volume'
@@ -198,6 +200,8 @@ export type FullOrganizationDetail = {
   repair_summary: RepairSummary | null
   /** `null` cuando el modulo de tienda online no esta disponible. */
   online_summary: OnlineSummary | null
+  /** `null` cuando no se pudo leer la cartera de creditos. */
+  credit_summary: CreditSummary | null
   /** `null` cuando no se pudieron leer los pagos del servicio. */
   billing_summary: BillingSummary | null
 }
@@ -744,7 +748,7 @@ export function OrganizationDetailView({ data }: Props) {
   const [activeTab, setActiveTab] = useState('overview')
   const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules, repair_summary, online_summary, billing_summary } = data
+  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules, repair_summary, online_summary, credit_summary, billing_summary } = data
   // Sin fila en `plans` el sistema aplica los limites del plan Free. Decir
   // «Sin tope» ahi seria falso.
   const sinTope =
@@ -789,6 +793,10 @@ export function OrganizationDetailView({ data }: Props) {
   const totalAvailableModules = MODULE_CATEGORIES.reduce((acc, cat) => acc + cat.modules.length, 0)
   const activeCount = enabledModulesList.length
   const coveragePercent = Math.round((activeCount / totalAvailableModules) * 100)
+
+  // El modulo de creditos puede estar apagado: «nunca financio» y «no lo tiene»
+  // son cosas distintas.
+  const creditsModuleEnabled = enabledModulesList.includes('credits')
 
   const editableOrg: EditableOrganization = {
     id: org.id,
@@ -1136,7 +1144,7 @@ export function OrganizationDetailView({ data }: Props) {
                 De dónde viene la actividad
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
+            <CardContent className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
               <StreamCard
                 icon={ShoppingCart}
                 tone="bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300"
@@ -1219,6 +1227,54 @@ export function OrganizationDetailView({ data }: Props) {
                     : []),
                 ]}
                 note="Lo cobrado por mostrador ya está contado en Punto de venta: no se suma."
+              />
+
+              <StreamCard
+                icon={HandCoins}
+                tone="bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300"
+                label="Créditos y cuotas"
+                disabled={credit_summary === null || credit_summary.total === 0}
+                disabledNote={
+                  credit_summary === null
+                    ? 'No se pudo leer la cartera de créditos'
+                    : creditsModuleEnabled
+                      ? 'Tiene el módulo habilitado pero nunca financió una venta'
+                      : 'No usa financiación: el módulo no está habilitado en su plan'
+                }
+                headline={`${(credit_summary?.total ?? 0).toLocaleString('es-PY')} créditos`}
+                sub={
+                  credit_summary
+                    ? `${credit_summary.active.toLocaleString('es-PY')} vigentes · ${credit_summary.completed.toLocaleString('es-PY')} saldados`
+                    : undefined
+                }
+                rows={[
+                  { label: 'Capital prestado', value: formatMoney(credit_summary?.principal ?? 0, currency) },
+                  {
+                    label: 'Falta cobrar',
+                    value: formatMoney(credit_summary?.outstanding ?? 0, currency),
+                    warn: (credit_summary?.outstanding ?? 0) > 0,
+                  },
+                  ...(credit_summary && credit_summary.overdueInstallments > 0
+                    ? [{
+                        label: `${credit_summary.overdueInstallments} cuotas vencidas`,
+                        value: formatMoney(credit_summary.overdueAmount, currency),
+                        warn: true,
+                      }]
+                    : []),
+                  ...(credit_summary && credit_summary.defaulted > 0
+                    ? [{ label: 'Incobrables', value: credit_summary.defaulted.toLocaleString('es-PY'), warn: true }]
+                    : []),
+                  ...(credit_summary?.averageTerm
+                    ? [{ label: 'Plazo promedio', value: `${credit_summary.averageTerm} meses` }]
+                    : []),
+                ]}
+                note={
+                  credit_summary?.installmentsTruncated
+                    ? 'Parcial: no se pudieron leer todas las cuotas, el saldo puede ser mayor.'
+                    : credit_summary && credit_summary.overdueInstallments > 0
+                      ? 'Se cuenta vencida toda cuota impaga cuyo vencimiento ya pasó, esté marcada o no.'
+                      : undefined
+                }
               />
 
               <StreamCard
