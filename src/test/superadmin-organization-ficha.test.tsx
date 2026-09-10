@@ -54,6 +54,18 @@ const base = (over: Partial<FullOrganizationDetail> = {}): FullOrganizationDetai
   company_info: null,
   billing: null,
   settings_modules: {},
+  repair_summary: {
+    total: 3, open: 1, completed: 2, cancelled: 0,
+    collected: 180_000, pendingBalance: 0, lastRepairAt: '2026-07-20T10:00:00Z',
+  },
+  online_summary: {
+    total: 0, paid: 0, revenue: 0, partial: 0, open: 0, cancelled: 0, lastOrderAt: null,
+  },
+  billing_summary: {
+    paidTotal: 500_000, paidCount: 2, pendingCount: 0, failedCount: 0, refundedCount: 0,
+    lastPaidAt: '2026-08-01T00:00:00Z', lastPaidAmount: 250_000, lastPaidMethod: 'transferencia',
+    currency: 'PYG', mixedCurrency: false,
+  },
   ...over,
 })
 
@@ -134,5 +146,94 @@ describe('los topes del plan se muestran contra el uso real', () => {
   it('sin límites cargados no dice «sin tope»', () => {
     render(<OrganizationDetailView data={base({ plan_limits: null, plan_limits_source: 'missing' })} />)
     expect(screen.getAllByText(/no tiene límites cargados/).length).toBeGreaterThan(0)
+  })
+})
+
+describe('de dónde viene la actividad', () => {
+  it('separa mostrador, tienda online y taller', () => {
+    render(<OrganizationDetailView data={base()} />)
+    expect(screen.getByText('Punto de venta')).toBeInTheDocument()
+    expect(screen.getByText('Tienda online')).toBeInTheDocument()
+    expect(screen.getByText('Taller')).toBeInTheDocument()
+  })
+
+  it('sin pedidos web lo dice en vez de mostrar «0 pedidos pagados»', () => {
+    render(<OrganizationDetailView data={base()} />)
+    expect(screen.getByText('Todavía no recibió ningún pedido por la web')).toBeInTheDocument()
+  })
+
+  it('un módulo que no respondió no se muestra como cero', () => {
+    render(<OrganizationDetailView data={base({ repair_summary: null })} />)
+    expect(screen.getByText('El módulo de taller no está disponible')).toBeInTheDocument()
+    // Y la barra de uso tampoco dibuja un 0 que parezca «cero reparaciones».
+    expect(screen.getByText('No se pudo leer el módulo de taller')).toBeInTheDocument()
+    expect(screen.getByText('Sin dato')).toBeInTheDocument()
+  })
+
+  it('el taller dice cuántas terminó y cuántas siguen adentro', () => {
+    render(<OrganizationDetailView data={base()} />)
+    expect(screen.getByText('3 reparaciones')).toBeInTheDocument()
+    expect(screen.getByText('2 terminadas · 1 en el taller')).toBeInTheDocument()
+  })
+
+  it('el trabajo terminado sin cobrar se resalta', () => {
+    render(<OrganizationDetailView data={base({
+      repair_summary: {
+        total: 2, open: 0, completed: 2, cancelled: 0,
+        collected: 50_000, pendingBalance: 150_000, lastRepairAt: null,
+      },
+    })} />)
+    expect(screen.getByText('Terminado sin cobrar')).toBeInTheDocument()
+  })
+
+  it('avisa que lo cobrado en el taller ya está contado en el mostrador', () => {
+    render(<OrganizationDetailView data={base()} />)
+    expect(screen.getByText(/ya está contado en Punto de venta/)).toBeInTheDocument()
+  })
+})
+
+describe('lo que pagó por el servicio', () => {
+  it('muestra el total cobrado y el último pago', () => {
+    render(<OrganizationDetailView data={base()} />)
+    expect(screen.getByText('Total cobrado')).toBeInTheDocument()
+    expect(screen.getByText('2 pagos cobrados')).toBeInTheDocument()
+    expect(screen.getByText(/transferencia/)).toBeInTheDocument()
+  })
+
+  it('una cuenta que nunca pagó lo dice', () => {
+    render(<OrganizationDetailView data={base({
+      billing_summary: {
+        paidTotal: 0, paidCount: 0, pendingCount: 0, failedCount: 0, refundedCount: 0,
+        lastPaidAt: null, lastPaidAmount: null, lastPaidMethod: null,
+        currency: null, mixedCurrency: false,
+      },
+    })} />)
+    expect(screen.getByText('Nunca registró un pago')).toBeInTheDocument()
+    expect(screen.getByText('Sin pagos')).toBeInTheDocument()
+  })
+
+  it('compara los meses pagados contra los que lleva abierta la cuenta', () => {
+    // Alta 2025-02-14, plan de ₲250.000: dos pagos no cubren el año y medio.
+    render(<OrganizationDetailView data={base()} />)
+    expect(screen.getByText('Pagó menos meses de los que lleva la cuenta abierta')).toBeInTheDocument()
+  })
+
+  it('sin precio mensual no inventa una comparación', () => {
+    render(<OrganizationDetailView data={base({
+      plan_details: { id: 'p', name: 'Free', tier: 'free', price_monthly: 0, currency: 'PYG' },
+    })} />)
+    expect(screen.getByText('El plan no tiene precio mensual: no hay contra qué comparar')).toBeInTheDocument()
+  })
+
+  it('los pagos pendientes y fallidos se señalan', () => {
+    render(<OrganizationDetailView data={base({
+      billing_summary: {
+        paidTotal: 250_000, paidCount: 1, pendingCount: 2, failedCount: 1, refundedCount: 0,
+        lastPaidAt: '2026-08-01T00:00:00Z', lastPaidAmount: 250_000, lastPaidMethod: null,
+        currency: 'PYG', mixedCurrency: false,
+      },
+    })} />)
+    expect(screen.getByText('2 pendientes')).toBeInTheDocument()
+    expect(screen.getByText('1 fallido')).toBeInTheDocument()
   })
 })

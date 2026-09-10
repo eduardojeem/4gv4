@@ -4,9 +4,16 @@ import { OrganizationDetailView, type FullOrganizationDetail } from '@/component
 import { summarizeOrganizationActivity } from '@/lib/superadmin/organization-activity'
 import { normalizePlanCode } from '@/lib/saas/subscription-service'
 import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
+import {
+  summarizeOnlineOrders,
+  summarizeRepairs,
+  summarizeSubscriptionPayments,
+} from '@/lib/superadmin/organization-volume'
 
 /** Tope del barrido de ventas para calcular facturacion. */
 const SALES_SCAN_CAP = 20000
+/** Tope de los barridos de pedidos y reparaciones. */
+const ROWS_SCAN_CAP = 20000
 
 type Props = {
   params: Promise<{ id: string }>
@@ -40,7 +47,9 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     { count: staffMembersCount },
     { count: customersCount },
     { data: salesRows },
-    { count: repairsCount, error: repairsError },
+    { data: repairRows, error: repairsError },
+    { data: orderRows, error: ordersError },
+    { data: paymentRows, error: paymentsError },
     { data: billing },
     { data: companyInfoRow },
   ] = await Promise.all([
@@ -102,10 +111,29 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       .eq('organization_id', org.id)
       .order('created_at', { ascending: false })
       .limit(SALES_SCAN_CAP + 1),
+    // Con importes y estado: el conteo pelado no decia cuantos equipos siguen
+    // en el taller ni cuanto trabajo terminado esta sin cobrar.
     admin
       .from('repairs')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', org.id),
+      .select('status, final_cost, estimated_cost, paid_amount, created_at, delivered_at')
+      .eq('organization_id', org.id)
+      .order('created_at', { ascending: false })
+      .limit(ROWS_SCAN_CAP),
+    // Tienda online. Es una tabla aparte de `sales`: el mostrador y la web no
+    // se mezclan, y hasta ahora la pantalla solo mostraba el mostrador.
+    admin
+      .from('customer_orders')
+      .select('status, payment_status, total, created_at')
+      .eq('organization_id', org.id)
+      .order('created_at', { ascending: false })
+      .limit(ROWS_SCAN_CAP),
+    // Lo que la organizacion pago por el servicio.
+    admin
+      .from('subscription_payments')
+      .select('amount, currency, status, payment_method, provider, plan_id, paid_at, created_at')
+      .eq('organization_id', org.id)
+      .order('created_at', { ascending: false })
+      .limit(500),
     // Identidad fiscal: RUC y razon social viven aca, no en `organizations`.
     admin
       .from('billing_profiles')
@@ -178,6 +206,12 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     activityTruncated ? sales.slice(0, SALES_SCAN_CAP) : sales
   )
 
+  // Un modulo puede no estar instalado en esta organizacion: `null` no es lo
+  // mismo que cero.
+  const repairSummary = repairsError ? null : summarizeRepairs(repairRows ?? [])
+  const onlineSummary = ordersError ? null : summarizeOnlineOrders(orderRows ?? [])
+  const billingSummary = paymentsError ? null : summarizeSubscriptionPayments(paymentRows ?? [])
+
   const branchList = branches ?? []
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -215,8 +249,11 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       customers: customersCount ?? 0,
       // El modulo puede no estar instalado en esta organizacion: `null` no es
       // lo mismo que cero reparaciones.
-      repairs: repairsError ? null : repairsCount ?? 0,
+      repairs: repairSummary?.total ?? null,
     },
+    repair_summary: repairSummary,
+    online_summary: onlineSummary,
+    billing_summary: billingSummary,
     activity,
     activityTruncated,
   }

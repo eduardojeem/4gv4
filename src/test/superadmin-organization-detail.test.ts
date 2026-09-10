@@ -145,7 +145,8 @@ describe('los conteos dejan de mezclar cosas distintas', () => {
   })
 
   it('las reparaciones distinguen «cero» de «el módulo no está»', () => {
-    expect(PAGINA).toContain('repairs: repairsError ? null : repairsCount ?? 0')
+    expect(PAGINA).toContain('const repairSummary = repairsError ? null : summarizeRepairs')
+    expect(PAGINA).toContain('repairs: repairSummary?.total ?? null')
   })
 
   it('si hay más ventas de las que se pueden sumar, se dice', () => {

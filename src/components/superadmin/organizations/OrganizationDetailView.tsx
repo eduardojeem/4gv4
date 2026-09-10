@@ -46,6 +46,9 @@ import {
   Clock,
   CircleDashed,
   Navigation,
+  Monitor,
+  Hammer,
+  Banknote,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -68,6 +71,12 @@ import {
   resolveOrganizationContact,
   type ResolvedField,
 } from '@/lib/superadmin/organization-profile'
+import {
+  billingCoverage,
+  type BillingSummary,
+  type OnlineSummary,
+  type RepairSummary,
+} from '@/lib/superadmin/organization-volume'
 import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
 import { RobotGuide } from '@/components/common/RobotGuide'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
@@ -185,6 +194,12 @@ export type FullOrganizationDetail = {
   billing: Record<string, unknown> | null
   /** `organization_settings.modules`, para leer la marca de onboarding. */
   settings_modules: unknown
+  /** `null` cuando el modulo de taller no esta disponible. */
+  repair_summary: RepairSummary | null
+  /** `null` cuando el modulo de tienda online no esta disponible. */
+  online_summary: OnlineSummary | null
+  /** `null` cuando no se pudieron leer los pagos del servicio. */
+  billing_summary: BillingSummary | null
 }
 
 type Props = {
@@ -488,6 +503,7 @@ function UsageBar({
   limit,
   hint,
   totalNote,
+  unavailable,
 }: {
   label: string
   used: number
@@ -495,9 +511,21 @@ function UsageBar({
   limit?: unknown
   hint?: string
   totalNote?: string
+  /** El modulo no respondio. Un `0` aca seria un dato inventado. */
+  unavailable?: string
 }) {
   const percent = limitUsage(used, limit)
   const cerca = percent !== null && percent >= 80
+
+  if (unavailable) {
+    return (
+      <div className="space-y-1.5">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="text-xl font-bold leading-none text-muted-foreground">Sin dato</p>
+        <p className="text-[11px] text-muted-foreground">{unavailable}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-1.5">
@@ -537,6 +565,72 @@ function UsageBar({
             .filter(Boolean)
             .join(' · ')}
         </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Un canal de actividad: cuanto movio y en que estado esta. Un solo numero de
+ * ventas no dejaba ver si la empresa vende por mostrador, por la web, o repara.
+ */
+function StreamCard({
+  icon: Icon,
+  tone,
+  label,
+  headline,
+  sub,
+  rows,
+  note,
+  disabled,
+  disabledNote,
+}: {
+  icon: React.ElementType
+  tone: string
+  label: string
+  headline: string
+  sub?: string
+  rows?: Array<{ label: string; value: string; warn?: boolean }>
+  note?: string
+  disabled?: boolean
+  disabledNote?: string
+}) {
+  return (
+    <div className={cn('rounded-xl border border-border p-4', disabled && 'opacity-70')}>
+      <div className="flex items-center gap-2">
+        <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg', tone)}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+      </div>
+
+      {disabled ? (
+        <p className="mt-3 text-xs font-medium text-muted-foreground">{disabledNote}</p>
+      ) : (
+        <>
+          <p className="mt-3 text-lg font-bold tabular-nums leading-none text-foreground">{headline}</p>
+          {sub && <p className="mt-1 text-[11px] text-muted-foreground">{sub}</p>}
+
+          {rows && rows.length > 0 && (
+            <dl className="mt-3 space-y-1 border-t border-border/60 pt-2">
+              {rows.map((row) => (
+                <div key={row.label} className="flex items-baseline justify-between gap-2">
+                  <dt className="text-[11px] text-muted-foreground">{row.label}</dt>
+                  <dd
+                    className={cn(
+                      'text-[11px] font-bold tabular-nums',
+                      row.warn ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'
+                    )}
+                  >
+                    {row.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+
+          {note && <p className="mt-2 text-[10px] leading-snug text-muted-foreground">{note}</p>}
+        </>
       )}
     </div>
   )
@@ -650,7 +744,7 @@ export function OrganizationDetailView({ data }: Props) {
   const [activeTab, setActiveTab] = useState('overview')
   const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules } = data
+  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules, repair_summary, online_summary, billing_summary } = data
   // Sin fila en `plans` el sistema aplica los limites del plan Free. Decir
   // «Sin tope» ahi seria falso.
   const sinTope =
@@ -672,6 +766,12 @@ export function OrganizationDetailView({ data }: Props) {
   const onboarding = resolveOnboardingState(settings_modules)
   const monedaConfig = configuredOr(settings?.currency, 'PYG')
   const zonaConfig = configuredOr(settings?.timezone, 'America/Asuncion')
+
+  const cobertura = billingCoverage(
+    plan_details?.price_monthly,
+    billing_summary?.paidTotal ?? 0,
+    antiguedad?.days ?? null
+  )
 
   const activityLevel = getActivityLevel(activity.daysSinceLastSale)
   const currency = settings?.currency || 'PYG'
@@ -1026,6 +1126,220 @@ export function OrganizationDetailView({ data }: Props) {
             />
           </div>
 
+          {/* De donde sale la actividad. La pantalla mostraba un unico numero
+              de ventas: no habia forma de saber si la empresa vende por
+              mostrador, por la tienda online, o repara equipos. */}
+          <Card className="rounded-2xl border border-border bg-card">
+            <CardHeader className="border-b border-border py-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <BarChart3 className="h-4 w-4 text-violet-500" />
+                De dónde viene la actividad
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
+              <StreamCard
+                icon={ShoppingCart}
+                tone="bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300"
+                label="Punto de venta"
+                headline={`${activity.completedSales.toLocaleString('es-PY')} ventas`}
+                sub={formatMoney(activity.revenueTotal, currency)}
+                rows={[
+                  ...(activity.totalSales !== activity.completedSales
+                    ? [{
+                        label: 'Anuladas',
+                        value: (activity.totalSales - activity.completedSales).toLocaleString('es-PY'),
+                        warn: true,
+                      }]
+                    : []),
+                  {
+                    label: 'Última venta',
+                    value: activity.lastSaleAt ? formatDate(activity.lastSaleAt) : 'Nunca',
+                  },
+                ]}
+              />
+
+              <StreamCard
+                icon={Monitor}
+                tone="bg-cyan-100 text-cyan-600 dark:bg-cyan-950/50 dark:text-cyan-300"
+                label="Tienda online"
+                disabled={online_summary === null || online_summary.total === 0}
+                disabledNote={
+                  online_summary === null
+                    ? 'No se pudo leer el módulo de pedidos'
+                    : 'Todavía no recibió ningún pedido por la web'
+                }
+                headline={`${(online_summary?.paid ?? 0).toLocaleString('es-PY')} pedidos pagados`}
+                sub={formatMoney(online_summary?.revenue ?? 0, currency)}
+                rows={[
+                  { label: 'Pedidos totales', value: (online_summary?.total ?? 0).toLocaleString('es-PY') },
+                  ...(online_summary && online_summary.open > 0
+                    ? [{ label: 'En curso', value: online_summary.open.toLocaleString('es-PY'), warn: true }]
+                    : []),
+                  ...(online_summary && online_summary.partial > 0
+                    ? [{ label: 'Cobro parcial', value: online_summary.partial.toLocaleString('es-PY'), warn: true }]
+                    : []),
+                ]}
+                note={
+                  online_summary && online_summary.partial > 0
+                    ? 'Los pedidos con cobro parcial no suman al facturado: no cobraron su total.'
+                    : undefined
+                }
+              />
+
+              <StreamCard
+                icon={Hammer}
+                tone="bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-300"
+                label="Taller"
+                disabled={repair_summary === null || repair_summary.total === 0}
+                disabledNote={
+                  repair_summary === null
+                    ? 'El módulo de taller no está disponible'
+                    : 'Nunca registró una reparación'
+                }
+                headline={`${(repair_summary?.total ?? 0).toLocaleString('es-PY')} reparaciones`}
+                sub={
+                  repair_summary
+                    ? `${repair_summary.completed.toLocaleString('es-PY')} terminadas · ${repair_summary.open.toLocaleString('es-PY')} en el taller`
+                    : undefined
+                }
+                rows={[
+                  {
+                    label: 'Cobrado',
+                    value: formatMoney(repair_summary?.collected ?? 0, currency),
+                  },
+                  ...(repair_summary && repair_summary.pendingBalance > 0
+                    ? [{
+                        label: 'Terminado sin cobrar',
+                        value: formatMoney(repair_summary.pendingBalance, currency),
+                        warn: true,
+                      }]
+                    : []),
+                  ...(repair_summary && repair_summary.cancelled > 0
+                    ? [{ label: 'Canceladas', value: repair_summary.cancelled.toLocaleString('es-PY') }]
+                    : []),
+                ]}
+                note="Lo cobrado por mostrador ya está contado en Punto de venta: no se suma."
+              />
+
+              <StreamCard
+                icon={Users}
+                tone="bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300"
+                label="Clientes"
+                headline={`${counts.customers.toLocaleString('es-PY')} registrados`}
+                sub={
+                  counts.customers > 0 && activity.completedSales > 0
+                    ? `${(activity.completedSales / counts.customers).toFixed(1)} ventas por cliente`
+                    : undefined
+                }
+                rows={[
+                  {
+                    label: 'Sucursales',
+                    value: `${branches.filter((b) => b.is_active).length} de ${branches.length}`,
+                  },
+                ]}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Lo que la organizacion pago por el servicio. `subscription_payments`
+              existe desde junio y no llegaba a ninguna pantalla: un plan pago
+              sin un solo cobro registrado era invisible. */}
+          <Card className="rounded-2xl border border-border bg-card">
+            <CardHeader className="border-b border-border py-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <Banknote className="h-4 w-4 text-emerald-500" />
+                Lo que pagó por el servicio
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Total cobrado</p>
+                <p className="text-xl font-bold tabular-nums leading-none text-foreground">
+                  {billing_summary === null
+                    ? 'Sin dato'
+                    : formatMoney(billing_summary.paidTotal, billing_summary.currency ?? currency)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {billing_summary === null
+                    ? 'No se pudieron leer los pagos'
+                    : billing_summary.paidCount === 0
+                      ? 'Nunca registró un pago'
+                      : `${billing_summary.paidCount} ${billing_summary.paidCount === 1 ? 'pago' : 'pagos'} cobrados`}
+                </p>
+                {billing_summary?.mixedCurrency && (
+                  <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                    Hay pagos en más de una moneda: el total suma importes distintos.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Último pago</p>
+                <p className="text-xl font-bold tabular-nums leading-none text-foreground">
+                  {billing_summary?.lastPaidAmount != null
+                    ? formatMoney(billing_summary.lastPaidAmount, billing_summary.currency ?? currency)
+                    : 'Sin pagos'}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {billing_summary?.lastPaidAt
+                    ? `${formatDate(billing_summary.lastPaidAt)}${billing_summary.lastPaidMethod ? ` · ${billing_summary.lastPaidMethod}` : ''}`
+                    : 'Ninguno registrado'}
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Plan actual</p>
+                <p className="text-xl font-bold leading-none text-foreground">{effectivePlan}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {plan_details?.price_monthly
+                    ? `${formatMoney(plan_details.price_monthly, plan_details.currency || currency)} por mes`
+                    : 'Sin precio cargado en el plan'}
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Cobertura</p>
+                <p
+                  className={cn(
+                    'text-xl font-bold tabular-nums leading-none',
+                    cobertura.behind ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'
+                  )}
+                >
+                  {cobertura.paidMonths === null
+                    ? '—'
+                    : `${cobertura.paidMonths} de ${cobertura.expectedMonths} meses`}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {cobertura.paidMonths === null
+                    ? 'El plan no tiene precio mensual: no hay contra qué comparar'
+                    : cobertura.behind
+                      ? 'Pagó menos meses de los que lleva la cuenta abierta'
+                      : 'Al día con los meses transcurridos'}
+                </p>
+              </div>
+
+              {billing_summary && (billing_summary.pendingCount > 0 || billing_summary.failedCount > 0 || billing_summary.refundedCount > 0) && (
+                <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
+                  {billing_summary.pendingCount > 0 && (
+                    <Badge variant="outline" className="border-amber-300 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:text-amber-400">
+                      {billing_summary.pendingCount} pendiente{billing_summary.pendingCount === 1 ? '' : 's'}
+                    </Badge>
+                  )}
+                  {billing_summary.failedCount > 0 && (
+                    <Badge variant="outline" className="border-rose-300 text-[10px] font-bold text-rose-700 dark:border-rose-900 dark:text-rose-400">
+                      {billing_summary.failedCount} fallido{billing_summary.failedCount === 1 ? '' : 's'}
+                    </Badge>
+                  )}
+                  {billing_summary.refundedCount > 0 && (
+                    <Badge variant="outline" className="text-[10px] font-bold text-muted-foreground">
+                      {billing_summary.refundedCount} devuelto{billing_summary.refundedCount === 1 ? '' : 's'}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Lo que la organizacion tiene cargado, contra lo que su plan
               permite. El uso vivia escondido en otra pestaña. */}
           <Card className="rounded-2xl border border-border bg-card">
@@ -1059,10 +1373,11 @@ export function OrganizationDetailView({ data }: Props) {
                 hint={sinTope}
               />
               <UsageBar
-                label={counts.repairs === null ? 'Clientes' : 'Reparaciones'}
-                used={counts.repairs === null ? counts.customers : counts.repairs}
-                limit={null}
-                hint={counts.repairs === null ? undefined : `${counts.customers.toLocaleString('es-PY')} clientes`}
+                label="Reparaciones"
+                used={repair_summary?.total ?? 0}
+                limit={plan_limits?.repairs}
+                hint={sinTope}
+                unavailable={repair_summary === null ? 'No se pudo leer el módulo de taller' : undefined}
               />
             </CardContent>
           </Card>
