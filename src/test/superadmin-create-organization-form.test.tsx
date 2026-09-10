@@ -249,3 +249,22 @@ describe('después de crear', () => {
     expect(screen.getByLabelText(/^Nombre de la empresa/)).toHaveValue('')
   })
 })
+
+/**
+ * La fecha de fin de prueba se formateaba sin zona horaria: el servidor usaba
+ * la suya (UTC en produccion) y el navegador la del usuario. Entre las 21:00 y
+ * las 24:00 de Paraguay el HTML del servidor traia el dia siguiente.
+ */
+describe('las fechas no dependen de la zona del servidor', () => {
+  it('se formatean en la zona horaria elegida para la organización', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const fuente = readFileSync(
+      resolve(process.cwd(), 'src/components/superadmin/organizations/CreateOrganizationForm.tsx'),
+      'utf8'
+    )
+    expect(fuente).toContain("year: 'numeric', timeZone }")
+    expect(fuente).toContain('formatDate(trialEndDate(planElegido.trialDays), timezone)')
+    expect(fuente).toContain('formatDate(subscription.trialEndsAt, timezone)')
+  })
+})

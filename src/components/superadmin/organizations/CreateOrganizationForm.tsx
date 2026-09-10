@@ -162,8 +162,16 @@ function useOwnerLookup(rawEmail: string): OwnerState {
 const formatGs = (value: number) =>
   new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(value)
 
-const formatDate = (value: Date | string) =>
-  new Intl.DateTimeFormat('es-PY', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value))
+/**
+ * Con zona horaria explicita. Sin ella, el servidor formatea en la suya (UTC en
+ * produccion) y el navegador en la del usuario: entre las 21:00 y las 24:00 de
+ * Paraguay el HTML del servidor traia el dia siguiente y la hidratacion no
+ * coincidia.
+ */
+const formatDate = (value: Date | string, timeZone: string) =>
+  new Intl.DateTimeFormat('es-PY', { day: '2-digit', month: 'short', year: 'numeric', timeZone }).format(
+    new Date(value)
+  )
 
 const LIMIT_KEYS = [
   { key: 'users', label: 'Colaboradores' },
@@ -534,7 +542,7 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
                 <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />
                 <span>
                   {subscription.trialDays > 0
-                    ? `En prueba ${subscription.trialDays} días, hasta el ${formatDate(subscription.trialEndsAt)}.`
+                    ? `En prueba ${subscription.trialDays} días, hasta el ${formatDate(subscription.trialEndsAt, timezone)}.`
                     : 'El plan no tiene período de prueba.'}
                 </span>
               </li>
@@ -960,7 +968,7 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
                     <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />
                     <span>
                       {planElegido && planElegido.trialDays > 0
-                        ? `Suscripción en prueba ${planElegido.trialDays} días, hasta el ${formatDate(trialEndDate(planElegido.trialDays))}`
+                        ? `Suscripción en prueba ${planElegido.trialDays} días, hasta el ${formatDate(trialEndDate(planElegido.trialDays), timezone)}`
                         : 'Suscripción sin período de prueba'}
                     </span>
                   </li>
