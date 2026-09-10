@@ -249,7 +249,7 @@ export function ContactCTA({ companyInfo, brand, phoneClean, contactHref }: Cont
                         </p>
                       </div>
 
-                      <button
+                      <button suppressHydrationWarning
                         type="button"
                         onClick={copyAddress}
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary transition-colors pt-1"
@@ -313,7 +313,7 @@ export function ContactCTA({ companyInfo, brand, phoneClean, contactHref }: Cont
                         <Car className="h-3.5 w-3.5 text-emerald-500" />
                         <span>¿Venís en <strong>Bolt</strong> o <strong>Uber</strong>?</span>
                       </span>
-                      <button
+                      <button suppressHydrationWarning
                         type="button"
                         onClick={copyAddress}
                         className="font-semibold text-primary hover:underline inline-flex items-center gap-1 cursor-pointer"

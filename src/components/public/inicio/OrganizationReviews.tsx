@@ -51,7 +51,7 @@ function StarRating({
   return (
     <div className="flex gap-0.5" role="group" aria-label="Calificación">
       {[1, 2, 3, 4, 5].map((star) => (
-        <button
+        <button suppressHydrationWarning
           key={star}
           type="button"
           disabled={readonly}
@@ -168,7 +168,7 @@ function ReviewForm({ onSuccess, tenantSlug }: { onSuccess: () => void; tenantSl
           <label htmlFor="review-name" className="mb-1 block text-sm font-medium">
             Nombre *
           </label>
-          <Input
+          <Input suppressHydrationWarning
             id="review-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -182,7 +182,7 @@ function ReviewForm({ onSuccess, tenantSlug }: { onSuccess: () => void; tenantSl
           <label htmlFor="review-email" className="mb-1 block text-sm font-medium">
             Email <span className="text-muted-foreground">(opcional)</span>
           </label>
-          <Input
+          <Input suppressHydrationWarning
             id="review-email"
             type="email"
             value={email}
