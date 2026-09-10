@@ -139,6 +139,42 @@ function getInitials(name: string | null, email: string | null) {
 // Stat card
 // ---------------------------------------------------------------------------
 
+
+function ActionDetailsPreview({ details }: { details: unknown }) {
+  if (!details || typeof details !== 'object') return null
+  const d = details as Record<string, any>
+  
+  const entries: string[] = []
+  if (d.message) entries.push(d.message)
+  if (d.target_email) entries.push(`Destino: ${d.target_email}`)
+  if (d.role) entries.push(`Rol: ${d.role}`)
+  if (d.reason) entries.push(`Motivo: ${d.reason}`)
+  if (d.status) entries.push(`Estado: ${d.status}`)
+  if (d.plan) entries.push(`Plan: ${d.plan}`)
+  if (d.amount) entries.push(`Monto: ${d.amount}`)
+  
+  if (entries.length === 0) {
+    const keys = Object.keys(d).filter(k => k !== 'organization_id' && k !== 'record_id')
+    for (const k of keys.slice(0, 2)) {
+      if (typeof d[k] === 'string' || typeof d[k] === 'number') {
+        entries.push(`${k}: ${d[k]}`)
+      }
+    }
+  }
+
+  if (entries.length === 0) return null
+
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {entries.slice(0, 3).map((e, i) => (
+        <span key={i} className="inline-block rounded bg-slate-100/80 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+          {e}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function StatCard({ label, value, sub, icon: Icon, tone = 'default' }: {
   label: string; value: string | number; sub: string
   icon: React.ComponentType<{ className?: string }>
@@ -624,14 +660,14 @@ export function AuditLogsDashboard({
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px]">
-              <thead className="border-b border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50">
+              <thead className="sticky top-0 z-10 border-b border-slate-100 bg-slate-50/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
                 <tr>
                   <th className={cn(thClass, 'pl-4 w-24')}>
                     <button className={thBtn} onClick={() => toggleSort('date')}>
                       Fecha <SortIndicator active={sortKey === 'date'} direction={sortDir} />
                     </button>
                   </th>
-                  <th className={thClass}>
+                  <th className={cn(thClass, 'w-64')}>
                     <button className={thBtn} onClick={() => toggleSort('action')}>
                       Acción <SortIndicator active={sortKey === 'action'} direction={sortDir} />
                     </button>
@@ -682,7 +718,7 @@ export function AuditLogsDashboard({
                         }
                       }}
                       className={cn(
-                        'cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400 dark:border-slate-800 dark:hover:bg-slate-800/40',
+                        'cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 even:bg-slate-50/50 focus:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400 dark:border-slate-800 dark:hover:bg-slate-800/40 dark:even:bg-slate-900/20',
                         (r.severity === 'critical' || r.severity === 'high') && 'bg-orange-50/30 dark:bg-orange-950/10'
                       )}
                     >
@@ -705,6 +741,7 @@ export function AuditLogsDashboard({
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{actionMeta.label}</p>
                             <p className="truncate text-[10px] font-mono text-slate-400">{r.action}</p>
+                            <ActionDetailsPreview details={r.details} />
                           </div>
                         </div>
                       </td>
@@ -717,6 +754,9 @@ export function AuditLogsDashboard({
                         </div>
                         {r.resourceName && (
                           <p className="mt-0.5 truncate text-[11px] text-indigo-600 dark:text-indigo-400">{r.resourceName}</p>
+                        )}
+                        {r.resourceId && !r.resourceName && (
+                          <p className="mt-0.5 truncate text-[10px] font-mono text-slate-400">ID: {r.resourceId.slice(0, 12)}...</p>
                         )}
                       </td>
 
