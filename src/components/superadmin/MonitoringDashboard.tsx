@@ -204,7 +204,8 @@ export function MonitoringDashboard({ data }: { data: MonitoringData }) {
   const [refreshing, setRefreshing] = useState(false)
   const [eventSearch, setEventSearch] = useState('')
   const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'high' | 'medium' | 'low'>('all')
-  const [now, setNow] = useState(() => new Date().toLocaleTimeString('es-PY', { timeStyle: 'medium' }))
+  const [mounted, setMounted] = useState(false)
+  const [now, setNow] = useState('')
 
   const handleRefresh = () => {
     setRefreshing(true)
@@ -215,6 +216,8 @@ export function MonitoringDashboard({ data }: { data: MonitoringData }) {
   useAutoRefresh(autoRefresh, 15000, handleRefresh)
 
   useEffect(() => {
+    setMounted(true)
+    setNow(new Date().toLocaleTimeString('es-PY', { timeStyle: 'medium' }))
     const t = setInterval(() => setNow(new Date().toLocaleTimeString('es-PY', { timeStyle: 'medium' })), 1000)
     return () => clearInterval(t)
   }, [])
@@ -298,7 +301,7 @@ export function MonitoringDashboard({ data }: { data: MonitoringData }) {
             </div>
           </div>
           <p className="max-w-2xl text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-            Diagnóstico en vivo de tablas Supabase, latencia paralela y eventos de seguridad. Hora: <span className="font-mono font-semibold">{now}</span>
+            Diagnóstico en vivo de tablas Supabase, latencia paralela y eventos de seguridad. Hora: <span className="font-mono font-semibold">{mounted ? now : '--:--:--'}</span>
           </p>
         </div>
 
