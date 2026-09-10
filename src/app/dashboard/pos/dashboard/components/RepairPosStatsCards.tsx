@@ -120,7 +120,11 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                             {formatCurrency(repairStats.readyAmount)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {repairStats.readyCount} esperando ? {repairStats.activeCount} activos
+                            {/* «Listo» y «en taller» son el estado de ahora: estas dos
+                                consultas no filtran por fecha, aunque la seccion diga
+                                «del Período». El «?» era un separador con la
+                                codificacion rota. */}
+                            {repairStats.readyCount} esperando retiro · {repairStats.activeCount} en taller (estado actual)
                         </p>
                     </CardContent>
                 </Card>

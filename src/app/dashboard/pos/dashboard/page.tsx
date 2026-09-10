@@ -26,6 +26,7 @@ import { ProfitStatsCards } from './components/ProfitStatsCards'
 import { CreditPortfolioCards } from './components/CreditPortfolioCards'
 import { useCreditPortfolio } from './hooks/useCreditPortfolio'
 import { availablePosDashboardTabs, resolveActiveTab, showsSection } from './lib/dashboard-tabs'
+import { buildSalesCsv, salesCsvFileName } from './lib/sales-csv'
 
 import { DetailedSalesTable } from './components/DetailedSalesTable'
 
@@ -54,36 +55,26 @@ export default function POSDashboard() {
 
   const handleExport = () => {
     try {
-      if (!stats.recentSales.length) {
-        toast.error('No hay datos para exportar')
+      // Exportaba `recentSales`: las 10 ventas mas recientes, no el periodo, y
+      // con Cliente e Items en «undefined». Ahora son todas las del periodo,
+      // con las columnas de la tabla detallada.
+      if (!stats.allSales.length) {
+        toast.error('No hay ventas en el período para exportar')
         return
       }
 
-      const headers = ['ID', 'Fecha', 'Cliente', 'Método pago', 'Total', 'Items']
-      const rows = stats.recentSales.map((sale) => [
-        sale.id,
-        sale.created_at,
-        sale.customer_name,
-        sale.payment_method,
-        formatCurrency(sale.total || 0),
-        sale.items_count,
-      ])
-
-      const csvContent = [
-        headers.join(','),
-        ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
-      ].join('\n')
+      const csvContent = buildSalesCsv(stats.allSales)
 
       const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.setAttribute('href', url)
-      link.setAttribute('download', `ventas_pos_${new Date().toISOString().split('T')[0]}.csv`)
+      link.setAttribute('download', salesCsvFileName(dateRange))
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
 
-      toast.success('Exportación completada')
+      toast.success(`Exportadas ${stats.allSales.length} ventas del período`)
     } catch (e) {
       toast.error('Error al exportar datos')
       console.error(e)

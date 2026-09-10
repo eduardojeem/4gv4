@@ -13,6 +13,7 @@ import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideBu
 import { POS_DASHBOARD_GUIDE } from '@/components/dashboard/common/section-guides-data'
 
 import type { PosDashboardTabDefinition, PosDashboardViewTab } from '../lib/dashboard-tabs'
+import { QUICK_RANGES, activeQuickRange } from '../lib/pos-dashboard-range'
 
 export type { PosDashboardViewTab }
 
@@ -42,13 +43,6 @@ interface PosDashboardHeaderProps {
   availableTabs: readonly PosDashboardTabDefinition[]
 }
 
-const QUICK_RANGES = [
-  { label: 'Hoy', getRange: () => { const d = new Date(); return { from: d, to: d } } },
-  { label: '7 días', getRange: () => { const to = new Date(); const from = new Date(); from.setDate(from.getDate() - 6); return { from, to } } },
-  { label: '30 días', getRange: () => { const to = new Date(); const from = new Date(); from.setDate(from.getDate() - 29); return { from, to } } },
-  { label: 'Este mes', getRange: () => { const now = new Date(); return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now } } },
-]
-
 export function PosDashboardHeader({ dateRange, setDateRange, onExport, activeViewTab, setActiveViewTab, availableTabs }: PosDashboardHeaderProps) {
   // El encabezado decia «POS & Taller» y hablaba de reparaciones tambien en
   // organizaciones sin taller.
@@ -57,6 +51,9 @@ export function PosDashboardHeader({ dateRange, setDateRange, onExport, activeVi
   const areas = ['ventas', tieneCreditos && 'créditos', tieneTaller && 'reparaciones', 'ganancias y métodos de pago']
     .filter(Boolean)
     .join(', ')
+
+  // Cual rango rapido esta aplicado: antes ningun boton quedaba marcado.
+  const rangoActivo = activeQuickRange(dateRange)
 
   const rangeLabel = dateRange?.from
     ? dateRange.to
@@ -117,10 +114,16 @@ export function PosDashboardHeader({ dateRange, setDateRange, onExport, activeVi
         <div className="flex gap-1 rounded-lg border bg-muted/30 p-1">
           {QUICK_RANGES.map((r) => (
             <button
-              key={r.label}
+              key={r.key}
               type="button"
-              onClick={() => setDateRange(r.getRange())}
-              className="h-7 rounded-md px-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-background hover:text-slate-900 dark:hover:text-slate-50"
+              aria-pressed={rangoActivo === r.key}
+              onClick={() => setDateRange(r.getRange(new Date()))}
+              className={cn(
+                'h-7 rounded-md px-2.5 text-xs font-medium transition-colors',
+                rangoActivo === r.key
+                  ? 'bg-background font-semibold text-foreground shadow-sm'
+                  : 'text-slate-500 hover:bg-background hover:text-slate-900 dark:hover:text-slate-50'
+              )}
             >
               {r.label}
             </button>
@@ -143,6 +146,7 @@ export function PosDashboardHeader({ dateRange, setDateRange, onExport, activeVi
             <Calendar
               initialFocus
               mode="range"
+              required
               defaultMonth={dateRange?.from}
               selected={dateRange}
               onSelect={setDateRange}

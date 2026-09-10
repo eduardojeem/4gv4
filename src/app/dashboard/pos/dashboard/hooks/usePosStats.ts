@@ -1,10 +1,22 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { startOfDay, format, parseISO, endOfDay, eachDayOfInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { DateRange } from 'react-day-picker'
 import { calculateProfit, calculateSalesCost, type ProfitResult } from '../lib/pos-profit'
 import { useBranch } from '@/contexts/branch-context'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { COMPLETED_SALE_STATUSES } from '@/lib/sales-status'
+import { buildDailySales, rangeBounds } from '../lib/pos-dashboard-range'
+
+/**
+ * Solo ventas cobradas. La consulta no filtraba por estado: una venta anulada
+ * (`PUT /api/sales` puede anularla) o pendiente seguia sumando en el total, las
+ * transacciones, el ticket promedio, el grafico, los medios de pago y la
+ * ganancia. Las filas sin estado se conservan: la columna tiene default
+ * 'completed' y un nulo es una venta vieja, no una anulada.
+ */
+const COUNTED_SALES_FILTER = `status.is.null,status.in.(${COMPLETED_SALE_STATUSES.join(',')})`
 
 export interface PosStats {
     totalSales: number
@@ -124,19 +136,41 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<Error | null>(null)
     const { selectedBranch } = useBranch()
-    const organizationId = selectedBranch?.organization_id
+    // La organizacion salia solo de la sucursal seleccionada. Sin sucursal
+    // —falla la carga de sucursales o la organizacion no tiene ninguna activa—
+    // la consulta nunca corria y `loading` quedaba en true: «Cargando
+    // analíticas del POS…» para siempre.
+    const { organization: activeOrganization, isLoading: organizationLoading } = useActiveOrganization()
+    const organizationId = activeOrganization?.id ?? selectedBranch?.organization_id ?? null
+    // Cada consulta lleva un numero. Cambiar de «30 días» a «Hoy» dispara dos
+    // consultas a la vez; si la de 30 dias terminaba ultima, pisaba a la de hoy
+    // y el dashboard mostraba 30 dias con la etiqueta «Hoy».
+    const requestRef = useRef(0)
 
     const supabase = useMemo(() => createClient(), [])
 
     const fetchStats = useCallback(async () => {
-        if (!dateRange?.from || !organizationId) return
+        const requestId = ++requestRef.current
+        const esVigente = () => requestId === requestRef.current
+        const bounds = rangeBounds(dateRange)
+
+        if (!bounds || !dateRange?.from) {
+            setLoading(false)
+            return
+        }
+        if (!organizationId) {
+            if (!organizationLoading) {
+                setLoading(false)
+                setError(new Error('No hay una organización activa para mostrar estadísticas.'))
+            }
+            return
+        }
 
         setLoading(true)
         setError(null)
 
         try {
-            const from = startOfDay(dateRange.from).toISOString()
-            const to = endOfDay(dateRange.to || dateRange.from).toISOString()
+            const { from, to } = bounds
 
             // 1. Fetch Sales Summary
             const salesPromise = supabase
@@ -151,6 +185,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     customer:customers!customer_id(name)
                 `)
                 .eq('organization_id', organizationId)
+                .or(COUNTED_SALES_FILTER)
                 .gte('created_at', from)
                 .lte('created_at', to)
                 .order('created_at', { ascending: false })
@@ -189,6 +224,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     )
                 `)
                 .eq('organization_id', organizationId)
+                .or(COUNTED_SALES_FILTER)
                 .gte('created_at', from)
                 .lte('created_at', to)
                 .order('created_at', { ascending: false })
@@ -442,36 +478,12 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             const topProducts = costBreakdown.products.slice(0, 5)
             const topProduct = topProducts[0] || { name: 'N/A', sales: 0 }
 
-            // Process Daily Sales with Gap Filling
-            const daysInInterval = eachDayOfInterval({
-                start: dateRange.from,
-                end: dateRange.to || dateRange.from
-            })
-
-            const daysMap = new Map<string, { date: string; fullDate: string; sales: number; transactions: number }>()
-
-            daysInInterval.forEach(day => {
-                const key = format(day, 'dd/MM')
-                daysMap.set(key, {
-                    date: key,
-                    fullDate: format(day, 'EEEE dd/MM/yyyy', { locale: es }),
-                    sales: 0,
-                    transactions: 0
-                })
-            })
-
-            salesData?.forEach((sale: any) => {
-                const d = parseISO(sale.created_at)
-                const key = format(d, 'dd/MM')
-
-                if (daysMap.has(key)) {
-                    const entry = daysMap.get(key)!
-                    entry.sales += (sale.total || 0)
-                    entry.transactions += 1
-                }
-            })
-
-            const dailySales = Array.from(daysMap.values())
+            // Con el año en la clave: agrupaba por «dd/MM» y mezclaba el mismo dia
+            // de dos años distintos.
+            const dailySales = buildDailySales(
+                dateRange,
+                (salesData || []) as Array<{ created_at: string; total?: number | null }>
+            )
 
             // Process Payment Methods
             const methodsMap = new Map<string, number>()
@@ -512,19 +524,28 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     ...sale,
                     cost: saleCost,
                     refundAmount,
+                    itemsCount: saleItems.reduce((n: number, i: any) => n + (Number(i.quantity) || 0), 0),
                     profit: (sale.total || 0) - saleCost - refundAmount
                 }
             })
 
             // Fix recentSales missing fields
+            // La lista de recientes lee `customer_name` e `items_count`. No se
+            // armaban: cada venta figuraba como «Consumidor Final» con
+            // «undefined artículos».
             const recentSales = (recentData || []).map((sale: any) => ({
                 id: sale.id,
                 created_at: sale.created_at,
                 total: sale.total,
                 payment_method: sale.payment_method,
                 customer: sale.customer,
-                items: sale.sale_items
+                customer_name: sale.customer?.name ?? null,
+                items: sale.sale_items,
+                items_count: (sale.sale_items || []).reduce((n: number, i: any) => n + (Number(i.quantity) || 0), 0)
             }))
+
+            // Llego tarde: el usuario ya eligio otro rango.
+            if (!esVigente()) return
 
             setStats({
                 totalSales,
@@ -576,12 +597,13 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             })
 
         } catch (err) {
+            if (!esVigente()) return
             console.error('Error fetching POS stats:', err)
             setError(err instanceof Error ? err : new Error('Unknown error'))
         } finally {
-            setLoading(false)
+            if (esVigente()) setLoading(false)
         }
-    }, [dateRange, supabase, organizationId])
+    }, [dateRange, supabase, organizationId, organizationLoading])
 
     useEffect(() => {
         fetchStats()
