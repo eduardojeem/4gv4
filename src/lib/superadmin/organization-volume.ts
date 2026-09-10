@@ -399,3 +399,51 @@ export function describeCreditOrigins(byOrigin: Record<string, number>): string 
 
   return partes.length > 0 ? partes.join(' · ') : null
 }
+
+// ── Cuan viva esta la cuenta, mirando todos los canales ─────────────────────
+
+export type ActivityKind = 'sale' | 'order' | 'repair' | 'credit'
+
+export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
+  sale: 'Vendió por mostrador',
+  order: 'Recibió un pedido web',
+  repair: 'Recibió una reparación',
+  credit: 'Otorgó un crédito',
+}
+
+export interface LastActivity {
+  at: string | null
+  kind: ActivityKind | null
+  days: number | null
+}
+
+/**
+ * El ultimo movimiento de la organizacion, venga de donde venga.
+ *
+ * «Actividad» se calculaba solo con la ultima venta del mostrador. Una
+ * organizacion que financio una reparacion de 750.000 hace dos dias figuraba
+ * como «Bajo el ritmo» porque su ultima venta era de hace un mes: el rotulo
+ * decia «esta cuenta se esta apagando» sobre una que estaba operando.
+ */
+export function resolveLastActivity(
+  fuentes: Partial<Record<ActivityKind, string | null | undefined>>,
+  now: number = Date.now()
+): LastActivity {
+  let at: string | null = null
+  let kind: ActivityKind | null = null
+
+  for (const [candidato, fecha] of Object.entries(fuentes) as Array<[ActivityKind, string | null | undefined]>) {
+    if (typeof fecha !== 'string' || !fecha) continue
+    if (!at || fecha > at) {
+      at = fecha
+      kind = candidato
+    }
+  }
+
+  if (!at) return { at: null, kind: null, days: null }
+
+  const marca = new Date(at).getTime()
+  if (!Number.isFinite(marca)) return { at: null, kind: null, days: null }
+
+  return { at, kind, days: Math.max(0, Math.floor((now - marca) / 86_400_000)) }
+}

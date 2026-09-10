@@ -315,3 +315,30 @@ describe('el origen de la cartera se muestra', () => {
     expect(screen.queryByText(/no nació de una venta/)).not.toBeInTheDocument()
   })
 })
+
+/**
+ * El caso real de HCA Celular: ultima venta hace 34 dias, credito de taller
+ * hace 2. La cuenta esta operando.
+ */
+describe('la actividad no depende solo del mostrador', () => {
+  it('un crédito reciente mantiene la cuenta como operando', () => {
+    render(<OrganizationDetailView data={base({
+      credit_summary: {
+        ...base().credit_summary!,
+        lastCreditAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+      },
+    })} />)
+    expect(screen.getByText('Operando')).toBeInTheDocument()
+    expect(screen.getByText(/Otorgó un crédito hace 2 días/)).toBeInTheDocument()
+  })
+
+  it('sin ningún movimiento en ningún canal lo dice', () => {
+    render(<OrganizationDetailView data={base({
+      activity: { revenueTotal: 0, revenueLast30: 0, completedSales: 0, totalSales: 0, lastSaleAt: null, daysSinceLastSale: null },
+      credit_summary: { ...base().credit_summary!, lastCreditAt: null },
+      repair_summary: { ...base().repair_summary!, lastRepairAt: null },
+    })} />)
+    expect(screen.getByText('Sin ningún movimiento registrado')).toBeInTheDocument()
+    expect(screen.getByText('Nunca vendió')).toBeInTheDocument()
+  })
+})

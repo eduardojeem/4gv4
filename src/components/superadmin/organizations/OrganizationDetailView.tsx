@@ -73,8 +73,10 @@ import {
   type ResolvedField,
 } from '@/lib/superadmin/organization-profile'
 import {
+  ACTIVITY_KIND_LABELS,
   billingCoverage,
   describeCreditOrigins,
+  resolveLastActivity,
   type BillingSummary,
   type CreditSummary,
   type OnlineSummary,
@@ -791,7 +793,16 @@ export function OrganizationDetailView({ data }: Props) {
     antiguedad?.days ?? null
   )
 
-  const activityLevel = getActivityLevel(activity.daysSinceLastSale)
+  // «Actividad» miraba solo la ultima venta del mostrador: una organizacion
+  // que financio una reparacion hace dos dias figuraba como «Bajo el ritmo»
+  // porque su ultima venta era de hace un mes.
+  const ultimoMovimiento = resolveLastActivity({
+    sale: activity.lastSaleAt,
+    order: online_summary?.lastOrderAt,
+    repair: repair_summary?.lastRepairAt,
+    credit: credit_summary?.lastCreditAt,
+  })
+  const activityLevel = getActivityLevel(ultimoMovimiento.days)
   const currency = settings?.currency || 'PYG'
   const storefrontPublic = org.storefront_public === true
 
@@ -1115,11 +1126,15 @@ export function OrganizationDetailView({ data }: Props) {
               label="Actividad"
               value={ACTIVITY_LABELS[activityLevel]}
               hint={
-                activity.daysSinceLastSale === null
-                  ? 'Nunca registró una venta'
-                  : activity.daysSinceLastSale === 0
-                    ? 'Vendió hoy'
-                    : `Última venta hace ${activity.daysSinceLastSale} días`
+                ultimoMovimiento.kind === null
+                  ? 'Sin ningún movimiento registrado'
+                  : `${ACTIVITY_KIND_LABELS[ultimoMovimiento.kind]} ${
+                      ultimoMovimiento.days === 0
+                        ? 'hoy'
+                        : ultimoMovimiento.days === 1
+                          ? 'ayer'
+                          : `hace ${ultimoMovimiento.days} días`
+                    }`
               }
               warn={activityLevel === 'dormant' || activityLevel === 'never'}
               icon={Activity}

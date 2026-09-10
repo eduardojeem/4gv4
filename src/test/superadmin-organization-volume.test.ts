@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   billingCoverage,
   describeCreditOrigins,
+  resolveLastActivity,
   summarizeCredits,
   summarizeOnlineOrders,
   summarizeRepairs,
@@ -340,5 +341,58 @@ describe('de dónde nació cada crédito', () => {
   it('la vista explica por qué el capital puede superar lo facturado', () => {
     expect(VISTA).toContain('no nació de una venta')
     expect(VISTA).toContain("origen !== 'sale'")
+  })
+})
+
+/**
+ * HCA Celular financio una reparacion de ₲750.000 el 2026-09-07 y su ultima
+ * venta de mostrador es del 2026-08-06. La ficha decia «Bajo el ritmo»: el
+ * rotulo afirmaba que la cuenta se estaba apagando sobre una que operaba
+ * anteayer.
+ */
+describe('cuán viva está la cuenta se mide con todos los canales', () => {
+  const AHORA = new Date('2026-09-09T12:00:00Z').getTime()
+
+  it('el último movimiento puede no ser una venta', () => {
+    const r = resolveLastActivity(
+      {
+        sale: '2026-08-06T21:43:00Z',
+        credit: '2026-09-07T18:14:19Z',
+      },
+      AHORA
+    )
+    expect(r.kind).toBe('credit')
+    expect(r.days).toBe(1)
+  })
+
+  it('gana el más reciente, sin importar de qué canal venga', () => {
+    const r = resolveLastActivity(
+      {
+        sale: '2026-09-08T00:00:00Z',
+        order: '2026-09-01T00:00:00Z',
+        repair: '2026-08-01T00:00:00Z',
+      },
+      AHORA
+    )
+    expect(r.kind).toBe('sale')
+  })
+
+  it('las fuentes vacías se ignoran', () => {
+    const r = resolveLastActivity({ sale: null, order: undefined, repair: '2026-09-05T00:00:00Z' }, AHORA)
+    expect(r.kind).toBe('repair')
+  })
+
+  it('sin ningún movimiento no inventa una fecha', () => {
+    expect(resolveLastActivity({}, AHORA)).toEqual({ at: null, kind: null, days: null })
+    expect(resolveLastActivity({ sale: null, credit: null }, AHORA).days).toBeNull()
+  })
+
+  it('una fecha corrupta no se toma como movimiento', () => {
+    expect(resolveLastActivity({ sale: 'no es una fecha' }, AHORA).days).toBeNull()
+  })
+
+  it('la vista usa el movimiento combinado, no la última venta', () => {
+    expect(VISTA).toContain('const activityLevel = getActivityLevel(ultimoMovimiento.days)')
+    expect(VISTA).toContain('credit: credit_summary?.lastCreditAt')
   })
 })
