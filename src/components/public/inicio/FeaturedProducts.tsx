@@ -77,6 +77,13 @@ export function FeaturedProducts() {
       result = result.filter((p) => p.category?.id === selectedCategory)
     }
 
+    // Agotados siempre al final del grid
+    result = [...result].sort((a, b) => {
+      const aStock = a.in_stock ? 0 : 1
+      const bStock = b.in_stock ? 0 : 1
+      return aStock - bStock
+    })
+
     return result
   }, [products, selectedCategory, activeSpecialTab])
 
@@ -103,13 +110,13 @@ export function FeaturedProducts() {
             <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
               {storefrontStyle === 'classic'
                 ? 'Descubrí los artículos en stock con garantía, opciones de financiación y entrega inmediata.'
-                : 'Lo que acaba de llegar, listo para comprar.'}
+                : 'Descubrí las últimas novedades y prendas destacadas de nuestra tienda.'}
             </p>
           </div>
 
-          <Button asChild variant="outline" className="hidden sm:inline-flex rounded-xl font-bold shadow-xs gap-1.5">
+          <Button asChild variant="outline" className="hidden sm:inline-flex rounded-full font-bold shadow-xs gap-1.5 px-5">
             <Link href={`${tenantPrefix}/productos`}>
-              <span>Ver catálogo completo ({products.length})</span>
+              <span>Ver todos ({products.length})</span>
               <ArrowRight className="h-4 w-4 text-primary" />
             </Link>
           </Button>

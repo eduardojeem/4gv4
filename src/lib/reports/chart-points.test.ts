@@ -106,7 +106,7 @@ describe('cada dataset dice que es, en vez de deducirse por su posicion', () => 
   })
 
   it('los dos tableros declaran sus secciones', () => {
-    const REPORTES = leer('src/app/dashboard/reports/page.tsx')
+    const REPORTES = leer('src/components/admin/reports/operational-reports.tsx')
     const ADMIN = leer('src/components/admin/reports/analytics-dashboard.tsx')
 
     expect(REPORTES).toContain("{ id: 'sales', rows: salesData },")

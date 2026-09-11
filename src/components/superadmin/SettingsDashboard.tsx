@@ -28,6 +28,16 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -51,7 +61,8 @@ export type SettingsData = {
     topTimezone: string | null
     currencyDistribution: Array<{ value: string; count: number }>
   }
-  envChecks: Array<{ key: string; configured: boolean }>
+  envChecks: Array<{ key: string; configured: boolean; required: boolean }>
+  loadIssues: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +78,16 @@ function formatDate(value: string | null) {
 function buildPatch(field: keyof SettingsData['system'], value: boolean | number | string): Record<string, unknown> {
   // El schema usa los nombres camelCase a nivel UI; el endpoint los pasa por mapSettingsToDB
   return { [field]: value }
+}
+
+export function summarizeEnvChecks(envChecks: SettingsData['envChecks']) {
+  const required = envChecks.filter((item) => item.required)
+  return {
+    requiredConfigured: required.filter((item) => item.configured).length,
+    requiredTotal: required.length,
+    requiredMissing: required.filter((item) => !item.configured).length,
+    optionalMissing: envChecks.filter((item) => !item.required && !item.configured).length,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +134,7 @@ function StatCard({ label, value, sub, icon: Icon, tone = 'default' }: {
 function ToggleRow({
   label, sub, checked, onChange, loading,
   icon: Icon, dangerWhen, recommendWhen,
+  disabled = false, integrationPending = false,
 }: {
   label: string
   sub: string
@@ -122,6 +144,8 @@ function ToggleRow({
   icon: React.ComponentType<{ className?: string }>
   dangerWhen?: boolean
   recommendWhen?: boolean
+  disabled?: boolean
+  integrationPending?: boolean
 }) {
   return (
     <div className={cn(
@@ -140,6 +164,11 @@ function ToggleRow({
                 Recomendado
               </Badge>
             )}
+            {integrationPending && (
+              <Badge variant="outline" className="rounded-full border-slate-200 bg-slate-50 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                Integración pendiente
+              </Badge>
+            )}
           </div>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{sub}</p>
         </div>
@@ -148,7 +177,12 @@ function ToggleRow({
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
         ) : (
-          <Switch checked={checked} onCheckedChange={onChange} />
+          <Switch
+            aria-label={label}
+            checked={checked}
+            onCheckedChange={onChange}
+            disabled={disabled}
+          />
         )}
       </div>
     </div>
@@ -163,6 +197,7 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
   const router = useRouter()
   const [system, setSystem] = useState(initial.system)
   const [loadingField, setLoadingField] = useState<keyof SettingsData['system'] | null>(null)
+  const [pendingMaintenance, setPendingMaintenance] = useState<boolean | null>(null)
 
   async function updateField<K extends keyof SettingsData['system']>(field: K, value: SettingsData['system'][K]) {
     setLoadingField(field)
@@ -192,8 +227,7 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
     }
   }
 
-  const missingEnv = initial.envChecks.filter((e) => !e.configured)
-  const configuredEnv = initial.envChecks.length - missingEnv.length
+  const envSummary = summarizeEnvChecks(initial.envChecks)
 
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-6">
@@ -205,40 +239,55 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
             <Wrench className="h-3.5 w-3.5" />
             Configuración SaaS
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Settings globales</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Configuración global</h1>
           <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-            Parámetros que afectan a toda la plataforma. Los cambios se aplican inmediatamente y se registran en el audit log.
+            Estado central de la plataforma. Cada control indica si hoy tiene aplicación operativa o si solo está almacenado para una integración futura.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => router.refresh()}>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button variant="outline" size="sm" className="w-full gap-2 sm:w-auto" onClick={() => router.refresh()}>
             <RefreshCw className="h-3.5 w-3.5" />
             Actualizar
           </Button>
-          <Button asChild variant="outline" size="sm" className="gap-2">
-            <Link href="/admin/settings">
+          <Button asChild variant="outline" size="sm" className="w-full gap-2 sm:w-auto">
+            <Link href="/superadmin/organizations/settings">
               <ExternalLink className="h-3.5 w-3.5" />
-              Editor completo
+              Configurar organizaciones
             </Link>
           </Button>
         </div>
       </header>
+
+      {initial.loadIssues.length > 0 && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-900 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-200">
+          <div className="flex items-start gap-3">
+            <XCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-semibold">Datos incompletos</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
+                {initial.loadIssues.map((issue) => <li key={issue}>{issue}</li>)}
+              </ul>
+              <p className="mt-2 text-xs">Revisá la conexión antes de tomar decisiones o guardar cambios.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Maintenance alert */}
       {system.maintenanceMode && (
         <div className="flex items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 dark:border-orange-900/50 dark:bg-orange-950/20">
           <AlertTriangle className="h-5 w-5 shrink-0 text-orange-600 dark:text-orange-400" />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">Modo mantenimiento ACTIVO</p>
+            <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">Indicador global de mantenimiento activado</p>
             <p className="text-xs text-orange-700 dark:text-orange-400">
-              La plataforma está cerrada para los usuarios. Solo super admins pueden acceder.
+              Este valor está almacenado, pero todavía no bloquea el acceso global. El mantenimiento público de cada tienda se administra por separado.
             </p>
           </div>
           <Button
             size="sm"
             variant="outline"
             className="shrink-0 border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300"
-            onClick={() => updateField('maintenanceMode', false)}
+            onClick={() => setPendingMaintenance(false)}
             disabled={loadingField === 'maintenanceMode'}
           >
             Desactivar
@@ -252,10 +301,10 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
         <StatCard label="Moneda principal" value={system.currency} sub={initial.platformStats.topCurrency && initial.platformStats.topCurrency !== system.currency ? `Orgs usan: ${initial.platformStats.topCurrency}` : 'Default del sistema'} icon={Banknote} tone="info" />
         <StatCard
           label="Env vars"
-          value={`${configuredEnv}/${initial.envChecks.length}`}
-          sub={missingEnv.length > 0 ? `${missingEnv.length} faltan` : 'todas configuradas'}
+          value={`${envSummary.requiredConfigured}/${envSummary.requiredTotal}`}
+          sub={envSummary.requiredMissing > 0 ? `${envSummary.requiredMissing} críticas faltan` : 'críticas configuradas'}
           icon={Key}
-          tone={missingEnv.length === 0 ? 'success' : 'warning'}
+          tone={envSummary.requiredMissing === 0 ? 'success' : 'warning'}
         />
         <StatCard
           label="Última edición"
@@ -291,6 +340,8 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
                 checked={system.allowRegistration}
                 onChange={(v) => updateField('allowRegistration', v)}
                 loading={loadingField === 'allowRegistration'}
+                disabled
+                integrationPending
               />
               <ToggleRow
                 icon={Mail}
@@ -300,15 +351,18 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
                 onChange={(v) => updateField('requireEmailVerification', v)}
                 loading={loadingField === 'requireEmailVerification'}
                 recommendWhen
+                disabled
+                integrationPending
               />
               <ToggleRow
                 icon={AlertTriangle}
                 label="Modo mantenimiento"
-                sub="Bloquea el acceso a toda la plataforma (excepto super admins)"
+                sub="Guarda la intención de mantenimiento global; todavía no aplica el bloqueo"
                 checked={system.maintenanceMode}
-                onChange={(v) => updateField('maintenanceMode', v)}
+                onChange={setPendingMaintenance}
                 loading={loadingField === 'maintenanceMode'}
                 dangerWhen={system.maintenanceMode}
+                integrationPending
               />
             </CardContent>
           </Card>
@@ -335,6 +389,8 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
                 onChange={(v) => updateField('requireTwoFactor', v)}
                 loading={loadingField === 'requireTwoFactor'}
                 recommendWhen
+                disabled
+                integrationPending
               />
 
               <div className="grid gap-3 sm:grid-cols-3 rounded-lg border bg-muted/30 p-3">
@@ -370,6 +426,8 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
                 onChange={(v) => updateField('autoBackup', v)}
                 loading={loadingField === 'autoBackup'}
                 recommendWhen
+                disabled
+                integrationPending
               />
               <ToggleRow
                 icon={Mail}
@@ -378,6 +436,8 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
                 checked={system.emailNotifications}
                 onChange={(v) => updateField('emailNotifications', v)}
                 loading={loadingField === 'emailNotifications'}
+                disabled
+                integrationPending
               />
               <ToggleRow
                 icon={Mail}
@@ -386,6 +446,8 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
                 checked={system.smsNotifications}
                 onChange={(v) => updateField('smsNotifications', v)}
                 loading={loadingField === 'smsNotifications'}
+                disabled
+                integrationPending
               />
             </CardContent>
           </Card>
@@ -421,6 +483,7 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
                       : <XCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
                     }
                     <code className="truncate font-mono text-[11px] text-slate-700 dark:text-slate-300">{e.key}</code>
+                    {!e.required && <span className="ml-auto text-[10px] text-slate-500">Opcional</span>}
                   </div>
                 ))}
               </div>
@@ -467,7 +530,6 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
             </CardHeader>
             <CardContent className="space-y-1">
               {[
-                { href: '/admin/settings', icon: Wrench, label: 'Editor completo de settings' },
                 { href: '/superadmin/organizations/settings', icon: Building2, label: 'Configuración de tenants' },
                 { href: '/superadmin/audit-logs', icon: Database, label: 'Audit log' },
                 { href: '/superadmin/monitoring', icon: Shield, label: 'Monitoreo del sistema' },
@@ -489,6 +551,28 @@ export function SettingsDashboard({ initial }: { initial: SettingsData }) {
           </Card>
         </div>
       </div>
+
+      <AlertDialog open={pendingMaintenance !== null} onOpenChange={(open) => !open && setPendingMaintenance(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Guardar el indicador de mantenimiento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Este ajuste queda registrado globalmente, pero no bloquea actualmente el acceso de usuarios ni reemplaza el mantenimiento público configurado por organización.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingMaintenance !== null) void updateField('maintenanceMode', pendingMaintenance)
+                setPendingMaintenance(null)
+              }}
+            >
+              Guardar configuración
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

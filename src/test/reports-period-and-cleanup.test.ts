@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 const hay = (ruta: string) => existsSync(resolve(process.cwd(), ruta))
 
-const REPORTES = leer('src/app/dashboard/reports/page.tsx')
+const REPORTES = leer('src/components/admin/reports/operational-reports.tsx')
 const EXPORTADOR = leer('src/lib/reports/section-pdf-exporter.ts')
 
 /**

@@ -186,27 +186,42 @@ const CAROUSEL_EXAMPLES: Array<{
     slide: {
       title: 'Nueva Colección de Temporada',
       message: 'Renová tu estilo con las últimas tendencias en prendas y calzados exclusivos.',
-      imageUrl: '/images/promotional-carousel/accesorios.webp',
+      imageUrl: '/images/promotional-carousel/hero-moda-esenciales.jpg',
       imageAlt: 'Prendas de vestir y ropa de moda',
       ctaText: 'Ver colección',
+      ctaHref: '/productos',
+      textTone: 'dark',
+      contentAlign: 'right',
+    },
+  },
+  {
+    name: 'Moda Urbana & Streetwear',
+    category: 'Moda & Ropa',
+    badgeIcon: '🔥',
+    slide: {
+      title: 'Estilo Urbano & Calce Relajado',
+      message: 'Prendas básicas y oversize confeccionadas en algodón peinado premium para todo el día.',
+      imageUrl: '/images/promotional-carousel/hero-moda-urbana.jpg',
+      imageAlt: 'Modelos vistiendo prendas urbanas oversize y hoodies de moda',
+      ctaText: 'Ver catálogo',
       ctaHref: '/productos',
       textTone: 'light',
       contentAlign: 'left',
     },
   },
   {
-    name: 'Liquidación de Temporada',
+    name: 'Uniformes & Línea Corporativa',
     category: 'Moda & Ropa',
-    badgeIcon: '🔥',
+    badgeIcon: '💼',
     slide: {
-      title: 'Liquidación con hasta 40% OFF',
-      message: 'Aprovechá descuentos imperdibles en prendas seleccionadas hasta agotar stock.',
-      imageUrl: '/images/promotional-carousel/renovacion.webp',
-      imageAlt: 'Ofertas de temporada en ropa y calzado',
-      ctaText: 'Ver liquidación',
-      ctaHref: '/productos?ofertas=true',
+      title: 'Prendas Corporativas para Empresas',
+      message: 'Camperas softshell, chombas polo y remeras con bordado de tu marca y precio mayorista.',
+      imageUrl: '/images/promotional-carousel/hero-linea-corporativa.jpg',
+      imageAlt: 'Equipo corporativo profesional con uniformes institucionales y camperas softshell',
+      ctaText: 'Ver Línea Empresas',
+      ctaHref: '/productos',
       textTone: 'dark',
-      contentAlign: 'center',
+      contentAlign: 'right',
     },
   },
   {
@@ -705,9 +720,15 @@ export function PromotionalCarouselEditor({
       return
     }
     const exists = current.slides.some((slide) => slide.id === editingSlide.id)
-    patch('slides', exists
+    const nextSlides = exists
       ? current.slides.map((slide) => slide.id === editingSlide.id ? editingSlide : slide)
-      : [...current.slides, editingSlide])
+      : [...current.slides, editingSlide]
+    setDraft((previous) => ({
+      ...(previous ?? current),
+      slides: nextSlides,
+      // Si el usuario agrega su primera diapositiva y estaba deshabilitado, activarlo automáticamente
+      enabled: true,
+    }))
     setDialogOpen(false)
     setEditingSlide(null)
     setFieldErrors({})

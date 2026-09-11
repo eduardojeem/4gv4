@@ -5,24 +5,15 @@ import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { usePathname } from 'next/navigation'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Grid3X3, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { usePublicCategories } from '@/hooks/usePublicCategories'
-import {
-  STOREFRONT_EYEBROW_CLASS,
-  STOREFRONT_HEADING_CLASS,
-  STOREFRONT_RADIUS_CLASS,
-  type StorefrontStyle,
-} from '@/lib/website/storefront-style'
+import type { StorefrontStyle } from '@/lib/website/storefront-style'
 import type { PublicProduct } from '@/types/public'
 import { NEWEST_PRODUCTS_SWR_OPTIONS, fetchPublicProducts, newestProductsKey } from './newest-products'
 
-/**
- * La foto de cada categoria: la del producto mas nuevo que tenga imagen. Las
- * categorias no tienen foto propia.
- */
 export function categoryCoverImages(products: PublicProduct[]): Map<string, string> {
   const covers = new Map<string, string>()
   for (const product of products) {
@@ -34,30 +25,35 @@ export function categoryCoverImages(products: PublicProduct[]): Map<string, stri
   return covers
 }
 
-/**
- * Categorias como colecciones con foto, para Moda y Deportivo. El aspecto
- * clasico usa iconos pensados para tecnologia y electrodomesticos.
- */
-export function CategoryCollections({ style }: { style: Exclude<StorefrontStyle, 'classic'> }) {
+interface CollectionItem {
+  id: string
+  name: string
+  tag?: string
+  href: string
+  imageUrl: string
+  count?: number
+}
+
+export function CategoryCollections({ style: _style }: { style: Exclude<StorefrontStyle, 'classic'> }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)
   }, [])
+
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
   const { categories, isLoading } = usePublicCategories()
   const { data: products } = useSWR(newestProductsKey(tenantSlug), fetchPublicProducts, NEWEST_PRODUCTS_SWR_OPTIONS)
-  const radius = STOREFRONT_RADIUS_CLASS[style]
 
   if (!mounted || isLoading) {
     return (
       <section className="border-b border-border/80 bg-background py-12 sm:py-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-8 h-9 w-56 animate-pulse bg-muted" />
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
+          <div className="mx-auto mb-8 h-8 w-56 animate-pulse rounded-xl bg-muted text-center" />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-6">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className={cn('aspect-[3/4] animate-pulse bg-muted', radius)} />
+              <div key={i} className="aspect-[4/5] animate-pulse rounded-2xl bg-muted" />
             ))}
           </div>
         </div>
@@ -65,81 +61,151 @@ export function CategoryCollections({ style }: { style: Exclude<StorefrontStyle,
     )
   }
 
-  const hasCounts = categories.some((c) => typeof c.productCount === 'number')
-  const withProducts = hasCounts ? categories.filter((c) => (c.productCount ?? 0) > 0) : categories
-  if (withProducts.length === 0) return null
-
-  const items = [...withProducts]
-    .sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0) || a.name.localeCompare(b.name))
-    .slice(0, 8)
   const covers = categoryCoverImages(products ?? [])
+  const validDbCategories = categories.filter((c) => (c.productCount ?? 0) > 0)
+
+  // Armar colecciones basadas 100% en las categorías reales de la base de datos
+  const dbCollections: CollectionItem[] = validDbCategories.map((cat) => {
+    const cover = covers.get(cat.id)
+    const fallbackImage = cat.name.toLowerCase().includes('corporat') || cat.name.toLowerCase().includes('empresa')
+      ? '/images/products/campera-softshell-corporativa.jpg'
+      : '/images/products/remera-basica-blanca.jpg'
+
+    return {
+      id: cat.id,
+      name: cat.name,
+      tag: cat.name.toLowerCase().includes('corporat') ? 'Empresas' : 'Colección',
+      href: `${tenantPrefix}/productos?category_id=${encodeURIComponent(cat.id)}`,
+      imageUrl: cover ? resolveProductImageUrl(cover) : fallbackImage,
+      count: cat.productCount,
+    }
+  })
+
+  let displayCollections: CollectionItem[] = []
+
+  if (dbCollections.length >= 4) {
+    displayCollections = dbCollections.slice(0, 8)
+  } else if (dbCollections.length > 0) {
+    // Si hay menos de 4 categorías en BD, mostramos todas las categorías reales existentes
+    // y completamos la grilla de forma elegante con enlaces directos a Ofertas y Catálogo
+    displayCollections = [...dbCollections]
+
+    if (displayCollections.length < 3) {
+      displayCollections.push({
+        id: 'col-ofertas',
+        name: 'Ofertas de Temporada',
+        tag: 'Precios Especiales',
+        href: `${tenantPrefix}/ofertas`,
+        imageUrl: '/images/promotional-carousel/hero-moda-esenciales.jpg',
+      })
+    }
+
+    if (displayCollections.length < 4) {
+      displayCollections.push({
+        id: 'col-catalogo-completo',
+        name: 'Catálogo Completo',
+        tag: 'Todas las Prendas',
+        href: `${tenantPrefix}/productos`,
+        imageUrl: '/images/promotional-carousel/hero-moda-urbana.jpg',
+        count: products?.length,
+      })
+    }
+  } else {
+    // Si todavía no hay categorías creadas
+    displayCollections = [
+      {
+        id: 'col-catalogo-completo',
+        name: 'Catálogo General',
+        tag: 'Colección',
+        href: `${tenantPrefix}/productos`,
+        imageUrl: '/images/promotional-carousel/hero-moda-esenciales.jpg',
+      }
+    ]
+  }
 
   return (
-    <section aria-labelledby="colecciones-titulo" className="border-b border-border/80 bg-background py-12 sm:py-16">
+    <section aria-labelledby="categorias-principales-titulo" className="border-b border-border/70 bg-background py-12 sm:py-16">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 flex items-end justify-between gap-4">
-          <div>
-            <span className={STOREFRONT_EYEBROW_CLASS[style]}>Colecciones</span>
-            <h2 id="colecciones-titulo" className={cn('mt-2 text-2xl text-foreground sm:text-4xl', STOREFRONT_HEADING_CLASS[style])}>
-              Comprá por categoría
-            </h2>
-          </div>
-          <Link
-            href={`${tenantPrefix}/productos`}
-            className="group inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-foreground transition-colors hover:text-primary"
+        {/* Cabecera estilo boutique editorial */}
+        <div className="mb-8 sm:mb-12 flex flex-col items-center text-center">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-primary mb-2">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            Explorá nuestras colecciones
+          </span>
+          <h2
+            id="categorias-principales-titulo"
+            className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground"
           >
-            <span>Ver todo</span>
-            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 motion-safe:transition-transform motion-safe:group-hover:translate-x-1" />
-          </Link>
+            Colecciones Destacadas
+          </h2>
+          <p className="mt-2 text-xs sm:text-sm text-muted-foreground max-w-lg">
+            Encontrá el corte, modelo y color ideal para tu estilo en nuestras líneas exclusivas.
+          </p>
         </div>
 
-        <ul className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
-          {items.map((category) => {
-            const cover = covers.get(category.id)
-            const coverSrc = cover ? resolveProductImageUrl(cover) : null
-            const count = category.productCount ?? 0
+        {/* Grilla editorial vertical aspect-[4/5] */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-6">
+          {displayCollections.map((col) => {
             return (
-              <li key={category.id}>
+              <div key={col.id} className="group relative">
                 <Link
-                  href={`${tenantPrefix}/productos?category_id=${encodeURIComponent(category.id)}`}
-                  className={cn(
-                    'group relative block aspect-[3/4] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
-                    radius,
-                    coverSrc ? 'bg-muted' : 'bg-primary'
-                  )}
+                  href={col.href}
+                  className="relative block aspect-[4/5] overflow-hidden rounded-2xl border border-border/60 bg-muted/40 shadow-sm transition-all duration-500 hover:shadow-xl hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
-                  {coverSrc && (
-                    <Image
-                      src={coverSrc}
-                      alt=""
-                      fill
-                      sizes="(max-width: 768px) 50vw, 25vw"
-                      className="object-cover motion-safe:transition-transform motion-safe:duration-700 motion-safe:group-hover:scale-[1.04]"
-                      unoptimized={coverSrc.startsWith('data:')}
-                    />
+                  <Image
+                    src={col.imageUrl}
+                    alt={col.name}
+                    fill
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 50vw, 25vw"
+                    className="object-cover transition-transform duration-700 ease-out group-hover:scale-108"
+                    unoptimized={col.imageUrl.startsWith('data:')}
+                  />
+
+                  {/* Gradiente oscuro inferior para texto nítido */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10 transition-opacity duration-300 group-hover:opacity-95" />
+
+                  {/* Tag superior */}
+                  {col.tag && (
+                    <div className="absolute top-3.5 left-3.5 z-10">
+                      <span className="inline-block rounded-full bg-white/20 backdrop-blur-md px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white border border-white/20">
+                        {col.tag}
+                      </span>
+                    </div>
                   )}
-                  <span
-                    className={cn(
-                      'absolute inset-x-0 bottom-0 flex flex-col gap-1 p-3 sm:p-4',
-                      coverSrc
-                        ? 'bg-gradient-to-t from-black/70 via-black/25 to-transparent pt-16 text-white'
-                        : 'text-primary-foreground'
-                    )}
-                  >
-                    <span className={cn('line-clamp-2 text-lg leading-tight sm:text-xl', STOREFRONT_HEADING_CLASS[style])}>
-                      {category.name}
-                    </span>
-                    {count > 0 && (
-                      <span className="text-[11px] font-medium uppercase tracking-widest opacity-80">
-                        {count} {count === 1 ? 'producto' : 'productos'}
+
+                  {/* Contenido en blanco abajo */}
+                  <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 flex flex-col justify-end text-white z-10">
+                    <h3 className="text-base sm:text-lg font-bold leading-tight text-white group-hover:text-white transition-colors line-clamp-1">
+                      {col.name}
+                    </h3>
+
+                    {typeof col.count === 'number' && col.count > 0 && (
+                      <span className="text-[11px] font-medium text-slate-300 mt-0.5">
+                        {col.count} {col.count === 1 ? 'modelo' : 'modelos'}
                       </span>
                     )}
-                  </span>
+
+                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-white/90 group-hover:text-white group-hover:translate-x-1 transition-all">
+                      <span>Ver colección</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </div>
+                  </div>
                 </Link>
-              </li>
+              </div>
             )
           })}
-        </ul>
+        </div>
+
+        {/* Enlace para ver todo el catálogo */}
+        <div className="mt-8 text-center sm:hidden">
+          <Link
+            href={`${tenantPrefix}/productos`}
+            className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary hover:underline"
+          >
+            <span>Ver todo el catálogo</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </div>
     </section>
   )

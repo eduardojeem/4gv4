@@ -255,6 +255,21 @@ export interface TrustBarSettings {
   items: TrustBarItem[]
 }
 
+export interface BrandItemSettings {
+  id: string
+  name: string
+  active: boolean
+  imageUrl?: string
+  href?: string
+}
+
+export interface BrandsSectionSettings {
+  enabled: boolean
+  title: string
+  subtitle?: string
+  items: BrandItemSettings[]
+}
+
 export interface WebsiteSettings {
   company_info: CompanyInfo
   hero_content?: HeroContent
@@ -264,6 +279,7 @@ export interface WebsiteSettings {
   /** Mismo banner que promotional_carousel, pero para la pagina /ofertas. */
   offers_carousel?: PromotionalCarouselSettings
   trust_bar?: TrustBarSettings
+  brands_section?: BrandsSectionSettings
   product_credit_defaults?: ProductCreditDefaults
   services_section?: ServicesSectionSettings
   services: Service[]

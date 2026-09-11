@@ -11,6 +11,8 @@ import {
   Activity,
   AlertCircle,
   CheckCircle2,
+  Columns,
+  HelpCircle,
   LayoutGrid,
   List as ListIcon,
   Plus,
@@ -21,18 +23,24 @@ import { useTechnicianBoardV2 as useTechnicianBoard } from '@/hooks/use-technici
 import { useTechnicians } from '@/hooks/use-technicians'
 import { TechnicianFilters } from '@/components/technician/filters/TechnicianFilters'
 import { TechnicianKanban } from '@/components/technician/board/TechnicianKanban'
+import { TechnicianListView } from '@/components/technician/TechnicianListView'
+import { RepairCardsView } from '@/components/dashboard/repairs/RepairCardsView'
+import { TechnicianGuideDialog } from '@/components/technician/TechnicianGuideDialog'
+import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
+import { getWarrantyStatus, formatWarrantyExpiration } from '@/lib/warranty-utils'
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
 import type { RepairFormData } from '@/schemas'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
 import type { Repair } from '@/types/repairs'
-import { RepairList } from '@/components/dashboard/repairs/RepairList'
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import { RepairDeliveryDialog } from '@/components/dashboard/repairs/RepairDeliveryDialog'
+import { Pagination } from '@/components/ui/pagination'
 import { cn } from '@/lib/utils'
 
 type TechnicianRepairUpdatePayload = Omit<Partial<Repair>, 'images' | 'parts' | 'notes'> & {
   customer_id?: string
   technician_id?: string
+  serial_number?: string
   images?: string[]
   parts?: RepairFormData['parts']
   notes?: RepairFormData['notes']
@@ -62,14 +70,14 @@ function MetricCard({
 }) {
   const t = toneClasses[tone]
   return (
-    <div className={cn('overflow-hidden rounded-2xl border bg-gradient-to-br p-5', t.wrap)}>
+    <div className={cn('overflow-hidden rounded-2xl border bg-gradient-to-br p-5 shadow-2xs', t.wrap)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
           <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{value}</p>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{sub}</p>
         </div>
-        <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', t.iconBg)}>
+        <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-2xs', t.iconBg)}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
@@ -82,10 +90,8 @@ function MetricCard({
 // ---------------------------------------------------------------------------
 
 export default function TechnicianPanel() {
-  // Declarado antes del hook para poder pasárselo como callback de "soltaste
-  // una tarjeta en Entregado": abre el diálogo de entrega en vez de marcar
-  // entregado en silencio con el drag.
   const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
+  const [warrantyClaimTarget, setWarrantyClaimTarget] = useState<Repair | null>(null)
 
   const {
     repairs,
@@ -106,11 +112,6 @@ export default function TechnicianPanel() {
 
   const { technicians } = useTechnicians()
 
-  // El rol 'technician' (SaaS) no tiene 'repairs.orders.create' — solo
-  // 'read'/'update'. Quien registra el ingreso de un equipo es vendedor,
-  // manager o admin; el técnico gestiona lo que ya está creado. Sin este
-  // chequeo, un técnico podía completar todo el formulario de alta y
-  // recibir un 403 recién al enviarlo.
   const { user } = useAuth()
   const canCreateRepair = roleHasPermission(
     mapLegacyRoleToOrganizationRole(user?.role),
@@ -118,12 +119,14 @@ export default function TechnicianPanel() {
   )
 
   const [searchTerm, setSearchTerm] = useState('')
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
+  // Default viewMode is 'list' as requested
+  const [viewMode, setViewMode] = useState<'list' | 'cards' | 'kanban'>('list')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<RepairFormMode>('add')
   const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [detailRepair, setDetailRepair] = useState<Repair | null>(null)
+  const [isGuideOpen, setIsGuideOpen] = useState(false)
 
   const filteredRepairs = useMemo(() => {
     if (!searchTerm) return repairs
@@ -133,12 +136,27 @@ export default function TechnicianPanel() {
       repair.customer.name.toLowerCase().includes(lowerTerm) ||
       repair.device.toLowerCase().includes(lowerTerm) ||
       repair.id.toLowerCase().includes(lowerTerm) ||
-      repair.issue.toLowerCase().includes(lowerTerm)
+      repair.issue.toLowerCase().includes(lowerTerm) ||
+      (repair.ticketNumber && repair.ticketNumber.toLowerCase().includes(lowerTerm))
     )
   }, [repairs, searchTerm])
 
-  // Métricas sobre el dataset completo (respeta "solo mis reparaciones" del hook),
-  // no sobre el resultado de la búsqueda de texto — así los totales no cambian al buscar.
+  const [cardsPage, setCardsPage] = useState<number>(1)
+  const [cardsPageSize, setCardsPageSize] = useState<number>(20)
+
+  // Reset cardsPage to 1 when search or filter changes
+  useEffect(() => {
+    setCardsPage(1)
+  }, [searchTerm, showMyRepairsOnly])
+
+  const cardsTotalPages = Math.max(1, Math.ceil(filteredRepairs.length / cardsPageSize))
+  const safeCardsPage = Math.min(Math.max(1, cardsPage), cardsTotalPages)
+
+  const paginatedCards = useMemo(() => {
+    const start = (safeCardsPage - 1) * cardsPageSize
+    return filteredRepairs.slice(start, start + cardsPageSize)
+  }, [filteredRepairs, safeCardsPage, cardsPageSize])
+
   const stats = useMemo(() => {
     const total = repairs.length
     const pending = repairs.filter((repair) => repair.dbStatus === 'recibido').length
@@ -254,12 +272,19 @@ export default function TechnicianPanel() {
 
         return true
       } else if (selectedRepair) {
+        if (selectedRepair.status === 'entregado' || selectedRepair.status === 'cancelado') {
+          toast.error(`No se puede editar una reparación en estado "${selectedRepair.status}".`)
+          return false
+        }
+
         const device = data.devices[0]
         const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
 
         const updatePayload: TechnicianRepairUpdatePayload = {
           brand: device.brand,
           model: device.model,
+          serialNumber: device.serialNumber || undefined,
+          serial_number: device.serialNumber || undefined,
           deviceType: device.deviceType,
           issue: device.issue,
           description: device.description,
@@ -270,6 +295,9 @@ export default function TechnicianPanel() {
           estimatedCost: device.estimatedCost,
           laborCost: data.laborCost || 0,
           finalCost: data.finalCost,
+          pricingMode: data.pricingMode,
+          discountAmount: data.discountAmount,
+          priceOverrideReason: data.priceOverrideReason,
           warrantyMonths: data.warrantyMonths,
           warrantyType: data.warrantyType,
           warrantyNotes: data.warrantyNotes,
@@ -304,49 +332,55 @@ export default function TechnicianPanel() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isDialogOpen])
 
-  const initialFormData: Partial<RepairFormData> | undefined = selectedRepair
-    ? {
-        existingCustomerId: selectedRepair.customer.id,
-        customerName: selectedRepair.customer.name,
-        customerPhone: selectedRepair.customer.phone,
-        customerEmail: selectedRepair.customer.email,
-        customerDocument: selectedRepair.customer.ruc || '',
-        priority: selectedRepair.priority,
-        urgency: selectedRepair.urgency === 'urgent' ? 'high' : 'medium',
-        devices: [
-          {
-            deviceType: selectedRepair.deviceType,
-            brand: selectedRepair.brand,
-            model: selectedRepair.model,
-            issue: selectedRepair.issue,
-            description: selectedRepair.description,
-            accessType: selectedRepair.accessType || 'none',
-            accessPassword: selectedRepair.accessPassword || '',
-            technician: selectedRepair.technician?.id || '',
-            estimatedCost: selectedRepair.estimatedCost,
-            images: selectedRepair.images?.map((image) => image.url) || [],
-          },
-        ],
-        parts: (selectedRepair.parts || []).map((part) => ({
-          id: part.id,
-          name: part.name,
-          cost: part.cost,
-          quantity: part.quantity,
-          supplier: part.supplier || '',
-          partNumber: part.partNumber || '',
-        })),
-        notes: (selectedRepair.notes || []).map((note) => ({
-          id: note.id,
-          text: note.text,
-          isInternal: note.isInternal ?? false,
-        })),
-        laborCost: selectedRepair.laborCost || 0,
-        finalCost: selectedRepair.finalCost,
-        warrantyMonths: selectedRepair.warrantyMonths ?? 3,
-        warrantyType: selectedRepair.warrantyType || 'full',
-        warrantyNotes: selectedRepair.warrantyNotes || '',
-      }
-    : undefined
+  const initialFormData: Partial<RepairFormData> | undefined = useMemo(() => {
+    if (!selectedRepair) return undefined
+    return {
+      existingCustomerId: selectedRepair.customer.id,
+      customerName: selectedRepair.customer.name,
+      customerPhone: selectedRepair.customer.phone,
+      customerEmail: selectedRepair.customer.email,
+      customerDocument: selectedRepair.customer.ruc || '',
+      priority: selectedRepair.priority,
+      urgency: selectedRepair.urgency === 'urgent' ? 'high' : 'medium',
+      laborCost: selectedRepair.laborCost || 0,
+      finalCost: selectedRepair.finalCost,
+      pricingMode: selectedRepair.pricingMode || 'automatic',
+      discountAmount: selectedRepair.discountAmount || 0,
+      priceOverrideReason: selectedRepair.priceOverrideReason || '',
+      warrantyMonths: selectedRepair.warrantyMonths ?? 3,
+      warrantyType: selectedRepair.warrantyType || 'full',
+      warrantyNotes: selectedRepair.warrantyNotes || '',
+      devices: [
+        {
+          deviceType: selectedRepair.deviceType,
+          brand: selectedRepair.brand,
+          model: selectedRepair.model,
+          serialNumber: selectedRepair.serialNumber || '',
+          issue: selectedRepair.issue,
+          description: selectedRepair.description,
+          accessType: selectedRepair.accessType || 'none',
+          accessPassword: selectedRepair.accessPassword || '',
+          technician: selectedRepair.technician?.id || '',
+          estimatedCost: selectedRepair.estimatedCost,
+          images: selectedRepair.images?.map((image) => image.url) || [],
+        },
+      ],
+      parts: (selectedRepair.parts || []).map((part) => ({
+        id: part.id,
+        name: part.name,
+        cost: part.cost,
+        quantity: part.quantity,
+        supplier: part.supplier || '',
+        partNumber: part.partNumber || '',
+        productId: part.productId || undefined,
+      })),
+      notes: (selectedRepair.notes || []).map((note) => ({
+        id: note.id,
+        text: note.text,
+        isInternal: note.isInternal ?? false,
+      })),
+    }
+  }, [selectedRepair])
 
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
@@ -358,30 +392,43 @@ export default function TechnicianPanel() {
             <Wrench className="h-3.5 w-3.5" />
             Panel técnico
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
+          <h1 className="text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
             {showMyRepairsOnly ? 'Mis reparaciones' : 'Tablero de reparaciones'}
           </h1>
           <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
             {showMyRepairsOnly
-              ? 'Reparaciones asignadas a tu cuenta. Arrastrá para cambiar el estado.'
-              : 'Vista global del estado de todas las reparaciones del equipo.'}
+              ? 'Reparaciones asignadas a tu cuenta. Gestiona el avance técnico de cada orden.'
+              : 'Vista global del estado de todas las reparaciones activas del taller.'}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Botón de Guía con Ejemplos */}
           <Button
             variant="outline"
             size="sm"
-            className="gap-2"
+            className="gap-1.5 border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-300 font-bold"
+            onClick={() => setIsGuideOpen(true)}
+          >
+            <HelpCircle className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            ¿Cómo funciona? (Guía con ejemplos)
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 font-semibold"
             onClick={refreshRepairs}
             disabled={isLoading}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
             Actualizar
           </Button>
+
           {canCreateRepair && (
             <Button
               size="sm"
-              className="gap-2"
+              className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-xs"
               onClick={() => {
                 setDialogMode('add')
                 setSelectedRepair(undefined)
@@ -395,7 +442,7 @@ export default function TechnicianPanel() {
         </div>
       </header>
 
-      {/* Stats */}
+      {/* Stats Cards Strip */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Total"
@@ -427,8 +474,8 @@ export default function TechnicianPanel() {
         />
       </section>
 
-      {/* Toolbar */}
-      <Card>
+      {/* Toolbar: Filters & View Switcher */}
+      <Card className="border-slate-200/80 dark:border-slate-800 shadow-2xs">
         <CardContent className="p-4">
           <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-center">
             <div className="w-full lg:flex-1">
@@ -442,41 +489,98 @@ export default function TechnicianPanel() {
                 isLoading={isLoading}
               />
             </div>
-            <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
-              <button
-                type="button"
-                onClick={() => setViewMode('kanban')}
-                className={cn(
-                  'flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors',
-                  viewMode === 'kanban'
-                    ? 'bg-background shadow-sm text-slate-900 dark:text-slate-50'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                )}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Kanban
-              </button>
+
+            {/* Selector de 3 Vistas: Lista (Default), Tarjetas (Cards), Kanban */}
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 dark:border-slate-800 dark:bg-slate-900">
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
                 className={cn(
-                  'flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors',
+                  'flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-bold transition-all cursor-pointer',
                   viewMode === 'list'
-                    ? 'bg-background shadow-sm text-slate-900 dark:text-slate-50'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-slate-50'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
                 )}
               >
                 <ListIcon className="h-3.5 w-3.5" />
                 Lista
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={cn(
+                  'flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-bold transition-all cursor-pointer',
+                  viewMode === 'cards'
+                    ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-slate-50'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                )}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Tarjetas
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('kanban')}
+                className={cn(
+                  'flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-bold transition-all cursor-pointer',
+                  viewMode === 'kanban'
+                    ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-slate-50'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                )}
+              >
+                <Columns className="h-3.5 w-3.5" />
+                Kanban
               </button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Board */}
+      {/* Main Views Area */}
       <section>
-        {viewMode === 'kanban' ? (
+        {viewMode === 'list' ? (
+          <TechnicianListView
+            repairs={filteredRepairs}
+            onEdit={handleEditRepair}
+            onView={handleViewRepair}
+            onDeliver={(repair) => setDeliverTarget(repair)}
+            onStatusChange={updateStatus}
+            onClaimWarranty={(repair) => setWarrantyClaimTarget(repair)}
+          />
+        ) : viewMode === 'cards' ? (
+          <div className="space-y-4">
+            <RepairCardsView
+              repairs={paginatedCards}
+              onView={handleViewRepair}
+              onEdit={handleEditRepair}
+              onDeliver={(repair) => setDeliverTarget(repair)}
+              onClaimWarranty={(repair) => setWarrantyClaimTarget(repair)}
+            />
+            {filteredRepairs.length > cardsPageSize && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-500 shadow-2xs">
+                <div>
+                  Mostrando <strong className="text-slate-800 dark:text-slate-200">{(safeCardsPage - 1) * cardsPageSize + 1}</strong> a{' '}
+                  <strong className="text-slate-800 dark:text-slate-200">{Math.min(safeCardsPage * cardsPageSize, filteredRepairs.length)}</strong> de{' '}
+                  <strong className="text-slate-800 dark:text-slate-200">{filteredRepairs.length}</strong> tarjetas
+                </div>
+                <Pagination
+                  currentPage={safeCardsPage}
+                  totalPages={cardsTotalPages}
+                  itemsPerPage={cardsPageSize}
+                  totalItems={filteredRepairs.length}
+                  onPageChange={setCardsPage}
+                  onItemsPerPageChange={(size) => {
+                    setCardsPageSize(size)
+                    setCardsPage(1)
+                  }}
+                  itemsPerPageOptions={[10, 20, 50, 100]}
+                />
+              </div>
+            )}
+          </div>
+        ) : (
           <TechnicianKanban
             repairs={filteredRepairs}
             kanbanOrder={kanbanOrder}
@@ -486,15 +590,10 @@ export default function TechnicianPanel() {
             onView={handleViewRepair}
             showMyRepairsOnly={showMyRepairsOnly}
           />
-        ) : (
-          <RepairList
-            repairs={filteredRepairs}
-            onEdit={handleEditRepair}
-            onView={handleViewRepair}
-          />
         )}
       </section>
 
+      {/* Dialogs */}
       <RepairFormDialog
         open={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}
@@ -523,6 +622,34 @@ export default function TechnicianPanel() {
         onOpenChange={(open) => !open && setDeliverTarget(null)}
         onConfirm={async (id, payload) => { await deliverRepair(id, payload.outcome, payload.note) }}
         allowPayment={false}
+      />
+
+      {warrantyClaimTarget && (
+        <CreateAfterSalesCaseDialog
+          open={!!warrantyClaimTarget}
+          onOpenChange={(open) => !open && setWarrantyClaimTarget(null)}
+          sourceType="repair"
+          repairId={warrantyClaimTarget.id}
+          customerId={warrantyClaimTarget.customer?.id}
+          reference={warrantyClaimTarget.ticketNumber || warrantyClaimTarget.id.slice(0, 8)}
+          subject={[warrantyClaimTarget.brand, warrantyClaimTarget.model].filter(Boolean).join(' ') || warrantyClaimTarget.device}
+          customerName={warrantyClaimTarget.customer?.name}
+          allowedRequestTypes={['repair_warranty']}
+          warrantyExpired={getWarrantyStatus(warrantyClaimTarget.warrantyExpiresAt) === 'expired'}
+          warrantyExpiresLabel={
+            warrantyClaimTarget.warrantyExpiresAt ? formatWarrantyExpiration(warrantyClaimTarget.warrantyExpiresAt) : null
+          }
+          onCreated={() => {
+            setWarrantyClaimTarget(null)
+            refreshRepairs()
+            toast.success('Reingreso por garantía iniciado exitosamente')
+          }}
+        />
+      )}
+
+      <TechnicianGuideDialog
+        open={isGuideOpen}
+        onOpenChange={setIsGuideOpen}
       />
     </div>
   )

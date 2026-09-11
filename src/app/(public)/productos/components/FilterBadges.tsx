@@ -7,6 +7,7 @@ import { formatPrice } from '@/lib/utils'
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 import { readActiveProductFilters, clearAllProductFilters } from '@/lib/utils/product-filters'
 import type { Category } from '@/types/public'
+import { FASHION_AUDIENCES } from '@/lib/products/fashion-filters'
 
 interface Branch {
   id: string
@@ -25,7 +26,7 @@ export function FilterBadges({
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
 
-  const { query, categoryId, brand, branchId, inStock, minPrice, maxPrice } = readActiveProductFilters(
+  const { query, categoryId, brand, branchId, audience, size, color, inStock, minPrice, maxPrice } = readActiveProductFilters(
     new URLSearchParams(searchParams.toString())
   )
   const isOnlyOffers = searchParams.get('offers') === 'true'
@@ -52,6 +53,9 @@ export function FilterBadges({
     !!categoryId ||
     !!brand ||
     !!branchId ||
+    !!audience ||
+    !!size ||
+    !!color ||
     inStock ||
     isOnlyOffers ||
     minPrice > 0 ||
@@ -105,6 +109,27 @@ export function FilterBadges({
           className="flex items-center gap-1.5 rounded-full border border-violet-300 bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-800/40 dark:bg-violet-950/40 dark:text-violet-300"
         >
           <span>Marca: {brand}</span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {audience && (
+        <button type="button" onClick={() => removeFilter('audience')} className="flex items-center gap-1.5 rounded-full border border-stone-300 bg-stone-50 px-3 py-1 text-xs font-bold text-stone-800 transition-colors hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100">
+          <span>Público: {FASHION_AUDIENCES.find((option) => option.value === audience)?.label || audience}</span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {size && (
+        <button type="button" onClick={() => removeFilter('size')} className="flex items-center gap-1.5 rounded-full border border-stone-300 bg-stone-50 px-3 py-1 text-xs font-bold text-stone-800 transition-colors hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100">
+          <span>Talle: {size}</span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {color && (
+        <button type="button" onClick={() => removeFilter('color')} className="flex items-center gap-1.5 rounded-full border border-stone-300 bg-stone-50 px-3 py-1 text-xs font-bold text-stone-800 transition-colors hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100">
+          <span>Color: {color}</span>
           <X className="h-3 w-3" />
         </button>
       )}

@@ -79,7 +79,7 @@ describe('cada promedio divide por lo suyo', () => {
  * tiraba.
  */
 describe('clientes que compraron y clientes nuevos son dos cosas', () => {
-  const PAGINA = leer('src/app/dashboard/reports/page.tsx')
+    const PAGINA = leer('src/components/admin/reports/operational-reports.tsx')
   const EXPORTADOR = leer('src/lib/reports/section-pdf-exporter.ts')
 
   it('la pantalla guarda los compradores en vez de descartarlos', () => {
@@ -107,7 +107,7 @@ describe('clientes que compraron y clientes nuevos son dos cosas', () => {
  */
 describe('el margen del PDF es el mismo que el de la pantalla', () => {
   const EXPORTADOR = leer('src/lib/reports/section-pdf-exporter.ts')
-  const PAGINA = leer('src/app/dashboard/reports/page.tsx')
+    const PAGINA = leer('src/components/admin/reports/operational-reports.tsx')
 
   it('divide por la facturacion con costo conocido', () => {
     expect(EXPORTADOR).toContain('((params.metrics.totalProfit! / coveredRevenue) * 100).toFixed(1)')

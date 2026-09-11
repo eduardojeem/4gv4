@@ -23,6 +23,12 @@ export const WEBSITE_SECTION_HELP = {
     examples: ['Cosméticos: “Productos originales”, “Asesoramiento” y “Retiro en tienda”.', 'Ropa: “Cambios según condiciones” y “Envíos disponibles”.'],
     note: 'Estos textos son informativos: no configuran automáticamente envíos, garantías ni formas de pago.',
   },
+  brands: {
+    title: 'Marquesina de marcas', description: 'Elegí qué marcas mostrar en la portada y su visibilidad pública.',
+    steps: ['Activá o desactivá marcas sugeridas con el switch Público.', 'Agregá tus propias marcas si vendés otras líneas.', 'Guardá los cambios para actualizar la portada.'],
+    examples: ['Ropa: Nike, Adidas, Zara o marcas propias que comercialices.', 'Deportes: marcas de calzado y accesorios oficiales.'],
+    note: 'Ocultar una marca no borra sus productos del catálogo, solo la quita de la marquesina de portada.',
+  },
   carousel: {
     title: 'Banners promocionales', description: 'Mostrá campañas con imágenes y mensajes breves.',
     steps: ['Agregá una imagen y un mensaje.', 'Revisá el destino del enlace y el orden.', 'Activá los banners que quieras mostrar y guardá.'],

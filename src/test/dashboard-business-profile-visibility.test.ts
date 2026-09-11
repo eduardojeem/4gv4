@@ -8,7 +8,7 @@ describe('dashboard business profile visibility', () => {
   it('conditions repair dashboards and queries on the effective module', () => {
     const dashboard = read('src/app/dashboard/page.tsx')
     const admin = read('src/app/admin/page.tsx')
-    const reports = read('src/app/dashboard/reports/page.tsx')
+    const reports = read('src/components/admin/reports/operational-reports.tsx')
 
     expect(dashboard).toContain("effectiveModules.includes('repairs')")
     expect(dashboard).toContain('hasRepairs ?')

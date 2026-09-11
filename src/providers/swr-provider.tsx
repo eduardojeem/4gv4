@@ -145,7 +145,7 @@ const swrConfig = {
     // Middleware para logging en desarrollo.
     // Usa un Set global para deduplicar: solo loguea la primera vez que una
     // clave va a red, no una vez por cada componente que comparte la misma key.
-    ...(process.env.NODE_ENV === 'development' ? [
+    ...(process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_SWR === 'true' ? [
       (useSWRNext: any) => {
         const inFlightKeys = new Set<string>()
         return (key: any, fetcher: any, config: any) => {

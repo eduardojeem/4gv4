@@ -21,6 +21,7 @@ interface MobileFiltersProps {
   categories: Category[]
   brands: string[]
   branches?: Array<{ id: string; name: string; city: string | null }>
+  fashionFacets?: { sizes: string[]; colors: string[] }
 }
 
 export function MobileFilters({ activeFiltersCount, ...props }: MobileFiltersProps) {

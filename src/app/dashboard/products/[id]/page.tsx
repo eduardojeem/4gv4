@@ -2269,7 +2269,7 @@ export default function ProductDetailPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push('/dashboard/reports/products')}
+                  onClick={() => router.push('/admin/reports/products')}
                   className="w-full h-9 rounded-xl font-semibold text-xs gap-2 shadow-xs"
                 >
                   <BarChart3 className="h-4 w-4" />

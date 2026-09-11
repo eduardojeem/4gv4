@@ -12,8 +12,7 @@ import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { generateProductSchema, serializeJsonLd } from '@/lib/seo'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
-import { InstallmentSelector } from '@/components/public/InstallmentSelector'
-import { ProductGallery, ProductActions } from './client-components'
+import { ProductDetailInteractive } from './client-components'
 import { BranchAvailability } from '@/components/public/BranchAvailability'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 
@@ -174,127 +173,14 @@ export default async function ProductDetailPage(props: Props) {
             Volver al catalogo
           </Link>
 
-          <div className="grid gap-10 lg:grid-cols-2">
-            {/* Images - Client Component */}
-            <ProductGallery
-                product={product}
-                hasDiscount={hasDiscount}
-                discountPercent={discountPercent}
-            />
-
-            {/* Product info */}
-            <div className="flex flex-col gap-6">
-              {/* Header */}
-              <div>
-                {product.brand && (
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    {product.brand}
-                  </p>
-                )}
-                <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground lg:text-3xl text-balance">
-                  {product.name}
-                </h1>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge
-                    variant={isInStock ? 'secondary' : 'destructive'}
-                    className="gap-1.5 text-xs rounded-full"
-                  >
-                    {isInStock ? (
-                      <>
-                        <Check className="h-3 w-3" /> En stock
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-3 w-3" /> Agotado
-                      </>
-                    )}
-                  </Badge>
-                  {product.category && (
-                    <Badge variant="outline" className="text-xs rounded-full">
-                      {product.category.name}
-                    </Badge>
-                  )}
-                  {hasOffer && discountPercent > 0 && (
-                    <Badge className="gap-1 bg-rose-600 text-white text-xs rounded-full">
-                      <Tag className="h-3 w-3" />
-                      -{discountPercent}% OFERTA
-                    </Badge>
-                  )}
-                  {isWholesale && product.wholesale_price && (
-                    <Badge className="bg-primary/10 text-primary border-primary/20 text-xs rounded-full">
-                      Precio Mayorista
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              {/* Price */}
-              <div className="rounded-2xl border border-border p-5">
-                <div className="flex items-baseline gap-3">
-                  <p className="text-4xl font-bold text-foreground">
-                    {formatPrice(displayPrice)}
-                  </p>
-                  {hasDiscount && (
-                    <p className="text-lg text-muted-foreground line-through">
-                      {formatPrice(product.sale_price)}
-                    </p>
-                  )}
-                </div>
-
-                {installmentPlans.length > 0 && (
-                  <InstallmentSelector
-                    price={displayPrice}
-                    plans={installmentPlans}
-                    className="mt-4"
-                  />
-                )}
-              </div>
-
-              {/* Description */}
-              {product.description && (
-                <div>
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Descripcion
-                  </h2>
-                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-                    {product.description}
-                  </p>
-                </div>
-              )}
-
-              {/* Details */}
-              <div>
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                  Detalles
-                </h2>
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                  {product.brand && (
-                    <div>
-                      <dt className="text-muted-foreground">Marca</dt>
-                      <dd className="font-medium text-foreground">
-                        {product.brand}
-                      </dd>
-                    </div>
-                  )}
-                  {product.category && (
-                    <div>
-                      <dt className="text-muted-foreground">Categoría</dt>
-                      <dd className="font-medium text-foreground">
-                        {product.category.name}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
-
-              {/* Contact CTA - Client Component */}
-              <ProductActions product={product} isInStock={isInStock} />
-
-              {/* Branch availability */}
-              <BranchAvailability branches={branchStock} />
-            </div>
-          </div>
+          <ProductDetailInteractive
+            product={product}
+            isWholesale={isWholesale}
+            hasDiscount={hasDiscount}
+            discountPercent={discountPercent}
+            installmentPlans={installmentPlans}
+            branchStock={branchStock}
+          />
 
           {/* Related */}
           {relatedProducts.length > 0 && (

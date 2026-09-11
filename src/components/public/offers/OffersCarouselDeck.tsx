@@ -391,7 +391,12 @@ export function OffersCarouselDeck({
           <article
             key={offer.id}
             aria-labelledby={`offer-title-${offer.id}`}
-            className="group relative flex flex-col justify-between min-w-[85%] sm:min-w-[48%] lg:min-w-[32%] xl:min-w-[30%] snap-start overflow-hidden rounded-3xl border border-border/80 bg-card p-4 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-primary/50"
+            className={cn(
+              'group relative flex flex-col justify-between min-w-[85%] sm:min-w-[48%] lg:min-w-[32%] xl:min-w-[30%] snap-start overflow-hidden rounded-3xl border border-border/80 bg-card p-4 shadow-xs transition-all duration-300',
+              offer.inStock
+                ? 'hover:-translate-y-1 hover:shadow-xl hover:border-primary/50'
+                : 'opacity-55 grayscale-[25%] hover:opacity-65'
+            )}
           >
             <div>
               {/* Imagen del Producto con Badges */}
@@ -434,8 +439,8 @@ export function OffersCarouselDeck({
                 </div>
 
                 {!offer.inStock && (
-                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 backdrop-blur-[2px]">
-                    <span className="rounded-full bg-slate-900/90 px-3.5 py-1.5 text-xs font-bold text-white shadow-md">
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/55 backdrop-blur-[1px]">
+                    <span className="rounded-full bg-foreground/90 px-3.5 py-1.5 text-[11px] font-black uppercase tracking-widest text-background shadow-md">
                       Sin stock
                     </span>
                   </div>

@@ -476,7 +476,7 @@ const InventoryReports: React.FC = () => {
       }>()
 
       // Sumaba TODAS las ventas del periodo, anuladas incluidas, mientras
-      // /dashboard/reports filtra por `isCompletedSaleStatus`. El mismo periodo
+      // /admin/reports filtra por `isCompletedSaleStatus`. El mismo periodo
       // daba dos cifras de ingresos y la diferencia eran las anulaciones.
       const completedSales = ((salesData || []) as ReportSaleRow[])
         .filter((sale) => isCompletedSaleStatus((sale as { status?: string | null }).status))

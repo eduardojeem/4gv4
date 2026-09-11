@@ -1217,7 +1217,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         quickStats,
         headlineCards: [
           // Los nombres dicen que incluye cada cifra. «Total vendido» a secas
-          // se compara con «Ventas Totales» de /dashboard/reports y no coincide:
+          // se compara con «Ventas Totales» de /admin/reports y no coincide:
           // aquel es solo POS y este suma el taller. La tarjeta de POS existe
           // justamente para que las dos secciones se puedan cuadrar.
           {

@@ -103,13 +103,13 @@ export function ProductCard(props: ProductCardProps) {
     offerPrice: product.offer_price ?? null,
   })
   const publicVariants = (product.variants ?? []).filter((variant) => variant.is_active)
-  const hasVariants = Boolean(product.has_variants || publicVariants.length > 0)
+  const hasVariants = Boolean(product.has_variants && publicVariants.length > 0)
   const selectedVariant = publicVariants.find((variant) => variant.id === selectedVariantId) ?? null
   const selectedPrice = selectedVariant
     ? (isWholesale && selectedVariant.wholesale_price != null ? selectedVariant.wholesale_price : selectedVariant.sale_price)
     : displayPrice
   const selectedStock = hasVariants
-    ? (selectedVariant ? selectedVariant.stock_quantity : 0)
+    ? (selectedVariant ? selectedVariant.stock_quantity : product.stock_quantity)
     : product.stock_quantity
 
   const originalPrice = hasOffer || isWholesaleDiscount ? product.sale_price : null
@@ -119,7 +119,7 @@ export function ProductCard(props: ProductCardProps) {
 
   const isInStock = hasVariants
     ? (selectedVariant ? selectedVariant.stock_quantity > 0 : publicVariants.some((variant) => variant.stock_quantity > 0))
-    : product.in_stock
+    : Boolean(product.in_stock && (product.stock_quantity ?? 0) > 0 || product.in_stock)
   const isLowStock = isInStock && (hasVariants ? selectedStock > 0 && selectedStock <= 4 : product.stock_quantity > 0 && product.stock_quantity <= 4)
   const imageSrc = resolveProductImageUrl(product.image)
   // Moda y deportivo: foto vertical a sangre, como en una tienda de ropa. El
@@ -201,10 +201,11 @@ export function ProductCard(props: ProductCardProps) {
       {/* ── Card ── */}
       <article
         className={cn(
-          'group relative flex flex-col overflow-hidden bg-card transition-colors',
+          'group relative flex flex-col overflow-hidden bg-card transition-all duration-200',
           storefrontStyle === 'classic' && 'rounded-lg border border-border/60 shadow-sm hover:border-primary/30',
           storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60',
-          storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40'
+          storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40',
+          !isInStock && 'opacity-60 grayscale-[30%]'
         )}
       >
         {favoriteSlug && <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug, image: product.image, price: product.sale_price }} /></div>}
@@ -271,8 +272,13 @@ export function ProductCard(props: ProductCardProps) {
 
           {/* Out-of-stock overlay */}
           {!isInStock && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-[2px]">
-              <span className="rounded-full bg-destructive/90 px-4 py-1.5 text-xs font-semibold text-destructive-foreground shadow">
+            <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px] z-10">
+              <span className={cn(
+                'rounded-full px-4 py-1.5 text-[11px] font-black uppercase tracking-widest shadow-md',
+                storefrontStyle === 'fashion'
+                  ? 'bg-foreground text-background'
+                  : 'bg-destructive/90 text-destructive-foreground'
+              )}>
                 Agotado
               </span>
             </div>
@@ -302,7 +308,7 @@ export function ProductCard(props: ProductCardProps) {
           <h3 className={cn(
             'line-clamp-2 flex-1 text-sm leading-snug text-foreground',
             storefrontStyle === 'classic' && 'font-semibold',
-            storefrontStyle === 'fashion' && 'font-normal',
+            storefrontStyle === 'fashion' && 'font-bold group-hover:text-primary transition-colors',
             storefrontStyle === 'sport' && 'font-bold uppercase tracking-tight'
           )}>
             {product.name}

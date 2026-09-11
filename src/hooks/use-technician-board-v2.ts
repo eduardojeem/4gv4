@@ -161,9 +161,6 @@ type RepairUpdateData = Omit<Partial<Repair>, 'images' | 'parts' | 'notes'> & {
         try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const result = await globalUpdateRepair(id, data as any)
-            if (!result) {
-                throw new Error('No se pudo actualizar la reparación')
-            }
             return result
         } catch (error) {
             logger.error('Error updating repair', { error })

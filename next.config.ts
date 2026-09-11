@@ -1,23 +1,33 @@
 import type { NextConfig } from "next";
+import { createRequire } from 'node:module'
+import { REMOTE_IMAGE_HOSTS } from './image-hosts.ts'
 
-const withPWAInit = require("@ducanh2912/next-pwa").default({
-  dest: "public",
-  cacheOnFrontEndNav: true,
-  aggressiveFrontEndNavCaching: true,
-  reloadOnOnline: true,
-  swcMinify: true,
-  disable: process.env.NODE_ENV === "development",
-  workboxOptions: {
-    disableDevLogs: true,
-  },
-});
+const identityConfig = <T,>(config: T) => config
+const loadModule = createRequire(import.meta.url)
+
+// Evita resolver Workbox y sus dependencias desde disco durante `next dev`.
+// El plugin solo produce artefactos para builds de produccion.
+const withPWAInit = process.env.NODE_ENV === 'production'
+  ? loadModule('@ducanh2912/next-pwa').default({
+      dest: "public",
+      cacheOnFrontEndNav: true,
+      aggressiveFrontEndNavCaching: true,
+      reloadOnOnline: true,
+      swcMinify: true,
+      workboxOptions: {
+        disableDevLogs: true,
+      },
+    })
+  : identityConfig
 
 // Configurar bundle analyzer
-const withBundleAnalyzer = require('@next/bundle-analyzer')({
-  enabled: process.env.ANALYZE === 'true',
-});
+const withBundleAnalyzer = process.env.ANALYZE === 'true'
+  ? loadModule('@next/bundle-analyzer')({ enabled: true })
+  : identityConfig
 
 const nextConfig: NextConfig = {
+  // Next 16 no debe escribir archivos de instrucciones de agentes al iniciar.
+  agentRules: false,
   typescript: {
     // TODO: Set to false once all TypeScript errors are resolved
     ignoreBuildErrors: true,
@@ -28,6 +38,10 @@ const nextConfig: NextConfig = {
   
   // Configuración experimental para optimización
   experimental: {
+    // En este proyecto grande, la cache persistente de desarrollo llego a
+    // bloquear Turbopack durante minutos mientras compactaba `.next/dev`.
+    // La cache de build/produccion se conserva; solo evitamos ese cuello local.
+    turbopackFileSystemCacheForDev: false,
     optimizePackageImports: [
       'lucide-react',
       '@radix-ui/react-accordion',
@@ -79,58 +93,11 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 31536000, // 1 año
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'example.com',
-        pathname: '/**',
-        },
-        {
-        protocol: 'https',
-        hostname: 'static.mobilesentrix.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'placehold.co',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'drive.google.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'lh3.googleusercontent.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'doc.googleusercontent.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'cswtugmwazxdktntndpy.supabase.co',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'ui-avatars.com',
-        pathname: '/**',
-      },
-    ],
+    remotePatterns: REMOTE_IMAGE_HOSTS.map((hostname) => ({
+      protocol: 'https' as const,
+      hostname,
+      pathname: '/**',
+    })),
   },
 
   // Configuración de compresión

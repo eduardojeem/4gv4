@@ -3,6 +3,13 @@ import type { PublicProduct } from '@/types/public'
 import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapPublicPromotion } from '@/lib/public-promotions'
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import { sanitizeFilterTerm } from '@/lib/api/sanitize-search'
+import { unstable_cache } from 'next/cache'
+
+// Precio, stock y promociones cambian con frecuencia. El directorio y sus
+// facetas cambian mucho menos, por eso pueden vivir mas tiempo sin volver a
+// materializar miles de filas en cada funcion de Vercel.
+export const MARKETPLACE_CATALOG_REVALIDATE_SECONDS = 30
+export const MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS = 300
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -225,7 +232,7 @@ export function resolveOrganizationRubro(
   return 'comercio'
 }
 
-export async function getMarketplaceOrganizations(
+async function getMarketplaceOrganizationsUncached(
   limit = 24,
   options?: { q?: string }
 ): Promise<MarketplaceOrganization[]> {
@@ -445,12 +452,70 @@ type MarketplaceProductFilters = {
   marca?: string
 }
 
+// Solo se cachea informacion expresamente publica. Los argumentos forman parte
+// de la clave, por lo que filtros distintos no mezclan resultados entre si.
+const getCachedMarketplaceOrganizations = unstable_cache(
+  getMarketplaceOrganizationsUncached,
+  ['marketplace-organizations'],
+  { revalidate: MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS, tags: ['marketplace:organizations'] }
+)
+
+const getCachedMarketplaceProductsPage = unstable_cache(
+  getMarketplaceProductsPageUncached,
+  ['marketplace-products'],
+  { revalidate: MARKETPLACE_CATALOG_REVALIDATE_SECONDS, tags: ['marketplace:products'] }
+)
+
+export const getMarketplaceCategories = unstable_cache(
+  getMarketplaceCategoriesUncached,
+  ['marketplace-categories'],
+  { revalidate: MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS, tags: ['marketplace:categories'] }
+)
+
+const getCachedMarketplaceBrands = unstable_cache(
+  getMarketplaceBrandsUncached,
+  ['marketplace-brands'],
+  { revalidate: MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS, tags: ['marketplace:brands'] }
+)
+
+export const getMarketplaceOffers = unstable_cache(
+  getMarketplaceOffersUncached,
+  ['marketplace-offers'],
+  { revalidate: MARKETPLACE_CATALOG_REVALIDATE_SECONDS, tags: ['marketplace:offers'] }
+)
+
+function hasMarketplaceProductFilters(options?: MarketplaceProductFilters) {
+  return Boolean(options?.q || options?.categoria || options?.subcategoria || options?.marca)
+}
+
+export function getMarketplaceOrganizations(limit = 24, options?: { q?: string }) {
+  // Una busqueda libre puede producir claves ilimitadas. Solo el directorio
+  // estable se comparte entre visitas.
+  return options?.q
+    ? getMarketplaceOrganizationsUncached(limit, options)
+    : getCachedMarketplaceOrganizations(limit)
+}
+
+export function getMarketplaceProductsPage(limit = 48, options?: MarketplaceProductFilters) {
+  return hasMarketplaceProductFilters(options)
+    ? getMarketplaceProductsPageUncached(limit, options)
+    : getCachedMarketplaceProductsPage(limit)
+}
+
+export function getMarketplaceBrands(limit = 50, options?: { categoria?: string }) {
+  // Las variantes por categoria se consultan bajo demanda; la portada reutiliza
+  // el ranking global y evita materializar hasta 20.000 filas por visita.
+  return options?.categoria
+    ? getMarketplaceBrandsUncached(limit, options)
+    : getCachedMarketplaceBrands(limit)
+}
+
 export type MarketplaceProductsPage = {
   products: MarketplaceProduct[]
   total: number
 }
 
-export async function getMarketplaceProductsPage(
+async function getMarketplaceProductsPageUncached(
   limit = 48,
   options?: MarketplaceProductFilters
 ): Promise<MarketplaceProductsPage> {
@@ -583,7 +648,7 @@ export async function getMarketplaceProductsPage(
   }
 }
 
-export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]> {
+async function getMarketplaceCategoriesUncached(): Promise<MarketplaceCategory[]> {
   const supabase = createAdminSupabase()
 
   // Doble nivel: si la categoría tenant tiene global_category_id →
@@ -643,7 +708,7 @@ export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]>
     .sort((a, b) => b.product_count - a.product_count)
 }
 
-export async function getMarketplaceBrands(
+async function getMarketplaceBrandsUncached(
   limit = 50,
   options?: { categoria?: string }
 ): Promise<MarketplaceBrand[]> {
@@ -805,7 +870,8 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
 
   const { data, error } = await supabase
     .from('products')
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, created_at, categories(id, name)')
+    // Agregamos has_variants para calcular stock real de productos con variantes
+    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, has_variants, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, created_at, categories(id, name)')
     .eq('organization_id', organization.id)
     .eq('is_active', true)
     .eq('visibility', 'public')
@@ -816,13 +882,46 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
 
   if (error || !data) return []
 
-  const rows = data as unknown as ProductRow[]
+  const rows = data as unknown as (ProductRow & { has_variants?: boolean })[]
+
+  // Buscar variantes de productos que las tengan, para calcular stock real
+  const variantProductIds = rows
+    .filter((r) => Boolean(r.has_variants))
+    .map((r) => r.id)
+
+  let variantsByProduct = new Map<string, { stock_quantity: number }[]>()
+  if (variantProductIds.length > 0) {
+    const { data: variantsData } = await supabase
+      .from('product_variants')
+      .select('product_id, stock_quantity')
+      .in('product_id', variantProductIds)
+      .eq('is_active', true)
+
+    if (variantsData) {
+      for (const v of variantsData) {
+        const key = String(v.product_id)
+        if (!variantsByProduct.has(key)) variantsByProduct.set(key, [])
+        variantsByProduct.get(key)!.push({ stock_quantity: Number(v.stock_quantity ?? 0) })
+      }
+    }
+  }
 
   return rows
     .map<MarketplaceProduct>((product) => {
       const category = Array.isArray(product.categories) ? product.categories[0] : product.categories
       const cat = category ? { id: category.id, name: category.name } : undefined
+
+      // Stock real: suma variantes si has_variants, de lo contrario usa el campo del producto
+      const productVariants = variantsByProduct.get(String(product.id)) ?? []
+      const publicStock = Boolean(product.has_variants) && productVariants.length > 0
+        ? productVariants.reduce((sum, v) => sum + v.stock_quantity, 0)
+        : Number(product.stock_quantity ?? 0)
+
       const publicProduct = toPublicProduct(product)
+      // Sobrescribir in_stock y stock_quantity con el valor variant-aware
+      publicProduct.in_stock = publicStock > 0
+      publicProduct.stock_quantity = publicStock
+
       const priced = applyAutomaticPromotionToProduct({
         ...publicProduct,
         category_id: cat?.id ?? null,
@@ -843,7 +942,7 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
     .filter((product) => Boolean(product.has_offer && product.offer_price && product.offer_price < product.sale_price))
 }
 
-export async function getMarketplaceOffers(limit = 100): Promise<MarketplaceProduct[]> {
+async function getMarketplaceOffersUncached(limit = 100): Promise<MarketplaceProduct[]> {
   const supabase = createAdminSupabase()
 
   // 1. Obtener todas las organizaciones públicas en el marketplace

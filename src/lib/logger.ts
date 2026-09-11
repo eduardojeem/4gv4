@@ -36,7 +36,22 @@ export const logger = {
      */
     error: (...args: any[]) => {
         if (isDevelopment) {
-            console.error('[ERROR]', ...args)
+            const formatted = args.map(arg => {
+                if (arg instanceof Error) {
+                    return `${arg.name}: ${arg.message}\n${arg.stack || ''}`
+                }
+                if (arg && typeof arg === 'object') {
+                    if ('error' in arg && arg.error instanceof Error) {
+                        return {
+                            ...arg,
+                            error: `${arg.error.name}: ${arg.error.message}`,
+                            stack: arg.error.stack,
+                        }
+                    }
+                }
+                return arg
+            })
+            console.error('[ERROR]', ...formatted)
         } else {
             // In production, log minimal info without sensitive data
             console.error('[ERROR] An error occurred')

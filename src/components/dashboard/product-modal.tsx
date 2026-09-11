@@ -77,6 +77,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { getProductSubmitState } from './product-modal-submit-state'
 import { getProductSaveFeedback, type ProductSaveFeedback } from '@/lib/products/product-save-feedback'
 import { getFirstProductErrorTab, shouldConfirmProductModalClose, getProductRequirementsProgress } from './product-modal-behavior'
+import { FASHION_AUDIENCES, getFashionAudienceFromTags, mergeFashionAudienceTag } from '@/lib/products/fashion-filters'
 import { ProductVariantsEditor } from '@/components/dashboard/products/ProductVariantsEditor'
 import { ProductVariantReview } from '@/components/dashboard/products/ProductVariantReview'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
@@ -297,6 +298,8 @@ export function ProductModal({
       barcode: '',
       is_active: true,
       visibility: 'public',
+      tags: [],
+      fashion_audience: '',
       images: [],
       has_variants: false,
       variant_attribute_config: [],
@@ -489,6 +492,8 @@ export function ProductModal({
         barcode: product.barcode || '',
         is_active: product.is_active ?? true,
         visibility: (product as any).visibility || 'public',
+        tags: Array.isArray((product as any).tags) ? (product as any).tags : [],
+        fashion_audience: getFashionAudienceFromTags((product as any).tags),
         images: product.images || [],
         has_variants: variantData.has_variants,
         variant_attribute_config: variantData.variant_attribute_config,
@@ -519,6 +524,8 @@ export function ProductModal({
         barcode: '',
         is_active: true,
         visibility: 'public',
+        tags: [],
+        fashion_audience: '',
         images: [],
         has_variants: false,
         variant_attribute_config: [],
@@ -641,6 +648,7 @@ export function ProductModal({
 
   const cleanProductData = (data: ProductFormValues) => {
     const rest = { ...data };
+    delete (rest as any).fashion_audience
 
     // Si no hay producto (creación), no enviamos ID
     if (!product) {
@@ -683,6 +691,7 @@ export function ProductModal({
       min_stock: Number(data.min_stock),
       is_active: data.is_active ?? true,
       visibility: data.visibility || 'public',
+      tags: mergeFashionAudienceTag(data.tags, data.fashion_audience || ''),
       has_offer: data.has_offer ?? false,
       installments_enabled: data.installments_enabled ?? false,
       installments_public: data.installments_public ?? true,
@@ -1122,6 +1131,40 @@ export function ProductModal({
                             </FormItem>
                           )}
                         />
+
+                        {businessVertical === 'clothing' && (
+                          <FormField
+                            control={form.control}
+                            name="fashion_audience"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Público <FieldRequirement /></FormLabel>
+                                <Select
+                                  onValueChange={(value) => field.onChange(value === '__none' ? '' : value)}
+                                  value={field.value || '__none'}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Mujer, hombre, niños…" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="__none">Sin definir</SelectItem>
+                                    {FASHION_AUDIENCES.map((option) => (
+                                      <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormDescription>
+                                  Se usa para organizar y filtrar la tienda pública; el talle se configura en Variantes.
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        )}
 
                         <FormField
                           control={form.control}

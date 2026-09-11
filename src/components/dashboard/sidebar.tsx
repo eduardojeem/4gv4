@@ -85,7 +85,6 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: 'Análisis',
     items: [
-      { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, roles: ['super_admin', 'admin'] },
       { name: 'Administración', href: '/admin', icon: Settings, roles: ['super_admin', 'admin'] },
     ],
   },

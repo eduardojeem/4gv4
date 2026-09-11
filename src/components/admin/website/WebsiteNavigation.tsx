@@ -9,6 +9,7 @@ import {
   Tag,
   Briefcase,
   Footprints,
+  Award,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +26,7 @@ const GROUPS = [
     items: [
       { id: 'hero', label: 'Portada', short: 'Portada', icon: Sparkles },
       { id: 'trust_bar', label: 'Beneficios', short: 'Beneficios', icon: ShieldCheck },
+      { id: 'brands', label: 'Marcas destacadas', short: 'Marcas', icon: Award },
       { id: 'carousel', label: 'Banners promocionales', short: 'Banners', icon: GalleryHorizontalEnd },
       { id: 'offers', label: 'Ofertas', short: 'Ofertas', icon: Tag },
     ],
@@ -47,7 +49,7 @@ export function WebsiteNavigation({ value, onChange }: { value: string; onChange
           <label htmlFor="website-section" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Editar sección
           </label>
-          <span className="text-[11px] text-muted-foreground">8 secciones</span>
+          <span className="text-[11px] text-muted-foreground">9 secciones</span>
         </div>
 
         <select

@@ -13,6 +13,8 @@ import { CategoryFilter } from './filters/CategoryFilter'
 import { BrandFilter } from './filters/BrandFilter'
 import { StockFilter } from './filters/StockFilter'
 import { PriceFilter } from './filters/PriceFilter'
+import { FashionFilter } from './filters/FashionFilter'
+import { useStorefrontStyle } from './storefront-style-context'
 
 interface Category {
   id: string
@@ -28,6 +30,7 @@ interface ProductFiltersProps {
   branches?: Array<{ id: string; name: string; city: string | null }>
   onCollapseChange?: (collapsed: boolean) => void
   hideHeader?: boolean
+  fashionFacets?: { sizes: string[]; colors: string[] }
 }
 
 export function ProductFilters({
@@ -37,7 +40,9 @@ export function ProductFilters({
   branches = [],
   onCollapseChange,
   hideHeader = false,
+  fashionFacets = { sizes: [], colors: [] },
 }: ProductFiltersProps) {
+  const storefrontStyle = useStorefrontStyle()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
@@ -46,6 +51,9 @@ export function ProductFilters({
   const brand = searchParams.get('brand') || ''
   const branchId = searchParams.get('branch_id') || ''
   const inStock = searchParams.get('in_stock') === 'true'
+  const audience = searchParams.get('audience') || ''
+  const size = searchParams.get('size') || ''
+  const color = searchParams.get('color') || ''
 
   // El slider opera dentro del rango real del catálogo (priceRange), no del
   // tope teórico PRODUCTS_MAX_PRICE: si el estado local usara el tope teórico,
@@ -98,6 +106,9 @@ export function ProductFilters({
     brand !== '',
     branchId !== '',
     inStock,
+    audience !== '',
+    size !== '',
+    color !== '',
     hasPriceFilter,
   ].filter(Boolean).length
 
@@ -202,7 +213,17 @@ export function ProductFilters({
           </div>
         )}
 
-        <Accordion type="multiple" defaultValue={['category', 'brand', 'stock', 'price']} className="w-full rounded-xl border border-border/60 bg-card shadow-sm">
+        <Accordion type="multiple" defaultValue={storefrontStyle === 'fashion' ? ['fashion', 'category', 'stock'] : ['category', 'brand', 'stock', 'price']} className="w-full rounded-xl border border-border/60 bg-card shadow-sm">
+          {storefrontStyle === 'fashion' && (
+            <FashionFilter
+              audience={audience}
+              size={size}
+              color={color}
+              sizes={fashionFacets.sizes}
+              colors={fashionFacets.colors}
+              onChange={updateFilters}
+            />
+          )}
           <CategoryFilter categories={categories} selectedCategoryId={categoryId} onSelect={(id) => updateFilters({ category_id: id })} />
           <BrandFilter brands={brands} selectedBrand={brand} onSelect={(b) => updateFilters({ brand: b })} />
           <StockFilter inStock={inStock} onChange={(checked) => updateFilters({ in_stock: checked })} />

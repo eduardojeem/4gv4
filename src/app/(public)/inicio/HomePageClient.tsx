@@ -1,6 +1,8 @@
 'use client'
 
 import { useMemo } from 'react'
+import { usePathname } from 'next/navigation'
+import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { HeroSection } from '@/components/public/inicio/HeroSection'
@@ -16,8 +18,13 @@ import { isPublicServicesPageAvailable, isPublicRepairsAvailable } from '@/lib/w
 import { ContactCTA } from '@/components/public/inicio/ContactCTA'
 import { BranchLocations } from '@/components/public/inicio/BranchLocations'
 import { OrganizationReviews } from '@/components/public/inicio/OrganizationReviews'
+import { StoreBrandTicker } from '@/components/public/inicio/StoreBrandTicker'
+import { FashionCampaignBanner } from '@/components/public/inicio/FashionCampaignBanner'
+import { FloatingWhatsAppButton } from '@/components/public/FloatingWhatsAppButton'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import type { BranchLocationData } from '@/components/public/inicio/BranchLocations'
 import type { WebsiteSettings } from '@/types/website-settings'
+
 
 interface HomePageClientProps {
   initialSettings: WebsiteSettings
@@ -27,6 +34,7 @@ interface HomePageClientProps {
 export default function HomePageClient({ initialSettings, branches = [] }: HomePageClientProps) {
   const { settings: liveSettings } = useWebsiteSettings()
   const settings = liveSettings ?? initialSettings
+  const storefrontStyle = useStorefrontStyle()
 
   const company_info = settings.company_info ?? {
     name: 'Tienda Oficial',
@@ -84,6 +92,77 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
     }
   }, [phone, email])
 
+  const pathname = usePathname()
+  const pathTenantSlug = getTenantSlugFromPathname(pathname)
+  const tenantPrefix = pathTenantSlug ? `/${pathTenantSlug}` : ''
+
+  const effectivePromotionalCarousel = useMemo(() => {
+    const existing = settings.promotional_carousel
+    const hasConfiguredSlides = Array.isArray(existing?.slides) && existing.slides.length > 0
+    const hasActiveSlides = hasConfiguredSlides && existing.slides.some((s) => s.active)
+
+    // Si la organización ya configuró y guardó diapositivas en su panel:
+    if (hasActiveSlides) {
+      return {
+        ...existing,
+        // Si tiene diapositivas activas pero el toggle general quedó en false por defecto,
+        // aseguramos que se muestren las imágenes que el usuario configuró
+        enabled: existing.enabled ?? true,
+      }
+    }
+
+    // Si la tienda es de indumentaria / moda y todavía no configuró ningún banner propio,
+    // mostramos banners de cortesía de moda a pantalla completa
+    if (storefrontStyle !== 'classic' && !hasConfiguredSlides) {
+      return {
+        enabled: true,
+        autoplay: true,
+        intervalSeconds: 6,
+        layoutMode: 'full' as const,
+        tone: 'dark' as const,
+        slides: [
+          {
+            id: 'slide-dabasica-1',
+            active: true,
+            title: hero_content.title || 'Nueva Colección 2026',
+            message: hero_content.subtitle || 'Prendas de alta calidad, últimas tendencias y envíos a todo el país.',
+            ctaText: hero_content.ctaPrimaryText || 'Ver Ofertas',
+            ctaHref: `${tenantPrefix}/productos`,
+            imageUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1920&auto=format&fit=crop',
+            imageAlt: hero_content.title || 'Nueva Colección 2026',
+            contentAlign: 'right' as const,
+            textTone: 'light' as const,
+          },
+          {
+            id: 'slide-dabasica-2',
+            active: true,
+            title: 'Moda Deportiva & Casual',
+            message: 'Las mejores marcas con el máximo confort para toda la familia.',
+            ctaText: 'Explorar catálogo',
+            ctaHref: `${tenantPrefix}/productos`,
+            imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1920&auto=format&fit=crop',
+            imageAlt: 'Moda Deportiva & Casual',
+            contentAlign: 'right' as const,
+            textTone: 'light' as const,
+          },
+          {
+            id: 'slide-dabasica-3',
+            active: true,
+            title: 'Básicos con Calidad Garantizada',
+            message: 'Remeras, buzos y complementos esenciales al mejor precio.',
+            ctaText: 'Comprar ahora',
+            ctaHref: `${tenantPrefix}/productos`,
+            imageUrl: 'https://images.unsplash.com/photo-1445205170230-053b83016050?q=80&w=1920&auto=format&fit=crop',
+            imageAlt: 'Básicos con Calidad Garantizada',
+            contentAlign: 'right' as const,
+            textTone: 'light' as const,
+          },
+        ],
+      }
+    }
+    return existing
+  }, [settings.promotional_carousel, storefrontStyle, hero_content, tenantPrefix])
+
   const brand = getBrandTheme(company_info.brandColor)
   const heroVisible = hero_content.enabled !== false
   const promotionalCarouselVisible = Boolean(
@@ -100,37 +179,56 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
         <h1 className="sr-only">{company_info.name || 'Inicio'}</h1>
       )}
 
-      {/* ── 1. Hero Principal con Buscador y Llamados a la Acción ── */}
-      {heroVisible && (
-        <HeroSection
-          companyInfo={company_info}
-          heroStats={hero_stats}
-          heroContent={hero_content}
-          brand={brand}
-          phoneClean={phoneClean}
-          contactHref={contactHref}
-          hasRepairs={hasRepairs}
+      {/* ── 1. Portada / Carrusel Principal ── */}
+      {storefrontStyle !== 'classic' ? (
+        <PromotionalCarousel
+          settings={effectivePromotionalCarousel}
+          isPageLead={true}
+        />
+      ) : (
+        heroVisible && (
+          <HeroSection
+            companyInfo={company_info}
+            heroStats={hero_stats}
+            heroContent={hero_content}
+            brand={brand}
+            phoneClean={phoneClean}
+            contactHref={contactHref}
+            hasRepairs={hasRepairs}
+          />
+        )
+      )}
+
+      {/* ── 2. Barra de Beneficios (En modo clásico si está arriba, o en moda siempre debajo de la portada) ── */}
+      {trustBarVisible && (storefrontStyle !== 'classic' || trustBarPosition === 'above_carousel') && (
+        <StoreTrustBar settings={settings.trust_bar} />
+      )}
+
+      {/* ── 3. Banners Promocionales (Modo Clásico) ── */}
+      {storefrontStyle === 'classic' && (
+        <PromotionalCarousel
+          settings={settings.promotional_carousel}
+          isPageLead={!heroVisible && promotionalCarouselVisible}
         />
       )}
 
-      {/* ── 2. Barra de Beneficios (Si está configurada ARRIBA del carrusel) ── */}
-      {trustBarVisible && trustBarPosition === 'above_carousel' && (
+      {/* ── 3.1 Barra de Beneficios (Modo Clásico si está configurada DEBAJO) ── */}
+      {storefrontStyle === 'classic' && trustBarVisible && trustBarPosition === 'below_carousel' && (
         <StoreTrustBar settings={settings.trust_bar} />
       )}
 
-      {/* ── 3. Banners Promocionales ── */}
-      <PromotionalCarousel
-        settings={settings.promotional_carousel}
-        isPageLead={!heroVisible && promotionalCarouselVisible}
-      />
-
-      {/* ── 3.1 Barra de Beneficios (Si está configurada DEBAJO del carrusel) ── */}
-      {trustBarVisible && trustBarPosition === 'below_carousel' && (
-        <StoreTrustBar settings={settings.trust_bar} />
+      {/* ── 3.2 Marquesina de Marcas Animada (Estilo Giulio Cesare) ── */}
+      {storefrontStyle !== 'classic' && (
+        <StoreBrandTicker settings={settings.brands_section} />
       )}
 
-      {/* ── 4. Showcase de Categorías ── */}
+      {/* ── 4. Showcase de Colecciones & Categorías ── */}
       <CategoryShowcase />
+
+      {/* ── 4.1 Banner de Campaña Intermedio (Moda / Boutique) ── */}
+      {storefrontStyle !== 'classic' && (
+        <FashionCampaignBanner phoneClean={phoneClean} />
+      )}
 
       {/* ── 5. Carrusel de Ofertas Especiales ── */}
       {settings.offers_section?.enabled && (
@@ -171,6 +269,9 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
         phoneClean={phoneClean}
         contactHref={contactHref}
       />
+
+      {/* ── 12. Botón Flotante Oficial de WhatsApp ── */}
+      <FloatingWhatsAppButton fallbackPhone={phoneClean} />
     </div>
   )
 }

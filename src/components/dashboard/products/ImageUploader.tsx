@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import imageCompression from 'browser-image-compression'
+import { getImageSourceValidationMessage } from '@/lib/image-url-policy'
 
 interface ImageUploaderProps {
   images: string[]
@@ -178,30 +179,16 @@ export function ImageUploader({
     onChange(newImages)
   }
 
-  const validateImageUrl = (url: string): boolean => {
-    try {
-      const urlObj = new URL(url)
-      const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
-      const pathname = urlObj.pathname.toLowerCase()
-      return validExtensions.some(ext => pathname.endsWith(ext)) || 
-             pathname.includes('/image') ||
-             url.includes('unsplash.com') ||
-             url.includes('cloudinary.com') ||
-             url.includes('imgur.com')
-    } catch {
-      return false
-    }
-  }
-
   const addImageFromUrl = async () => {
     if (!imageUrl.trim()) {
       toast.error('Por favor ingresa una URL')
       return
     }
 
-    if (!validateImageUrl(imageUrl)) {
+    const validationMessage = getImageSourceValidationMessage(imageUrl)
+    if (validationMessage) {
       toast.error('URL inválida', {
-        description: 'La URL debe ser una imagen válida (JPG, PNG, WebP, GIF)'
+        description: validationMessage,
       })
       return
     }
@@ -227,7 +214,7 @@ export function ImageUploader({
       })
 
       // Agregar la URL a las imágenes
-      onChange([...images, imageUrl])
+      onChange([...images, imageUrl.trim()])
       toast.success('Imagen agregada desde URL')
       setImageUrl('')
       setShowUrlInput(false)
@@ -479,7 +466,7 @@ export function ImageUploader({
                     </div>
 
                     <p className="text-xs text-blue-600">
-                      💡 Puedes usar URLs de Unsplash, Cloudinary, Imgur o cualquier imagen pública
+                      Usá una URL HTTPS de un proveedor habilitado. El sistema validará el dominio y que la imagen cargue correctamente.
                     </p>
                   </div>
                 </Card>

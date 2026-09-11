@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Eye, Pencil, Trash2, MoreVertical, PackageCheck, DollarSign, Shield } from 'lucide-react'
 import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
+import { getWarrantyStatus } from '@/lib/warranty-utils'
 
 interface RepairCardsViewProps {
   repairs: Repair[]
@@ -35,13 +36,35 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, 
           estimatedCost: repair.estimatedCost,
           paidAmount: repair.paidAmount,
         })
+        const isDelivered = repair.status === 'entregado'
+        const ws = getWarrantyStatus(repair.warrantyExpiresAt)
+        const hasActiveWarranty = isDelivered && (
+          ws === 'active' ||
+          ws === 'expiring' ||
+          (Boolean(repair.warrantyMonths && repair.warrantyMonths > 0) && ws !== 'expired')
+        )
+
         return (
-        <div key={repair.id} className="relative group">
+        <div key={repair.id} className="relative group flex flex-col justify-between rounded-xl">
           <RepairCard
             repair={repair}
             onClick={onView ? () => onView(repair) : onEdit ? () => onEdit(repair) : undefined}
             className="h-full"
           />
+          {hasActiveWarranty && onClaimWarranty && (
+            <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full h-7 gap-1.5 text-xs font-bold border-amber-300 bg-amber-50/90 text-amber-800 hover:bg-amber-100 hover:text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 shadow-2xs cursor-pointer"
+                onClick={() => onClaimWarranty(repair)}
+                title="Procesar reingreso por garantía"
+              >
+                <Shield className="h-3.5 w-3.5 text-amber-600" />
+                Procesar Garantía
+              </Button>
+            </div>
+          )}
           {/* Action menu — visible on hover */}
           <div className="absolute right-2 top-2 z-10 opacity-100 transition-opacity sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100">
             <DropdownMenu>
@@ -60,7 +83,7 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, 
                   <Eye className="mr-2 h-3.5 w-3.5" />
                   Ver detalles
                 </DropdownMenuItem>
-                {onEdit && (
+                {onEdit && !isDelivered && repair.status !== 'cancelado' && (
                   <DropdownMenuItem onClick={() => onEdit(repair)}>
                     <Pencil className="mr-2 h-3.5 w-3.5" />
                     Editar

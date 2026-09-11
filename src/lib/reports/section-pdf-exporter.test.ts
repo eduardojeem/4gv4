@@ -86,7 +86,7 @@ describe('no se recortan filas en silencio', () => {
 })
 
 describe('los cinco PDF llevan el nombre del negocio', () => {
-  const pagina = leer('src/app/dashboard/reports/page.tsx')
+  const pagina = leer('src/components/admin/reports/operational-reports.tsx')
   const productos = leer('src/components/reports/ReportsProductsTab.tsx')
   const creditos = leer('src/components/reports/ReportsCreditsTab.tsx')
 

@@ -339,6 +339,21 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
         },
       ],
     },
+    brands_section: {
+      enabled: true,
+      title: 'Las mejores marcas para toda la familia',
+      subtitle: 'Encontrá indumentaria y calzado original con garantía y envío rápido',
+      items: [
+        { id: 'nike', name: 'Nike', active: true },
+        { id: 'adidas', name: 'Adidas', active: true },
+        { id: 'puma', name: 'Puma', active: true },
+        { id: 'under-armour', name: 'Under Armour', active: true },
+        { id: 'reebok', name: 'Reebok', active: true },
+        { id: 'new-balance', name: 'New Balance', active: true },
+        { id: 'zara', name: 'Zara', active: true },
+        { id: 'vans', name: 'Vans', active: true },
+      ],
+    },
     product_credit_defaults: {
       enabled: true,
       calculationBase: 'sale',
@@ -412,6 +427,7 @@ export function applyWebsiteSettingsDefaults(
   const promotionalCarousel = (settings.promotional_carousel || {}) as Partial<WebsiteSettings['promotional_carousel']>
   const offersCarousel = (settings.offers_carousel || {}) as Partial<WebsiteSettings['offers_carousel']>
   const trustBar = (settings.trust_bar || {}) as Partial<WebsiteSettings['trust_bar']>
+  const brandsSection = (settings.brands_section || {}) as Partial<WebsiteSettings['brands_section']>
   const productCreditDefaults = (settings.product_credit_defaults || {}) as Partial<WebsiteSettings['product_credit_defaults']>
   const servicesSection = (settings.services_section || {}) as Partial<WebsiteSettings['services_section']>
   const maintenanceMode = (settings.maintenance_mode || {}) as Partial<WebsiteSettings['maintenance_mode']>
@@ -463,6 +479,13 @@ export function applyWebsiteSettingsDefaults(
       items: Array.isArray(trustBar.items)
         ? trustBar.items
         : defaults.trust_bar.items,
+    },
+    brands_section: {
+      ...defaults.brands_section,
+      ...brandsSection,
+      items: Array.isArray(brandsSection.items)
+        ? brandsSection.items
+        : defaults.brands_section.items,
     },
     product_credit_defaults: {
       ...defaults.product_credit_defaults,

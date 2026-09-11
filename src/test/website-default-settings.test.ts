@@ -75,4 +75,25 @@ describe('applyWebsiteSettingsDefaults', () => {
     expect(customized.offers_section.accentColor).toBe('brand')
     expect(customized.offers_section.subtitle).toBe(defaults.offers_section.subtitle)
   })
+
+  it('provides brands_section defaults and supports custom items and visibility', () => {
+    const defaults = applyWebsiteSettingsDefaults({} as Partial<WebsiteSettings>)
+    expect(defaults.brands_section.enabled).toBe(true)
+    expect(defaults.brands_section.title).toBe('Las mejores marcas para toda la familia')
+    expect(defaults.brands_section.items.length).toBeGreaterThan(0)
+    expect(defaults.brands_section.items[0].active).toBe(true)
+
+    const customized = applyWebsiteSettingsDefaults({
+      brands_section: {
+        enabled: false,
+        title: 'Marcas Exclusivas',
+        items: [{ id: 'custom-1', name: 'Mi Marca Propia', active: true }],
+      },
+    } as Partial<WebsiteSettings>)
+
+    expect(customized.brands_section.enabled).toBe(false)
+    expect(customized.brands_section.title).toBe('Marcas Exclusivas')
+    expect(customized.brands_section.items).toHaveLength(1)
+    expect(customized.brands_section.items[0].name).toBe('Mi Marca Propia')
+  })
 })

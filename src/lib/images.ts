@@ -1,5 +1,6 @@
 import { config } from './config'
 import { getPublicUrl } from './supabase-storage'
+import { isSupportedImageSource } from './image-url-policy'
 
 export const resolveProductImageUrl = (url?: string | null): string => {
   // Si no hay URL o está vacía, retornar placeholder
@@ -10,8 +11,11 @@ export const resolveProductImageUrl = (url?: string | null): string => {
   // Si es data URI o blob URL, retornar tal cual
   if (cleanUrl.startsWith('data:') || cleanUrl.startsWith('blob:')) return cleanUrl
   
-  // Si ya es una URL completa (http/https), retornar tal cual
-  if (/^https?:\/\//.test(cleanUrl)) return cleanUrl
+  // Una URL externa que Next/Image no puede renderizar nunca debe llegar al
+  // componente: los registros antiguos o importados usan un fallback seguro.
+  if (/^https?:\/\//.test(cleanUrl)) {
+    return isSupportedImageSource(cleanUrl) ? cleanUrl : '/placeholder-product.svg'
+  }
   
   // Si es una ruta relativa que empieza con /, retornar tal cual (archivo público en /public)
   if (cleanUrl.startsWith('/')) return cleanUrl

@@ -39,6 +39,7 @@ export interface PublicProductVariant {
   wholesale_price?: number | null
   stock_quantity: number
   is_active: boolean
+  image_url?: string | null
 }
 
 export interface PublicProduct {

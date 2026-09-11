@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { unstable_cache } from 'next/cache'
 
 export type PlatformBranding = {
   platformName: string
@@ -126,7 +127,7 @@ export function withBrandingInFeatures(features: unknown, branding: PlatformBran
   }
 }
 
-export async function getPlatformBranding() {
+async function getPlatformBrandingUncached() {
   const admin = createAdminSupabase()
   const { data } = await admin
     .from('system_settings')
@@ -136,3 +137,9 @@ export async function getPlatformBranding() {
 
   return getBrandingFromFeatures((data as { features?: unknown } | null)?.features)
 }
+
+export const getPlatformBranding = unstable_cache(
+  getPlatformBrandingUncached,
+  ['platform-branding'],
+  { revalidate: 300, tags: ['platform:branding'] }
+)

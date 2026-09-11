@@ -71,7 +71,7 @@ describe('los conteos del informe de reparaciones', () => {
 
 describe('el informe recibe los conteos que muestra', () => {
   it('la pantalla los calcula y los guarda', () => {
-    const PAGINA = leer('src/app/dashboard/reports/page.tsx')
+    const PAGINA = leer('src/components/admin/reports/operational-reports.tsx')
     expect(PAGINA).toContain('completed: completion.deliveredCount,')
     expect(PAGINA).toContain('inProgress: completion.inProgressCount,')
   })

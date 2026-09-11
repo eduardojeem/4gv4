@@ -13,7 +13,6 @@ type RestrictedRole = 'vendedor' | 'tecnico'
 
 const BLOCKED_SECTIONS: string[] = [
   '/dashboard/pos/dashboard',
-  '/dashboard/reports',
   '/dashboard/suppliers',
   '/dashboard/settings',
   '/dashboard/repairs/settings',

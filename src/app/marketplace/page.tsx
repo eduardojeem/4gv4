@@ -20,7 +20,10 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-export const dynamic = 'force-dynamic'
+// La pagina puede reutilizar el HTML/RSC durante la misma ventana corta que el
+// catalogo. Los filtros personales viven en otras rutas y no forman parte de
+// esta salida publica.
+export const revalidate = 30
 
 export default async function MarketplacePage() {
   const [organizations, marketplacePage, brands, marketplaceOffers] = await Promise.all([

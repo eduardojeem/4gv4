@@ -9,7 +9,11 @@ import {
 } from '@/lib/api/products-server'
 import { ProductCard } from '@/components/public/ProductCard'
 import { ProductFilters } from '@/components/public/ProductFilters'
-import { Breadcrumbs } from '@/components/public/Breadcrumbs'
+import {
+  StorefrontCatalogHero,
+  StorefrontCatalogToolbar,
+  StorefrontCollections,
+} from '@/components/public/StorefrontCatalogChrome'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import {
   ProductSearch,
@@ -25,6 +29,7 @@ import {
 import { Search } from 'lucide-react'
 import { PRODUCTS_MAX_PRICE, PRODUCTS_PER_PAGE } from '@/lib/constants/products'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
+import { FASHION_AUDIENCES, type FashionAudience } from '@/lib/products/fashion-filters'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +65,12 @@ export default async function ProductsPage(props: {
   const maxPrice = Number.isFinite(rawMaxPrice) && rawMaxPrice > 0 ? rawMaxPrice : MAX_PRICE
   const inStock = searchParams.in_stock === 'true'
   const offers = searchParams.offers === 'true' || searchParams.ofertas === 'true'
+  const rawAudience = typeof searchParams.audience === 'string' ? searchParams.audience : ''
+  const audience = FASHION_AUDIENCES.some((option) => option.value === rawAudience)
+    ? rawAudience as FashionAudience
+    : undefined
+  const size = typeof searchParams.size === 'string' ? searchParams.size : ''
+  const color = typeof searchParams.color === 'string' ? searchParams.color : ''
   const sort = (searchParams.sort as string) || 'default'
 
   const rawPerPage = Number(searchParams.per_page || searchParams.limit)
@@ -70,7 +81,7 @@ export default async function ProductsPage(props: {
   const { isWholesale } = await resolveWholesaleStatus()
 
   // Fetch data in parallel
-  const [productsData, categories, branches] = await Promise.all([
+  const [productsData, categories, branches, settings] = await Promise.all([
     getPublicProducts({
       query,
       categoryId,
@@ -80,6 +91,9 @@ export default async function ProductsPage(props: {
       maxPrice,
       inStock,
       offers,
+      audience,
+      size,
+      color,
       sort,
       page,
       perPage,
@@ -87,9 +101,10 @@ export default async function ProductsPage(props: {
     }),
     getPublicCategories(isWholesale),
     getPublicBranches(),
+    fetchWebsiteSettings(),
   ])
 
-  const { products, total, totalPages, brands, priceRange, branchFilterUnavailable } = productsData
+  const { products, total, totalPages, brands, priceRange, branchFilterUnavailable, fashionFacets } = productsData
   const selectedBranchName = branchId ? branches.find((b) => b.id === branchId)?.name : undefined
 
   const productBranchMap =
@@ -106,6 +121,9 @@ export default async function ProductsPage(props: {
     branchId !== '' ||
     inStock ||
     offers ||
+    Boolean(audience) ||
+    size !== '' ||
+    color !== '' ||
     minPrice > 0 ||
     maxPrice < MAX_PRICE
 
@@ -115,6 +133,9 @@ export default async function ProductsPage(props: {
     branchId !== '',
     inStock,
     offers,
+    Boolean(audience),
+    size !== '',
+    color !== '',
     minPrice > 0 || maxPrice < MAX_PRICE,
   ].filter(Boolean).length
 
@@ -126,38 +147,22 @@ export default async function ProductsPage(props: {
         baseUrl={prefixPublicTenantPath(tenantPrefix, '/productos')}
       />
 
-      {/* Breadcrumb + Header comercial */}
-      <div className="border-b border-border/60 bg-gradient-to-b from-primary/[0.04] via-card to-background py-6">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <Breadcrumbs
-            homeHref={prefixPublicTenantPath(tenantPrefix, '/inicio')}
-            items={[{ label: 'Productos' }]}
-          />
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mt-2">
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl lg:text-4xl text-balance">
-                Catálogo de Productos
-              </h1>
-              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-                {total} {total === 1 ? 'producto disponible' : 'productos disponibles'}
-                {query && (
-                  <>
-                    {' para '}
-                    <span className="font-bold text-foreground">
-                      &quot;{query}&quot;
-                    </span>
-                  </>
-                )}
-              </p>
-            </div>
+      <StorefrontCatalogHero
+        homeHref={prefixPublicTenantPath(tenantPrefix, '/inicio')}
+        productsHref={prefixPublicTenantPath(tenantPrefix, '/productos')}
+        storeName={settings?.company_info?.name || 'Nuestra tienda'}
+        total={total}
+        query={query}
+      >
+        <Suspense fallback={<div className="h-10 w-full max-w-sm animate-pulse rounded-xl bg-muted" />}>
+          <ProductSearch />
+        </Suspense>
+      </StorefrontCatalogHero>
 
-            {/* Search bar */}
-            <Suspense fallback={<div className="h-10 w-full max-w-sm bg-muted animate-pulse rounded-xl" />}>
-              <ProductSearch />
-            </Suspense>
-          </div>
-        </div>
-      </div>
+      <StorefrontCollections
+        categories={categories}
+        productsHref={prefixPublicTenantPath(tenantPrefix, '/productos')}
+      />
 
       {/* Main content */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
@@ -173,6 +178,7 @@ export default async function ProductsPage(props: {
                     categories={categories}
                     brands={brands}
                     branches={branches}
+                    fashionFacets={fashionFacets}
                   />
                 </Suspense>
               </div>
@@ -183,7 +189,7 @@ export default async function ProductsPage(props: {
           <div className="flex-1 min-w-0">
             
             {/* ── Barra Flotante Sticky de Filtros y Ordenamiento al hacer Scroll ── */}
-            <div className="sticky top-16 z-30 mb-5 rounded-2xl border border-border/80 bg-background/95 p-2.5 sm:p-3 shadow-md backdrop-blur-xl space-y-2 transition-shadow">
+            <StorefrontCatalogToolbar>
               
               {/* Fila 1 (Arriba): Controles Principales -> Filtros Móviles + Sucursal + Relevancia/Orden */}
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -193,6 +199,7 @@ export default async function ProductsPage(props: {
                   categories={categories}
                   brands={brands}
                   branches={branches}
+                  fashionFacets={fashionFacets}
                 />
 
                 <div className="flex items-center gap-2">
@@ -216,7 +223,7 @@ export default async function ProductsPage(props: {
                   <FilterBadges categories={categories} branches={branches} />
                 </Suspense>
               </div>
-            </div>
+            </StorefrontCatalogToolbar>
 
             {/* Product grid */}
             {branchFilterUnavailable ? (

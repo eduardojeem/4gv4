@@ -195,6 +195,21 @@ export const TrustBarSchema = z.object({
   items: z.array(TrustBarItemSchema).max(6, 'Máximo 6 beneficios'),
 })
 
+export const BrandItemSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1, 'El nombre de la marca es requerido').max(60, 'Máximo 60 caracteres'),
+  active: z.boolean().default(true),
+  imageUrl: z.string().url().or(z.literal('')).optional(),
+  href: z.string().max(255).optional(),
+})
+
+export const BrandsSectionSchema = z.object({
+  enabled: z.boolean().default(true),
+  title: z.string().trim().min(1, 'El título es requerido').max(100, 'Máximo 100 caracteres').default('Las mejores marcas para toda la familia'),
+  subtitle: z.string().max(200, 'Máximo 200 caracteres').optional().default('Encontrá indumentaria y calzado original con garantía y envío rápido'),
+  items: z.array(BrandItemSchema).max(24, 'Máximo 24 marcas'),
+})
+
 export const CreditPlanDefaultSchema = z.object({
   count: z.number().int().min(1, 'Minimo 1 cuota').max(60, 'Maximo 60 cuotas'),
   rate: z.number().min(0, 'El recargo no puede ser negativo').max(300, 'Recargo demasiado alto'),
@@ -465,6 +480,7 @@ export const WebsiteSettingsSchema = z.object({
   promotional_carousel: PromotionalCarouselSchema.optional(),
   offers_carousel: PromotionalCarouselSchema.optional(),
   trust_bar: TrustBarSchema.optional(),
+  brands_section: BrandsSectionSchema.optional(),
   product_credit_defaults: ProductCreditDefaultsSchema.optional(),
   services_section: ServicesSectionSchema.optional(),
   services: ServicesSchema,
@@ -487,6 +503,7 @@ export const SETTING_SCHEMAS = {
   promotional_carousel: PromotionalCarouselSchema,
   offers_carousel: PromotionalCarouselSchema,
   trust_bar: TrustBarSchema,
+  brands_section: BrandsSectionSchema,
   product_credit_defaults: ProductCreditDefaultsSchema,
   services_section: ServicesSectionSchema,
   services: ServicesSchema,

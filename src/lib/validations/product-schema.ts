@@ -4,6 +4,7 @@ import {
   ProductAttributeDefinitionSchema,
   ProductVariantInputSchema,
 } from "@/lib/products/variant-contract"
+import { isPersistableImageSource } from '@/lib/image-url-policy'
 
 export const productSchema = z
   .object({
@@ -144,7 +145,22 @@ export const productSchema = z
       ),
     is_active: z.boolean().default(true),
     visibility: z.enum(['public', 'wholesale', 'hidden']).optional().default('public'),
-    images: z.array(z.string()).default([]),
+    tags: z.array(z.string().trim().min(1).max(80)).max(30).optional().default([]),
+    fashion_audience: z.enum(['mujer', 'hombre', 'ninos', 'bebes', 'unisex', '']).optional().default(''),
+    images: z
+      .array(
+        z.string().trim()
+          .refine(
+            (source) => source.startsWith('data:image/') || source.length <= 2048,
+            'La URL de la imagen es demasiado larga',
+          )
+          .refine(
+            isPersistableImageSource,
+            'La imagen debe pertenecer a un dominio habilitado o al almacenamiento del sistema',
+          ),
+      )
+      .max(10, 'No se permiten más de 10 imágenes')
+      .default([]),
     has_variants: z.boolean().default(false),
     variant_attribute_config: z.array(ProductAttributeDefinitionSchema).default([]),
     variants: z.array(ProductVariantInputSchema).default([]),

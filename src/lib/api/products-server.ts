@@ -10,6 +10,7 @@ import { getTenantSlugFromHost } from '@/lib/saas/tenant'
 import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-tenant'
 import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
 import { buildVisibleCategoryTree, resolveEffectiveProductStock } from '@/lib/public/catalog'
+import { getVariantFashionValue, type FashionAudience } from '@/lib/products/fashion-filters'
 
 import { PRODUCTS_MAX_PRICE, PRODUCTS_PER_PAGE } from '@/lib/constants/products'
 
@@ -60,6 +61,9 @@ export type ProductFilters = {
   maxPrice?: number
   inStock?: boolean
   offers?: boolean
+  audience?: FashionAudience
+  size?: string
+  color?: string
   sort?: string
   page?: number
   perPage?: number
@@ -77,6 +81,7 @@ export type ProductsResponse = {
   priceRange: { min: number; max: number }
   isWholesale: boolean
   branchFilterUnavailable?: boolean
+  fashionFacets: { sizes: string[]; colors: string[] }
 }
 
 const MAX_PRICE = PRODUCTS_MAX_PRICE
@@ -143,6 +148,9 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     minPrice = 0,
     maxPrice = MAX_PRICE,
     inStock = false,
+    audience,
+    size: rawSize = '',
+    color: rawColor = '',
     sort: rawSort = 'name',
     page: rawPage = 1,
     perPage = PRODUCTS_PER_PAGE,
@@ -155,6 +163,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
   // #2 — Sanitizar brand igual que query para prevenir inyección PostgREST.
   const brand = sanitizeSearch(rawBrand ?? '')
+  const size = sanitizeSearch(rawSize)
+  const color = sanitizeSearch(rawColor)
 
   // #4 — max_price negativo o cero produce un rango [0,0] vacío sin aviso.
   // Se trata cualquier valor <= 0 o no-finito como "sin límite superior".
@@ -179,6 +189,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       brands: [],
       priceRange: { min: 0, max: MAX_PRICE },
       isWholesale: false,
+      fashionFacets: { sizes: [], colors: [] },
     }
   }
 
@@ -207,6 +218,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     category: { id: string; name: string } | { id: string; name: string }[] | null
     brand_details: { name: string } | null
     branch_stock?: Array<{ stock_quantity: number | null }> | { stock_quantity: number | null } | null
+    tags?: string[] | null
   }
 
   // Resolve wholesale status — use caller-supplied value if available to avoid re-querying.
@@ -255,6 +267,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
         brands: [],
         priceRange: { min: 0, max: MAX_PRICE },
         isWholesale,
+        fashionFacets: { sizes: [], colors: [] },
       }
     } else {
       useBranchJoin = true
@@ -264,8 +277,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   // Build query - only active products, never select wholesale_price for non-wholesale
   // Typed as string to avoid TS2590 (union type too complex with long string literals)
   const baseSelectFields: string = isWholesale
-    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
-    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
+    ? 'id, name, sku, description, brand, tags, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
+    : 'id, name, sku, description, brand, tags, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
 
   // Sub-consultas que dependen de la BD se resuelven una sola vez, antes de
   // armar el query, para que el builder de abajo sea sincrónico y reutilizable.
@@ -297,6 +310,28 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   }
 
   const priceCol = isWholesale ? 'wholesale_price' : 'sale_price'
+
+  let fashionVariantProductIds: string[] | null = null
+  if (size || color) {
+    const { data: candidateVariants, error: candidateError } = await (supabase as any)
+      .from('product_variants')
+      .select('product_id, attributes')
+      .eq('organization_id', organization.id)
+      .eq('is_active', true)
+      .gt('stock_quantity', 0)
+
+    if (candidateError) throw new Error(candidateError.message)
+
+    fashionVariantProductIds = Array.from(new Set(
+      (candidateVariants ?? [])
+        .filter((variant: { attributes?: Record<string, unknown> }) => {
+          const matchesSize = !size || getVariantFashionValue(variant.attributes, 'size').toLowerCase() === size.toLowerCase()
+          const matchesColor = !color || getVariantFashionValue(variant.attributes, 'color').toLowerCase() === color.toLowerCase()
+          return matchesSize && matchesColor
+        })
+        .map((variant: { product_id: string }) => variant.product_id),
+    ))
+  }
 
   /** Arma el query completo. `withBranchJoin` permite reintentar sin el join. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -336,6 +371,13 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       } else {
         q = q.eq('brand', brand)
       }
+    }
+
+    if (audience) q = q.contains('tags', [`audience:${audience}`])
+    if (fashionVariantProductIds) {
+      q = fashionVariantProductIds.length > 0
+        ? q.in('id', fashionVariantProductIds)
+        : q.eq('id', '00000000-0000-0000-0000-000000000000')
     }
 
     if (minPrice > 0 || effectiveMaxPrice < MAX_PRICE) {
@@ -420,6 +462,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
           wholesale_price: isWholesale && v.wholesale_price ? Number(v.wholesale_price) : null,
           stock_quantity: Number(v.stock_quantity ?? 0),
           is_active: Boolean(v.is_active ?? true),
+          image_url: (v.attributes && typeof v.attributes === 'object' && v.attributes.image_url) ? String(v.attributes.image_url) : null,
         })
         variantsByProductId.set(v.product_id, list)
       }
@@ -472,6 +515,18 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     }
   })
 
+  const sizeOptions = new Set<string>()
+  const colorOptions = new Set<string>()
+  for (const variants of variantsByProductId.values()) {
+    for (const variant of variants ?? []) {
+      if ((variant.stock_quantity ?? 0) <= 0) continue
+      const variantSize = getVariantFashionValue(variant.attributes, 'size')
+      const variantColor = getVariantFashionValue(variant.attributes, 'color')
+      if (variantSize) sizeOptions.add(variantSize)
+      if (variantColor) colorOptions.add(variantColor)
+    }
+  }
+
   // Facetas del sidebar (marcas + rango de precio): un único scan cacheado por
   // organización/tipo de usuario, en vez de dos scans completos por request.
   const { brands, priceRange } = await getProductFacets(organization.id, isWholesale)
@@ -487,6 +542,10 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     priceRange: { min: metaMinPrice, max: metaMaxPrice },
     isWholesale,
     branchFilterUnavailable,
+    fashionFacets: {
+      sizes: Array.from(sizeOptions).sort((a, b) => a.localeCompare(b, 'es', { numeric: true })),
+      colors: Array.from(colorOptions).sort((a, b) => a.localeCompare(b, 'es')),
+    },
   }
 }
 
@@ -620,28 +679,93 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     offer_price: p.offer_price,
   }, (automaticPromotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>)))
 
-  // Si tiene variantes, traer las combinaciones activas
-  let productVariants: PublicProduct['variants'] = []
-  if (p.has_variants) {
-    const { data: variantRows } = await supabase
-      .from('product_variants')
-      .select('id, product_id, variant_name, attributes, sku, sale_price, wholesale_price, stock_quantity, is_active')
-      .eq('product_id', p.id)
-      .eq('organization_id', organization.id)
-      .eq('is_active', true)
-      .order('created_at', { ascending: true })
+  // Traer las combinaciones activas si existen
+  const { data: variantRows } = await supabase
+    .from('product_variants')
+    .select('id, product_id, variant_name, attributes, sku, sale_price, wholesale_price, stock_quantity, is_active')
+    .eq('product_id', p.id)
+    .eq('organization_id', organization.id)
+    .eq('is_active', true)
+    .order('created_at', { ascending: true })
 
-    productVariants = (variantRows ?? []).map((v: any) => ({
-      id: v.id,
-      product_id: v.product_id,
-      variant_name: v.variant_name,
-      attributes: (typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : {}) as Record<string, string>,
-      sku: v.sku || null,
-      sale_price: Number(v.sale_price ?? p.sale_price),
-      wholesale_price: isWholesale && v.wholesale_price ? Number(v.wholesale_price) : null,
-      stock_quantity: Number(v.stock_quantity ?? 0),
-      is_active: Boolean(v.is_active ?? true),
-    }))
+  const productVariants: PublicProduct['variants'] = (variantRows ?? []).map((v: any) => ({
+    id: v.id,
+    product_id: v.product_id,
+    variant_name: v.variant_name,
+    attributes: (typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : {}) as Record<string, string>,
+    sku: v.sku || null,
+    sale_price: Number(v.sale_price ?? p.sale_price),
+    wholesale_price: isWholesale && v.wholesale_price ? Number(v.wholesale_price) : null,
+    stock_quantity: Number(v.stock_quantity ?? 0),
+    is_active: Boolean(v.is_active ?? true),
+    image_url: (v.attributes && typeof v.attributes === 'object' && v.attributes.image_url) ? String(v.attributes.image_url) : null,
+  }))
+
+  const hasVariants = Boolean(p.has_variants || productVariants.length > 0)
+
+  // Si tiene variantes pero no tiene configurado variant_attribute_config, auto-derivar desde attributes
+  let variantAttributeConfig = Array.isArray(p.variant_attribute_config) && p.variant_attribute_config.length > 0
+    ? p.variant_attribute_config
+    : []
+
+  if (hasVariants && variantAttributeConfig.length === 0 && productVariants.length > 0) {
+    const attrMap: Record<string, Set<string>> = {}
+    for (const v of productVariants) {
+      if (v.attributes && typeof v.attributes === 'object') {
+        for (const [key, val] of Object.entries(v.attributes)) {
+          if (key !== 'image_url' && val && typeof val === 'string') {
+            if (!attrMap[key]) attrMap[key] = new Set()
+            attrMap[key].add(val)
+          }
+        }
+      }
+    }
+
+    const orderPreference: Record<string, number> = {
+      color: 1,
+      colour: 1,
+      size: 2,
+      talle: 2,
+      talla: 2,
+    }
+
+    const labelMap: Record<string, string> = {
+      size: 'Talle',
+      talle: 'Talle',
+      talla: 'Talla',
+      color: 'Color',
+      colour: 'Color',
+      material: 'Material',
+    }
+
+    const sizeOrder = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', 'XXL', '3XL', '4XL']
+
+    variantAttributeConfig = Object.entries(attrMap)
+      .sort(([a], [b]) => (orderPreference[a.toLowerCase()] ?? 99) - (orderPreference[b.toLowerCase()] ?? 99))
+      .map(([key, setValues]) => {
+        const lowerKey = key.toLowerCase()
+        const label = labelMap[lowerKey] || (key.charAt(0).toUpperCase() + key.slice(1))
+        const isColor = lowerKey.includes('color') || lowerKey.includes('colour')
+
+        const rawOptions = Array.from(setValues)
+        const sortedOptions = (lowerKey.includes('size') || lowerKey.includes('talle') || lowerKey.includes('talla'))
+          ? rawOptions.sort((a, b) => {
+              const ia = sizeOrder.indexOf(a.toUpperCase())
+              const ib = sizeOrder.indexOf(b.toUpperCase())
+              if (ia !== -1 && ib !== -1) return ia - ib
+              if (ia !== -1) return -1
+              if (ib !== -1) return 1
+              return a.localeCompare(b, undefined, { numeric: true })
+            })
+          : rawOptions
+
+        return {
+          key,
+          label,
+          control: isColor ? 'color' as const : 'select' as const,
+          options: sortedOptions,
+        }
+      })
   }
 
   const product: PublicProduct = {
@@ -659,8 +783,8 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     installments_enabled: p.installments_enabled || false,
     installments_public: p.installments_public ?? true,
     installments_plans: Array.isArray(p.installments_plans) ? p.installments_plans : [],
-    has_variants: Boolean(p.has_variants),
-    variant_attribute_config: Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : [],
+    has_variants: hasVariants,
+    variant_attribute_config: variantAttributeConfig,
     variants: productVariants,
     stock_quantity: (p.stock_quantity as number) ?? 0,
     in_stock: ((p.stock_quantity as number) ?? 0) > 0,

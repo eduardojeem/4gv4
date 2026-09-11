@@ -208,7 +208,7 @@ export default function DashboardPage() {
   const [canRefresh, setCanRefresh] = useState(true)
   const refreshCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [stats, setStats] = useState<KpiStat[]>([
-    { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/dashboard/reports' },
+    { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/admin/reports' },
     ...(hasOrders ? [{ title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo' as const, href: '/dashboard/orders' }] : []),
     { title: 'Clientes nuevos', value: '—', icon: Users, tone: 'violet', href: '/dashboard/customers' },
     { title: 'Productos', value: '—', icon: Package, tone: 'cyan', href: '/dashboard/products' },
@@ -462,7 +462,7 @@ export default function DashboardPage() {
           title: 'Ventas del día',
           value: formatCurrency(totalRevenueToday),
           subtitle: `${completedToday} venta${completedToday !== 1 ? 's' : ''} completada${completedToday !== 1 ? 's' : ''}`,
-          icon: Banknote, tone: 'emerald' as const, href: '/dashboard/reports',
+          icon: Banknote, tone: 'emerald' as const, href: '/admin/reports',
           trend: trendData,
         },
         ...(hasOrders ? [{
@@ -531,7 +531,7 @@ export default function DashboardPage() {
     { title: 'Nueva devolución', icon: RotateCcw, href: '/dashboard/after-sales?new=true', tone: 'violet' as const },
     { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers?new=true', tone: 'violet' as const },
     { title: 'Nuevo producto', icon: Package, href: '/dashboard/products?new=true', tone: 'emerald' as const },
-    { title: 'Ver reportes', icon: BarChart3, href: '/dashboard/reports', tone: 'cyan' as const },
+    { title: 'Ver reportes', icon: BarChart3, href: '/admin/reports', tone: 'cyan' as const },
     { title: 'Mi tienda pública', icon: Store, href: organization?.slug ? `/${organization.slug}/inicio` : '/marketplace/empresas', tone: 'emerald' as const },
     { title: 'Marketplace', icon: Globe, href: '/marketplace', tone: 'cyan' as const },
   ]
@@ -812,7 +812,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <Button asChild variant="ghost" size="sm" className="h-7 gap-1 text-xs">
-                <Link href="/dashboard/reports">
+                <Link href="/admin/reports">
                   Ver todo
                   <ArrowRight className="h-3 w-3" />
                 </Link>

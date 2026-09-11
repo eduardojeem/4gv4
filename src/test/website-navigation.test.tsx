@@ -4,10 +4,10 @@ import { WebsiteNavigation } from '@/components/admin/website/WebsiteNavigation'
 import { ServicesPublicationStatus } from '@/components/admin/website/ServicesPublicationStatus'
 
 describe('website navigation', () => {
-  it('groups all eight sections and requests navigation from the mobile selector', () => {
+  it('groups all nine sections and requests navigation from the mobile selector', () => {
     const change = vi.fn()
     render(<WebsiteNavigation value="company" onChange={change} />)
-    expect(screen.getAllByRole('option')).toHaveLength(8)
+    expect(screen.getAllByRole('option')).toHaveLength(9)
     fireEvent.change(screen.getByLabelText('Editar sección'), { target: { value: 'services' } })
     expect(change).toHaveBeenCalledWith('services')
     expect(screen.getByLabelText('Editar sección')).toHaveValue('company')

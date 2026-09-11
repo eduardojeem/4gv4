@@ -6,12 +6,12 @@ import { calculateRepairCostAverages } from '@/lib/reports/repair-costs'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
-const REPORTES = leer('src/app/dashboard/reports/page.tsx')
+const REPORTES = leer('src/components/admin/reports/operational-reports.tsx')
 const ADMIN = leer('src/hooks/use-admin-analytics.ts')
 const EXPORTADOR_SECCIONES = leer('src/lib/reports/section-pdf-exporter.ts')
 
 /**
- * `/admin/analytics` y `/dashboard/reports` publicaban dos cifras que se leian
+ * `/admin/analytics` y `/admin/reports` publicaban dos cifras que se leian
  * como la misma y no lo eran: «Total vendido» sumaba POS mas el ingreso del
  * taller, y «Ventas Totales» era solo POS. Sobre el mismo periodo y la misma
  * sucursal daban distinto, y nada decia por que.

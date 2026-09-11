@@ -11,7 +11,6 @@ import {
   Package,
   Users,
   Wrench,
-  BarChart3,
   Menu
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
@@ -37,7 +36,6 @@ const MOBILE_NAV_ITEMS: NavItem[] = [
   { name: 'Productos', href: '/dashboard/products', icon: Package, requiredModule: 'inventory' },
   { name: 'Clientes', href: '/dashboard/customers', icon: Users },
   { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, requiredModule: 'repairs' },
-  { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3 },
 ]
 
 export const MobileNav = memo(function MobileNav() {

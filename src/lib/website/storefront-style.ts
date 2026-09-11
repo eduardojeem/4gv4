@@ -70,3 +70,4 @@ export const STOREFRONT_RADIUS_CLASS: Record<StorefrontStyle, string> = {
   fashion: 'rounded-none',
   sport: 'rounded-md',
 }
+

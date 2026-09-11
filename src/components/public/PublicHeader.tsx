@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag, ChevronRight, Search, MapPin, Mail, MessageCircle, ShieldCheck, Heart } from 'lucide-react'
+import { ArrowLeft, Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag, ChevronRight, Search, MapPin, Mail, MessageCircle, ShieldCheck, Heart } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
@@ -679,6 +679,23 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
           </button>
         </div>
       </div>
+
+      {tenantPrefix && (
+        <div className="border-t border-primary-foreground/15 bg-primary text-primary-foreground shadow-sm lg:hidden">
+          <Link
+            href="/marketplace"
+            aria-label="Volver al Marketplace"
+            className="container flex min-h-10 items-center justify-center gap-2 px-4 py-2 text-sm font-bold transition-colors hover:bg-primary-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-foreground/70"
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Volver al Marketplace</span>
+            <span className="hidden text-xs font-medium text-primary-foreground/80 sm:inline">
+              · Explorar más tiendas
+            </span>
+          </Link>
+        </div>
+      )}
 
       {/* ── MODAL / DRAWER LATERAL OFF-CANVAS (SHEET) ── */}
       {mobileMenuOpen && (

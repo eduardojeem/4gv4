@@ -4,11 +4,10 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Flame,
   Home,
-  LayoutDashboard,
   Package,
   ShoppingCart,
+  Store,
   User,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
@@ -28,30 +27,27 @@ export function StoreMobileBottomNav() {
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
-  const canAccessDashboard =
-    user?.role === 'super_admin' ||
-    user?.role === 'admin' ||
-    user?.role === 'tecnico' ||
-    user?.role === 'vendedor'
-
   const tabs = [
     {
       href: `${tenantPrefix}/inicio`,
       label: 'Inicio',
       icon: Home,
+      emphasized: false,
       isActive: pathname === `${tenantPrefix}/inicio` || pathname === tenantPrefix || pathname === '/',
     },
     {
       href: `${tenantPrefix}/productos`,
       label: 'Productos',
       icon: Package,
+      emphasized: false,
       isActive: pathname.startsWith(`${tenantPrefix}/productos`) && !pathname.includes('ofertas=true'),
     },
     {
-      href: `${tenantPrefix}/productos?ofertas=true`,
-      label: 'Ofertas',
-      icon: Flame,
-      isActive: pathname.includes('ofertas=true') || pathname.startsWith(`${tenantPrefix}/ofertas`),
+      href: '/marketplace',
+      label: 'Marketplace',
+      icon: Store,
+      emphasized: true,
+      isActive: false,
     },
   ]
 
@@ -64,16 +60,19 @@ export function StoreMobileBottomNav() {
         aria-label="Navegación móvil y tablet de la tienda"
         className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/80 bg-background/95 backdrop-blur-xl px-2 shadow-lg lg:hidden"
       >
-        {/* Tab 1-3: Inicio, Productos, Ofertas */}
+        {/* Accesos principales de la tienda y salida visible al Marketplace */}
         {tabs.map((tab) => {
           const Icon = tab.icon
           return (
             <Link
               key={tab.href}
               href={tab.href}
+              aria-label={tab.emphasized ? 'Volver al Marketplace' : undefined}
               className={cn(
                 'group flex flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-semibold transition-all select-none',
-                tab.isActive
+                tab.emphasized
+                  ? 'font-bold text-primary'
+                  : tab.isActive
                   ? 'text-primary'
                   : 'text-muted-foreground hover:text-foreground'
               )}
@@ -81,7 +80,9 @@ export function StoreMobileBottomNav() {
               <div
                 className={cn(
                   'flex h-7 w-7 items-center justify-center rounded-xl transition-all duration-200',
-                  tab.isActive
+                  tab.emphasized
+                    ? 'scale-110 bg-primary text-primary-foreground shadow-md ring-2 ring-primary/20'
+                    : tab.isActive
                     ? 'bg-primary/10 text-primary scale-110 shadow-xs'
                     : 'group-hover:bg-muted text-muted-foreground'
                 )}

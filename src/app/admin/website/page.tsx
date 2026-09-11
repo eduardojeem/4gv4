@@ -10,6 +10,7 @@ import { CheckoutSettingsEditor } from '@/components/admin/website/CheckoutSetti
 import { OffersSectionEditor } from '@/components/admin/website/OffersSectionEditor'
 import { PromotionalCarouselEditor } from '@/components/admin/website/PromotionalCarouselEditor'
 import { TrustBarEditor } from '@/components/admin/website/TrustBarEditor'
+import { BrandsSectionEditor } from '@/components/admin/website/BrandsSectionEditor'
 import { SetupGuide } from '@/components/admin/website/SetupGuide'
 import { WebsiteHowItWorksDialog } from '@/components/admin/website/WebsiteHowItWorksDialog'
 import { WebsiteSectionIntro } from '@/components/admin/website/WebsiteSectionIntro'
@@ -146,6 +147,7 @@ export default function WebsiteAdminPage() {
         {tab === 'company' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="company" /><CompanyInfoForm /></section>}
         {tab === 'hero' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="hero" /><HeroEditor /></section>}
         {tab === 'trust_bar' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="trust_bar" /><TrustBarEditor /></section>}
+        {tab === 'brands' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="brands" /><BrandsSectionEditor /></section>}
         {tab === 'carousel' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="carousel" /><PromotionalCarouselEditor /></section>}
         {tab === 'offers' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="offers" /><OffersSectionEditor /></section>}
         {tab === 'services' && <section aria-label="Catálogo de servicios"><WebsiteSectionIntro section="services" /><ServicesManager orgSlug={orgSlug} /></section>}
