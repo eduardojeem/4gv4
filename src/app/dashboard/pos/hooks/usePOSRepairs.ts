@@ -30,6 +30,12 @@ export interface UsePOSRepairsOptions {
   isCheckoutOpen: boolean
   /** Tasa de impuesto para el cálculo del total de reparaciones */
   taxPercentage: number
+  /**
+   * La organización tiene el módulo de taller. Sin él no se consultan las
+   * reparaciones del cliente: antes se pedían a la API en cada selección de
+   * cliente aunque la organización no tuviera taller.
+   */
+  enabled?: boolean
 }
 
 export interface UsePOSRepairsReturn {
@@ -75,6 +81,7 @@ export function usePOSRepairs({
   selectedCustomer,
   isCheckoutOpen,
   taxPercentage,
+  enabled = true,
 }: UsePOSRepairsOptions): UsePOSRepairsReturn {
   const { selectedBranchId } = useBranch()
   const [customerRepairs, setCustomerRepairs] = useState<any[]>([])
@@ -85,7 +92,7 @@ export function usePOSRepairs({
 
   // --- Carga desde Supabase + suscripción Realtime ---
   useEffect(() => {
-    if (!selectedCustomer) {
+    if (!selectedCustomer || !enabled) {
       setCustomerRepairs([])
       setSelectedRepairIds(prev => (prev.length ? [] : prev))
       return
@@ -102,7 +109,7 @@ export function usePOSRepairs({
       console.warn('No se pudieron cargar reparaciones del cliente en el POS:', error)
       setCustomerRepairs([])
     })
-  }, [selectedCustomer, selectedBranchId])
+  }, [selectedCustomer, selectedBranchId, enabled])
 
   // --- Toggles de entrega ---
   useEffect(() => {

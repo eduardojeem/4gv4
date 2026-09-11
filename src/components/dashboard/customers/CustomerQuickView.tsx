@@ -37,6 +37,7 @@ import { toast } from 'sonner'
 import type { Customer } from '@/hooks/use-customer-state'
 import { formatCurrency as globalFormatCurrency } from '@/lib/currency'
 import { CustomerGlobalPaymentModal } from './CustomerGlobalPaymentModal'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -194,6 +195,10 @@ function copyToClipboard(text: string, label: string) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdit }: CustomerQuickViewProps) {
+  // Sin modulo de taller no se consultan ni se muestran las reparaciones.
+  const { effectiveModules } = useSubscriptionStatus()
+  const tieneTaller = effectiveModules.includes('repairs')
+
   const [repairs, setRepairs] = useState<RepairSummary[]>([])
   const [repairStats, setRepairStats] = useState<RepairStats>({ totalRepairs: 0, totalSpent: 0 })
   const [sales, setSales] = useState<SaleSummary[]>([])
@@ -325,7 +330,8 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
     }
 
     fetchSales()
-    fetchRepairs()
+    if (tieneTaller) fetchRepairs()
+    else setLoadingRepairs(false)
     fetchCredits()
     fetchStoreCredit()
     return () => controller.abort()
@@ -479,7 +485,7 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
         {/* ── Body ── */}
         <div className="max-h-[calc(92vh-13rem)] overflow-y-auto overscroll-contain">
           {/* Métricas del Cliente */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 bg-slate-50/50 dark:divide-slate-800/80 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800">
+          <div className={cn('grid grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 bg-slate-50/50 dark:divide-slate-800/80 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800', tieneTaller ? 'sm:grid-cols-5' : 'sm:grid-cols-4')}>
             <button
               type="button"
               onClick={() => setActiveSubTab('purchases')}
@@ -493,6 +499,7 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
               <p className="text-[11px] font-medium text-slate-500">Compras</p>
             </button>
 
+            {tieneTaller && (
             <button
               type="button"
               onClick={() => setActiveSubTab('repairs')}
@@ -505,6 +512,7 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
               <p className="mt-1 text-base font-bold text-slate-900 dark:text-white tabular-nums">{totalRepairsCount}</p>
               <p className="text-[11px] font-medium text-slate-500">Reparaciones</p>
             </button>
+            )}
 
             <button
               type="button"
@@ -730,6 +738,7 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
                   </span>
                 </button>
 
+                {tieneTaller && (
                 <button
                   type="button"
                   onClick={() => setActiveSubTab('repairs')}
@@ -749,6 +758,7 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
                     {repairs.length}
                   </span>
                 </button>
+                )}
 
                 <button
                   type="button"

@@ -31,6 +31,7 @@ import { toast } from 'sonner'
 
 import { Customer } from "@/hooks/use-customer-state"
 import { formatCurrency } from "@/lib/currency"
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 interface CustomerDetailHeaderProps {
   customer: Customer
@@ -57,6 +58,10 @@ export function CustomerDetailHeader({
   compact: _compact,
   stats,
 }: CustomerDetailHeaderProps) {
+  // «Nueva Reparación» solo con el modulo de taller.
+  const { effectiveModules } = useSubscriptionStatus()
+  const tieneTaller = effectiveModules.includes('repairs')
+
 
   // Atajo de teclado ESC para volver rápidamente a la lista de clientes
   React.useEffect(() => {
@@ -240,6 +245,7 @@ export function CustomerDetailHeader({
             <span>Nueva Venta</span>
           </Button>
 
+          {tieneTaller && (
           <Button
             size="sm"
             onClick={() => router.push(`/dashboard/repairs?new=true&customerId=${customer.id}&customerName=${encodeURIComponent(customer.name)}`)}
@@ -248,6 +254,7 @@ export function CustomerDetailHeader({
             <Wrench className="h-4 w-4 text-sky-600 dark:text-sky-400" />
             <span>Nueva Reparación</span>
           </Button>
+          )}
 
           <Button
             variant="outline"

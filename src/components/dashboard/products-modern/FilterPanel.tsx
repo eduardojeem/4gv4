@@ -22,6 +22,8 @@ import { applyFilters, getUniqueBrands } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
 
 export interface FilterPanelProps {
+  /** Sin módulo de servicios ni servicios cargados, no se ofrece filtrar por servicio. */
+  showServices?: boolean
   isOpen: boolean
   products: Product[]
   categories: Category[]
@@ -38,6 +40,7 @@ export interface FilterPanelProps {
 }
 
 export function FilterPanel({
+  showServices = true,
   isOpen,
   products,
   categories,
@@ -138,7 +141,7 @@ export function FilterPanel({
             <SelectContent>
               <SelectItem value={ALL_OPTION_VALUE}>📦 + ⚙️ Todos los tipos</SelectItem>
               <SelectItem value="products">📦 Solo Productos Físicos</SelectItem>
-              <SelectItem value="services">⚙️ Solo Servicios</SelectItem>
+              {showServices && <SelectItem value="services">⚙️ Solo Servicios</SelectItem>}
             </SelectContent>
           </Select>
         </div>

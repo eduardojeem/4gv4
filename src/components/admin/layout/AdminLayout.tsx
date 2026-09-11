@@ -55,7 +55,10 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
   const [loading, setLoading] = useState(false)
   const { sidebarCollapsed: collapsed, toggleSidebar } = useAdminLayout()
   const { hasPermission, isAdmin, isSuperAdmin, user, signOut } = useAuth()
-  const { modules: planModules } = useSubscriptionStatus()
+  // Los modulos efectivos: los del plan menos los que la organizacion apago.
+  // Se pasaban los del plan, asi que Analitica, Inventario avanzado o Seguridad
+  // seguian en el menu aunque la organizacion los hubiera deshabilitado.
+  const { effectiveModules } = useSubscriptionStatus()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -67,8 +70,8 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
   // Oculta del menú las secciones cuyo módulo no está incluido en el plan activo
   // (ej. Analytics, Inventario avanzado, Seguridad si el plan no las trae).
   const visibleCategories = useMemo(
-    () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin, isSuperAdmin, planModules),
-    [hasPermission, isAdmin, isSuperAdmin, planModules]
+    () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin, isSuperAdmin, effectiveModules),
+    [hasPermission, isAdmin, isSuperAdmin, effectiveModules]
   )
 
   // El manejador acepta Ctrl y Cmd; el cartel decia «Ctrl» siempre.

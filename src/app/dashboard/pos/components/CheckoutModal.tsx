@@ -67,6 +67,8 @@ type CheckoutRepair = {
 // Define props interface
 export interface CheckoutModalProps {
   // Repair Linking
+  /** Sin modulo de taller no se ofrece vincular la venta a una reparacion. */
+  repairsEnabled?: boolean
   selectedRepairIds: string[]
   setSelectedRepairIds: (val: string[]) => void
   customerRepairs: CheckoutRepair[]
@@ -119,6 +121,7 @@ export interface CheckoutModalProps {
 }
 
 export const CheckoutModal = memo<CheckoutModalProps>(({
+  repairsEnabled = true,
   selectedRepairIds,
   setSelectedRepairIds,
   customerRepairs,
@@ -370,7 +373,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             />
 
             {/* Selector de reparacion vinculada (Multiple) */}
-            {selectedCustomer && (
+            {repairsEnabled && selectedCustomer && (
               <div className="mt-6 border-t pt-4">
                 {(() => {
                    const activeRepairs = customerRepairs.filter(repair => (

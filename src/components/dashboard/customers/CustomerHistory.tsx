@@ -98,6 +98,7 @@ import { useCustomerPurchases } from '@/hooks/useCustomerData'
 import { useCustomerRepairs } from '@/hooks/useCustomerRepairs'
 import { TimelineView } from './TimelineView'
 import { paymentMethodLabel } from '@/lib/i18n/labels'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 interface CustomerHistoryProps {
   customer: Customer
@@ -308,6 +309,10 @@ function HistoryItemCard({ item, index, mode }: { item: HistoryItem; index: numb
 }
 
 export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detailed' }: CustomerHistoryProps) {
+  // Sin modulo de taller no se muestran la tarjeta, el filtro ni la pestaña de
+  // reparaciones: eran un «0 reparaciones» permanente en un negocio sin taller.
+  const { effectiveModules } = useSubscriptionStatus()
+  const tieneTaller = effectiveModules.includes('repairs')
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState("overview")
   const [searchTerm, setSearchTerm] = useState("")
@@ -581,7 +586,8 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
       </div>
 
       {/* Estadísticas */}
-      <div className={isCompact ? "grid grid-cols-2 lg:grid-cols-4 gap-3" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"}>
+      <div className={isCompact ? `grid grid-cols-2 ${tieneTaller ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3` : `grid grid-cols-1 md:grid-cols-2 ${tieneTaller ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
+        {tieneTaller && (
         <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20">
           <CardContent className={isCompact ? "p-4" : "p-6"}>
             <div className={isCompact ? "flex items-center gap-2" : "flex items-center gap-3"}>
@@ -595,6 +601,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
             </div>
           </CardContent>
         </Card>
+        )}
 
         <Card className="border-0 shadow-lg bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20">
           <CardContent className={isCompact ? "p-4" : "p-6"}>
@@ -660,7 +667,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="repair">Reparaciones</SelectItem>
+                {tieneTaller && <SelectItem value="repair">Reparaciones</SelectItem>}
                 <SelectItem value="purchase">Compras</SelectItem>
                 <SelectItem value="payment">Pagos</SelectItem>
               </SelectContent>
@@ -730,13 +737,15 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
       ) : (
         // Modo detallado/compacto con tabs
         <Tabs value={activeTab} onValueChange={setActiveTab} className={isCompact ? "space-y-4" : "space-y-6"}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className={`grid w-full ${tieneTaller ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="overview" className={isCompact ? "p-1 sm:p-2 text-xs" : "p-2 sm:p-3 text-sm"}>
               Resumen
             </TabsTrigger>
+            {tieneTaller && (
             <TabsTrigger value="repairs" className={isCompact ? "p-1 sm:p-2 text-xs" : "p-2 sm:p-3 text-sm"}>
               Reparaciones ({repairRecords.length})
             </TabsTrigger>
+            )}
             <TabsTrigger value="purchases" className={isCompact ? "p-1 sm:p-2 text-xs" : "p-2 sm:p-3 text-sm"}>
               Compras ({purchases.length})
             </TabsTrigger>
@@ -826,6 +835,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
             </div>
           </TabsContent>
 
+          {tieneTaller && (
           <TabsContent value="repairs" className={isCompact ? "space-y-4" : "space-y-6"}>
             <Card>
               <CardHeader>
@@ -913,6 +923,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
               </CardContent>
             </Card>
           </TabsContent>
+          )}
 
           <TabsContent value="purchases" className={isCompact ? "space-y-4" : "space-y-6"}>
             <Card>

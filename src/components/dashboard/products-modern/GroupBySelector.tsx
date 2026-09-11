@@ -16,12 +16,15 @@ export interface GroupBySelectorProps {
   groupBy: GroupByMode
   onGroupByChange: (mode: GroupByMode) => void
   className?: string
+  /** Sin módulo de servicios ni servicios cargados, agrupar por tipo no tiene sentido. */
+  showServices?: boolean
 }
 
 export function GroupBySelector({
   groupBy,
   onGroupByChange,
-  className
+  className,
+  showServices = true,
 }: GroupBySelectorProps) {
   const getLabel = () => {
     switch (groupBy) {
@@ -74,6 +77,7 @@ export function GroupBySelector({
           {groupBy === 'none' && <Check className="h-3.5 w-3.5 text-primary" />}
         </DropdownMenuItem>
 
+        {showServices && (
         <DropdownMenuItem
           onClick={() => onGroupByChange('type')}
           className={cn('flex items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium cursor-pointer', groupBy === 'type' && 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 font-bold')}
@@ -87,6 +91,7 @@ export function GroupBySelector({
           </div>
           {groupBy === 'type' && <Check className="h-3.5 w-3.5 text-purple-600" />}
         </DropdownMenuItem>
+        )}
 
         <DropdownMenuItem
           onClick={() => onGroupByChange('category')}

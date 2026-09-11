@@ -18,6 +18,8 @@ export interface QuickFilterCounts {
 }
 
 export interface QuickFiltersBarProps {
+  /** Sin módulo de servicios ni servicios cargados, el filtro no aparece. */
+  showServices?: boolean
   products: Product[]
   counts?: QuickFilterCounts
   activeFilter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | 'variants' | null
@@ -26,6 +28,7 @@ export interface QuickFiltersBarProps {
 }
 
 export function QuickFiltersBar({
+  showServices = true,
   products,
   counts: providedCounts,
   activeFilter,
@@ -122,6 +125,7 @@ export function QuickFiltersBar({
         </Button>
 
         {/* Solo Servicios */}
+        {showServices && (
         <Button
           type="button"
           variant="outline"
@@ -143,6 +147,7 @@ export function QuickFiltersBar({
             {counts.services ?? 0}
           </Badge>
         </Button>
+        )}
 
         {/* Con Variantes */}
         <Button

@@ -29,6 +29,7 @@ import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { cn } from '@/lib/utils'
 import { CreateAfterSalesCaseDialog, type AfterSalesSaleItem } from './CreateAfterSalesCaseDialog'
 import type { RequestType, SourceType } from './after-sales-meta'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 type SourceRow = {
     id: string
@@ -72,6 +73,10 @@ function formatDate(value: string | null | undefined) {
 }
 
 export function SourcesBrowser() {
+    // Sin taller no hay reparaciones contra las que reclamar.
+    const { effectiveModules } = useSubscriptionStatus()
+    const tieneTaller = effectiveModules.includes('repairs')
+
     // El ticket sale con los datos y el logo de la organizacion; sin esto caia
     // al monograma de dos letras del config global.
     const { settings: websiteSettings } = useAdminWebsiteSettings()
@@ -215,6 +220,7 @@ export function SourcesBrowser() {
                     >
                         <ShoppingCart className="h-3.5 w-3.5" /> Ventas
                     </Button>
+                    {tieneTaller && (
                     <Button
                         type="button"
                         size="sm"
@@ -225,6 +231,7 @@ export function SourcesBrowser() {
                     >
                         <Wrench className="h-3.5 w-3.5" /> Reparaciones
                     </Button>
+                    )}
                 </div>
             </div>
 

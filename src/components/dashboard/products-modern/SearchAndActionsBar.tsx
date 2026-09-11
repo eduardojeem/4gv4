@@ -32,9 +32,12 @@ export interface SearchAndActionsBarProps {
   onImport?: () => void
   isLoading?: boolean
   className?: string
+  /** Se reenvia al agrupador: sin servicios no se ofrece agrupar por tipo. */
+  showServices?: boolean
 }
 
 export function SearchAndActionsBar({
+  showServices = true,
   searchQuery,
   onSearchChange,
   isFilterPanelOpen,
@@ -75,6 +78,7 @@ export function SearchAndActionsBar({
               <GroupBySelector
                 groupBy={groupBy}
                 onGroupByChange={onGroupByChange}
+                showServices={showServices}
               />
             )}
 

@@ -25,7 +25,8 @@ interface POSShortcutsBarProps {
   onToggleWholesale: () => void
   isWholesale: boolean
   onClearCart: () => void
-  onOpenRepairModal: () => void
+  /** Sin módulo de taller no se pasa y el atajo no aparece. */
+  onOpenRepairModal?: () => void
   canCheckout: boolean
   cartItemCount: number
   className?: string
@@ -139,7 +140,8 @@ export function POSShortcutsBar({
           <span>{isWholesale ? 'Mayorista Activo' : 'Minorista'}</span>
         </button>
 
-        {/* Cobrar Reparación */}
+        {/* Cobrar Reparación: solo con el módulo de taller */}
+        {onOpenRepairModal && (
         <button
           type="button"
           onClick={onOpenRepairModal}
@@ -149,6 +151,7 @@ export function POSShortcutsBar({
           <Wrench className="h-3 w-3 text-indigo-500" />
           <span>Cobrar Reparación</span>
         </button>
+        )}
       </div>
 
       {/* Esc: Cancelar / Limpiar */}

@@ -13,9 +13,11 @@ export interface MetricsGridProps {
   metrics: DashboardMetrics
   canViewCost?: boolean
   onMetricClick?: (metric: 'all' | 'low_stock' | 'out_of_stock' | 'value' | 'products' | 'services' | 'active') => void
+  /** Sin módulo de servicios ni servicios cargados, no se desglosa «0 servicios». */
+  showServices?: boolean
 }
 
-export function MetricsGrid({ metrics, canViewCost = true, onMetricClick }: MetricsGridProps) {
+export function MetricsGrid({ metrics, canViewCost = true, onMetricClick, showServices = true }: MetricsGridProps) {
   const formattedValue = formatCurrencyCompact(metrics.inventory_value)
   const physicalCount = metrics.physical_products_count ?? Math.max(0, metrics.total_products - (metrics.services_count ?? 0))
   const servicesCount = metrics.services_count ?? 0
@@ -26,7 +28,7 @@ export function MetricsGrid({ metrics, canViewCost = true, onMetricClick }: Metr
       <MetricCard
         title="Catálogo Total"
         value={metrics.total_products}
-        subtitle={`${physicalCount} productos · ${servicesCount} servicios`}
+        subtitle={showServices ? `${physicalCount} productos · ${servicesCount} servicios` : `${physicalCount} productos`}
         icon={Package2}
         gradient="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/40 dark:to-blue-900/20"
         iconBg="bg-blue-500 dark:bg-blue-600"

@@ -55,6 +55,7 @@ import type { QuickFilterCounts } from "@/components/dashboard/products-modern/Q
 import type { Database } from "@/lib/supabase/types";
 import { PlanLimitBanner } from "@/components/subscription/PlanLimitBanner";
 import { useBranch } from "@/contexts/branch-context";
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 type Json = Database["public"]["Tables"]["products"]["Row"]["dimensions"];
 
 export default function ProductsPage() {
@@ -65,6 +66,11 @@ export default function ProductsPage() {
 
   // Group by mode (desglose por secciones) y modo de maximizar espacio
   const [groupBy, setGroupBy] = useState<GroupByMode>("none");
+  // Servicios: se ofrecen si la organizacion tiene el modulo o ya cargo
+  // servicios. Sin ninguna de las dos, «Solo Servicios», «Por tipo» y
+  // «0 servicios» eran ruido en un catalogo que no los usa.
+  const { effectiveModules } = useSubscriptionStatus();
+  const hasServicesModule = effectiveModules.includes("services");
   const [isMaximizedSpace, setIsMaximizedSpace] = useState(false);
 
   // Permissions check
@@ -695,6 +701,7 @@ export default function ProductsPage() {
             {/* Metrics Grid */}
             <MetricsGrid
               metrics={globalMetrics}
+              showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
               canViewCost={canViewCost}
               onMetricClick={handleMetricClick}
             />
@@ -764,6 +771,7 @@ export default function ProductsPage() {
 
         {/* Search and Actions Bar */}
         <SearchAndActionsBar
+          showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
           searchQuery={searchQuery}
           onSearchChange={handleSearch}
           isFilterPanelOpen={isFilterPanelOpen}
@@ -796,6 +804,7 @@ export default function ProductsPage() {
         {/* Quick Filters Bar */}
         <QuickFiltersBar
           products={products}
+          showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
           counts={globalQuickFilterCounts}
           activeFilter={filters.quick_filter}
           onFilterClick={handleQuickFilter}
@@ -807,6 +816,7 @@ export default function ProductsPage() {
             <div className="p-4 sm:p-5">
               <FilterPanel
                 isOpen={isFilterPanelOpen}
+                showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
                 products={products}
                 categories={categories}
                 suppliers={suppliers}

@@ -109,6 +109,7 @@ import {
 import { usePOSRepairs, type PosCartRepair } from './hooks/usePOSRepairs'
 import { usePOSSearch } from './hooks/usePOSSearch'
 import { usePOSSaleProcessor } from './hooks/usePOSSaleProcessor'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 /** Lo minimo que necesita el carrito para armar la linea de una reparacion.
  * @deprecated Usa PosCartRepair desde './hooks/usePOSRepairs'
@@ -243,6 +244,11 @@ function POSPageContent() {
 
 
   // ── Reparaciones (extraído a usePOSRepairs) ──────────────────────────────
+  // Taller: sin el modulo de reparaciones no se consultan ni se ofrece cobrar
+  // reparaciones. Es la misma regla que usa el menu lateral.
+  const { effectiveModules } = useSubscriptionStatus()
+  const repairsEnabled = effectiveModules.includes('repairs')
+
   const {
     customerRepairs,
     setCustomerRepairs,
@@ -263,6 +269,7 @@ function POSPageContent() {
     selectedCustomer,
     isCheckoutOpen,
     taxPercentage,
+    enabled: repairsEnabled,
   })
 
   const { heldSales, heldSalesCount, parkSale, deleteSale, clearAllSales } = useHeldSales(posStorageScope)
@@ -279,7 +286,7 @@ function POSPageContent() {
     const cid = searchParams.get('customerId')
     const rid = searchParams.get('repairId')
     if (cid) setSelectedCustomer(cid)
-    if (rid) setSelectedRepairIds([rid])
+    if (rid && repairsEnabled) setSelectedRepairIds([rid])
   // Only run once on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -831,7 +838,7 @@ function POSPageContent() {
     saleItems.forEach(item => {
       addToCartHook(item as any, item.quantity)
     })
-    if (Array.isArray(sale.selectedRepairIds) && sale.selectedRepairIds.length > 0) {
+    if (repairsEnabled && Array.isArray(sale.selectedRepairIds) && sale.selectedRepairIds.length > 0) {
       setSelectedRepairIds(sale.selectedRepairIds)
     }
     setIsWholesale(Boolean(sale.isWholesale))
@@ -1609,6 +1616,7 @@ function POSPageContent() {
                       </div>
                       <kbd className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">F3</kbd>
                     </DropdownMenuItem>
+                    {repairsEnabled && (
                     <DropdownMenuItem 
                       onClick={() => setIsRepairModalOpen(true)}
                       className="gap-2.5 cursor-pointer py-2 text-xs"
@@ -1619,6 +1627,7 @@ function POSPageContent() {
                         <span className="text-[10px] text-muted-foreground">Importar saldo de ticket técnico</span>
                       </div>
                     </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem 
                       onClick={() => setIsMovementDialogOpen(true)}
                       className="gap-2.5 cursor-pointer py-2 text-xs"
@@ -2227,7 +2236,7 @@ function POSPageContent() {
                 onHoldSale={handleParkCurrentSale}
                 onOpenHeldSales={() => setIsHeldSalesModalOpen(true)}
                 heldSalesCount={heldSalesCount}
-                onOpenRepairModal={() => setIsRepairModalOpen(true)}
+                onOpenRepairModal={repairsEnabled ? () => setIsRepairModalOpen(true) : undefined}
               />
             </div>
           </div>
@@ -2249,7 +2258,7 @@ function POSPageContent() {
         onToggleWholesale={() => handleWholesaleToggle(!isWholesale)}
         isWholesale={isWholesale}
         onClearCart={() => clearCart()}
-        onOpenRepairModal={() => setIsRepairModalOpen(true)}
+        onOpenRepairModal={repairsEnabled ? () => setIsRepairModalOpen(true) : undefined}
         canCheckout={canCheckout}
         cartItemCount={unifiedCalculations.totalItemCount}
       />
@@ -2320,10 +2329,10 @@ function POSPageContent() {
                     setIsHeldSalesModalOpen(true)
                   }}
                   heldSalesCount={heldSalesCount}
-                  onOpenRepairModal={() => {
+                  onOpenRepairModal={repairsEnabled ? () => {
                     setIsMobileCartOpen(false)
                     setIsRepairModalOpen(true)
-                  }}
+                  } : undefined}
                 />
               </div>
             </SheetContent>
@@ -2552,6 +2561,7 @@ function POSPageContent() {
         selectedRepairIds={selectedRepairIds}
         setSelectedRepairIds={setSelectedRepairIds}
         customerRepairs={customerRepairs}
+        repairsEnabled={repairsEnabled}
         markRepairDelivered={markRepairDelivered}
         setMarkRepairDelivered={setMarkRepairDelivered}
         deliveryOutcome={deliveryOutcome}
@@ -2996,7 +3006,7 @@ function POSPageContent() {
 
       {/* Modal de Cobro de Reparación / Taller */}
       <POSRepairChargeModal
-        open={isRepairModalOpen}
+        open={repairsEnabled && isRepairModalOpen}
         onOpenChange={setIsRepairModalOpen}
         onAddRepairToCart={handleAddRepairToCart}
       />

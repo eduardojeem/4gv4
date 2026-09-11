@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { REQUEST_META, formatMoney, type RequestType, type SourceType } from './after-sales-meta'
 import { ProductThumb } from '@/components/suppliers/order-ui'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 /** Origen encontrado por la busqueda, ya normalizado por la API. */
 interface OriginResult {
@@ -93,6 +94,10 @@ export function CreateAfterSalesCaseDialog({
     saleItems,
     onCreated,
 }: CreateAfterSalesCaseDialogProps) {
+    // Sin taller no se ofrece reclamar contra una reparacion.
+    const { effectiveModules } = useSubscriptionStatus()
+    const tieneTaller = effectiveModules.includes('repairs')
+
     const [requestType, setRequestType] = useState<RequestType>(allowedRequestTypes[0])
     const [reason, setReason] = useState('')
     const [notes, setNotes] = useState('')
@@ -318,7 +323,7 @@ export function CreateAfterSalesCaseDialog({
                                 {([
                                     { value: 'sale' as SourceType, label: 'Una venta', icon: ShoppingBag },
                                     { value: 'repair' as SourceType, label: 'Una reparacion', icon: Wrench },
-                                ]).map((option) => {
+                                ]).filter((option) => option.value !== 'repair' || tieneTaller).map((option) => {
                                     const OptionIcon = option.icon
                                     const active = originType === option.value
                                     return (
