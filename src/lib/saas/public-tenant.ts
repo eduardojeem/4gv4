@@ -11,6 +11,8 @@ export type PublicOrganization = {
   logo_url: string | null
   marketplace_public: boolean | null
   storefront_public: boolean
+  /** Rubro del negocio: decide el aspecto de la tienda en «Automático». */
+  business_vertical: string | null
 }
 
 const FALLBACK_PUBLIC_ORG_SLUG = normalizeDefaultPublicOrgSlug(process.env.DEFAULT_PUBLIC_ORG_SLUG)
@@ -64,7 +66,7 @@ export async function resolvePublicOrganizationBySlug(
 
   const { data, error } = await supabase
     .from('organizations')
-    .select('id, name, slug, plan, logo_url, marketplace_public, storefront_public')
+    .select('id, name, slug, plan, logo_url, marketplace_public, storefront_public, business_vertical')
     .eq('slug', slug)
     .maybeSingle()
 
@@ -78,7 +80,7 @@ export async function resolvePublicOrganizationBySlug(
 
   const { data: aliasRow, error: aliasError } = await supabase
     .from('organization_slug_aliases')
-    .select('organization:organizations(id, name, slug, plan, logo_url, marketplace_public, storefront_public)')
+    .select('organization:organizations(id, name, slug, plan, logo_url, marketplace_public, storefront_public, business_vertical)')
     .eq('old_slug', slug)
     .maybeSingle()
 

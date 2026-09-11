@@ -7,19 +7,12 @@ import { usePathname } from 'next/navigation'
 import { ArrowRight, Flame, Package, Sparkles, Layers, Grid3X3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ProductCard } from '@/components/public/ProductCard'
-import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
+import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
 import type { PublicProduct } from '@/types/public'
-
-const fetcher = async (url: string): Promise<PublicProduct[]> => {
-  const res = await fetch(url)
-  const body = await res.json().catch(() => null)
-  const products = body?.data?.products
-  if (!res.ok || !Array.isArray(products)) {
-    throw new Error('Failed to fetch products')
-  }
-  return products as PublicProduct[]
-}
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
+import { STOREFRONT_EYEBROW_CLASS, STOREFRONT_HEADING_CLASS } from '@/lib/website/storefront-style'
+import { NEWEST_PRODUCTS_SWR_OPTIONS, fetchPublicProducts, newestProductsKey } from './newest-products'
 
 export function FeaturedProducts() {
   const pathname = usePathname()
@@ -28,10 +21,12 @@ export function FeaturedProducts() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [activeSpecialTab, setActiveSpecialTab] = useState<'all' | 'offers' | 'featured'>('all')
 
+  const storefrontStyle = useStorefrontStyle()
+
   const { data, error, isLoading } = useSWR(
-    withOrgQuery('/api/public/products?per_page=32&sort=newest', tenantSlug),
-    fetcher,
-    { revalidateOnFocus: false, dedupingInterval: 60000 }
+    newestProductsKey(tenantSlug),
+    fetchPublicProducts,
+    NEWEST_PRODUCTS_SWR_OPTIONS
   )
 
   const [isMounted, setIsMounted] = useState(false)
@@ -94,15 +89,21 @@ export function FeaturedProducts() {
         {/* Cabecera de Sección */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
-            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
-              Catálogo Destacado
-            </span>
-            <h2 className="mt-1.5 text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-              Productos Disponibles
+            {storefrontStyle === 'classic' ? (
+              <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Catálogo Destacado
+              </span>
+            ) : (
+              <span className={STOREFRONT_EYEBROW_CLASS[storefrontStyle]}>Nuevos ingresos</span>
+            )}
+            <h2 className={cn('mt-1.5 text-2xl sm:text-3xl text-foreground', STOREFRONT_HEADING_CLASS[storefrontStyle])}>
+              {storefrontStyle === 'classic' ? 'Productos Disponibles' : 'Lo último en la tienda'}
             </h2>
             <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-              Descubrí los artículos en stock con garantía, opciones de financiación y entrega inmediata.
+              {storefrontStyle === 'classic'
+                ? 'Descubrí los artículos en stock con garantía, opciones de financiación y entrega inmediata.'
+                : 'Lo que acaba de llegar, listo para comprar.'}
             </p>
           </div>
 

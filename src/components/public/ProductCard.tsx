@@ -17,6 +17,8 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
+import { usesPortraitMedia } from '@/lib/website/storefront-style'
 import { getWhatsAppLink } from '@/lib/whatsapp'
 
 interface ProductCardProps {
@@ -54,6 +56,7 @@ export function ProductCard(props: ProductCardProps) {
   const [activeImageIdx, setActiveImageIdx] = useState(0)
   const [quantity, setQuantity] = useState(1)
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
+  const storefrontStyle = useStorefrontStyle()
 
   // Compute gallery images: deduplicate image_url and images[]
   const galleryImages = (() => {
@@ -119,6 +122,10 @@ export function ProductCard(props: ProductCardProps) {
     : product.in_stock
   const isLowStock = isInStock && (hasVariants ? selectedStock > 0 && selectedStock <= 4 : product.stock_quantity > 0 && product.stock_quantity <= 4)
   const imageSrc = resolveProductImageUrl(product.image)
+  // Moda y deportivo: foto vertical a sangre, como en una tienda de ropa. El
+  // placeholder se sigue mostrando entero para no recortarlo.
+  const portraitMedia = usesPortraitMedia(storefrontStyle)
+  const coverImage = portraitMedia && imageSrc !== '/placeholder-product.svg'
 
   // ── Cuotas / financiación (informativo) ───────────────────────────────────
   const installmentsVisible =
@@ -193,14 +200,22 @@ export function ProductCard(props: ProductCardProps) {
     <>
       {/* ── Card ── */}
       <article
-        className="group relative flex flex-col overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm transition-colors hover:border-primary/30"
+        className={cn(
+          'group relative flex flex-col overflow-hidden bg-card transition-colors',
+          storefrontStyle === 'classic' && 'rounded-lg border border-border/60 shadow-sm hover:border-primary/30',
+          storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60',
+          storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40'
+        )}
       >
         {favoriteSlug && <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug, image: product.image, price: product.sale_price }} /></div>}
         {/* ── Image area ── */}
         <button
           type="button"
           onClick={() => setQuickViewOpen(true)}
-          className="relative aspect-[4/3] overflow-hidden bg-muted/30 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+          className={cn(
+            'relative overflow-hidden bg-muted/30 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
+            portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]'
+          )}
           aria-label={`Vista rápida de ${product.name}`}
         >
           {imageSrc && !imageError ? (
@@ -209,7 +224,11 @@ export function ProductCard(props: ProductCardProps) {
               alt={product.name}
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, (max-width: 1536px) 33vw, 25vw"
-              className="object-contain p-4 transition-transform duration-500 group-hover:scale-[1.06]"
+              className={
+                coverImage
+                  ? 'object-cover transition-transform duration-700 group-hover:scale-[1.03]'
+                  : 'object-contain p-4 transition-transform duration-500 group-hover:scale-[1.06]'
+              }
               priority={priority}
               quality={75}
               onError={() => setImageError(true)}
@@ -280,7 +299,12 @@ export function ProductCard(props: ProductCardProps) {
           )}
 
           {/* Product name */}
-          <h3 className="line-clamp-2 flex-1 text-sm font-semibold leading-snug text-foreground">
+          <h3 className={cn(
+            'line-clamp-2 flex-1 text-sm leading-snug text-foreground',
+            storefrontStyle === 'classic' && 'font-semibold',
+            storefrontStyle === 'fashion' && 'font-normal',
+            storefrontStyle === 'sport' && 'font-bold uppercase tracking-tight'
+          )}>
             {product.name}
           </h3>
 

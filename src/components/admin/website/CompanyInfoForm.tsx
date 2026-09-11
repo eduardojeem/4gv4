@@ -38,6 +38,8 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { STOREFRONT_STYLE_LABELS, STOREFRONT_STYLE_OPTIONS, resolveStorefrontStyle } from '@/lib/website/storefront-style'
 import { Switch } from '@/components/ui/switch'
 import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import { CompanyInfo } from '@/types/website-settings'
@@ -148,6 +150,9 @@ export function CompanyInfoForm() {
   const preview = BRAND_PREVIEW[formData.brandColor || 'blue'] ?? BRAND_PREVIEW.blue
   const headerPreview = HEADER_PREVIEW_STYLES[formData.headerStyle || 'glass'] ?? HEADER_PREVIEW_STYLES.glass
   const brandTheme = getBrandTheme(formData.brandColor)
+  const { businessVertical } = useSubscriptionStatus()
+  const storefrontStylePreference = formData.storefrontStyle || 'auto'
+  const automaticStorefrontStyle = STOREFRONT_STYLE_LABELS[resolveStorefrontStyle('auto', businessVertical)]
   const hasValidCustomBrand = formData.brandColor === 'custom' && isValidBrandHexColor(formData.customBrandColor)
   const customBrandStyle = hasValidCustomBrand
     ? { '--brand-primary': formData.customBrandColor } as React.CSSProperties
@@ -294,6 +299,7 @@ export function CompanyInfoForm() {
       headerStyle: formData.headerStyle || 'glass',
       headerColor: formData.headerColor || '',
       showTopBar: formData.showTopBar !== undefined ? formData.showTopBar : true,
+      storefrontStyle: formData.storefrontStyle || 'auto',
       whatsapp: formData.whatsapp || '',
       slogan: formData.slogan || '',
       description: formData.description || '',
@@ -541,7 +547,7 @@ export function CompanyInfoForm() {
               <div className="space-y-1">
                 <span className="font-semibold text-foreground">Qué cambia en tu sitio</span>
                 <p className="leading-relaxed">
-                  El color define los botones y el fondo del inicio. El estilo modifica el encabezado, y la barra superior muestra tus datos de contacto.
+                  El color define los botones y el fondo del inicio. El aspecto cambia cómo se ven el inicio y los productos. El estilo modifica el encabezado, y la barra superior muestra tus datos de contacto.
                 </p>
               </div>
             </div>
@@ -657,6 +663,47 @@ export function CompanyInfoForm() {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <div>
+                <p id="storefrontStyleLabel" className="text-sm font-semibold">Aspecto de la tienda</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Cambia la portada del inicio, las categorías y las tarjetas de productos. No oculta ninguna sección.
+                </p>
+              </div>
+              <div role="group" aria-labelledby="storefrontStyleLabel" className="grid gap-2 sm:grid-cols-2">
+                {STOREFRONT_STYLE_OPTIONS.map((option) => {
+                  const isSelected = storefrontStylePreference === option.value
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleChange('storefrontStyle', option.value)}
+                      aria-pressed={isSelected}
+                      className={`relative flex flex-col items-start gap-1 rounded-md border p-3 pr-8 text-left transition-colors ${
+                        isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border hover:border-foreground/30'
+                      }`}
+                    >
+                      <span className={`text-sm ${isSelected ? 'font-bold text-primary' : 'font-semibold text-foreground'}`}>
+                        {option.label}
+                        {option.value === 'auto' && (
+                          <>
+                            {' '}
+                            <span className="font-normal text-muted-foreground">(por tu rubro: {automaticStorefrontStyle})</span>
+                          </>
+                        )}
+                      </span>
+                      <span className="text-xs leading-relaxed text-muted-foreground">{option.description}</span>
+                      {isSelected && (
+                        <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                          <Check aria-hidden="true" className="h-2.5 w-2.5" />
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             <div className="grid gap-4 pt-2 sm:grid-cols-2">

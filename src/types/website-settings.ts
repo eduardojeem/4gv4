@@ -15,6 +15,8 @@ export interface CompanyInfo {
   brandColor?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo' | 'teal' | 'rose' | 'amber' | 'emerald' | 'cyan' | 'sky' | 'custom'
   customBrandColor?: string
   headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
+  /** Aspecto de la tienda online. `auto` lo decide el rubro del negocio. */
+  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport'
   headerColor?: string
   showTopBar?: boolean
   whatsapp?: string

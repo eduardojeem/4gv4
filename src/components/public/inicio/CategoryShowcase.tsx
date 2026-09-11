@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
+import { CategoryCollections } from './CategoryCollections'
 import {
   ArrowRight,
   Battery,
@@ -190,6 +192,14 @@ function getCategoryPreset(name: string): CategoryPreset {
 }
 
 export function CategoryShowcase() {
+  const storefrontStyle = useStorefrontStyle()
+  // Moda y deportivo muestran colecciones con foto: los iconos de abajo son de
+  // tecnología y electrodomésticos.
+  if (storefrontStyle !== 'classic') return <CategoryCollections style={storefrontStyle} />
+  return <ClassicCategoryShowcase />
+}
+
+function ClassicCategoryShowcase() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)

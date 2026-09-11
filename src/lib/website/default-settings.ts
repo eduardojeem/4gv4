@@ -250,6 +250,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       logoUrl: '',
       brandColor: 'blue',
       headerStyle: 'glass',
+      storefrontStyle: 'auto',
       headerColor: '',
       showTopBar: true,
       servicesPageEnabled: false,

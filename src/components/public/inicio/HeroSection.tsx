@@ -27,6 +27,8 @@ import { isPublicRepairsAvailable } from '@/lib/website/services'
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import type { CompanyInfo, HeroStats, HeroContent } from '@/types/website-settings'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
+import { HeroCampaign } from './HeroCampaign'
 
 interface HeroSectionProps {
   companyInfo: CompanyInfo
@@ -76,7 +78,27 @@ function AnimatedStat({ value, label }: { value: string; label: string }) {
   )
 }
 
-export function HeroSection({
+export function HeroSection(props: HeroSectionProps) {
+  const storefrontStyle = useStorefrontStyle()
+  if (props.heroContent.enabled === false) return null
+  // Moda y deportivo usan una portada de campaña con fotos del catálogo; las
+  // estadísticas de garantía y despacho quedan para el aspecto clásico.
+  if (storefrontStyle !== 'classic') {
+    return (
+      <HeroCampaign
+        style={storefrontStyle}
+        companyInfo={props.companyInfo}
+        heroContent={props.heroContent}
+        phoneClean={props.phoneClean}
+        contactHref={props.contactHref}
+        hasRepairs={props.hasRepairs ?? false}
+      />
+    )
+  }
+  return <ClassicHeroSection {...props} />
+}
+
+function ClassicHeroSection({
   companyInfo,
   heroStats,
   heroContent,
