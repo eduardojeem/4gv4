@@ -1,56 +1,43 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  Tag,
-  Package,
   ArrowRight,
-  Zap,
-  ShoppingCart,
-  MessageCircle,
-  Search,
-  Sparkles,
-  TrendingDown,
-  Star,
   CheckCircle,
-  X,
-  SlidersHorizontal,
-  Flame,
-  Percent,
-  Layers,
-  ArrowDownNarrowWide,
-  ArrowUpNarrowWide,
-  Clock,
-  ShieldCheck,
   ChevronLeft,
   ChevronRight,
-  MoreHorizontal,
+  MessageCircle,
+  Package,
+  Search,
+  ShoppingCart,
+  Tag,
+  X,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { usePublicTenantPrefix } from '@/lib/public/tenant-client'
-import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
-import { cn } from '@/lib/utils'
-import type { OffersSectionSettings, PublicCommerceMode, WebsiteSettings } from '@/types/website-settings'
-import { usePublicCart } from '@/hooks/use-public-cart'
-import type { PublicProduct } from '@/types/public'
 import { toast } from 'sonner'
 import useSWR from 'swr'
-
-import { formatCurrency } from '@/lib/currency'
-import { getWhatsAppLink } from '@/lib/whatsapp'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import {
   OFFER_ACCENTS as CAROUSEL_ACCENTS,
   OffersCarouselDeck,
   type OfferSlide,
 } from '@/components/public/offers/OffersCarouselDeck'
-import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { usePublicCart } from '@/hooks/use-public-cart'
+import { formatCurrency } from '@/lib/currency'
+import { usePublicTenantPrefix } from '@/lib/public/tenant-client'
+import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
+import { cn } from '@/lib/utils'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { usesPortraitMedia } from '@/lib/website/storefront-style'
+import { getWhatsAppLink } from '@/lib/whatsapp'
+import type { PublicProduct } from '@/types/public'
+import type { OffersSectionSettings, PublicCommerceMode, WebsiteSettings } from '@/types/website-settings'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OfferProduct {
@@ -76,9 +63,42 @@ interface OffersPageClientProps {
 }
 
 type SortKey = 'discount' | 'price_asc' | 'price_desc' | 'newest'
-type DiscountFilterTier = 'all' | '30' | '20' | 'featured' | 'stock'
+type OfferTier = 'all' | '30' | '20' | 'featured' | 'stock'
+type QuickTier = Exclude<OfferTier, 'all'>
 
-const PAGE_SIZE_OPTIONS = [12, 16, 24, 48]
+const PAGE_SIZE = 24
+
+const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
+  { value: 'discount', label: 'Mayor descuento' },
+  { value: 'price_asc', label: 'Menor precio' },
+  { value: 'price_desc', label: 'Mayor precio' },
+  { value: 'newest', label: 'Más recientes' },
+]
+
+const TIER_LABELS: Record<QuickTier, string> = {
+  '30': '30% o más',
+  '20': '20% o más',
+  featured: 'Destacadas',
+  stock: 'Con stock',
+}
+
+/**
+ * Colores del acento que elige el dueño. La etiqueta de descuento lleva texto
+ * chico, por eso los fondos son lo bastante oscuros para contraste AA.
+ */
+const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], { text: string; badge: string }> = {
+  brand: { text: 'text-primary', badge: 'bg-primary text-primary-foreground' },
+  rose: { text: 'text-rose-600 dark:text-rose-400', badge: 'bg-rose-600 text-white' },
+  amber: { text: 'text-amber-700 dark:text-amber-400', badge: 'bg-amber-400 text-amber-950' },
+  orange: { text: 'text-orange-700 dark:text-orange-400', badge: 'bg-orange-700 text-white' },
+  emerald: { text: 'text-emerald-700 dark:text-emerald-400', badge: 'bg-emerald-700 text-white' },
+  blue: { text: 'text-blue-600 dark:text-blue-400', badge: 'bg-blue-600 text-white' },
+  sky: { text: 'text-sky-700 dark:text-sky-400', badge: 'bg-sky-700 text-white' },
+  violet: { text: 'text-violet-600 dark:text-violet-400', badge: 'bg-violet-600 text-white' },
+  fuchsia: { text: 'text-fuchsia-700 dark:text-fuchsia-400', badge: 'bg-fuchsia-700 text-white' },
+  red: { text: 'text-red-600 dark:text-red-400', badge: 'bg-red-600 text-white' },
+  teal: { text: 'text-teal-700 dark:text-teal-400', badge: 'bg-teal-700 text-white' },
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatPrice(price: number): string {
@@ -88,6 +108,46 @@ function formatPrice(price: number): string {
 function calcDiscount(sale: number, offer: number): number {
   if (sale <= 0 || offer >= sale) return 0
   return Math.round(((sale - offer) / sale) * 100)
+}
+
+function matchesTier(offer: OfferProduct, tier: OfferTier) {
+  if (tier === '30') return calcDiscount(offer.sale_price, offer.offer_price) >= 30
+  if (tier === '20') return calcDiscount(offer.sale_price, offer.offer_price) >= 20
+  if (tier === 'featured') return offer.featured
+  if (tier === 'stock') return offer.in_stock
+  return true
+}
+
+/**
+ * Filtros rapidos que vale la pena ofrecer: los que dejan algo y no dejan todo.
+ * Un chip que da cero resultados, o el mismo listado que «Todas» o que el tramo
+ * anterior, solo agrega ruido.
+ */
+export function availableOfferTiers(offers: OfferProduct[]): QuickTier[] {
+  const total = offers.length
+  const count = (tier: OfferTier) => offers.filter((offer) => matchesTier(offer, tier)).length
+  const useful = (n: number) => n > 0 && n < total
+  const over30 = count('30')
+  const over20 = count('20')
+  const tiers: QuickTier[] = []
+  if (useful(over30)) tiers.push('30')
+  if (useful(over20) && over20 !== over30) tiers.push('20')
+  if (useful(count('featured'))) tiers.push('featured')
+  if (useful(count('stock'))) tiers.push('stock')
+  return tiers
+}
+
+/** Numeros de pagina con «…» cuando hay muchas: 1 … 5 6 7 … 12. */
+export function paginationItems(current: number, total: number): Array<number | 'gap'> {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const start = Math.max(2, current - 1)
+  const end = Math.min(total - 1, current + 1)
+  const items: Array<number | 'gap'> = [1]
+  if (start > 2) items.push('gap')
+  for (let p = start; p <= end; p++) items.push(p)
+  if (end < total - 1) items.push('gap')
+  items.push(total)
+  return items
 }
 
 function toOfferSlides(offers: OfferProduct[], limit: number): OfferSlide[] {
@@ -111,128 +171,6 @@ function toOfferSlides(offers: OfferProduct[], limit: number): OfferSlide[] {
         salePrice: offer.sale_price,
       }
     })
-}
-
-const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], {
-  heroGlow: string
-  badge: string
-  badgeText: string
-  text: string
-  solid: string
-  soft: string
-  border: string
-  glowCard: string
-}> = {
-  brand: {
-    heroGlow: 'from-primary/20 via-primary/5 to-transparent',
-    badge: 'border-primary/40 bg-primary/10 text-primary',
-    badgeText: 'text-primary',
-    text: 'text-primary',
-    solid: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20',
-    soft: 'bg-primary/10 text-primary hover:bg-primary/15',
-    border: 'border-primary/30 hover:border-primary',
-    glowCard: 'hover:shadow-primary/15',
-  },
-  rose: {
-    heroGlow: 'from-rose-500/20 via-rose-500/5 to-transparent dark:from-rose-950/40',
-    badge: 'border-rose-500/30 bg-rose-50 text-rose-700 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300',
-    badgeText: 'text-rose-600 dark:text-rose-400',
-    text: 'text-rose-600 dark:text-rose-400',
-    solid: 'bg-rose-600 text-white hover:bg-rose-500 shadow-md shadow-rose-600/25',
-    soft: 'bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300',
-    border: 'border-rose-200 dark:border-rose-900/40 hover:border-rose-500/60',
-    glowCard: 'hover:shadow-rose-600/10',
-  },
-  amber: {
-    heroGlow: 'from-amber-500/20 via-amber-500/5 to-transparent dark:from-amber-950/40',
-    badge: 'border-amber-500/30 bg-amber-50 text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-300',
-    badgeText: 'text-amber-600 dark:text-amber-400',
-    text: 'text-amber-600 dark:text-amber-400',
-    solid: 'bg-amber-600 text-white hover:bg-amber-500 shadow-md shadow-amber-600/25',
-    soft: 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300',
-    border: 'border-amber-200 dark:border-amber-900/40 hover:border-amber-500/60',
-    glowCard: 'hover:shadow-amber-600/10',
-  },
-  orange: {
-    heroGlow: 'from-orange-500/20 via-orange-500/5 to-transparent dark:from-orange-950/40',
-    badge: 'border-orange-500/30 bg-orange-50 text-orange-800 dark:border-orange-800/50 dark:bg-orange-950/40 dark:text-orange-300',
-    badgeText: 'text-orange-600 dark:text-orange-400',
-    text: 'text-orange-600 dark:text-orange-400',
-    solid: 'bg-orange-600 text-white hover:bg-orange-500 shadow-md shadow-orange-600/25',
-    soft: 'bg-orange-50 text-orange-800 hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-300',
-    border: 'border-orange-200 dark:border-orange-900/40 hover:border-orange-500/60',
-    glowCard: 'hover:shadow-orange-600/10',
-  },
-  emerald: {
-    heroGlow: 'from-emerald-500/20 via-emerald-500/5 to-transparent dark:from-emerald-950/40',
-    badge: 'border-emerald-500/30 bg-emerald-50 text-emerald-800 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-300',
-    badgeText: 'text-emerald-600 dark:text-emerald-400',
-    text: 'text-emerald-600 dark:text-emerald-400',
-    solid: 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-md shadow-emerald-600/25',
-    soft: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300',
-    border: 'border-emerald-200 dark:border-emerald-900/40 hover:border-emerald-500/60',
-    glowCard: 'hover:shadow-emerald-600/10',
-  },
-  blue: {
-    heroGlow: 'from-blue-500/20 via-blue-500/5 to-transparent dark:from-blue-950/40',
-    badge: 'border-blue-500/30 bg-blue-50 text-blue-800 dark:border-blue-800/50 dark:bg-blue-950/40 dark:text-blue-300',
-    badgeText: 'text-blue-600 dark:text-blue-400',
-    text: 'text-blue-600 dark:text-blue-400',
-    solid: 'bg-blue-600 text-white hover:bg-blue-500 shadow-md shadow-blue-600/25',
-    soft: 'bg-blue-50 text-blue-800 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300',
-    border: 'border-blue-200 dark:border-blue-900/40 hover:border-blue-500/60',
-    glowCard: 'hover:shadow-blue-600/10',
-  },
-  sky: {
-    heroGlow: 'from-sky-500/20 via-sky-500/5 to-transparent dark:from-sky-950/40',
-    badge: 'border-sky-500/30 bg-sky-50 text-sky-800 dark:border-sky-800/50 dark:bg-sky-950/40 dark:text-sky-300',
-    badgeText: 'text-sky-600 dark:text-sky-400',
-    text: 'text-sky-600 dark:text-sky-400',
-    solid: 'bg-sky-600 text-white hover:bg-sky-500 shadow-md shadow-sky-600/25',
-    soft: 'bg-sky-50 text-sky-800 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300',
-    border: 'border-sky-200 dark:border-sky-900/40 hover:border-sky-500/60',
-    glowCard: 'hover:shadow-sky-600/10',
-  },
-  violet: {
-    heroGlow: 'from-violet-500/20 via-violet-500/5 to-transparent dark:from-violet-950/40',
-    badge: 'border-violet-500/30 bg-violet-50 text-violet-800 dark:border-violet-800/50 dark:bg-violet-950/40 dark:text-violet-300',
-    badgeText: 'text-violet-600 dark:text-violet-400',
-    text: 'text-violet-600 dark:text-violet-400',
-    solid: 'bg-violet-600 text-white hover:bg-violet-500 shadow-md shadow-violet-600/25',
-    soft: 'bg-violet-50 text-violet-800 hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300',
-    border: 'border-violet-200 dark:border-violet-900/40 hover:border-violet-500/60',
-    glowCard: 'hover:shadow-violet-600/10',
-  },
-  fuchsia: {
-    heroGlow: 'from-fuchsia-500/20 via-fuchsia-500/5 to-transparent dark:from-fuchsia-950/40',
-    badge: 'border-fuchsia-500/30 bg-fuchsia-50 text-fuchsia-800 dark:border-fuchsia-800/50 dark:bg-fuchsia-950/40 dark:text-fuchsia-300',
-    badgeText: 'text-fuchsia-600 dark:text-fuchsia-400',
-    text: 'text-fuchsia-600 dark:text-fuchsia-400',
-    solid: 'bg-fuchsia-600 text-white hover:bg-fuchsia-500 shadow-md shadow-fuchsia-600/25',
-    soft: 'bg-fuchsia-50 text-fuchsia-800 hover:bg-fuchsia-100 dark:bg-fuchsia-950/40 dark:text-fuchsia-300',
-    border: 'border-fuchsia-200 dark:border-fuchsia-900/40 hover:border-fuchsia-500/60',
-    glowCard: 'hover:shadow-fuchsia-600/10',
-  },
-  red: {
-    heroGlow: 'from-red-500/20 via-red-500/5 to-transparent dark:from-red-950/40',
-    badge: 'border-red-500/30 bg-red-50 text-red-800 dark:border-red-800/50 dark:bg-red-950/40 dark:text-red-300',
-    badgeText: 'text-red-600 dark:text-red-400',
-    text: 'text-red-600 dark:text-red-400',
-    solid: 'bg-red-600 text-white hover:bg-red-500 shadow-md shadow-red-600/25',
-    soft: 'bg-red-50 text-red-800 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300',
-    border: 'border-red-200 dark:border-red-900/40 hover:border-red-500/60',
-    glowCard: 'hover:shadow-red-600/10',
-  },
-  teal: {
-    heroGlow: 'from-teal-500/20 via-teal-500/5 to-transparent dark:from-teal-950/40',
-    badge: 'border-teal-500/30 bg-teal-50 text-teal-800 dark:border-teal-800/50 dark:bg-teal-950/40 dark:text-teal-300',
-    badgeText: 'text-teal-600 dark:text-teal-400',
-    text: 'text-teal-600 dark:text-teal-400',
-    solid: 'bg-teal-600 text-white hover:bg-teal-500 shadow-md shadow-teal-600/25',
-    soft: 'bg-teal-50 text-teal-800 hover:bg-teal-100 dark:bg-teal-950/40 dark:text-teal-300',
-    border: 'border-teal-200 dark:border-teal-900/40 hover:border-teal-500/60',
-    glowCard: 'hover:shadow-teal-600/10',
-  },
 }
 
 // ─── Fetcher ──────────────────────────────────────────────────────────────────
@@ -268,7 +206,27 @@ async function fetchOffers(url: string): Promise<OfferProduct[]> {
     }))
 }
 
-// ─── Modern Offer Card ────────────────────────────────────────────────────────
+// ─── Filter chip ──────────────────────────────────────────────────────────────
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-8 shrink-0 items-center rounded-full border px-3.5 text-sm transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+        active
+          ? 'border-foreground bg-foreground font-medium text-background'
+          : 'border-border text-foreground/80 hover:border-foreground/40 hover:text-foreground'
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ─── Offer card ───────────────────────────────────────────────────────────────
 function OfferCard({
   offer,
   tenantPrefix,
@@ -276,6 +234,7 @@ function OfferCard({
   priority,
   commerceMode,
   contactPhone,
+  portrait,
 }: {
   offer: OfferProduct
   tenantPrefix: string
@@ -283,24 +242,26 @@ function OfferCard({
   priority?: boolean
   commerceMode: PublicCommerceMode
   contactPhone: string
+  portrait: boolean
 }) {
   const { addProduct } = usePublicCart()
   const [addedToCart, setAddedToCart] = useState(false)
   const discount = calcDiscount(offer.sale_price, offer.offer_price)
   const savings = Math.max(0, offer.sale_price - offer.offer_price)
   const href = `${tenantPrefix}/productos/${offer.id}`
+  // En Moda y Deportivo la foto va vertical y a sangre; sin foto, el icono entero.
+  const coverImage = portrait && Boolean(offer.image)
 
-  const whatsappHref = contactPhone
-    ? getWhatsAppLink({
-        phone: contactPhone,
-        message: `Hola, quiero consultar por la oferta de ${offer.name} (${formatPrice(offer.offer_price)}).`,
-      })
-    : null
+  const whatsappHref =
+    commerceMode === 'whatsapp' && contactPhone
+      ? getWhatsAppLink({
+          phone: contactPhone,
+          message: `Hola, quiero consultar por la oferta de ${offer.name} (${formatPrice(offer.offer_price)}).`,
+        })
+      : null
 
-  const handleCart = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (commerceMode !== 'cart') return
+  const handleCart = () => {
+    if (!offer.in_stock) return
     const product: PublicProduct = {
       ...offer,
       sku: '',
@@ -320,151 +281,105 @@ function OfferCard({
   }
 
   return (
-    <article className={cn(
-      'group relative flex flex-col overflow-hidden rounded-3xl border border-border/80 bg-card p-3 sm:p-4 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-primary/40',
-      accent.glowCard
-    )}>
-      {/* ── Visual Media Area ── */}
-      <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-muted/40 p-3">
-        <Link href={href} className="relative block h-full w-full">
-          {offer.image ? (
-            <Image
-              src={offer.image}
-              alt={offer.name || 'Producto en oferta'}
-              fill
-              unoptimized
-              className="object-contain transition-transform duration-500 group-hover:scale-105"
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              priority={priority}
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <Package className="h-12 w-12 text-muted-foreground/40" />
-            </div>
-          )}
-        </Link>
-
-        {/* Floating Badges */}
-        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10 pointer-events-none">
-          {discount > 0 && (
-            <span className={cn(
-              'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold shadow-sm',
-              accent.solid
-            )}>
-              <Flame className="h-3.5 w-3.5 fill-current animate-pulse" />
-              <span>-{discount}%</span>
-            </span>
-          )}
-
-          {savings > 0 && (
-            <span className="inline-flex items-center rounded-full bg-emerald-500/90 backdrop-blur-xs px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xs">
-              Ahorrás {formatPrice(savings)}
-            </span>
-          )}
-        </div>
-
-        {/* Featured Star Pill */}
-        {offer.featured && (
-          <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
-              <Star className="h-3 w-3 fill-white" />
-              <span>Destacado</span>
-            </span>
-          </div>
+    <article className="group flex flex-col">
+      {/* La foto repite el enlace del nombre: fuera del orden de tabulación. */}
+      <Link
+        href={href}
+        tabIndex={-1}
+        aria-hidden="true"
+        className={cn(
+          'relative block overflow-hidden rounded-xl bg-muted/50',
+          coverImage ? 'aspect-[3/4]' : 'aspect-square'
         )}
-
-        {/* Out of Stock Overlay */}
-        {!offer.in_stock && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 backdrop-blur-[2px]">
-            <span className="rounded-full bg-slate-900/90 px-3.5 py-1.5 text-xs font-bold text-white shadow-md">
-              Sin stock
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* ── Content & Pricing Area ── */}
-      <div className="mt-3 flex flex-1 flex-col justify-between space-y-2">
-        {/* Brand & Category tags */}
-        <div className="flex items-center justify-between gap-2">
-          {offer.brand ? (
-            <span className="truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              {offer.brand}
-            </span>
-          ) : (
-            <span className="text-[10px] font-semibold text-muted-foreground">Oferta Especial</span>
-          )}
-
-          {offer.category && (
-            <span className="truncate rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-              {offer.category.name}
-            </span>
-          )}
-        </div>
-
-        {/* Title */}
-        <Link href={href} className="group-hover:text-primary transition-colors">
-          <h3 className="line-clamp-2 text-xs sm:text-sm font-bold leading-snug text-foreground" title={offer.name}>
-            {offer.name}
-          </h3>
-        </Link>
-
-        {/* Price Block */}
-        <div className="pt-2 border-t border-border/50">
-          <div className="flex items-baseline gap-2">
-            <p className="text-base sm:text-xl font-extrabold tracking-tight tabular-nums text-foreground">
-              {formatPrice(offer.offer_price)}
-            </p>
-            {offer.sale_price > offer.offer_price && (
-              <p className="text-xs font-semibold text-muted-foreground line-through tabular-nums">
-                {formatPrice(offer.sale_price)}
-              </p>
+      >
+        {offer.image ? (
+          <Image
+            src={offer.image}
+            alt=""
+            fill
+            unoptimized
+            priority={priority}
+            sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+            className={cn(
+              'motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover:scale-[1.03]',
+              coverImage ? 'object-cover' : 'object-contain p-4',
+              !offer.in_stock && 'opacity-60 grayscale'
             )}
-          </div>
-        </div>
+          />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center">
+            <Package className="h-10 w-10 text-muted-foreground/40" />
+          </span>
+        )}
 
-        {/* CTAs: Details + Cart / WhatsApp */}
-        <div className="pt-1 flex items-center gap-2">
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="flex-1 rounded-xl text-xs font-bold border-border/80 hover:bg-muted"
+        {discount > 0 && (
+          <span className={cn('absolute left-2.5 top-2.5 rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums', accent.badge)}>
+            -{discount}%
+          </span>
+        )}
+      </Link>
+
+      <div className="mt-3 flex flex-1 flex-col">
+        {offer.brand && <p className="truncate text-xs text-muted-foreground">{offer.brand}</p>}
+
+        <h3 className="mt-0.5 line-clamp-2 text-sm font-medium leading-snug text-foreground">
+          <Link
+            href={href}
+            className="rounded-sm hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Link href={href}>Ver detalle</Link>
-          </Button>
+            {offer.name}
+          </Link>
+        </h3>
 
-          {commerceMode === 'cart' && (
+        <p className="mt-2 flex flex-wrap items-baseline gap-x-2">
+          <span className="text-base font-semibold tabular-nums text-foreground sm:text-lg">
+            {formatPrice(offer.offer_price)}
+          </span>
+          {offer.sale_price > offer.offer_price && (
+            <del className="text-xs tabular-nums text-muted-foreground">{formatPrice(offer.sale_price)}</del>
+          )}
+        </p>
+
+        <p className={cn('mt-0.5 text-xs font-medium', offer.in_stock ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground')}>
+          {offer.in_stock ? `Ahorrás ${formatPrice(savings)}` : 'Sin stock'}
+          {discount > 0 && <span className="sr-only"> · {discount}% de descuento</span>}
+        </p>
+
+        <div className="mt-auto pt-3">
+          {commerceMode === 'cart' ? (
             <Button
+              type="button"
+              variant="outline"
               size="sm"
               onClick={handleCart}
               disabled={!offer.in_stock}
               aria-label={`Agregar ${offer.name} al carrito`}
-              className={cn(
-                'h-9 w-9 p-0 shrink-0 rounded-xl transition-all',
-                addedToCart
-                  ? 'bg-emerald-600 hover:bg-emerald-600 text-white shadow-xs'
-                  : accent.solid
+              className="h-9 w-full gap-2"
+            >
+              {addedToCart ? (
+                <CheckCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <ShoppingCart aria-hidden="true" className="h-4 w-4" />
               )}
-            >
-              {addedToCart ? <CheckCircle className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
+              {addedToCart ? 'Agregado' : 'Agregar'}
             </Button>
-          )}
-
-          {commerceMode === 'whatsapp' && whatsappHref && (
-            <Button
-              asChild
-              size="sm"
-              className="h-9 w-9 p-0 shrink-0 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs"
-            >
+          ) : whatsappHref ? (
+            <Button asChild variant="outline" size="sm" className="h-9 w-full gap-2">
               <a
                 href={whatsappHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={`Consultar por ${offer.name} en WhatsApp`}
               >
-                <MessageCircle className="h-4 w-4" />
+                <MessageCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                Consultar
               </a>
+            </Button>
+          ) : (
+            <Button asChild variant="outline" size="sm" className="h-9 w-full">
+              <Link href={href} aria-label={`Ver detalle de ${offer.name}`}>
+                Ver detalle
+              </Link>
             </Button>
           )}
         </div>
@@ -479,6 +394,7 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
   const { tenantPrefix } = usePublicTenantPrefix()
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
+  const portrait = usesPortraitMedia(useStorefrontStyle())
   const settings = liveSettings ?? initialSettings
   const offersSettings = settings.offers_section
   const commerceMode = settings.checkout.commerceMode ?? 'cart'
@@ -487,23 +403,20 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
     settings.company_info.phone?.trim() ||
     ''
   const accent = OFFER_ACCENTS[offersSettings.accentColor] ?? OFFER_ACCENTS.rose
+  const resultsRef = useRef<HTMLDivElement>(null)
 
-  // Fetch offers
   const { data: allOffers = initialOffers, error: offersError, isLoading, mutate: retryOffers } = useSWR<OfferProduct[]>(
     withOrgQuery('/api/public/products?per_page=100&sort=newest&has_offer=true', tenantSlug),
     fetchOffers,
     { fallbackData: initialOffers, revalidateOnFocus: false, dedupingInterval: 60_000 }
   )
 
-  // Filters & State
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const [selectedTier, setSelectedTier] = useState<DiscountFilterTier>('all')
+  const [selectedTier, setSelectedTier] = useState<OfferTier>('all')
   const [sortBy, setSortBy] = useState<SortKey>('discount')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(16)
 
-  // Derived categories
   const categories = useMemo(() => Array.from(
     new Map(
       allOffers
@@ -512,7 +425,8 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
     ).values()
   ), [allOffers])
 
-  // Filtered + sorted offers
+  const quickTiers = useMemo(() => availableOfferTiers(allOffers), [allOffers])
+
   const filteredOffers = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase()
 
@@ -521,19 +435,14 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
         const matchesSearch = !normalizedSearch
           || offer.name.toLowerCase().includes(normalizedSearch)
           || (offer.brand?.toLowerCase().includes(normalizedSearch) ?? false)
-
         const matchesCategory = !selectedCategory || offer.category?.id === selectedCategory
-
-        const discount = calcDiscount(offer.sale_price, offer.offer_price)
-        let matchesTier = true
-        if (selectedTier === '30') matchesTier = discount >= 30
-        else if (selectedTier === '20') matchesTier = discount >= 20
-        else if (selectedTier === 'featured') matchesTier = Boolean(offer.featured)
-        else if (selectedTier === 'stock') matchesTier = Boolean(offer.in_stock)
-
-        return matchesSearch && matchesCategory && matchesTier
+        return matchesSearch && matchesCategory && matchesTier(offer, selectedTier)
       })
       .sort((a, b) => {
+        // Agotados siempre al final, cualquiera sea el criterio de orden
+        const stockDiff = (a.in_stock ? 0 : 1) - (b.in_stock ? 0 : 1)
+        if (stockDiff !== 0) return stockDiff
+
         if (sortBy === 'discount') {
           return calcDiscount(b.sale_price, b.offer_price) - calcDiscount(a.sale_price, a.offer_price)
         }
@@ -543,17 +452,12 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
       })
   }, [allOffers, search, selectedCategory, selectedTier, sortBy])
 
-  // Pagination calculations
-  const totalPages = Math.max(1, Math.ceil(filteredOffers.length / pageSize))
+  const totalPages = Math.max(1, Math.ceil(filteredOffers.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
-  const pageStart = (safePage - 1) * pageSize
-  const paginatedOffers = filteredOffers.slice(pageStart, pageStart + pageSize)
+  const pageStart = (safePage - 1) * PAGE_SIZE
+  const paginatedOffers = filteredOffers.slice(pageStart, pageStart + PAGE_SIZE)
 
-  const maxSavings = allOffers.reduce(
-    (maximum, offer) => Math.max(maximum, offer.sale_price - offer.offer_price),
-    0,
-  )
-
+  const maxSavings = allOffers.reduce((maximum, offer) => Math.max(maximum, offer.sale_price - offer.offer_price), 0)
   const maxDiscountPercent = allOffers.reduce(
     (maximum, offer) => Math.max(maximum, calcDiscount(offer.sale_price, offer.offer_price)),
     0,
@@ -564,6 +468,17 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
   const carouselSlides = toOfferSlides(allOffers, carouselSettings.maxItems)
 
   const hasActiveFilters = Boolean(search || selectedCategory || selectedTier !== 'all')
+  const showInitialSkeleton = isLoading && initialOffers.length === 0
+  const resultSummary = [
+    filteredOffers.length === 1 ? '1 oferta' : `${filteredOffers.length} ofertas`,
+    hasActiveFilters && filteredOffers.length !== allOffers.length ? ` de ${allOffers.length}` : '',
+    totalPages > 1 ? ` · página ${safePage} de ${totalPages}` : '',
+  ].join('')
+
+  const updateFilters = (apply: () => void) => {
+    apply()
+    setPage(1)
+  }
 
   const resetAllFilters = () => {
     setSearch('')
@@ -572,21 +487,26 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
     setPage(1)
   }
 
+  const goToPage = (next: number) => {
+    setPage(Math.min(Math.max(1, next), totalPages))
+    const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+    resultsRef.current?.scrollIntoView?.({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+  }
+
   // ── Section Disabled ────────────────────────────────────────────────────────
   if (!offersSettings.enabled) {
     return (
-      <div className="container flex min-h-[60vh] items-center justify-center py-16 text-center">
-        <div className="max-w-md rounded-3xl border border-dashed border-border p-10 bg-card">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-            <Tag className="h-8 w-8" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">Ofertas no disponibles</h1>
-          <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+      <div className="container mx-auto flex min-h-[60vh] items-center justify-center px-4 py-16 text-center">
+        <div className="max-w-sm">
+          <Tag aria-hidden="true" className="mx-auto h-8 w-8 text-muted-foreground" />
+          <h1 className="mt-4 text-xl font-semibold text-foreground">Ofertas no disponibles</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             Esta tienda no tiene activa su sección de ofertas en este momento.
           </p>
-          <Button asChild className="mt-6 rounded-xl font-bold">
+          <Button asChild className="mt-6 gap-2">
             <Link href={`${tenantPrefix}/productos`}>
-              Ver todos los productos <ArrowRight className="ml-2 h-4 w-4" />
+              Ver todos los productos
+              <ArrowRight aria-hidden="true" className="h-4 w-4" />
             </Link>
           </Button>
         </div>
@@ -596,95 +516,56 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
 
   return (
     <div className="min-h-screen bg-background">
-      {/* ── Banners Promocionales de Campaña ── */}
+      {/* ── Banners de campaña configurados en Sitio Web ── */}
       <PromotionalCarousel settings={settings.offers_carousel} />
 
-      {/* ── Hero Banner Renovado (E-Commerce High Energy) ── */}
-      <section className={cn(
-        'relative overflow-hidden border-b border-border/80 bg-gradient-to-b py-10 sm:py-16',
-        accent.heroGlow
-      )}>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-
-          {/* Eyebrow Pill */}
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3.5 py-1 text-xs font-extrabold text-rose-600 dark:text-rose-400 shadow-xs">
-            <Flame className="h-4 w-4 fill-current animate-pulse text-rose-600 dark:text-rose-400" />
-            <span>{offersSettings.eyebrow || 'Zona de Ofertas & Descuentos'}</span>
+      {/* ── Encabezado ── */}
+      <section className="border-b border-border/70">
+        <div className="container mx-auto flex flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10 lg:flex-row lg:items-end lg:justify-between lg:px-8">
+          <div className="max-w-2xl">
+            <p className={cn('text-sm font-medium', accent.text)}>{offersSettings.eyebrow || 'Ofertas'}</p>
+            <h1 className="mt-1.5 text-balance text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              {offersSettings.title || 'Precios especiales'}
+            </h1>
+            {offersSettings.subtitle && (
+              <p className="mt-2 text-pretty text-sm text-muted-foreground sm:text-base">{offersSettings.subtitle}</p>
+            )}
           </div>
 
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-2xl">
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-foreground leading-[1.15]">
-                {offersSettings.title || 'Ofertas Imperdibles por Tiempo Limitado'}
-              </h1>
-              <p className="mt-3 text-sm sm:text-base text-muted-foreground leading-relaxed">
-                {offersSettings.subtitle || 'Aprovechá precios especiales en productos seleccionados con stock inmediato y garantía oficial.'}
-              </p>
-
-              {/* Stat Cards */}
-              {allOffers.length > 0 && (
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <div className="inline-flex items-center gap-2 rounded-2xl border border-border/80 bg-card px-3.5 py-2 shadow-xs">
-                    <TrendingDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-xs font-bold text-foreground">
-                      <strong className="text-emerald-600 dark:text-emerald-400">{allOffers.length}</strong> productos en oferta
-                    </span>
-                  </div>
-
-                  {maxDiscountPercent > 0 && (
-                    <div className="inline-flex items-center gap-2 rounded-2xl border border-border/80 bg-card px-3.5 py-2 shadow-xs">
-                      <Percent className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                      <span className="text-xs font-bold text-foreground">
-                        Hasta <strong className="text-rose-600 dark:text-rose-400">-{maxDiscountPercent}% OFF</strong>
-                      </span>
-                    </div>
-                  )}
-
-                  {maxSavings > 0 && (
-                    <div className="inline-flex items-center gap-2 rounded-2xl border border-border/80 bg-card px-3.5 py-2 shadow-xs">
-                      <Tag className="h-4 w-4 text-amber-500" />
-                      <span className="text-xs font-bold text-foreground">
-                        Ahorrá hasta <strong className="text-amber-600 dark:text-amber-400">{formatPrice(maxSavings)}</strong>
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Catálogo completo link */}
-            <div className="flex items-center gap-3">
-              <Button asChild variant="outline" className="rounded-xl border-border bg-card font-bold shadow-xs gap-2">
-                <Link href={`${tenantPrefix}/productos`}>
-                  <span>Ver catálogo regular</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-
+          {allOffers.length > 0 && (
+            <dl className="grid shrink-0 grid-cols-3 divide-x divide-border/70 rounded-xl border border-border/70 text-center">
+              <div className="px-4 py-3 sm:px-5">
+                <dt className="text-xs text-muted-foreground">En oferta</dt>
+                <dd className="mt-0.5 text-base font-semibold tabular-nums text-foreground sm:text-lg">{allOffers.length}</dd>
+              </div>
+              <div className="px-4 py-3 sm:px-5">
+                <dt className="text-xs text-muted-foreground">Descuento</dt>
+                <dd className={cn('mt-0.5 text-base font-semibold tabular-nums sm:text-lg', accent.text)}>
+                  hasta -{maxDiscountPercent}%
+                </dd>
+              </div>
+              <div className="px-4 py-3 sm:px-5">
+                <dt className="text-xs text-muted-foreground">Ahorro</dt>
+                <dd className="mt-0.5 text-base font-semibold tabular-nums text-foreground sm:text-lg">
+                  hasta {formatPrice(maxSavings)}
+                </dd>
+              </div>
+            </dl>
+          )}
         </div>
       </section>
 
-      {/* ── Carrusel de Destacados Top Deals (Destacados de la semana) ── */}
+      {/* ── Destacados ── */}
       {carouselSettings.enabled && carouselSlides.length > 0 && (
-        <section className={cn('relative overflow-hidden border-b py-8 sm:py-12 bg-muted/20', carouselAccent.section)}>
+        <section className={cn('border-b border-border/70 bg-muted/30 py-8 sm:py-10', carouselAccent.section)}>
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="mb-5 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-              <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-0.5 text-xs font-extrabold text-amber-600 dark:text-amber-400 shadow-2xs">
-                  <Flame className="h-3.5 w-3.5 fill-current animate-pulse text-amber-500" />
-                  <span>Selección Especial</span>
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
-                  {carouselSettings.title || 'Destacados de la semana'}
-                </h2>
-                {carouselSettings.subtitle && (
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    {carouselSettings.subtitle}
-                  </p>
-                )}
-              </div>
+            <div className="mb-5">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                {carouselSettings.title || 'Destacados de la semana'}
+              </h2>
+              {carouselSettings.subtitle && (
+                <p className="mt-1 text-sm text-muted-foreground">{carouselSettings.subtitle}</p>
+              )}
             </div>
 
             <OffersCarouselDeck
@@ -700,279 +581,149 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
         </section>
       )}
 
-      {/* ── Toolbar Sticky de Búsqueda y Filtros Rápidos ── */}
-      <div className="sticky top-16 z-30 border-b border-border/80 bg-background/95 backdrop-blur-xl shadow-xs">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-2.5">
+      {/* ── Listado ── */}
+      <div ref={resultsRef} className="container mx-auto scroll-mt-32 px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        {allOffers.length > 0 && (
+          <>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative sm:w-80">
+                <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  aria-label="Buscar en ofertas"
+                  placeholder="Buscar por producto o marca"
+                  enterKeyHint="search"
+                  value={search}
+                  onChange={(e) => updateFilters(() => setSearch(e.target.value))}
+                  className="h-10 pl-9 pr-9"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => updateFilters(() => setSearch(''))}
+                    aria-label="Limpiar búsqueda"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <X aria-hidden="true" className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
 
-          {/* Fila 1: Buscador + Tiers Rápidos + Ordenador */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-
-            {/* Buscador de ofertas */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                aria-label="Buscar productos en oferta"
-                placeholder="Buscar por producto o marca en oferta..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                  setPage(1)
-                }}
-                className="h-10 rounded-xl border-border/80 bg-card pl-10 pr-9 text-xs sm:text-sm focus-visible:ring-primary shadow-2xs"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch('')
-                    setPage(1)
-                  }}
-                  aria-label="Limpiar búsqueda"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground transition-colors"
+              <label className="flex items-center gap-2 text-sm text-muted-foreground sm:ml-auto">
+                <span className="shrink-0">Ordenar por</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => updateFilters(() => setSortBy(e.target.value as SortKey))}
+                  className="h-10 min-w-0 flex-1 cursor-pointer rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-none"
                 >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
-            {/* Quick Tier Chips & Sort */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-
-              {/* Tiers de Descuento */}
-              <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border/80 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => { setSelectedTier('all'); setPage(1); }}
-                  className={cn(
-                    'px-2.5 py-1 rounded-lg text-xs font-bold transition-all',
-                    selectedTier === 'all'
-                      ? 'bg-background text-foreground shadow-2xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
+            {(quickTiers.length > 0 || categories.length > 1) && (
+              <div role="group" aria-label="Filtros" className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+                <FilterChip
+                  active={selectedTier === 'all' && !selectedCategory}
+                  onClick={() => updateFilters(() => {
+                    setSelectedTier('all')
+                    setSelectedCategory(null)
+                  })}
                 >
                   Todas
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => { setSelectedTier('30'); setPage(1); }}
-                  className={cn(
-                    'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all',
-                    selectedTier === '30'
-                      ? 'bg-rose-500 text-white shadow-2xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Flame className="h-3 w-3 fill-current" />
-                  <span>≥30% OFF</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => { setSelectedTier('20'); setPage(1); }}
-                  className={cn(
-                    'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all',
-                    selectedTier === '20'
-                      ? 'bg-amber-500 text-white shadow-2xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Zap className="h-3 w-3 fill-current" />
-                  <span>≥20% OFF</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => { setSelectedTier('featured'); setPage(1); }}
-                  className={cn(
-                    'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all',
-                    selectedTier === 'featured'
-                      ? 'bg-primary text-primary-foreground shadow-2xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Star className="h-3 w-3" />
-                  <span>Top</span>
-                </button>
-              </div>
-
-              {/* Ordenador */}
-              <div className="flex items-center gap-1.5 rounded-xl border border-border/80 bg-card px-2.5 h-10 shrink-0 shadow-2xs">
-                <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <select
-                  aria-label="Ordenar ofertas"
-                  value={sortBy}
-                  onChange={(e) => {
-                    setSortBy(e.target.value as SortKey)
-                    setPage(1)
-                  }}
-                  className="bg-transparent text-xs font-bold text-foreground outline-none cursor-pointer pr-1"
-                >
-                  <option value="discount" className="bg-background text-foreground">Mayor descuento (%)</option>
-                  <option value="price_asc" className="bg-background text-foreground">Menor precio</option>
-                  <option value="price_desc" className="bg-background text-foreground">Mayor precio</option>
-                  <option value="newest" className="bg-background text-foreground">Más recientes</option>
-                </select>
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* Fila 2: Chips de Categorías */}
-          {categories.length > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
-              <span className="text-[11px] font-bold text-muted-foreground shrink-0 uppercase tracking-wider pr-1">
-                Rubros:
-              </span>
-
-              <button
-                type="button"
-                onClick={() => { setSelectedCategory(null); setPage(1); }}
-                className={cn(
-                  'px-3 py-1 rounded-lg font-bold shrink-0 transition-all text-xs',
-                  !selectedCategory
-                    ? 'bg-primary text-primary-foreground shadow-2xs'
-                    : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
+                </FilterChip>
+                {quickTiers.map((tier) => (
+                  <FilterChip
+                    key={tier}
+                    active={selectedTier === tier}
+                    onClick={() => updateFilters(() => setSelectedTier(selectedTier === tier ? 'all' : tier))}
+                  >
+                    {TIER_LABELS[tier]}
+                  </FilterChip>
+                ))}
+                {quickTiers.length > 0 && categories.length > 1 && (
+                  <span aria-hidden="true" className="mx-1 w-px shrink-0 self-stretch bg-border" />
                 )}
-              >
-                Todos
-              </button>
+                {categories.length > 1 && categories.map((category) => (
+                  <FilterChip
+                    key={category.id}
+                    active={selectedCategory === category.id}
+                    onClick={() => updateFilters(() => setSelectedCategory(selectedCategory === category.id ? null : category.id))}
+                  >
+                    {category.name}
+                  </FilterChip>
+                ))}
+              </div>
+            )}
 
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCategory(selectedCategory === cat.id ? null : cat.id)
-                    setPage(1)
-                  }}
-                  className={cn(
-                    'px-3 py-1 rounded-lg font-bold shrink-0 transition-all text-xs',
-                    selectedCategory === cat.id
-                      ? 'bg-primary text-primary-foreground shadow-2xs'
-                      : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
-                  )}
-                >
-                  {cat.name}
-                </button>
-              ))}
+            <div className="mt-6 flex min-h-8 items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground" aria-live="polite">{resultSummary}</p>
+              {hasActiveFilters && (
+                <Button type="button" variant="ghost" size="sm" onClick={resetAllFilters} className="h-8 gap-1.5 text-muted-foreground">
+                  <X aria-hidden="true" className="h-3.5 w-3.5" />
+                  Limpiar filtros
+                </Button>
+              )}
             </div>
-          )}
+          </>
+        )}
 
-        </div>
-      </div>
-
-      {/* ── Grilla de Ofertas & Resultados ── */}
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-
-        {/* Error Alert */}
         {offersError && (
-          <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs sm:text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100" role="alert">
-            <p>No pudimos sincronizar las últimas ofertas en vivo. Podés seguir explorando los productos guardados.</p>
-            <Button type="button" variant="outline" size="sm" onClick={() => retryOffers()} className="shrink-0 rounded-xl font-bold">
+          <div
+            role="alert"
+            className="mt-4 flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+          >
+            <p>No pudimos actualizar las ofertas. Te mostramos las últimas que cargamos.</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => retryOffers()} className="shrink-0">
               Reintentar
             </Button>
           </div>
         )}
 
-        {/* Resumen Superior */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs sm:text-sm font-semibold text-muted-foreground">
-              {filteredOffers.length === 0 ? (
-                'Sin coincidencias'
-              ) : (
-                <>
-                  Mostrando <strong className="text-foreground">{filteredOffers.length > 0 ? pageStart + 1 : 0} - {Math.min(pageStart + pageSize, filteredOffers.length)}</strong> de{' '}
-                  <strong className="text-foreground">{filteredOffers.length}</strong> ofertas
-                </>
-              )}
-            </span>
-
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={resetAllFilters}
-                className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-1 text-xs font-bold hover:bg-rose-500/20 transition-colors"
-              >
-                <X className="h-3 w-3" />
-                <span>Limpiar filtros</span>
-              </button>
-            )}
-          </div>
-
-          {/* Selector de Tamaño de Página */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-bold text-muted-foreground">Ver:</span>
-            <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/80">
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={() => {
-                    setPageSize(size)
-                    setPage(1)
-                  }}
-                  className={cn(
-                    'px-2 py-0.5 rounded-md text-[11px] font-bold transition-all',
-                    pageSize === size
-                      ? 'bg-background text-foreground shadow-2xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {size}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Loading Skeletons */}
-        {isLoading && initialOffers.length === 0 && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-5" aria-label="Cargando ofertas">
-            {[0, 1, 2, 3, 4, 5, 6, 7].map((item) => (
-              <div key={item} className="h-80 animate-pulse rounded-3xl border border-border/80 bg-muted/40" />
+        {showInitialSkeleton && (
+          <div aria-busy="true" aria-label="Cargando ofertas" className="mt-4 grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-5 md:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, item) => (
+              <div key={item} className="space-y-3">
+                <div className="aspect-square animate-pulse rounded-xl bg-muted" />
+                <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
+                <div className="h-5 w-1/2 animate-pulse rounded bg-muted" />
+              </div>
             ))}
           </div>
         )}
 
-        {/* Empty State */}
-        {!isLoading && !offersError && filteredOffers.length === 0 && (
-          <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card p-12 text-center max-w-md mx-auto">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-              <Flame className="h-8 w-8 text-rose-500" />
-            </div>
-            <h2 className="text-base sm:text-lg font-bold text-foreground">
-              {hasActiveFilters ? 'Sin ofertas con estos filtros' : 'Sin ofertas activas'}
+        {!showInitialSkeleton && filteredOffers.length === 0 && (
+          <div role="status" className="mx-auto mt-6 flex max-w-md flex-col items-center rounded-xl border border-dashed border-border px-6 py-12 text-center">
+            <Tag aria-hidden="true" className="h-8 w-8 text-muted-foreground" />
+            <h2 className="mt-3 text-base font-semibold text-foreground">
+              {hasActiveFilters ? 'Ninguna oferta coincide' : 'No hay ofertas activas'}
             </h2>
-            <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+            <p className="mt-1 text-sm text-muted-foreground">
               {hasActiveFilters
-                ? 'Probá ajustando el porcentaje de descuento o los términos de búsqueda.'
-                : 'En este momento no hay productos con precio de liquidación activo.'}
+                ? 'Probá con otra búsqueda o quitá algún filtro.'
+                : 'Volvé pronto o mirá el catálogo completo.'}
             </p>
-            <div className="mt-6 flex flex-wrap gap-2.5 justify-center">
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
               {hasActiveFilters && (
-                <Button
-                  variant="outline"
-                  onClick={resetAllFilters}
-                  className="rounded-xl font-bold text-xs"
-                >
+                <Button type="button" variant="outline" onClick={resetAllFilters}>
                   Limpiar filtros
                 </Button>
               )}
-              <Button asChild className="rounded-xl font-bold text-xs">
+              <Button asChild className="gap-2">
                 <Link href={`${tenantPrefix}/productos`}>
-                  Ver todos los productos <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  Ver catálogo
+                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
                 </Link>
               </Button>
             </div>
           </div>
         )}
 
-        {/* Products Grid */}
         {paginatedOffers.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-5">
+          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-5 md:grid-cols-3 xl:grid-cols-4">
             {paginatedOffers.map((offer, i) => (
               <OfferCard
                 key={offer.id}
@@ -982,163 +733,96 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
                 priority={i < 4}
                 commerceMode={commerceMode}
                 contactPhone={contactPhone}
+                portrait={portrait}
               />
             ))}
           </div>
         )}
 
-        {/* ── Paginación de Ofertas ── */}
         {totalPages > 1 && (
-          <div className="mt-10 pt-6 border-t border-border/60 flex items-center justify-center gap-1.5">
+          <nav aria-label="Páginas de ofertas" className="mt-12 flex items-center justify-center gap-1">
             <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 rounded-lg"
-              onClick={() => {
-                setPage(Math.max(1, safePage - 1))
-                window.scrollTo({ top: 400, behavior: 'smooth' })
-              }}
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => goToPage(safePage - 1)}
               disabled={safePage === 1}
               aria-label="Página anterior"
+              className="h-9 gap-1 px-2.5"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">Anterior</span>
             </Button>
 
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-              <Button
-                key={pageNum}
-                variant={safePage === pageNum ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => {
-                  setPage(pageNum)
-                  window.scrollTo({ top: 400, behavior: 'smooth' })
-                }}
-                className={cn(
-                  'h-8 min-w-8 px-2 rounded-lg text-xs font-semibold',
-                  safePage === pageNum
-                    ? 'bg-primary text-primary-foreground font-bold shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {pageNum}
-              </Button>
-            ))}
+            {paginationItems(safePage, totalPages).map((item, index) =>
+              item === 'gap' ? (
+                <span key={`gap-${index}`} aria-hidden="true" className="px-1.5 text-sm text-muted-foreground">
+                  …
+                </span>
+              ) : (
+                <Button
+                  key={item}
+                  type="button"
+                  variant={item === safePage ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => goToPage(item)}
+                  aria-label={`Página ${item}`}
+                  aria-current={item === safePage ? 'page' : undefined}
+                  className="h-9 min-w-9 px-2 tabular-nums"
+                >
+                  {item}
+                </Button>
+              )
+            )}
 
             <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 rounded-lg"
-              onClick={() => {
-                setPage(Math.min(totalPages, safePage + 1))
-                window.scrollTo({ top: 400, behavior: 'smooth' })
-              }}
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => goToPage(safePage + 1)}
               disabled={safePage === totalPages}
               aria-label="Página siguiente"
+              className="h-9 gap-1 px-2.5"
             >
-              <ChevronRight className="h-4 w-4" />
+              <span className="hidden sm:inline">Siguiente</span>
+              <ChevronRight aria-hidden="true" className="h-4 w-4" />
             </Button>
-          </div>
+          </nav>
         )}
-
       </div>
 
-      {/* ── Modern Banner: ¿Buscás otros modelos o novedades? ── */}
-      {filteredOffers.length > 0 && (
-        <section className="border-t border-border/80 bg-gradient-to-b from-background via-muted/20 to-muted/40 py-12 sm:py-16">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-6 sm:p-10 lg:p-12 shadow-sm transition-all duration-300 hover:shadow-xl hover:border-primary/30">
-
-              {/* Background ambient glow */}
-              <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
-              <div className="pointer-events-none absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-rose-500/10 blur-3xl" />
-
-              <div className="relative z-10 grid gap-8 lg:grid-cols-[1.4fr_1fr] lg:items-center">
-
-                {/* Left Column: Heading + Value Props */}
-                <div className="space-y-4">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1 text-xs font-extrabold text-primary shadow-2xs">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    <span>Catálogo & Asesoramiento</span>
-                  </div>
-
-                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-foreground leading-[1.2]">
-                    ¿Buscás otros modelos, marcas o novedades?
-                  </h2>
-
-                  <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-xl">
-                    Además de nuestras ofertas de liquidación, contamos con un catálogo completo de productos con garantía oficial, stock actualizado y financiación en cuotas.
-                  </p>
-
-                  {/* Feature Badges */}
-                  <div className="pt-2 flex flex-wrap items-center gap-3">
-                    <div className="inline-flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground">
-                      <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
-                      <span>Stock y reposición constante</span>
-                    </div>
-
-                    <div className="inline-flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground">
-                      <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                      <span>Garantía oficial y soporte</span>
-                    </div>
-
-                    {contactPhone && (
-                      <div className="inline-flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground">
-                        <MessageCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                        <span>Atención personalizada</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Right Column: Interactive CTAs */}
-                <div className="flex flex-col sm:flex-row lg:flex-col gap-3 justify-center lg:items-end">
-                  <Button
-                    asChild
-                    size="lg"
-                    className="h-12 w-full sm:w-auto lg:w-full max-w-xs justify-center rounded-2xl font-bold shadow-md shadow-primary/20 gap-2 text-xs sm:text-sm"
+      {/* ── Cierre ── */}
+      {allOffers.length > 0 && (
+        <section className="border-t border-border/70 bg-muted/30">
+          <div className="container mx-auto flex flex-col gap-4 px-4 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">¿No encontraste lo que buscabas?</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                En el catálogo están todos los productos de {settings.company_info.name || 'la tienda'}.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild className="gap-2">
+                <Link href={`${tenantPrefix}/productos`}>
+                  Ver catálogo completo
+                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
+                </Link>
+              </Button>
+              {contactPhone && (
+                <Button asChild variant="outline" className="gap-2">
+                  <a
+                    href={getWhatsAppLink({
+                      phone: contactPhone,
+                      message: 'Hola, estoy viendo las ofertas y quiero consultar por otros productos.',
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
                   >
-                    <Link href={`${tenantPrefix}/productos`}>
-                      <span>Explorar todo el catálogo</span>
-                      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                    </Link>
-                  </Button>
-
-                  {contactPhone ? (
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="lg"
-                      className="h-12 w-full sm:w-auto lg:w-full max-w-xs justify-center rounded-2xl border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-bold gap-2 text-xs sm:text-sm"
-                    >
-                      <a
-                        href={getWhatsAppLink({
-                          phone: contactPhone,
-                          message: 'Hola, estoy viendo las ofertas y quiero consultar por otros modelos disponibles.',
-                        })}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Consultar por WhatsApp sobre otros productos"
-                      >
-                        <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                        <span>Consultar por WhatsApp</span>
-                      </a>
-                    </Button>
-                  ) : (
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="lg"
-                      className="h-12 w-full sm:w-auto lg:w-full max-w-xs justify-center rounded-2xl font-bold border-border/80 hover:bg-muted text-xs sm:text-sm"
-                    >
-                      <Link href={`${tenantPrefix}/inicio`}>
-                        <span>Volver al inicio</span>
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-
-              </div>
-
+                    <MessageCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    Consultar por WhatsApp
+                  </a>
+                </Button>
+              )}
             </div>
           </div>
         </section>
