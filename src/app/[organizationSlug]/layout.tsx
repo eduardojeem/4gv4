@@ -9,6 +9,7 @@ import { CustomerLinkBanner } from '@/components/public/CustomerLinkBanner'
 import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { notFound } from 'next/navigation'
 
 // Cada tienda declara su propio manifest, para que el icono instalado abra en
@@ -30,7 +31,10 @@ export default async function OrganizationPublicLayout({
   params: Promise<{ organizationSlug: string }>
 }) {
   const { organizationSlug } = await params
-  if (!await resolvePublicStorefrontOrganizationBySlug(organizationSlug)) notFound()
+  const storefrontOrganization = await resolvePublicStorefrontOrganizationBySlug(organizationSlug)
+  if (!storefrontOrganization) notFound()
+  // Sin modulo de taller la tienda no ofrece seguimiento de reparaciones.
+  const repairsModuleEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')
   const settings = await fetchWebsiteSettings()
   const brandColor = settings?.company_info?.brandColor || 'blue'
   const customBrandColor = settings?.company_info?.customBrandColor
@@ -48,7 +52,7 @@ export default async function OrganizationPublicLayout({
           <PublicHeader initialSettings={settings} />
           <CustomerLinkBanner />
           <div className="flex-1 pb-16 lg:pb-0">{children}</div>
-          <PublicFooter initialSettings={settings} />
+          <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
           <StoreMobileBottomNav />
           <WhatsAppFloatButton />
         </div>

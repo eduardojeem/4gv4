@@ -117,7 +117,8 @@ describe('el prefijo de los enlaces se separa del de la tienda', () => {
 
   it('los enlaces usan linkPrefix', () => {
     expect(CLIENTE).toContain('linkPrefix = tenantPrefix')
-    expect(CLIENTE).toContain('<ProfileQuickActions role={profile.role || \'cliente\'} tenantPrefix={linkPrefix} />')
+    // Dentro de una tienda, «Rastrear equipo» depende de que tenga taller.
+    expect(CLIENTE).toContain('<ProfileQuickActions role={profile.role || \'cliente\'} tenantPrefix={linkPrefix} showRepairs={repairsAvailable} />')
     expect(CLIENTE).toContain('<ProfileActivity repairs={recentRepairs} tenantPrefix={linkPrefix} />')
   })
 

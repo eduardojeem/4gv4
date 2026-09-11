@@ -10,6 +10,8 @@ interface ProfileQuickActionsProps {
   variant?: 'all' | 'marketplace' | 'account'
   showStaffPanel?: boolean
   showAuthorizedPersons?: boolean
+  /** La tienda tiene taller. Sin el, «Rastrear equipo» llevaba a una seccion vacia. */
+  showRepairs?: boolean
 }
 
 import { ChangePasswordDialog } from './change-password-dialog'
@@ -20,6 +22,7 @@ export function ProfileQuickActions({
   variant = 'all',
   showStaffPanel = true,
   showAuthorizedPersons = true,
+  showRepairs = true,
 }: ProfileQuickActionsProps) {
   // 'super_admin' es mas privilegiado que 'admin' y quedaba afuera de esta
   // lista, asi que ese rol no veia el acceso al panel desde su propio perfil.
@@ -36,7 +39,9 @@ export function ProfileQuickActions({
     const activityLinks = [
       { href: '#favoritos', label: 'Favoritos', icon: Heart, tone: 'text-rose-600 bg-rose-500/10' },
       { href: '#carritos', label: 'Carritos', icon: ShoppingCart, tone: 'text-primary bg-primary/10' },
-      { href: repairsHref, label: 'Rastrear equipo', icon: Wrench, tone: 'text-amber-700 bg-amber-500/10 dark:text-amber-300' },
+      ...(showRepairs
+        ? [{ href: repairsHref, label: 'Rastrear equipo', icon: Wrench, tone: 'text-amber-700 bg-amber-500/10 dark:text-amber-300' }]
+        : []),
       { href: creditsHref, label: 'Créditos y cuotas', icon: WalletCards, tone: 'text-emerald-700 bg-emerald-500/10 dark:text-emerald-300' },
       ...(showAuthorizedPersons
         ? [{ href: authorizedHref, label: 'Personas autorizadas', icon: Shield, tone: 'text-info bg-info/10' }]
@@ -45,7 +50,7 @@ export function ProfileQuickActions({
 
     return (
       <nav aria-label="Accesos de mi actividad" className="overflow-x-auto pb-1">
-        <div className={`grid min-w-[560px] gap-2 sm:min-w-0 ${activityLinks.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+        <div className={`grid min-w-[560px] gap-2 sm:min-w-0 ${activityLinks.length === 5 ? 'grid-cols-5' : activityLinks.length === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
           {activityLinks.map(({ href, label, icon: Icon, tone }) => (
             <Link
               key={label}
@@ -95,6 +100,7 @@ export function ProfileQuickActions({
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link>
 
+        {showRepairs && (
         <Link
           href={repairsHref}
           className="group flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
@@ -108,6 +114,7 @@ export function ProfileQuickActions({
           </div>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link>
+        )}
 
         <Link
           href={creditsHref}

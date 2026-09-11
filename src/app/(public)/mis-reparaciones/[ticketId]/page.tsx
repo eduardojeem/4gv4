@@ -6,6 +6,8 @@ import { verifyRepairHash } from '@/lib/repair-qr'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
+import { notFound } from 'next/navigation'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import type { PublicRepair } from '@/types/public'
 import RepairDetailClient from './RepairDetailClient'
@@ -182,6 +184,13 @@ export default async function RepairDetailPage({
 }) {
   const { ticketId } = await params
   const { verify: verifyHash } = await searchParams
+
+  // Sin modulo de taller, el detalle de una reparacion no existe para esa tienda.
+  const tenantSlug = (await headers()).get('x-tenant-slug')
+  if (tenantSlug) {
+    const organization = await resolvePublicOrganizationBySlug(tenantSlug, createAdminSupabase())
+    if (organization && !(await isOrganizationModuleEnabled(organization.id, 'repairs'))) notFound()
+  }
 
   const initialRepair = await fetchRepairServerSide(ticketId, verifyHash ?? null)
 

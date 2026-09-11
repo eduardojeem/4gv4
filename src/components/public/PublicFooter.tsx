@@ -9,7 +9,18 @@ import { isPublicServicesPageAvailable, isPublicRepairsAvailable } from '@/lib/w
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import type { WebsiteSettings } from '@/types/website-settings'
 
-export function PublicFooter({ initialSettings = null }: { initialSettings?: WebsiteSettings | null }) {
+export function PublicFooter({
+  initialSettings = null,
+  repairsModuleEnabled = true,
+}: {
+  initialSettings?: WebsiteSettings | null
+  /**
+   * La organizacion tiene el modulo de taller. Lo resuelve el layout en el
+   * servidor; sin el, «Mis reparaciones» se ofrecia segun la configuracion del
+   * sitio aunque la tienda no tuviera taller.
+   */
+  repairsModuleEnabled?: boolean
+}) {
   const { settings } = useWebsiteSettings()
   const pathname = usePathname()
   const effectiveSettings = settings ?? initialSettings
@@ -27,7 +38,7 @@ export function PublicFooter({ initialSettings = null }: { initialSettings?: Web
     company?.servicesPageEnabled,
     effectiveSettings?.services
   )
-  const repairsEnabled = isPublicRepairsAvailable(company, effectiveSettings?.services)
+  const repairsEnabled = repairsModuleEnabled && isPublicRepairsAvailable(company, effectiveSettings?.services)
 
   return (
     <footer className="border-t border-border/50 bg-muted/30">

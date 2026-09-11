@@ -8,6 +8,7 @@ import { EMPTY_CUSTOMER_ACCOUNT_SUMMARY } from '@/lib/profile/customer-account-s
 import type { ProfileOrder } from '@/components/profile/profile-orders'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 
 interface RecentProfileRepair {
@@ -58,6 +59,9 @@ export default async function CustomerProfilePage({ basePath }: { basePath?: str
     if (!organization) notFound()
     organizationId = organization.id
   }
+  // «Rastrear equipo» solo si la tienda tiene taller. En el marketplace no hay
+  // una tienda puntual y se mantiene.
+  const repairsAvailable = organizationId ? await isOrganizationModuleEnabled(organizationId, 'repairs') : true
 
   const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', user.id).single()
 
@@ -130,6 +134,7 @@ export default async function CustomerProfilePage({ basePath }: { basePath?: str
       stores={stores}
       recentRepairs={recentRepairs}
       recentOrders={recentOrders}
+      repairsAvailable={repairsAvailable}
       organization={userOrganization ? {
         id: userOrganization.id,
         name: userOrganization.name,

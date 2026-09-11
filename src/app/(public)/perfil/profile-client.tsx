@@ -41,6 +41,8 @@ type ProfileData = z.infer<typeof profileSchema> & {
 }
 
 interface ProfileClientProps {
+  /** La tienda tiene el modulo de taller: sin el no se ofrece «Rastrear equipo». */
+  repairsAvailable?: boolean
   initialData: ProfileData
   userId: string
   /** Tienda de la ruta. Vacio fuera de una: decide el alcance de los datos. */
@@ -91,6 +93,7 @@ export function ProfileClient({
   recentRepairs,
   recentOrders,
   organization,
+  repairsAvailable = true,
 }: ProfileClientProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -311,7 +314,7 @@ export function ProfileClient({
 
         <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
           <div className="flex flex-col gap-6">
-            <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={linkPrefix} />
+            <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={linkPrefix} showRepairs={repairsAvailable} />
             <ProfileFavoritesWidget linkPrefix={linkPrefix} />
             <ProfileStoreCarts />
             <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />

@@ -37,6 +37,7 @@ import { RepairStoreFilter } from '@/components/public/repairs/repair-store-filt
 import { customerRepairHref } from '@/lib/public/store-scoped-href'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { cn } from '@/lib/utils'
 
@@ -155,6 +156,10 @@ export default async function MisReparacionesPage({
     : null
 
   if (tenantSlug && !organization) notFound()
+  // Sin modulo de taller esta tienda no tiene reparaciones que mostrar: la URL
+  // respondia igual aunque la organizacion no tuviera taller. En el marketplace
+  // no hay tienda y no aplica.
+  if (organization && !(await isOrganizationModuleEnabled(organization.id, 'repairs'))) notFound()
 
   const settings = await fetchWebsiteSettings()
   const companyName = settings?.company_info?.name || organization?.name || 'Tienda'
