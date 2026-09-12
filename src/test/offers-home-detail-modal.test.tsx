@@ -133,7 +133,8 @@ describe('el detalle de una oferta destacada', () => {
 
     const modal = within(screen.getByRole('dialog'))
     fireEvent.click(modal.getByRole('button', { name: /Agregar al carrito/ }))
-    expect(control.addProduct).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), 58_650, 1)
+    // Sin variantes, el lugar de la variante va vacío.
+    expect(control.addProduct).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), 58_650, 1, undefined)
   })
 
   it('con variantes, primero hay que elegirlas', () => {

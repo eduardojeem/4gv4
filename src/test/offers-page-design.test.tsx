@@ -189,7 +189,7 @@ describe('las tarjetas', () => {
     const dialog = screen.getByRole('dialog')
     const modalCartBtn = within(dialog).getByRole('button', { name: /Agregar al carrito/i })
     fireEvent.click(modalCartBtn)
-    expect(control.addProduct).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), 60_000, 1)
+    expect(control.addProduct).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), 60_000, 1, undefined)
   })
 })
 

@@ -274,6 +274,12 @@ export function OffersCarouselDeck({
       toast.error('Producto sin stock')
       return
     }
+    // Con variantes se abre el detalle: el pedido rechaza una linea sin variante.
+    if (offer.product?.has_variants) {
+      setDetailOffer(offer.product)
+      toast.info('Elegí una variante para continuar.')
+      return
+    }
 
     // Extract price
     const price = offer.offerPrice ?? (
@@ -289,7 +295,7 @@ export function OffersCarouselDeck({
       offer_price: price,
       has_offer: true,
       in_stock: offer.inStock,
-      stock_quantity: 99,
+      stock_quantity: offer.product?.stock_quantity ?? 99,
       featured: true,
       image: offer.image,
       images: offer.image ? [offer.image] : [],

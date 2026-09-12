@@ -287,6 +287,13 @@ function OfferCard({
   const handleCart = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!offer.in_stock) return
+    // Con variantes hay que elegir cual: agregar a ciegas dejaba una linea que
+    // el pedido rechazaba al confirmar.
+    if (offer.has_variants) {
+      openDetail()
+      toast.info('Elegí una variante para continuar.')
+      return
+    }
     const product: PublicProduct = {
       ...offer,
       sku: '',

@@ -226,7 +226,9 @@ export function OfferDetailModal({
       sale_price: effectivePrice,
       offer_price: effectivePrice,
     }
-    const result = addProduct(product, effectivePrice, quantity)
+    // Sin la variante, el pedido rechaza la linea al confirmar: se elegia talle
+    // y color y el checkout pedia elegirlos de nuevo.
+    const result = addProduct(product, effectivePrice, quantity, matchedVariant ?? undefined)
     if (result.limited) {
       toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
       return
