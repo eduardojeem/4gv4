@@ -701,10 +701,21 @@ export function ProductModal({
       has_offer: data.has_offer ?? false,
       installments_enabled: data.installments_enabled ?? false,
       installments_public: data.installments_public ?? true,
-      has_variants: Boolean(data.has_variants && (data.variant_attribute_config?.length ?? 0) > 0 && (data.variants?.length ?? 0) > 0),
-      variant_attribute_config: data.has_variants && Array.isArray(data.variant_attribute_config)
-        ? data.variant_attribute_config
-        : [],
+      has_variants: Boolean(
+        data.has_variants &&
+        Array.isArray(data.variants) &&
+        data.variants.length > 0
+      ),
+      variant_attribute_config: (() => {
+        if (!data.has_variants) return []
+        if (Array.isArray(data.variant_attribute_config) && data.variant_attribute_config.length > 0) {
+          return data.variant_attribute_config
+        }
+        if (Array.isArray(data.variants) && data.variants.length > 0) {
+          return deriveVariantAttributeConfig(data.variants)
+        }
+        return []
+      })(),
       variants: data.has_variants && Array.isArray(data.variants)
         ? data.variants
         : [],

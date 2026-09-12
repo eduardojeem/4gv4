@@ -21,7 +21,10 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import { formatPrice } from '@/lib/utils'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import type { PublicProductVariant } from '@/types/public'
+import { resolveOfferPrice } from '@/lib/public/offer-pricing'
+import { PublicVariantPicker } from './PublicVariantPicker'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 type Props = {
@@ -73,6 +76,7 @@ function Thumb({
 export function MarketplaceProductModal({ product, open, onClose }: Props) {
   const [activeIdx, setActiveIdx] = useState(0)
   const [mainError, setMainError] = useState(false)
+  const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({})
 
   // Construir lista única de imágenes: [image, ...images] sin duplicados y sin nulls
   const allImages: string[] = product
@@ -96,6 +100,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
   useEffect(() => {
     setActiveIdx(0)
     setMainError(false)
+    setSelectedAttrs({})
   }, [product?.id])
 
   const prev = useCallback(() => { setMainError(false); setActiveIdx((i) => Math.max(0, i - 1)) }, [])
@@ -115,24 +120,49 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, hasMultiple, prev, next])
 
+  const variants = useMemo<PublicProductVariant[]>(
+    () => (product?.variants ?? []).filter((variant) => variant.is_active),
+    [product?.variants]
+  )
+  const hasVariants = Boolean(product?.has_variants && variants.length > 0)
+  const attributeKeys = useMemo(() => {
+    const nonSelectable = new Set(['image_url', 'image', 'photo', 'imageurl'])
+    if (product?.variant_attribute_config?.length) {
+      return product.variant_attribute_config
+        .filter((config) => !nonSelectable.has(config.key.toLowerCase()))
+        .map((config) => config.key)
+    }
+    return Array.from(new Set(variants.flatMap((variant) => Object.keys(variant.attributes ?? {}))))
+      .filter((k) => !nonSelectable.has(k.toLowerCase()))
+  }, [product?.variant_attribute_config, variants])
+  const matchedVariant = useMemo(() => {
+    if (!hasVariants || attributeKeys.some((key) => !selectedAttrs[key])) return null
+    return variants.find((variant) => attributeKeys.every((key) => variant.attributes[key] === selectedAttrs[key])) ?? null
+  }, [attributeKeys, hasVariants, selectedAttrs, variants])
+
   if (!product) return null
 
-  const hasOffer =
-    product.has_offer &&
-    product.offer_price != null &&
-    product.offer_price < product.sale_price
+  const selectedSalePrice = matchedVariant?.sale_price ?? product.sale_price
+  const selectedOfferPrice = matchedVariant?.offer_price != null
+    ? matchedVariant.offer_price
+    : product.offer_price != null && product.offer_price > 0 && product.offer_price < product.sale_price
+      ? Math.min(product.offer_price, selectedSalePrice)
+      : null
+  const hasOffer = Boolean(selectedOfferPrice != null && selectedOfferPrice < selectedSalePrice)
 
-  const displayPrice = hasOffer ? product.offer_price! : product.sale_price
+  const displayPrice = hasOffer
+    ? (selectedOfferPrice ?? resolveOfferPrice(product.sale_price, product.offer_price, selectedSalePrice))
+    : selectedSalePrice
   const discountPct = hasOffer
-    ? Math.round((1 - product.offer_price! / product.sale_price) * 100)
+    ? Math.round((1 - displayPrice / selectedSalePrice) * 100)
     : 0
 
-  const isInStock = product.in_stock
+  const isInStock = matchedVariant ? matchedVariant.stock_quantity > 0 : product.in_stock
   const isLowStock =
     isInStock &&
-    typeof product.stock_quantity === 'number' &&
-    product.stock_quantity > 0 &&
-    product.stock_quantity <= 4
+    typeof (matchedVariant?.stock_quantity ?? product.stock_quantity) === 'number' &&
+    (matchedVariant?.stock_quantity ?? product.stock_quantity) > 0 &&
+    (matchedVariant?.stock_quantity ?? product.stock_quantity) <= 4
 
   const productHref = `/${product.organization_slug}/productos/${product.id}`
   const storeHref = `/${product.organization_slug}/inicio`
@@ -153,7 +183,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
           3. Footer   →  shrink-0  (siempre visible)
       */}
       <DialogContent
-        className="flex max-h-[90dvh] w-[calc(100%-1rem)] sm:max-w-lg flex-col gap-0 overflow-hidden rounded-xl border bg-background p-0 shadow-xl focus:outline-none"
+        className="flex max-h-[92dvh] w-[calc(100%-1rem)] sm:max-w-2xl flex-col gap-0 overflow-hidden rounded-2xl border bg-background p-0 shadow-2xl focus:outline-none"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">{product.name}</DialogTitle>
@@ -164,7 +194,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
         <div className="border-b border-slate-200/30 dark:border-slate-800/30">
 
           {/* Imagen principal */}
-          <div className="relative h-40 overflow-hidden bg-muted/30 sm:h-48">
+          <div className="relative h-52 overflow-hidden bg-muted/30 sm:h-64">
             {currentSrc && !mainError ? (
               <Image
                 key={currentSrc}
@@ -271,7 +301,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
 
         {/* ── 2. Contenido scrolleable ─────────────────────────────────────── */}
         <div>
-          <div className="flex flex-col gap-3 p-4">
+          <div className="flex flex-col gap-4 p-4 sm:p-6">
 
             {/* Fila de Vendedor: Logo de empresa, nombre y opción de ubicación */}
             <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-2.5 dark:border-slate-800/80 dark:bg-slate-900/40">
@@ -349,7 +379,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
               </p>
               {hasOffer && (
                 <p className="text-sm font-semibold text-slate-400 line-through dark:text-slate-500">
-                  {formatPrice(product.sale_price)}
+                  {formatPrice(selectedSalePrice)}
                 </p>
               )}
             </div>
@@ -370,10 +400,19 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
               {isLowStock && (
                 <span className="flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-250/20 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 shadow-sm">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
-                  Últimas {product.stock_quantity} unidades
+                  Últimas {matchedVariant?.stock_quantity ?? product.stock_quantity} unidades
                 </span>
               )}
             </div>
+
+            {hasVariants && (
+              <PublicVariantPicker
+                variants={variants}
+                config={product.variant_attribute_config}
+                selected={selectedAttrs}
+                onChange={(key, value) => setSelectedAttrs((current) => ({ ...current, [key]: value }))}
+              />
+            )}
 
             {/* Descripción completa */}
             {product.description?.trim() && (

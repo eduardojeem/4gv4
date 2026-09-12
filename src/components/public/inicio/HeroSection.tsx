@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   ArrowRight,
+  Briefcase,
   CheckCircle,
   MessageCircle,
   Package,
@@ -29,6 +30,11 @@ import type { CompanyInfo, HeroStats, HeroContent } from '@/types/website-settin
 import type { BrandTheme } from '@/lib/constants/brand-theme'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { HeroCampaign } from './HeroCampaign'
+import type {
+  PublishedHeroAction,
+  StorefrontCapabilities,
+  StorefrontTracking,
+} from '@/lib/website/storefront-capabilities'
 
 interface HeroSectionProps {
   companyInfo: CompanyInfo
@@ -38,6 +44,9 @@ interface HeroSectionProps {
   phoneClean: string
   contactHref: string
   hasRepairs?: boolean
+  capabilities?: StorefrontCapabilities
+  primaryAction?: PublishedHeroAction
+  tracking?: StorefrontTracking
 }
 
 function AnimatedStat({ value, label }: { value: string; label: string }) {
@@ -92,6 +101,9 @@ export function HeroSection(props: HeroSectionProps) {
         phoneClean={props.phoneClean}
         contactHref={props.contactHref}
         hasRepairs={props.hasRepairs ?? false}
+        capabilities={props.capabilities}
+        primaryAction={props.primaryAction}
+        tracking={props.tracking}
       />
     )
   }
@@ -106,6 +118,11 @@ function ClassicHeroSection({
   phoneClean,
   contactHref,
   hasRepairs = false,
+  capabilities,
+  primaryAction = { kind: 'products', href: '/productos' },
+  tracking = hasRepairs
+    ? { kind: 'repairs', href: '/mis-reparaciones' }
+    : { kind: 'orders', href: '/track' },
 }: HeroSectionProps) {
   const pathname = usePathname()
   const router = useRouter()
@@ -194,7 +211,7 @@ function ClassicHeroSection({
             </p>
 
             {/* ── Buscador Directo en el Hero ── */}
-            <form
+            {(capabilities?.hasCatalog ?? true) && <form
               onSubmit={handleSearchSubmit}
               className="mt-6 flex w-full max-w-lg items-center gap-2 rounded-2xl border border-border/80 bg-card p-1.5 shadow-md focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all"
             >
@@ -215,18 +232,25 @@ function ClassicHeroSection({
                 <span>Buscar</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </Button>
-            </form>
+            </form>}
 
             {/* CTAs Principales */}
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Button asChild size="lg" className="rounded-xl font-bold shadow-sm gap-2">
-                <Link href={`${tenantPrefix}/productos`}>
-                  <ShoppingBag className="h-4 w-4" />
-                  {heroContent.ctaPrimaryText || 'Explorar productos'}
-                </Link>
+                {primaryAction.kind === 'contact' ? (
+                  <a href={contactHref} target={phoneClean ? '_blank' : undefined} rel={phoneClean ? 'noopener noreferrer' : undefined}>
+                    <MessageCircle className="h-4 w-4" />
+                    {heroContent.ctaPrimaryText || 'Solicitar información'}
+                  </a>
+                ) : (
+                  <Link href={`${tenantPrefix}${primaryAction.href}`}>
+                    {primaryAction.kind === 'services' ? <Briefcase className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
+                    {heroContent.ctaPrimaryText || (primaryAction.kind === 'services' ? 'Ver servicios' : 'Explorar productos')}
+                  </Link>
+                )}
               </Button>
 
-              <Button
+              {primaryAction.kind !== 'contact' && <Button
                 asChild
                 size="lg"
                 variant="outline"
@@ -240,31 +264,26 @@ function ClassicHeroSection({
                   <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   {heroContent.ctaSecondaryText || 'Contactar por WhatsApp'}
                 </a>
-              </Button>
+              </Button>}
             </div>
 
             {/* Rastrear reparación u orden de compra */}
-            <div className="mt-4">
-              {hasRepairs ? (
+            {tracking.kind !== 'none' && tracking.href && (
+              <div className="mt-4">
                 <Link
-                  href={`${tenantPrefix}/mis-reparaciones`}
+                  href={`${tenantPrefix}${tracking.href}`}
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  <Wrench className="h-3.5 w-3.5 text-primary" />
-                  <span>{heroContent.trackRepairText || '¿Tenés una orden técnica? Rastreá tu equipo aquí'}</span>
+                  {tracking.kind === 'repairs'
+                    ? <Wrench className="h-3.5 w-3.5 text-primary" />
+                    : <Truck className="h-3.5 w-3.5 text-primary" />}
+                  <span>{tracking.kind === 'repairs'
+                    ? heroContent.trackRepairText || '¿Tenés una orden técnica? Rastreá tu equipo aquí'
+                    : '¿Hiciste una compra? Rastreá el estado de tu pedido aquí'}</span>
                   <ArrowRight className="h-3 w-3 opacity-60" />
                 </Link>
-              ) : (
-                <Link
-                  href={`${tenantPrefix}/track`}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <Truck className="h-3.5 w-3.5 text-primary" />
-                  <span>¿Hiciste una compra? Rastreá el estado de tu pedido aquí</span>
-                  <ArrowRight className="h-3 w-3 opacity-60" />
-                </Link>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* ── Columna Derecha: Tarjeta Comercial Destacada ──
@@ -317,15 +336,15 @@ function ClassicHeroSection({
                 {/* Estadísticas de Confianza */}
                 {heroStats.enabled !== false && (
                   <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/40 p-3.5 text-center border border-border/40">
-                    <AnimatedStat value={heroStats.repairs || '100%'} label="Garantía" />
-                    <AnimatedStat value={heroStats.satisfaction || '4.9★'} label="Valoración" />
-                    <AnimatedStat value={heroStats.avgTime || '24h'} label="Despacho" />
+                    <AnimatedStat value={heroStats.repairs || '100%'} label={capabilities?.metricLabels[0] ?? 'Garantía'} />
+                    <AnimatedStat value={heroStats.satisfaction || '4.9★'} label={capabilities?.metricLabels[1] ?? 'Valoración'} />
+                    <AnimatedStat value={heroStats.avgTime || '24h'} label={capabilities?.metricLabels[2] ?? 'Despacho'} />
                   </div>
                 )}
 
                 {/* Accesos Rápidos de Compra (duplican los CTA del hero en movil) */}
                 <div className="hidden lg:block space-y-2">
-                  <Link
+                  {(capabilities?.hasCatalog ?? true) && <Link
                     href={`${tenantPrefix}/productos`}
                     className="flex items-center justify-between rounded-xl border border-border/70 bg-background p-3 text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-muted/50 hover:shadow-xs group"
                   >
@@ -336,9 +355,9 @@ function ClassicHeroSection({
                       <span>Ver catálogo completo de productos</span>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
-                  </Link>
+                  </Link>}
 
-                  <Link
+                  {(capabilities?.hasCatalog ?? true) && <Link
                     href={`${tenantPrefix}/productos?ofertas=true`}
                     className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50/50 p-3 text-xs font-bold text-rose-800 transition-all hover:bg-rose-100/70 hover:shadow-xs group dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-300"
                   >
@@ -349,7 +368,22 @@ function ClassicHeroSection({
                       <span>Promociones y ofertas especiales</span>
                     </div>
                     <ArrowRight className="h-4 w-4 text-rose-500 transition-transform group-hover:translate-x-1" />
-                  </Link>
+                  </Link>}
+
+                  {primaryAction.kind === 'services' && (
+                    <Link
+                      href={`${tenantPrefix}/servicios`}
+                      className="flex items-center justify-between rounded-xl border border-border/70 bg-background p-3 text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-muted/50 hover:shadow-xs group"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <Briefcase className="h-4 w-4" />
+                        </div>
+                        <span>Ver catálogo completo de servicios</span>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                    </Link>
+                  )}
                 </div>
 
                 {/* Badge Inferior de Horarios */}

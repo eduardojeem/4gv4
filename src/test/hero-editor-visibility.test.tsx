@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { HeroEditor } from '@/components/admin/website/HeroEditor'
+import { resolveStorefrontCapabilities } from '@/lib/website/storefront-capabilities'
 
 const hookState = vi.hoisted(() => ({
   updateSettings: vi.fn(),
@@ -111,5 +112,39 @@ describe('HeroEditor visibility control', () => {
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Textos' }), { button: 0, ctrlKey: false })
     expect(screen.getByLabelText('Título principal')).toHaveValue('Soluciones para tu celular')
     expect(screen.getByRole('button', { name: 'Guardar portada' })).toBeDisabled()
+  })
+
+  it('adapts templates, preview labels and tracking to a clothing store', () => {
+    const capabilities = resolveStorefrontCapabilities({
+      businessVertical: 'clothing',
+      operatingModel: 'retail',
+      effectiveModules: ['inventory', 'ecommerce', 'orders'],
+    })
+
+    render(<HeroEditor capabilities={capabilities} />)
+
+    expect(screen.getByText('Moda e indumentaria')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Moda, Calzado & Accesorios' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Servicio Técnico & Reparaciones' })).not.toBeInTheDocument()
+    expect(screen.getByText('Clientes')).toBeInTheDocument()
+    expect(screen.queryByText('Reparaciones')).not.toBeInTheDocument()
+    expect(screen.getByText('Seguimiento de pedidos activo')).toBeInTheDocument()
+    expect(screen.getByLabelText('Título principal')).toHaveAttribute('placeholder', 'Estilo, calidad y las mejores marcas para vos')
+    expect(screen.queryByRole('button', { name: 'Consultar falla' })).not.toBeInTheDocument()
+    expect(screen.getByText('El contenido actual menciona reparaciones o servicio técnico.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Aplicar contenido recomendado' })).toBeInTheDocument()
+  })
+
+  it('shows repair-specific controls only when repairs are enabled', () => {
+    const capabilities = resolveStorefrontCapabilities({
+      businessVertical: 'electronics',
+      operatingModel: 'repair',
+      effectiveModules: ['inventory', 'services', 'repairs'],
+    })
+
+    render(<HeroEditor capabilities={capabilities} />)
+    expect(screen.getByRole('button', { name: 'Servicio Técnico & Reparaciones' })).toBeInTheDocument()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Botones' }), { button: 0, ctrlKey: false })
+    expect(screen.getByLabelText(/Texto del enlace inferior/)).toBeInTheDocument()
   })
 })

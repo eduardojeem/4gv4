@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -11,6 +12,42 @@ import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBran
 import { canCreateResource } from '@/lib/saas/subscription-service'
 import { filterProductsByCatalogKind, parseProductCatalogKind } from '@/lib/products/catalog-kind'
 import { ProductVariantsPayloadSchema } from '@/lib/products/variant-contract'
+import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
+
+function revalidateProductStorefront(organizationSlug?: string | null, organizationId?: string | null, productId?: string | null) {
+  try {
+    const paths: string[] = ['/', '/productos', '/ofertas', '/marketplace', '/marketplace/productos', '/marketplace/ofertas']
+    if (productId) {
+      paths.push(`/productos/${productId}`)
+    }
+    if (organizationSlug) {
+      paths.push(`/${organizationSlug}`)
+      paths.push(`/${organizationSlug}/productos`)
+      paths.push(`/${organizationSlug}/ofertas`)
+      if (productId) {
+        paths.push(`/${organizationSlug}/productos/${productId}`)
+      }
+    }
+    for (const p of paths) {
+      try {
+        revalidatePath(p)
+      } catch {
+        // Ignorar entornos o builds donde revalidatePath no esté activo
+      }
+    }
+    try {
+      revalidateTag('marketplace:products', 'max')
+      revalidateTag('marketplace:offers', 'max')
+      if (organizationId) {
+        revalidateTag(`product-facets:${organizationId}`, 'max')
+      }
+    } catch {
+      // Ignorar fallas de tags en mocks de test
+    }
+  } catch (error) {
+    logger.warn('Failed to revalidate storefront caches after product change', { error })
+  }
+}
 
 // GET /api/products - Get products with variants
 /**
@@ -420,9 +457,16 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
     }
 
     if (validated.has_variants) {
+      const rawAttrs = validated.variant_attribute_config ?? []
+      const effectiveAttrs = (Array.isArray(rawAttrs) && rawAttrs.length > 0)
+        ? rawAttrs
+        : (Array.isArray(validated.variants) && validated.variants.length > 0
+          ? deriveVariantAttributeConfig(validated.variants)
+          : [])
+
       const variantPayload = ProductVariantsPayloadSchema.safeParse({
         hasVariants: true,
-        attributes: validated.variant_attribute_config,
+        attributes: effectiveAttrs,
         variants: validated.variants,
       })
 
@@ -503,6 +547,8 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         const { purchase_price: _purchasePrice, ...visible } = variant
         return visible
       })
+
+      revalidateProductStorefront(organization.slug, organization.id, savedProductId)
 
       return NextResponse.json({
         success: true,
@@ -626,6 +672,8 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         )[0]
       : product
     
+    revalidateProductStorefront(organization.slug, organization.id, String(product.id))
+
     return NextResponse.json({
       success: true,
       data: responseProduct
@@ -701,9 +749,16 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     }
 
     if (validated.has_variants !== undefined && (validated.has_variants || existingProduct.has_variants)) {
+      const rawAttrs = validated.variant_attribute_config ?? existingProduct.variant_attribute_config ?? []
+      const effectiveAttrs = (Array.isArray(rawAttrs) && rawAttrs.length > 0)
+        ? rawAttrs
+        : (Array.isArray(validated.variants) && validated.variants.length > 0
+          ? deriveVariantAttributeConfig(validated.variants)
+          : [])
+
       const variantPayload = ProductVariantsPayloadSchema.safeParse({
         hasVariants: validated.has_variants,
-        attributes: validated.variant_attribute_config ?? existingProduct.variant_attribute_config ?? [],
+        attributes: effectiveAttrs,
         variants: validated.variants ?? [],
       })
 
@@ -728,10 +783,47 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       }
 
       const admin = createAdminSupabase()
+
+      // Asegurar que las variantes existentes tengan su fila en branch_variant_inventory
+      // para evitar que el RPC intente registrar movimientos iniciales con ON CONFLICT inválido.
+      const existingVariantIds = variantPayload.data.variants
+        .map((v) => v.id)
+        .filter((id): id is string => Boolean(id))
+
+      if (existingVariantIds.length > 0) {
+        const { data: existingBvi } = await admin
+          .from('branch_variant_inventory')
+          .select('variant_id')
+          .eq('organization_id', organization.id)
+          .eq('branch_id', variantBranchId)
+          .in('variant_id', existingVariantIds)
+
+        const presentIds = new Set((existingBvi || []).map((row) => row.variant_id))
+        const missingFromBvi = variantPayload.data.variants.filter(
+          (v) => v.id && !presentIds.has(v.id),
+        )
+
+        if (missingFromBvi.length > 0) {
+          await admin.from('branch_variant_inventory').insert(
+            missingFromBvi.map((v) => ({
+              organization_id: organization.id,
+              branch_id: variantBranchId,
+              product_id: validated.id,
+              variant_id: v.id!,
+              stock_quantity: v.stockQuantity ?? 0,
+              min_stock: v.minStock ?? 0,
+            })),
+          )
+        }
+      }
+
       const { data: saved, error: saveError } = await admin.rpc('save_product_with_variants', {
         p_product: {
           ...existingProduct,
           ...validated,
+          warranty_months: validated.warranty_months ?? existingProduct.warranty_months ?? 0,
+          return_window_days: validated.return_window_days ?? existingProduct.return_window_days ?? 0,
+          exchange_window_days: validated.exchange_window_days ?? existingProduct.exchange_window_days ?? 0,
           id: validated.id,
           organization_id: organization.id,
           has_variants: variantPayload.data.hasVariants,
@@ -743,12 +835,25 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       })
 
       if (saveError) {
+        logger.error('Failed to update product with variants', {
+          code: saveError.code,
+          error: saveError.message,
+          details: saveError.details,
+          hint: saveError.hint,
+          productId: validated.id,
+          organizationId: organization.id,
+        })
         const code = getVariantErrorCode(saveError)
         return NextResponse.json(
           {
             success: false,
-            error: 'No se pudo actualizar el producto con sus variantes.',
+            error: code === 'VARIANT_SKU_DUPLICATE'
+              ? 'Ya existe una variante con ese SKU en la organización.'
+              : code === 'VARIANT_BARCODE_DUPLICATE'
+                ? 'Ya existe una variante con ese código de barras en la organización.'
+                : (saveError.message || 'No se pudo actualizar el producto con sus variantes.'),
             code: code ?? 'PRODUCT_VARIANTS_SAVE_FAILED',
+            details: saveError.details || saveError.message,
           },
           { status: code ? VARIANT_ERROR_STATUS[code] : 500 },
         )
@@ -772,6 +877,8 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         const { purchase_price: _purchasePrice, ...visible } = variant
         return visible
       })
+
+      revalidateProductStorefront(organization.slug, organization.id, savedProductId)
 
       return NextResponse.json({
         success: true,
@@ -877,6 +984,8 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         )[0]
       : product
     
+    revalidateProductStorefront(organization.slug, organization.id, String(product.id))
+
     return NextResponse.json({
       success: true,
       data: responseProduct

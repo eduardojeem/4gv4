@@ -18,6 +18,7 @@ import {
 } from '@/lib/website/storefront-style'
 import type { CompanyInfo, HeroContent } from '@/types/website-settings'
 import type { PublicProduct } from '@/types/public'
+import type { PublishedHeroAction, StorefrontCapabilities, StorefrontTracking } from '@/lib/website/storefront-capabilities'
 import { NEWEST_PRODUCTS_SWR_OPTIONS, fetchPublicProducts, newestProductsKey } from './newest-products'
 
 interface HeroCampaignProps {
@@ -27,6 +28,9 @@ interface HeroCampaignProps {
   phoneClean: string
   contactHref: string
   hasRepairs: boolean
+  capabilities?: StorefrontCapabilities
+  primaryAction?: PublishedHeroAction
+  tracking?: StorefrontTracking
 }
 
 /** Fotos del mosaico: los productos más nuevos que tienen imagen propia. */
@@ -43,7 +47,19 @@ function tileSpan(index: number, total: number) {
   return ''
 }
 
-export function HeroCampaign({ style, companyInfo, heroContent, phoneClean, contactHref, hasRepairs }: HeroCampaignProps) {
+export function HeroCampaign({
+  style,
+  companyInfo,
+  heroContent,
+  phoneClean,
+  contactHref,
+  hasRepairs,
+  capabilities,
+  primaryAction = { kind: 'products', href: '/productos' },
+  tracking = hasRepairs
+    ? { kind: 'repairs', href: '/mis-reparaciones' }
+    : { kind: 'orders', href: '/track' },
+}: HeroCampaignProps) {
   const pathname = usePathname()
   const router = useRouter()
   const tenantSlug = getTenantSlugFromPathname(pathname)
@@ -103,13 +119,20 @@ export function HeroCampaign({ style, companyInfo, heroContent, phoneClean, cont
                 size="lg"
                 className="group/btn h-12 rounded-full bg-primary text-primary-foreground font-bold px-7 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:brightness-105 active:translate-y-0"
               >
-                <Link href={`${tenantPrefix}/productos`} className="inline-flex items-center gap-2">
-                  <span>{heroContent.ctaPrimaryText || 'Ver la colección'}</span>
-                  <ArrowRight aria-hidden="true" className="h-4 w-4 transition-transform duration-200 group-hover/btn:translate-x-1" />
-                </Link>
+                {primaryAction.kind === 'contact' ? (
+                  <a href={contactHref} target={phoneClean ? '_blank' : undefined} rel={phoneClean ? 'noopener noreferrer' : undefined} className="inline-flex items-center gap-2">
+                    <span>{heroContent.ctaPrimaryText || 'Solicitar información'}</span>
+                    <ArrowRight aria-hidden="true" className="h-4 w-4 transition-transform duration-200 group-hover/btn:translate-x-1" />
+                  </a>
+                ) : (
+                  <Link href={`${tenantPrefix}${primaryAction.href}`} className="inline-flex items-center gap-2">
+                    <span>{heroContent.ctaPrimaryText || (primaryAction.kind === 'services' ? 'Ver servicios' : 'Ver la colección')}</span>
+                    <ArrowRight aria-hidden="true" className="h-4 w-4 transition-transform duration-200 group-hover/btn:translate-x-1" />
+                  </Link>
+                )}
               </Button>
 
-              <Button
+              {primaryAction.kind !== 'contact' && <Button
                 asChild
                 size="lg"
                 variant="outline"
@@ -124,11 +147,11 @@ export function HeroCampaign({ style, companyInfo, heroContent, phoneClean, cont
                   <MessageCircle aria-hidden="true" className="h-4 w-4 text-[#25D366]" />
                   <span>{heroContent.ctaSecondaryText || 'Contactar por WhatsApp'}</span>
                 </a>
-              </Button>
+              </Button>}
             </div>
 
             {/* Buscador píldora minimalista */}
-            <form
+            {(capabilities?.hasCatalog ?? true) && <form
               role="search"
               onSubmit={handleSearchSubmit}
               className="mt-8 flex w-full max-w-md items-center gap-3 rounded-full border border-border/80 bg-card px-4 py-1.5 shadow-xs transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20"
@@ -148,23 +171,23 @@ export function HeroCampaign({ style, companyInfo, heroContent, phoneClean, cont
               >
                 Buscar
               </button>
-            </form>
+            </form>}
 
-            <Link
-              href={hasRepairs ? `${tenantPrefix}/mis-reparaciones` : `${tenantPrefix}/track`}
+            {tracking.kind !== 'none' && tracking.href && <Link
+              href={`${tenantPrefix}${tracking.href}`}
               className="mt-5 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
-              {hasRepairs ? (
+              {tracking.kind === 'repairs' ? (
                 <Wrench aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
               ) : (
                 <Truck aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
               )}
               <span>
-                {hasRepairs
+                {tracking.kind === 'repairs'
                   ? heroContent.trackRepairText || '¿Tenés una orden técnica? Rastreá tu equipo aquí'
                   : '¿Hiciste una compra? Seguí tu pedido'}
               </span>
-            </Link>
+            </Link>}
           </div>
 
           {/* Lado derecho: Mosaico editorial de fotos de productos */}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WebsiteEditorDirtyContext } from '@/components/admin/website/website-editor-dirty'
 import { CompanyInfoForm } from '@/components/admin/website/CompanyInfoForm'
 import { HeroEditor } from '@/components/admin/website/HeroEditor'
@@ -19,14 +19,21 @@ import { WebsiteNavigation } from '@/components/admin/website/WebsiteNavigation'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { useEffectiveModule } from '@/contexts/SubscriptionStatusContext'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { resolveStorefrontCapabilities } from '@/lib/website/storefront-capabilities'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 export default function WebsiteAdminPage() {
   const { settings, refresh, isRefreshing } = useAdminWebsiteSettings()
-  const hasServicesModule = useEffectiveModule('services')
-  const hasRepairsModule = useEffectiveModule('repairs')
+  const { businessVertical, operatingModel, effectiveModules } = useSubscriptionStatus()
+  const storefrontCapabilities = useMemo(() => resolveStorefrontCapabilities({
+    businessVertical,
+    operatingModel,
+    effectiveModules,
+  }), [businessVertical, operatingModel, effectiveModules])
+  const hasServicesModule = storefrontCapabilities.hasServices
+  const hasRepairsModule = storefrontCapabilities.hasRepairs
   const servicesModuleEnabled = hasServicesModule || hasRepairsModule
 
   const [orgSlug, setOrgSlug] = useState<string | null>(null)
@@ -185,7 +192,7 @@ export default function WebsiteAdminPage() {
         <div className="min-w-0">
 
         {tab === 'company' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="company" /><CompanyInfoForm /></section>}
-        {tab === 'hero' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="hero" /><HeroEditor /></section>}
+        {tab === 'hero' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="hero" /><HeroEditor capabilities={storefrontCapabilities} /></section>}
         {tab === 'trust_bar' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="trust_bar" /><TrustBarEditor /></section>}
         {tab === 'brands' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="brands" /><BrandsSectionEditor /></section>}
         {tab === 'carousel' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="carousel" /><PromotionalCarouselEditor /></section>}

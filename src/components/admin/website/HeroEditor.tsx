@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import {
   Loader2,
+  AlertTriangle,
   Save,
   Sparkles,
   TrendingUp,
@@ -40,6 +41,7 @@ import {
   ExternalLink,
   Zap,
   Award,
+  Briefcase,
   ThumbsUp,
   Clock,
   ArrowRight,
@@ -54,9 +56,15 @@ import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import { cn } from '@/lib/utils'
+import {
+  getCompatibleHeroPresetIds,
+  resolveStorefrontCapabilities,
+  type HeroPresetId,
+  type StorefrontCapabilities,
+} from '@/lib/website/storefront-capabilities'
 
 export interface HeroPreset {
-  id: string
+  id: HeroPresetId
   label: string
   icon: string
   badge: string
@@ -73,12 +81,12 @@ export const HERO_PRESETS: HeroPreset[] = [
     id: 'tech',
     label: 'Tecnología & Celulares',
     icon: '📱',
-    badge: '✨ Especialistas en Tecnología & Celulares',
-    title: 'Lo último en tecnología y servicio técnico garantizado',
-    subtitle: 'Equipos nuevos, accesorios originales y reparación profesional con garantía escrita.',
+    badge: '✨ Tecnología & Celulares',
+    title: 'Lo último en tecnología con atención personalizada',
+    subtitle: 'Equipos, accesorios y productos originales con garantía y entrega rápida.',
     ctaPrimaryText: 'Ver productos',
     ctaSecondaryText: 'Escribinos por WhatsApp',
-    trustBadges: ['Garantía escrita', 'Repuestos originales', 'Envíos a todo el país'],
+    trustBadges: ['Garantía oficial', 'Productos originales', 'Envíos a todo el país'],
     stats: { repairs: '10K+', satisfaction: '99%', avgTime: '24-48h' },
   },
   {
@@ -94,6 +102,18 @@ export const HERO_PRESETS: HeroPreset[] = [
     stats: { repairs: '5K+', satisfaction: '99%', avgTime: '24h' },
   },
   {
+    id: 'cosmetics',
+    label: 'Cosmética & Belleza',
+    icon: '✨',
+    badge: 'Cuidado & Belleza',
+    title: 'Realzá tu belleza con productos de confianza',
+    subtitle: 'Cosmética y cuidado personal originales, con asesoramiento y entregas rápidas.',
+    ctaPrimaryText: 'Ver catálogo',
+    ctaSecondaryText: 'Pedir asesoramiento',
+    trustBadges: ['Productos originales', 'Asesoría personalizada', 'Envíos disponibles'],
+    stats: { repairs: 'Clientes', satisfaction: 'Valoración', avgTime: 'Entrega' },
+  },
+  {
     id: 'electro',
     label: 'Electro, Hogar & Bazar',
     icon: '🏠',
@@ -104,6 +124,18 @@ export const HERO_PRESETS: HeroPreset[] = [
     ctaSecondaryText: 'Pedir cotización',
     trustBadges: ['Stock inmediato', 'Garantía oficial', 'Precios especiales'],
     stats: { repairs: '8K+', satisfaction: '98%', avgTime: '24h' },
+  },
+  {
+    id: 'services',
+    label: 'Servicios Profesionales',
+    icon: '🧰',
+    badge: 'Atención Profesional',
+    title: 'Soluciones profesionales a tu medida',
+    subtitle: 'Servicios claros, atención personalizada y presupuestos sin sorpresas.',
+    ctaPrimaryText: 'Ver servicios',
+    ctaSecondaryText: 'Solicitar presupuesto',
+    trustBadges: ['Atención directa', 'Presupuestos claros', 'Trabajo garantizado'],
+    stats: { repairs: 'Servicios', satisfaction: 'Satisfacción', avgTime: 'Respuesta' },
   },
   {
     id: 'repairs',
@@ -141,39 +173,6 @@ const BADGE_SUGGESTIONS = [
   '💎 Productos 100% Originales',
 ]
 
-const TITLE_SUGGESTIONS = [
-  'Lo último en tecnología y servicio técnico garantizado',
-  'Los mejores productos con atención personalizada y garantía',
-  'Tu tienda de confianza con precios imbatibles y envíos rápidos',
-  'Ofertas exclusivas y lanzamientos de temporada al mejor precio',
-  'Todo lo que buscás en un solo lugar con despacho inmediato',
-]
-
-const SUBTITLE_SUGGESTIONS = [
-  'Stock 100% actualizado • Envíos a todo el país • Atención directa por WhatsApp',
-  'Garantía escrita • Repuestos originales • Técnicos certificados',
-  'Precios mayoristas y minoristas • Pagos en efectivo, transferencias y tarjetas',
-  'Comprá fácil y seguro desde tu celular con entrega rápida a domicilio',
-]
-
-const CTA_PRIMARY_SUGGESTIONS = [
-  'Ver productos',
-  'Explorar catálogo',
-  'Ver ofertas activas',
-  'Comprar ahora',
-  'Ver colección',
-  'Explorar tienda',
-]
-
-const CTA_SECONDARY_SUGGESTIONS = [
-  'Escribinos por WhatsApp',
-  'Consultar stock',
-  'Pedir cotización',
-  'Asesoramiento gratis',
-  'Contactar vendedor',
-  'Consultar falla',
-]
-
 const TRACK_REPAIR_SUGGESTIONS = [
   '¿Tenés una reparación? Rastreá tu equipo',
   '¿Hiciste un pedido? Rastreá tu compra',
@@ -206,9 +205,16 @@ const STAT_AVG_TIME_SUGGESTIONS = ['24-48h', '1-3 horas', 'En el día', 'Despach
 interface HeroEditorProps {
   initialContent?: HeroContent
   initialStats?: HeroStats
+  capabilities?: StorefrontCapabilities
 }
 
-export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {}) {
+const DEFAULT_CAPABILITIES = resolveStorefrontCapabilities({
+  businessVertical: 'general',
+  operatingModel: 'retail',
+  effectiveModules: ['inventory', 'ecommerce', 'orders'],
+})
+
+export function HeroEditor({ initialContent, initialStats, capabilities = DEFAULT_CAPABILITIES }: HeroEditorProps = {}) {
   const { settings, isLoading, error, isSaving, updateSettings } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults()
   const [heroContentDraft, setHeroContentDraft] = useState<HeroContent | null>(null)
@@ -218,6 +224,30 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
   const heroContent = heroContentDraft ?? settings?.hero_content ?? defaults.hero_content
   const heroStats = heroStatsDraft ?? settings?.hero_stats ?? defaults.hero_stats
   const hasChanges = heroContentDraft !== null || heroStatsDraft !== null
+  const compatiblePresetIds = getCompatibleHeroPresetIds(capabilities)
+  const compatiblePresets = HERO_PRESETS.filter((preset) => compatiblePresetIds.includes(preset.id))
+  const recommendedPreset = compatiblePresets[0] ?? HERO_PRESETS[HERO_PRESETS.length - 1]
+  const titleSuggestions = compatiblePresets.map((preset) => preset.title)
+  const subtitleSuggestions = compatiblePresets.map((preset) => preset.subtitle)
+  const primarySuggestions = Array.from(new Set(compatiblePresets.map((preset) => preset.ctaPrimaryText)))
+  const secondarySuggestions = Array.from(new Set(compatiblePresets.map((preset) => preset.ctaSecondaryText)))
+  const trustBadgeCategories = capabilities.hasRepairs
+    ? TRUST_BADGE_CATEGORIES
+    : TRUST_BADGE_CATEGORIES.map((category) => ({
+        ...category,
+        items: category.items.filter((item) => !/repuesto|técnic|diagnóstico/i.test(item)),
+      })).filter((category) => category.items.length > 0)
+  const currentHeroCopy = [
+    heroContent.badge,
+    heroContent.title,
+    heroContent.subtitle,
+    heroContent.ctaPrimaryText,
+    heroContent.ctaSecondaryText,
+    heroContent.trackRepairText,
+    ...(heroContent.trustBadges ?? []),
+  ].filter(Boolean).join(' ')
+  const hasIncompatibleRepairCopy = !capabilities.hasRepairs &&
+    /reparaci|servicio técnico|soporte técnico|diagnóstico|repuestos?|técnicos?/i.test(currentHeroCopy)
 
   const brand = getBrandTheme(settings?.company_info?.brandColor)
   const customBrandColor = settings?.company_info?.customBrandColor
@@ -354,6 +384,41 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
         onToggle={(checked) => updateContent('enabled', checked)}
       />
 
+      <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-semibold text-foreground">{capabilities.businessLabel}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            La portada se adapta a las funciones disponibles y oculta acciones que tu organización no tiene habilitadas.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5 text-[11px] font-medium">
+          <span className={cn('rounded-full border px-2 py-1', capabilities.hasCatalog ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border bg-muted text-muted-foreground')}>
+            {capabilities.hasCatalog ? 'Catálogo activo' : 'Sin catálogo'}
+          </span>
+          <span className={cn('rounded-full border px-2 py-1', capabilities.hasServices ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border bg-muted text-muted-foreground')}>
+            {capabilities.hasServices ? 'Servicios activos' : 'Sin servicios'}
+          </span>
+          <span className={cn('rounded-full border px-2 py-1', capabilities.hasRepairs ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border bg-muted text-muted-foreground')}>
+            {capabilities.hasRepairs ? 'Reparaciones activas' : 'Sin reparaciones'}
+          </span>
+        </div>
+      </div>
+
+      {hasIncompatibleRepairCopy && (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">El contenido actual menciona reparaciones o servicio técnico.</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Ese módulo no está activo. Actualizá los textos antes de publicar para no ofrecer una función inexistente.</p>
+            </div>
+          </div>
+          <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => applyHeroPreset(recommendedPreset)}>
+            Aplicar contenido recomendado
+          </Button>
+        </div>
+      )}
+
       <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
       <aside aria-label="Vista previa de la portada" className="min-w-0 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1">
         <Button type="button" variant="outline" className="w-full justify-between xl:hidden" aria-expanded={previewOpen} aria-controls="hero-preview" onClick={() => setPreviewOpen((open) => !open)}>
@@ -473,7 +538,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                     'mt-3.5 flex flex-wrap gap-1.5',
                     previewDevice === 'mobile' ? 'justify-center' : ''
                   )}>
-                    {(heroContent.trustBadges || ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados']).map((label, i) => (
+                    {(heroContent.trustBadges || recommendedPreset.trustBadges).map((label, i) => (
                       <div key={i} className="rounded-full bg-muted border border-border/70 px-2.5 py-0.5 text-[11px] font-semibold text-foreground shadow-2xs">
                         ✓ {label}
                       </div>
@@ -481,7 +546,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                   </div>
 
                   {/* ── Buscador Simulado ── */}
-                  <div className="mt-5 flex w-full max-w-md items-center gap-2 rounded-2xl border border-border/80 bg-card p-1.5 shadow-md">
+                  {capabilities.hasCatalog && <div className="mt-5 flex w-full max-w-md items-center gap-2 rounded-2xl border border-border/80 bg-card p-1.5 shadow-md">
                     <div className="relative flex-1 flex items-center pl-3">
                       <Search className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="ml-2 text-xs text-muted-foreground truncate">
@@ -492,7 +557,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                       <span>Buscar</span>
                       <ArrowRight className="h-3 w-3" />
                     </div>
-                  </div>
+                  </div>}
 
                   {/* CTAs Principales */}
                   <div className={cn(
@@ -500,7 +565,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                     previewDevice === 'mobile' ? 'w-full flex-col items-stretch' : ''
                   )}>
                     <div className="rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2 cursor-pointer hover:bg-primary/90">
-                      <ShoppingBag className="h-4 w-4" />
+                      {capabilities.primaryAction.kind === 'services' ? <Briefcase className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
                       <span>{heroContent.ctaPrimaryText || 'Ver productos'}</span>
                     </div>
 
@@ -511,13 +576,17 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                   </div>
 
                   {/* Track Repair */}
-                  <div className="mt-3.5 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
-                    <Wrench className="h-3.5 w-3.5 text-primary shrink-0" />
+                  {capabilities.tracking.kind !== 'none' && <div className="mt-3.5 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+                    {capabilities.tracking.kind === 'repairs'
+                      ? <Wrench className="h-3.5 w-3.5 text-primary shrink-0" />
+                      : <Truck className="h-3.5 w-3.5 text-primary shrink-0" />}
                     <span className="underline underline-offset-2">
-                      {heroContent.trackRepairText || '¿Tenés una reparación? Rastreá tu equipo'}
+                      {capabilities.tracking.kind === 'repairs'
+                        ? heroContent.trackRepairText || '¿Tenés una reparación? Rastreá tu equipo'
+                        : 'Seguimiento de pedidos activo'}
                     </span>
                     <ArrowRight className="h-3 w-3 opacity-60" />
-                  </div>
+                  </div>}
                 </div>
 
                 {/* ── Columna Derecha: Tarjeta Comercial Destacada ── */}
@@ -558,15 +627,15 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                       <div className="grid grid-cols-3 gap-1.5 rounded-2xl bg-muted/40 p-3 text-center border border-border/40">
                         <div>
                           <div className="text-sm sm:text-base font-extrabold text-foreground">{heroStats.repairs || '100%'}</div>
-                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">Reparaciones</div>
+                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">{capabilities.metricLabels[0]}</div>
                         </div>
                         <div>
                           <div className="text-sm sm:text-base font-extrabold text-foreground">{heroStats.satisfaction || '4.9★'}</div>
-                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">Satisfacción</div>
+                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">{capabilities.metricLabels[1]}</div>
                         </div>
                         <div>
                           <div className="text-sm sm:text-base font-extrabold text-foreground">{heroStats.avgTime || '24h'}</div>
-                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">Tiempo prom.</div>
+                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">{capabilities.metricLabels[2]}</div>
                         </div>
                       </div>
                     )}
@@ -642,13 +711,14 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
           {/* ── Plantillas por Rubro ── */}
           <details className="rounded-xl border bg-muted/20 p-3">
             <summary className="cursor-pointer text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Usar una plantilla</summary>
-            <p className="my-3 text-xs text-muted-foreground">Elegí tu rubro para reemplazar los textos, botones, insignias y cifras del borrador. Revisá las cifras antes de guardar: son ejemplos, no datos reales de tu negocio.</p>
+            <p className="my-3 text-xs text-muted-foreground">Mostramos únicamente plantillas compatibles con tu rubro y módulos. Revisá las cifras antes de guardar: son ejemplos, no datos reales de tu negocio.</p>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
-              {HERO_PRESETS.map((preset) => (
+              {compatiblePresets.map((preset, index) => (
                 <button
                   key={preset.id}
                   type="button"
+                  aria-label={preset.label}
                   onClick={() => applyHeroPreset(preset)}
                   className="flex flex-col items-center justify-center p-3 rounded-xl border border-border/80 bg-background/80 hover:bg-primary/10 hover:border-primary/40 transition-all text-center group cursor-pointer shadow-2xs"
                 >
@@ -656,6 +726,9 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                   <span className="text-xs font-bold text-foreground group-hover:text-primary leading-tight line-clamp-2">
                     {preset.label}
                   </span>
+                  {index === 0 && (
+                    <span className="mt-1 text-[9px] font-bold uppercase tracking-wider text-primary">Recomendada</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -770,7 +843,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               id="title"
               value={heroContent.title}
               onChange={(e) => updateContent('title', e.target.value)}
-              placeholder="Reparación de celulares rápida y confiable"
+              placeholder={recommendedPreset.title}
               maxLength={150}
               aria-invalid={!!errors.title}
               aria-describedby={errors.title ? 'title-error' : undefined}
@@ -782,7 +855,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
             <details className="pt-1">
               <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
               <div className="flex flex-wrap gap-1.5">
-                {TITLE_SUGGESTIONS.map((sug, i) => (
+                {titleSuggestions.map((sug, i) => (
                   <button
                     key={i}
                     type="button"
@@ -815,7 +888,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               id="subtitle"
               value={heroContent.subtitle}
               onChange={(e) => updateContent('subtitle', e.target.value)}
-              placeholder="Diagnóstico gratuito • Garantía de 6 meses • Técnicos certificados"
+              placeholder={recommendedPreset.subtitle}
               rows={2}
               maxLength={300}
               aria-invalid={!!errors.subtitle}
@@ -828,7 +901,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
             <details className="pt-1">
               <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
               <div className="flex flex-wrap gap-1.5">
-                {SUBTITLE_SUGGESTIONS.map((sug, i) => (
+                {subtitleSuggestions.map((sug, i) => (
                   <button
                     key={i}
                     type="button"
@@ -900,7 +973,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               <details className="pt-1">
                 <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
                 <div className="flex flex-wrap gap-1.5">
-                  {CTA_PRIMARY_SUGGESTIONS.map((sug, i) => (
+                  {primarySuggestions.map((sug, i) => (
                     <button
                       key={i}
                       type="button"
@@ -937,7 +1010,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
               <details className="pt-1">
                 <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
                 <div className="flex flex-wrap gap-1.5">
-                  {CTA_SECONDARY_SUGGESTIONS.map((sug, i) => (
+                  {secondarySuggestions.map((sug, i) => (
                     <button
                       key={i}
                       type="button"
@@ -957,7 +1030,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
             </div>
 
             {/* Enlace de Rastreo */}
-            <div className="space-y-2.5 md:col-span-2 pt-2 border-t border-border/40">
+            {capabilities.tracking.kind === 'repairs' ? <div className="space-y-2.5 md:col-span-2 pt-2 border-t border-border/40">
               <Label htmlFor="trackRepairText" className="text-sm font-bold text-foreground flex items-center gap-1.5">
                 <ArrowRight className="h-4 w-4 text-primary" />
                 Texto del enlace inferior (Rastreo / Seguimiento)
@@ -991,7 +1064,13 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                   ))}
                 </div>
               </details>
-            </div>
+            </div> : (
+              <div className="md:col-span-2 rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+                {capabilities.tracking.kind === 'orders'
+                  ? 'Seguimiento de pedidos activo: la portada enlazará al estado de compra sin mencionar reparaciones.'
+                  : 'No se mostrará un enlace de seguimiento porque la organización no tiene pedidos ni reparaciones habilitados.'}
+              </div>
+            )}
           </div>
 
         </div>
@@ -1031,7 +1110,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
             <Label className="text-sm font-bold text-foreground">Tus 3 Insignias de Portada</Label>
             <div className="grid gap-3 sm:grid-cols-3">
               {[0, 1, 2].map((idx) => {
-                const badges = heroContent.trustBadges || ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados']
+                const badges = heroContent.trustBadges || recommendedPreset.trustBadges
                 return (
                   <div key={idx} className="space-y-1.5">
                     <Label htmlFor={`hero-trust-badge-${idx}`} className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
@@ -1061,7 +1140,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
             <p className="text-xs text-muted-foreground">Se agrega al primer espacio vacío. Si los tres están completos, reemplaza la primera insignia.</p>
 
             <div className="grid gap-4 sm:grid-cols-3">
-              {TRUST_BADGE_CATEGORIES.map((cat, catIdx) => (
+              {trustBadgeCategories.map((cat, catIdx) => (
                 <div key={catIdx} className="space-y-2">
                   <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
                     <span>{cat.icon}</span>
@@ -1069,7 +1148,7 @@ export function HeroEditor({ initialContent, initialStats }: HeroEditorProps = {
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {cat.items.map((badgeSug, i) => {
-                      const currentBadges = heroContent.trustBadges || ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados']
+                      const currentBadges = heroContent.trustBadges || recommendedPreset.trustBadges
                       const isSelected = currentBadges.includes(badgeSug)
 
                       return (

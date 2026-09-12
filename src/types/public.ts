@@ -36,6 +36,7 @@ export interface PublicProductVariant {
   attributes: Record<string, string>
   sku: string | null
   sale_price: number
+  offer_price?: number | null
   wholesale_price?: number | null
   stock_quantity: number
   is_active: boolean

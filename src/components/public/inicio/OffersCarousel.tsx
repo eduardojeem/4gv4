@@ -14,6 +14,7 @@ import {
   OffersCarouselDeck,
   type OfferSlide,
 } from '@/components/public/offers/OffersCarouselDeck'
+import type { OfferDetailProduct } from '@/components/public/offers/OfferDetailModal'
 
 export type { OfferSlide }
 
@@ -26,6 +27,38 @@ const priceFormatter = new Intl.NumberFormat('es-PY', {
   style: 'currency',
   currency: 'PYG',
   maximumFractionDigits: 0,
+})
+
+/**
+ * El producto completo que necesita el modal de detalle: galeria, variantes y
+ * stock. La API publica ya devuelve todo eso en la misma respuesta.
+ */
+const toOfferDetailProduct = (product: Record<string, unknown>): OfferDetailProduct => ({
+  id: String(product.id),
+  name: String(product.name || 'Producto destacado'),
+  brand: (product.brand as string | null) ?? null,
+  description: (product.description as string | null) ?? null,
+  sale_price: Number(product.sale_price || 0),
+  offer_price: Number(product.offer_price || 0),
+  has_offer: Boolean(product.has_offer),
+  in_stock: typeof product.in_stock === 'boolean'
+    ? product.in_stock
+    : Number(product.stock_quantity ?? 0) > 0,
+  stock_quantity: Number(product.stock_quantity ?? 0),
+  featured: Boolean(product.featured),
+  image: (product.image as string | null)
+    || (Array.isArray(product.images) && product.images.length > 0 ? String(product.images[0]) : null),
+  images: Array.isArray(product.images) ? product.images.map(String) : null,
+  category: product.category && typeof product.category === 'object'
+    ? {
+        id: String((product.category as Record<string, unknown>).id),
+        name: String((product.category as Record<string, unknown>).name),
+      }
+    : undefined,
+  created_at: product.created_at ? String(product.created_at) : null,
+  has_variants: Boolean(product.has_variants),
+  variant_attribute_config: (product.variant_attribute_config as OfferDetailProduct['variant_attribute_config']) ?? undefined,
+  variants: (product.variants as OfferDetailProduct['variants']) ?? undefined,
 })
 
 /**
@@ -63,6 +96,7 @@ export const mapProductsToOfferSlides = (products: unknown[]): OfferSlide[] => {
           : Number(product.stock_quantity ?? product.in_stock) > 0,
         offerPrice: Number(product.offer_price || 0),
         salePrice: Number(product.sale_price || 0),
+        product: toOfferDetailProduct(product),
       }
     })
 }

@@ -20,6 +20,7 @@ import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { usesPortraitMedia } from '@/lib/website/storefront-style'
 import { getWhatsAppLink } from '@/lib/whatsapp'
+import { resolveOfferPrice } from '@/lib/public/offer-pricing'
 
 interface ProductCardProps {
   product: PublicProduct
@@ -84,8 +85,8 @@ export function ProductCard(props: ProductCardProps) {
   // ── Price logic ──────────────────────────────────────────────────────────
   const hasOffer =
     !isWholesale &&
-    product.has_offer === true &&
     product.offer_price != null &&
+    product.offer_price > 0 &&
     product.offer_price < product.sale_price
 
   const isWholesaleDiscount =
@@ -99,14 +100,18 @@ export function ProductCard(props: ProductCardProps) {
     isWholesale,
     wholesalePrice: product.wholesale_price ?? null,
     salePrice: product.sale_price,
-    hasOffer: product.has_offer === true,
+    hasOffer,
     offerPrice: product.offer_price ?? null,
   })
   const publicVariants = (product.variants ?? []).filter((variant) => variant.is_active)
   const hasVariants = Boolean(product.has_variants && publicVariants.length > 0)
   const selectedVariant = publicVariants.find((variant) => variant.id === selectedVariantId) ?? null
   const selectedPrice = selectedVariant
-    ? (isWholesale && selectedVariant.wholesale_price != null ? selectedVariant.wholesale_price : selectedVariant.sale_price)
+    ? (isWholesale && selectedVariant.wholesale_price != null
+        ? selectedVariant.wholesale_price
+        : hasOffer
+          ? resolveOfferPrice(product.sale_price, product.offer_price, selectedVariant.sale_price)
+          : selectedVariant.sale_price)
     : displayPrice
   const selectedStock = hasVariants
     ? (selectedVariant ? selectedVariant.stock_quantity : product.stock_quantity)
@@ -115,6 +120,12 @@ export function ProductCard(props: ProductCardProps) {
   const originalPrice = hasOffer || isWholesaleDiscount ? product.sale_price : null
   const discountPct = originalPrice
     ? Math.round(((originalPrice - displayPrice) / originalPrice) * 100)
+    : 0
+  const selectedOriginalPrice = selectedVariant && hasOffer
+    ? selectedVariant.sale_price
+    : originalPrice
+  const selectedDiscountPct = selectedOriginalPrice && selectedPrice < selectedOriginalPrice
+    ? Math.round(((selectedOriginalPrice - selectedPrice) / selectedOriginalPrice) * 100)
     : 0
 
   const isInStock = hasVariants
@@ -562,17 +573,17 @@ export function ProductCard(props: ProductCardProps) {
                     )}>
                       {formatPrice(selectedPrice)}
                     </p>
-                    {originalPrice && (
+                    {selectedOriginalPrice && selectedPrice < selectedOriginalPrice && (
                       <p className="mb-0.5 text-sm text-muted-foreground line-through">
-                        {formatPrice(originalPrice)}
+                        {formatPrice(selectedOriginalPrice)}
                       </p>
                     )}
                   </div>
                   {/* Savings chip */}
-                  {originalPrice && discountPct > 0 && (
+                  {selectedOriginalPrice && selectedDiscountPct > 0 && (
                     <p className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                       <Tag className="h-3 w-3" />
-                      Ahorrás {formatPrice(originalPrice - displayPrice)}
+                      Ahorrás {formatPrice(selectedOriginalPrice - selectedPrice)} · {selectedDiscountPct}% OFF
                     </p>
                   )}
                 </div>
@@ -594,7 +605,14 @@ export function ProductCard(props: ProductCardProps) {
                         {publicVariants.map((variant) => {
                           const isSelected = selectedVariantId === variant.id
                           const hasStock = variant.stock_quantity > 0
-                          const variantPrice = isWholesale && variant.wholesale_price != null ? variant.wholesale_price : variant.sale_price
+                          const variantPrice = isWholesale && variant.wholesale_price != null
+                            ? variant.wholesale_price
+                            : hasOffer
+                              ? resolveOfferPrice(product.sale_price, product.offer_price, variant.sale_price)
+                              : variant.sale_price
+                          const variantOriginalPrice = hasOffer && variantPrice < variant.sale_price
+                            ? variant.sale_price
+                            : null
                           return (
                             <button
                               key={variant.id}
@@ -622,8 +640,20 @@ export function ProductCard(props: ProductCardProps) {
                                 <span className={cn('font-medium', hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive')}>
                                   {hasStock ? `${variant.stock_quantity} disp.` : 'Sin stock'}
                                 </span>
-                                <span className="font-bold text-foreground">
-                                  {formatPrice(variantPrice)}
+                                <span className="flex flex-col items-end leading-tight">
+                                  <span className={cn(
+                                    'font-bold',
+                                    variantOriginalPrice
+                                      ? 'text-rose-600 dark:text-rose-400'
+                                      : 'text-foreground'
+                                  )}>
+                                    {formatPrice(variantPrice)}
+                                  </span>
+                                  {variantOriginalPrice && (
+                                    <span className="text-[10px] font-medium text-muted-foreground line-through">
+                                      {formatPrice(variantOriginalPrice)}
+                                    </span>
+                                  )}
                                 </span>
                               </div>
                             </button>
@@ -646,7 +676,7 @@ export function ProductCard(props: ProductCardProps) {
                 {/* Installments */}
                 {installmentsVisible && (product.installments_plans?.length ?? 0) > 0 && (
                   <InstallmentSelector
-                    price={displayPrice * quantity}
+                    price={selectedPrice * quantity}
                     plans={product.installments_plans ?? []}
                     compact
                   />

@@ -24,6 +24,7 @@ import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getWhatsAppLink } from '@/lib/whatsapp'
 import { toast } from 'sonner'
 import type { PublicProduct } from '@/types/public'
+import { OfferDetailModal, type OfferDetailProduct } from './OfferDetailModal'
 
 export interface OfferSlide {
   id: string
@@ -38,6 +39,8 @@ export interface OfferSlide {
   inStock: boolean
   offerPrice?: number
   salePrice?: number
+  /** Producto completo: con esto la tarjeta abre el detalle en un modal. */
+  product?: OfferDetailProduct
 }
 
 export type OffersAccent = {
@@ -158,6 +161,7 @@ export function OffersCarouselDeck({
   const [isDocumentVisible, setIsDocumentVisible] = useState(true)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
   const [addedItemIds, setAddedItemIds] = useState<Record<string, boolean>>({})
+  const [detailOffer, setDetailOffer] = useState<OfferDetailProduct | null>(null)
 
   const { addProduct } = usePublicCart()
   const { settings: websiteSettings } = useWebsiteSettings()
@@ -215,7 +219,9 @@ export function OffersCarouselDeck({
     return nearest
   }, [])
 
-  const effectivelyPaused = isCarouselPaused || isUserPaused || !autoplay
+  // Con el detalle abierto la rotacion se frena: si no, al cerrar el modal la
+  // tarjeta que estabas mirando ya no esta.
+  const effectivelyPaused = isCarouselPaused || isUserPaused || !autoplay || Boolean(detailOffer)
 
   useEffect(() => {
     if (effectivelyPaused || offers.length <= 1 || !isSectionVisible || !isDocumentVisible) return
@@ -246,6 +252,14 @@ export function OffersCarouselDeck({
       block: 'nearest',
     })
   }, [offers.length, prefersReducedMotion])
+
+  // La foto y «Ver» abren el detalle sin salir de la pagina, pero siguen siendo
+  // enlaces: con Ctrl+clic o «abrir en otra pestaña» va a la pagina completa.
+  const openDetail = (event: React.MouseEvent, offer: OfferSlide) => {
+    if (!offer.product || event.metaKey || event.ctrlKey || event.shiftKey) return
+    event.preventDefault()
+    setDetailOffer(offer.product)
+  }
 
   const resolveHref = (href: string | undefined) => {
     const target = href ?? '/productos'
@@ -408,7 +422,13 @@ export function OffersCarouselDeck({
             <div>
               {/* Imagen del Producto con Badges */}
                   <div className="relative aspect-4/3 w-full overflow-hidden rounded-xl bg-muted/40 p-2 mb-2">
-                <Link href={resolveHref(offer.ctaHref)} className="relative block h-full w-full">
+                <Link
+                  href={resolveHref(offer.ctaHref)}
+                  onClick={(event) => openDetail(event, offer)}
+                  aria-haspopup={offer.product ? 'dialog' : undefined}
+                  aria-label={offer.product ? `Ver detalle de ${offer.title}` : undefined}
+                  className="relative block h-full w-full"
+                >
                   {offer.image ? (
                     <Image
                       src={offer.image}
@@ -488,7 +508,11 @@ export function OffersCarouselDeck({
                   variant="outline"
                   className="rounded-xl font-bold text-xs px-2.5 sm:px-3 h-8 sm:h-9 border-border/80 hover:bg-muted"
                 >
-                  <Link href={resolveHref(offer.ctaHref)}>
+                  <Link
+                    href={resolveHref(offer.ctaHref)}
+                    onClick={(event) => openDetail(event, offer)}
+                    aria-haspopup={offer.product ? 'dialog' : undefined}
+                  >
                     <span>Ver</span>
                     <ArrowRight className="h-3 w-3 ml-1 transition-transform group-hover:translate-x-0.5" />
                   </Link>
@@ -536,6 +560,15 @@ export function OffersCarouselDeck({
           </article>
         ))}
       </div>
+
+      <OfferDetailModal
+        offer={detailOffer}
+        isOpen={Boolean(detailOffer)}
+        onClose={() => setDetailOffer(null)}
+        tenantPrefix={tenantPrefix}
+        commerceMode={commerceMode}
+        contactPhone={contactPhone}
+      />
     </div>
   )
 }

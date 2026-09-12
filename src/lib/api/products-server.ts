@@ -11,6 +11,7 @@ import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-ten
 import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
 import { buildVisibleCategoryTree, resolveEffectiveProductStock } from '@/lib/public/catalog'
 import { getVariantFashionValue, type FashionAudience } from '@/lib/products/fashion-filters'
+import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 
 import { PRODUCTS_MAX_PRICE, PRODUCTS_PER_PAGE } from '@/lib/constants/products'
 
@@ -501,7 +502,9 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       installments_public: (p.installments_public as boolean) ?? true,
       installments_plans: Array.isArray(p.installments_plans) ? p.installments_plans : [],
       has_variants: effectiveHasVariants,
-      variant_attribute_config: Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : undefined,
+      variant_attribute_config: (Array.isArray(p.variant_attribute_config) && p.variant_attribute_config.length > 0)
+        ? p.variant_attribute_config
+        : (productVariants.length > 0 ? (deriveVariantAttributeConfig(productVariants) as PublicProduct['variant_attribute_config']) : undefined),
       variants: productVariants,
       stock_quantity: stockQuantity,
       in_stock: stockQuantity > 0,

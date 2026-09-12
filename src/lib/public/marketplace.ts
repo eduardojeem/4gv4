@@ -4,6 +4,8 @@ import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapP
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import { sanitizeFilterTerm } from '@/lib/api/sanitize-search'
 import { unstable_cache } from 'next/cache'
+import type { PublicProductVariant } from '@/types/public'
+import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 
 // Precio, stock y promociones cambian con frecuencia. El directorio y sus
 // facetas cambian mucho menos, por eso pueden vivir mas tiempo sin volver a
@@ -160,6 +162,8 @@ type ProductRow = {
   images: string[] | null
   unit_measure: string | null
   barcode: string | null
+  has_variants?: boolean | null
+  variant_attribute_config?: PublicProduct['variant_attribute_config'] | null
   created_at?: string | null
   categories?: { id: string; name: string } | { id: string; name: string }[] | null
   organizations?: { id: string; name: string; slug: string; logo_url?: string | null } | { id: string; name: string; slug: string; logo_url?: string | null }[] | null
@@ -187,6 +191,8 @@ function toPublicProduct(product: ProductRow): PublicProduct {
     images: product.images,
     unit_measure: product.unit_measure ?? 'unidad',
     barcode: product.barcode,
+    has_variants: Boolean(product.has_variants),
+    variant_attribute_config: product.variant_attribute_config ?? undefined,
   }
 }
 
@@ -523,7 +529,7 @@ async function getMarketplaceProductsPageUncached(
 
   let query = supabase
     .from('products')
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name, parent_id), organizations!inner(id, name, slug, logo_url)', { count: 'exact' })
+    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, categories(id, name, parent_id), organizations!inner(id, name, slug, logo_url)', { count: 'exact' })
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
@@ -563,6 +569,31 @@ async function getMarketplaceProductsPageUncached(
   if (error || !data) return { products: [], total: 0 }
 
   const rows = (data ?? []) as unknown as ProductRow[]
+  const productIds = rows.map((product) => product.id)
+  const { data: variantRows } = productIds.length > 0
+    ? await supabase
+        .from('product_variants')
+        .select('id, product_id, variant_name, attributes, sku, sale_price, stock_quantity, is_active')
+        .in('product_id', productIds)
+        .eq('is_active', true)
+        .order('variant_name')
+    : { data: [] }
+  const variantsByProduct = new Map<string, PublicProductVariant[]>()
+  for (const variant of variantRows ?? []) {
+    const key = String(variant.product_id)
+    const list = variantsByProduct.get(key) ?? []
+    list.push({
+      id: String(variant.id),
+      product_id: key,
+      variant_name: String(variant.variant_name ?? ''),
+      attributes: variant.attributes && typeof variant.attributes === 'object' && !Array.isArray(variant.attributes) ? variant.attributes as Record<string, string> : {},
+      sku: variant.sku ? String(variant.sku) : null,
+      sale_price: Number(variant.sale_price ?? 0),
+      stock_quantity: Number(variant.stock_quantity ?? 0),
+      is_active: Boolean(variant.is_active),
+    })
+    variantsByProduct.set(key, list)
+  }
   const organizationIds = [...new Set(rows.map((product) => product.organization_id))]
   const [
     { data: automaticRows },
@@ -610,6 +641,7 @@ async function getMarketplaceProductsPageUncached(
       const organization = getProductOrganization(product)
       if (!organization) return null
       const publicProduct = toPublicProduct(product)
+      const variants = variantsByProduct.get(product.id) ?? []
       const priced = applyAutomaticPromotionToProduct({
         ...publicProduct,
         category_id: publicProduct.category?.id ?? null,
@@ -628,6 +660,8 @@ async function getMarketplaceProductsPageUncached(
 
       return {
         ...publicProduct,
+        has_variants: variants.length > 0,
+        variants,
         has_offer: priced.has_offer,
         offer_price: priced.offer_price,
         promotion_name: priced.promotion_name,
@@ -870,8 +904,8 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
 
   const { data, error } = await supabase
     .from('products')
-    // Agregamos has_variants para calcular stock real de productos con variantes
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, has_variants, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, created_at, categories(id, name)')
+    // Agregamos has_variants y variant_attribute_config para calcular stock y atributos reales de productos con variantes
+    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, has_variants, variant_attribute_config, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, created_at, categories(id, name)')
     .eq('organization_id', organization.id)
     .eq('is_active', true)
     .eq('visibility', 'public')
@@ -889,11 +923,11 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
     .filter((r) => Boolean(r.has_variants))
     .map((r) => r.id)
 
-  let variantsByProduct = new Map<string, { stock_quantity: number }[]>()
+  let variantsByProduct = new Map<string, PublicProductVariant[]>()
   if (variantProductIds.length > 0) {
     const { data: variantsData } = await supabase
       .from('product_variants')
-      .select('product_id, stock_quantity')
+      .select('id, product_id, variant_name, attributes, sku, sale_price, stock_quantity, is_active')
       .in('product_id', variantProductIds)
       .eq('is_active', true)
 
@@ -901,7 +935,16 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
       for (const v of variantsData) {
         const key = String(v.product_id)
         if (!variantsByProduct.has(key)) variantsByProduct.set(key, [])
-        variantsByProduct.get(key)!.push({ stock_quantity: Number(v.stock_quantity ?? 0) })
+        variantsByProduct.get(key)!.push({
+          id: String(v.id),
+          product_id: key,
+          variant_name: String(v.variant_name ?? ''),
+          attributes: v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes) ? v.attributes as Record<string, string> : {},
+          sku: v.sku ? String(v.sku) : null,
+          sale_price: Number(v.sale_price ?? 0),
+          stock_quantity: Number(v.stock_quantity ?? 0),
+          is_active: Boolean(v.is_active),
+        })
       }
     }
   }
@@ -917,10 +960,17 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
         ? productVariants.reduce((sum, v) => sum + v.stock_quantity, 0)
         : Number(product.stock_quantity ?? 0)
 
+      const variantConfig = (Array.isArray(product.variant_attribute_config) && product.variant_attribute_config.length > 0)
+        ? product.variant_attribute_config
+        : (productVariants.length > 0 ? (deriveVariantAttributeConfig(productVariants) as PublicProduct['variant_attribute_config']) : undefined)
+
       const publicProduct = toPublicProduct(product)
       // Sobrescribir in_stock y stock_quantity con el valor variant-aware
       publicProduct.in_stock = publicStock > 0
       publicProduct.stock_quantity = publicStock
+      publicProduct.has_variants = Boolean(product.has_variants) || productVariants.length > 0
+      publicProduct.variant_attribute_config = variantConfig
+      publicProduct.variants = productVariants
 
       const priced = applyAutomaticPromotionToProduct({
         ...publicProduct,
@@ -929,6 +979,9 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
 
       return {
         ...publicProduct,
+        has_variants: productVariants.length > 0,
+        variants: productVariants,
+        variant_attribute_config: variantConfig,
         category: cat,
         has_offer: priced.has_offer,
         offer_price: priced.offer_price,

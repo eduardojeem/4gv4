@@ -39,6 +39,9 @@ export default async function OffersPage() {
     featured: p.featured,
     image: p.image,
     images: p.images,
+    has_variants: p.has_variants,
+    variant_attribute_config: p.variant_attribute_config,
+    variants: p.variants,
     category: p.category ? { id: p.category.id, name: p.category.name } : undefined,
     created_at: p.created_at ?? null,
   }))

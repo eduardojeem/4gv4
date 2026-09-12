@@ -14,7 +14,12 @@ import { OffersCarousel } from '@/components/public/inicio/OffersCarousel'
 import { ServicesGrid } from '@/components/public/inicio/ServicesGrid'
 import { ProcessSteps } from '@/components/public/inicio/ProcessSteps'
 import { getPublicProcessFlows } from '@/lib/website/process-steps'
-import { isPublicServicesPageAvailable, isPublicRepairsAvailable } from '@/lib/website/services'
+import {
+  canPublishRepairs,
+  canPublishServices,
+  resolvePublishedHeroActions,
+  type StorefrontCapabilities,
+} from '@/lib/website/storefront-capabilities'
 import { ContactCTA } from '@/components/public/inicio/ContactCTA'
 import { BranchLocations } from '@/components/public/inicio/BranchLocations'
 import { OrganizationReviews } from '@/components/public/inicio/OrganizationReviews'
@@ -30,9 +35,10 @@ import type { WebsiteSettings } from '@/types/website-settings'
 interface HomePageClientProps {
   initialSettings: WebsiteSettings
   branches?: BranchLocationData[]
+  capabilities: StorefrontCapabilities
 }
 
-export default function HomePageClient({ initialSettings, branches = [] }: HomePageClientProps) {
+export default function HomePageClient({ initialSettings, branches = [], capabilities }: HomePageClientProps) {
   const { settings: liveSettings } = useWebsiteSettings()
   const settings = liveSettings ?? initialSettings
   const storefrontStyle = useStorefrontStyle()
@@ -74,8 +80,12 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
   )
 
   // Validaciones dinámicas según configuración y rubro de la empresa
-  const hasServices = isPublicServicesPageAvailable(company_info.servicesPageEnabled, services)
-  const hasRepairs = isPublicRepairsAvailable(company_info, services)
+  const hasServices = canPublishServices(capabilities, company_info.servicesPageEnabled, services)
+  const hasRepairs = canPublishRepairs(capabilities, company_info.repairTrackingEnabled, services)
+  const heroActions = resolvePublishedHeroActions(capabilities, {
+    servicesVisible: hasServices,
+    repairsVisible: hasRepairs,
+  })
   const hasProcessSteps = company_info.processSectionEnabled !== false && processFlows.length > 0
 
   const phone = company_info.phone
@@ -128,7 +138,7 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
             title: hero_content.title || 'Nueva Colección 2026',
             message: hero_content.subtitle || 'Prendas de alta calidad, últimas tendencias y envíos a todo el país.',
             ctaText: hero_content.ctaPrimaryText || 'Ver Ofertas',
-            ctaHref: `${tenantPrefix}/productos`,
+            ctaHref: heroActions.primary.href ? `${tenantPrefix}${heroActions.primary.href}` : `${tenantPrefix}/inicio#contacto`,
             imageUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1920&auto=format&fit=crop',
             imageAlt: hero_content.title || 'Nueva Colección 2026',
             contentAlign: 'right' as const,
@@ -140,7 +150,7 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
             title: 'Moda Deportiva & Casual',
             message: 'Las mejores marcas con el máximo confort para toda la familia.',
             ctaText: 'Explorar catálogo',
-            ctaHref: `${tenantPrefix}/productos`,
+            ctaHref: heroActions.primary.href ? `${tenantPrefix}${heroActions.primary.href}` : `${tenantPrefix}/inicio#contacto`,
             imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1920&auto=format&fit=crop',
             imageAlt: 'Moda Deportiva & Casual',
             contentAlign: 'right' as const,
@@ -152,7 +162,7 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
             title: 'Básicos con Calidad Garantizada',
             message: 'Remeras, buzos y complementos esenciales al mejor precio.',
             ctaText: 'Comprar ahora',
-            ctaHref: `${tenantPrefix}/productos`,
+            ctaHref: heroActions.primary.href ? `${tenantPrefix}${heroActions.primary.href}` : `${tenantPrefix}/inicio#contacto`,
             imageUrl: 'https://images.unsplash.com/photo-1445205170230-053b83016050?q=80&w=1920&auto=format&fit=crop',
             imageAlt: 'Básicos con Calidad Garantizada',
             contentAlign: 'right' as const,
@@ -162,7 +172,7 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
       }
     }
     return existing
-  }, [settings.promotional_carousel, storefrontStyle, hero_content, tenantPrefix])
+  }, [settings.promotional_carousel, storefrontStyle, hero_content, tenantPrefix, heroActions.primary.href])
 
   const brand = getBrandTheme(company_info.brandColor)
   const heroVisible = hero_content.enabled !== false
@@ -196,6 +206,9 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
             phoneClean={phoneClean}
             contactHref={contactHref}
             hasRepairs={hasRepairs}
+            capabilities={capabilities}
+            primaryAction={heroActions.primary}
+            tracking={heroActions.tracking}
           />
         )
       )}
