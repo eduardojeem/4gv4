@@ -10,6 +10,8 @@ import { MarketplaceOffersSection, type MarketplaceOfferGroup } from '@/componen
 import { getMarketplaceOrganizations, getMarketplaceProductsPage, getMarketplaceBrands, getMarketplaceOffers } from '@/lib/public/marketplace'
 import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsSection'
 import { getPlatformBranding } from '@/lib/platform/branding'
+import { getPlatformAnnouncement } from '@/lib/platform/announcement'
+import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import { MarketplaceOrgProductGrid } from '@/components/public/MarketplaceOrgProductGrid'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -26,11 +28,12 @@ export async function generateMetadata(): Promise<Metadata> {
 export const revalidate = 30
 
 export default async function MarketplacePage() {
-  const [organizations, marketplacePage, brands, marketplaceOffers] = await Promise.all([
+  const [organizations, marketplacePage, brands, marketplaceOffers, announcement] = await Promise.all([
     getMarketplaceOrganizations(),
     getMarketplaceProductsPage(48),
     getMarketplaceBrands(30),
     getMarketplaceOffers(100),
+    getPlatformAnnouncement(),
   ])
   const marketplaceProducts = marketplacePage.products
 
@@ -66,6 +69,8 @@ export default async function MarketplacePage() {
 
   return (
     <div>
+      <AnnouncementModal announcement={announcement} scope="marketplace" />
+
       {/* ── Hero ── */}
       <section className="relative overflow-hidden border-b border-slate-200 dark:border-slate-800">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_-5%,rgba(6,182,212,0.13),transparent)] dark:bg-[radial-gradient(ellipse_80%_55%_at_50%_-5%,rgba(6,182,212,0.07),transparent)]" />
