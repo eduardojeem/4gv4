@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -25,6 +25,7 @@ import { PublicVariantPicker } from '@/components/public/PublicVariantPicker'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { formatCurrency } from '@/lib/currency'
 import { resolveProductImageUrl } from '@/lib/images'
+import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/variant-image'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { cn } from '@/lib/utils'
 import { getWhatsAppLink } from '@/lib/whatsapp'
@@ -154,6 +155,21 @@ export function OfferDetailModal({
   const effectiveStock = matchedVariant ? matchedVariant.stock_quantity : (offer?.stock_quantity ?? 0)
   const effectiveInStock = matchedVariant ? matchedVariant.stock_quantity > 0 : (offer?.in_stock ?? false)
 
+  // La galeria suma las fotos de las variantes y se calcula antes del corte de
+  // abajo: aca todavia se pueden usar hooks.
+  const galleryImages = useMemo(
+    () => galleryWithVariantImages([offer?.image, ...(offer?.images ?? [])], allVariants),
+    [offer?.image, offer?.images, allVariants],
+  )
+  const variantImageIdx = useMemo(
+    () => variantImageIndex(galleryImages, matchedVariant, allVariants),
+    [galleryImages, matchedVariant, allVariants],
+  )
+  useEffect(() => {
+    if (variantImageIdx === -1) return
+    setActiveImageIdx(variantImageIdx)
+  }, [variantImageIdx])
+
   if (!offer) return null
 
   const discount = calcDiscount(
@@ -162,23 +178,6 @@ export function OfferDetailModal({
   )
   const savings = Math.max(0, offer.sale_price - effectivePrice)
   const productHref = `${tenantPrefix}/productos/${offer.id}`
-
-  // Images deduplication
-  const galleryImages: string[] = (() => {
-    const list: string[] = []
-    const seen = new Set<string>()
-    const candidates = [
-      ...(offer.image ? [offer.image] : []),
-      ...(Array.isArray(offer.images) ? offer.images : []),
-    ]
-    for (const img of candidates) {
-      if (img && !seen.has(img)) {
-        seen.add(img)
-        list.push(img)
-      }
-    }
-    return list
-  })()
 
   const currentImage = galleryImages[activeImageIdx] || offer.image || null
   const resolvedActive = resolveProductImageUrl(currentImage)

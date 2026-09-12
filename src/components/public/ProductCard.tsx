@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { FavoriteButton } from './Favorites'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -11,6 +11,7 @@ import { InstallmentSelector } from '@/components/public/InstallmentSelector'
 import { usePathname } from 'next/navigation'
 import { formatPrice, cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
+import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/variant-image'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -58,22 +59,12 @@ export function ProductCard(props: ProductCardProps) {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
   const storefrontStyle = useStorefrontStyle()
 
-  // Compute gallery images: deduplicate image_url and images[]
-  const galleryImages = (() => {
-    const seen = new Set<string>()
-    const result: string[] = []
-    const candidates = [
-      ...(product.image ? [product.image] : []),
-      ...(Array.isArray(product.images) ? product.images : []),
-    ]
-    for (const img of candidates) {
-      if (img && !seen.has(img)) {
-        seen.add(img)
-        result.push(img)
-      }
-    }
-    return result
-  })()
+  // La galeria incluye las fotos de las variantes: sin eso, elegir un color no
+  // tenia ninguna foto que mostrar.
+  const galleryImages = galleryWithVariantImages(
+    [product.image, ...(Array.isArray(product.images) ? product.images : [])],
+    (product.variants ?? []).filter((variant) => variant.is_active),
+  )
   const activeImage = galleryImages[activeImageIdx] ?? null
   const resolvedActive = resolveProductImageUrl(activeImage)
 
@@ -99,6 +90,17 @@ export function ProductCard(props: ProductCardProps) {
   const publicVariants = (product.variants ?? []).filter((variant) => variant.is_active)
   const hasVariants = Boolean(product.has_variants && publicVariants.length > 0)
   const selectedVariant = publicVariants.find((variant) => variant.id === selectedVariantId) ?? null
+
+  // La foto sigue a la variante elegida, como en la pagina de detalle.
+  const variantImageIdx = useMemo(
+    () => variantImageIndex(galleryImages, selectedVariant, publicVariants),
+    [galleryImages, selectedVariant, publicVariants],
+  )
+  useEffect(() => {
+    if (variantImageIdx === -1) return
+    setImageError(false)
+    setActiveImageIdx(variantImageIdx)
+  }, [variantImageIdx])
   const selectedPrice = selectedVariant
     ? resolvePublicVariantPrice({ isWholesale, product, variant: selectedVariant })
     : displayPrice
@@ -606,13 +608,13 @@ export function ProductCard(props: ProductCardProps) {
                                 setSelectedVariantId(variant.id)
                                 setQuantity(1)
                               }}
-                              disabled={!hasStock}
+                              aria-pressed={isSelected}
                               className={cn(
                                 'flex flex-col justify-between rounded-xl border p-2.5 text-left text-xs transition-all',
                                 isSelected
                                   ? 'border-primary bg-primary/10 shadow-xs ring-2 ring-primary/20 text-foreground'
                                   : 'border-border bg-card hover:border-primary/40 hover:bg-muted/40 text-foreground',
-                                !hasStock && 'cursor-not-allowed opacity-45 bg-muted/50'
+                                !hasStock && 'opacity-60 bg-muted/40'
                               )}
                             >
                               <div className="flex items-start justify-between gap-1">

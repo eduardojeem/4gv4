@@ -90,9 +90,13 @@ describe('detalle público compacto y variantes', () => {
     const addBtn = modal.getByRole('button', { name: /Elegí una variante para agregar/i })
     expect(addBtn).toBeDisabled()
 
-    // 3. La variante sin stock está deshabilitada
+    // 3. La variante sin stock se puede elegir —para ver su foto y su precio—
+    //    pero sigue sin poder comprarse. Antes estaba deshabilitada: el cliente
+    //    tocaba el color y no pasaba nada.
     const outOfStockVariantBtn = modal.getByRole('button', { name: /Negro \/ S \(Agotado\)/i })
-    expect(outOfStockVariantBtn).toBeDisabled()
+    expect(outOfStockVariantBtn).toBeEnabled()
+    fireEvent.click(outOfStockVariantBtn)
+    expect(modal.getByRole('button', { name: /Agregar al carrito/i })).toBeDisabled()
 
     // 4. Seleccionar variante "Azul / L"
     const blueVariantBtn = modal.getByRole('button', { name: /Azul \/ L/i })

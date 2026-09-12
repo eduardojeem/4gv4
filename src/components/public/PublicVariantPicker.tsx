@@ -38,11 +38,12 @@ export function PublicVariantPicker({ variants, config, selected, onChange, titl
                   <button
                     key={option}
                     type="button"
-                    disabled={!available}
+                    aria-pressed={isSelected}
                     onClick={() => onChange(key, option)}
-                    className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-foreground hover:bg-muted'} ${!available ? 'cursor-not-allowed opacity-40 line-through' : ''}`}
+                    className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-foreground hover:bg-muted'} ${!available ? 'opacity-60 line-through' : ''}`}
                   >
                     {option}
+                    {!available && <span className="sr-only"> (sin stock)</span>}
                   </button>
                 )
               })}

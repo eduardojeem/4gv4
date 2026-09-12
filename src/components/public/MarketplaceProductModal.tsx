@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { resolveProductImageUrl } from '@/lib/images'
+import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/variant-image'
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import { formatPrice } from '@/lib/utils'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
@@ -78,19 +79,13 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
   const [mainError, setMainError] = useState(false)
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({})
 
-  // Construir lista única de imágenes: [image, ...images] sin duplicados y sin nulls
+  // Incluye las fotos de las variantes, para que elegir un color muestre la suya.
   const allImages: string[] = product
-    ? Array.from(
-        new Set(
-          [
-            product.image,
-            ...(Array.isArray(product.images) ? product.images : []),
-          ]
-            .filter((s): s is string => typeof s === 'string' && s.trim() !== '')
-            .map((s) => resolveProductImageUrl(s))
-            .filter((s) => s !== '/placeholder-product.svg')
-        )
-      )
+    ? galleryWithVariantImages(
+        [product.image, ...(Array.isArray(product.images) ? product.images : [])],
+        product.variants ?? [],
+        resolveProductImageUrl,
+      ).filter((image) => image !== '/placeholder-product.svg')
     : []
 
   const hasMultiple = allImages.length > 1
@@ -139,6 +134,17 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
     if (!hasVariants || attributeKeys.some((key) => !selectedAttrs[key])) return null
     return variants.find((variant) => attributeKeys.every((key) => variant.attributes[key] === selectedAttrs[key])) ?? null
   }, [attributeKeys, hasVariants, selectedAttrs, variants])
+
+  // La foto sigue a la variante elegida, como en la pagina de detalle.
+  const variantImageIdx = useMemo(
+    () => variantImageIndex(allImages, matchedVariant, variants, resolveProductImageUrl),
+    [allImages, matchedVariant, variants],
+  )
+  useEffect(() => {
+    if (variantImageIdx === -1) return
+    setMainError(false)
+    setActiveIdx(variantImageIdx)
+  }, [variantImageIdx])
 
   if (!product) return null
 
