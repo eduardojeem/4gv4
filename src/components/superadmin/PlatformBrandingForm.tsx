@@ -781,7 +781,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                     label="Nombre de la Plataforma"
                     value={draft.platformName}
                     onChange={updateField}
-                    placeholder="Ej: SERVIX 360"
+                    placeholder="Ej: MiTiendaPy"
                     maxLength={80}
                     helperText="Aparece en el navbar, emails y títulos."
                   />
@@ -932,7 +932,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                     label="Título SEO (Google Title)"
                     value={draft.seoTitle}
                     onChange={updateField}
-                    placeholder="SERVIX 360 para POS, inventario, marketplace y servicios"
+                    placeholder="MiTiendaPy para POS, inventario, marketplace y servicios"
                     maxLength={160}
                   />
                   <div className="space-y-1.5">

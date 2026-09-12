@@ -1,4 +1,5 @@
 import { headers } from 'next/headers'
+import { unstable_rethrow } from 'next/navigation'
 import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
 import { getTenantSlugFromHost } from '@/lib/saas/tenant'
 
@@ -15,6 +16,7 @@ export async function resolveRequestStorefrontOrganization() {
       getTenantSlugFromHost(headerStore.get('host') ?? '')
     return tenantSlug ? await resolvePublicOrganizationBySlug(tenantSlug) : null
   } catch (error) {
+    unstable_rethrow(error)
     console.error('[storefront] No se pudo resolver la tienda de la peticion', error)
     return null
   }

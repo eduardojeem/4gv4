@@ -93,7 +93,7 @@ export async function POST(
       .eq('id', campaignId)
       .eq('organization_id', organization.id)
 
-    const brandName = (organization as { name?: string }).name || 'Servix360'
+    const brandName = (organization as { name?: string }).name || 'MiTiendaPy'
     let sentCount = 0
     const messageRows: Record<string, unknown>[] = []
 

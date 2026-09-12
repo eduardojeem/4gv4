@@ -72,7 +72,7 @@ export default async function OrganizationPublicLayout({
             <CustomerLinkBanner />
             <div className="flex-1 pb-16 lg:pb-0">{children}</div>
             <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
-            <StoreMobileBottomNav />
+            <StoreMobileBottomNav offersEnabled={settings?.offers_section?.enabled !== false} />
             <WhatsAppFloatButton />
           </div>
         </CartProviderWithDrawer>

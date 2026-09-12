@@ -24,7 +24,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
   try {
     const { params } = routeContext as ProductRouteContext
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminSupabase()
     const requestedBranchId = getRequestedBranchId(request)
     const branchScope = await resolveBranchScopeForUser({
       userId: user.id,

@@ -7,7 +7,7 @@ import {
   Home,
   Package,
   ShoppingCart,
-  Store,
+  Tag,
   User,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
@@ -17,7 +17,7 @@ import { AuthModal } from '@/components/public/AuthModal'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
 
-export function StoreMobileBottomNav() {
+export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?: boolean }) {
   const pathname = usePathname()
   const { user } = useAuth()
   const { count } = usePublicCart()
@@ -33,6 +33,7 @@ export function StoreMobileBottomNav() {
       label: 'Inicio',
       icon: Home,
       emphasized: false,
+      ariaLabel: undefined,
       isActive: pathname === `${tenantPrefix}/inicio` || pathname === tenantPrefix || pathname === '/',
     },
     {
@@ -40,15 +41,17 @@ export function StoreMobileBottomNav() {
       label: 'Productos',
       icon: Package,
       emphasized: false,
+      ariaLabel: undefined,
       isActive: pathname.startsWith(`${tenantPrefix}/productos`) && !pathname.includes('ofertas=true'),
     },
-    {
-      href: '/marketplace',
-      label: 'Marketplace',
-      icon: Store,
+    ...(offersEnabled ? [{
+      href: `${tenantPrefix}/ofertas`,
+      label: 'Ofertas',
+      icon: Tag,
       emphasized: true,
-      isActive: false,
-    },
+      ariaLabel: 'Ver ofertas de la tienda',
+      isActive: pathname.startsWith(`${tenantPrefix}/ofertas`),
+    }] : []),
   ]
 
   const customerLoginHref = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
@@ -60,18 +63,19 @@ export function StoreMobileBottomNav() {
         aria-label="Navegación móvil y tablet de la tienda"
         className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/80 bg-background/95 backdrop-blur-xl px-2 shadow-lg lg:hidden"
       >
-        {/* Accesos principales de la tienda y salida visible al Marketplace */}
+        {/* Accesos principales de la tienda; Marketplace permanece visible arriba. */}
         {tabs.map((tab) => {
           const Icon = tab.icon
           return (
             <Link
               key={tab.href}
               href={tab.href}
-              aria-label={tab.emphasized ? 'Volver al Marketplace' : undefined}
+              aria-label={tab.ariaLabel}
+              aria-current={tab.isActive ? 'page' : undefined}
               className={cn(
                 'group flex flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-semibold transition-all select-none',
                 tab.emphasized
-                  ? 'font-bold text-primary'
+                  ? 'font-bold text-rose-600 dark:text-rose-400'
                   : tab.isActive
                   ? 'text-primary'
                   : 'text-muted-foreground hover:text-foreground'
@@ -81,7 +85,7 @@ export function StoreMobileBottomNav() {
                 className={cn(
                   'flex h-7 w-7 items-center justify-center rounded-xl transition-all duration-200',
                   tab.emphasized
-                    ? 'scale-110 bg-primary text-primary-foreground shadow-md ring-2 ring-primary/20'
+                    ? 'scale-110 bg-rose-600 text-white shadow-md ring-2 ring-rose-500/25 group-hover:bg-rose-500'
                     : tab.isActive
                     ? 'bg-primary/10 text-primary scale-110 shadow-xs'
                     : 'group-hover:bg-muted text-muted-foreground'

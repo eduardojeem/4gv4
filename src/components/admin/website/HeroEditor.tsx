@@ -1187,7 +1187,7 @@ export function HeroEditor({ initialContent, initialStats, capabilities = DEFAUL
       </SectionCard>
 
       {/* Stats */}
-      <SectionCard icon={TrendingUp} title="Estadísticas de Confianza" description="Métricas numéricas de impacto mostradas en la portada">
+      <SectionCard icon={TrendingUp} title="Estadísticas de confianza" description={`Métricas adaptadas a tu negocio: ${capabilities.metricLabels.join(', ')}.`}>
         <div className="space-y-6">
 
           <PublicVisibilityCard
@@ -1231,7 +1231,7 @@ export function HeroEditor({ initialContent, initialStats, capabilities = DEFAUL
                 <div className="space-y-2.5">
                   <Label htmlFor="repairs" className="text-sm font-bold text-foreground flex items-center gap-1.5">
                     <Award className="h-4 w-4 text-primary" />
-                    Métrica 1 (Volumen / Casos)
+                    Métrica 1 ({capabilities.metricLabels[0]})
                   </Label>
                   <Input
                     id="repairs"
@@ -1268,7 +1268,7 @@ export function HeroEditor({ initialContent, initialStats, capabilities = DEFAUL
                 <div className="space-y-2.5">
                   <Label htmlFor="satisfaction" className="text-sm font-bold text-foreground flex items-center gap-1.5">
                     <ThumbsUp className="h-4 w-4 text-emerald-500" />
-                    Métrica 2 (Satisfacción / Score)
+                    Métrica 2 ({capabilities.metricLabels[1]})
                   </Label>
                   <Input
                     id="satisfaction"
@@ -1305,7 +1305,7 @@ export function HeroEditor({ initialContent, initialStats, capabilities = DEFAUL
                 <div className="space-y-2.5">
                   <Label htmlFor="avgTime" className="text-sm font-bold text-foreground flex items-center gap-1.5">
                     <Clock className="h-4 w-4 text-amber-500" />
-                    Métrica 3 (Velocidad / Tiempo)
+                    Métrica 3 ({capabilities.metricLabels[2]})
                   </Label>
                   <Input
                     id="avgTime"

@@ -54,7 +54,8 @@ describe('SuperAdminShell', () => {
     )
 
     expect(screen.getAllByRole('complementary', { name: 'Asistente del centro de control' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByAltText('Robot asistente de SERVIX 360').length).toBeGreaterThan(0)
+    expect(screen.getAllByAltText('Robot asistente de MiTiendaPy').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/servix/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /hablar|chat|preguntar/i })).not.toBeInTheDocument()
   })
 

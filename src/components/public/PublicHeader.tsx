@@ -65,6 +65,7 @@ export function PublicHeader({
   const [mounted, setMounted] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const { user, signOut } = useAuth()
   const { settings } = useWebsiteSettings()
   const effectiveSettings = settings ?? initialSettings
@@ -121,6 +122,7 @@ export function PublicHeader({
       router.push(withTenantPrefix('/productos'))
     }
     setMobileMenuOpen(false)
+    setMobileSearchOpen(false)
   }
 
   const handleClearSearch = () => {
@@ -140,6 +142,7 @@ export function PublicHeader({
   // Close mobile menu on route change
   useEffect(() => {
     setMobileMenuOpen(false)
+    setMobileSearchOpen(false)
   }, [pathname])
 
   // Close mobile menu on outside click
@@ -545,6 +548,22 @@ export function PublicHeader({
             </Button>
           )}
 
+          <button
+            type="button"
+            onClick={() => setMobileSearchOpen((open) => !open)}
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors md:hidden',
+              mobileSearchOpen
+                ? 'border-primary/40 bg-primary/10 text-primary'
+                : 'border-border/80 bg-background text-foreground hover:bg-muted'
+            )}
+            aria-label={mobileSearchOpen ? 'Cerrar búsqueda' : 'Buscar en la tienda'}
+            aria-expanded={mobileSearchOpen}
+            aria-controls="public-mobile-search"
+          >
+            {mobileSearchOpen ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+          </button>
+
           <PublicCartButton />
           <PublicFavorites />
 
@@ -692,6 +711,38 @@ export function PublicHeader({
         </div>
       </div>
 
+      {mobileSearchOpen && (
+        <div
+          id="public-mobile-search"
+          className="border-t border-border/60 bg-background/95 px-3 py-2.5 sm:px-4 md:hidden"
+        >
+          <form onSubmit={handleSearchSubmit} className="container flex items-center gap-2 px-0">
+            <div className="relative min-w-0 flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <input
+                autoFocus
+                type="search"
+                aria-label="Buscar productos en la tienda"
+                placeholder={`Buscar en ${companyInfo?.name || 'la tienda'}...`}
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="h-10 w-full rounded-xl border border-border/80 bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <button
+              type="submit"
+              aria-label="Ejecutar búsqueda"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <Search className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </form>
+        </div>
+      )}
+
       {tenantPrefix && (
         <div className="border-t border-primary-foreground/15 bg-primary text-primary-foreground shadow-sm lg:hidden">
           <Link
@@ -755,30 +806,6 @@ export function PublicHeader({
               >
                 <X className="h-4 w-4" />
               </button>
-            </div>
-
-            {/* Mobile Search Input */}
-            <div className="pt-3 pb-2">
-              <form onSubmit={handleSearchSubmit} className="relative w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                <input
-                  type="search"
-                  placeholder="Buscar productos..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-9 w-full rounded-xl border border-border bg-muted/40 pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/20"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={handleClearSearch}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    aria-label="Limpiar búsqueda"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </form>
             </div>
 
             {/* Sección de Usuario / Cuenta */}

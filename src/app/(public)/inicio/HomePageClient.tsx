@@ -58,11 +58,11 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
     avgTime: '24h',
   }
 
-  const hero_content = settings.hero_content ?? {
+  const hero_content = useMemo(() => settings.hero_content ?? {
     badge: 'Catálogo Oficial',
     title: 'Los mejores productos al mejor precio',
     subtitle: 'Explorá nuestro catálogo con stock actualizado, promociones exclusivas y envíos a todo el país.',
-  }
+  }, [settings.hero_content])
 
   const services = settings.services
   const safeServices = useMemo(

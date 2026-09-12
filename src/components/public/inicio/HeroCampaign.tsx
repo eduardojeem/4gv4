@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
@@ -32,6 +32,10 @@ interface HeroCampaignProps {
   primaryAction?: PublishedHeroAction
   tracking?: StorefrontTracking
 }
+
+const subscribeToHydration = () => () => undefined
+const getClientHydrationSnapshot = () => true
+const getServerHydrationSnapshot = () => false
 
 /** Fotos del mosaico: los productos más nuevos que tienen imagen propia. */
 export function pickCampaignProducts(products: PublicProduct[], excludedIds: string[] = [], limit = 3) {
@@ -66,11 +70,11 @@ export function HeroCampaign({
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
   const [searchQuery, setSearchQuery] = useState('')
   const [failedImageIds, setFailedImageIds] = useState<string[]>([])
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  )
 
   const { data, isLoading } = useSWR(newestProductsKey(tenantSlug), fetchPublicProducts, NEWEST_PRODUCTS_SWR_OPTIONS)
   const loadingPhotos = !mounted || (isLoading && !data)

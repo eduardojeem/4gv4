@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
@@ -48,6 +48,10 @@ interface HeroSectionProps {
   primaryAction?: PublishedHeroAction
   tracking?: StorefrontTracking
 }
+
+const subscribeToHydration = () => () => undefined
+const getClientHydrationSnapshot = () => true
+const getServerHydrationSnapshot = () => false
 
 function AnimatedStat({ value, label }: { value: string; label: string }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -130,10 +134,11 @@ function ClassicHeroSection({
   const tenantPrefix =
     pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
 
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  )
 
   const [searchQuery, setSearchQuery] = useState('')
   const mapsHref = getCompanyMapsHref(companyInfo.mapsUrl, companyInfo.address)

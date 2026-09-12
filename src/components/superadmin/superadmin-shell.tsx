@@ -61,8 +61,20 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAuth } from '@/contexts/auth-context'
+import type { PlatformBranding } from '@/lib/platform/branding'
 import { uniqueNavigationItems } from '@/lib/superadmin/navigation'
 import { cn } from '@/lib/utils'
+
+type SuperAdminBranding = Pick<
+  PlatformBranding,
+  'platformName' | 'logoUrl' | 'logoDarkUrl'
+>
+
+const DEFAULT_SUPERADMIN_BRANDING: SuperAdminBranding = {
+  platformName: 'MiTiendaPy',
+  logoUrl: '/branding/mitiendapy-horizontal-light.png',
+  logoDarkUrl: '/branding/mitiendapy-horizontal-dark.png',
+}
 
 type NavSection = 'overview' | 'tenants' | 'billing' | 'content' | 'system'
 type NavIcon = React.ComponentType<{ className?: string }>
@@ -507,6 +519,7 @@ function NavItemRow({
 
 type SidebarContentProps = {
   mode: 'desktop' | 'mobile'
+  branding: SuperAdminBranding
   pathname: string
   isCollapsed: boolean
   expandedItems: Set<string>
@@ -519,6 +532,7 @@ type SidebarContentProps = {
 
 function SidebarContent({
   mode,
+  branding,
   pathname,
   isCollapsed,
   expandedItems,
@@ -529,6 +543,7 @@ function SidebarContent({
   onCloseMobile,
 }: SidebarContentProps) {
   const collapsed = mode === 'desktop' && isCollapsed
+  const sidebarLogo = branding.logoDarkUrl || branding.logoUrl || DEFAULT_SUPERADMIN_BRANDING.logoDarkUrl
 
   return (
     <div className="flex h-full flex-col bg-slate-950">
@@ -536,8 +551,8 @@ function SidebarContent({
         <Link href="/superadmin" onClick={() => onNavigate('/superadmin')} className={cn('flex min-w-0 items-center gap-3', collapsed && 'mx-auto')}>
           <div className="flex h-8 shrink-0 items-center">
             <Image
-              src="/branding/servix-360-logo.png"
-              alt="SERVIX 360"
+              src={sidebarLogo}
+              alt={branding.platformName}
               width={132}
               height={32}
               priority
@@ -546,7 +561,7 @@ function SidebarContent({
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold leading-tight text-white">SERVIX 360</p>
+              <p className="truncate text-sm font-bold leading-tight text-white">{branding.platformName}</p>
               <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-400">
                 Centro de control
               </p>
@@ -638,7 +653,7 @@ function SidebarContent({
             <span className="absolute inset-2 rounded-full bg-cyan-400/20 blur-md" aria-hidden="true" />
             <Image
               src="/branding/mascot/mi-tienda-assistant-2d.png"
-              alt="Robot asistente de SERVIX 360"
+              alt={`Robot asistente de ${branding.platformName}`}
               width={72}
               height={66}
               sizes="56px"
@@ -689,9 +704,11 @@ function Breadcrumb({ pathname }: { pathname: string }) {
 export function SuperAdminShell({
   children,
   userEmail,
+  branding = DEFAULT_SUPERADMIN_BRANDING,
 }: {
   children: React.ReactNode
   userEmail: string | null
+  branding?: SuperAdminBranding
 }) {
   const pathname = usePathname() ?? '/superadmin'
   const router = useRouter()
@@ -821,6 +838,7 @@ export function SuperAdminShell({
   }, [handleNavigate, router])
 
   const sidebarProps: Omit<SidebarContentProps, 'mode'> = {
+    branding,
     pathname,
     isCollapsed,
     expandedItems: effectiveExpandedItems,

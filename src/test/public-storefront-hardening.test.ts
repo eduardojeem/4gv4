@@ -93,7 +93,7 @@ describe('public storefront hardening', () => {
 
   it('only accepts a tenant slug as the legacy public organization target', () => {
     expect(normalizeDefaultPublicOrgSlug('4g-celulares')).toBe('4g-celulares')
-    expect(normalizeDefaultPublicOrgSlug('www.servix360.org')).toBeNull()
+    expect(normalizeDefaultPublicOrgSlug('www.example.com')).toBeNull()
     expect(normalizeDefaultPublicOrgSlug('')).toBeNull()
   })
 
