@@ -547,6 +547,20 @@ export function CartPageClient({
             setUnitPrice(cartItemId, Number(conflict.currentPrice || 0))
           }
         }
+        // Esa linea no se puede comprar como esta: se saca y se explica que
+        // hacer. Antes el cliente veia un error generico y quedaba trabado.
+        if (payload?.code === 'VARIANT_NOT_AVAILABLE' && Array.isArray(payload?.data?.conflicts)) {
+          const quitados: string[] = []
+          for (const conflict of payload.data.conflicts) {
+            if (typeof conflict?.productId !== 'string') continue
+            const cartItemId = conflict.variantId ? `${conflict.productId}:${conflict.variantId}` : conflict.productId
+            removeItem(cartItemId)
+            quitados.push(String(conflict.productName || 'un producto'))
+          }
+          if (quitados.length > 0) {
+            throw new Error(`Sacamos ${quitados.join(', ')} del carrito: elegí talle o color en la página del producto y agregalo de nuevo.`)
+          }
+        }
         throw new Error(payload?.error || 'No se pudo crear el pedido.')
       }
 

@@ -9,6 +9,7 @@ import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { applyAutomaticPromotionToProduct, evaluatePublicCoupon, mapPublicPromotion, type PublicPromotion } from '@/lib/public-promotions'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
+import { findVariantConflicts } from '@/lib/orders/variant-conflicts'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
 import { deliveryZoneMatchesLocation } from '@/lib/checkout/delivery-zone'
@@ -168,15 +169,16 @@ export async function POST(request: NextRequest) {
     if (missing) {
       return NextResponse.json({ success: false, error: 'Un producto del carrito ya no esta disponible.' }, { status: 400 })
     }
-    const invalidVariant = requestedItems.find((item) => {
-      const product = productMap.get(item.productId) as Record<string, unknown>
-      if (Boolean(product.has_variants) && !item.variantId) return true
-      if (!item.variantId) return false
-      const variant = variantMap.get(item.variantId)
-      return !variant || String(variant.product_id) !== item.productId
-    })
-    if (invalidVariant) {
-      return NextResponse.json({ success: false, code: 'VARIANT_NOT_AVAILABLE', error: 'Elegí nuevamente la variante del producto.' }, { status: 409 })
+    // Se devuelven una por una: el carrito necesita saber cuales lineas sacar,
+    // no solo que algo fallo.
+    const variantConflicts = findVariantConflicts(requestedItems, productMap, variantMap)
+    if (variantConflicts.length > 0) {
+      return NextResponse.json({
+        success: false,
+        code: 'VARIANT_NOT_AVAILABLE',
+        error: 'Elegí nuevamente la variante del producto.',
+        data: { conflicts: variantConflicts },
+      }, { status: 409 })
     }
 
     const stockConflicts = requestedItems.flatMap((item) => {
