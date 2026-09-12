@@ -286,6 +286,24 @@ export interface BrandsSectionSettings {
   items: BrandItemSettings[]
 }
 
+/**
+ * Cartel que aparece al entrar a la tienda. Misma forma que el del marketplace,
+ * que edita el superadmin.
+ */
+export interface StoreAnnouncement {
+  enabled: boolean
+  title: string
+  message: string
+  imageUrl?: string
+  ctaLabel?: string
+  ctaHref?: string
+  /** Vigencia opcional, en formato AAAA-MM-DD. */
+  startsAt?: string
+  endsAt?: string
+  /** Cambia en cada guardado: quien ya lo cerró vuelve a verlo. */
+  updatedAt?: string
+}
+
 export interface WebsiteSettings {
   company_info: CompanyInfo
   hero_content?: HeroContent
@@ -302,6 +320,7 @@ export interface WebsiteSettings {
   testimonials: Testimonial[]
   process_steps: ProcessStep[]
   process_flows: ProcessFlow[]
+  announcement?: StoreAnnouncement
   maintenance_mode?: MaintenanceMode
   checkout?: CheckoutSettings
 }

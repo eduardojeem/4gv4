@@ -12,6 +12,8 @@ import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-ten
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { resolveStorefrontStyle } from '@/lib/website/storefront-style'
 import { StorefrontStyleProvider } from '@/components/public/storefront-style-context'
+import { AnnouncementModal } from '@/components/public/AnnouncementModal'
+import { normalizeAnnouncement } from '@/lib/announcements/announcement'
 import { notFound } from 'next/navigation'
 
 // Cada tienda declara su propio manifest, para que el icono instalado abra en
@@ -64,6 +66,10 @@ export default async function OrganizationPublicLayout({
             data-storefront-style={storefrontStyle}
           >
             <SkipToContentLink />
+          <AnnouncementModal
+            announcement={normalizeAnnouncement(settings?.announcement)}
+            scope={`tienda:${storefrontOrganization.slug}`}
+          />
             <PublicHeader
               initialSettings={settings}
               repairsModuleEnabled={repairsModuleEnabled}

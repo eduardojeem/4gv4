@@ -12,6 +12,7 @@ import {
   Award,
   ChevronRight,
   Layers,
+  Megaphone,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { WebsiteSettings } from '@/types/website-settings'
@@ -86,6 +87,13 @@ const GROUPS: NavigationGroup[] = [
         short: 'Ofertas',
         description: 'Promociones y descuentos clave',
         icon: Tag,
+      },
+      {
+        id: 'announcement',
+        label: 'Aviso emergente',
+        short: 'Aviso',
+        description: 'Cartel al entrar a tu tienda',
+        icon: Megaphone,
       },
     ],
   },

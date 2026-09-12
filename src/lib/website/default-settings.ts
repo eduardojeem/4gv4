@@ -382,6 +382,17 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       { id: 'step-4', number: 4, title: 'Entrega', description: 'Recoge tu dispositivo como nuevo' },
     ],
     process_flows: [],
+    announcement: {
+      enabled: false,
+      title: '',
+      message: '',
+      imageUrl: '',
+      ctaLabel: '',
+      ctaHref: '',
+      startsAt: '',
+      endsAt: '',
+      updatedAt: '',
+    },
     maintenance_mode: {
       enabled: false,
       title: 'Sitio en Mantenimiento',
@@ -508,6 +519,10 @@ export function applyWebsiteSettingsDefaults(
     process_flows: Array.isArray(settings.process_flows)
       ? settings.process_flows
       : defaults.process_flows,
+    announcement: {
+      ...defaults.announcement,
+      ...(settings.announcement ?? {})
+    },
     maintenance_mode: {
       ...defaults.maintenance_mode,
       ...maintenanceMode

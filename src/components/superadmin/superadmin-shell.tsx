@@ -37,6 +37,7 @@ import {
   Users,
   Wrench,
   X,
+  Megaphone,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -165,6 +166,7 @@ const navItems: NavItem[] = [
       { title: 'Marca SaaS', href: '/superadmin/web-content/brand', icon: Sparkles },
       { title: 'Landing', href: '/superadmin/web-content/landing', icon: LayoutTemplate },
       { title: 'Marketplace', href: '/superadmin/web-content/marketplace', icon: Store },
+      { title: 'Aviso del marketplace', href: '/superadmin/web-content/anuncio', icon: Megaphone },
     ],
   },
   {

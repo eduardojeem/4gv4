@@ -23,6 +23,12 @@ export const WEBSITE_SECTION_HELP = {
     examples: ['Cosméticos: “Productos originales”, “Asesoramiento” y “Retiro en tienda”.', 'Ropa: “Cambios según condiciones” y “Envíos disponibles”.'],
     note: 'Estos textos son informativos: no configuran automáticamente envíos, garantías ni formas de pago.',
   },
+  announcement: {
+    title: 'Aviso al entrar a tu tienda', description: 'Un cartel para avisar algo puntual: un horario especial, una promoción o una demora en las entregas.',
+    steps: ['Escribí el título y el mensaje.', 'Si querés, sumá una imagen, un botón y las fechas en que se muestra.', 'Activalo y guardá.'],
+    examples: ['Ropa: “Cambios hasta el 30” con un botón a las condiciones.', 'Almacén: “El sábado atendemos de 8 a 12”.'],
+    note: 'Cada cliente lo ve una vez por día. Si lo editás, vuelve a aparecer.',
+  },
   brands: {
     title: 'Marquesina de marcas', description: 'Elegí qué marcas mostrar en la portada y su visibilidad pública.',
     steps: ['Activá o desactivá marcas sugeridas con el switch Público.', 'Agregá tus propias marcas si vendés otras líneas.', 'Guardá los cambios para actualizar la portada.'],

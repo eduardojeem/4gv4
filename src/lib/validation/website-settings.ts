@@ -484,6 +484,37 @@ export const CheckoutSettingsSchema = z.object({
   }
 })
 
+const announcementDate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usá el formato AAAA-MM-DD').or(z.literal(''))
+
+export const AnnouncementSchema = z.object({
+  enabled: z.boolean().default(false),
+  title: z.string().trim().max(120).default(''),
+  message: z.string().trim().max(600).default(''),
+  imageUrl: z.string().trim().max(500).optional().default(''),
+  ctaLabel: z.string().trim().max(60).optional().default(''),
+  ctaHref: z.string().trim().max(500).optional().default(''),
+  startsAt: announcementDate.optional().default(''),
+  endsAt: announcementDate.optional().default(''),
+  updatedAt: z.string().trim().max(40).optional().default(''),
+}).superRefine((value, context) => {
+  // Un aviso activo sin texto no se mostraria nunca: mejor avisarlo al guardar.
+  if (value.enabled && !value.title) {
+    context.addIssue({ code: 'custom', path: ['title'], message: 'Escribí un título para activarlo' })
+  }
+  if (value.enabled && !value.message) {
+    context.addIssue({ code: 'custom', path: ['message'], message: 'Escribí el mensaje para activarlo' })
+  }
+  if (value.ctaLabel && !value.ctaHref) {
+    context.addIssue({ code: 'custom', path: ['ctaHref'], message: 'El botón necesita un enlace' })
+  }
+  if (value.ctaHref && !(value.ctaHref.startsWith('/') || /^https?:\/\//i.test(value.ctaHref))) {
+    context.addIssue({ code: 'custom', path: ['ctaHref'], message: 'Usá una ruta de tu tienda (/ofertas) o una URL http(s)' })
+  }
+  if (value.startsAt && value.endsAt && value.startsAt > value.endsAt) {
+    context.addIssue({ code: 'custom', path: ['endsAt'], message: 'La fecha de fin es anterior a la de inicio' })
+  }
+})
+
 // Esquema completo de configuración del sitio web
 export const WebsiteSettingsSchema = z.object({
   company_info: CompanyInfoSchema,
@@ -493,6 +524,7 @@ export const WebsiteSettingsSchema = z.object({
   promotional_carousel: PromotionalCarouselSchema.optional(),
   offers_carousel: PromotionalCarouselSchema.optional(),
   trust_bar: TrustBarSchema.optional(),
+  announcement: AnnouncementSchema.optional(),
   brands_section: BrandsSectionSchema.optional(),
   product_credit_defaults: ProductCreditDefaultsSchema.optional(),
   services_section: ServicesSectionSchema.optional(),
@@ -516,6 +548,7 @@ export const SETTING_SCHEMAS = {
   promotional_carousel: PromotionalCarouselSchema,
   offers_carousel: PromotionalCarouselSchema,
   trust_bar: TrustBarSchema,
+  announcement: AnnouncementSchema,
   brands_section: BrandsSectionSchema,
   product_credit_defaults: ProductCreditDefaultsSchema,
   services_section: ServicesSectionSchema,

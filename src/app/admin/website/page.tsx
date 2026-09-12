@@ -10,6 +10,7 @@ import { CheckoutSettingsEditor } from '@/components/admin/website/CheckoutSetti
 import { OffersSectionEditor } from '@/components/admin/website/OffersSectionEditor'
 import { PromotionalCarouselEditor } from '@/components/admin/website/PromotionalCarouselEditor'
 import { TrustBarEditor } from '@/components/admin/website/TrustBarEditor'
+import { AnnouncementEditor } from '@/components/admin/website/AnnouncementEditor'
 import { BrandsSectionEditor } from '@/components/admin/website/BrandsSectionEditor'
 import { SetupGuide } from '@/components/admin/website/SetupGuide'
 import { WebsiteHowItWorksDialog } from '@/components/admin/website/WebsiteHowItWorksDialog'
@@ -197,6 +198,7 @@ export default function WebsiteAdminPage() {
         {tab === 'brands' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="brands" /><BrandsSectionEditor /></section>}
         {tab === 'carousel' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="carousel" /><PromotionalCarouselEditor /></section>}
         {tab === 'offers' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="offers" /><OffersSectionEditor /></section>}
+        {tab === 'announcement' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="announcement" /><AnnouncementEditor /></section>}
         {tab === 'services' && (
           <section aria-label="Catálogo de servicios">
             <WebsiteSectionIntro section="services" />

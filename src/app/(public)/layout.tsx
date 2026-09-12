@@ -8,6 +8,8 @@ import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWithDrawer'
 import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { StorefrontStyleProvider } from '@/components/public/storefront-style-context'
+import { AnnouncementModal } from '@/components/public/AnnouncementModal'
+import { normalizeAnnouncement } from '@/lib/announcements/announcement'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { resolveRequestStorefrontOrganization } from '@/lib/website/request-storefront-organization'
 import { resolveStorefrontStyle } from '@/lib/website/storefront-style'
@@ -71,6 +73,10 @@ export default async function PublicLayout({
             data-storefront-style={storefrontStyle}
           >
             <SkipToContentLink />
+          <AnnouncementModal
+            announcement={normalizeAnnouncement(settings?.announcement)}
+            scope={`tienda:${storefrontOrganization?.slug ?? settings?.company_info?.slug ?? 'tienda'}`}
+          />
             <PublicHeader initialSettings={settings} />
             <div className="flex-1 pb-16 lg:pb-0">{children}</div>
             <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
