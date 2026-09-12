@@ -201,10 +201,10 @@ export function ProductCard(props: ProductCardProps) {
       {/* ── Card ── */}
       <article
         className={cn(
-          'group relative flex flex-col overflow-hidden bg-card transition-all duration-200',
-          storefrontStyle === 'classic' && 'rounded-lg border border-border/60 shadow-sm hover:border-primary/30',
-          storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60',
-          storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40',
+          'group relative flex flex-col overflow-hidden bg-card transition-all duration-300',
+          storefrontStyle === 'classic' && 'rounded-lg border border-border/60 shadow-sm hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10',
+          storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60 hover:shadow-md',
+          storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40 hover:shadow-md',
           !isInStock && 'opacity-60 grayscale-[30%]'
         )}
       >
@@ -246,13 +246,13 @@ export function ProductCard(props: ProductCardProps) {
           {/* Badges — top left */}
           <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1.5">
             {discountPct > 0 && (
-              <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-sm">
+              <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-red-600 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-xs">
                 <Tag className="h-2.5 w-2.5" />
                 -{discountPct}%
               </span>
             )}
             {product.featured && !hasOffer && (
-              <span className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-sm">
+              <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-xs">
                 <Zap className="h-2.5 w-2.5" />
                 Destacado
               </span>
@@ -347,7 +347,7 @@ export function ProductCard(props: ProductCardProps) {
           >
             <Link
               href={productHref}
-              className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background text-xs font-bold text-foreground transition-all hover:border-border hover:bg-muted active:scale-[0.98]"
+              className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-primary active:scale-[0.98]"
               aria-label={`Ver detalle de ${product.name}`}
             >
               <Eye className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

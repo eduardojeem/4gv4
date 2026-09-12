@@ -380,7 +380,13 @@ interface ImportableProduct {
 // Componente principal
 // ─────────────────────────────────────────────
 
-export function ServicesManager({ orgSlug }: { orgSlug?: string | null }) {
+export function ServicesManager({
+  orgSlug,
+  servicesModuleEnabled = true,
+}: {
+  orgSlug?: string | null
+  servicesModuleEnabled?: boolean
+}) {
   const { settings, isLoading, error, isSaving, updateSetting, updateSettings } = useAdminWebsiteSettings()
   const [servicesDraft, setServicesDraft] = useState<Service[] | null>(null)
   const [sectionDraft, setSectionDraft] = useState<ServicesSectionSettings | null>(null)
@@ -811,7 +817,13 @@ export function ServicesManager({ orgSlug }: { orgSlug?: string | null }) {
 
   return (
     <div className="space-y-4">
-      <ServicesPublicationStatus storefrontPublic={settings?.company_info?.storefrontPublic === true} enabled={savedPageEnabled} activeCount={savedActive} orgSlug={orgSlug} />
+      <ServicesPublicationStatus
+        storefrontPublic={settings?.company_info?.storefrontPublic === true}
+        enabled={savedPageEnabled}
+        activeCount={savedActive}
+        orgSlug={orgSlug}
+        servicesModuleEnabled={servicesModuleEnabled}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
         <div>
           <label htmlFor="services-section-enabled" className="text-sm font-medium">Habilitar sección de servicios</label>

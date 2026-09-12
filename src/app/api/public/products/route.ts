@@ -7,6 +7,7 @@ import { resolveWholesaleStatus } from '@/lib/api/products-server'
 import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapPublicPromotion } from '@/lib/public-promotions'
 import { parsePublicProductsQuery } from '@/lib/public/products-query'
+import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -152,10 +153,12 @@ export async function GET(request: NextRequest) {
       const category = Array.isArray(p.category) ? p.category[0] : p.category
       const cat = category as { id: string; name: string } | null
       const productVariants = variantsByProduct.get(String(p.id)) ?? []
+      const effectiveHasVariants = Boolean(p.has_variants) || productVariants.length > 0
       const baseStock = Number(p.stock_quantity ?? 0)
-      const publicStock = Boolean(p.has_variants) && productVariants.length > 0
+      const publicStock = effectiveHasVariants && productVariants.length > 0
         ? productVariants.reduce((sum, variant) => sum + Number(variant.stock_quantity ?? 0), 0)
-        : Number(p.stock_quantity ?? 0)
+        : baseStock
+      const configuredAttributes = Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : []
       const priced = applyAutomaticPromotionToProduct({
         id: p.id as string,
         category_id: cat?.id ?? null,
@@ -172,7 +175,9 @@ export async function GET(request: NextRequest) {
         category: cat ? { id: cat.id, name: cat.name } : undefined,
         sale_price: p.sale_price as number,
         wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-        stock_quantity: publicStock,
+        stock_quantity: effectiveHasVariants && productVariants.length > 0
+          ? publicStock
+          : Number(p.stock_quantity ?? 0), // stock_quantity: Number(p.stock_quantity ?? 0)
         in_stock: publicStock > 0,
         is_active: p.is_active as boolean,
         featured: (p.featured as boolean) || false,
@@ -184,8 +189,10 @@ export async function GET(request: NextRequest) {
         unit_measure: p.unit_measure as string,
         barcode: p.barcode as string | null,
         created_at: p.created_at ? String(p.created_at) : null,
-        has_variants: Boolean(p.has_variants),
-        variant_attribute_config: Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : [],
+        has_variants: effectiveHasVariants,
+        variant_attribute_config: configuredAttributes.length > 0
+          ? configuredAttributes
+          : deriveVariantAttributeConfig(productVariants),
         variants: productVariants.map((variant) => ({
           id: String(variant.id), product_id: String(variant.product_id), variant_name: String(variant.variant_name),
           attributes: (variant.attributes ?? {}) as Record<string, string>, sku: variant.sku ? String(variant.sku) : null,

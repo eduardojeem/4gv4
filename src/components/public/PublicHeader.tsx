@@ -48,7 +48,15 @@ function formatSocialUrl(handleOrUrl: string, platform: 'instagram' | 'facebook'
   return handleOrUrl
 }
 
-export function PublicHeader({ initialSettings = null }: { initialSettings?: WebsiteSettings | null }) {
+export function PublicHeader({
+  initialSettings = null,
+  repairsModuleEnabled = true,
+  servicesModuleEnabled = true,
+}: {
+  initialSettings?: WebsiteSettings | null
+  repairsModuleEnabled?: boolean
+  servicesModuleEnabled?: boolean
+}) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
@@ -193,14 +201,18 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
     }
   }
 
-  const servicesEnabled = isPublicServicesPageAvailable(
-    effectiveSettings?.company_info?.servicesPageEnabled,
-    effectiveSettings?.services
-  )
-  const repairsEnabled = isPublicRepairsAvailable(
-    effectiveSettings?.company_info,
-    effectiveSettings?.services
-  )
+  const servicesEnabled =
+    servicesModuleEnabled &&
+    isPublicServicesPageAvailable(
+      effectiveSettings?.company_info?.servicesPageEnabled,
+      effectiveSettings?.services
+    )
+  const repairsEnabled =
+    repairsModuleEnabled &&
+    isPublicRepairsAvailable(
+      effectiveSettings?.company_info,
+      effectiveSettings?.services
+    )
   const offersEnabled = effectiveSettings?.offers_section?.enabled !== false
 
   const navLinks = [
@@ -242,7 +254,7 @@ export function PublicHeader({ initialSettings = null }: { initialSettings?: Web
             ? 'border-white/10 bg-black/15 text-primary-foreground/90'
             : companyInfo?.headerStyle === 'dark'
             ? 'border-slate-900 bg-slate-900/60 text-slate-400'
-            : 'border-border/50 bg-muted/40 text-muted-foreground'
+            : 'border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 text-foreground/90'
         }`}>
           <div className="container flex h-auto items-center justify-between gap-4">
             {/* Left: Contact info & Hours */}

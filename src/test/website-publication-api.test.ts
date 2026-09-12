@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }))
 
 const state = vi.hoisted(() => ({
   current: { slug: 'mi-tienda', marketplace_public: false, storefront_public: false },

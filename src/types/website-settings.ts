@@ -116,6 +116,22 @@ export interface PromotionalCarouselSlide {
   active: boolean
   textTone: 'light' | 'dark'
   contentAlign: 'left' | 'center' | 'right'
+  /** Ocultar textos superpuestos en el banner (modo banner gráfico/diseñado) */
+  hideText?: boolean
+  /** Insignia o etiqueta destacada arriba del título (ej: 🔥 30% OFF) */
+  badge?: string
+  /** Tamaño tipográfico del título */
+  titleSize?: 'normal' | 'large' | 'compact'
+  /** Intensidad del oscurecimiento / degradé de fondo */
+  overlayIntensity?: 'none' | 'subtle' | 'medium' | 'strong'
+  /** Color o tinte del degradé de fondo */
+  overlayColor?: 'black' | 'white' | 'brand'
+  /** Color de fondo base de la diapositiva */
+  backgroundColor?: string
+  /** Color de letra personalizado para el título (ej: #facc15, #ffffff) */
+  titleColor?: string
+  /** Estilo o familia tipográfica del banner */
+  fontFamily?: 'sans' | 'display' | 'serif' | 'mono'
 }
 
 export interface PromotionalCarouselSettings {

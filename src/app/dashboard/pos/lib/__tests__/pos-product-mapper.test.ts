@@ -38,4 +38,25 @@ describe('mapProductForPOS', () => {
 
     expect(product.wholesale_price).toBeNull()
   })
+
+  it('calculates stock from active variants when product stock is 0', () => {
+    const product = mapProductForPOS({
+      id: 'product-3',
+      name: 'Chomba Polo',
+      sku: 'POLO-1',
+      sale_price: 89000,
+      stock_quantity: 0,
+      category_id: null,
+      is_active: true,
+      has_variants: true,
+      variants: [
+        { id: 'v1', stock_quantity: 3, is_active: true },
+        { id: 'v2', stock_quantity: 5, is_active: true },
+        { id: 'v3', stock_quantity: 10, is_active: false },
+      ],
+    })
+
+    expect(product.has_variants).toBe(true)
+    expect(product.stock_quantity).toBe(8)
+  })
 })

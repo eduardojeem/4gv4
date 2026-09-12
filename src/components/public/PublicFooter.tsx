@@ -12,6 +12,7 @@ import type { WebsiteSettings } from '@/types/website-settings'
 export function PublicFooter({
   initialSettings = null,
   repairsModuleEnabled = true,
+  servicesModuleEnabled = true,
 }: {
   initialSettings?: WebsiteSettings | null
   /**
@@ -20,6 +21,7 @@ export function PublicFooter({
    * sitio aunque la tienda no tuviera taller.
    */
   repairsModuleEnabled?: boolean
+  servicesModuleEnabled?: boolean
 }) {
   const { settings } = useWebsiteSettings()
   const pathname = usePathname()
@@ -34,15 +36,19 @@ export function PublicFooter({
   const companyName = company?.name || 'Tienda'
   const mapsHref = getCompanyMapsHref(company?.mapsUrl, company?.address)
 
-  const servicesEnabled = isPublicServicesPageAvailable(
-    company?.servicesPageEnabled,
-    effectiveSettings?.services
-  )
+  const servicesEnabled =
+    servicesModuleEnabled &&
+    isPublicServicesPageAvailable(
+      company?.servicesPageEnabled,
+      effectiveSettings?.services
+    )
   const repairsEnabled = repairsModuleEnabled && isPublicRepairsAvailable(company, effectiveSettings?.services)
 
   return (
-    <footer className="border-t border-border/50 bg-muted/30">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <footer className="relative overflow-hidden border-t-2 border-primary/20 bg-gradient-to-b from-primary/[0.04] via-background to-muted/40">
+      {/* Luz ambiental sutil en el pie */}
+      <div className="pointer-events-none absolute -bottom-24 left-1/2 -translate-x-1/2 h-64 w-[600px] rounded-full bg-primary/5 blur-3xl" />
+      <div className="container relative mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           
           {/* Brand */}

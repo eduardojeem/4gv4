@@ -607,6 +607,37 @@
   --sidebar-primary: oklch(0.66 0.18 235);
 }
 
+/* =========================================================================
+   Enriquecimiento de Color en Modo Claro para la Sección Pública de Tiendas
+   ========================================================================= */
+
+/* Tonos secundarios y de acento derivados armoniosamente del color de marca */
+:root:not(.dark) [data-color-scheme] {
+  --ring: var(--primary);
+  --secondary: color-mix(in oklch, var(--primary) 10%, oklch(0.975 0.003 240));
+  --secondary-foreground: color-mix(in oklch, var(--primary) 70%, oklch(0.2 0.03 240));
+  --accent: color-mix(in oklch, var(--primary) 14%, oklch(0.965 0.004 240));
+  --accent-foreground: color-mix(in oklch, var(--primary) 85%, oklch(0.15 0.03 240));
+}
+
+:root:not(.dark) [data-custom-brand] {
+  --ring: var(--brand-primary);
+  --secondary: color-mix(in oklch, var(--brand-primary) 10%, oklch(0.975 0.003 240));
+  --secondary-foreground: color-mix(in oklch, var(--brand-primary) 70%, oklch(0.2 0.03 240));
+  --accent: color-mix(in oklch, var(--brand-primary) 14%, oklch(0.965 0.004 240));
+  --accent-foreground: color-mix(in oklch, var(--brand-primary) 85%, oklch(0.15 0.03 240));
+}
+
+/* Atmósfera de luz ambiental con gradientes sutiles que acompañan el color de marca */
+:root:not(.dark) [data-storefront-style] {
+  background-color: oklch(0.984 0.005 240);
+  background-image:
+    radial-gradient(ellipse 70% 50% at 50% -10%, color-mix(in oklch, var(--primary) 11%, transparent), transparent 70%),
+    radial-gradient(ellipse 55% 40% at 95% 25%, color-mix(in oklch, var(--primary) 7%, transparent), transparent 60%),
+    radial-gradient(ellipse 50% 45% at 5% 55%, color-mix(in oklch, var(--primary) 6%, transparent), transparent 65%);
+  background-attachment: fixed;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

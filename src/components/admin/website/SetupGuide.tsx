@@ -107,7 +107,9 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
       label: 'Servicios Técnicos',
       icon: Briefcase,
       description: 'Catálogo de reparaciones y mano de obra',
-      isCompleted: services.length > 0 && services.some(s => s.active !== false),
+      isCompleted:
+        company?.servicesPageEnabled === false ||
+        (services.length > 0 && services.some(s => s.active !== false)),
       tip: 'Registra al menos un servicio activo (con su precio estimado, beneficios y tiempos de entrega) para mostrarlo en el sitio.',
     },
     {

@@ -19,6 +19,7 @@ import { ContactCTA } from '@/components/public/inicio/ContactCTA'
 import { BranchLocations } from '@/components/public/inicio/BranchLocations'
 import { OrganizationReviews } from '@/components/public/inicio/OrganizationReviews'
 import { StoreBrandTicker } from '@/components/public/inicio/StoreBrandTicker'
+import { StorefrontAudienceLinks } from '@/components/public/inicio/StorefrontAudienceLinks'
 import { FashionCampaignBanner } from '@/components/public/inicio/FashionCampaignBanner'
 import { FloatingWhatsAppButton } from '@/components/public/FloatingWhatsAppButton'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
@@ -199,8 +200,11 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
         )
       )}
 
-      {/* ── 2. Barra de Beneficios (En modo clásico si está arriba, o en moda siempre debajo de la portada) ── */}
-      {trustBarVisible && (storefrontStyle !== 'classic' || trustBarPosition === 'above_carousel') && (
+      {/* Accesos de compra inmediatos para tiendas de moda y deporte. */}
+      <StorefrontAudienceLinks />
+
+      {/* En clásico se conserva la ubicación configurable; moda/deporte usan una jerarquía más comercial. */}
+      {storefrontStyle === 'classic' && trustBarVisible && trustBarPosition === 'above_carousel' && (
         <StoreTrustBar settings={settings.trust_bar} />
       )}
 
@@ -222,15 +226,14 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
         <StoreBrandTicker settings={settings.brands_section} />
       )}
 
-      {/* ── 4. Showcase de Colecciones & Categorías ── */}
-      <CategoryShowcase />
+      {/* Las categorías editoriales se conservan solo en el aspecto clásico;
+          en moda/deporte los accesos por público evitan navegación duplicada. */}
+      {storefrontStyle === 'classic' && <CategoryShowcase />}
 
-      {/* ── 4.1 Banner de Campaña Intermedio (Moda / Boutique) ── */}
-      {storefrontStyle !== 'classic' && (
-        <FashionCampaignBanner phoneClean={phoneClean} />
-      )}
+      {/* Productos antes de campañas secundarias: el usuario llega antes al catálogo. */}
+      <FeaturedProducts />
 
-      {/* ── 5. Carrusel de Ofertas Especiales ── */}
+      {/* Ofertas y campaña secundaria aparecen después del primer bloque comprable. */}
       {settings.offers_section?.enabled && (
         <div id="ofertas">
           <OffersCarousel
@@ -240,8 +243,13 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
         </div>
       )}
 
-      {/* ── 6. Productos Destacados con Filtros Rápidos ── */}
-      <FeaturedProducts />
+      {storefrontStyle !== 'classic' && (
+        <FashionCampaignBanner phoneClean={phoneClean} />
+      )}
+
+      {storefrontStyle !== 'classic' && trustBarVisible && (
+        <StoreTrustBar settings={settings.trust_bar} className="py-4 sm:py-5" />
+      )}
 
       {/* ── 7. Servicios Técnicos (SÓLO si la empresa los ofrece y tiene activos) ── */}
       {hasServices && <ServicesGrid services={safeServices} />}
@@ -255,7 +263,7 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
       {branches.length > 0 && <BranchLocations branches={branches} brand={brand} />}
 
       {/* ── 9.1 Barra de Beneficios (Si está configurada AL PIE DE PÁGINA) ── */}
-      {trustBarVisible && trustBarPosition === 'bottom' && (
+      {storefrontStyle === 'classic' && trustBarVisible && trustBarPosition === 'bottom' && (
         <StoreTrustBar settings={settings.trust_bar} />
       )}
 

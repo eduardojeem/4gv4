@@ -63,65 +63,23 @@ export function CategoryCollections({ style: _style }: { style: Exclude<Storefro
 
   const covers = categoryCoverImages(products ?? [])
   const validDbCategories = categories.filter((c) => (c.productCount ?? 0) > 0)
+  if (validDbCategories.length === 0) return null
 
-  // Armar colecciones basadas 100% en las categorías reales de la base de datos
-  const dbCollections: CollectionItem[] = validDbCategories.map((cat) => {
+  const items = [...validDbCategories]
+    .sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0) || a.name.localeCompare(b.name))
+    .slice(0, 8)
+
+  const displayCollections: CollectionItem[] = items.map((cat) => {
     const cover = covers.get(cat.id)
-    const fallbackImage = cat.name.toLowerCase().includes('corporat') || cat.name.toLowerCase().includes('empresa')
-      ? '/images/products/campera-softshell-corporativa.jpg'
-      : '/images/products/remera-basica-blanca.jpg'
-
     return {
       id: cat.id,
       name: cat.name,
       tag: cat.name.toLowerCase().includes('corporat') ? 'Empresas' : 'Colección',
       href: `${tenantPrefix}/productos?category_id=${encodeURIComponent(cat.id)}`,
-      imageUrl: cover ? resolveProductImageUrl(cover) : fallbackImage,
+      imageUrl: cover ? resolveProductImageUrl(cover) : null,
       count: cat.productCount,
     }
   })
-
-  let displayCollections: CollectionItem[] = []
-
-  if (dbCollections.length >= 4) {
-    displayCollections = dbCollections.slice(0, 8)
-  } else if (dbCollections.length > 0) {
-    // Si hay menos de 4 categorías en BD, mostramos todas las categorías reales existentes
-    // y completamos la grilla de forma elegante con enlaces directos a Ofertas y Catálogo
-    displayCollections = [...dbCollections]
-
-    if (displayCollections.length < 3) {
-      displayCollections.push({
-        id: 'col-ofertas',
-        name: 'Ofertas de Temporada',
-        tag: 'Precios Especiales',
-        href: `${tenantPrefix}/ofertas`,
-        imageUrl: '/images/promotional-carousel/hero-moda-esenciales.jpg',
-      })
-    }
-
-    if (displayCollections.length < 4) {
-      displayCollections.push({
-        id: 'col-catalogo-completo',
-        name: 'Catálogo Completo',
-        tag: 'Todas las Prendas',
-        href: `${tenantPrefix}/productos`,
-        imageUrl: '/images/promotional-carousel/hero-moda-urbana.jpg',
-        count: products?.length,
-      })
-    }
-  } else {
-    // Si todavía no hay categorías creadas
-    displayCollections = [
-      {
-        id: 'col-catalogo-completo',
-        name: 'Catálogo General',
-        tag: 'Colección',
-        href: `${tenantPrefix}/productos`,
-        imageUrl: '/images/promotional-carousel/hero-moda-esenciales.jpg',
-      }
-    ]
-  }
 
   return (
     <section aria-labelledby="categorias-principales-titulo" className="border-b border-border/70 bg-background py-12 sm:py-16">
@@ -152,21 +110,23 @@ export function CategoryCollections({ style: _style }: { style: Exclude<Storefro
                   href={col.href}
                   className="relative block aspect-[4/5] overflow-hidden rounded-2xl border border-border/60 bg-muted/40 shadow-sm transition-all duration-500 hover:shadow-xl hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
-                  <Image
-                    src={col.imageUrl}
-                    alt={col.name}
-                    fill
-                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 50vw, 25vw"
-                    className="object-cover transition-transform duration-700 ease-out group-hover:scale-108"
-                    unoptimized={col.imageUrl.startsWith('data:')}
-                  />
+                  {col.imageUrl && (
+                    <Image
+                      src={col.imageUrl}
+                      alt={col.name}
+                      fill
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 50vw, 25vw"
+                      className="object-cover transition-transform duration-700 ease-out group-hover:scale-108"
+                      unoptimized={col.imageUrl.startsWith('data:')}
+                    />
+                  )}
 
                   {/* Gradiente oscuro inferior para texto nítido */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10 transition-opacity duration-300 group-hover:opacity-95" />
 
                   {/* Tag superior */}
                   {col.tag && (
-                    <div className="absolute top-3.5 left-3.5 z-10">
+                    <div className="absolute top-3.5 left-3.5 z-10" aria-hidden="true">
                       <span className="inline-block rounded-full bg-white/20 backdrop-blur-md px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white border border-white/20">
                         {col.tag}
                       </span>
@@ -181,11 +141,11 @@ export function CategoryCollections({ style: _style }: { style: Exclude<Storefro
 
                     {typeof col.count === 'number' && col.count > 0 && (
                       <span className="text-[11px] font-medium text-slate-300 mt-0.5">
-                        {col.count} {col.count === 1 ? 'modelo' : 'modelos'}
+                        {col.count} {col.count === 1 ? 'producto' : 'productos'}
                       </span>
                     )}
 
-                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-white/90 group-hover:text-white group-hover:translate-x-1 transition-all">
+                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-white/90 group-hover:text-white group-hover:translate-x-1 transition-all" aria-hidden="true">
                       <span>Ver colección</span>
                       <ArrowRight className="h-3.5 w-3.5" />
                     </div>

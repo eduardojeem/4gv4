@@ -154,22 +154,35 @@ const PromotionalCarouselImageSchema = z.string()
 
 export const PromotionalCarouselSlideSchema = z.object({
   id: z.string().min(1).max(100),
-  title: z.string().trim().min(3, 'Ingresá un título').max(100),
-  message: z.string().trim().min(3, 'Ingresá un mensaje').max(240),
+  title: z.string().trim().max(100).default(''),
+  message: z.string().trim().max(240).default(''),
   imageUrl: PromotionalCarouselImageSchema,
   imageAlt: z.string().trim().min(3, 'Describí la imagen').max(160),
   ctaText: z.string().trim().max(50).optional().or(z.literal('')),
   ctaHref: PromotionalCarouselLinkSchema,
   active: z.boolean(),
-  textTone: z.enum(['light', 'dark']),
-  contentAlign: z.enum(['left', 'center', 'right']),
+  textTone: z.enum(['light', 'dark']).default('light'),
+  contentAlign: z.enum(['left', 'center', 'right']).default('left'),
+  hideText: z.boolean().optional().default(false),
+  badge: z.string().trim().max(40).optional().or(z.literal('')),
+  titleSize: z.enum(['normal', 'large', 'compact']).optional().default('normal'),
+  overlayIntensity: z.enum(['none', 'subtle', 'medium', 'strong']).optional().default('strong'),
+  overlayColor: z.enum(['black', 'white', 'brand']).optional().default('black'),
+  backgroundColor: z.string().max(50).optional().or(z.literal('')),
+  titleColor: z.string().max(50).optional().or(z.literal('')),
+  fontFamily: z.enum(['sans', 'display', 'serif', 'mono']).optional().default('sans'),
 }).superRefine((value, ctx) => {
-  if (Boolean(value.ctaText?.trim()) !== Boolean(value.ctaHref?.trim())) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['ctaText'],
-      message: 'Completá el texto y el enlace del botón, o dejá ambos vacíos',
-    })
+  // Validación de botón:
+  // Si hideText es false, ctaText y ctaHref deben ir juntos o ambos vacíos.
+  // Si hideText es true, permitimos ctaHref sin ctaText (para hacer clic en todo el banner sin mostrar botón encima).
+  if (!value.hideText) {
+    if (Boolean(value.ctaText?.trim()) !== Boolean(value.ctaHref?.trim())) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ctaText'],
+        message: 'Completá el texto y el enlace del botón, o dejá ambos vacíos',
+      })
+    }
   }
 })
 

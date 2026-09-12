@@ -1,5 +1,6 @@
-import { Loader2, Coins, Zap, Trophy, CheckCircle2 } from 'lucide-react'
+import { Loader2, Coins, Zap, Trophy, Settings2, Ticket, ClipboardList, History } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { LOYALTY_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { useLoyalty } from '@/hooks/use-loyalty'
@@ -7,6 +8,7 @@ import { LoyaltySettingsCard } from './LoyaltySettingsCard'
 import { PointRulesCard } from './PointRulesCard'
 import { RafflesManager } from './RafflesManager'
 import { LoyaltyModuleNotice } from './LoyaltyModuleNotice'
+import { getRaffleOperationalSummary } from './loyalty-summary'
 
 export function LoyaltyRafflesPanel({ canManage }: { canManage: boolean }) {
   const {
@@ -41,6 +43,7 @@ export function LoyaltyRafflesPanel({ canManage }: { canManage: boolean }) {
 
   const activeRulesCount = rules.filter((r) => r.is_active).length
   const activeRafflesCount = raffles.filter((r) => r.status === 'published').length
+  const operational = getRaffleOperationalSummary(raffles)
 
   return (
     <div className="flex flex-col gap-6">
@@ -101,57 +104,53 @@ export function LoyaltyRafflesPanel({ canManage }: { canManage: boolean }) {
         </div>
       </div>
 
-      {/* Bloque 1: Configuración de Acumulación */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-slate-950 text-xs font-extrabold shadow-xs">
-            1
-          </span>
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            Regla Base de Puntos por Compra
-          </h3>
-        </div>
-        <LoyaltySettingsCard settings={settings} onSave={saveSettings} canManage={canManage} />
-      </section>
+      <Tabs defaultValue="resumen" className="w-full">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 sm:grid-cols-4 dark:bg-slate-900">
+          <TabsTrigger value="resumen" className="gap-1.5 text-xs sm:text-sm"><ClipboardList className="h-4 w-4" />Resumen</TabsTrigger>
+          <TabsTrigger value="reglas" className="gap-1.5 text-xs sm:text-sm"><Settings2 className="h-4 w-4" />Reglas</TabsTrigger>
+          <TabsTrigger value="sorteos" className="gap-1.5 text-xs sm:text-sm"><Ticket className="h-4 w-4" />Sorteos</TabsTrigger>
+          <TabsTrigger value="historial" className="gap-1.5 text-xs sm:text-sm"><History className="h-4 w-4" />Historial</TabsTrigger>
+        </TabsList>
 
-      {/* Bloque 2: Multiplicadores y Campañas Temporales */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-extrabold shadow-xs">
-            2
-          </span>
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            Campañas y Multiplicadores de Puntos
-          </h3>
-        </div>
-        <PointRulesCard
-          rules={rules}
-          onCreate={createRule}
-          onToggle={toggleRule}
-          onDelete={deleteRule}
-          canManage={canManage}
-        />
-      </section>
+        <TabsContent value="resumen" className="mt-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              ['Sorteos abiertos', operational.open],
+              ['Cierran en 7 días', operational.closingSoon],
+              ['Tickets emitidos', operational.tickets],
+              ['Pendientes de sortear', operational.pendingDraw],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+                <p className="mt-1 text-xl font-extrabold text-slate-900 dark:text-slate-100">{value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-xl border border-cyan-200 bg-cyan-50/60 p-4 text-sm text-cyan-950 dark:border-cyan-900/60 dark:bg-cyan-950/30 dark:text-cyan-100">
+            <p className="font-bold">Siguiente paso recomendado</p>
+            <p className="mt-1 text-xs opacity-80">
+              {settings?.enabled ? 'El programa está activo. Revisa los sorteos próximos a cerrar y las reglas activas.' : 'Activa la regla base para empezar a otorgar puntos en cada venta.'}
+            </p>
+          </div>
+        </TabsContent>
 
-      {/* Bloque 3: Sorteos y Ganadores */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-600 text-white text-xs font-extrabold shadow-xs">
-            3
-          </span>
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            Sorteos, Tickets y Ganadores
-          </h3>
-        </div>
-        <RafflesManager
-          raffles={raffles}
-          onCreate={createRaffle}
-          onUpdateStatus={updateRaffleStatus}
-          onDraw={drawRaffle}
-          onRefresh={refresh}
-          canManage={canManage}
-        />
-      </section>
+        <TabsContent value="reglas" className="mt-4 space-y-6">
+          <section className="space-y-3"><h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Regla base de puntos por compra</h3><LoyaltySettingsCard settings={settings} onSave={saveSettings} canManage={canManage} /></section>
+          <section className="space-y-3"><h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Campañas y multiplicadores</h3><PointRulesCard rules={rules} onCreate={createRule} onToggle={toggleRule} onDelete={deleteRule} canManage={canManage} /></section>
+        </TabsContent>
+
+        <TabsContent value="sorteos" className="mt-4">
+          <RafflesManager raffles={raffles} onCreate={createRaffle} onUpdateStatus={updateRaffleStatus} onDraw={drawRaffle} onRefresh={refresh} canManage={canManage} />
+        </TabsContent>
+
+        <TabsContent value="historial" className="mt-4">
+          <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center dark:border-slate-700">
+            <History className="mx-auto h-8 w-8 text-slate-400" />
+            <h3 className="mt-2 text-sm font-bold">Historial de operaciones</h3>
+            <p className="mt-1 text-xs text-slate-500">Aquí quedarán visibles publicaciones, cierres, sorteos y entregas de premios.</p>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

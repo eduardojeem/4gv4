@@ -4,6 +4,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
 import { logger } from '@/lib/logger'
+import { canTransitionRaffleStatus, raffleTransitionMessage, type RaffleLifecycleStatus } from '@/lib/raffles/lifecycle'
 
 function raffleId(routeContext: unknown): string | null {
   const params = (routeContext as { params?: { id?: string } } | undefined)?.params
@@ -46,6 +47,10 @@ const patchSchema = z.object({
   requirements: z.string().max(1000).nullable().optional(),
   terms: z.string().max(4000).nullable().optional(),
   ends_at: z.string().optional(),
+  min_purchase_amount: z.number().nonnegative().nullable().optional(),
+  auto_entry_on_sale: z.boolean().optional(),
+  allow_point_purchase: z.boolean().optional(),
+  point_purchase_price: z.number().positive().nullable().optional(),
 })
 
 export const PATCH = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, { organization }, routeContext) => {
@@ -67,6 +72,34 @@ export const PATCH = withTenantAuth({ permission: 'promotions.manage', module: '
   }
 
   const supabase = await createOrgScopedClient(organization.id)
+
+  const current = await supabase
+    .from('raffles')
+    .select('id, status, starts_at, ends_at')
+    .eq('id', id)
+    .eq('organization_id', organization.id)
+    .maybeSingle()
+
+  if (current.error) {
+    return loyaltyErrorResponse(current.error, 'consultar el estado del sorteo', { raffleId: id })
+  }
+  if (!current.data) return NextResponse.json({ error: 'El sorteo no existe' }, { status: 404 })
+
+  if (parsed.data.status) {
+    const from = current.data.status as RaffleLifecycleStatus
+    const transitionError = raffleTransitionMessage(from, parsed.data.status)
+    if (transitionError || !canTransitionRaffleStatus(from, parsed.data.status)) {
+      return NextResponse.json({ error: transitionError ?? 'Transición de estado no permitida', code: 'INVALID_STATUS_TRANSITION' }, { status: 409 })
+    }
+  }
+
+  if (parsed.data.ends_at) {
+    const end = new Date(parsed.data.ends_at)
+    const start = new Date(current.data.starts_at)
+    if (!Number.isFinite(end.getTime()) || end <= start) {
+      return NextResponse.json({ error: 'La fecha de cierre tiene que ser posterior a la de inicio', code: 'INVALID_END_DATE' }, { status: 400 })
+    }
+  }
 
   const { data, error } = await supabase
     .from('raffles')

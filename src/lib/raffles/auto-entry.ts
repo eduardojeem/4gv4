@@ -24,30 +24,36 @@ export async function tryAutoRaffleEntryForSale(
     const nowIso = new Date().toISOString()
     const { data: activeRaffles, error: raffleError } = await supabase
       .from('raffles')
-      .select('id, name, points_per_ticket, max_tickets_per_customer, ends_at, requirements')
+      .select('id, name, points_per_ticket, max_tickets_per_customer, ends_at, requirements, min_purchase_amount, auto_entry_on_sale')
       .eq('organization_id', organizationId)
       .eq('status', 'published')
       .lte('starts_at', nowIso)
       .gte('ends_at', nowIso)
       .order('created_at', { ascending: false })
-      .limit(1)
+      .limit(20)
 
     if (raffleError || !activeRaffles || activeRaffles.length === 0) {
       return null
     }
 
-    const raffle = activeRaffles[0]
+    const eligibleRaffles = activeRaffles.filter((candidate) => {
+      if (candidate.auto_entry_on_sale === false) return false
+      if (candidate.min_purchase_amount != null) return saleAmount >= Number(candidate.min_purchase_amount)
+      // Compatibilidad con sorteos creados antes del campo estructurado.
+      const match = candidate.requirements?.match(/desde Gs\.?\s*([\d\.]+)/i)
+      if (!match?.[1]) return true
+      return saleAmount >= Number(match[1].replace(/\./g, ''))
+    })
 
-    // Validar monto mínimo si está definido en los requisitos del sorteo
-    if (raffle.requirements) {
-      const match = raffle.requirements.match(/desde Gs\.?\s*([\d\.]+)/i)
-      if (match && match[1]) {
-        const minAmount = Number(match[1].replace(/\./g, ''))
-        if (minAmount > 0 && saleAmount < minAmount) {
-          return null // La compra no alcanza el monto mínimo configurado
-        }
-      }
+    if (eligibleRaffles.length === 0) return null
+    if (eligibleRaffles.length > 1) {
+      logger.warn('Multiple eligible raffles found; using the one closing first', {
+        organizationId,
+        raffleIds: eligibleRaffles.map((item) => item.id),
+      })
     }
+    const raffle = [...eligibleRaffles].sort((a, b) => a.ends_at.localeCompare(b.ends_at))[0]
+
 
     // 2. Consultar el saldo de puntos disponible del cliente
     const { data: account } = await supabase

@@ -31,4 +31,17 @@ describe('services publication status', () => {
     expect(screen.getByText('Sección de servicios oculta')).toBeInTheDocument()
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
+  it('shows module inactive status and hides link when organization lacks services module', () => {
+    render(<ServicesPublicationStatus storefrontPublic enabled activeCount={2} orgSlug="tienda" servicesModuleEnabled={false} />)
+    expect(screen.getByText('Módulo de servicios no activo')).toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+})
+
+describe('website navigation module gating', () => {
+  it('displays "Sin módulo" badge and inactive plan description when services module is disabled', () => {
+    render(<WebsiteNavigation value="company" onChange={vi.fn()} servicesModuleEnabled={false} />)
+    expect(screen.getByText('Sin módulo')).toBeInTheDocument()
+    expect(screen.getByText('Módulo inactivo en tu plan')).toBeInTheDocument()
+  })
 })

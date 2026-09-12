@@ -95,6 +95,30 @@ describe('normalizeProductVariantsForForm', () => {
     expect(parsed.success).toBe(true)
   })
 
+  it('recupera la configuracion cuando existen variantes aunque la bandera del padre este desactualizada', () => {
+    const result = normalizeProductVariantsForForm({
+      id: 'prod-inconsistent',
+      sku: 'REM-01',
+      has_variants: false,
+      variant_attribute_config: [],
+      variants: [{
+        id: '82fc4048-e412-4e20-8516-57ae280c1ad8',
+        variant_name: 'Azul / M',
+        sku: 'REM-01-AZU-M',
+        attributes: { color: 'Azul', size: 'M', image_url: '/remera.jpg' },
+        stock_quantity: 3,
+        is_active: true,
+      }],
+    })
+
+    expect(result.has_variants).toBe(true)
+    expect(result.variant_attribute_config).toEqual([
+      expect.objectContaining({ key: 'color', options: ['Azul'] }),
+      expect.objectContaining({ key: 'size', options: ['M'] }),
+    ])
+    expect(result.variants).toHaveLength(1)
+  })
+
   it('does not silently downgrade an incomplete variant product', () => {
     const seedProduct = {
       id: 'prod-789',

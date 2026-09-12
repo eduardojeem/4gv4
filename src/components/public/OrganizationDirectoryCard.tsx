@@ -57,6 +57,7 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
   const rubroMeta = RUBRO_LABELS[rubroKey] ?? RUBRO_LABELS.comercio
   const RubroIcon = rubroMeta.icon
   const normalizedCity = normalizeCity(organization.city)
+  const accentColor = organizationAccentColor(organization)
 
   return (
     <Link
@@ -68,8 +69,8 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
       )}
       // El color que la tienda eligio para su pagina publica: la tarjeta
       // anticipa lo que el visitante va a encontrar si entra.
-      style={organizationAccentColor(organization)
-        ? { borderTop: `3px solid ${organizationAccentColor(organization)}` }
+      style={accentColor
+        ? { borderTop: `3px solid ${accentColor}` }
         : undefined}
     >
       {/* Product preview thumbnails + logo overlay */}
@@ -127,7 +128,7 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
                 organization.brand_color === 'sky' && 'from-sky-500 to-blue-700',
                 (!organization.brand_color || organization.brand_color === 'blue') && 'from-blue-600 to-blue-800'
               )}
-              style={organization.custom_brand_color ? { backgroundColor: organization.custom_brand_color } : undefined}
+              style={organization.custom_brand_color ? { backgroundColor: organization.custom_brand_color, backgroundImage: 'none' } : undefined}
             >
               {organization.name.slice(0, 2).toUpperCase()}
             </div>
@@ -234,7 +235,10 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
           <span />
         )}
 
-        <div className="flex items-center gap-1 text-primary group-hover:underline">
+        <div
+          className="flex items-center gap-1 text-primary group-hover:underline transition-colors"
+          style={accentColor ? { color: accentColor } : undefined}
+        >
           <span>Visitar tienda</span>
           <ExternalLink className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
         </div>

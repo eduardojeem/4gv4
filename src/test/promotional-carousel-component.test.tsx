@@ -95,4 +95,96 @@ describe('PromotionalCarousel', () => {
     render(<PromotionalCarousel settings={settings} isPageLead />)
     expect(screen.getByRole('heading', { level: 1, name: 'Accesorios en oferta' })).toBeInTheDocument()
   })
+
+  it('renders a graphic banner without text as a full clickable link', () => {
+    const bannerSettings: PromotionalCarouselSettings = {
+      enabled: true,
+      autoplay: false,
+      intervalSeconds: 6,
+      slides: [
+        {
+          id: 'slide-graphic',
+          title: '',
+          message: '',
+          imageUrl: 'https://example.com/banner-limpio.webp',
+          imageAlt: 'Gran liquidación de invierno',
+          ctaHref: '/productos?oferta=true',
+          active: true,
+          textTone: 'light',
+          contentAlign: 'center',
+          hideText: true,
+          overlayIntensity: 'none',
+        },
+      ],
+    }
+
+    render(<PromotionalCarousel settings={bannerSettings} />)
+
+    // El banner entero es un link con el texto alternativo accesible
+    const link = screen.getByRole('link', { name: 'Gran liquidación de invierno' })
+    expect(link).toBeInTheDocument()
+    expect(link).toHaveAttribute('href', '/4g-celulares/productos?oferta=true')
+    // No debe haber encabezado visible superpuesto
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument()
+  })
+
+  it('renders badge pill and custom title size on slides', () => {
+    const badgeSettings: PromotionalCarouselSettings = {
+      enabled: true,
+      autoplay: false,
+      intervalSeconds: 6,
+      slides: [
+        {
+          id: 'slide-badge',
+          title: 'Mega Liquidación',
+          message: 'Todo con hasta 50% de descuento.',
+          imageUrl: 'https://example.com/banner.webp',
+          imageAlt: 'Mega Liquidación',
+          ctaText: 'Ver productos',
+          ctaHref: '/productos',
+          active: true,
+          textTone: 'light',
+          contentAlign: 'left',
+          badge: '🔥 50% OFF',
+          titleSize: 'large',
+        },
+      ],
+    }
+
+    render(<PromotionalCarousel settings={badgeSettings} />)
+
+    expect(screen.getByText('🔥 50% OFF')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Mega Liquidación' })).toBeInTheDocument()
+  })
+
+  it('renders custom titleColor and fontFamily on slides', () => {
+    const styledSettings: PromotionalCarouselSettings = {
+      enabled: true,
+      autoplay: false,
+      intervalSeconds: 6,
+      slides: [
+        {
+          id: 'slide-styled',
+          title: 'Temporada de Oro',
+          message: 'Colección exclusiva para ocasiones especiales.',
+          imageUrl: 'https://example.com/oro.webp',
+          imageAlt: 'Temporada de Oro',
+          ctaText: 'Ver colección',
+          ctaHref: '/productos',
+          active: true,
+          textTone: 'light',
+          contentAlign: 'left',
+          titleColor: '#facc15',
+          fontFamily: 'serif',
+        },
+      ],
+    }
+
+    render(<PromotionalCarousel settings={styledSettings} />)
+
+    const heading = screen.getByRole('heading', { name: 'Temporada de Oro' })
+    expect(heading).toBeInTheDocument()
+    expect(heading).toHaveStyle({ color: 'rgb(250, 204, 21)' }) // #facc15 in rgb
+    expect(heading).toHaveClass('font-serif')
+  })
 })

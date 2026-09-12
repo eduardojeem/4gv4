@@ -74,4 +74,17 @@ describe('PromotionalCarouselEditor', () => {
     expect(dialog).toHaveClass('sm:max-w-[1700px]')
     expect(dialog).not.toHaveClass('sm:max-w-lg')
   })
+
+  it('allows activating graphic banner mode without text overlays', () => {
+    render(<PromotionalCarouselEditor />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva diapositiva' }))
+
+    const switchBtn = screen.getByRole('switch', { name: 'Modo banner gráfico sin textos' })
+    expect(switchBtn).toHaveAttribute('aria-checked', 'false')
+
+    fireEvent.click(switchBtn)
+    expect(switchBtn).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByText(/Banner en modo gráfico activo/i)).toBeInTheDocument()
+  })
 })

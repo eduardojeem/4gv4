@@ -14,15 +14,21 @@ import { BrandsSectionEditor } from '@/components/admin/website/BrandsSectionEdi
 import { SetupGuide } from '@/components/admin/website/SetupGuide'
 import { WebsiteHowItWorksDialog } from '@/components/admin/website/WebsiteHowItWorksDialog'
 import { WebsiteSectionIntro } from '@/components/admin/website/WebsiteSectionIntro'
-import { Eye, Globe } from 'lucide-react'
+import { AlertTriangle, Eye, Globe, RotateCw } from 'lucide-react'
 import { WebsiteNavigation } from '@/components/admin/website/WebsiteNavigation'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { useEffectiveModule } from '@/contexts/SubscriptionStatusContext'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 export default function WebsiteAdminPage() {
-  const { settings } = useAdminWebsiteSettings()
+  const { settings, refresh, isRefreshing } = useAdminWebsiteSettings()
+  const hasServicesModule = useEffectiveModule('services')
+  const hasRepairsModule = useEffectiveModule('repairs')
+  const servicesModuleEnabled = hasServicesModule || hasRepairsModule
+
   const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [tab, setTab] = useState('company')
   const dirtyRef = useRef(false)
@@ -38,6 +44,22 @@ export default function WebsiteAdminPage() {
       dirtyRef.current = false
     }
     setTab(next)
+  }
+
+  const handleRefresh = async () => {
+    if (dirtyRef.current) {
+      const ok = window.confirm(
+        'Tenés cambios sin guardar en la sección actual. ¿Deseás actualizar desde el servidor y descartar los cambios no guardados?'
+      )
+      if (!ok) return
+      dirtyRef.current = false
+    }
+    const res = await refresh()
+    if (res?.success) {
+      toast.success('Contenido del sitio actualizado')
+    } else {
+      toast.error('No se pudo actualizar el contenido')
+    }
   }
 
   // Warn before closing/reloading with unsaved changes.
@@ -83,6 +105,19 @@ export default function WebsiteAdminPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="gap-2"
+            title="Actualizar datos del sitio web"
+          >
+            <RotateCw className={cn("h-4 w-4", isRefreshing && "animate-spin text-primary")} />
+            <span>{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
+          </Button>
+
           <WebsiteHowItWorksDialog
             currentTab={tab}
             orgSlug={orgSlug}
@@ -140,8 +175,13 @@ export default function WebsiteAdminPage() {
       <SetupGuide activeTab={tab} onTabChange={handleTabChange} />
 
       {/* Tabs */}
-      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <WebsiteNavigation value={tab} onChange={handleTabChange} />
+      <div className="grid items-start gap-5 lg:grid-cols-[270px_minmax(0,1fr)]">
+        <WebsiteNavigation
+          value={tab}
+          onChange={handleTabChange}
+          settings={settings}
+          servicesModuleEnabled={servicesModuleEnabled}
+        />
         <div className="min-w-0">
 
         {tab === 'company' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="company" /><CompanyInfoForm /></section>}
@@ -150,7 +190,23 @@ export default function WebsiteAdminPage() {
         {tab === 'brands' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="brands" /><BrandsSectionEditor /></section>}
         {tab === 'carousel' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="carousel" /><PromotionalCarouselEditor /></section>}
         {tab === 'offers' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="offers" /><OffersSectionEditor /></section>}
-        {tab === 'services' && <section aria-label="Catálogo de servicios"><WebsiteSectionIntro section="services" /><ServicesManager orgSlug={orgSlug} /></section>}
+        {tab === 'services' && (
+          <section aria-label="Catálogo de servicios">
+            <WebsiteSectionIntro section="services" />
+            {!servicesModuleEnabled && (
+              <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-900 dark:text-amber-200">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-semibold">Módulo de servicios y reparaciones no activo en tu suscripción</p>
+                  <p className="text-muted-foreground">
+                    Tu plan actual no incluye los módulos de <strong>Servicios</strong> ni <strong>Reparaciones</strong>. Podés preparar el catálogo en modo borrador, pero permanecerá oculto para los clientes en tu tienda web hasta que actives el módulo.
+                  </p>
+                </div>
+              </div>
+            )}
+            <ServicesManager orgSlug={orgSlug} servicesModuleEnabled={servicesModuleEnabled} />
+          </section>
+        )}
         {tab === 'process' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="process" /><ProcessStepsEditor /></section>}
         {tab === 'checkout' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="checkout" /><CheckoutSettingsEditor /></section>}
         </div>

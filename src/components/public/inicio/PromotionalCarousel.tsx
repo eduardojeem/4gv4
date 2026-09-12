@@ -26,28 +26,112 @@ const ALIGNMENT = {
   right: 'sm:items-end sm:text-right',
 } as const
 
-function getOverlayGradient(tone: 'light' | 'dark', align: 'left' | 'center' | 'right' = 'left') {
-  if (tone === 'light') {
+function getOverlayGradient(
+  tone: 'light' | 'dark' = 'light',
+  align: 'left' | 'center' | 'right' = 'left',
+  intensity: 'none' | 'subtle' | 'medium' | 'strong' = 'strong',
+  color: 'black' | 'white' | 'brand' = 'black'
+) {
+  if (intensity === 'none') {
+    return 'opacity-0 pointer-events-none'
+  }
+
+  const effectiveColor = color === 'brand' ? 'brand' : (color || (tone === 'light' ? 'black' : 'white'))
+
+  if (intensity === 'subtle') {
+    if (effectiveColor === 'white') {
+      switch (align) {
+        case 'right': return 'bg-gradient-to-t from-white/70 via-white/40 to-transparent sm:bg-gradient-to-l sm:from-white/70 sm:via-white/35 sm:to-transparent'
+        case 'center': return 'bg-gradient-to-t from-white/70 via-white/40 to-transparent sm:bg-white/30 sm:bg-radial sm:from-white/60 sm:via-white/30 sm:to-transparent'
+        case 'left':
+        default: return 'bg-gradient-to-t from-white/70 via-white/40 to-transparent sm:bg-gradient-to-r sm:from-white/70 sm:via-white/35 sm:to-transparent'
+      }
+    } else if (effectiveColor === 'brand') {
+      switch (align) {
+        case 'right': return 'bg-gradient-to-t from-primary/60 via-primary/30 to-transparent sm:bg-gradient-to-l sm:from-primary/65 sm:via-primary/30 sm:to-transparent'
+        case 'center': return 'bg-gradient-to-t from-primary/60 via-primary/35 to-transparent sm:bg-primary/20 sm:bg-radial sm:from-primary/50 sm:via-primary/20 sm:to-transparent'
+        case 'left':
+        default: return 'bg-gradient-to-t from-primary/60 via-primary/30 to-transparent sm:bg-gradient-to-r sm:from-primary/65 sm:via-primary/30 sm:to-transparent'
+      }
+    } else {
+      switch (align) {
+        case 'right': return 'bg-gradient-to-t from-black/65 via-black/40 to-transparent sm:bg-gradient-to-l sm:from-black/65 sm:via-black/35 sm:to-transparent'
+        case 'center': return 'bg-gradient-to-t from-black/65 via-black/40 to-transparent sm:bg-black/30 sm:bg-radial sm:from-black/55 sm:via-black/30 sm:to-transparent'
+        case 'left':
+        default: return 'bg-gradient-to-t from-black/65 via-black/40 to-transparent sm:bg-gradient-to-r sm:from-black/65 sm:via-black/35 sm:to-transparent'
+      }
+    }
+  }
+
+  if (intensity === 'medium') {
+    if (effectiveColor === 'white') {
+      switch (align) {
+        case 'right': return 'bg-gradient-to-t from-white/90 via-white/75 to-white/20 sm:bg-gradient-to-l sm:from-white/90 sm:via-white/65 sm:to-transparent'
+        case 'center': return 'bg-gradient-to-t from-white/90 via-white/75 to-white/30 sm:bg-white/55 sm:bg-radial sm:from-white/85 sm:via-white/55 sm:to-white/20'
+        case 'left':
+        default: return 'bg-gradient-to-t from-white/90 via-white/75 to-white/20 sm:bg-gradient-to-r sm:from-white/90 sm:via-white/65 sm:to-transparent'
+      }
+    } else if (effectiveColor === 'brand') {
+      switch (align) {
+        case 'right': return 'bg-gradient-to-t from-slate-950/85 via-primary/70 to-transparent sm:bg-gradient-to-l sm:from-slate-950/85 sm:via-primary/60 sm:to-transparent'
+        case 'center': return 'bg-gradient-to-t from-slate-950/85 via-primary/70 to-transparent sm:bg-primary/45 sm:bg-radial sm:from-slate-950/80 sm:via-primary/50 sm:to-transparent'
+        case 'left':
+        default: return 'bg-gradient-to-t from-slate-950/85 via-primary/70 to-transparent sm:bg-gradient-to-r sm:from-slate-950/85 sm:via-primary/60 sm:to-transparent'
+      }
+    } else {
+      switch (align) {
+        case 'right': return 'bg-gradient-to-t from-black/85 via-black/65 to-black/20 sm:bg-gradient-to-l sm:from-black/85 sm:via-black/55 sm:to-transparent'
+        case 'center': return 'bg-gradient-to-t from-black/85 via-black/65 to-black/25 sm:bg-black/45 sm:bg-radial sm:from-black/75 sm:via-black/45 sm:to-black/20'
+        case 'left':
+        default: return 'bg-gradient-to-t from-black/85 via-black/65 to-black/20 sm:bg-gradient-to-r sm:from-black/85 sm:via-black/55 sm:to-transparent'
+      }
+    }
+  }
+
+  // Strong (default / classic)
+  if (effectiveColor === 'white') {
     switch (align) {
-      case 'right':
-        return 'bg-gradient-to-t from-black/95 via-black/85 to-black/45 sm:bg-gradient-to-l sm:from-black/95 sm:via-black/80 sm:to-black/25'
-      case 'center':
-        return 'bg-gradient-to-t from-black/95 via-black/85 to-black/50 sm:bg-black/60 sm:bg-radial sm:from-black/90 sm:via-black/75 sm:to-black/45'
+      case 'right': return 'bg-gradient-to-t from-white/98 via-white/92 to-white/50 sm:bg-gradient-to-l sm:from-white/98 sm:via-white/88 sm:to-transparent'
+      case 'center': return 'bg-gradient-to-t from-white/98 via-white/92 to-white/60 sm:bg-white/75 sm:bg-radial sm:from-white/98 sm:via-white/88 sm:to-white/45'
       case 'left':
-      default:
-        return 'bg-gradient-to-t from-black/95 via-black/85 to-black/45 sm:bg-gradient-to-r sm:from-black/95 sm:via-black/80 sm:to-black/25'
+      default: return 'bg-gradient-to-t from-white/98 via-white/92 to-white/50 sm:bg-gradient-to-r sm:from-white/98 sm:via-white/88 sm:to-transparent'
+    }
+  } else if (effectiveColor === 'brand') {
+    switch (align) {
+      case 'right': return 'bg-gradient-to-t from-slate-950 via-primary/85 to-primary/40 sm:bg-gradient-to-l sm:from-slate-950 sm:via-primary/80 sm:to-primary/20'
+      case 'center': return 'bg-gradient-to-t from-slate-950 via-primary/85 to-primary/45 sm:bg-primary/70 sm:bg-radial sm:from-slate-950 sm:via-primary/80 sm:to-primary/35'
+      case 'left':
+      default: return 'bg-gradient-to-t from-slate-950 via-primary/85 to-primary/40 sm:bg-gradient-to-r sm:from-slate-950 sm:via-primary/80 sm:to-primary/20'
     }
   } else {
     switch (align) {
-      case 'right':
-        return 'bg-gradient-to-t from-white/98 via-white/92 to-white/50 sm:bg-gradient-to-l sm:from-white/98 sm:via-white/88 sm:to-transparent'
-      case 'center':
-        return 'bg-gradient-to-t from-white/98 via-white/92 to-white/60 sm:bg-white/75 sm:bg-radial sm:from-white/98 sm:via-white/88 sm:to-white/45'
+      case 'right': return 'bg-gradient-to-t from-black/95 via-black/85 to-black/45 sm:bg-gradient-to-l sm:from-black/95 sm:via-black/80 sm:to-black/25'
+      case 'center': return 'bg-gradient-to-t from-black/95 via-black/85 to-black/50 sm:bg-black/60 sm:bg-radial sm:from-black/90 sm:via-black/75 sm:to-black/45'
       case 'left':
-      default:
-        return 'bg-gradient-to-t from-white/98 via-white/92 to-white/50 sm:bg-gradient-to-r sm:from-white/98 sm:via-white/88 sm:to-transparent'
+      default: return 'bg-gradient-to-t from-black/95 via-black/85 to-black/45 sm:bg-gradient-to-r sm:from-black/95 sm:via-black/80 sm:to-black/25'
     }
   }
+}
+
+function isLightColor(color?: string): boolean {
+  if (!color) return false
+  const clean = color.trim().toLowerCase()
+  if (clean === '#ffffff' || clean === '#fff' || clean === 'white') return true
+  if (clean === '#000000' || clean === '#000' || clean === 'black' || clean === '#09090b') return false
+  const hex = clean.replace('#', '')
+  if (hex.length === 3) {
+    const r = parseInt(hex[0] + hex[0], 16)
+    const g = parseInt(hex[1] + hex[1], 16)
+    const b = parseInt(hex[2] + hex[2], 16)
+    return !isNaN(r) && (r * 299 + g * 587 + b * 114) / 1000 > 160
+  }
+  if (hex.length === 6) {
+    const r = parseInt(hex.substring(0, 2), 16)
+    const g = parseInt(hex.substring(2, 4), 16)
+    const b = parseInt(hex.substring(4, 6), 16)
+    return !isNaN(r) && (r * 299 + g * 587 + b * 114) / 1000 > 160
+  }
+  return false
 }
 
 export function PromotionalCarousel({
@@ -188,10 +272,13 @@ export function PromotionalCarousel({
               const isCurrent = idx === safeIndex
               const tone = slide.textTone || 'light'
               const align = slide.contentAlign || 'left'
+              const intensity = slide.overlayIntensity || (slide.hideText ? 'none' : 'strong')
+              const overlayColor = slide.overlayColor || (tone === 'light' ? 'black' : 'white')
 
               return (
                 <div
                   key={slide.id || idx}
+                  style={slide.backgroundColor ? { backgroundColor: slide.backgroundColor } : undefined}
                   className={cn(
                     'absolute inset-0 transition-all duration-700 ease-in-out',
                     isCurrent ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-105 pointer-events-none z-0'
@@ -199,20 +286,22 @@ export function PromotionalCarousel({
                 >
                   <Image
                     src={slide.imageUrl}
-                    alt={slide.imageAlt || slide.title}
+                    alt={slide.imageAlt || slide.title || 'Promoción'}
                     fill
                     priority={isPageLead && idx === 0}
                     sizes="(max-width: 640px) 100vw, 1280px"
                     className="object-cover object-center"
                   />
 
-                  {/* Gradiente direccional con alto contraste para máxima legibilidad */}
-                  <div
-                    className={cn(
-                      'absolute inset-0 transition-opacity duration-700',
-                      getOverlayGradient(tone, align)
-                    )}
-                  />
+                  {/* Gradiente direccional configurable para máxima legibilidad */}
+                  {intensity !== 'none' && (
+                    <div
+                      className={cn(
+                        'absolute inset-0 transition-opacity duration-700',
+                        getOverlayGradient(tone, align, intensity, overlayColor)
+                      )}
+                    />
+                  )}
                 </div>
               )
             })}
@@ -246,63 +335,146 @@ export function PromotionalCarousel({
             )}
           </div>
 
-          {/* ── Textos y Botón de Acción ── */}
-          <div
-            className={cn(
-              'relative z-20 flex min-h-[340px] sm:min-h-[440px] md:min-h-[480px] flex-col justify-center px-5 py-8 pb-14 sm:px-14 sm:py-16 sm:pb-16 lg:px-18 transition-all duration-500',
-              ALIGNMENT[activeSlide.contentAlign],
-              activeSlide.textTone === 'light' ? 'text-white' : 'text-zinc-950'
-            )}
-          >
-            <Heading
-              className={cn(
-                'max-w-2xl text-xl sm:text-4xl md:text-5xl font-black tracking-tight leading-snug sm:leading-[1.15]',
-                activeSlide.textTone === 'light'
-                  ? 'text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] [text-shadow:_0_2px_14px_rgb(0_0_0_/_90%)]'
-                  : 'text-zinc-950 drop-shadow-[0_1px_3px_rgba(255,255,255,0.9)]'
-              )}
-            >
-              {activeSlide.title}
-            </Heading>
+          {/* ── Textos y Botón de Acción o Banner Cliqueable Completo ── */}
+          {(() => {
+            const isTextHidden = Boolean(
+              activeSlide.hideText ||
+              (!activeSlide.title?.trim() && !activeSlide.message?.trim() && !activeSlide.badge?.trim())
+            )
 
-            <p
-              className={cn(
-                'mt-2.5 max-w-xl text-xs sm:text-base md:text-lg font-semibold leading-relaxed sm:mt-4 line-clamp-3 sm:line-clamp-none',
-                activeSlide.textTone === 'light'
-                  ? 'text-slate-100 drop-shadow-[0_1px_6px_rgba(0,0,0,0.95)] [text-shadow:_0_1px_8px_rgb(0_0_0_/_90%)]'
-                  : 'text-zinc-800 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]'
-              )}
-            >
-              {activeSlide.message}
-            </p>
-
-            {activeSlide.ctaText && activeSlide.ctaHref && (
-              <div className="mt-4 sm:mt-6 flex items-center gap-3">
-                <Button
-                  asChild
-                  size="lg"
-                  className={cn(
-                    'h-10 sm:h-12 rounded-xl sm:rounded-2xl px-5 sm:px-6 text-xs sm:text-sm font-bold shadow-md transition-all duration-200 hover:scale-105 group/btn gap-2',
-                    activeSlide.textTone === 'light'
-                      ? 'bg-white text-zinc-950 hover:bg-slate-100 shadow-black/30'
-                      : 'bg-zinc-950 text-white hover:bg-zinc-800 shadow-zinc-950/25'
+            if (isTextHidden) {
+              return (
+                <>
+                  {isPageLead && (
+                    <h1 className="sr-only">{activeSlide.imageAlt || activeSlide.title || 'Promoción destacada'}</h1>
                   )}
-                >
-                  {isExternal ? (
-                    <a href={ctaHref} target="_blank" rel="noopener noreferrer">
-                      <span>{activeSlide.ctaText}</span>
-                      <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
-                    </a>
+                  {activeSlide.ctaHref ? (
+                    isExternal ? (
+                      <a
+                        href={ctaHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="relative z-20 flex min-h-[340px] sm:min-h-[440px] md:min-h-[480px] w-full items-center justify-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label={activeSlide.imageAlt || 'Ver promoción'}
+                      >
+                        <span className="sr-only">{activeSlide.imageAlt || 'Ver promoción'}</span>
+                      </a>
+                    ) : (
+                      <Link
+                        href={ctaHref}
+                        className="relative z-20 flex min-h-[340px] sm:min-h-[440px] md:min-h-[480px] w-full items-center justify-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label={activeSlide.imageAlt || 'Ver promoción'}
+                      >
+                        <span className="sr-only">{activeSlide.imageAlt || 'Ver promoción'}</span>
+                      </Link>
+                    )
                   ) : (
-                    <Link href={ctaHref}>
-                      <span>{activeSlide.ctaText}</span>
-                      <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
-                    </Link>
+                    <div className="relative z-20 min-h-[340px] sm:min-h-[440px] md:min-h-[480px] w-full pointer-events-none" />
                   )}
-                </Button>
+                </>
+              )
+            }
+
+            const titleSizeClass = {
+              compact: 'text-lg sm:text-2xl md:text-3xl font-bold',
+              normal: 'text-xl sm:text-4xl md:text-5xl font-black',
+              large: 'text-2xl sm:text-5xl md:text-6xl font-black tracking-tight',
+            }[activeSlide.titleSize || 'normal']
+
+            const titleFontClass = {
+              sans: 'font-sans',
+              display: 'font-black tracking-tight uppercase',
+              serif: 'font-serif font-bold tracking-normal',
+              mono: 'font-mono font-bold tracking-tighter',
+            }[activeSlide.fontFamily || 'sans']
+
+            const hasLightTitle = activeSlide.titleColor
+              ? isLightColor(activeSlide.titleColor)
+              : activeSlide.textTone === 'light'
+
+            return (
+              <div
+                className={cn(
+                  'relative z-20 flex min-h-[340px] sm:min-h-[440px] md:min-h-[480px] flex-col justify-center px-5 py-8 pb-14 sm:px-14 sm:py-16 sm:pb-16 lg:px-18 transition-all duration-500',
+                  ALIGNMENT[activeSlide.contentAlign || 'left'],
+                  activeSlide.textTone === 'light' ? 'text-white' : 'text-zinc-950'
+                )}
+              >
+                {activeSlide.badge?.trim() && (
+                  <div className="mb-2.5 sm:mb-3.5 flex items-center">
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs sm:text-sm font-bold tracking-wide uppercase border backdrop-blur-md',
+                        activeSlide.textTone === 'light'
+                          ? 'bg-white/20 text-white border-white/30 shadow-black/20'
+                          : 'bg-black/10 text-zinc-950 border-black/15'
+                      )}
+                    >
+                      <Sparkles className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                      <span>{activeSlide.badge}</span>
+                    </span>
+                  </div>
+                )}
+
+                {activeSlide.title && (
+                  <Heading
+                    style={activeSlide.titleColor ? { color: activeSlide.titleColor } : undefined}
+                    className={cn(
+                      'max-w-2xl leading-snug sm:leading-[1.15]',
+                      titleSizeClass,
+                      titleFontClass,
+                      !activeSlide.titleColor && (activeSlide.textTone === 'light' ? 'text-white' : 'text-zinc-950'),
+                      hasLightTitle
+                        ? 'drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] [text-shadow:_0_2px_14px_rgb(0_0_0_/_90%)]'
+                        : 'drop-shadow-none [text-shadow:none]'
+                    )}
+                  >
+                    {activeSlide.title}
+                  </Heading>
+                )}
+
+                {activeSlide.message && (
+                  <p
+                    className={cn(
+                      'mt-2.5 max-w-xl text-xs sm:text-base md:text-lg font-semibold leading-relaxed sm:mt-4 line-clamp-3 sm:line-clamp-none',
+                      activeSlide.textTone === 'light'
+                        ? 'text-slate-100 drop-shadow-[0_1px_6px_rgba(0,0,0,0.95)] [text-shadow:_0_1px_8px_rgb(0_0_0_/_90%)]'
+                        : 'text-zinc-800'
+                    )}
+                  >
+                    {activeSlide.message}
+                  </p>
+                )}
+
+                {activeSlide.ctaText && activeSlide.ctaHref && (
+                  <div className="mt-4 sm:mt-6 flex items-center gap-3">
+                    <Button
+                      asChild
+                      size="lg"
+                      className={cn(
+                        'h-10 sm:h-12 rounded-xl sm:rounded-2xl px-5 sm:px-6 text-xs sm:text-sm font-bold shadow-md transition-all duration-200 hover:scale-105 group/btn gap-2',
+                        activeSlide.textTone === 'light'
+                          ? 'bg-white text-zinc-950 hover:bg-slate-100 shadow-black/30'
+                          : 'bg-zinc-950 text-white hover:bg-zinc-800 shadow-zinc-950/25'
+                      )}
+                    >
+                      {isExternal ? (
+                        <a href={ctaHref} target="_blank" rel="noopener noreferrer">
+                          <span>{activeSlide.ctaText}</span>
+                          <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
+                        </a>
+                      ) : (
+                        <Link href={ctaHref}>
+                          <span>{activeSlide.ctaText}</span>
+                          <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
+                        </Link>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            )
+          })()}
 
           {/* ── Indicadores de Progreso Estilo Story / Barra Interactiva ── */}
           {canRotate && (

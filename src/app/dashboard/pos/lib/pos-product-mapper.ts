@@ -20,6 +20,8 @@ export type PosProductRow = {
   installments_enabled?: boolean | null
   installments_public?: boolean | null
   installments_plans?: unknown
+  has_variants?: boolean | null
+  variants?: unknown
 }
 
 function mapInstallmentPlans(value: unknown): InstallmentPlanOption[] {
@@ -39,6 +41,14 @@ function mapInstallmentPlans(value: unknown): InstallmentPlanOption[] {
 
 export function mapProductForPOS(row: PosProductRow): Product {
   const category = Array.isArray(row.categories) ? row.categories[0] : row.categories
+  const rawVariants = Array.isArray(row.variants) ? row.variants : []
+  const hasVariants = Boolean(row.has_variants || rawVariants.length > 0)
+  const variantStock = hasVariants && rawVariants.length > 0
+    ? rawVariants.reduce((sum: number, v: any) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
+    : null
+  const stockQuantity = hasVariants && variantStock !== null && Number(row.stock_quantity || 0) === 0
+    ? variantStock
+    : Number(row.stock_quantity || 0)
 
   return {
     id: row.id,
@@ -47,7 +57,7 @@ export function mapProductForPOS(row: PosProductRow): Product {
     barcode: row.barcode || null,
     sale_price: Number(row.sale_price),
     wholesale_price: row.wholesale_price == null ? null : Number(row.wholesale_price),
-    stock_quantity: Number(row.stock_quantity),
+    stock_quantity: stockQuantity,
     category_id: row.category_id,
     category: category
       ? { id: row.category_id, name: category.name }
@@ -63,5 +73,7 @@ export function mapProductForPOS(row: PosProductRow): Product {
     installments_enabled: Boolean(row.installments_enabled),
     installments_public: Boolean(row.installments_public),
     installments_plans: mapInstallmentPlans(row.installments_plans),
+    has_variants: hasVariants,
+    variants: rawVariants as any,
   } as Product
 }

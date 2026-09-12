@@ -141,15 +141,25 @@ export function applyBranchInventoryToProducts<T extends { id: string; stock_qua
   thresholdMap?: Map<string, { minStock: number | null; maxStock: number | null }>
 ): Array<T & { branch_stock_quantity?: number }> {
   return products.map((product) => {
+    const rawVariants = Array.isArray((product as any).variants) ? (product as any).variants : []
+    const hasVariants = Boolean((product as any).has_variants || rawVariants.length > 0)
+    const variantStock = hasVariants && rawVariants.length > 0
+      ? rawVariants.reduce((sum: number, v: any) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
+      : null
+
     if (stockMap.has(product.id)) {
       const branchStock = Number(stockMap.get(product.id) || 0)
+      const effectiveStock = hasVariants && variantStock !== null && branchStock === 0
+        ? variantStock
+        : branchStock
+
       // El umbral de la sucursal solo pisa al del producto cuando esta
       // configurado: NULL significa «usar el del producto».
       const thresholds = thresholdMap?.get(product.id)
       return {
         ...product,
-        stock_quantity: branchStock,
-        branch_stock_quantity: branchStock,
+        stock_quantity: effectiveStock,
+        branch_stock_quantity: effectiveStock,
         ...(thresholds?.minStock !== null && thresholds?.minStock !== undefined
           ? { min_stock: thresholds.minStock }
           : {}),
@@ -160,11 +170,18 @@ export function applyBranchInventoryToProducts<T extends { id: string; stock_qua
     }
 
     if (branchScoped) {
-      // A catalog product without a row in the selected branch has no stock there.
+      const effectiveStock = hasVariants && variantStock !== null ? variantStock : 0
       return {
         ...product,
-        stock_quantity: 0,
-        branch_stock_quantity: 0,
+        stock_quantity: effectiveStock,
+        branch_stock_quantity: effectiveStock,
+      }
+    }
+
+    if (hasVariants && variantStock !== null && (product.stock_quantity == null || product.stock_quantity === 0)) {
+      return {
+        ...product,
+        stock_quantity: variantStock,
       }
     }
 

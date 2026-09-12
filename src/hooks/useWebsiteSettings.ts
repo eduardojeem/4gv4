@@ -105,7 +105,7 @@ export function useWebsiteSettings() {
 
 // Fetcher para el panel admin (autenticado, sin caché agresiva).
 async function adminSettingsFetcher(url: string): Promise<WebsiteSettings> {
-  const adminRes = await fetch(url)
+  const adminRes = await fetch(url, { cache: 'no-store' })
   if (adminRes.ok) {
     const adminData = await adminRes.json()
     return adminData.data as WebsiteSettings
@@ -120,12 +120,27 @@ async function adminSettingsFetcher(url: string): Promise<WebsiteSettings> {
 export function useAdminWebsiteSettings() {
   const [isSaving, setIsSaving] = useState(false)
   const [isInitializing, setIsInitializing] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const { data, error, isLoading } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, adminSettingsFetcher, {
+  const { data, error, isLoading, mutate: swrMutate } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, adminSettingsFetcher, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     revalidateIfStale: false,
+    refreshInterval: 0,
   })
+
+  const refresh = async () => {
+    try {
+      setIsRefreshing(true)
+      await swrMutate()
+      return { success: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to refresh settings'
+      return { success: false, error: message }
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const updateSettings = async (values: Partial<WebsiteSettings>) => {
     const previous = data
@@ -207,9 +222,11 @@ export function useAdminWebsiteSettings() {
     error: error ? (error as Error).message : null,
     isSaving,
     isInitializing,
+    isRefreshing,
     updateSetting,
     updateSettings,
     initializeMissingSettings,
-    refetch: () => mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
+    refetch: () => mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY),
+    refresh,
   }
 }

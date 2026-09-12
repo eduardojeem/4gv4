@@ -375,7 +375,7 @@ export const ProductCard = memo(({
               ) : (
                 <div className="flex items-center gap-0.5">
                   <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                  <span>AGREGAR</span>
+                  <span>{product.has_variants ? 'OPCIONES' : 'AGREGAR'}</span>
                 </div>
               )}
             </Button>

@@ -64,4 +64,37 @@ describe('promotional carousel website setting', () => {
       })),
     }).success).toBe(false)
   })
+
+  it('accepts graphic banners without text overlay and with custom background/text options', () => {
+    const graphicSlide = {
+      id: 'slide-graphic',
+      title: '',
+      message: '',
+      imageUrl: 'https://example.com/banner-graphic.webp',
+      imageAlt: 'Banner publicitario de temporada',
+      ctaHref: '/productos?categoria=remeras',
+      active: true,
+      textTone: 'light' as const,
+      contentAlign: 'center' as const,
+      hideText: true,
+      badge: '🔥 30% OFF',
+      titleSize: 'large' as const,
+      overlayIntensity: 'none' as const,
+      overlayColor: 'brand' as const,
+      backgroundColor: '#09090b',
+      titleColor: '#facc15',
+      fontFamily: 'display' as const,
+    }
+
+    const result = validateSetting('promotional_carousel', {
+      ...validCarousel,
+      slides: [graphicSlide],
+    })
+
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.slides[0].titleColor).toBe('#facc15')
+      expect(result.data.slides[0].fontFamily).toBe('display')
+    }
+  })
 })

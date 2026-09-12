@@ -83,6 +83,109 @@ const STATUS_LABEL: Record<
   cancelled: { label: 'Cancelado', variant: 'destructive', badgeColor: 'bg-rose-500 text-white' },
 }
 
+export interface RaffleTemplate {
+  id: string
+  label: string
+  badge: string
+  icon: string
+  description: string
+  name: string
+  shortDescription: string
+  requirements: string
+  terms: string
+  points_per_ticket: number
+  min_purchase_amount: number
+  auto_entry_on_sale: boolean
+  allow_point_purchase: boolean
+  point_purchase_price: number
+  max_tickets_per_customer: string
+  max_tickets_total: number
+  min_age: number
+  durationDays: number
+  prizes: Array<{ position: number; title: string }>
+}
+
+export const RAFFLE_TEMPLATES: RaffleTemplate[] = [
+  {
+    id: 'anniversary',
+    label: 'Gran Sorteo Aniversario',
+    badge: 'Popular',
+    icon: '🎂',
+    description: '3 premios escalonados de alto impacto para celebrar con tus clientes.',
+    name: 'Gran Sorteo Aniversario de la Tienda',
+    shortDescription: '¡Celebramos nuestro aniversario premiando tu preferencia con increíbles premios!',
+    requirements: 'Participan clientes registrados con compras en el local o canjeando/comprando puntos para el sorteo.',
+    terms: 'Sorteo transparente certificado por sistema. Los ganadores se anunciarán en nuestras redes y serán contactados por WhatsApp.',
+    points_per_ticket: 50,
+    min_purchase_amount: 100000,
+    auto_entry_on_sale: true,
+    allow_point_purchase: true,
+    point_purchase_price: 1000,
+    max_tickets_per_customer: '20',
+    max_tickets_total: 1000,
+    min_age: 0,
+    durationDays: 30,
+    prizes: [
+      { position: 1, title: '1º Premio: Vale de Compra por Gs. 1.000.000' },
+      { position: 2, title: '2º Premio: Smartwatch Pro / Auriculares Inalámbricos' },
+      { position: 3, title: '3º Premio: Kit de Productos Exclusivos de la Tienda' },
+    ],
+  },
+  {
+    id: 'vip_loyalty',
+    label: 'Fidelidad Clientes VIP',
+    badge: 'Fidelización',
+    icon: '👑',
+    description: 'Recompensa mensual exclusiva para compradores recurrentes.',
+    name: 'Sorteo Mensual Fidelidad Clientes VIP',
+    shortDescription: 'Premiamos a nuestros clientes frecuentes de todos los meses.',
+    requirements: 'Participan compras mayores a Gs. 50.000 o clientes con 30+ puntos de fidelidad.',
+    terms: 'Válido para clientes con ficha y teléfono verificado. Notificación directa al ganador.',
+    points_per_ticket: 30,
+    min_purchase_amount: 50000,
+    auto_entry_on_sale: true,
+    allow_point_purchase: true,
+    point_purchase_price: 1000,
+    max_tickets_per_customer: '10',
+    max_tickets_total: 500,
+    min_age: 0,
+    durationDays: 20,
+    prizes: [
+      { position: 1, title: '1º Premio: Smartphone / Dispositivo de Última Generación' },
+      { position: 2, title: '2º Premio: 50% de Descuento en tu próxima compra' },
+    ],
+  },
+  {
+    id: 'weekend_flash',
+    label: 'Relámpago Fin de Semana',
+    badge: 'Exprés',
+    icon: '⚡',
+    description: 'Sorteo rápido de fin de semana para dinamizar las ventas en caja.',
+    name: 'Sorteo Relámpago de Fin de Semana',
+    shortDescription: '¡Comprá este fin de semana y participá por premios al instante!',
+    requirements: 'Participan compras y canjes de puntos realizados de viernes a domingo.',
+    terms: 'Sorteo automático este domingo a las 20:00 hs.',
+    points_per_ticket: 20,
+    min_purchase_amount: 30000,
+    auto_entry_on_sale: true,
+    allow_point_purchase: true,
+    point_purchase_price: 1000,
+    max_tickets_per_customer: '5',
+    max_tickets_total: 250,
+    min_age: 0,
+    durationDays: 3,
+    prizes: [
+      { position: 1, title: '1º Premio: Gift Card / Tarjeta Regalo Gs. 300.000' },
+      { position: 2, title: '2º Premio: Vale de Compra Gs. 150.000' },
+    ],
+  },
+]
+
+function formatDateTimeLocal(d: Date) {
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 const EMPTY_RAFFLE = {
   name: '',
   description: '',
@@ -93,6 +196,8 @@ const EMPTY_RAFFLE = {
   points_per_ticket: 50,
   min_purchase_amount: 100000,
   auto_entry_on_sale: true,
+  allow_point_purchase: true,
+  point_purchase_price: 1000,
   max_tickets_per_customer: '',
   max_tickets_total: 1000,
   min_age: 0, // Por defecto 0 = Sin restricción de edad
@@ -120,6 +225,30 @@ export function RafflesManager({
     { position: 1, title: '' },
   ])
 
+  const applyTemplate = (template: RaffleTemplate) => {
+    const now = new Date()
+    const startDate = new Date(now.getTime() - 60000)
+    const endDate = new Date(now.getTime() + template.durationDays * 24 * 60 * 60 * 1000)
+
+    setDraft({
+      name: template.name,
+      description: template.shortDescription,
+      requirements: template.requirements,
+      terms: template.terms,
+      starts_at: formatDateTimeLocal(startDate),
+      ends_at: formatDateTimeLocal(endDate),
+      points_per_ticket: template.points_per_ticket,
+      min_purchase_amount: template.min_purchase_amount,
+      auto_entry_on_sale: template.auto_entry_on_sale,
+      allow_point_purchase: template.allow_point_purchase,
+      point_purchase_price: template.point_purchase_price,
+      max_tickets_per_customer: template.max_tickets_per_customer,
+      max_tickets_total: template.max_tickets_total,
+      min_age: template.min_age,
+    })
+    setPrizes(template.prizes)
+  }
+
   // Modal para ver ganadores de un sorteo
   const [viewWinnersRaffle, setViewWinnersRaffle] = useState<RaffleRow | null>(null)
   const [winnersData, setWinnersData] = useState<WinnerItem[]>([])
@@ -134,15 +263,26 @@ export function RafflesManager({
 
   const handleCreate = async () => {
     setSaving(true)
-    const autoReq = draft.auto_entry_on_sale
-      ? `Participación directa: Compras desde Gs. ${Number(draft.min_purchase_amount || 100000).toLocaleString('es-PY')} generan automáticamente números de sorteo. ${draft.requirements || ''}`.trim()
-      : draft.requirements || null
+    let autoReq = draft.requirements || ''
+    if (draft.auto_entry_on_sale) {
+      const entryText = `Participación directa: Compras desde Gs. ${Number(draft.min_purchase_amount || 100000).toLocaleString('es-PY')} generan automáticamente números de sorteo.`
+      autoReq = `${entryText} ${autoReq}`.trim()
+    }
+    if (draft.allow_point_purchase) {
+      const pricePerTicket = (Number(draft.point_purchase_price) || 1000) * (Number(draft.points_per_ticket) || 50)
+      const purchaseText = `Compra de puntos disponible en caja: Gs. ${Number(draft.point_purchase_price || 1000).toLocaleString('es-PY')} por punto (Gs. ${pricePerTicket.toLocaleString('es-PY')} por número).`
+      autoReq = `${autoReq} · ${purchaseText}`.trim()
+    }
 
     const ok = await onCreate({
       name: draft.name,
       description: draft.description || null,
-      requirements: autoReq,
+      requirements: autoReq || null,
       terms: draft.terms || null,
+      min_purchase_amount: draft.auto_entry_on_sale ? Number(draft.min_purchase_amount || 100000) : null,
+      auto_entry_on_sale: draft.auto_entry_on_sale,
+      allow_point_purchase: draft.allow_point_purchase,
+      point_purchase_price: draft.allow_point_purchase ? Number(draft.point_purchase_price || 1000) : null,
       prizes: prizes
         .filter((p) => p.title.trim())
         .map((p, i) => ({ position: i + 1, title: p.title.trim() })),
@@ -375,23 +515,39 @@ export function RafflesManager({
 
         <CardContent className="space-y-3">
           {raffles.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 p-8 sm:p-10 text-center dark:border-slate-800">
               <Gift className="h-10 w-10 text-slate-300 dark:text-slate-700" />
               <h4 className="mt-3 text-sm font-bold text-slate-900 dark:text-slate-100">
                 Todavía no tienes sorteos creados
               </h4>
-              <p className="mt-1 max-w-sm text-xs text-slate-500">
-                Crea un sorteo, carga los premios que vas a regalar y publícalo para que el mostrador pueda canjear números a los clientes.
+              <p className="mt-1 max-w-md text-xs text-slate-500">
+                Lanza una campaña para fidelizar clientes y aumentar tus ventas. Puedes usar una plantilla lista para usar o crear uno a medida.
               </p>
               {canManage && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-4 gap-1.5 text-xs rounded-xl"
-                  onClick={() => setOpen(true)}
-                >
-                  <Plus className="h-3.5 w-3.5" /> Crear mi primer sorteo
-                </Button>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+                  <Button
+                    size="sm"
+                    className="gap-1.5 text-xs rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-md shadow-cyan-600/20"
+                    onClick={() => {
+                      applyTemplate(RAFFLE_TEMPLATES[0])
+                      setOpen(true)
+                    }}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" /> Usar Plantilla Recomendada (Aniversario)
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-xs rounded-xl"
+                    onClick={() => {
+                      setDraft(EMPTY_RAFFLE)
+                      setPrizes([{ position: 1, title: '' }])
+                      setOpen(true)
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Crear sorteo personalizado
+                  </Button>
+                </div>
               )}
             </div>
           ) : (
@@ -400,6 +556,7 @@ export function RafflesManager({
               const issued = ticketCount(raffle)
               const ended = new Date(raffle.ends_at) <= new Date()
               const progressPercent = Math.min(100, Math.round((issued / raffle.max_tickets_total) * 100))
+              const hasPointPurchase = raffle.requirements?.toLowerCase().includes('compra de puntos') || raffle.requirements?.toLowerCase().includes('comprando puntos')
 
               return (
                 <div
@@ -415,6 +572,11 @@ export function RafflesManager({
                         <Badge variant="outline" className={`text-[10px] font-bold ${status.badgeColor}`}>
                           {status.label}
                         </Badge>
+                        {hasPointPurchase && (
+                          <Badge variant="outline" className="text-[10px] font-medium border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                            💳 Compra de puntos disponible
+                          </Badge>
+                        )}
                       </div>
 
                       {raffle.description && (
@@ -777,6 +939,40 @@ export function RafflesManager({
           </DialogHeader>
 
           <div className="space-y-5 pt-2">
+            {/* Plantillas Rápidas Pre-cargadas */}
+            <div className="rounded-2xl border border-cyan-200/90 bg-gradient-to-r from-cyan-50/70 via-blue-50/50 to-indigo-50/40 p-3.5 dark:border-cyan-900/60 dark:from-cyan-950/30 dark:via-blue-950/20 dark:to-indigo-950/20 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-950 dark:text-cyan-200">
+                  <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                  <span>Plantillas Rápidas Pre-cargadas</span>
+                </div>
+                <span className="text-[10px] text-cyan-700/90 dark:text-cyan-400 font-semibold">1-clic para autocompletar</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {RAFFLE_TEMPLATES.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => applyTemplate(tpl)}
+                    className="flex flex-col items-start gap-1 rounded-xl border border-cyan-200/70 bg-white/90 p-2.5 text-left transition-all hover:border-cyan-500 hover:bg-cyan-50/60 hover:shadow-xs dark:border-slate-800 dark:bg-slate-900/80 dark:hover:bg-slate-800/80 cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-base">{tpl.icon}</span>
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300">
+                        {tpl.badge}
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 leading-tight mt-0.5">
+                      {tpl.label}
+                    </span>
+                    <span className="text-[10px] text-slate-500 line-clamp-2 leading-tight">
+                      {tpl.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* 1. Datos Principales */}
             <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800/80 dark:bg-slate-900/40 space-y-3">
               <div className="flex items-center gap-2">
@@ -964,15 +1160,77 @@ export function RafflesManager({
                 </div>
               ) : (
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Modo manual: Los números solo se obtendrán cuando el cliente canjee sus puntos acumulados en caja.
+                  Modo manual: Los números solo se obtendrán cuando el cliente canjee o compre puntos en caja.
                 </p>
               )}
             </div>
 
-            {/* 4. Fechas y Horarios */}
+            {/* 4. Opción de Compra Directa de Puntos para el Sorteo */}
+            <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-bold">4</span>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950 dark:text-emerald-200">
+                    Opción de Compra de Puntos / Números en Caja
+                  </h4>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="point-purchase-switch" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                    {draft.allow_point_purchase ? 'Habilitado' : 'Deshabilitado'}
+                  </Label>
+                  <Switch
+                    id="point-purchase-switch"
+                    checked={draft.allow_point_purchase}
+                    onCheckedChange={(checked) => setDraft((d) => ({ ...d, allow_point_purchase: checked }))}
+                  />
+                </div>
+              </div>
+
+              {draft.allow_point_purchase ? (
+                <div className="space-y-3 pt-1">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="point-price" className="text-xs font-semibold">
+                        Monto por cada Punto (en Guaraníes)
+                      </Label>
+                      <Input
+                        id="point-price"
+                        type="number"
+                        min={100}
+                        step={100}
+                        value={draft.point_purchase_price}
+                        onChange={(e) => setDraft((d) => ({ ...d, point_purchase_price: Number(e.target.value) }))}
+                        className="rounded-xl text-xs bg-white dark:bg-slate-950 font-semibold h-9.5"
+                      />
+                      <p className="text-[10px] text-slate-500">Ej: Gs. 1.000 por cada punto</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">
+                        Precio Equivalente por Número de Sorteo
+                      </Label>
+                      <div className="rounded-xl border border-emerald-200/80 bg-white p-2 text-xs font-medium text-emerald-800 dark:border-emerald-800 dark:bg-slate-950 dark:text-emerald-300 h-9.5 flex items-center">
+                        <strong>Gs. {((Number(draft.point_purchase_price) || 1000) * (Number(draft.points_per_ticket) || 50)).toLocaleString('es-PY')}</strong>
+                        <span className="ml-1 text-[11px] text-slate-500">({draft.points_per_ticket} pts × Gs. {(Number(draft.point_purchase_price) || 1000).toLocaleString('es-PY')})</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">Precio directo si el cliente no tiene puntos previos</p>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-emerald-800/90 dark:text-emerald-300/90 bg-white/70 dark:bg-slate-900/60 p-2.5 rounded-xl border border-emerald-200/60 dark:border-emerald-900/40">
+                    💡 <strong>Venta en Caja:</strong> El cliente puede comprar puntos en caja en efectivo o transferencia. En la ventana de canje, podrás seleccionar <strong>&quot;Comprar Puntos&quot;</strong>, cobrar el monto y emitir los números de sorteo en el acto.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Solo se podrá participar acumulando puntos en compras regulares o canjeando puntos preexistentes.
+                </p>
+              )}
+            </div>
+
+            {/* 5. Fechas y Horarios */}
             <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800/80 dark:bg-slate-900/40 space-y-3">
               <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-[10px] font-bold">4</span>
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-[10px] font-bold">5</span>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                   Período de Participación
                 </h4>
@@ -1006,10 +1264,10 @@ export function RafflesManager({
               </div>
             </div>
 
-            {/* 5. Reglas de Tickets y Puntos */}
+            {/* 6. Reglas de Tickets y Puntos */}
             <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800/80 dark:bg-slate-900/40 space-y-3">
               <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold">5</span>
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold">6</span>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                   Reglas de Tickets y Puntos
                 </h4>

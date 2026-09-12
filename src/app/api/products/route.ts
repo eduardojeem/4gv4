@@ -240,7 +240,14 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       )
     }
     
-    const baseProducts = (products || []) as Array<Record<string, unknown> & { id: string; stock_quantity?: number | null }>
+    const baseProducts = (products || []) as Array<Record<string, unknown> & {
+      id: string
+      stock_quantity?: number | null
+      min_stock?: number | null
+      max_stock?: number | null
+      has_variants?: boolean | null
+      variants?: unknown
+    }>
     const branchInventoryClient = supabase as unknown as Parameters<typeof loadBranchInventoryStockMap>[0]
     const { stockMap, thresholdMap, reservedMap, branchScoped, failed: branchStockFailed, error: branchStockError } =
       await loadBranchInventoryStockMap(
@@ -268,11 +275,21 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const cappedProducts = baseProducts.slice(0, IN_MEMORY_STOCK_FILTER_CAP)
     const branchAwareProducts = strictBranchStock && branchScope.branchId
       ? cappedProducts.map((product) => {
+          const rawVariants = Array.isArray(product.variants) ? product.variants : []
+          const hasVariants = Boolean(product.has_variants || rawVariants.length > 0)
+          const variantStock = hasVariants && rawVariants.length > 0
+            ? rawVariants.reduce((sum: number, v: any) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
+            : null
+
           const branchStock = Number(stockMap.get(product.id) || 0)
+          const effectiveStock = hasVariants && variantStock !== null && (branchStock === 0 || !stockMap.has(product.id))
+            ? variantStock
+            : branchStock
+
           return {
             ...product,
-            stock_quantity: branchStock,
-            branch_stock_quantity: branchStock,
+            stock_quantity: effectiveStock,
+            branch_stock_quantity: effectiveStock,
             reserved_quantity: Number(reservedMap.get(product.id) || 0),
           }
         })

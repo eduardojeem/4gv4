@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { canViewProductCost } from '@/lib/auth/role-utils'
+import { deriveVariantAttributeConfig, normalizeVariantAttributeValues } from '@/lib/products/variant-attributes'
 
 type ProductSummaryRow = {
   sale_price: number | null
@@ -45,34 +46,6 @@ function toSafeNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(number) ? number : fallback
 }
 
-function normalizeAttributeValues(value: unknown): Record<string, string> {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return Object.fromEntries(
-      Object.entries(value)
-        .map(([key, item]) => [key.trim(), String(item).trim()] as const)
-        .filter(([key, item]) => key && item),
-    )
-  }
-
-  if (!Array.isArray(value)) return {}
-
-  return Object.fromEntries(value
-    .filter((entry) => entry && typeof entry === 'object')
-    .map((entry) => {
-      const item = entry as Record<string, unknown>
-      return {
-        attribute_id: String(item.attribute_id ?? ''),
-        attribute_name: String(item.attribute_name ?? ''),
-        option_id: String(item.option_id ?? ''),
-        value: String(item.value ?? ''),
-        display_value: item.display_value ? String(item.display_value) : undefined,
-        color_hex: item.color_hex ? String(item.color_hex) : undefined,
-      }
-    })
-    .filter((entry) => entry.attribute_name && entry.value)
-    .map((entry) => [entry.attribute_name, entry.value]))
-}
-
 function normalizeProductSummary(value: unknown): ProductSummaryRow | null {
   if (Array.isArray(value)) {
     const [first] = value
@@ -110,7 +83,7 @@ function mapVariantRow(row: ProductVariantRow, includeCost: boolean) {
     sku: row.sku ?? '',
     barcode: row.barcode ?? undefined,
     name: row.variant_name ?? row.sku ?? `Variante ${row.id.slice(0, 8)}`,
-    attributes: normalizeAttributeValues(row.attributes),
+    attributes: normalizeVariantAttributeValues(row.attributes),
     price,
     wholesale_price: wholesalePrice,
     ...(includeCost ? { cost_price: costPrice } : {}),
@@ -233,7 +206,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
 
     const { data: product, error: productError } = await supabase
       .from('products')
-      .select('id, sale_price')
+      .select('id, sale_price, variant_attribute_config')
       .eq('id', productId)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -290,6 +263,44 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         error: insertError.message,
       })
       throw insertError
+    }
+
+    const { data: siblingVariants, error: siblingVariantsError } = await supabase
+      .from('product_variants')
+      .select('attributes')
+      .eq('organization_id', organization.id)
+      .eq('product_id', productId)
+
+    const configuredAttributes = Array.isArray(product.variant_attribute_config)
+      ? product.variant_attribute_config
+      : []
+    const derivedAttributes = deriveVariantAttributeConfig(siblingVariants ?? [])
+    const { error: parentUpdateError } = siblingVariantsError
+      ? { error: siblingVariantsError }
+      : await supabase
+          .from('products')
+          .update({
+            has_variants: true,
+            variant_attribute_config: configuredAttributes.length > 0
+              ? configuredAttributes
+              : derivedAttributes,
+          })
+          .eq('id', productId)
+          .eq('organization_id', organization.id)
+
+    if (parentUpdateError) {
+      // Evitar dejar otra combinación huérfana si no se pudo sincronizar el padre.
+      await supabase
+        .from('product_variants')
+        .delete()
+        .eq('id', insertedVariant.id)
+        .eq('organization_id', organization.id)
+      logger.error('Failed to synchronize variant product parent', {
+        productId,
+        variantId: insertedVariant.id,
+        error: parentUpdateError.message,
+      })
+      throw parentUpdateError
     }
 
     return NextResponse.json(

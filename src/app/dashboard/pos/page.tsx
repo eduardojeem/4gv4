@@ -1482,7 +1482,7 @@ function POSPageContent() {
                   <div className="absolute top-full left-0 right-0 bg-popover border border-border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
                     {searchSuggestions.map((suggestion, index) => (
                       <div
-                        key={suggestion}
+                        key={`${suggestion}-${index}`}
                         className={`px-4 py-2 cursor-pointer hover:bg-muted ${index === selectedSuggestionIndex ? 'bg-accent text-accent-foreground' : ''
                           }`}
                         onClick={() => selectSuggestion(suggestion)}
@@ -2981,6 +2981,7 @@ function POSPageContent() {
             setSelectedProductForVariants(null)
           }}
           onAddToCart={addVariantToCart}
+          formatCurrency={formatCurrency}
         />
       )}
 
@@ -3033,6 +3034,14 @@ function POSPageContent() {
         onAddToCart={(product, qty) => {
           addToCartHook(product, qty)
         }}
+        getProductWithVariants={getProductWithVariants}
+        onAddVariantToCart={addVariantToCart}
+        onOpenVariantSelector={(prodWithVariants) => {
+          setIsDetailDialogOpen(false)
+          setSelectedProductForVariants(prodWithVariants)
+          setVariantSelectorOpen(true)
+        }}
+        formatCurrency={formatCurrency}
         creditContext={{
           hasCustomer: Boolean(activeCustomer),
           hasCreditLine: Number(activeCustomer?.credit_limit || 0) > 0,

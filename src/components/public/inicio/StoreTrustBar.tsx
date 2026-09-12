@@ -64,6 +64,25 @@ const DEFAULT_BENEFITS = [
   },
 ]
 
+const BENEFIT_COLOR_THEMES = [
+  {
+    bg: 'bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/20 group-hover:bg-blue-600 group-hover:text-white group-hover:shadow-blue-500/25',
+    hoverBorder: 'hover:border-blue-500/50 hover:shadow-blue-500/10',
+  },
+  {
+    bg: 'bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 group-hover:bg-emerald-600 group-hover:text-white group-hover:shadow-emerald-500/25',
+    hoverBorder: 'hover:border-emerald-500/50 hover:shadow-emerald-500/10',
+  },
+  {
+    bg: 'bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/20 group-hover:bg-amber-600 group-hover:text-white group-hover:shadow-amber-500/25',
+    hoverBorder: 'hover:border-amber-500/50 hover:shadow-amber-500/10',
+  },
+  {
+    bg: 'bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/20 group-hover:bg-purple-600 group-hover:text-white group-hover:shadow-purple-500/25',
+    hoverBorder: 'hover:border-purple-500/50 hover:shadow-purple-500/10',
+  },
+]
+
 export function StoreTrustBar({
   settings,
   className
@@ -92,18 +111,27 @@ export function StoreTrustBar({
       : 'grid-cols-2 md:grid-cols-4'
 
   return (
-    <div className={cn('border-b border-border/80 bg-card/60 backdrop-blur-xs py-5 sm:py-6', className)}>
+    <div className={cn('border-b border-primary/15 bg-gradient-to-r from-primary/[0.04] via-card/85 to-primary/[0.05] backdrop-blur-xs py-5 sm:py-6', className)}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className={cn('grid gap-3.5 sm:gap-4 md:gap-5', gridColsClass)}>
           {activeItems.map((b, idx) => {
             const Icon = (b.icon && ICON_MAP[b.icon.toLowerCase()]) || ShieldCheck
+            const theme = BENEFIT_COLOR_THEMES[idx % BENEFIT_COLOR_THEMES.length]
 
             return (
               <div
                 key={('id' in b && b.id) || idx}
-                className="group flex items-center gap-3.5 rounded-2xl border border-border/60 bg-background/80 p-3.5 transition-all duration-200 hover:border-primary/40 hover:shadow-xs hover:bg-background"
+                className={cn(
+                  'group flex items-center gap-3.5 rounded-2xl border border-border/80 bg-card/90 p-3.5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:bg-card',
+                  theme.hoverBorder
+                )}
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-105">
+                <div
+                  className={cn(
+                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all duration-300 group-hover:scale-105 group-hover:shadow-xs',
+                    theme.bg
+                  )}
+                >
                   <Icon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -111,7 +139,7 @@ export function StoreTrustBar({
                     {b.title}
                   </h4>
                   {b.description && (
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-[11px] text-muted-foreground truncate mt-0.5">
                       {b.description}
                     </p>
                   )}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -168,6 +169,17 @@ async function updateHandler(
       resource: 'website_settings',
       new_values: { organization_id: orgId, keys: validatedEntries.map(({ key }) => key) },
     })
+
+    const hasMarketplaceKeys = validatedEntries.some(({ key }) => key === 'company_info' || key === 'hero_content')
+    if (hasMarketplaceKeys) {
+      try {
+        revalidateTag('marketplace:organizations', 'max')
+        revalidatePath('/marketplace/empresas')
+        revalidatePath('/marketplace', 'layout')
+      } catch (cacheError) {
+        console.warn('Could not revalidate marketplace cache on settings batch update:', cacheError)
+      }
+    }
 
     return NextResponse.json({ success: true, data })
   } catch (error) {

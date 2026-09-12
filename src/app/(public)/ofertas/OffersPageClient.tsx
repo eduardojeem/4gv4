@@ -6,20 +6,34 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   ArrowRight,
+  ArrowUpDown,
+  Check,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  Flame,
   MessageCircle,
   Package,
+  Plus,
+  Minus,
   Search,
   ShoppingCart,
+  Sparkles,
   Tag,
+  TrendingDown,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import {
   OFFER_ACCENTS as CAROUSEL_ACCENTS,
@@ -33,6 +47,7 @@ import { formatCurrency } from '@/lib/currency'
 import { usePublicTenantPrefix } from '@/lib/public/tenant-client'
 import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
+import { resolveProductImageUrl } from '@/lib/images'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { usesPortraitMedia } from '@/lib/website/storefront-style'
 import { getWhatsAppLink } from '@/lib/whatsapp'
@@ -40,6 +55,24 @@ import type { PublicProduct } from '@/types/public'
 import type { OffersSectionSettings, PublicCommerceMode, WebsiteSettings } from '@/types/website-settings'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+interface OfferProductVariant {
+  id: string
+  product_id: string
+  variant_name: string
+  attributes: Record<string, string>
+  sku: string | null
+  sale_price: number
+  stock_quantity: number
+  is_active: boolean
+}
+
+interface OfferVariantAttributeConfig {
+  key: string
+  label: string
+  control: 'text' | 'number' | 'select' | 'color'
+  options: string[]
+}
+
 interface OfferProduct {
   id: string
   name: string
@@ -55,6 +88,10 @@ interface OfferProduct {
   images: string[] | null
   category?: { id: string; name: string }
   created_at: string | null
+  // Variantes
+  has_variants?: boolean
+  variant_attribute_config?: OfferVariantAttributeConfig[]
+  variants?: OfferProductVariant[]
 }
 
 interface OffersPageClientProps {
@@ -203,6 +240,25 @@ async function fetchOffers(url: string): Promise<OfferProduct[]> {
         ? { id: String((p.category as Record<string, unknown>).id), name: String((p.category as Record<string, unknown>).name) }
         : undefined,
       created_at: p.created_at ? String(p.created_at) : null,
+      // Variantes
+      has_variants: Boolean(p.has_variants),
+      variant_attribute_config: Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : undefined,
+      variants: Array.isArray(p.variants)
+        ? (p.variants as Array<Record<string, unknown>>)
+            .filter((v) => Boolean(v.is_active))
+            .map((v) => ({
+              id: String(v.id),
+              product_id: String(v.product_id),
+              variant_name: String(v.variant_name ?? ''),
+              attributes: (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes))
+                ? (v.attributes as Record<string, string>)
+                : {},
+              sku: v.sku ? String(v.sku) : null,
+              sale_price: Number(v.sale_price ?? 0),
+              stock_quantity: Number(v.stock_quantity ?? 0),
+              is_active: Boolean(v.is_active),
+            }))
+        : undefined,
     }))
 }
 
@@ -214,15 +270,624 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'inline-flex h-8 shrink-0 items-center rounded-full border px-3.5 text-sm transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+        'inline-flex h-8 shrink-0 items-center rounded-full border px-3.5 text-sm font-medium transition-all duration-200',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         active
-          ? 'border-foreground bg-foreground font-medium text-background'
-          : 'border-border text-foreground/80 hover:border-foreground/40 hover:text-foreground'
+          ? 'border-amber-500 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm shadow-amber-500/25'
+          : 'border-border/70 bg-background text-foreground/75 hover:border-amber-500/40 hover:bg-amber-500/5 hover:text-foreground'
       )}
     >
       {children}
     </button>
+  )
+}
+
+// ─── Offer Detail Modal ───────────────────────────────────────────────────────
+function OfferDetailModal({
+  offer,
+  isOpen,
+  onClose,
+  tenantPrefix,
+  accent,
+  commerceMode,
+  contactPhone,
+}: {
+  offer: OfferProduct | null
+  isOpen: boolean
+  onClose: () => void
+  tenantPrefix: string
+  accent: (typeof OFFER_ACCENTS)[OffersSectionSettings['accentColor']]
+  commerceMode: PublicCommerceMode
+  contactPhone: string
+}) {
+  const { addProduct } = usePublicCart()
+  const [activeImageIdx, setActiveImageIdx] = useState(0)
+  const [quantity, setQuantity] = useState(1)
+  const [addedToCart, setAddedToCart] = useState(false)
+  // Variant selection: map attribute key → chosen option value
+  const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({})
+
+  // Reset state when offer changes
+  const hasVariants = Boolean(offer?.has_variants && offer?.variants && offer.variants.length > 0)
+
+  // Find matching variant from selected attributes
+  const activeVariants = offer?.variants?.filter((v) => v.is_active && v.stock_quantity > 0) ?? []
+  const allVariants = offer?.variants?.filter((v) => v.is_active) ?? []
+
+
+  const attributeKeys: string[] = useMemo(() => {
+    if (!offer?.variant_attribute_config || offer.variant_attribute_config.length === 0) {
+      // Fallback: derive from variants themselves
+      const keys = new Set<string>()
+      for (const v of allVariants) {
+        for (const k of Object.keys(v.attributes)) keys.add(k)
+      }
+      return Array.from(keys)
+    }
+    return offer.variant_attribute_config.map((c) => c.key)
+  }, [offer?.variant_attribute_config, allVariants])
+
+  const attributeLabels: Record<string, string> = useMemo(() => {
+    const map: Record<string, string> = {}
+    if (offer?.variant_attribute_config) {
+      for (const c of offer.variant_attribute_config) map[c.key] = c.label
+    }
+    // Fallback: capitalize key
+    for (const k of attributeKeys) {
+      if (!map[k]) map[k] = k.charAt(0).toUpperCase() + k.slice(1)
+    }
+    return map
+  }, [offer?.variant_attribute_config, attributeKeys])
+
+  const attributeControls: Record<string, string> = useMemo(() => {
+    const map: Record<string, string> = {}
+    if (offer?.variant_attribute_config) {
+      for (const c of offer.variant_attribute_config) map[c.key] = c.control
+    }
+    return map
+  }, [offer?.variant_attribute_config])
+
+  // Options per attribute key (deduplicated, preserving order from config or from variants)
+  const attributeOptions: Record<string, string[]> = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    if (offer?.variant_attribute_config) {
+      for (const c of offer.variant_attribute_config) {
+        map[c.key] = c.options
+      }
+    }
+    // Fill gaps from variant data
+    for (const k of attributeKeys) {
+      if (!map[k]) {
+        const seen = new Set<string>()
+        const opts: string[] = []
+        for (const v of allVariants) {
+          const val = v.attributes[k]
+          if (val && !seen.has(val)) { seen.add(val); opts.push(val) }
+        }
+        map[k] = opts
+      }
+    }
+    return map
+  }, [offer?.variant_attribute_config, attributeKeys, allVariants])
+
+  // Which options are available (have at least one in-stock variant matching the other already-selected attrs)
+  const availableOptions = (key: string): Set<string> => {
+    const otherSelected = Object.fromEntries(Object.entries(selectedAttrs).filter(([k]) => k !== key))
+    const available = new Set<string>()
+    for (const v of activeVariants) {
+      const matchesOther = Object.entries(otherSelected).every(([k, val]) => v.attributes[k] === val)
+      if (matchesOther && v.attributes[key]) available.add(v.attributes[key])
+    }
+    return available
+  }
+
+  // Matched variant (exact match on all keys)
+  const matchedVariant: OfferProductVariant | null = useMemo(() => {
+    if (!hasVariants || attributeKeys.length === 0) return null
+    const allSelected = attributeKeys.every((k) => Boolean(selectedAttrs[k]))
+    if (!allSelected) return null
+    return allVariants.find((v) =>
+      attributeKeys.every((k) => v.attributes[k] === selectedAttrs[k])
+    ) ?? null
+  }, [hasVariants, attributeKeys, selectedAttrs, allVariants])
+
+  const selectionComplete = !hasVariants || attributeKeys.every((k) => Boolean(selectedAttrs[k]))
+
+  // Effective price/stock (from variant if matched, else from offer base)
+  const effectivePrice = matchedVariant ? matchedVariant.sale_price : offer?.offer_price ?? 0
+  const effectiveStock = matchedVariant ? matchedVariant.stock_quantity : (offer?.stock_quantity ?? 0)
+  const effectiveInStock = matchedVariant ? matchedVariant.stock_quantity > 0 : (offer?.in_stock ?? false)
+
+  if (!offer) return null
+
+  const discount = calcDiscount(offer.sale_price, offer.offer_price)
+  const savings = Math.max(0, offer.sale_price - effectivePrice)
+  const productHref = `${tenantPrefix}/productos/${offer.id}`
+
+  // Images deduplication
+  const galleryImages: string[] = (() => {
+    const list: string[] = []
+    const seen = new Set<string>()
+    const candidates = [
+      ...(offer.image ? [offer.image] : []),
+      ...(Array.isArray(offer.images) ? offer.images : []),
+    ]
+    for (const img of candidates) {
+      if (img && !seen.has(img)) {
+        seen.add(img)
+        list.push(img)
+      }
+    }
+    return list
+  })()
+
+  const currentImage = galleryImages[activeImageIdx] || offer.image || null
+  const resolvedActive = resolveProductImageUrl(currentImage)
+
+  const variantLabel = matchedVariant ? matchedVariant.variant_name : ''
+  const whatsappMsg = variantLabel
+    ? `Hola, quiero consultar por la oferta de ${offer.name} — ${variantLabel} (${formatPrice(effectivePrice)}).`
+    : `Hola, quiero consultar por la oferta de ${offer.name} (${formatPrice(effectivePrice)}).`
+
+  const whatsappHref =
+    contactPhone
+      ? getWhatsAppLink({ phone: contactPhone, message: whatsappMsg })
+      : null
+
+  const handleSelectAttr = (key: string, value: string) => {
+    setSelectedAttrs((prev) => {
+      const next = { ...prev, [key]: value }
+      // If the current selection of subsequent attrs is no longer available, clear them
+      const keys = attributeKeys
+      const idx = keys.indexOf(key)
+      const cleared = { ...next }
+      for (let i = idx + 1; i < keys.length; i++) {
+        const k = keys[i]
+        const avail = new Set<string>()
+        for (const v of activeVariants) {
+          const matchesBefore = keys.slice(0, i).every((kk) => v.attributes[kk] === cleared[kk])
+          if (matchesBefore && v.attributes[k]) avail.add(v.attributes[k])
+        }
+        if (cleared[k] && !avail.has(cleared[k])) delete cleared[k]
+      }
+      return cleared
+    })
+    setQuantity(1)
+    setAddedToCart(false)
+  }
+
+  const handleAddToCart = () => {
+    if (!effectiveInStock || !selectionComplete) return
+    const product: PublicProduct = {
+      ...offer,
+      sku: matchedVariant?.sku ?? '',
+      wholesale_price: null,
+      is_active: true,
+      unit_measure: 'unidad',
+      barcode: null,
+      sale_price: effectivePrice,
+      offer_price: effectivePrice,
+    }
+    const result = addProduct(product, effectivePrice, quantity)
+    if (result.limited) {
+      toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
+      return
+    }
+    toast.success('¡Agregado al carrito!')
+    setAddedToCart(true)
+    setTimeout(() => {
+      setAddedToCart(false)
+      onClose()
+    }, 1200)
+  }
+
+  return (
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose()
+          setActiveImageIdx(0)
+          setQuantity(1)
+          setAddedToCart(false)
+          setSelectedAttrs({})
+        }
+      }}
+    >
+      <DialogContent
+        className="flex max-h-[92dvh] w-[calc(100%-1rem)] sm:max-w-2xl flex-col gap-0 overflow-hidden rounded-2xl p-0 shadow-2xl border-border/80"
+        showCloseButton
+      >
+        <DialogTitle className="sr-only">{offer.name}</DialogTitle>
+        <DialogDescription className="sr-only">
+          Detalles de la oferta de {offer.name}, precio especial, ahorro y opciones de compra.
+        </DialogDescription>
+
+        <div className="min-h-0 overflow-y-auto overscroll-contain">
+          {/* ── Galería de imágenes / portada ── */}
+          <div className="relative bg-muted/30 border-b border-border/60">
+            <div className="relative h-52 sm:h-64 overflow-hidden">
+              {resolvedActive && resolvedActive !== '/placeholder-product.svg' ? (
+                <Image
+                  src={resolvedActive}
+                  alt={offer.name}
+                  fill
+                  unoptimized
+                  sizes="(max-width: 640px) 100vw, 640px"
+                  className="object-contain p-4 transition-transform duration-300"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <Package className="h-16 w-16 text-muted-foreground/30" />
+                </div>
+              )}
+
+              {/* Badges superiores sobre imagen */}
+              <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-1.5 pointer-events-none">
+                {discount > 0 && (
+                  <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 via-red-500 to-amber-500 px-3 py-1 text-xs font-black tracking-wide text-white shadow-md">
+                    <Flame className="h-3.5 w-3.5 fill-white animate-pulse" />
+                    -{discount}% OFF
+                  </span>
+                )}
+                {offer.featured && (
+                  <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-1 text-xs font-bold text-white shadow-md">
+                    <Sparkles className="h-3 w-3 fill-white" />
+                    Destacado
+                  </span>
+                )}
+              </div>
+
+              {/* Overlay sin stock */}
+              {!effectiveInStock && selectionComplete && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-[2px] z-20">
+                  <span className="rounded-full bg-destructive/90 px-4 py-1.5 text-xs font-extrabold uppercase tracking-widest text-destructive-foreground shadow-md">
+                    Sin stock
+                  </span>
+                </div>
+              )}
+
+              {/* Controles de galería */}
+              {galleryImages.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Imagen anterior"
+                    onClick={() => setActiveImageIdx((i) => (i - 1 + galleryImages.length) % galleryImages.length)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-background/85 shadow-md backdrop-blur-sm transition hover:bg-background"
+                  >
+                    <ChevronLeft className="h-4 w-4 text-foreground" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Imagen siguiente"
+                    onClick={() => setActiveImageIdx((i) => (i + 1) % galleryImages.length)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-background/85 shadow-md backdrop-blur-sm transition hover:bg-background"
+                  >
+                    <ChevronRight className="h-4 w-4 text-foreground" />
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Miniaturas de galería */}
+            {galleryImages.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto px-4 py-2 border-t border-border/40 bg-background/50">
+                {galleryImages.map((img, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveImageIdx(idx)}
+                    aria-label={`Ver imagen ${idx + 1}`}
+                    className={cn(
+                      'relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border-2 transition-all',
+                      idx === activeImageIdx
+                        ? 'border-rose-500 ring-2 ring-rose-500/30'
+                        : 'border-border/70 hover:border-foreground/30 opacity-70 hover:opacity-100'
+                    )}
+                  >
+                    <Image
+                      src={resolveProductImageUrl(img)}
+                      alt=""
+                      fill
+                      unoptimized
+                      sizes="48px"
+                      className="object-contain p-1"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Información de la oferta ── */}
+          <div className="flex flex-col gap-4 p-4 sm:p-6">
+            <div>
+              {offer.brand && (
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  {offer.brand}
+                </p>
+              )}
+              <h2 className="mt-1 text-lg sm:text-xl font-bold leading-snug text-foreground">
+                {offer.name}
+              </h2>
+
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                    effectiveInStock
+                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/50'
+                      : 'bg-destructive/10 text-destructive ring-1 ring-destructive/20'
+                  )}
+                >
+                  <span className={cn('h-1.5 w-1.5 rounded-full', effectiveInStock ? 'bg-emerald-500 animate-pulse' : 'bg-destructive')} />
+                  {!selectionComplete ? 'Seleccioná una variante' : effectiveInStock ? 'Disponible para entrega inmediata' : 'Agotado'}
+                </span>
+
+                {offer.category && (
+                  <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-border/70">
+                    {offer.category.name}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* ── Bloque de precio y ahorro ── */}
+            <div className="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-amber-500/[0.07] via-rose-500/[0.04] to-transparent p-4 dark:border-amber-500/20">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-2xl sm:text-3xl font-black tabular-nums tracking-tight text-foreground">
+                  {formatPrice(effectivePrice)}
+                </span>
+                {offer.sale_price > effectivePrice && (
+                  <del className="text-sm sm:text-base font-semibold tabular-nums text-muted-foreground">
+                    {formatPrice(offer.sale_price)}
+                  </del>
+                )}
+                {discount > 0 && (
+                  <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-0.5 text-xs font-bold text-white shadow-xs">
+                    <TrendingDown className="h-3 w-3" />
+                    -{discount}%
+                  </span>
+                )}
+              </div>
+
+              {savings > 0 && effectiveInStock && selectionComplete && (
+                <div className="mt-2.5 flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  <Tag className="h-3.5 w-3.5" />
+                  <span>¡Ahorrás {formatPrice(savings)} en esta compra!</span>
+                </div>
+              )}
+            </div>
+
+            {/* ── Variantes ── */}
+            {hasVariants && attributeKeys.length > 0 && (
+              <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/60 p-3.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Variantes disponibles
+                </h4>
+                {attributeKeys.map((key) => {
+                  const label = attributeLabels[key]
+                  const control = attributeControls[key] ?? 'text'
+                  const options = attributeOptions[key] ?? []
+                  const available = availableOptions(key)
+                  const selectedValue = selectedAttrs[key]
+
+                  return (
+                    <div key={key}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="text-xs font-semibold text-foreground/80">
+                          {label}
+                        </span>
+                        {selectedValue && (
+                          <span className="text-xs text-muted-foreground">
+                            · <span className="font-medium text-foreground">{selectedValue}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {control === 'color' ? (
+                        // Color swatches
+                        <div className="flex flex-wrap gap-2">
+                          {options.map((opt) => {
+                            const isAvail = available.has(opt)
+                            const isSelected = selectedValue === opt
+                            // Try to interpret value as hex color
+                            const isHex = /^#[0-9A-Fa-f]{3,8}$/.test(opt)
+                            return (
+                              <button
+                                key={opt}
+                                type="button"
+                                title={opt}
+                                aria-label={`${label}: ${opt}${!isAvail ? ' (sin stock)' : ''}`}
+                                aria-pressed={isSelected}
+                                disabled={!isAvail}
+                                onClick={() => handleSelectAttr(key, opt)}
+                                className={cn(
+                                  'relative h-9 w-9 rounded-full border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                                  isSelected
+                                    ? 'border-foreground ring-2 ring-foreground/20 scale-110'
+                                    : 'border-border/60 hover:border-foreground/40 hover:scale-105',
+                                  !isAvail && 'opacity-40 cursor-not-allowed line-through'
+                                )}
+                                style={isHex ? { backgroundColor: opt } : {}}
+                              >
+                                {!isHex && (
+                                  <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-foreground">
+                                    {opt.slice(0, 2)}
+                                  </span>
+                                )}
+                                {isSelected && (
+                                  <span className="absolute inset-0 flex items-center justify-center">
+                                    <Check className={cn('h-3.5 w-3.5', isHex ? 'text-white drop-shadow' : 'text-foreground')} />
+                                  </span>
+                                )}
+                                {!isAvail && (
+                                  <span className="absolute inset-0 flex items-center justify-center">
+                                    <span className="block h-px w-full rotate-45 bg-muted-foreground/60" />
+                                  </span>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        // Pill buttons for size / text / number
+                        <div className="flex flex-wrap gap-2">
+                          {options.map((opt) => {
+                            const isAvail = available.has(opt)
+                            const isSelected = selectedValue === opt
+                            return (
+                              <button
+                                key={opt}
+                                type="button"
+                                aria-label={`${label}: ${opt}${!isAvail ? ' (sin stock)' : ''}`}
+                                aria-pressed={isSelected}
+                                disabled={!isAvail}
+                                onClick={() => handleSelectAttr(key, opt)}
+                                className={cn(
+                                  'relative inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-xl border px-3 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                                  isSelected
+                                    ? 'border-amber-500 bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-sm shadow-amber-500/30'
+                                    : isAvail
+                                      ? 'border-border/70 bg-background text-foreground hover:border-amber-500/50 hover:bg-amber-500/5'
+                                      : 'border-border/30 bg-muted/30 text-muted-foreground cursor-not-allowed'
+                                )}
+                              >
+                                {!isAvail && (
+                                  <span className="pointer-events-none absolute inset-0 flex items-center">
+                                    <span className="block h-px w-full rotate-12 bg-muted-foreground/30" />
+                                  </span>
+                                )}
+                                {opt}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+
+                {/* Variant summary */}
+                {matchedVariant && (
+                  <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs">
+                    <span className="text-muted-foreground">Variante seleccionada:</span>
+                    <span className="font-semibold text-foreground">{matchedVariant.variant_name}</span>
+                  </div>
+                )}
+
+                {/* Warning if selection is incomplete */}
+                {!selectionComplete && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                    ↑ Seleccioná todas las opciones para continuar
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Descripción */}
+            {offer.description?.trim() && (
+              <div className="rounded-xl border border-border/70 bg-card/60 p-3.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Descripción y detalles
+                </h4>
+                <p className="mt-1.5 whitespace-pre-line text-xs sm:text-sm leading-relaxed text-muted-foreground">
+                  {offer.description.trim()}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Footer con acciones de compra ── */}
+        <div className="shrink-0 flex flex-col gap-2.5 border-t border-border/70 bg-background p-4">
+          {commerceMode === 'cart' && effectiveInStock && selectionComplete && (
+            <div className="flex items-center justify-between gap-3 text-xs sm:text-sm font-medium">
+              <span className="text-muted-foreground">Cantidad:</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Reducir cantidad"
+                  disabled={quantity <= 1}
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-40"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <span className="w-8 text-center font-bold tabular-nums text-foreground">
+                  {quantity}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Aumentar cantidad"
+                  disabled={effectiveStock > 0 && quantity >= effectiveStock}
+                  onClick={() => setQuantity((q) => q + 1)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-40"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 pt-1">
+            {commerceMode === 'cart' ? (
+              <Button
+                type="button"
+                onClick={handleAddToCart}
+                disabled={!effectiveInStock || !selectionComplete}
+                aria-label={`Agregar al carrito · ${formatPrice(effectivePrice * quantity)}`}
+                className="h-11 flex-1 gap-2 rounded-xl font-bold bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 text-white shadow-md shadow-rose-600/20 hover:from-rose-500 hover:to-rose-600 disabled:opacity-50"
+              >
+                {addedToCart ? (
+                  <>
+                    <Check className="h-4 w-4 text-white" />
+                    <span>¡Agregado al carrito!</span>
+                  </>
+                ) : !selectionComplete ? (
+                  <>
+                    <ShoppingCart className="h-4 w-4" />
+                    <span>Seleccioná las variantes</span>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="h-4 w-4" />
+                    <span>Agregar al carrito · {formatPrice(effectivePrice * quantity)}</span>
+                  </>
+                )}
+              </Button>
+            ) : whatsappHref ? (
+              <Button
+                asChild
+                className="h-11 flex-1 gap-2 rounded-xl font-bold bg-emerald-600 text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500"
+              >
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={onClose}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Consultar por WhatsApp
+                </a>
+              </Button>
+            ) : null}
+
+            <Button
+              asChild
+              variant="outline"
+              className="h-11 gap-1.5 rounded-xl border-border/80 hover:bg-muted font-semibold text-xs sm:text-sm"
+            >
+              <Link href={productHref} onClick={onClose}>
+                <span>Ver página completa</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -235,6 +900,7 @@ function OfferCard({
   commerceMode,
   contactPhone,
   portrait,
+  onOpenDetail,
 }: {
   offer: OfferProduct
   tenantPrefix: string
@@ -243,14 +909,24 @@ function OfferCard({
   commerceMode: PublicCommerceMode
   contactPhone: string
   portrait: boolean
+  onOpenDetail?: (offer: OfferProduct) => void
 }) {
   const { addProduct } = usePublicCart()
   const [addedToCart, setAddedToCart] = useState(false)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
   const discount = calcDiscount(offer.sale_price, offer.offer_price)
   const savings = Math.max(0, offer.sale_price - offer.offer_price)
   const href = `${tenantPrefix}/productos/${offer.id}`
   // En Moda y Deportivo la foto va vertical y a sangre; sin foto, el icono entero.
   const coverImage = portrait && Boolean(offer.image)
+
+  const openDetail = () => {
+    if (onOpenDetail) {
+      onOpenDetail(offer)
+    } else {
+      setDetailModalOpen(true)
+    }
+  }
 
   const whatsappHref =
     commerceMode === 'whatsapp' && contactPhone
@@ -260,7 +936,8 @@ function OfferCard({
         })
       : null
 
-  const handleCart = () => {
+  const handleCart = (e: React.MouseEvent) => {
+    e.stopPropagation()
     if (!offer.in_stock) return
     const product: PublicProduct = {
       ...offer,
@@ -281,110 +958,180 @@ function OfferCard({
   }
 
   return (
-    <article className="group flex flex-col">
-      {/* La foto repite el enlace del nombre: fuera del orden de tabulación. */}
-      <Link
-        href={href}
-        tabIndex={-1}
-        aria-hidden="true"
+    <>
+      <article
         className={cn(
-          'relative block overflow-hidden rounded-xl bg-muted/50',
-          coverImage ? 'aspect-[3/4]' : 'aspect-square'
+          'group relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-300',
+          'bg-card p-2.5 sm:p-3',
+          'border-amber-500/25 dark:border-amber-400/20 shadow-xs',
+          'hover:-translate-y-1 hover:border-amber-500/55 hover:shadow-lg hover:shadow-amber-500/10 dark:hover:border-amber-400/45 dark:hover:shadow-amber-500/5',
+          !offer.in_stock && 'opacity-60 grayscale-[25%]'
         )}
       >
-        {offer.image ? (
-          <Image
-            src={offer.image}
-            alt=""
-            fill
-            unoptimized
-            priority={priority}
-            sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+        {/* Imagen del producto — clic abre el modal de detalle */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={openDetail}
+            aria-label={`Ver detalle de ${offer.name}`}
             className={cn(
-              'motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover:scale-[1.03]',
-              coverImage ? 'object-cover' : 'object-contain p-4',
-              !offer.in_stock && 'opacity-60 grayscale'
+              'relative block w-full overflow-hidden rounded-xl bg-muted/40 cursor-pointer',
+              coverImage ? 'aspect-[3/4]' : 'aspect-square'
             )}
-          />
-        ) : (
-          <span className="flex h-full w-full items-center justify-center">
-            <Package className="h-10 w-10 text-muted-foreground/40" />
-          </span>
-        )}
-
-        {discount > 0 && (
-          <span className={cn('absolute left-2.5 top-2.5 rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums', accent.badge)}>
-            -{discount}%
-          </span>
-        )}
-      </Link>
-
-      <div className="mt-3 flex flex-1 flex-col">
-        {offer.brand && <p className="truncate text-xs text-muted-foreground">{offer.brand}</p>}
-
-        <h3 className="mt-0.5 line-clamp-2 text-sm font-medium leading-snug text-foreground">
-          <Link
-            href={href}
-            className="rounded-sm hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {offer.name}
-          </Link>
-        </h3>
+            {offer.image ? (
+              <Image
+                src={offer.image}
+                alt={offer.name}
+                fill
+                unoptimized
+                priority={priority}
+                sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                className={cn(
+                  'motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover:scale-[1.04]',
+                  coverImage ? 'object-cover' : 'object-contain p-3',
+                  !offer.in_stock && 'opacity-60 grayscale'
+                )}
+              />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center">
+                <Package className="h-10 w-10 text-muted-foreground/40" />
+              </span>
+            )}
 
-        <p className="mt-2 flex flex-wrap items-baseline gap-x-2">
-          <span className="text-base font-semibold tabular-nums text-foreground sm:text-lg">
-            {formatPrice(offer.offer_price)}
-          </span>
-          {offer.sale_price > offer.offer_price && (
-            <del className="text-xs tabular-nums text-muted-foreground">{formatPrice(offer.sale_price)}</del>
-          )}
-        </p>
-
-        <p className={cn('mt-0.5 text-xs font-medium', offer.in_stock ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground')}>
-          {offer.in_stock ? `Ahorrás ${formatPrice(savings)}` : 'Sin stock'}
-          {discount > 0 && <span className="sr-only"> · {discount}% de descuento</span>}
-        </p>
-
-        <div className="mt-auto pt-3">
-          {commerceMode === 'cart' ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleCart}
-              disabled={!offer.in_stock}
-              aria-label={`Agregar ${offer.name} al carrito`}
-              className="h-9 w-full gap-2"
-            >
-              {addedToCart ? (
-                <CheckCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              ) : (
-                <ShoppingCart aria-hidden="true" className="h-4 w-4" />
+            {/* Badges superiores sobre imagen */}
+            <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1 pointer-events-none">
+              {discount > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-amber-500 px-2.5 py-0.5 text-xs font-extrabold text-white shadow-sm tabular-nums">
+                  <Flame className="h-3 w-3 fill-white animate-pulse" />
+                  -{discount}%
+                </span>
               )}
-              {addedToCart ? 'Agregado' : 'Agregar'}
-            </Button>
-          ) : whatsappHref ? (
-            <Button asChild variant="outline" size="sm" className="h-9 w-full gap-2">
-              <a
-                href={whatsappHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Consultar por ${offer.name} en WhatsApp`}
-              >
-                <MessageCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                Consultar
-              </a>
-            </Button>
-          ) : (
-            <Button asChild variant="outline" size="sm" className="h-9 w-full">
-              <Link href={href} aria-label={`Ver detalle de ${offer.name}`}>
+              {offer.featured && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                  <Sparkles className="h-2.5 w-2.5 fill-white" />
+                  Top
+                </span>
+              )}
+            </div>
+
+            {!offer.in_stock && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px] z-10">
+                <span className="rounded-full bg-destructive/90 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-destructive-foreground shadow-xs">
+                  Agotado
+                </span>
+              </div>
+            )}
+
+            {/* Hover overlay hint */}
+            <span className="absolute inset-0 flex items-end justify-center pb-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-background/90 px-3 py-1.5 text-[11px] font-semibold text-foreground shadow backdrop-blur-sm border border-border/60">
+                <Eye className="h-3 w-3" />
                 Ver detalle
+              </span>
+            </span>
+          </button>
+        </div>
+
+        {/* Información y precios */}
+        <div className="mt-2.5 flex flex-1 flex-col">
+          {offer.brand && (
+            <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {offer.brand}
+            </p>
+          )}
+
+          <h3 className="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug text-foreground">
+            <Link
+              href={href}
+              className="rounded-sm hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {offer.name}
+            </Link>
+          </h3>
+
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
+            <span className="text-base font-bold tabular-nums text-foreground sm:text-lg">
+              {formatPrice(offer.offer_price)}
+            </span>
+            {offer.sale_price > offer.offer_price && (
+              <del className="text-xs tabular-nums text-muted-foreground font-medium">
+                {formatPrice(offer.sale_price)}
+              </del>
+            )}
+          </div>
+
+          <p className={cn('mt-0.5 text-xs font-semibold', offer.in_stock ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground')}>
+            {offer.in_stock ? `Ahorrás ${formatPrice(savings)}` : 'Sin stock'}
+            {discount > 0 && <span className="sr-only"> · {discount}% de descuento</span>}
+          </p>
+
+          <div className="mt-auto pt-3 flex items-center gap-1.5">
+            {commerceMode === 'cart' ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCart}
+                disabled={!offer.in_stock}
+                aria-label={`Agregar ${offer.name} al carrito`}
+                className="h-9 flex-1 gap-2 rounded-xl border-amber-500/30 hover:border-amber-500/60 hover:bg-amber-500/5 font-semibold text-xs"
+              >
+                {addedToCart ? (
+                  <CheckCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <ShoppingCart aria-hidden="true" className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                )}
+                {addedToCart ? 'Agregado' : 'Agregar'}
+              </Button>
+            ) : whatsappHref ? (
+              <Button asChild variant="outline" size="sm" className="h-9 flex-1 gap-2 rounded-xl border-emerald-500/30 hover:border-emerald-500 hover:bg-emerald-500/5 font-semibold text-xs">
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Consultar por ${offer.name} en WhatsApp`}
+                >
+                  <MessageCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Consultar
+                </a>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openDetail}
+                className="h-9 flex-1 rounded-xl font-semibold text-xs"
+                aria-label={`Ver detalle de ${offer.name}`}
+              >
+                Ver detalle
+              </Button>
+            )}
+
+            {/* Ver detalle completo — enlace a la página del producto */}
+            <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:text-foreground" title="Ver página completa del producto">
+              <Link href={href} aria-label={`Ver página completa de ${offer.name}`}>
+                <Eye className="h-4 w-4" />
               </Link>
             </Button>
-          )}
+          </div>
         </div>
-      </div>
-    </article>
+      </article>
+
+      {/* Modal individual en caso de no usar handler compartido */}
+      {!onOpenDetail && (
+        <OfferDetailModal
+          offer={offer}
+          isOpen={detailModalOpen}
+          onClose={() => setDetailModalOpen(false)}
+          tenantPrefix={tenantPrefix}
+          accent={accent}
+          commerceMode={commerceMode}
+          contactPhone={contactPhone}
+        />
+      )}
+    </>
   )
 }
 
@@ -585,84 +1332,95 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
       <div ref={resultsRef} className="container mx-auto scroll-mt-32 px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
         {allOffers.length > 0 && (
           <>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative sm:w-80">
-                <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  aria-label="Buscar en ofertas"
-                  placeholder="Buscar por producto o marca"
-                  enterKeyHint="search"
-                  value={search}
-                  onChange={(e) => updateFilters(() => setSearch(e.target.value))}
-                  className="h-10 pl-9 pr-9"
-                />
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() => updateFilters(() => setSearch(''))}
-                    aria-label="Limpiar búsqueda"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <X aria-hidden="true" className="h-4 w-4" />
-                  </button>
-                )}
+            {/* ── Panel de filtros ── */}
+            <div className="rounded-2xl border border-amber-500/20 bg-card/80 p-3.5 shadow-sm backdrop-blur-sm sm:p-4">
+              {/* Fila superior: búsqueda + orden */}
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+                {/* Buscador */}
+                <div className="relative flex-1 sm:max-w-sm">
+                  <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-500/70" />
+                  <Input
+                    aria-label="Buscar en ofertas"
+                    placeholder="Buscar por producto o marca…"
+                    enterKeyHint="search"
+                    value={search}
+                    onChange={(e) => updateFilters(() => setSearch(e.target.value))}
+                    className="h-10 rounded-xl border-amber-500/25 pl-9 pr-9 focus-visible:border-amber-500/60 focus-visible:ring-amber-500/20"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => updateFilters(() => setSearch(''))}
+                      aria-label="Limpiar búsqueda"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <X aria-hidden="true" className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Ordenar */}
+                <div className="flex items-center gap-2 sm:ml-auto">
+                  <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="shrink-0 text-xs font-medium text-foreground/70">Ordenar</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => updateFilters(() => setSortBy(e.target.value as SortKey))}
+                      className="h-9 min-w-0 flex-1 cursor-pointer rounded-xl border border-amber-500/25 bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 sm:flex-none"
+                    >
+                      {SORT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-muted-foreground sm:ml-auto">
-                <span className="shrink-0">Ordenar por</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => updateFilters(() => setSortBy(e.target.value as SortKey))}
-                  className="h-10 min-w-0 flex-1 cursor-pointer rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-none"
-                >
-                  {SORT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
+              {/* Chips de filtro */}
+              {(quickTiers.length > 0 || categories.length > 1) && (
+                <div role="group" aria-label="Filtros" className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap">
+                  <FilterChip
+                    active={selectedTier === 'all' && !selectedCategory}
+                    onClick={() => updateFilters(() => {
+                      setSelectedTier('all')
+                      setSelectedCategory(null)
+                    })}
+                  >
+                    ✦ Todas
+                  </FilterChip>
+                  {quickTiers.map((tier) => (
+                    <FilterChip
+                      key={tier}
+                      active={selectedTier === tier}
+                      onClick={() => updateFilters(() => setSelectedTier(selectedTier === tier ? 'all' : tier))}
+                    >
+                      {TIER_LABELS[tier]}
+                    </FilterChip>
                   ))}
-                </select>
-              </label>
+                  {quickTiers.length > 0 && categories.length > 1 && (
+                    <span aria-hidden="true" className="mx-1 w-px shrink-0 self-stretch bg-border" />
+                  )}
+                  {categories.length > 1 && categories.map((category) => (
+                    <FilterChip
+                      key={category.id}
+                      active={selectedCategory === category.id}
+                      onClick={() => updateFilters(() => setSelectedCategory(selectedCategory === category.id ? null : category.id))}
+                    >
+                      {category.name}
+                    </FilterChip>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {(quickTiers.length > 0 || categories.length > 1) && (
-              <div role="group" aria-label="Filtros" className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-                <FilterChip
-                  active={selectedTier === 'all' && !selectedCategory}
-                  onClick={() => updateFilters(() => {
-                    setSelectedTier('all')
-                    setSelectedCategory(null)
-                  })}
-                >
-                  Todas
-                </FilterChip>
-                {quickTiers.map((tier) => (
-                  <FilterChip
-                    key={tier}
-                    active={selectedTier === tier}
-                    onClick={() => updateFilters(() => setSelectedTier(selectedTier === tier ? 'all' : tier))}
-                  >
-                    {TIER_LABELS[tier]}
-                  </FilterChip>
-                ))}
-                {quickTiers.length > 0 && categories.length > 1 && (
-                  <span aria-hidden="true" className="mx-1 w-px shrink-0 self-stretch bg-border" />
-                )}
-                {categories.length > 1 && categories.map((category) => (
-                  <FilterChip
-                    key={category.id}
-                    active={selectedCategory === category.id}
-                    onClick={() => updateFilters(() => setSelectedCategory(selectedCategory === category.id ? null : category.id))}
-                  >
-                    {category.name}
-                  </FilterChip>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-6 flex min-h-8 items-center justify-between gap-3">
+            {/* Barra de resultados */}
+            <div className="mt-4 flex min-h-8 items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground" aria-live="polite">{resultSummary}</p>
               {hasActiveFilters && (
-                <Button type="button" variant="ghost" size="sm" onClick={resetAllFilters} className="h-8 gap-1.5 text-muted-foreground">
+                <Button type="button" variant="ghost" size="sm" onClick={resetAllFilters} className="h-8 gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:text-amber-300">
                   <X aria-hidden="true" className="h-3.5 w-3.5" />
                   Limpiar filtros
                 </Button>

@@ -18,6 +18,10 @@ interface BrandDisplayItem {
   svgLogo: React.ReactNode
 }
 
+export function buildBrandTickerItems<T>(items: T[]): T[] {
+  return items.length === 0 ? [] : [...items, ...items]
+}
+
 export function StoreBrandTicker({
   settings,
   title,
@@ -76,7 +80,7 @@ export function StoreBrandTicker({
         ),
         href: item.href || `${tenantPrefix}/productos?q=${encodeURIComponent(item.name)}`,
       }))
-  }, [settings?.items, tenantPrefix])
+  }, [settings, tenantPrefix])
 
   // Combinar marcas configuradas activas con marcas detectadas en productos
   const displayBrands = useMemo(() => {
@@ -86,16 +90,10 @@ export function StoreBrandTicker({
     return storeBrands
   }, [configuredBrands, storeBrands])
 
-  // Duplicar array para efecto continuo fluido (Marquee infinito -50%)
+  // Una sola copia adicional alcanza para el marquee de escritorio. En móvil
+  // la segunda tanda se oculta y la fila se desplaza manualmente.
   const tickerItems = useMemo(() => {
-    if (displayBrands.length === 0) return []
-    // Para que la tira sea suficientemente ancha y no queden huecos en pantallas grandes:
-    let baseList = [...displayBrands]
-    while (baseList.length < 8) {
-      baseList = [...baseList, ...displayBrands]
-    }
-    // Duplicar exactamente para el ciclo infinito a -50%
-    return [...baseList, ...baseList]
+    return buildBrandTickerItems(displayBrands)
   }, [displayBrands])
 
   if (!isEnabled || tickerItems.length === 0) {
@@ -120,13 +118,13 @@ export function StoreBrandTicker({
         </div>
 
         {/* Contenedor del Carrusel con Desvanecimiento Lateral y Movimiento Automático */}
-        <div className="relative overflow-hidden w-full select-none">
+        <div className="relative w-full select-none overflow-x-auto pb-1 scrollbar-hide sm:overflow-hidden sm:pb-0">
           {/* Sombras de desvanecimiento lateral estilo Giulio Cesare */}
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-12 sm:w-28 bg-gradient-to-r from-background via-background/80 to-transparent z-10" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-12 sm:w-28 bg-gradient-to-l from-background via-background/80 to-transparent z-10" />
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-28 bg-gradient-to-r from-background via-background/80 to-transparent sm:block" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-28 bg-gradient-to-l from-background via-background/80 to-transparent sm:block" />
 
           {/* Fila horizontal con animación infinita continua (Marquee con pausa al pasar el cursor) */}
-          <div className="flex w-max items-center gap-4 sm:gap-6 py-3 animate-marquee-left hover:[animation-play-state:paused]">
+          <div className="flex w-max items-center gap-4 py-3 sm:gap-6 sm:animate-marquee-left sm:hover:[animation-play-state:paused] motion-reduce:animate-none">
             {tickerItems.map((brand, idx) => {
               const href = brand.href || `${tenantPrefix}/productos?q=${encodeURIComponent(brand.name)}`
               const hasCustomImage = Boolean(brand.imageUrl && !imageErrors[`${brand.id}-${idx}`])
@@ -135,12 +133,19 @@ export function StoreBrandTicker({
                 <Link
                   key={`${brand.id}-${idx}`}
                   href={href}
-                  className="shrink-0 transition-transform duration-300 focus-visible:outline-none"
+                  className={cn(
+                    'shrink-0 snap-start transition-transform duration-300 focus-visible:outline-none',
+                    idx >= displayBrands.length && 'hidden sm:block',
+                  )}
                   aria-label={`Ver colección ${brand.name}`}
+                  aria-hidden={idx >= displayBrands.length ? true : undefined}
+                  tabIndex={idx >= displayBrands.length ? -1 : undefined}
                 >
                   <div className="flex h-14 w-28 sm:h-16 sm:w-36 items-center justify-center rounded-xl border border-border/60 bg-card px-4 py-2 shadow-xs transition-all duration-300 opacity-80 grayscale hover:grayscale-0 hover:opacity-100 hover:scale-105 hover:border-primary/40 hover:shadow-md text-foreground">
                     <div className="flex items-center justify-center max-h-8 max-w-full">
                       {hasCustomImage ? (
+                        // Las marcas permiten URLs administrables y dominios no conocidos en build.
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={brand.imageUrl!}
                           alt={brand.name}

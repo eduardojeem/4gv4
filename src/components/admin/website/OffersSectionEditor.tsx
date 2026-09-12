@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Check, Eye, EyeOff, Loader2, Save, ShoppingBag, Tag } from 'lucide-react'
+import { usePathname } from 'next/navigation'
+import { ArrowRight, Check, Eye, EyeOff, Loader2, Save, ShoppingBag, Sparkles, Tag } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
@@ -47,6 +48,8 @@ interface OffersSectionEditorProps {
 }
 
 export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}) {
+  const pathname = usePathname()
+  const isInsidePromotions = Boolean(pathname?.includes('/dashboard/promotions'))
   const { settings, isLoading, error, isSaving, updateSetting, refetch } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults().offers_section
   const [draft, setDraft] = useState<OffersSectionSettings | null>(null)
@@ -94,6 +97,36 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
 
   return (
     <div className={cn('space-y-8 md:space-y-10', className ?? 'max-w-4xl pb-24 md:pb-8')}>
+      {/* Aviso destacado para ir a la personalización completa en Promociones */}
+      {!isInsidePromotions && (
+        <div className="group relative overflow-hidden rounded-2xl border-2 border-primary/25 bg-gradient-to-br from-primary/10 via-primary/5 to-background p-5 sm:p-6 shadow-xs transition-all hover:border-primary/40 hover:shadow-md">
+          <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-primary/15 blur-3xl transition-all group-hover:bg-primary/20" />
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1.5 max-w-xl">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-bold text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Personalización Avanzada de Ofertas</span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-foreground">
+                ¿Querés diseñar banners y carruseles publicitarios para tus ofertas?
+              </h3>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                Podés crear diapositivas con imágenes, mensajes y botones exclusivos para <code className="rounded bg-muted px-1.5 py-0.5 text-foreground font-mono text-xs">/ofertas</code>, activar carrusel automático de rebajados y configurar cupones desde la sección de <strong>Promociones</strong>.
+              </p>
+            </div>
+            <div className="shrink-0 flex flex-col gap-2">
+              <Button asChild size="default" className="rounded-xl font-bold gap-2 shadow-md hover:scale-[1.02] transition-transform">
+                <Link href="/dashboard/promotions?tab=publica">
+                  <Sparkles className="h-4 w-4 text-amber-300" />
+                  <span>Ir a Promociones</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <details className="rounded-xl border p-3">
       <summary className="cursor-pointer text-sm font-medium">Ver vista previa de ofertas</summary>
       <Card className={cn('relative mt-3 overflow-hidden border shadow-sm transition-all', selectedAccent.preview, !current.enabled && 'opacity-60 grayscale')}>
@@ -184,20 +217,47 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
         </div>
       </SectionCard>
 
-      <div className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background p-6 sm:p-8 sm:flex-row sm:items-center sm:justify-between transition-all hover:border-primary/40 hover:shadow-md">
-        <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-2xl transition-all group-hover:bg-primary/20" />
-        <div className="relative">
-          <p className="text-base font-bold">Productos en oferta activa</p>
-          <p className="mt-1.5 max-w-lg text-sm text-muted-foreground">
-            El sistema recopila automáticamente cualquier producto de tu catálogo que tenga configurado un &quot;precio de oferta&quot;. No necesitás añadirlos manualmente aquí.
-          </p>
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Tarjeta 1: Productos con precio de oferta */}
+        <div className="group relative flex flex-col justify-between gap-4 overflow-hidden rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-xs transition-all hover:border-border hover:shadow-sm">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              <ShoppingBag className="h-4 w-4 text-primary" />
+              <span>Precios de rebaja</span>
+            </div>
+            <p className="text-sm font-bold text-foreground">Productos en oferta activa</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              El catálogo recopila automáticamente cualquier producto que tenga configurado un &quot;precio de oferta&quot;.
+            </p>
+          </div>
+          <Button asChild variant="outline" className="w-fit rounded-xl text-xs font-semibold">
+            <Link href="/dashboard/products">
+              <ShoppingBag className="mr-2 h-3.5 w-3.5" />
+              Gestionar productos
+            </Link>
+          </Button>
         </div>
-        <Button asChild variant="default" className="relative shrink-0 rounded-full shadow-lg">
-          <Link href="/dashboard/products">
-            <ShoppingBag className="mr-2 h-4 w-4" />
-            Gestionar productos
-          </Link>
-        </Button>
+
+        {/* Tarjeta 2: Campañas y promociones avanzadas */}
+        <div className="group relative flex flex-col justify-between gap-4 overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/5 via-background to-background p-5 sm:p-6 shadow-xs transition-all hover:border-primary/40 hover:shadow-sm">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span>Campañas & Banners</span>
+            </div>
+            <p className="text-sm font-bold text-foreground">Personalización en Promociones</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Diseñá banners con imágenes propias, activá el carrusel de productos rebajados y creá cupones de descuento.
+            </p>
+          </div>
+          <Button asChild className="w-fit rounded-xl text-xs font-bold gap-1.5 shadow-sm">
+            <Link href="/dashboard/promotions?tab=publica">
+              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+              <span>Ir a sección de Promociones</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">

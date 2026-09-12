@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
 import { resolvePublicStorefrontOrganization } from '@/lib/saas/public-tenant'
 import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
+import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 
 type ProductRow = {
   id: string
@@ -136,18 +137,20 @@ export async function GET(
       has_offer: finalProduct.has_offer,
       offer_price: finalProduct.offer_price,
     }, (automaticRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>)))
-    const { data: variantRows, error: variantError } = finalProduct.has_variants
-      ? await supabase.from('product_variants')
+    const { data: variantRows, error: variantError } = await supabase.from('product_variants')
           .select(isWholesale
             ? 'id, product_id, variant_name, attributes, sku, sale_price, wholesale_price, stock_quantity, is_active'
             : 'id, product_id, variant_name, attributes, sku, sale_price, stock_quantity, is_active')
           .eq('organization_id', organization.id).eq('product_id', finalProduct.id).eq('is_active', true).order('variant_name')
-      : { data: [], error: null }
     if (variantError) throw variantError
     const publicVariantRows = (variantRows ?? []) as unknown as Array<Record<string, unknown>>
-    const publicStock = finalProduct.has_variants
+    const effectiveHasVariants = finalProduct.has_variants || publicVariantRows.length > 0
+    const publicStock = effectiveHasVariants && publicVariantRows.length > 0
       ? publicVariantRows.reduce((sum, variant) => sum + Number(variant.stock_quantity ?? 0), 0)
       : finalProduct.stock_quantity
+    const configuredAttributes = Array.isArray(finalProduct.variant_attribute_config)
+      ? finalProduct.variant_attribute_config
+      : []
     const publicProduct: PublicProduct = {
       id: finalProduct.id,
       name: finalProduct.name,
@@ -168,8 +171,10 @@ export async function GET(
       images: finalProduct.images,
       unit_measure: finalProduct.unit_measure,
       barcode: finalProduct.barcode,
-      has_variants: finalProduct.has_variants,
-      variant_attribute_config: finalProduct.variant_attribute_config ?? [],
+      has_variants: effectiveHasVariants,
+      variant_attribute_config: configuredAttributes.length > 0
+        ? configuredAttributes
+        : deriveVariantAttributeConfig(publicVariantRows),
       variants: publicVariantRows.map((variant) => ({
         id: String(variant.id), product_id: String(variant.product_id), variant_name: String(variant.variant_name),
         attributes: (variant.attributes ?? {}) as Record<string, string>, sku: variant.sku ? String(variant.sku) : null,

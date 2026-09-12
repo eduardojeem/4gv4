@@ -428,9 +428,9 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   }
 
   const rawProducts = ((products as unknown as DBProduct[]) || [])
-  const variantProductIds = rawProducts
-    .filter((p) => Boolean(p.has_variants))
-    .map((p) => p.id)
+  // Consultar por todos los productos permite recuperar catálogos importados
+  // donde existen filas de variantes pero la bandera del padre quedó atrasada.
+  const variantProductIds = rawProducts.map((p) => p.id)
 
   const variantsByProductId = new Map<string, PublicProduct['variants']>()
 
@@ -474,7 +474,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     const category = Array.isArray(p.category) ? p.category[0] : p.category
     const cat = category as { id: string; name: string } | null
     const productVariants = variantsByProductId.get(p.id) || []
-    const stockQuantity = Boolean(p.has_variants) && productVariants.length > 0
+    const effectiveHasVariants = Boolean(p.has_variants) || productVariants.length > 0
+    const stockQuantity = effectiveHasVariants && productVariants.length > 0
       ? productVariants.reduce((sum, v) => sum + (v.stock_quantity ?? 0), 0)
       : resolveEffectiveProductStock(p.stock_quantity, p.branch_stock, useBranchJoin)
     const priced = applyAutomaticPromotionToProduct({
@@ -499,7 +500,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       installments_enabled: (p.installments_enabled as boolean) || false,
       installments_public: (p.installments_public as boolean) ?? true,
       installments_plans: Array.isArray(p.installments_plans) ? p.installments_plans : [],
-      has_variants: Boolean(p.has_variants),
+      has_variants: effectiveHasVariants,
       variant_attribute_config: Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : undefined,
       variants: productVariants,
       stock_quantity: stockQuantity,
@@ -786,8 +787,12 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     has_variants: hasVariants,
     variant_attribute_config: variantAttributeConfig,
     variants: productVariants,
-    stock_quantity: (p.stock_quantity as number) ?? 0,
-    in_stock: ((p.stock_quantity as number) ?? 0) > 0,
+    stock_quantity: hasVariants && productVariants.length > 0
+      ? productVariants.reduce((sum, variant) => sum + Number(variant.stock_quantity ?? 0), 0)
+      : (p.stock_quantity as number) ?? 0,
+    in_stock: hasVariants && productVariants.length > 0
+      ? productVariants.some((variant) => Number(variant.stock_quantity ?? 0) > 0)
+      : ((p.stock_quantity as number) ?? 0) > 0,
     is_active: p.is_active,
     featured: p.featured || false,
     image: Array.isArray(p.images)

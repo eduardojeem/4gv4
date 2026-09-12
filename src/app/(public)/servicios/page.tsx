@@ -7,6 +7,7 @@ import {
 } from '@/lib/website/services'
 import { ServicesPageClient } from './ServicesPageClient'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import type { Service } from '@/types/website-settings'
 
 // La relación categories(name) de Supabase puede venir como objeto o como
@@ -82,6 +83,10 @@ export default async function ServicesPage({ organizationId, organizationName }:
   const companyName = organizationName || settings?.company_info?.name || 'Nuestra empresa'
   const phone = settings?.company_info?.phone || ''
   const whatsapp = settings?.company_info?.whatsapp || phone
+
+  if (organizationId && !(await isOrganizationModuleEnabled(organizationId, 'services'))) {
+    notFound()
+  }
 
   if (settings?.company_info?.servicesPageEnabled === false) {
     notFound()

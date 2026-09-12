@@ -14,7 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Coins, Loader2, Search, ShieldAlert, Ticket, User } from 'lucide-react'
+import { Coins, Loader2, Search, ShieldAlert, Ticket, User, CreditCard, Sparkles } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import {
   checkParticipation,
   maxTicketsAllowed,
@@ -76,8 +77,25 @@ export function RaffleRedeemDialog({ raffle, onOpenChange, onRedeemed }: RaffleR
   const [quantity, setQuantity] = useState(1)
   const [redeeming, setRedeeming] = useState(false)
   const [issued, setIssued] = useState<number[] | null>(null)
+  const [mode, setMode] = useState<'redeem' | 'buy_points'>('redeem')
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'card'>('cash')
+
+  const defaultPricePerPoint = (() => {
+    if (raffle?.point_purchase_price && raffle.point_purchase_price > 0) return raffle.point_purchase_price
+    if (!raffle?.requirements) return 1000
+    const match = raffle.requirements.match(/Gs\.\s*([\d.]+)\s*por punto/i)
+    if (match && match[1]) {
+      const clean = Number(match[1].replace(/\./g, ''))
+      if (!isNaN(clean) && clean > 0) return clean
+    }
+    return 1000
+  })()
+  const [pricePerPoint, setPricePerPoint] = useState(defaultPricePerPoint)
 
   const ticketsIssuedTotal = raffle?.tickets?.[0]?.count ?? 0
+  const pointsPerTicket = raffle?.points_per_ticket || 50
+  const pointsToBuy = quantity * pointsPerTicket
+  const totalCashToCharge = pointsToBuy * (pricePerPoint || 1000)
 
   // Se limpia todo al abrir con otro sorteo: dejar el cliente anterior
   // seleccionado invitaría a canjear en el sorteo equivocado.
@@ -88,7 +106,9 @@ export function RaffleRedeemDialog({ raffle, onOpenChange, onRedeemed }: RaffleR
     setState(null)
     setQuantity(1)
     setIssued(null)
-  }, [raffle?.id])
+    setMode('redeem')
+    setPricePerPoint(defaultPricePerPoint)
+  }, [raffle?.id, defaultPricePerPoint])
 
   const runSearch = useCallback(async () => {
     const term = search.trim()
@@ -193,14 +213,48 @@ export function RaffleRedeemDialog({ raffle, onOpenChange, onRedeemed }: RaffleR
     }
   }
 
+  const handleBuyAndRedeem = async () => {
+    if (!selected || !raffle) return
+    if (raffle.allow_point_purchase === false) {
+      toast.error('La compra directa de puntos no está habilitada para este sorteo')
+      return
+    }
+    setRedeeming(true)
+    try {
+      const response = await fetch(`/api/raffles/${raffle.id}/tickets/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: selected.id,
+          quantity,
+          payment_method: paymentMethod,
+        }),
+      })
+      const body = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        toast.error(body?.error ?? 'No se pudo completar el cobro y la emisión de números.')
+        return
+      }
+
+      const numbers = (body?.tickets ?? []).map((t: { ticket_number: number }) => t.ticket_number)
+      setIssued(numbers)
+      toast.success(`¡Venta exitosa! ${numbers.length} número(s) asignados al cliente`)
+      onRedeemed()
+      await loadCustomerState(selected)
+    } finally {
+      setRedeeming(false)
+    }
+  }
+
   return (
     <Dialog open={!!raffle} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Canjear puntos por números</DialogTitle>
-          <DialogDescription className="text-xs">
+        <DialogTitle>Asignar números al cliente</DialogTitle>
+        <DialogDescription className="text-xs">
             {raffle.name} · {raffle.points_per_ticket} puntos por número
-          </DialogDescription>
+        </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -270,45 +324,154 @@ export function RaffleRedeemDialog({ raffle, onOpenChange, onRedeemed }: RaffleR
             )}
           </div>
 
-          {/* ── Cantidad ────────────────────────────────────────────── */}
+          {/* ── Cantidad y Modo de Participación ───────────────────────── */}
           {state && !loadingState && (
-            <>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="redeem-qty" className="text-xs">Cuántos números</Label>
-                  <span className="text-[11px] text-slate-500">
-                    puede llevar hasta {maxNow}
-                  </span>
-                </div>
-                <Input
-                  id="redeem-qty"
-                  type="number"
-                  min={1}
-                  max={Math.max(1, maxNow)}
-                  value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
-                />
+            <div className="space-y-4 pt-1">
+              {/* Selector de Modo */}
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setMode('redeem')}
+                  className={cn(
+                    'flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all cursor-pointer',
+                    mode === 'redeem'
+                      ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-950 dark:text-slate-50 font-bold'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                  )}
+                >
+                  <Coins className="h-3.5 w-3.5 text-amber-500" />
+                  Saldo de Puntos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('buy_points')}
+                  disabled={raffle.allow_point_purchase === false}
+                  className={cn(
+                    'flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all cursor-pointer',
+                    mode === 'buy_points'
+                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200',
+                    raffle.allow_point_purchase === false && 'cursor-not-allowed opacity-50'
+                  )}
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  {raffle.allow_point_purchase === false ? 'Compra de puntos desactivada' : 'Comprar puntos en caja'}
+                </button>
               </div>
 
-              {/* La chance se muestra tal cual es, sin adornarla. */}
-              {participation?.allowed && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3 text-xs dark:border-slate-800 dark:bg-slate-900/40">
-                  <p className="text-slate-700 dark:text-slate-300">
-                    Cuesta <strong>{participation.pointsCost} puntos</strong>. Le quedarían{' '}
-                    <strong>{state.account.balance - participation.pointsCost}</strong>.
-                  </p>
-                  <p className="mt-1 text-slate-500">
-                    Con {state.ticketsInThisRaffle + quantity} de {ticketsIssuedTotal + quantity} números,
-                    su chance de ganar sería de {(odds * 100).toFixed(1)} %.
-                  </p>
-                </div>
-              )}
+              {mode === 'redeem' ? (
+                <>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="redeem-qty" className="text-xs">Cuántos números</Label>
+                      <span className="text-[11px] text-slate-500">
+                        puede llevar hasta {maxNow}
+                      </span>
+                    </div>
+                    <Input
+                      id="redeem-qty"
+                      type="number"
+                      min={1}
+                      max={Math.max(1, maxNow)}
+                      value={quantity}
+                      onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                    />
+                  </div>
 
-              {participation && !participation.allowed && (
-                <div className="flex items-start gap-2 rounded-xl border border-rose-200/60 bg-rose-50/50 px-3.5 py-3 dark:border-rose-900/40 dark:bg-rose-950/20">
-                  <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                  <p className="text-xs leading-relaxed text-rose-900 dark:text-rose-200">
-                    {participation.message}
+                  {/* La chance se muestra tal cual es, sin adornarla. */}
+                  {participation?.allowed && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3 text-xs dark:border-slate-800 dark:bg-slate-900/40">
+                      <p className="text-slate-700 dark:text-slate-300">
+                        Cuesta <strong>{participation.pointsCost} puntos</strong>. Le quedarían{' '}
+                        <strong>{state.account.balance - participation.pointsCost}</strong>.
+                      </p>
+                      <p className="mt-1 text-slate-500">
+                        Con {state.ticketsInThisRaffle + quantity} de {ticketsIssuedTotal + quantity} números,
+                        su chance de ganar sería de {(odds * 100).toFixed(1)} %.
+                      </p>
+                    </div>
+                  )}
+
+                  {participation && !participation.allowed && (
+                    <div className="flex items-start gap-2 rounded-xl border border-rose-200/60 bg-rose-50/50 px-3.5 py-3 dark:border-rose-900/40 dark:bg-rose-950/20">
+                      <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                      <p className="text-xs leading-relaxed text-rose-900 dark:text-rose-200">
+                        {participation.message}
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-3.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-3.5 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white text-xs font-bold">💳</span>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950 dark:text-emerald-200">
+                      Venta directa de puntos para sorteo
+                    </h4>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="buy-qty" className="text-xs font-semibold">
+                        Cantidad de Números
+                      </Label>
+                      <Input
+                        id="buy-qty"
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={quantity}
+                        onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                        className="bg-white dark:bg-slate-900 text-xs font-bold"
+                      />
+                      <p className="text-[10px] text-slate-500">{pointsToBuy} puntos necesarios ({pointsPerTicket} pts/número)</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="price-per-pt" className="text-xs font-semibold">
+                        Monto por Punto (Gs.)
+                      </Label>
+                      <Input
+                        id="price-per-pt"
+                        type="number"
+                        min={100}
+                        step={100}
+                        value={pricePerPoint}
+                        onChange={(e) => setPricePerPoint(Math.max(100, Number(e.target.value) || 1000))}
+                        className="bg-white dark:bg-slate-900 text-xs font-semibold"
+                      />
+                      <p className="text-[10px] text-slate-500">Monto configurado para este sorteo</p>
+                    </div>
+                  </div>
+
+                  {/* Resumen de cobro en caja */}
+                  <div className="rounded-xl border border-emerald-300 bg-white p-3 text-xs dark:border-emerald-800 dark:bg-slate-900 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600 dark:text-slate-400">Puntos a acreditar:</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{pointsToBuy} pts</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-1">
+                      <span className="font-bold text-emerald-800 dark:text-emerald-300 text-xs">Total a cobrar en caja:</span>
+                      <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                        Gs. {totalCashToCharge.toLocaleString('es-PY')}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="points-payment-method" className="text-xs font-semibold">Medio de pago recibido</Label>
+                    <select
+                      id="points-payment-method"
+                      value={paymentMethod}
+                      onChange={(event) => setPaymentMethod(event.target.value as 'cash' | 'transfer' | 'card')}
+                      className="h-9 w-full rounded-xl border border-emerald-200 bg-white px-3 text-xs font-medium dark:border-emerald-800 dark:bg-slate-900"
+                    >
+                      <option value="cash">Efectivo</option>
+                      <option value="transfer">Transferencia</option>
+                      <option value="card">Tarjeta</option>
+                    </select>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-emerald-900/80 dark:text-emerald-200/80">
+                    El cobro acredita los puntos y luego emite los números. Verifica el medio de pago en tu caja antes de confirmar.
                   </p>
                 </div>
               )}
@@ -316,7 +479,7 @@ export function RaffleRedeemDialog({ raffle, onOpenChange, onRedeemed }: RaffleR
               <p className="text-[11px] leading-relaxed text-slate-400">
                 {responsiblePlayNotice({ minAge: raffle.min_age })}
               </p>
-            </>
+            </div>
           )}
 
           {/* ── Resultado ───────────────────────────────────────────── */}
@@ -340,10 +503,21 @@ export function RaffleRedeemDialog({ raffle, onOpenChange, onRedeemed }: RaffleR
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {issued ? 'Cerrar' : 'Cancelar'}
           </Button>
-          <Button onClick={handleRedeem} disabled={!participation?.allowed || redeeming}>
-            {redeeming && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-            Canjear {participation?.allowed ? `${participation.pointsCost} puntos` : ''}
-          </Button>
+          {mode === 'redeem' ? (
+            <Button onClick={handleRedeem} disabled={!participation?.allowed || redeeming}>
+              {redeeming && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              Canjear {participation?.allowed ? `${participation.pointsCost} puntos` : ''}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleBuyAndRedeem}
+              disabled={redeeming || !selected}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+            >
+              {redeeming && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              Cobrar Gs. {totalCashToCharge.toLocaleString('es-PY')} y Asignar Números
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -283,7 +283,45 @@ function newSlide(): PromotionalCarouselSlide {
     active: true,
     textTone: 'light',
     contentAlign: 'left',
+    hideText: false,
+    badge: '',
+    titleSize: 'normal',
+    overlayIntensity: 'strong',
+    overlayColor: 'black',
+    backgroundColor: '',
+    titleColor: '',
+    fontFamily: 'sans',
   }
+}
+
+const TITLE_COLOR_PRESETS = [
+  { label: 'Blanco', value: '#ffffff', bg: 'bg-white', border: 'border-zinc-300 dark:border-zinc-700' },
+  { label: 'Oro / Amarillo', value: '#facc15', bg: 'bg-yellow-400', border: 'border-yellow-500' },
+  { label: 'Naranja Fuego', value: '#fb923c', bg: 'bg-orange-400', border: 'border-orange-500' },
+  { label: 'Verde Neón', value: '#4ade80', bg: 'bg-emerald-400', border: 'border-emerald-500' },
+  { label: 'Celeste', value: '#38bdf8', bg: 'bg-sky-400', border: 'border-sky-500' },
+  { label: 'Negro Carbón', value: '#09090b', bg: 'bg-zinc-950', border: 'border-zinc-800' },
+]
+
+function isLightColor(color?: string): boolean {
+  if (!color) return false
+  const clean = color.trim().toLowerCase()
+  if (clean === '#ffffff' || clean === '#fff' || clean === 'white') return true
+  if (clean === '#000000' || clean === '#000' || clean === 'black' || clean === '#09090b') return false
+  const hex = clean.replace('#', '')
+  if (hex.length === 3) {
+    const r = parseInt(hex[0] + hex[0], 16)
+    const g = parseInt(hex[1] + hex[1], 16)
+    const b = parseInt(hex[2] + hex[2], 16)
+    return !isNaN(r) && (r * 299 + g * 587 + b * 114) / 1000 > 160
+  }
+  if (hex.length === 6) {
+    const r = parseInt(hex.substring(0, 2), 16)
+    const g = parseInt(hex.substring(2, 4), 16)
+    const b = parseInt(hex.substring(4, 6), 16)
+    return !isNaN(r) && (r * 299 + g * 587 + b * 114) / 1000 > 160
+  }
+  return false
 }
 
 // ── Slide Preview ────────────────────────────────────────────────────────────
@@ -294,7 +332,45 @@ function SlidePreview({ slide, uploading }: { slide: PromotionalCarouselSlide; u
     left: 'items-start text-left',
     center: 'items-center text-center',
     right: 'items-end text-right',
-  }[slide.contentAlign]
+  }[slide.contentAlign || 'left']
+
+  const isTextHidden = Boolean(
+    slide.hideText ||
+    (!slide.title?.trim() && !slide.message?.trim() && !slide.badge?.trim())
+  )
+
+  const intensity = slide.overlayIntensity || (slide.hideText ? 'none' : 'strong')
+  const overlayColor = slide.overlayColor || (slide.textTone === 'light' ? 'black' : 'white')
+
+  const titleSizeClass = {
+    compact: 'text-base sm:text-xl font-bold',
+    normal: 'text-lg sm:text-2xl font-black',
+    large: 'text-xl sm:text-3xl font-black tracking-tight',
+  }[slide.titleSize || 'normal']
+
+  const titleFontClass = {
+    sans: 'font-sans',
+    display: 'font-black tracking-tight uppercase',
+    serif: 'font-serif font-bold',
+    mono: 'font-mono font-bold tracking-tighter',
+  }[slide.fontFamily || 'sans']
+
+  const hasLightTitle = slide.titleColor
+    ? isLightColor(slide.titleColor)
+    : slide.textTone === 'light'
+
+  const overlayBgClass = (() => {
+    if (intensity === 'none') return 'opacity-0'
+    const opacityClass = {
+      subtle: 'opacity-25',
+      medium: 'opacity-55',
+      strong: 'opacity-85',
+    }[intensity] || 'opacity-85'
+
+    if (overlayColor === 'white') return cn('bg-white', opacityClass)
+    if (overlayColor === 'brand') return cn('bg-primary', opacityClass)
+    return cn('bg-black', opacityClass)
+  })()
 
   return (
     <div className="space-y-2">
@@ -313,7 +389,10 @@ function SlidePreview({ slide, uploading }: { slide: PromotionalCarouselSlide; u
         </div>
       </div>
       <div className={cn('mx-auto overflow-hidden rounded-lg border border-border/60 bg-background shadow-sm', mode === 'mobile' ? 'w-full max-w-[280px]' : 'w-full')}>
-        <div className={cn('relative overflow-hidden bg-muted', mode === 'mobile' ? 'aspect-[12/5]' : 'aspect-[16/8]')}>
+        <div
+          style={slide.backgroundColor ? { backgroundColor: slide.backgroundColor } : undefined}
+          className={cn('relative overflow-hidden bg-muted', mode === 'mobile' ? 'aspect-[12/5]' : 'aspect-[16/8]')}
+        >
         {slide.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={slide.imageUrl} alt={slide.imageAlt || ''} className="absolute inset-0 h-full w-full object-cover" />
@@ -327,27 +406,75 @@ function SlidePreview({ slide, uploading }: { slide: PromotionalCarouselSlide; u
             </span>
           </div>
         )}
-        {mode === 'desktop' && <div className={cn('absolute inset-0', slide.textTone === 'light' ? 'bg-black/40' : 'bg-white/20')} />}
-        {mode === 'desktop' && <div className={cn('relative flex h-full flex-col justify-center px-8 py-6', alignClass, slide.textTone === 'light' ? 'text-white' : 'text-zinc-950')}>
-          <p className="text-lg font-black leading-tight drop-shadow-sm sm:text-2xl">
-            {slide.title || <span className="opacity-40 font-normal text-base">Título de la promoción</span>}
-          </p>
-          <p className="mt-2.5 text-xs font-medium opacity-90 sm:text-sm">
-            {slide.message || <span className="opacity-40 font-normal">El mensaje se mostrará sobre la imagen.</span>}
-          </p>
-          {slide.ctaText && (
-            <span className={cn('mt-4 w-fit rounded-lg px-3 py-1.5 text-[10px] font-bold shadow-sm sm:text-xs', slide.textTone === 'light' ? 'bg-white text-zinc-950' : 'bg-zinc-950 text-white')}>
-              {slide.ctaText}
-            </span>
-          )}
-        </div>}
+
+        {/* Capa de oscurecimiento o tinte en desktop */}
+        {mode === 'desktop' && intensity !== 'none' && (
+          <div className={cn('absolute inset-0 transition-opacity', overlayBgClass)} />
+        )}
+
+        {mode === 'desktop' && (
+          isTextHidden ? (
+            <div className="relative flex h-full flex-col justify-end p-4">
+              <span className="w-fit rounded-md bg-black/60 px-2 py-1 text-[11px] font-medium text-white backdrop-blur-xs">
+                🖼️ Modo gráfico (sin textos superpuestos)
+                {slide.ctaHref && <span className="ml-1 text-white/80">· Enlace: {slide.ctaHref}</span>}
+              </span>
+            </div>
+          ) : (
+            <div className={cn('relative flex h-full flex-col justify-center px-8 py-6', alignClass, slide.textTone === 'light' ? 'text-white' : 'text-zinc-950')}>
+              {slide.badge && (
+                <span className={cn('mb-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide border', slide.textTone === 'light' ? 'bg-white/20 text-white border-white/30' : 'bg-black/10 text-zinc-950 border-black/20')}>
+                  <Sparkles className="h-2.5 w-2.5" />
+                  {slide.badge}
+                </span>
+              )}
+              <p
+                style={slide.titleColor ? { color: slide.titleColor } : undefined}
+                className={cn(
+                  'leading-tight',
+                  hasLightTitle && 'drop-shadow-sm',
+                  titleSizeClass,
+                  titleFontClass,
+                  !slide.titleColor && (slide.textTone === 'light' ? 'text-white' : 'text-zinc-950')
+                )}
+              >
+                {slide.title || <span className="opacity-40 font-normal text-base">Título de la promoción</span>}
+              </p>
+              <p className="mt-2 text-xs font-medium opacity-90 sm:text-sm line-clamp-2">
+                {slide.message || <span className="opacity-40 font-normal">El mensaje se mostrará sobre la imagen.</span>}
+              </p>
+              {slide.ctaText && (
+                <span className={cn('mt-3.5 w-fit rounded-lg px-3 py-1.5 text-[10px] font-bold shadow-sm sm:text-xs', slide.textTone === 'light' ? 'bg-white text-zinc-950' : 'bg-zinc-950 text-white')}>
+                  {slide.ctaText}
+                </span>
+              )}
+            </div>
+          )
+        )}
         </div>
         {mode === 'mobile' && (
-          <div className={cn('flex min-h-[180px] flex-col justify-center px-5 py-6 text-foreground', alignClass)}>
-            <p className="text-xl font-black leading-tight">{slide.title || <span className="text-base font-normal opacity-40">Título de la promoción</span>}</p>
-            <p className="mt-2 text-xs font-medium text-muted-foreground">{slide.message || <span className="font-normal opacity-60">El mensaje se mostrará debajo de la imagen.</span>}</p>
-            {slide.ctaText && <span className="mt-4 w-fit rounded-md bg-foreground px-3 py-2 text-[11px] font-bold text-background">{slide.ctaText}</span>}
-          </div>
+          isTextHidden ? (
+            <div className="p-3 text-center text-xs text-muted-foreground bg-muted/20">
+              🖼️ Modo gráfico sin textos · Toda la imagen redirige {slide.ctaHref ? `a ${slide.ctaHref}` : 'al pulsar'}
+            </div>
+          ) : (
+            <div className={cn('flex min-h-[160px] flex-col justify-center px-5 py-5 text-foreground', alignClass)}>
+              {slide.badge && (
+                <span className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">
+                  <Sparkles className="h-2.5 w-2.5" />
+                  {slide.badge}
+                </span>
+              )}
+              <p
+                style={slide.titleColor ? { color: slide.titleColor } : undefined}
+                className={cn('leading-tight', titleSizeClass, titleFontClass, !slide.titleColor && 'font-black')}
+              >
+                {slide.title || <span className="text-base font-normal opacity-40">Título de la promoción</span>}
+              </p>
+              <p className="mt-1.5 text-xs font-medium text-muted-foreground">{slide.message || <span className="font-normal opacity-60">El mensaje se mostrará debajo de la imagen.</span>}</p>
+              {slide.ctaText && <span className="mt-3.5 w-fit rounded-md bg-foreground px-3 py-1.5 text-[11px] font-bold text-background">{slide.ctaText}</span>}
+            </div>
+          )
         )}
       </div>
     </div>
@@ -789,10 +916,8 @@ export function PromotionalCarouselEditor({
   }
 
   const isEditing = current.slides.some((slide) => slide.id === editingSlide?.id)
-  const editorPanelClass = (section: EditorSection, desktopClass?: string) => cn(
-    activeEditorSection === section ? 'block' : 'hidden',
-    'xl:block',
-    desktopClass,
+  const editorPanelClass = (section: EditorSection) => cn(
+    activeEditorSection === section ? 'block animate-in fade-in-50 duration-150' : 'hidden'
   )
 
   if (isLoading) {
@@ -973,9 +1098,30 @@ export function PromotionalCarouselEditor({
                   {!slide.active && <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-xs font-semibold text-white">Oculta</span>}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{slide.title}</p>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{slide.message}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">{slide.ctaText || 'Sin botón'} · {slide.contentAlign === 'left' ? 'Izquierda' : slide.contentAlign === 'center' ? 'Centro' : 'Derecha'}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {slide.badge && (
+                      <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">
+                        {slide.badge}
+                      </span>
+                    )}
+                    {slide.hideText && (
+                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground border">
+                        🖼️ Modo gráfico
+                      </span>
+                    )}
+                    <p className="truncate text-sm font-semibold">
+                      {slide.title || (slide.hideText ? 'Banner sin textos superpuestos' : 'Sin título')}
+                    </p>
+                  </div>
+                  {slide.message && !slide.hideText && (
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{slide.message}</p>
+                  )}
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    {slide.hideText
+                      ? (slide.ctaHref ? `Enlace: ${slide.ctaHref}` : 'Solo imagen (sin enlace)')
+                      : `${slide.ctaText || 'Sin botón'} · ${slide.contentAlign === 'left' ? 'Izquierda' : slide.contentAlign === 'center' ? 'Centro' : 'Derecha'}`}
+                    {slide.overlayIntensity && slide.overlayIntensity !== 'strong' ? ` · Capa: ${slide.overlayIntensity === 'none' ? 'sin oscurecer' : slide.overlayIntensity}` : ''}
+                  </p>
                 </div>
                 <div className="flex items-center justify-end gap-1">
                   <Switch checked={slide.active} onCheckedChange={(value) => toggleSlide(slide.id, value)} aria-label={`Mostrar ${slide.title}`} />
@@ -1067,8 +1213,9 @@ export function PromotionalCarouselEditor({
 
               {/* Left: form */}
               <div className="bg-muted/15 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
-                <div className="sticky top-0 z-20 border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-5 xl:hidden">
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-5" role="tablist" aria-label="Secciones de la diapositiva">
+                {/* Tab bar - visible on all screen sizes */}
+                <div className="sticky top-0 z-20 border-b border-border/70 bg-background/95 px-3 py-2.5 backdrop-blur-sm sm:px-6">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2" role="tablist" aria-label="Secciones de la diapositiva">
                     {EDITOR_SECTIONS.map((section) => {
                       const Icon = section.icon
                       const selected = activeEditorSection === section.value
@@ -1082,23 +1229,520 @@ export function PromotionalCarouselEditor({
                           aria-controls={`carousel-panel-${section.value}`}
                           onClick={() => setActiveEditorSection(section.value)}
                           className={cn(
-                            'flex min-h-11 w-full items-center justify-center gap-2 rounded-md border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                            selected ? 'border-primary bg-primary text-primary-foreground shadow-sm' : 'border-border/70 bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted hover:text-foreground'
+                            'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer sm:px-3.5',
+                            selected
+                              ? 'border-primary bg-primary text-primary-foreground shadow-xs'
+                              : 'border-border/70 bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted hover:text-foreground'
                           )}
                         >
-                          <Icon className="h-3.5 w-3.5" />
-                          {section.label}
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span>{section.label}</span>
                         </button>
                       )
                     })}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 px-3 py-4 sm:px-5 sm:py-5 xl:min-h-0 xl:flex-1 xl:grid-cols-2 xl:items-start xl:overflow-y-auto xl:px-6 xl:py-6 [scrollbar-gutter:stable]">
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 xl:px-8 xl:py-7 [scrollbar-gutter:stable]">
+                  <div className="mx-auto max-w-2xl">
+
+                {/* Text */}
+                <div id="carousel-panel-content" role="tabpanel" aria-labelledby="carousel-tab-content" className={editorPanelClass('content')}>
+                <FormSection icon={Type} label="Contenido y textos del banner" step={1}>
+                  <div className="grid gap-4">
+                    {/* Interruptor modo banner gráfico / sin textos */}
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="promotion-hide-text" className="text-xs sm:text-sm font-bold text-foreground cursor-pointer">
+                          Sin textos superpuestos (Modo banner gráfico)
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Activá esto si tu imagen ya tiene el diseño completo o querés mostrar la foto limpia sin tipografía encima.
+                        </p>
+                      </div>
+                      <Switch
+                        id="promotion-hide-text"
+                        checked={Boolean(editingSlide.hideText)}
+                        onCheckedChange={(checked) => {
+                          updateSlideField('hideText', checked)
+                          if (checked && (!editingSlide.overlayIntensity || editingSlide.overlayIntensity === 'strong')) {
+                            updateSlideField('overlayIntensity', 'none')
+                          }
+                        }}
+                        aria-label="Modo banner gráfico sin textos"
+                      />
+                    </div>
+
+                    {editingSlide.hideText ? (
+                      <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 text-xs text-foreground/80 space-y-1.5">
+                        <p className="font-bold text-primary flex items-center gap-1.5 text-sm">
+                          <Sparkles className="h-4 w-4" /> Banner en modo gráfico activo
+                        </p>
+                        <p className="leading-relaxed">
+                          La imagen se mostrará al 100% de su tamaño sin títulos, mensajes ni botones superpuestos.
+                        </p>
+                        <p className="text-muted-foreground">
+                          💡 Podés ir a la pestaña <strong>Botón</strong> para asignarle un enlace y hacer que toda la imagen sea cliqueable.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Insignia / Badge Superior */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-3">
+                            <Label htmlFor="promotion-badge" className="text-xs font-bold text-foreground">
+                              Insignia o etiqueta superior <span className="text-muted-foreground font-normal">(Opcional)</span>
+                            </Label>
+                            <CharCount value={editingSlide.badge || ''} max={40} />
+                          </div>
+                          <Input
+                            id="promotion-badge"
+                            value={editingSlide.badge || ''}
+                            onChange={(e) => updateSlideField('badge', e.target.value)}
+                            maxLength={40}
+                            placeholder="Ej: 🔥 30% OFF, ✨ NUEVA TEMPORADA"
+                            className="h-9 text-xs font-medium"
+                          />
+                          {/* Sugerencias de Insignia */}
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {['🔥 30% OFF', '✨ NUEVA COLECCIÓN', '⚡ OFERTA FLASH', '🚚 ENVÍO GRATIS', '💳 HASTA 6 CUOTAS', '⭐ DESTACADO'].map((sug) => (
+                              <button
+                                key={sug}
+                                type="button"
+                                onClick={() => updateSlideField('badge', sug)}
+                                className={cn(
+                                  'rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer',
+                                  editingSlide.badge === sug
+                                    ? 'border-primary bg-primary/10 text-primary font-bold'
+                                    : 'border-border/60 bg-background text-muted-foreground hover:text-foreground'
+                                )}
+                              >
+                                {sug}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Título */}
+                        <div className="space-y-1.5 pt-2 border-t border-border/40">
+                          <div className="flex items-center justify-between gap-3">
+                            <Label htmlFor="promotion-title" className="text-xs font-bold text-foreground">Título del banner</Label>
+                            <CharCount value={editingSlide.title} max={100} />
+                          </div>
+                          <Input
+                            id="promotion-title"
+                            aria-invalid={Boolean(fieldErrors.title)}
+                            aria-describedby={fieldErrors.title ? 'promotion-title-error' : undefined}
+                            value={editingSlide.title}
+                            onChange={(e) => updateSlideField('title', e.target.value)}
+                            maxLength={100}
+                            placeholder="Ej: 🔥 30% OFF en Seleccionados"
+                            className="h-10 text-sm font-semibold"
+                          />
+                          <FieldError id="promotion-title-error" message={fieldErrors.title} />
+
+                          {/* Selector de tamaño de título */}
+                          <div className="pt-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-1.5">Tamaño tipográfico del título:</p>
+                            <SegmentedControl
+                              value={editingSlide.titleSize || 'normal'}
+                              onChange={(v) => updateSlideField('titleSize', v)}
+                              options={[
+                                { value: 'compact' as const, label: 'Compacto' },
+                                { value: 'normal' as const, label: 'Normal' },
+                                { value: 'large' as const, label: 'Grande / Impacto' },
+                              ]}
+                            />
+                          </div>
+
+                          {/* Selector de estilo de fuente */}
+                          <div className="pt-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-1.5">Estilo tipográfico (Fuente):</p>
+                            <SegmentedControl
+                              value={editingSlide.fontFamily || 'sans'}
+                              onChange={(v) => updateSlideField('fontFamily', v)}
+                              options={[
+                                { value: 'sans' as const, label: 'Moderna (Sans)' },
+                                { value: 'display' as const, label: 'Impacto (Bold)' },
+                                { value: 'serif' as const, label: 'Elegante (Serif)' },
+                                { value: 'mono' as const, label: 'Urbana (Mono)' },
+                              ]}
+                            />
+                          </div>
+
+                          {/* Selector de color de título */}
+                          <div className="pt-2 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[11px] font-semibold text-muted-foreground">Color de letra del título:</p>
+                              {editingSlide.titleColor ? (
+                                <button
+                                  type="button"
+                                  onClick={() => updateSlideField('titleColor', '')}
+                                  className="text-[11px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                                >
+                                  Restablecer a automático
+                                </button>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground">
+                                  Automático por tono ({editingSlide.textTone === 'light' ? 'Blanco' : 'Oscuro'})
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                              {TITLE_COLOR_PRESETS.map((preset) => {
+                                const isSelected = editingSlide.titleColor?.toLowerCase() === preset.value.toLowerCase()
+                                return (
+                                  <button
+                                    key={preset.value}
+                                    type="button"
+                                    onClick={() => updateSlideField('titleColor', preset.value)}
+                                    title={preset.label}
+                                    className={cn(
+                                      'flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer',
+                                      isSelected
+                                        ? 'border-primary ring-2 ring-primary/40 bg-primary/10 text-primary'
+                                        : 'border-border/70 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                                    )}
+                                  >
+                                    <span className={cn('h-3 w-3 rounded-full border shadow-xs shrink-0', preset.bg, preset.border)} />
+                                    <span>{preset.label}</span>
+                                  </button>
+                                )
+                              })}
+
+                              {/* Selector libre */}
+                              <div className="flex items-center gap-1.5 pl-1">
+                                <input
+                                  type="color"
+                                  value={editingSlide.titleColor || (editingSlide.textTone === 'light' ? '#ffffff' : '#09090b')}
+                                  onChange={(e) => updateSlideField('titleColor', e.target.value)}
+                                  className="h-7 w-7 rounded-md border border-border cursor-pointer bg-transparent p-0.5"
+                                  title="Elegir color libremente"
+                                  aria-label="Color personalizado del título"
+                                />
+                                <Input
+                                  value={editingSlide.titleColor || ''}
+                                  onChange={(e) => updateSlideField('titleColor', e.target.value)}
+                                  placeholder="#HEX"
+                                  maxLength={20}
+                                  className="h-7 w-20 text-[11px] font-mono px-2"
+                                  aria-label="Código HEX del color del título"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Sugerencias Rápidas de Título */}
+                          <div className="pt-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                              <Lightbulb className="h-3 w-3 text-amber-500" />
+                              Sugerencias de títulos comerciales:
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {TITLE_SUGGESTIONS.map((sug, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => updateSlideField('title', sug)}
+                                  className={cn(
+                                    'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer text-left',
+                                    editingSlide.title === sug
+                                      ? 'border-primary bg-primary/10 font-bold text-primary'
+                                      : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                                  )}
+                                >
+                                  {sug}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mensaje */}
+                        <div className="space-y-1.5 pt-2 border-t border-border/40">
+                          <div className="flex items-center justify-between gap-3">
+                            <Label htmlFor="promotion-message" className="text-xs font-bold text-foreground">Mensaje descriptivo</Label>
+                            <CharCount value={editingSlide.message} max={240} />
+                          </div>
+                          <Textarea
+                            id="promotion-message"
+                            aria-invalid={Boolean(fieldErrors.message)}
+                            aria-describedby={fieldErrors.message ? 'promotion-message-error' : undefined}
+                            value={editingSlide.message}
+                            onChange={(e) => updateSlideField('message', e.target.value)}
+                            maxLength={240}
+                            rows={3}
+                            placeholder="Aprovechá precios especiales por tiempo limitado."
+                            className="min-h-20 resize-none text-sm"
+                          />
+                          <FieldError id="promotion-message-error" message={fieldErrors.message} />
+
+                          {/* Sugerencias Rápidas de Mensaje */}
+                          <div className="pt-1">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                              <Lightbulb className="h-3 w-3 text-amber-500" />
+                              Sugerencias de mensajes:
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {MESSAGE_SUGGESTIONS.map((sug, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => updateSlideField('message', sug)}
+                                  className={cn(
+                                    'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer text-left',
+                                    editingSlide.message === sug
+                                      ? 'border-primary bg-primary/10 font-bold text-primary'
+                                      : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                                  )}
+                                >
+                                  {sug.slice(0, 42)}...
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </FormSection>
+                </div>
+
+                {/* Image */}
+                <div id="carousel-panel-image" role="tabpanel" aria-labelledby="carousel-tab-image" className={editorPanelClass('image')}>
+                <FormSection icon={Upload} label="Imagen promocional" step={2}>
+                  <ImageUploadZone
+                    imageUrl={editingSlide.imageUrl}
+                    uploading={uploading}
+                    error={fieldErrors.imageUrl}
+                    onFileSelect={(file) => void uploadImage(file)}
+                    onClear={() => {
+                      discardTemporaryImage(editingUploadPathRef.current || pendingPathForSlide(editingSlide))
+                      editingUploadPathRef.current = null
+                      updateSlideField('imageUrl', '')
+                    }}
+                  />
+                  <FieldError id="promotion-image-error" message={fieldErrors.imageUrl} />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="promotion-alt" className="text-xs font-semibold text-foreground">Descripción para accesibilidad (Alt) <span className="text-destructive">*</span></Label>
+                      <CharCount value={editingSlide.imageAlt} max={160} />
+                    </div>
+                    <Input id="promotion-alt" required aria-invalid={Boolean(fieldErrors.imageAlt)} aria-describedby={fieldErrors.imageAlt ? 'promotion-alt-error' : 'promotion-alt-help'} value={editingSlide.imageAlt} onChange={(e) => updateSlideField('imageAlt', e.target.value)} maxLength={160} placeholder="Cargadores y cables incluidos en la promoción" className="text-sm" />
+                    <FieldError id="promotion-alt-error" message={fieldErrors.imageAlt} />
+                    <p id="promotion-alt-help" className="text-[11px] text-muted-foreground">Requerido para buscadores y lectores de pantalla.</p>
+                  </div>
+                </FormSection>
+                </div>
+
+                {/* CTA */}
+                <div id="carousel-panel-cta" role="tabpanel" aria-labelledby="carousel-tab-cta" className={editorPanelClass('cta')}>
+                <FormSection icon={Link2} label="Botón de acción y enlace" step={3}>
+                  <div className="grid gap-4">
+                    {editingSlide.hideText && (
+                      <div className="rounded-lg border border-border/70 bg-muted/40 p-3 text-xs text-muted-foreground leading-relaxed">
+                        ℹ️ En modo banner gráfico no se muestra un botón visual, pero al ingresar un enlace, <strong>toda la imagen actuará como enlace</strong> al hacer clic o pulsar en la tienda.
+                      </div>
+                    )}
+
+                    {/* Texto del Botón (solo si no está en modo hideText) */}
+                    {!editingSlide.hideText && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="promotion-cta" className="text-xs font-bold text-foreground">Texto del botón</Label>
+                          <CharCount value={editingSlide.ctaText || ''} max={50} />
+                        </div>
+                        <Input id="promotion-cta" aria-invalid={Boolean(fieldErrors.ctaText)} aria-describedby={fieldErrors.ctaText ? 'promotion-cta-error' : undefined} value={editingSlide.ctaText || ''} onChange={(e) => updateSlideField('ctaText', e.target.value)} maxLength={50} placeholder="Ej: Ver ofertas, Comprar ahora" className="text-sm font-semibold" />
+                        <FieldError id="promotion-cta-error" message={fieldErrors.ctaText} />
+
+                        {/* Sugerencias Botón */}
+                        <div className="pt-1">
+                          <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                            <Lightbulb className="h-3 w-3 text-amber-500" />
+                            Sugerencias de botón:
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {CTA_TEXT_SUGGESTIONS.map((sug, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => updateSlideField('ctaText', sug)}
+                                className={cn(
+                                  'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer',
+                                  editingSlide.ctaText === sug
+                                    ? 'border-primary bg-primary/10 font-bold text-primary'
+                                    : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                                )}
+                              >
+                                {sug}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Enlace del Botón o Banner */}
+                    <div className={cn('space-y-1.5', !editingSlide.hideText && 'pt-2 border-t border-border/40')}>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="promotion-href" className="text-xs font-bold text-foreground">
+                          Enlace o destino
+                        </Label>
+                        <CharCount value={editingSlide.ctaHref || ''} max={500} />
+                      </div>
+                      <Input id="promotion-href" aria-invalid={Boolean(fieldErrors.ctaHref)} aria-describedby={fieldErrors.ctaHref ? 'promotion-href-error' : undefined} value={editingSlide.ctaHref || ''} onChange={(e) => updateSlideField('ctaHref', e.target.value)} maxLength={500} placeholder="/productos" className="text-sm font-mono" />
+                      <FieldError id="promotion-href-error" message={fieldErrors.ctaHref} />
+
+                      {/* Atajos de Destino */}
+                      <div className="pt-1">
+                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                          <ExternalLink className="h-3 w-3 text-primary" />
+                          Destinos rápidos:
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {CTA_HREF_SHORTCUTS.map((shortcut, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => updateSlideField('ctaHref', shortcut.href)}
+                              className={cn(
+                                'rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer',
+                                editingSlide.ctaHref === shortcut.href
+                                  ? 'border-primary bg-primary/10 text-primary'
+                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                              )}
+                            >
+                              {shortcut.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </FormSection>
+                </div>
+
+                {/* Appearance */}
+                <div id="carousel-panel-appearance" role="tabpanel" aria-labelledby="carousel-tab-appearance" className={editorPanelClass('appearance')}>
+                <FormSection icon={Monitor} label="Diseño, fondo y contrastes" step={4}>
+                  <div className="grid gap-5">
+                    {/* Alineación y Tono */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-foreground">Alineación del texto</p>
+                        <SegmentedControl
+                          value={editingSlide.contentAlign}
+                          onChange={(v) => updateSlideField('contentAlign', v)}
+                          options={[
+                            { value: 'left' as const, label: 'Izquierda', icon: AlignLeft },
+                            { value: 'center' as const, label: 'Centro', icon: AlignCenter },
+                            { value: 'right' as const, label: 'Derecha', icon: AlignRight },
+                          ]}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-foreground">Tono del texto</p>
+                        <SegmentedControl
+                          value={editingSlide.textTone}
+                          onChange={(v) => updateSlideField('textTone', v)}
+                          options={[
+                            { value: 'light' as const, label: 'Claro', icon: SunMedium },
+                            { value: 'dark' as const, label: 'Oscuro', icon: MoonStar },
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Capa de oscurecimiento / Overlay */}
+                    <div className="space-y-2 pt-3 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-foreground">Capa de oscurecimiento (Overlay sobre la imagen)</p>
+                        <span className="text-[11px] text-muted-foreground">Control de contraste</span>
+                      </div>
+                      <SegmentedControl
+                        value={editingSlide.overlayIntensity || (editingSlide.hideText ? 'none' : 'strong')}
+                        onChange={(v) => updateSlideField('overlayIntensity', v)}
+                        options={[
+                          { value: 'none' as const, label: 'Sin capa (0%)' },
+                          { value: 'subtle' as const, label: 'Sutil (25%)' },
+                          { value: 'medium' as const, label: 'Equilibrado (55%)' },
+                          { value: 'strong' as const, label: 'Intenso (85%)' },
+                        ]}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Usá <strong>Sin capa (0%)</strong> si querés que la foto o banner se vea completamente limpia y nítida.
+                      </p>
+                    </div>
+
+                    {/* Tinte de la capa */}
+                    {editingSlide.overlayIntensity !== 'none' && (
+                      <div className="space-y-2 pt-2">
+                        <p className="text-xs font-semibold text-foreground">Tinte de la capa / degradé</p>
+                        <SegmentedControl
+                          value={editingSlide.overlayColor || (editingSlide.textTone === 'light' ? 'black' : 'white')}
+                          onChange={(v) => updateSlideField('overlayColor', v)}
+                          options={[
+                            { value: 'black' as const, label: 'Negro cine' },
+                            { value: 'white' as const, label: 'Blanco luminoso' },
+                            { value: 'brand' as const, label: 'Color de marca' },
+                          ]}
+                        />
+                      </div>
+                    )}
+
+                    {/* Color de fondo base */}
+                    <div className="space-y-2 pt-3 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="promotion-bg-color" className="text-xs font-semibold text-foreground">
+                          Color de fondo base de la diapositiva <span className="text-muted-foreground font-normal">(Opcional)</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="promotion-bg-color"
+                          value={editingSlide.backgroundColor || ''}
+                          onChange={(e) => updateSlideField('backgroundColor', e.target.value)}
+                          placeholder="#09090b o rgb(15 23 42)"
+                          className="h-9 font-mono text-xs max-w-xs"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          {[
+                            { label: 'Negro', value: '#09090b' },
+                            { label: 'Grafito', value: '#1e293b' },
+                            { label: 'Blanco', value: '#ffffff' },
+                          ].map((c) => (
+                            <button
+                              key={c.value}
+                              type="button"
+                              onClick={() => updateSlideField('backgroundColor', c.value)}
+                              className="text-[11px] px-2 py-1 rounded border border-border/70 hover:bg-muted text-muted-foreground cursor-pointer"
+                            >
+                              {c.label}
+                            </button>
+                          ))}
+                          {editingSlide.backgroundColor && (
+                            <button
+                              type="button"
+                              onClick={() => updateSlideField('backgroundColor', '')}
+                              className="text-[11px] px-2 py-1 text-destructive hover:underline cursor-pointer"
+                            >
+                              Limpiar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Visible cuando la imagen tiene transparencia (PNG/WebP) o márgenes.
+                      </p>
+                    </div>
+                  </div>
+                </FormSection>
+                </div>
 
                 {/* Templates */}
-                <div id="carousel-panel-template" role="tabpanel" aria-labelledby="carousel-tab-template" className={editorPanelClass('template', 'xl:order-5 xl:col-span-2')}>
-                <FormSection icon={ImagePlus} label="Inicio rápido con plantillas por rubro">
+                <div id="carousel-panel-template" role="tabpanel" aria-labelledby="carousel-tab-template" className={editorPanelClass('template')}>
+                <FormSection icon={ImagePlus} label="Inicio rápido con plantillas por rubro" step={5}>
                   {/* Filtro por Categorías */}
                   <div className="flex flex-wrap gap-1.5 pb-2">
                     {['all', 'Tecnología', 'Moda & Ropa', 'Cosmética', 'Ferretería', 'Promociones'].map((cat) => (
@@ -1118,7 +1762,7 @@ export function PromotionalCarouselEditor({
                     ))}
                   </div>
 
-                  <div className="grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">
+                  <div className="grid gap-2.5 sm:grid-cols-2">
                     {CAROUSEL_EXAMPLES
                       .filter((ex) => templateCategoryFilter === 'all' || ex.category === templateCategoryFilter)
                       .map((example) => (
@@ -1159,242 +1803,33 @@ export function PromotionalCarouselEditor({
                 </FormSection>
                 </div>
 
-                {/* Text */}
-                <div id="carousel-panel-content" role="tabpanel" aria-labelledby="carousel-tab-content" className={editorPanelClass('content', 'xl:order-1')}>
-                <FormSection icon={Type} label="Contenido principal" step={1}>
-                  <div className="grid gap-4">
-                    {/* Título */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="promotion-title" className="text-xs font-bold text-foreground">Título del banner <span className="text-destructive">*</span></Label>
-                        <CharCount value={editingSlide.title} max={100} />
-                      </div>
-                      <Input id="promotion-title" required aria-invalid={Boolean(fieldErrors.title)} aria-describedby={fieldErrors.title ? 'promotion-title-error' : undefined} value={editingSlide.title} onChange={(e) => updateSlideField('title', e.target.value)} maxLength={100} placeholder="Ej: 🔥 30% OFF en Seleccionados" className="h-10 text-sm font-semibold" />
-                      <FieldError id="promotion-title-error" message={fieldErrors.title} />
-
-                      {/* Sugerencias Rápidas de Título */}
-                      <div className="pt-1">
-                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                          <Lightbulb className="h-3 w-3 text-amber-500" />
-                          Sugerencias de títulos comerciales:
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                          {TITLE_SUGGESTIONS.map((sug, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => updateSlideField('title', sug)}
-                              className={cn(
-                                'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer text-left',
-                                editingSlide.title === sug
-                                  ? 'border-primary bg-primary/10 font-bold text-primary'
-                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                              )}
-                            >
-                              {sug}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Mensaje */}
-                    <div className="space-y-1.5 pt-2 border-t border-border/40">
-                      <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="promotion-message" className="text-xs font-bold text-foreground">Mensaje descriptivo <span className="text-destructive">*</span></Label>
-                        <CharCount value={editingSlide.message} max={240} />
-                      </div>
-                      <Textarea id="promotion-message" required aria-invalid={Boolean(fieldErrors.message)} aria-describedby={fieldErrors.message ? 'promotion-message-error' : undefined} value={editingSlide.message} onChange={(e) => updateSlideField('message', e.target.value)} maxLength={240} rows={3} placeholder="Aprovechá precios especiales por tiempo limitado." className="min-h-20 resize-none text-sm" />
-                      <FieldError id="promotion-message-error" message={fieldErrors.message} />
-
-                      {/* Sugerencias Rápidas de Mensaje */}
-                      <div className="pt-1">
-                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                          <Lightbulb className="h-3 w-3 text-amber-500" />
-                          Sugerencias de mensajes:
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                          {MESSAGE_SUGGESTIONS.map((sug, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => updateSlideField('message', sug)}
-                              className={cn(
-                                'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer text-left',
-                                editingSlide.message === sug
-                                  ? 'border-primary bg-primary/10 font-bold text-primary'
-                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                              )}
-                            >
-                              {sug.slice(0, 42)}...
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
                   </div>
-                </FormSection>
-                </div>
-
-                {/* Image */}
-                <div id="carousel-panel-image" role="tabpanel" aria-labelledby="carousel-tab-image" className={editorPanelClass('image', 'xl:order-2')}>
-                <FormSection icon={Upload} label="Imagen promocional" step={2}>
-                  <ImageUploadZone
-                    imageUrl={editingSlide.imageUrl}
-                    uploading={uploading}
-                    error={fieldErrors.imageUrl}
-                    onFileSelect={(file) => void uploadImage(file)}
-                    onClear={() => {
-                      discardTemporaryImage(editingUploadPathRef.current || pendingPathForSlide(editingSlide))
-                      editingUploadPathRef.current = null
-                      updateSlideField('imageUrl', '')
-                    }}
-                  />
-                  <FieldError id="promotion-image-error" message={fieldErrors.imageUrl} />
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="promotion-alt" className="text-xs font-semibold text-foreground">Descripción para accesibilidad (Alt) <span className="text-destructive">*</span></Label>
-                      <CharCount value={editingSlide.imageAlt} max={160} />
-                    </div>
-                    <Input id="promotion-alt" required aria-invalid={Boolean(fieldErrors.imageAlt)} aria-describedby={fieldErrors.imageAlt ? 'promotion-alt-error' : 'promotion-alt-help'} value={editingSlide.imageAlt} onChange={(e) => updateSlideField('imageAlt', e.target.value)} maxLength={160} placeholder="Cargadores y cables incluidos en la promoción" className="text-sm" />
-                    <FieldError id="promotion-alt-error" message={fieldErrors.imageAlt} />
-                    <p id="promotion-alt-help" className="text-[11px] text-muted-foreground">Requerido para buscadores y lectores de pantalla.</p>
-                  </div>
-                </FormSection>
-                </div>
-
-                {/* CTA */}
-                <div id="carousel-panel-cta" role="tabpanel" aria-labelledby="carousel-tab-cta" className={editorPanelClass('cta', 'xl:order-3')}>
-                <FormSection icon={Link2} label="Botón de acción (Llamado al clic)" step={3}>
-                  <div className="grid gap-4">
-                    {/* Texto del Botón */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="promotion-cta" className="text-xs font-bold text-foreground">Texto del botón</Label>
-                        <CharCount value={editingSlide.ctaText || ''} max={50} />
-                      </div>
-                      <Input id="promotion-cta" aria-invalid={Boolean(fieldErrors.ctaText)} aria-describedby={fieldErrors.ctaText ? 'promotion-cta-error' : undefined} value={editingSlide.ctaText || ''} onChange={(e) => updateSlideField('ctaText', e.target.value)} maxLength={50} placeholder="Ej: Ver ofertas, Comprar ahora" className="text-sm font-semibold" />
-                      <FieldError id="promotion-cta-error" message={fieldErrors.ctaText} />
-
-                      {/* Sugerencias Botón */}
-                      <div className="pt-1">
-                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                          <Lightbulb className="h-3 w-3 text-amber-500" />
-                          Sugerencias de botón:
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                          {CTA_TEXT_SUGGESTIONS.map((sug, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => updateSlideField('ctaText', sug)}
-                              className={cn(
-                                'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer',
-                                editingSlide.ctaText === sug
-                                  ? 'border-primary bg-primary/10 font-bold text-primary'
-                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                              )}
-                            >
-                              {sug}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Enlace del Botón */}
-                    <div className="space-y-1.5 pt-2 border-t border-border/40">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="promotion-href" className="text-xs font-bold text-foreground">Enlace o destino</Label>
-                        <CharCount value={editingSlide.ctaHref || ''} max={500} />
-                      </div>
-                      <Input id="promotion-href" aria-invalid={Boolean(fieldErrors.ctaHref)} aria-describedby={fieldErrors.ctaHref ? 'promotion-href-error' : undefined} value={editingSlide.ctaHref || ''} onChange={(e) => updateSlideField('ctaHref', e.target.value)} maxLength={500} placeholder="/productos" className="text-sm font-mono" />
-                      <FieldError id="promotion-href-error" message={fieldErrors.ctaHref} />
-
-                      {/* Atajos de Destino */}
-                      <div className="pt-1">
-                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                          <ExternalLink className="h-3 w-3 text-primary" />
-                          Destinos rápidos:
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {CTA_HREF_SHORTCUTS.map((shortcut, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => updateSlideField('ctaHref', shortcut.href)}
-                              className={cn(
-                                'rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer',
-                                editingSlide.ctaHref === shortcut.href
-                                  ? 'border-primary bg-primary/10 text-primary'
-                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                              )}
-                            >
-                              {shortcut.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </FormSection>
-                </div>
-
-                {/* Appearance */}
-                <div id="carousel-panel-appearance" role="tabpanel" aria-labelledby="carousel-tab-appearance" className={editorPanelClass('appearance', 'xl:order-4')}>
-                <FormSection icon={Monitor} label="Apariencia" step={4}>
-                  <div className="grid gap-4 2xl:grid-cols-2">
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-foreground">Alineación del texto</p>
-                      <SegmentedControl
-                        value={editingSlide.contentAlign}
-                        onChange={(v) => updateSlideField('contentAlign', v)}
-                        options={[
-                          { value: 'left' as const, label: 'Izquierda', icon: AlignLeft },
-                          { value: 'center' as const, label: 'Centro', icon: AlignCenter },
-                          { value: 'right' as const, label: 'Derecha', icon: AlignRight },
-                        ]}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-foreground">Tono del texto</p>
-                      <SegmentedControl
-                        value={editingSlide.textTone}
-                        onChange={(v) => updateSlideField('textTone', v)}
-                        options={[
-                          { value: 'light' as const, label: 'Claro', icon: SunMedium },
-                          { value: 'dark' as const, label: 'Oscuro', icon: MoonStar },
-                        ]}
-                      />
-                    </div>
-                  </div>
-                </FormSection>
-                </div>
                 </div>
               </div>
 
               {/* Right: preview + publish */}
               <div className="flex flex-col border-t border-border/60 bg-muted/30 px-4 py-5 sm:px-6 xl:h-full xl:overflow-y-auto xl:border-l xl:border-t-0 xl:py-6">
-                <SlidePreview slide={editingSlide} uploading={uploading} />
+                <div className="mx-auto w-full max-w-md space-y-6 xl:sticky xl:top-0">
+                  <SlidePreview slide={editingSlide} uploading={uploading} />
 
-                <div className="mt-6 space-y-4 border-t border-border/60 pt-5">
+                  <div className="space-y-4 border-t border-border/60 pt-5">
+                    <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-background px-4 py-4">
+                      <div>
+                        <p className="text-sm font-semibold">Publicar diapositiva</p>
+                        <p className="text-xs text-muted-foreground">Visible en la tienda cuando está activa.</p>
+                      </div>
+                      <Switch id="promotion-active" aria-label="Publicar diapositiva" checked={editingSlide.active} onCheckedChange={(value) => updateSlideField('active', value)} />
+                    </div>
 
-                <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-background px-4 py-4">
-                  <div>
-                    <p className="text-sm font-semibold">Publicar diapositiva</p>
-                    <p className="text-xs text-muted-foreground">Visible en la tienda cuando está activa.</p>
+                    <div className="space-y-3 rounded-lg border border-border/60 bg-background px-4 py-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Consejos</p>
+                      <ul className="space-y-1.5 text-xs text-muted-foreground">
+                        <li className="flex items-start gap-1.5"><span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />Usá imágenes horizontales de al menos 1200 × 500 px.</li>
+                        <li className="flex items-start gap-1.5"><span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />Textos cortos y directos generan más clics.</li>
+                        <li className="flex items-start gap-1.5"><span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />Elegí tono claro para imágenes oscuras y viceversa.</li>
+                      </ul>
+                    </div>
                   </div>
-                  <Switch id="promotion-active" aria-label="Publicar diapositiva" checked={editingSlide.active} onCheckedChange={(value) => updateSlideField('active', value)} />
-                </div>
-
-                <div className="space-y-3 rounded-lg border border-border/60 bg-background px-4 py-4">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Consejos</p>
-                  <ul className="space-y-1.5 text-xs text-muted-foreground">
-                    <li className="flex items-start gap-1.5"><span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />Usá imágenes horizontales de al menos 1200 × 500 px.</li>
-                    <li className="flex items-start gap-1.5"><span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />Textos cortos y directos generan más clics.</li>
-                    <li className="flex items-start gap-1.5"><span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />Elegí tono claro para imágenes oscuras y viceversa.</li>
-                  </ul>
-                </div>
                 </div>
               </div>
             </div>

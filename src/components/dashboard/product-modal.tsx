@@ -81,6 +81,7 @@ import { FASHION_AUDIENCES, getFashionAudienceFromTags, mergeFashionAudienceTag 
 import { ProductVariantsEditor } from '@/components/dashboard/products/ProductVariantsEditor'
 import { ProductVariantReview } from '@/components/dashboard/products/ProductVariantReview'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 
 interface ProductModalProps {
   product: Product | null
@@ -202,14 +203,16 @@ export function normalizeProductVariantsForForm(product: any): {
       }
     })
 
-  // No se debe convertir silenciosamente un producto con variantes en uno
-  // simple cuando un listado resumido todavía no incluyó la relación. El modal
-  // completa esos datos desde el detalle antes de permitir guardar.
-  const effectiveHasVariants = Boolean(product.has_variants)
+  // La relación es la evidencia más fuerte. Datos importados antiguos pueden
+  // conservar variantes aunque la bandera del padre haya quedado en false.
+  const effectiveHasVariants = Boolean(product.has_variants || normalizedVariants.length > 0)
+  const derivedConfig = normalizedConfig.length > 0
+    ? normalizedConfig
+    : deriveVariantAttributeConfig(rawVariants)
 
   return {
     has_variants: effectiveHasVariants,
-    variant_attribute_config: effectiveHasVariants ? normalizedConfig : [],
+    variant_attribute_config: effectiveHasVariants ? derivedConfig : [],
     variants: effectiveHasVariants ? normalizedVariants : [],
   }
 }
@@ -238,6 +241,9 @@ export function ProductModal({
   productRef.current = product
   const productId = product?.id ?? null
   const listedVariants = (product as (Product & { variants?: unknown[] }) | null)?.variants
+  const hasRecoveredVariantData = Boolean(
+    product && !product.has_variants && Array.isArray(listedVariants) && listedVariants.length > 0
+  )
   const productNeedsVariantHydration = Boolean(
     product?.has_variants
     && (!Array.isArray(listedVariants) || listedVariants.length === 0)
@@ -2407,6 +2413,15 @@ export function ProductModal({
                       <AlertTitle>Cargando variantes guardadas</AlertTitle>
                       <AlertDescription>
                         Estamos recuperando talles, colores, precios y stock antes de habilitar la edición.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {hasRecoveredVariantData && (
+                    <Alert className="border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Variantes recuperadas</AlertTitle>
+                      <AlertDescription>
+                        Este producto tenía combinaciones guardadas, pero su configuración principal estaba desactivada. Al guardar se sincronizarán nuevamente sus atributos y variantes.
                       </AlertDescription>
                     </Alert>
                   )}

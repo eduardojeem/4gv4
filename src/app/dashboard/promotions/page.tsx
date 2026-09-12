@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import {
@@ -40,6 +40,7 @@ import {
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { PROMOTIONS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { usePromotions } from '@/hooks/use-promotions'
+import { cn } from '@/lib/utils'
 import type { Promotion } from '@/types/promotion'
 import {
   PromotionStats,
@@ -92,7 +93,7 @@ const PromotionDialog = dynamic(
   }
 )
 
-/** Encabezado estilizado de cada bloque de la pestaña pública */
+/** Encabezado estilizado y compacto de cada bloque de la pestaña pública */
 function PublicBlockHeading({
   step,
   icon: Icon,
@@ -107,24 +108,31 @@ function PublicBlockHeading({
   badgeText?: string
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3.5 sm:p-4 dark:border-slate-800/80 dark:bg-slate-900/40">
-      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 text-xs font-extrabold text-white shadow-xs">
-        {step}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-slate-100">
-            <Icon className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-            {title}
-          </h2>
-          {badgeText && (
-            <Badge variant="outline" className="text-[10px] font-semibold text-cyan-700 dark:text-cyan-300 border-cyan-500/30 bg-cyan-50/50 dark:bg-cyan-950/30">
-              {badgeText}
-            </Badge>
-          )}
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2.5 dark:border-slate-800/80 dark:bg-slate-900/60">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-blue-600 text-xs font-bold text-white shadow-2xs">
+          {step}
+        </span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+              <Icon className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />
+              <span>{title}</span>
+            </h2>
+            {badgeText && (
+              <Badge variant="outline" className="hidden sm:inline-flex text-[10px] py-0 px-1.5 font-medium text-cyan-700 dark:text-cyan-300 border-cyan-500/30 bg-cyan-50/50 dark:bg-cyan-950/30">
+                {badgeText}
+              </Badge>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">{description}</p>
         </div>
-        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{description}</p>
       </div>
+      {badgeText && (
+        <Badge variant="outline" className="sm:hidden self-start text-[10px] py-0 px-1.5 font-medium text-cyan-700 dark:text-cyan-300 border-cyan-500/30 bg-cyan-50/50 dark:bg-cyan-950/30">
+          {badgeText}
+        </Badge>
+      )}
     </div>
   )
 }
@@ -168,6 +176,19 @@ export default function PromotionsPage() {
   const [deletingPromotion, setDeletingPromotion] = useState<Promotion | null>(null)
   const [tab, setTab] = useState('promociones')
   const [publicSectionTab, setPublicSectionTab] = useState<'all' | 'header' | 'carousel' | 'banners'>('all')
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const queryTab = params.get('tab')
+    if (queryTab === 'publica' || queryTab === 'puntos' || queryTab === 'promociones') {
+      setTab(queryTab)
+    }
+    const block = params.get('block')
+    if (block === 'banners' || block === 'carousel' || block === 'header' || block === 'all') {
+      setPublicSectionTab(block)
+    }
+  }, [])
 
   // Get alerts data — derivado de allPromotions (no filtradas)
   // para que las alertas no se oculten cuando el user aplica filtros
@@ -369,92 +390,107 @@ export default function PromotionsPage() {
           <TabsContent value="publica" className="mt-6 flex flex-col gap-6">
             {canEdit ? (
               <>
-                {/* Banner de acceso rápido e información clara */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-cyan-200/80 bg-gradient-to-r from-cyan-50/70 via-white to-sky-50/40 p-4 sm:p-5 dark:border-cyan-900/40 dark:from-cyan-950/30 dark:via-slate-900/60 dark:to-sky-950/20 shadow-xs">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Badge className="bg-cyan-600 text-white text-[10px] font-bold">
-                        Página Pública de Ofertas
-                      </Badge>
-                      <span className="text-xs font-mono text-slate-500">/ofertas</span>
+                {/* Banner compacto de acceso rápido e información clara */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-cyan-200/80 bg-gradient-to-r from-cyan-50/70 via-white to-sky-50/40 p-3.5 sm:p-4 dark:border-cyan-900/40 dark:from-cyan-950/30 dark:via-slate-900/60 dark:to-sky-950/20 shadow-xs">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-600 text-white shadow-xs">
+                      <Store className="h-4.5 w-4.5" />
                     </div>
-                    <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-50">
-                      Diseño y Experiencia de Ofertas en tu Tienda Web
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
-                      Configura cómo tus clientes ven los banners, carruseles de productos rebajados y textos en la página de ofertas. Los descuentos en sí se administran en la pestaña &quot;Promociones&quot;.
-                    </p>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-50 truncate">
+                          Diseño y Experiencia de Ofertas en tu Tienda Web
+                        </h2>
+                        <Badge variant="outline" className="text-[10px] font-mono border-cyan-500/30 bg-cyan-50/60 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300 shrink-0">
+                          /ofertas
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-2xl">
+                        Configura cómo tus clientes ven los banners, carruseles de productos rebajados y textos en la página de ofertas.
+                      </p>
+                    </div>
                   </div>
                   <Button
                     asChild
                     size="sm"
                     variant="outline"
-                    className="gap-2 shrink-0 rounded-xl bg-white dark:bg-slate-900 text-xs font-semibold h-9 shadow-xs hover:border-cyan-500"
+                    className="gap-1.5 shrink-0 rounded-xl bg-white dark:bg-slate-900 text-xs font-semibold h-8.5 shadow-xs hover:border-cyan-500 self-start sm:self-auto"
                   >
                     <a href="/ofertas" target="_blank" rel="noreferrer">
                       <Store className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-                      Ver /ofertas en vivo
+                      <span>Ver /ofertas en vivo</span>
                       <ExternalLink className="h-3 w-3 opacity-60" />
                     </a>
                   </Button>
                 </div>
 
-                {/* Selector rápido de sección para no tener que hacer scroll infinito */}
-                <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-                  <span className="text-[11px] font-bold text-slate-500 px-2 uppercase">Filtrar Vista:</span>
+                {/* Selector rápido y ordenado de sección para no tener que hacer scroll infinito */}
+                <div className="flex flex-wrap items-center justify-between gap-2 p-1.5 bg-slate-100/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant={publicSectionTab === 'carousel' ? 'default' : 'ghost'}
+                      className={cn(
+                        'rounded-xl text-xs h-8 px-3.5 gap-1.5 font-bold transition-all',
+                        publicSectionTab === 'carousel'
+                          ? 'bg-cyan-600 text-white shadow-xs hover:bg-cyan-700'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800'
+                      )}
+                      onClick={() => setPublicSectionTab('carousel')}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>2. Carrusel de Rebajados</span>
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant={publicSectionTab === 'banners' ? 'default' : 'ghost'}
+                      className={cn(
+                        'rounded-xl text-xs h-8 px-3.5 gap-1.5 font-bold transition-all',
+                        publicSectionTab === 'banners'
+                          ? 'bg-cyan-600 text-white shadow-xs hover:bg-cyan-700'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800'
+                      )}
+                      onClick={() => setPublicSectionTab('banners')}
+                    >
+                      <GalleryHorizontalEnd className="h-3.5 w-3.5" />
+                      <span>3. Banners Publicitarios</span>
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant={publicSectionTab === 'header' ? 'default' : 'ghost'}
+                      className={cn(
+                        'rounded-xl text-xs h-8 px-3.5 gap-1.5 font-bold transition-all',
+                        publicSectionTab === 'header'
+                          ? 'bg-cyan-600 text-white shadow-xs hover:bg-cyan-700'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800'
+                      )}
+                      onClick={() => setPublicSectionTab('header')}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      <span>1. Encabezado & Colores</span>
+                    </Button>
+                  </div>
+
                   <Button
                     size="sm"
                     variant={publicSectionTab === 'all' ? 'default' : 'ghost'}
-                    className={`rounded-xl text-xs h-7.5 px-3 font-bold ${
+                    className={cn(
+                      'rounded-xl text-xs h-8 px-3 font-bold transition-all',
                       publicSectionTab === 'all'
                         ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300'
-                    }`}
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                    )}
                     onClick={() => setPublicSectionTab('all')}
                   >
                     Mostrar Todo (3 Pasos)
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={publicSectionTab === 'header' ? 'default' : 'ghost'}
-                    className={`rounded-xl text-xs h-7.5 px-3 font-bold ${
-                      publicSectionTab === 'header'
-                        ? 'bg-cyan-600 text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300'
-                    }`}
-                    onClick={() => setPublicSectionTab('header')}
-                  >
-                    1. Encabezado & Colores
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={publicSectionTab === 'carousel' ? 'default' : 'ghost'}
-                    className={`rounded-xl text-xs h-7.5 px-3 font-bold ${
-                      publicSectionTab === 'carousel'
-                        ? 'bg-cyan-600 text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300'
-                    }`}
-                    onClick={() => setPublicSectionTab('carousel')}
-                  >
-                    2. Carrusel de Rebajados
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={publicSectionTab === 'banners' ? 'default' : 'ghost'}
-                    className={`rounded-xl text-xs h-7.5 px-3 font-bold ${
-                      publicSectionTab === 'banners'
-                        ? 'bg-cyan-600 text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300'
-                    }`}
-                    onClick={() => setPublicSectionTab('banners')}
-                  >
-                    3. Banners Publicitarios
                   </Button>
                 </div>
 
                 {/* Bloque 1: Configuración General */}
                 {(publicSectionTab === 'all' || publicSectionTab === 'header') && (
-                  <section className="space-y-3">
+                  <section className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-card p-4 sm:p-5 shadow-xs space-y-4">
                     <PublicBlockHeading
                       step={1}
                       icon={Eye}
@@ -468,7 +504,7 @@ export default function PromotionsPage() {
 
                 {/* Bloque 2: Carrusel Automático de Rebajados */}
                 {(publicSectionTab === 'all' || publicSectionTab === 'carousel') && (
-                  <section className="space-y-3">
+                  <section className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-card p-4 sm:p-5 shadow-xs space-y-4">
                     <PublicBlockHeading
                       step={2}
                       icon={Sparkles}
@@ -482,7 +518,7 @@ export default function PromotionsPage() {
 
                 {/* Bloque 3: Carrusel de Banners de Campañas */}
                 {(publicSectionTab === 'all' || publicSectionTab === 'banners') && (
-                  <section className="space-y-3">
+                  <section className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-card p-4 sm:p-5 shadow-xs space-y-4">
                     <PublicBlockHeading
                       step={3}
                       icon={GalleryHorizontalEnd}

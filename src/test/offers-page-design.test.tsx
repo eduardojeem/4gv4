@@ -148,9 +148,13 @@ describe('las tarjetas', () => {
     expect(screen.queryByRole('button', { name: /al carrito/ })).not.toBeInTheDocument()
   })
 
-  it('en modo catálogo, un botón al detalle', () => {
+  it('en modo catálogo, un botón abre el modal de detalle y hay enlace a la página completa', () => {
     pintar([oferta('p1', 'Remera', 100_000, 50_000)], ajustes('catalog'))
-    expect(screen.getByRole('link', { name: 'Ver detalle de Remera' })).toHaveAttribute('href', '/tienda-demo/productos/p1')
+    // "Ver detalle" ahora abre el modal
+    const verDetalleBtn = screen.getAllByRole('button', { name: 'Ver detalle de Remera' })[0]
+    expect(verDetalleBtn).toBeInTheDocument()
+    // El enlace a la página completa sigue disponible (ícono Eye en la fila de acciones)
+    expect(screen.getByRole('link', { name: 'Ver página completa de Remera' })).toHaveAttribute('href', '/tienda-demo/productos/p1')
   })
 
   it('en Moda la foto va vertical, como en el resto de la tienda', () => {
@@ -159,7 +163,33 @@ describe('las tarjetas', () => {
         <OffersPageClient initialSettings={ajustes()} initialOffers={[oferta('p1', 'Remera', 100, 50, { image: 'https://cdn.test/r.jpg' })] as never} />
       </StorefrontStyleProvider>
     )
-    expect(container.querySelector('article a')).toHaveClass('aspect-[3/4]')
+    expect(container.querySelector('article button[class*="aspect"]')).toHaveClass('aspect-[3/4]')
+  })
+
+  it('permite abrir el modal de detalle de oferta y muestra el ahorro y opciones', () => {
+    pintar([
+      oferta('p1', 'Remera Básica Oversize', 100_000, 60_000, {
+        description: 'Algodón peinado premium de tacto suave.',
+        brand: 'DA Básica',
+      }),
+    ])
+
+    // Abre el modal haciendo clic en la imagen del producto (ahora es un botón)
+    const quickViewBtn = screen.getByRole('button', { name: 'Ver detalle de Remera Básica Oversize' })
+    fireEvent.click(quickViewBtn)
+
+    // El diálogo debe estar en pantalla con la información de la oferta
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('Algodón peinado premium de tacto suave.')).toBeInTheDocument()
+    expect(screen.getByText(/¡Ahorrás Gs. 40.000 en esta compra!/)).toBeInTheDocument()
+    expect(screen.getByText('-40% OFF')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Ver página completa/ })).toHaveAttribute('href', '/tienda-demo/productos/p1')
+
+    // Se puede agregar al carrito desde el modal
+    const dialog = screen.getByRole('dialog')
+    const modalCartBtn = within(dialog).getByRole('button', { name: /Agregar al carrito/i })
+    fireEvent.click(modalCartBtn)
+    expect(control.addProduct).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), 60_000, 1)
   })
 })
 

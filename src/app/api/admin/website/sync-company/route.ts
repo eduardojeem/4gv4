@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
@@ -214,6 +214,12 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
   revalidatePath(`/${canonicalSlug}`, 'layout')
   if (currentSlug && currentSlug !== canonicalSlug) revalidatePath(`/${currentSlug}`, 'layout')
   revalidatePath('/marketplace', 'layout')
+  revalidatePath('/marketplace/empresas')
+  try {
+    revalidateTag('marketplace:organizations', 'max')
+  } catch (cacheError) {
+    console.warn('Could not revalidate marketplace:organizations tag:', cacheError)
+  }
   return NextResponse.json({ success: true, data: validation.data })
 }
 

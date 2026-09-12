@@ -37,7 +37,16 @@ export default async function OrganizationPublicLayout({
   if (!storefrontOrganization) notFound()
   // Sin modulo de taller la tienda no ofrece seguimiento de reparaciones.
   const repairsModuleEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')
+  const servicesModuleEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'services')
   const settings = await fetchWebsiteSettings()
+  if (settings?.company_info) {
+    if (!servicesModuleEnabled) {
+      settings.company_info.servicesPageEnabled = false
+    }
+    if (!repairsModuleEnabled) {
+      settings.company_info.repairTrackingEnabled = false
+    }
+  }
   const brandColor = settings?.company_info?.brandColor || 'blue'
   const customBrandColor = settings?.company_info?.customBrandColor
   // El aspecto que eligio el dueño o, en «Automático», el de su rubro.
@@ -55,7 +64,11 @@ export default async function OrganizationPublicLayout({
             data-storefront-style={storefrontStyle}
           >
             <SkipToContentLink />
-            <PublicHeader initialSettings={settings} />
+            <PublicHeader 
+              initialSettings={settings} 
+              repairsModuleEnabled={repairsModuleEnabled}
+              servicesModuleEnabled={servicesModuleEnabled}
+            />
             <CustomerLinkBanner />
             <div className="flex-1 pb-16 lg:pb-0">{children}</div>
             <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />

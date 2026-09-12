@@ -12,4 +12,5 @@ export const REMOTE_IMAGE_HOSTS = [
   'ui-avatars.com',
   'pyunicentroprod.vtexassets.com',
   'images.napali.app',
+  'cdn.test',
 ] as const

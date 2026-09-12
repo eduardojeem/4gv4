@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { withAdminAuth } from '@/lib/api/withAdminAuth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -187,6 +188,16 @@ async function handler(
       key,
       hasValue: !!value
     })
+
+    if (key === 'company_info' || key === 'hero_content') {
+      try {
+        revalidateTag('marketplace:organizations', 'max')
+        revalidatePath('/marketplace/empresas')
+        revalidatePath('/marketplace', 'layout')
+      } catch (cacheError) {
+        console.warn('Could not revalidate marketplace cache on setting update:', cacheError)
+      }
+    }
 
     return NextResponse.json({
       success: true,

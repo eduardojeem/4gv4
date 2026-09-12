@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -9,10 +9,15 @@ import { Button } from '@/components/ui/button'
 import { ProductCard } from '@/components/public/ProductCard'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
-import type { PublicProduct } from '@/types/public'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { STOREFRONT_EYEBROW_CLASS, STOREFRONT_HEADING_CLASS } from '@/lib/website/storefront-style'
 import { NEWEST_PRODUCTS_SWR_OPTIONS, fetchPublicProducts, newestProductsKey } from './newest-products'
+
+export function getFeaturedProductLimit(style: 'classic' | 'fashion' | 'sport') {
+  return style === 'classic' ? 16 : 8
+}
+
+const subscribeToMount = () => () => undefined
 
 export function FeaturedProducts() {
   const pathname = usePathname()
@@ -29,12 +34,8 @@ export function FeaturedProducts() {
     NEWEST_PRODUCTS_SWR_OPTIONS
   )
 
-  const [isMounted, setIsMounted] = useState(false)
-  useEffect(() => {
-    setIsMounted(true)
-  }, [])
-
-  const products = isMounted ? (data ?? []) : []
+  const isMounted = useSyncExternalStore(subscribeToMount, () => true, () => false)
+  const products = useMemo(() => (isMounted ? (data ?? []) : []), [data, isMounted])
   const effectiveIsLoading = !isMounted || isLoading
 
   // Categorías presentes en los productos cargados
@@ -97,8 +98,8 @@ export function FeaturedProducts() {
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
             {storefrontStyle === 'classic' ? (
-              <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
-                <Sparkles className="h-3.5 w-3.5" />
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary shadow-xs">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
                 Catálogo Destacado
               </span>
             ) : (
@@ -114,7 +115,7 @@ export function FeaturedProducts() {
             </p>
           </div>
 
-          <Button asChild variant="outline" className="hidden sm:inline-flex rounded-full font-bold shadow-xs gap-1.5 px-5">
+          <Button asChild variant="outline" className="hidden sm:inline-flex rounded-full font-bold shadow-xs gap-1.5 px-5 hover:border-primary/40 hover:text-primary">
             <Link href={`${tenantPrefix}/productos`}>
               <span>Ver todos ({products.length})</span>
               <ArrowRight className="h-4 w-4 text-primary" />
@@ -133,8 +134,8 @@ export function FeaturedProducts() {
             className={cn(
               'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all shadow-xs shrink-0',
               activeSpecialTab === 'all' && selectedCategory === 'all'
-                ? 'bg-primary text-primary-foreground'
-                : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/25 font-bold'
+                : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-primary/40'
             )}
           >
             <Layers className="h-3.5 w-3.5" />
@@ -151,8 +152,8 @@ export function FeaturedProducts() {
               className={cn(
                 'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all shadow-xs shrink-0',
                 activeSpecialTab === 'offers'
-                  ? 'border-rose-500 bg-rose-600 text-white'
-                  : 'border border-rose-200 bg-rose-50/70 text-rose-700 hover:bg-rose-100 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300'
+                  ? 'border-rose-500 bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-sm shadow-rose-500/25 font-bold'
+                  : 'border border-rose-200 bg-rose-50/80 text-rose-700 hover:bg-rose-100 hover:border-rose-300 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300'
               )}
             >
               <Flame className="h-3.5 w-3.5" />
@@ -170,8 +171,8 @@ export function FeaturedProducts() {
               className={cn(
                 'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all shadow-xs shrink-0',
                 activeSpecialTab === 'featured'
-                  ? 'bg-amber-600 text-white'
-                  : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm shadow-amber-500/25 font-bold'
+                  : 'border border-amber-200 bg-amber-50/80 text-amber-700 hover:bg-amber-100 hover:border-amber-300 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-300'
               )}
             >
               <Sparkles className="h-3.5 w-3.5" />
@@ -191,8 +192,8 @@ export function FeaturedProducts() {
               className={cn(
                 'flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all shadow-xs shrink-0',
                 selectedCategory === cat.id
-                  ? 'bg-secondary text-secondary-foreground font-bold border border-primary/40'
-                  : 'border border-border/70 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                  ? 'bg-primary/10 text-primary font-bold border border-primary/40 shadow-xs'
+                  : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30'
               )}
             >
               <Grid3X3 className="h-3 w-3 opacity-70" />
@@ -211,7 +212,7 @@ export function FeaturedProducts() {
           </div>
         ) : displayedProducts.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 sm:gap-5">
-            {displayedProducts.slice(0, 16).map((product, index) => (
+            {displayedProducts.slice(0, getFeaturedProductLimit(storefrontStyle)).map((product, index) => (
               <ProductCard key={product.id} product={product} priority={index < 4} />
             ))}
           </div>

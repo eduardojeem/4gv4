@@ -48,6 +48,10 @@ export type OffersAccent = {
   activeDot: string
 }
 
+export function getOfferCardWidthClass() {
+  return 'min-w-[72%] sm:min-w-[40%] lg:min-w-[24%] xl:min-w-[23%]'
+}
+
 export const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], OffersAccent> = {
   brand: {
     section: 'border-primary/20 bg-gradient-to-b from-primary/[0.04] via-background to-background',
@@ -215,7 +219,7 @@ export function OffersCarouselDeck({
 
   useEffect(() => {
     if (effectivelyPaused || offers.length <= 1 || !isSectionVisible || !isDocumentVisible) return
-    const delay = Math.max(2, intervalSeconds) * 1000
+    const delay = Math.max(4, intervalSeconds) * 1000
     const interval = window.setInterval(() => {
       setActiveOfferIndex((prev) => {
         const next = (prev + 1) % offers.length
@@ -368,7 +372,7 @@ export function OffersCarouselDeck({
       {/* ── Pista Deslizable de Tarjetas Premium ── */}
       <div
         ref={trackRef}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 scroll-smooth scrollbar-none"
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 motion-safe:scroll-smooth scrollbar-none"
         tabIndex={0}
         role="region"
         aria-label={ariaLabel}
@@ -392,7 +396,10 @@ export function OffersCarouselDeck({
             key={offer.id}
             aria-labelledby={`offer-title-${offer.id}`}
             className={cn(
-              'group relative flex flex-col justify-between min-w-[85%] sm:min-w-[48%] lg:min-w-[32%] xl:min-w-[30%] snap-start overflow-hidden rounded-3xl border border-border/80 bg-card p-4 shadow-xs transition-all duration-300',
+              cn(
+                'group relative flex flex-col justify-between snap-start overflow-hidden rounded-2xl border border-border/80 bg-card p-3 shadow-xs transition-all duration-300 motion-reduce:transition-none',
+                getOfferCardWidthClass(),
+              ),
               offer.inStock
                 ? 'hover:-translate-y-1 hover:shadow-xl hover:border-primary/50'
                 : 'opacity-55 grayscale-[25%] hover:opacity-65'
@@ -400,7 +407,7 @@ export function OffersCarouselDeck({
           >
             <div>
               {/* Imagen del Producto con Badges */}
-              <div className="relative aspect-4/3 w-full overflow-hidden rounded-2xl bg-muted/40 p-3 mb-3">
+                  <div className="relative aspect-4/3 w-full overflow-hidden rounded-xl bg-muted/40 p-2 mb-2">
                 <Link href={resolveHref(offer.ctaHref)} className="relative block h-full w-full">
                   {offer.image ? (
                     <Image
@@ -461,7 +468,7 @@ export function OffersCarouselDeck({
             </div>
 
             {/* Precios & Botón de Acción */}
-            <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+            <div className="mt-3 pt-2 border-t border-border/60 flex items-center justify-between gap-2">
               <div className="min-w-0">
                 {offer.originalPriceLabel && (
                   <p className="text-xs font-semibold text-muted-foreground line-through tabular-nums leading-none truncate">

@@ -36,6 +36,10 @@ export interface RaffleRow {
   prizes: Array<{ position: number; title: string; details?: string }>
   requirements: string | null
   terms: string | null
+  min_purchase_amount: number | null
+  auto_entry_on_sale: boolean
+  allow_point_purchase: boolean
+  point_purchase_price: number | null
   starts_at: string
   ends_at: string
   points_per_ticket: number
