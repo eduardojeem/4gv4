@@ -383,7 +383,7 @@ export function VariantSelector({
               <h3 className="font-semibold text-xs sm:text-sm text-foreground line-clamp-2 leading-snug">
                 {product.name}
               </h3>
-              
+
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 {product.brand && (
                   <span className="text-[10px] text-muted-foreground font-medium">

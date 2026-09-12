@@ -64,8 +64,8 @@ export default async function OrganizationPublicLayout({
             data-storefront-style={storefrontStyle}
           >
             <SkipToContentLink />
-            <PublicHeader 
-              initialSettings={settings} 
+            <PublicHeader
+              initialSettings={settings}
               repairsModuleEnabled={repairsModuleEnabled}
               servicesModuleEnabled={servicesModuleEnabled}
             />
