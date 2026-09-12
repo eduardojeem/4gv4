@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { resolveProductImageUrl } from '@/lib/images'
+import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import type { PublicProduct, PublicProductVariant, InstallmentPlanOption } from '@/types/public'
 import type { BranchStockInfo } from '@/lib/api/products-server'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -247,11 +248,13 @@ export function ProductDetailInteractive({
     ? selectedVariant.sku
     : product.sku
 
-  const displayPrice = hasVariants && selectedVariant
-    ? (product.has_offer && product.offer_price && product.offer_price < selectedVariant.sale_price
-        ? product.offer_price
-        : selectedVariant.sale_price)
-    : Number(product.offer_price || product.sale_price || 0)
+  // Misma regla que la tarjeta y que el cobro: la oferta del producto baja la
+  // variante en proporcion, y el precio mayorista gana sobre la oferta.
+  const displayPrice = resolvePublicVariantPrice({
+    isWholesale,
+    product,
+    variant: hasVariants ? selectedVariant : null,
+  })
 
   const companyInfo = settings?.company_info
   const envSupportPhone = (

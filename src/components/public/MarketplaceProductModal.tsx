@@ -23,7 +23,7 @@ import { formatPrice } from '@/lib/utils'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { PublicProductVariant } from '@/types/public'
-import { resolveOfferPrice } from '@/lib/public/offer-pricing'
+import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { PublicVariantPicker } from './PublicVariantPicker'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -143,16 +143,8 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
   if (!product) return null
 
   const selectedSalePrice = matchedVariant?.sale_price ?? product.sale_price
-  const selectedOfferPrice = matchedVariant?.offer_price != null
-    ? matchedVariant.offer_price
-    : product.offer_price != null && product.offer_price > 0 && product.offer_price < product.sale_price
-      ? Math.min(product.offer_price, selectedSalePrice)
-      : null
-  const hasOffer = Boolean(selectedOfferPrice != null && selectedOfferPrice < selectedSalePrice)
-
-  const displayPrice = hasOffer
-    ? (selectedOfferPrice ?? resolveOfferPrice(product.sale_price, product.offer_price, selectedSalePrice))
-    : selectedSalePrice
+  const displayPrice = resolvePublicVariantPrice({ isWholesale: false, product, variant: matchedVariant })
+  const hasOffer = displayPrice < selectedSalePrice
   const discountPct = hasOffer
     ? Math.round((1 - displayPrice / selectedSalePrice) * 100)
     : 0

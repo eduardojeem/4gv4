@@ -6,6 +6,7 @@ import { config } from '@/lib/config'
 import type { Database } from '@/lib/supabase/types'
 import type { Product, ProductAlert, Category, Supplier, Brand } from '@/types/product-unified'
 import { useBranch } from '@/contexts/branch-context'
+import { toast } from 'sonner'
 import { branchHeaders } from '@/lib/branches/client'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'
@@ -529,6 +530,12 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       if (!response.ok || !payload?.success || !updatedProduct) {
         throw new Error(getProductApiError(payload, 'Error al actualizar el producto'))
+      }
+
+      // Un ajuste de stock que falla no invalida el guardado, pero el usuario
+      // tiene que enterarse: antes se perdia en silencio.
+      for (const warning of (payload as { warnings?: string[] } | null)?.warnings ?? []) {
+        toast.warning(warning)
       }
 
       // Actualizar estado local inmediatamente

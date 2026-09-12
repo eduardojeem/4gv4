@@ -119,6 +119,10 @@ const productApiFields = [
   'image_url',
   'barcode',
   'unit_measure',
+  // Sin estos campos el editor mostraba variantes y al guardar se perdian.
+  'has_variants',
+  'variant_attribute_config',
+  'variants',
 ] as const
 
 function toProductApiPayload(productData: Partial<Product>) {
@@ -481,10 +485,12 @@ export function useInventory({
 
   const updateProduct = async (id: string, productData: Partial<Product>) => {
     try {
-      const response = await fetch(`/api/products/${id}`, {
+      // La ruta de coleccion es la que guarda producto y variantes de forma
+      // atomica; la ruta por id no persiste variantes.
+      const response = await fetch('/api/products', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...branchHeaders(selectedBranchId) },
-        body: JSON.stringify(toProductApiPayload(productData)),
+        body: JSON.stringify({ ...toProductApiPayload(productData), id }),
       })
       const payload = await response.json().catch(() => null)
 

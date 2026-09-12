@@ -11,7 +11,6 @@ import { InstallmentSelector } from '@/components/public/InstallmentSelector'
 import { usePathname } from 'next/navigation'
 import { formatPrice, cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
-import { resolvePublicUnitPrice } from '@/lib/orders/public-pricing'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -20,7 +19,7 @@ import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { usesPortraitMedia } from '@/lib/website/storefront-style'
 import { getWhatsAppLink } from '@/lib/whatsapp'
-import { resolveOfferPrice } from '@/lib/public/offer-pricing'
+import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 
 interface ProductCardProps {
   product: PublicProduct
@@ -96,22 +95,12 @@ export function ProductCard(props: ProductCardProps) {
 
   // La misma función que usa el checkout: si la vitrina y el cobro calcularan
   // por separado, vuelven a divergir como pasaba con el precio mayorista.
-  const displayPrice = resolvePublicUnitPrice({
-    isWholesale,
-    wholesalePrice: product.wholesale_price ?? null,
-    salePrice: product.sale_price,
-    hasOffer,
-    offerPrice: product.offer_price ?? null,
-  })
+  const displayPrice = resolvePublicVariantPrice({ isWholesale, product, variant: null })
   const publicVariants = (product.variants ?? []).filter((variant) => variant.is_active)
   const hasVariants = Boolean(product.has_variants && publicVariants.length > 0)
   const selectedVariant = publicVariants.find((variant) => variant.id === selectedVariantId) ?? null
   const selectedPrice = selectedVariant
-    ? (isWholesale && selectedVariant.wholesale_price != null
-        ? selectedVariant.wholesale_price
-        : hasOffer
-          ? resolveOfferPrice(product.sale_price, product.offer_price, selectedVariant.sale_price)
-          : selectedVariant.sale_price)
+    ? resolvePublicVariantPrice({ isWholesale, product, variant: selectedVariant })
     : displayPrice
   const selectedStock = hasVariants
     ? (selectedVariant ? selectedVariant.stock_quantity : product.stock_quantity)
@@ -605,11 +594,7 @@ export function ProductCard(props: ProductCardProps) {
                         {publicVariants.map((variant) => {
                           const isSelected = selectedVariantId === variant.id
                           const hasStock = variant.stock_quantity > 0
-                          const variantPrice = isWholesale && variant.wholesale_price != null
-                            ? variant.wholesale_price
-                            : hasOffer
-                              ? resolveOfferPrice(product.sale_price, product.offer_price, variant.sale_price)
-                              : variant.sale_price
+                          const variantPrice = resolvePublicVariantPrice({ isWholesale, product, variant })
                           const variantOriginalPrice = hasOffer && variantPrice < variant.sale_price
                             ? variant.sale_price
                             : null

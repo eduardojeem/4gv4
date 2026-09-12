@@ -25,7 +25,7 @@ import { PublicVariantPicker } from '@/components/public/PublicVariantPicker'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { formatCurrency } from '@/lib/currency'
 import { resolveProductImageUrl } from '@/lib/images'
-import { resolveOfferPrice } from '@/lib/public/offer-pricing'
+import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { cn } from '@/lib/utils'
 import { getWhatsAppLink } from '@/lib/whatsapp'
 import type { PublicProduct } from '@/types/public'
@@ -148,11 +148,9 @@ export function OfferDetailModal({
   const selectionComplete = !hasVariants || attributeKeys.every((k) => Boolean(selectedAttrs[k]))
 
   // Effective price/stock (from variant if matched, else from offer base)
-  const effectivePrice = matchedVariant
-    ? (matchedVariant.offer_price != null && matchedVariant.offer_price < matchedVariant.sale_price
-        ? matchedVariant.offer_price
-        : resolveOfferPrice(offer.sale_price, offer.offer_price, matchedVariant.sale_price))
-    : offer?.offer_price ?? 0
+  const effectivePrice = offer
+    ? resolvePublicVariantPrice({ isWholesale: false, product: offer, variant: matchedVariant })
+    : 0
   const effectiveStock = matchedVariant ? matchedVariant.stock_quantity : (offer?.stock_quantity ?? 0)
   const effectiveInStock = matchedVariant ? matchedVariant.stock_quantity > 0 : (offer?.in_stock ?? false)
 

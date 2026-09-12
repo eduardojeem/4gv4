@@ -108,6 +108,21 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       )
     }
 
+    // Esta ruta no persiste variantes: antes las validaba y las descartaba en
+    // silencio, asi que el editor creia haber guardado. El guardado con
+    // variantes vive en PUT /api/products.
+    const sendsVariants = (Array.isArray(body?.variants) && body.variants.length > 0) || body?.has_variants === true
+    if (sendsVariants) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Para guardar variantes usá PUT /api/products.',
+          code: 'VARIANTS_NOT_SUPPORTED_HERE',
+        },
+        { status: 400 },
+      )
+    }
+
     const validationResult = productUpdateSchema.safeParse({
       ...body,
       id,

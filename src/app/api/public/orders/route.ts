@@ -8,7 +8,7 @@ import { resolvePublicStorefrontOrganization } from '@/lib/saas/public-tenant'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { applyAutomaticPromotionToProduct, evaluatePublicCoupon, mapPublicPromotion, type PublicPromotion } from '@/lib/public-promotions'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
-import { resolvePublicUnitPrice } from '@/lib/orders/public-pricing'
+import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
 import { deliveryZoneMatchesLocation } from '@/lib/checkout/delivery-zone'
@@ -221,14 +221,20 @@ export async function POST(request: NextRequest) {
         has_offer: Boolean(product.has_offer),
         offer_price: product.offer_price == null ? null : Number(product.offer_price),
       }, automaticPromotions)
-      const unitPrice = resolvePublicUnitPrice({
+      const unitPrice = resolvePublicVariantPrice({
         isWholesale,
-        wholesalePrice: variant?.wholesale_price == null
-          ? (product.wholesale_price == null ? null : Number(product.wholesale_price))
-          : Number(variant.wholesale_price),
-        salePrice: variant ? Number(variant.sale_price || 0) : priced.sale_price,
-        hasOffer: Boolean(priced.has_offer),
-        offerPrice: priced.offer_price ?? null,
+        product: {
+          sale_price: priced.sale_price,
+          offer_price: priced.offer_price ?? null,
+          has_offer: Boolean(priced.has_offer),
+          wholesale_price: product.wholesale_price == null ? null : Number(product.wholesale_price),
+        },
+        variant: variant
+          ? {
+              sale_price: Number(variant.sale_price || 0),
+              wholesale_price: variant.wholesale_price == null ? null : Number(variant.wholesale_price),
+            }
+          : null,
       })
 
       return {

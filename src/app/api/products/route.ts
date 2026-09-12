@@ -13,6 +13,7 @@ import { canCreateResource } from '@/lib/saas/subscription-service'
 import { filterProductsByCatalogKind, parseProductCatalogKind } from '@/lib/products/catalog-kind'
 import { ProductVariantsPayloadSchema } from '@/lib/products/variant-contract'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
+import { planVariantStockAdjustments } from '@/lib/products/variant-stock-sync'
 
 function revalidateProductStorefront(organizationSlug?: string | null, organizationId?: string | null, productId?: string | null) {
   try {
@@ -817,6 +818,19 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         }
       }
 
+      // El stock de las variantes que ya existen no lo toca el RPC: se aplica
+      // despues como ajuste, para que quede el movimiento.
+      const { data: currentStockRows } = existingVariantIds.length > 0
+        ? await admin
+            .from('product_variants')
+            .select('id, stock_quantity')
+            .eq('organization_id', organization.id)
+            .in('id', existingVariantIds)
+        : { data: [] as Array<{ id: string; stock_quantity: number | null }> }
+      const currentStockById = new Map(
+        (currentStockRows ?? []).map((row) => [String(row.id), Number(row.stock_quantity ?? 0)]),
+      )
+
       const { data: saved, error: saveError } = await admin.rpc('save_product_with_variants', {
         p_product: {
           ...existingProduct,
@@ -860,6 +874,36 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       }
 
       const savedProductId = String((saved as { product_id?: unknown } | null)?.product_id ?? validated.id)
+
+      const stockWarnings: string[] = []
+      for (const adjustment of planVariantStockAdjustments(currentStockById, variantPayload.data.variants)) {
+        const { error: adjustError } = await admin.rpc('adjust_variant_stock_atomic', {
+          p_organization_id: organization.id,
+          p_branch_id: variantBranchId,
+          p_variant_id: adjustment.variantId,
+          p_quantity_delta: adjustment.delta,
+          p_movement_type: 'adjustment',
+          p_idempotency_key: adjustment.idempotencyKey,
+          p_actor_id: user.id,
+          p_reference_type: 'product_edit',
+          p_reference_id: savedProductId,
+          p_reason: 'Ajuste de stock desde la ficha del producto',
+          p_metadata: { source: 'product-editor', from: adjustment.from, to: adjustment.to },
+        })
+
+        if (adjustError) {
+          logger.error('Failed to adjust variant stock after product save', {
+            variantId: adjustment.variantId,
+            productId: savedProductId,
+            organizationId: organization.id,
+            error: adjustError.message,
+          })
+          stockWarnings.push(
+            `No se pudo ajustar el stock de ${adjustment.variantName}: quedó en ${adjustment.from}.`,
+          )
+        }
+      }
+
       const [{ data: product, error: productError }, { data: variants, error: variantsError }] = await Promise.all([
         admin.from('products').select('*').eq('id', savedProductId).eq('organization_id', organization.id).single(),
         admin.from('product_variants').select('*').eq('product_id', savedProductId).eq('organization_id', organization.id).order('created_at'),
@@ -886,6 +930,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
           product: stripProductCost(product as Record<string, unknown>, user.role),
           variants: visibleVariants,
         },
+        warnings: stockWarnings.length > 0 ? stockWarnings : undefined,
       })
     }
 
