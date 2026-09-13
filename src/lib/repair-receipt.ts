@@ -1,6 +1,5 @@
 import { config } from '@/lib/config'
 import { formatCurrency } from '@/lib/currency'
-import { generateRepairHash } from '@/lib/repair-qr'
 import {
   DEFAULT_RECEIPT_SETTINGS,
   normalizeRepairReceiptSettings,
@@ -1017,11 +1016,11 @@ const generateRepairReceiptHTML = (
         </div>
       </div>` : ''}
 
-      ${settings.showHash ? `
+      ${settings.showHash && payload.verificationHash ? `
       <div style="margin-top: 10px; padding: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; text-align: center;">
         <div style="font-size: 9.5px; color: #6b7280; line-height: 1.3;">
           <strong>Hash de verificación:</strong><br/>
-          <code style="font-size: 8.5px; color: #111827; letter-spacing: 0.5px;">${payload.verificationHash || generateRepairHash(ticketNumber, payload.customer.id || payload.customer.name, dateObj)}</code>
+          <code style="font-size: 8.5px; color: #111827; letter-spacing: 0.5px;">${payload.verificationHash}</code>
         </div>
       </div>` : ''}
 

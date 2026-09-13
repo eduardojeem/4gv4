@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateRepairHash } from '@/lib/repair-qr'
+import { generateRepairHash } from '@/lib/repair-qr-hash'
 import { createClient } from '@/lib/supabase/server'
 import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 

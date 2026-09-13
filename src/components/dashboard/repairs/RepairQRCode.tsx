@@ -11,27 +11,28 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { generateQRCodeURL, generateRepairTrackingURL, generateRepairHash } from '@/lib/repair-qr'
+import { generateQRCodeURL, generateRepairTrackingURL } from '@/lib/repair-qr'
 
 interface RepairQRCodeProps {
   ticketNumber: string
-  customerName: string
-  createdAt: Date | string
+  /**
+   * Hash firmado por POST /api/repairs/sign. Antes se calculaba aca, en el
+   * navegador, donde no existe el secreto: en produccion lanzaba y en
+   * desarrollo daba un hash que el servidor rechazaba.
+   */
+  hash: string
   size?: number
 }
 
-export function RepairQRCode({ 
-  ticketNumber, 
-  customerName, 
-  createdAt,
-  size = 200 
+export function RepairQRCode({
+  ticketNumber,
+  hash,
+  size = 200
 }: RepairQRCodeProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
-  
-  const date = typeof createdAt === 'string' ? new Date(createdAt) : createdAt
-  const hash = generateRepairHash(ticketNumber, customerName, date)
+
   const trackingURL = generateRepairTrackingURL(ticketNumber, hash)
-  const qrURL = generateQRCodeURL(ticketNumber, customerName, date, size)
+  const qrURL = generateQRCodeURL(ticketNumber, hash, size)
 
   const handleCopyURL = () => {
     navigator.clipboard.writeText(trackingURL)
@@ -81,7 +82,7 @@ export function RepairQRCode({
         <div className="flex justify-center">
           <div className="relative">
             {!imageLoaded && (
-              <div 
+              <div
                 className="flex items-center justify-center bg-muted rounded-lg animate-pulse"
                 style={{ width: size, height: size }}
               >

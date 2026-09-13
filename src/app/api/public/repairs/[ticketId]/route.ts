@@ -6,7 +6,7 @@ import {
   isPublicRepairSessionAuthorized,
   verifyPublicToken,
 } from '@/lib/public-session'
-import { verifyRepairHash } from '@/lib/repair-qr'
+import { verifyRepairHash } from '@/lib/repair-qr-hash'
 import { PublicRepair } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'

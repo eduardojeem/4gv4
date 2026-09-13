@@ -1,10 +1,6 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import html2canvas from 'html2canvas'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
-import XLSXStyle from 'xlsx-js-style'
 import { toast } from 'sonner'
 import { 
   Download, 
@@ -68,6 +64,27 @@ const getDayOfWeekStr = (dateStr: string): string => {
     // fallback
   }
   return ''
+}
+
+// ── Librerias de exportacion, bajo demanda ────────────────────────────────────
+// html2canvas, jspdf, jspdf-autotable y xlsx-js-style se importaban arriba del
+// archivo. Como este componente esta en /admin/analytics y /admin/reports, las
+// cuatro viajaban en la primera carga de esas dos rutas —el chunk de 883 KB que
+// marcaba post-build-checks— aunque solo se usan al tocar «Exportar». Ahora se
+// piden recien en ese momento, y el navegador las cachea para el siguiente.
+async function loadHtml2Canvas() {
+  const mod = await import('html2canvas')
+  return mod.default
+}
+
+async function loadPdfLibraries() {
+  const [pdf, table] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+  return { jsPDF: pdf.default, autoTable: table.default }
+}
+
+async function loadXlsxStyle() {
+  const mod = await import('xlsx-js-style')
+  return mod.default
 }
 
 // ── Helpers de estilos Excel (XLSXStyle) ──────────────────────────────────────
@@ -284,6 +301,7 @@ export function ChartExporter({
       const exportId = `chart-export-${Date.now()}-${Math.floor(Math.random() * 10000)}`
       safeCapture.target.setAttribute('data-export-id', exportId)
 
+      const html2canvas = await loadHtml2Canvas()
       const canvas = await html2canvas(safeCapture.target, {
         backgroundColor: '#ffffff',
         scale: options.chartQuality === 'high' ? 2.5 : options.chartQuality === 'medium' ? 2 : 1.5,
@@ -328,6 +346,7 @@ export function ChartExporter({
     setExportProgress(5)
 
     try {
+      const { jsPDF, autoTable } = await loadPdfLibraries()
       const isLandscape = options.pageLayout === 'landscape'
       const doc = new jsPDF({
         orientation: options.pageLayout,
@@ -1130,6 +1149,7 @@ export function ChartExporter({
     setExportProgress(10)
 
     try {
+      const XLSXStyle = await loadXlsxStyle()
       const wb = XLSXStyle.utils.book_new()
       const now = new Date()
       const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
