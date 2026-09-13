@@ -4,7 +4,14 @@ import {
   DEFAULT_RECEIPT_SETTINGS,
   normalizeRepairReceiptSettings,
   type RepairReceiptSettings,
+  type RepairReceiptSettingsPatch,
 } from '@/lib/repairs/receipt-settings'
+import {
+  formatWarrantyMonths,
+  hasClause,
+  resolveWarranty,
+  WARRANTY_TYPE_PRINT_LABELS,
+} from '@/lib/repairs/warranty'
 
 export { DEFAULT_RECEIPT_SETTINGS, type RepairReceiptSettings } from '@/lib/repairs/receipt-settings'
 
@@ -66,6 +73,120 @@ export const saveReceiptSettings = (
     }
   } catch {}
   return { ...DEFAULT_RECEIPT_SETTINGS, ...settings }
+}
+
+/**
+ * La copia del navegador, al día con el servidor.
+ *
+ * El detalle de la reparación y la fila del listado imprimen con
+ * `getReceiptSettings()`, que lee lo guardado en este navegador. Esa copia solo
+ * se actualizaba al abrir el diálogo del comprobante: en una computadora donde
+ * nadie lo abría se imprimía con la configuración de fábrica o con una vieja.
+ * Se refresca al abrir las pantallas de reparaciones, como mucho una vez por
+ * minuto.
+ */
+const RECEIPT_SETTINGS_FRESH_MS = 60_000
+let lastReceiptSync = 0
+let receiptSyncInFlight: Promise<ReceiptSettingsSnapshot | null> | null = null
+
+export type ReceiptSettingsSnapshot = {
+  settings: RepairReceiptSettings
+  organizationId: string | null
+  persisted: boolean
+  canEdit: boolean
+}
+
+export function refreshReceiptSettings(options: { force?: boolean } = {}): Promise<ReceiptSettingsSnapshot | null> {
+  if (typeof window === 'undefined') return Promise.resolve(null)
+  if (receiptSyncInFlight) return receiptSyncInFlight
+  if (!options.force && Date.now() - lastReceiptSync < RECEIPT_SETTINGS_FRESH_MS) return Promise.resolve(null)
+
+  receiptSyncInFlight = (async () => {
+    try {
+      const response = await fetch('/api/repairs/receipt-settings', { cache: 'no-store' })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success || !payload.data) return null
+
+      const organizationId = typeof payload.organizationId === 'string' ? payload.organizationId : null
+      const settings = saveReceiptSettings(normalizeRepairReceiptSettings(payload.data), organizationId)
+      lastReceiptSync = Date.now()
+      return {
+        settings,
+        organizationId,
+        persisted: Boolean(payload.persisted),
+        canEdit: payload.canEdit !== false,
+      }
+    } catch {
+      return null
+    } finally {
+      receiptSyncInFlight = null
+    }
+  })()
+
+  return receiptSyncInFlight
+}
+
+/**
+ * Guarda solo los campos que cambiaron. El servidor los fusiona con lo que ya
+ * está guardado, así dos pantallas que editan cosas distintas no se pisan.
+ */
+export async function patchReceiptSettings(
+  patch: RepairReceiptSettingsPatch
+): Promise<{ ok: true; settings: RepairReceiptSettings; organizationId: string | null } | { ok: false; status: number; error: string }> {
+  try {
+    const response = await fetch('/api/repairs/receipt-settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: patch }),
+    })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.success) {
+      return {
+        ok: false,
+        status: response.status,
+        error: payload?.error
+          || (response.status === 403
+            ? 'Solo un administrador puede cambiar esta configuración.'
+            : 'No se pudo guardar la configuración.'),
+      }
+    }
+    const organizationId = typeof payload.organizationId === 'string' ? payload.organizationId : null
+    const settings = saveReceiptSettings(normalizeRepairReceiptSettings(payload.data), organizationId)
+    lastReceiptSync = Date.now()
+    return { ok: true, settings, organizationId }
+  } catch {
+    return { ok: false, status: 0, error: 'No se pudo conectar para guardar la configuración.' }
+  }
+}
+
+/**
+ * Avisa cuando cambia la configuración: en esta pestaña (el evento que ya
+ * existía) y en las otras abiertas del mismo navegador (el evento `storage`).
+ */
+export function subscribeReceiptSettings(listener: (settings: RepairReceiptSettings) => void): () => void {
+  if (typeof window === 'undefined') return () => {}
+
+  const onLocal = (event: Event) => {
+    const detail = (event as CustomEvent<RepairReceiptSettings>).detail
+    listener(detail ? normalizeRepairReceiptSettings(detail) : getReceiptSettings())
+  }
+  const onStorage = (event: StorageEvent) => {
+    if (!event.key || !event.key.startsWith(RECEIPT_SETTINGS_KEY) || event.key === ACTIVE_RECEIPT_ORGANIZATION_KEY) return
+    listener(getReceiptSettings())
+  }
+
+  window.addEventListener(REPAIR_RECEIPT_SETTINGS_EVENT, onLocal)
+  window.addEventListener('storage', onStorage)
+  return () => {
+    window.removeEventListener(REPAIR_RECEIPT_SETTINGS_EVENT, onLocal)
+    window.removeEventListener('storage', onStorage)
+  }
+}
+
+/** Solo para pruebas: olvida cuándo fue la última sincronización. */
+export function resetReceiptSettingsSyncForTests() {
+  lastReceiptSync = 0
+  receiptSyncInFlight = null
 }
 
 export interface RepairDevicePrintItem {
@@ -251,7 +372,10 @@ export const generateRepairShareText = (payload: RepairPrintPayload): string => 
   }
   
   if (payload.warrantyMonths && payload.warrantyMonths > 0) {
-    text += `\n🛡️ *Garantía:* ${payload.warrantyMonths} meses`
+    text += `\n🛡️ *Garantía:* ${formatWarrantyMonths(payload.warrantyMonths)}`
+    if (payload.warrantyType) {
+      text += `, ${WARRANTY_TYPE_PRINT_LABELS[payload.warrantyType]}`
+    }
     if (payload.warrantyNotes) {
       text += ` (${payload.warrantyNotes})`
     }
@@ -792,7 +916,18 @@ const generateRepairReceiptHTML = (
   }
 
   const legalText = settings.legalText || 'Declaro haber leído y aceptado los términos y condiciones del servicio técnico. Autorizo la revisión y/o reparación de los equipos detallados. La empresa no se responsabiliza por pérdida de datos; se recomienda realizar copias de seguridad.'
-  const warrantyNotes = payload.warrantyNotes || settings.defaultWarrantyNotes
+  // Una orden con garantía propia manda aunque sea 0; la del taller solo cubre
+  // a las que no dicen nada. Ver resolveWarranty.
+  const warranty = resolveWarranty(payload, settings)
+  const warrantyNotes = warranty.notes
+  // Estas tres salían siempre, aunque ya estuvieran en el texto legal o en las
+  // notas: quien las había agregado con los botones las veía impresas dos veces.
+  const alreadyPrinted = `${legalText}\n${warrantyNotes}`
+  const standardClauses = [
+    'Pasados los 90 días de la notificación, el equipo se considerará abandonado.',
+    ...(warranty.months > 0 ? ['La garantía no cubre daños por humedad, golpes o mal uso posterior a la entrega.'] : []),
+    'Es indispensable presentar este comprobante para el retiro y reclamo de garantía.',
+  ].filter((clause) => !hasClause(alreadyPrinted, clause))
 
   // HTML para comprobante del cliente (estructura original fiel y configurable)
   const customerDevicesHTML = payload.devices.map((d) => `
@@ -963,15 +1098,13 @@ const generateRepairReceiptHTML = (
       <div class="warranty-box">
         <div class="warranty-title">🛡️ Garantía y Términos</div>
         <div class="warranty-text">
-          ${(payload.warrantyMonths && payload.warrantyMonths > 0) || settings.defaultWarrantyMonths > 0 ? `
-          • <strong>Garantía:</strong> ${payload.warrantyMonths || settings.defaultWarrantyMonths} ${(payload.warrantyMonths || settings.defaultWarrantyMonths) === 1 ? 'mes' : 'meses'} (${payload.warrantyType || settings.defaultWarrantyType === 'labor' ? 'Mano de obra' : payload.warrantyType || settings.defaultWarrantyType === 'parts' ? 'Repuestos' : 'Total y repuestos'}).<br/>
-          ${warrantyNotes ? `• ${warrantyNotes}<br/>` : ''}
+          ${warranty.months > 0 ? `
+          • <strong>Garantía:</strong> ${formatWarrantyMonths(warranty.months)} (${WARRANTY_TYPE_PRINT_LABELS[warranty.type]}).<br/>
+          ${warrantyNotes ? `• ${warrantyNotes.replace(/\n/g, '<br/>')}<br/>` : ''}
           ` : `
-          • Esta reparación inicial no incluye garantía hasta su finalización.<br/>
+          • Esta reparación no incluye garantía.<br/>
           `}
-          • Pasados los 90 días de la notificación, el equipo se considerará abandonado.
-          • La garantía no cubre daños por humedad, golpes o mal uso posterior a la entrega.
-          • Es indispensable presentar este comprobante para el retiro y reclamo de garantía.
+          ${standardClauses.map((clause) => `• ${clause}<br/>`).join('')}
         </div>
       </div>
 

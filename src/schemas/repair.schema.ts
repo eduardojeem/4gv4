@@ -3,6 +3,7 @@
  */
 
 import { z } from 'zod'
+import { WARRANTY_MONTHS_MAX, WARRANTY_NOTES_MAX } from '@/lib/repairs/warranty'
 
 const MAX_REPAIR_COST = 1_000_000_000
 const MAX_REPAIR_COST_MSG = `El costo es demasiado alto. Maximo permitido: ${MAX_REPAIR_COST.toLocaleString('es-PY')}`
@@ -258,14 +259,14 @@ export const WarrantySchema = z.object({
   warrantyMonths: z
     .number()
     .min(0, 'Los meses de garantia no pueden ser negativos')
-    .max(36, 'La garantia maxima es de 36 meses')
+    .max(WARRANTY_MONTHS_MAX, `La garantía máxima es de ${WARRANTY_MONTHS_MAX} meses`)
     .default(3),
 
   warrantyType: WarrantyTypeEnum.default('full'),
 
   warrantyNotes: z
     .string()
-    .max(500, 'Las notas de garantia son demasiado largas (maximo 500 caracteres)')
+    .max(WARRANTY_NOTES_MAX, `Las notas de garantía admiten hasta ${WARRANTY_NOTES_MAX} caracteres`)
     .optional()
     .nullable()
     .or(z.literal(''))
@@ -316,14 +317,14 @@ export const RepairFormSchema = z.object({
   warrantyMonths: z
     .number()
     .min(0, 'Los meses de garantia no pueden ser negativos')
-    .max(36, 'La garantia maxima es de 36 meses')
+    .max(WARRANTY_MONTHS_MAX, `La garantía máxima es de ${WARRANTY_MONTHS_MAX} meses`)
     .default(3),
 
   warrantyType: WarrantyTypeEnum.default('full'),
 
   warrantyNotes: z
     .string()
-    .max(500, 'Las notas de garantia son demasiado largas (maximo 500 caracteres)')
+    .max(WARRANTY_NOTES_MAX, `Las notas de garantía admiten hasta ${WARRANTY_NOTES_MAX} caracteres`)
     .optional()
     .nullable()
     .or(z.literal('')),
@@ -391,14 +392,14 @@ export const RepairFormQuickSchema = z.object({
   warrantyMonths: z
     .number()
     .min(0, 'Los meses de garantia no pueden ser negativos')
-    .max(36, 'La garantia maxima es de 36 meses')
+    .max(WARRANTY_MONTHS_MAX, `La garantía máxima es de ${WARRANTY_MONTHS_MAX} meses`)
     .default(3),
 
   warrantyType: WarrantyTypeEnum.default('full'),
 
   warrantyNotes: z
     .string()
-    .max(500, 'Las notas de garantia son demasiado largas (maximo 500 caracteres)')
+    .max(WARRANTY_NOTES_MAX, `Las notas de garantía admiten hasta ${WARRANTY_NOTES_MAX} caracteres`)
     .optional()
     .nullable()
     .or(z.literal('')),

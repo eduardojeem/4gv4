@@ -65,6 +65,20 @@ import { AppError } from '@/lib/errors'
 // import { uploadFile } from '@/lib/supabase-storage'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { useRepairWarrantyPolicy } from '@/hooks/use-repair-warranty-policy'
+import { refreshReceiptSettings } from '@/lib/repair-receipt'
+import {
+  appendClause,
+  formatWarrantyMonths,
+  hasClause,
+  WARRANTY_CLAUSES,
+  WARRANTY_NOTES_MAX,
+  WARRANTY_QUICK_MONTHS,
+  WARRANTY_TYPE_HINTS,
+  WARRANTY_TYPE_LABELS,
+  WARRANTY_TYPES,
+  warrantyMonthOptions,
+  type WarrantyType,
+} from '@/lib/repairs/warranty'
 import { hasSingleDeviceOnlyData, describeSingleDeviceOnlyData } from '@/lib/repairs/multi-device-guard'
 import { describeDeviceName, describeDeviceSummary, deviceAccent } from '@/lib/repairs/device-label'
 
@@ -310,6 +324,23 @@ export function RepairFormDialogV2({
   // La garantia predeterminada del taller: una sola, guardada por empresa, la
   // misma que usa el comprobante. Antes cada navegador tenia la suya.
   const warrantyPolicy = useRepairWarrantyPolicy(open)
+
+  // Mantiene al día la copia del comprobante con la que imprimen el detalle y el
+  // listado de reparaciones, aunque en esta computadora nadie abra la
+  // configuración. Como mucho una vez por minuto.
+  useEffect(() => { void refreshReceiptSettings() }, [])
+
+  // «Fijar como predeterminada» cambia la garantía de todo el taller. Se ofrecía
+  // siempre: un técnico recibía un 403, y si la política no había cargado se
+  // guardaba sobre valores que nadie había visto.
+  const puedeFijarGarantia = warrantyPolicy.canEdit && !warrantyPolicy.loading && !warrantyPolicy.error
+  const motivoNoFijar = !warrantyPolicy.canEdit
+    ? 'Solo un administrador puede cambiar la garantía del taller.'
+    : warrantyPolicy.loading
+      ? 'Cargando la garantía del taller…'
+      : warrantyPolicy.error
+        ? 'No se pudo cargar la garantía del taller. Cerrá y volvé a abrir el formulario.'
+        : 'Guardar esta configuración como la predeterminada para nuevas reparaciones'
 
   async function guardarGarantiaDelTaller(next: { months: number; type: 'labor' | 'parts' | 'full'; notes: string }) {
     const result = await warrantyPolicy.save(next)
@@ -705,7 +736,9 @@ export function RepairFormDialogV2({
             depositMethod: null,
             depositReference: '',
           }
-        : data
+        // «Sin garantía» deja las notas ocultas y deshabilitadas, pero seguían
+        // guardándose con la orden.
+        : data.warrantyMonths === 0 ? { ...data, warrantyNotes: '' } : data
       const effectivePricingMode: CostCalculationMode = quickMode || isBasicBatch ? 'automatic' : calculationMode
       const pricing = calculateRepairPricing({
         mode: effectivePricingMode,
@@ -2785,7 +2818,8 @@ export function RepairFormDialogV2({
                         void guardarGarantiaDelTaller({ months, type, notes })
                       }}
                       className="h-8 text-xs gap-1.5 border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900 font-bold shadow-xs"
-                      title="Guardar esta configuración como la predeterminada para nuevas reparaciones"
+                      disabled={!puedeFijarGarantia}
+                      title={motivoNoFijar}
                     >
                       <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
                       <span>Fijar como Predeterminada</span>
@@ -2805,13 +2839,12 @@ export function RepairFormDialogV2({
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { months: 0, label: 'Sin Garantía' },
-                      { months: 1, label: '1 Mes' },
-                      { months: 3, label: '3 Meses (Estándar)' },
-                      { months: 6, label: '6 Meses' },
-                      { months: 12, label: '1 Año' },
-                    ].map((preset) => {
+                    {/* Los habituales más la del taller: con una política de 2 o 9
+                        meses no había atajo que la marcara. */}
+                    {[...new Set<number>([...WARRANTY_QUICK_MONTHS, warrantyPolicy.policy.months])]
+                      .sort((a, b) => a - b)
+                      .map((months) => ({ months, label: formatWarrantyMonths(months) }))
+                      .map((preset) => {
                       const active = watch('warrantyMonths') === preset.months
                       const isDefault = warrantyPolicy.policy.months === preset.months
                       return (
@@ -2858,13 +2891,12 @@ export function RepairFormDialogV2({
                             <SelectValue placeholder="Seleccionar duración" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="0">Sin garantía (0 meses)</SelectItem>
-                            <SelectItem value="1">1 mes</SelectItem>
-                            <SelectItem value="3">3 meses (recomendado)</SelectItem>
-                            <SelectItem value="6">6 meses</SelectItem>
-                            <SelectItem value="12">1 año (12 meses)</SelectItem>
-                            <SelectItem value="24">2 años (24 meses)</SelectItem>
-                            <SelectItem value="36">3 años (36 meses)</SelectItem>
+                            {warrantyMonthOptions(field.value).map((months) => (
+                              <SelectItem key={months} value={String(months)}>
+                                {formatWarrantyMonths(months)}
+                                {months === warrantyPolicy.policy.months ? ' · la del taller' : ''}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       )}
@@ -2896,24 +2928,14 @@ export function RepairFormDialogV2({
                             <SelectValue placeholder="Seleccionar tipo" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="labor">
-                              <div className="flex flex-col">
-                                <span className="font-medium">Solo mano de obra</span>
-                                <span className="text-xs text-muted-foreground">Cubre el trabajo realizado</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="parts">
-                              <div className="flex flex-col">
-                                <span className="font-medium">Solo repuestos</span>
-                                <span className="text-xs text-muted-foreground">Cubre las piezas instaladas</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="full">
-                              <div className="flex flex-col">
-                                <span className="font-medium">Completa (Mano de obra + Repuestos)</span>
-                                <span className="text-xs text-muted-foreground">Cobertura integral recomendada</span>
-                              </div>
-                            </SelectItem>
+                            {WARRANTY_TYPES.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{WARRANTY_TYPE_LABELS[type]}</span>
+                                  <span className="text-xs text-muted-foreground">{WARRANTY_TYPE_HINTS[type]}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       )}
@@ -2941,22 +2963,13 @@ export function RepairFormDialogV2({
                     <div className="space-y-1">
                       <span className="text-[11px] text-muted-foreground font-medium">Insertar cláusula rápida:</span>
                       <div className="flex flex-wrap gap-1.5">
-                        {[
-                          'Aplica únicamente a la pieza sustituida.',
-                          'No cubre daños por humedad, agua o líquidos.',
-                          'No cubre caídas, golpes o fracturas de cristal.',
-                          'Garantía de batería por ciclos de carga.',
-                          'Conserve el comprobante para reclamos.',
-                        ].map((clause) => (
+                        {WARRANTY_CLAUSES.map((clause) => (
                           <button
                             key={clause}
                             type="button"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || hasClause(watch('warrantyNotes') || '', clause)}
                             onClick={() => {
-                              const current = watch('warrantyNotes') || ''
-                              if (current.includes(clause)) return
-                              const updated = current ? `${current}\n• ${clause}` : `• ${clause}`
-                              setValue('warrantyNotes', updated, { shouldDirty: true })
+                              setValue('warrantyNotes', appendClause(watch('warrantyNotes') || '', clause), { shouldDirty: true, shouldValidate: true })
                             }}
                             className="text-[11px] px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
                           >
@@ -2969,6 +2982,7 @@ export function RepairFormDialogV2({
 
                   <Textarea
                     id="warrantyNotes"
+                    maxLength={WARRANTY_NOTES_MAX}
                     placeholder="Ej: La garantía aplica sobre la pantalla cambiada. Excluye daños por humedad o golpes posteriores..."
                     className={`min-h-[80px] resize-none ${errors.warrantyNotes ? 'border-red-500' : ''}`}
                     disabled={isSubmitting || watch('warrantyMonths') === 0}
@@ -3001,13 +3015,9 @@ export function RepairFormDialogV2({
                           Vista Previa de Garantía
                         </h4>
                         <div className="text-xs text-amber-800 dark:text-amber-200 space-y-1">
-                          <p>• Duración: <strong>{watch('warrantyMonths')} {watch('warrantyMonths') === 1 ? 'mes' : 'meses'}</strong></p>
-                          <p>• Cobertura estimada: Si se entrega hoy, cubre hasta el <strong>{format(addMonths(new Date(), watch('warrantyMonths') || 0), "d 'de' MMMM yyyy", { locale: es })}</strong> ({((watch('warrantyMonths') || 0) * 30)} días aprox.)</p>
-                          <p>• Cobertura: <strong>
-                            {watch('warrantyType') === 'labor' && 'Solo mano de obra'}
-                            {watch('warrantyType') === 'parts' && 'Solo repuestos'}
-                            {watch('warrantyType') === 'full' && 'Completa (mano de obra + repuestos)'}
-                          </strong></p>
+                          <p>• Duración: <strong>{formatWarrantyMonths(watch('warrantyMonths') || 0)}</strong></p>
+                          <p>• Si se entrega hoy, cubre hasta el <strong>{format(addMonths(new Date(), watch('warrantyMonths') || 0), "d 'de' MMMM yyyy", { locale: es })}</strong></p>
+                          <p>• Cobertura: <strong>{WARRANTY_TYPE_LABELS[(watch('warrantyType') || 'full') as WarrantyType]}</strong></p>
                           {watch('warrantyNotes') && (
                             <p>• Notas: <strong>{watch('warrantyNotes')}</strong></p>
                           )}
@@ -3718,12 +3728,12 @@ export function RepairFormDialogV2({
                   <SelectValue placeholder="Seleccionar duración" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="0">Sin garantía (0 meses)</SelectItem>
-                  <SelectItem value="1">1 mes (30 días)</SelectItem>
-                  <SelectItem value="3">3 meses (90 días - Estándar)</SelectItem>
-                  <SelectItem value="6">6 meses (180 días)</SelectItem>
-                  <SelectItem value="12">1 año (12 meses)</SelectItem>
-                  <SelectItem value="24">2 años (24 meses)</SelectItem>
+                  {warrantyMonthOptions(configWarrantyMonths).map((months) => (
+                    <SelectItem key={months} value={String(months)}>
+                      {formatWarrantyMonths(months)}
+                      {months === warrantyPolicy.policy.months ? ' · la del taller' : ''}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -3741,9 +3751,9 @@ export function RepairFormDialogV2({
                   <SelectValue placeholder="Seleccionar tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="full">Completa (Mano de obra + Repuestos)</SelectItem>
-                  <SelectItem value="labor">Solo mano de obra</SelectItem>
-                  <SelectItem value="parts">Solo repuestos instalados</SelectItem>
+                  {WARRANTY_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>{WARRANTY_TYPE_LABELS[type]}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -3764,21 +3774,15 @@ export function RepairFormDialogV2({
             <div className="space-y-1">
               <span className="text-[11px] text-muted-foreground font-medium">Insertar cláusula recomendada:</span>
               <div className="flex flex-wrap gap-1.5">
-                {[
-                  'Aplica únicamente sobre la pieza sustituida.',
-                  'No cubre daños causados por humedad, agua o líquidos.',
-                  'No cubre golpes, caídas o fracturas de pantalla posteriores.',
-                  'Garantía de batería sujeta a ciclos normales de carga.',
-                  'Precinto de seguridad intacto obligatorio para reclamos.',
-                  'Presentación indispensable del comprobante o ticket.',
-                ].map((clause) => (
+                {/* La misma lista que la tarjeta. Tenían redacciones apenas distintas
+                    («a la pieza» / «sobre la pieza») y el chequeo de repetidas no
+                    las reconocía como la misma cláusula. */}
+                {WARRANTY_CLAUSES.map((clause) => (
                   <button
                     key={clause}
                     type="button"
-                    onClick={() => {
-                      if (configWarrantyNotes.includes(clause)) return
-                      setConfigWarrantyNotes(prev => prev ? `${prev}\n• ${clause}` : `• ${clause}`)
-                    }}
+                    disabled={hasClause(configWarrantyNotes, clause)}
+                    onClick={() => setConfigWarrantyNotes((prev) => appendClause(prev, clause))}
                     className="text-[11px] px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
                   >
                     + {clause}
@@ -3789,6 +3793,7 @@ export function RepairFormDialogV2({
 
             <Textarea
               value={configWarrantyNotes}
+              maxLength={WARRANTY_NOTES_MAX}
               onChange={(e) => setConfigWarrantyNotes(e.target.value)}
               placeholder="Escribe los términos y condiciones de garantía que se imprimirán en el comprobante del cliente..."
               className="min-h-[100px] text-xs resize-none"
@@ -3802,8 +3807,8 @@ export function RepairFormDialogV2({
             </span>
             <div className="text-xs text-slate-700 dark:text-slate-300 space-y-1 bg-white/70 dark:bg-slate-900/70 p-3 rounded-lg border border-amber-100 dark:border-amber-900/30 font-mono">
               <p className="font-bold text-amber-900 dark:text-amber-300">🛡️ TÉRMINOS Y CONDICIONES DE GARANTÍA:</p>
-              <p>• Duración: <strong>{configWarrantyMonths === 0 ? 'Sin garantía' : `${configWarrantyMonths} ${configWarrantyMonths === 1 ? 'mes' : 'meses'} (hasta el ${format(addMonths(new Date(), configWarrantyMonths), "dd/MM/yyyy")})`}</strong></p>
-              <p>• Cobertura: <strong>{configWarrantyType === 'labor' ? 'Solo mano de obra' : configWarrantyType === 'parts' ? 'Solo repuestos' : 'Completa (Mano de obra + Repuestos)'}</strong></p>
+              <p>• Duración: <strong>{configWarrantyMonths === 0 ? 'Sin garantía' : `${formatWarrantyMonths(configWarrantyMonths)} (hasta el ${format(addMonths(new Date(), configWarrantyMonths), "dd/MM/yyyy")})`}</strong></p>
+              <p>• Cobertura: <strong>{WARRANTY_TYPE_LABELS[configWarrantyType]}</strong></p>
               {configWarrantyNotes && (
                 <div className="pt-1 whitespace-pre-line text-[11px] text-slate-600 dark:text-slate-400">
                   {configWarrantyNotes}
@@ -3852,6 +3857,8 @@ export function RepairFormDialogV2({
                 })
                 setIsWarrantyConfigOpen(false)
               }}
+              disabled={!puedeFijarGarantia}
+              title={motivoNoFijar}
               className="flex-1 sm:flex-none text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold gap-1 shadow-sm"
             >
               <Star className="h-3.5 w-3.5 fill-white" />

@@ -33,9 +33,11 @@ describe('una sola garantía predeterminada, la de la empresa', () => {
   })
 
   it('lee y guarda contra la configuración de la empresa', () => {
-    expect(HOOK).toContain("fetch('/api/repairs/receipt-settings')")
-    expect(HOOK).toContain("method: 'PUT'")
-    expect(HOOK).toContain('defaultWarrantyMonths: next.months')
+    // Pasa por la sincronización común, que también refresca la copia del
+    // navegador con la que imprimen el detalle y el listado.
+    expect(HOOK).toContain('refreshReceiptSettings({ force: true })')
+    expect(HOOK).toContain('patchReceiptSettings({')
+    expect(HOOK).toContain('defaultWarrantyMonths: clampWarrantyMonths(next.months)')
   })
 
   it('vuelve a cargar al habilitarse para no aplicar primero el respaldo de 3 meses', () => {
@@ -47,18 +49,23 @@ describe('una sola garantía predeterminada, la de la empresa', () => {
     expect(efectoDeCarga).toContain('setLoading(true)')
   })
 
-  it('al guardar manda el comprobante completo, no solo la garantía', () => {
-    // La API normaliza contra los valores por defecto, no contra lo guardado:
-    // un PUT parcial reseteaba el formato de papel, el logo y el texto legal.
+  it('al guardar manda solo la garantía, y el servidor la fusiona con lo guardado', () => {
+    // Antes mandaba el comprobante entero leído al abrir. Si esa lectura había
+    // fallado, mandaba los valores de fábrica y reseteaba papel, logo y texto
+    // legal de toda la empresa. El PATCH fusiona en el servidor.
     const fn = HOOK.slice(HOOK.indexOf('const save = useCallback'))
-    expect(fn.slice(0, 700)).toContain('...settingsRef.current,')
+    const cuerpo = fn.slice(0, fn.indexOf("if ('error' in result)"))
+    expect(cuerpo).toContain('patchReceiptSettings({')
+    expect(cuerpo).not.toContain('settingsRef')
+    expect(cuerpo).not.toContain('paperFormat')
+    expect(cuerpo).not.toContain('legalText')
   })
 
   it('no pierde lo que el taller ya había configurado', () => {
     // Un local que puso 6 meses en la pantalla vieja volvería a 3 sin aviso.
     expect(HOOK).toContain('repair_default_warranty_months')
     expect(HOOK).toContain('4g_default_repair_warranty')
-    expect(HOOK).toContain('body.persisted ? desdeServidor : { ...desdeServidor, ...readLegacyPolicy() }')
+    expect(HOOK).toContain('snapshot.persisted ? desdeServidor : { ...desdeServidor, ...readLegacyPolicy() }')
   })
 })
 
@@ -122,5 +129,44 @@ describe('el formulario de reparación toma la del taller', () => {
   it('la estrella marca la del taller, no la del navegador', () => {
     expect(FORMULARIO).toContain('warrantyPolicy.policy.months === preset.months')
     expect(FORMULARIO).toContain('Predeterminada del taller')
+  })
+})
+
+/**
+ * La misma garantía se elegía en cuatro lugares con listas propias: con una
+ * política de 2 meses el formulario quedaba en blanco, las cláusulas repetidas
+ * no se detectaban y el tope de notas del taller (1000) bloqueaba el alta (500).
+ */
+describe('las pantallas de garantía usan las mismas reglas', () => {
+  const soloCodigo = (fuente: string) => fuente
+    .split(/\r?\n/)
+    .filter((linea) => !linea.trim().startsWith('//') && !linea.trim().startsWith('*'))
+    .join('\n')
+
+  it('ninguna tiene su propia lista de meses', () => {
+    for (const fuente of [FORMULARIO, AJUSTES]) {
+      expect(fuente).toContain('warrantyMonthOptions(')
+      expect(soloCodigo(fuente)).not.toMatch(/<SelectItem value="(0|1|2|3|6|12|24|36)">/)
+    }
+  })
+
+  it('ni sus propias cláusulas', () => {
+    expect(FORMULARIO.match(/WARRANTY_CLAUSES\.map/g)).toHaveLength(2)
+    expect(AJUSTES).toContain('WARRANTY_CLAUSES.map')
+    expect(FORMULARIO).toContain('appendClause(')
+    expect(AJUSTES).toContain('appendClause(')
+  })
+
+  it('«Fijar como predeterminada» no se ofrece a quien no puede, ni sin la política cargada', () => {
+    expect(FORMULARIO).toContain('const puedeFijarGarantia = warrantyPolicy.canEdit && !warrantyPolicy.loading && !warrantyPolicy.error')
+    expect(FORMULARIO.match(/disabled=\{!puedeFijarGarantia\}/g)).toHaveLength(2)
+  })
+
+  it('una orden sin garantía no guarda notas ocultas', () => {
+    expect(FORMULARIO).toContain(": data.warrantyMonths === 0 ? { ...data, warrantyNotes: '' } : data")
+  })
+
+  it('el formulario mantiene fresca la copia con la que se imprime', () => {
+    expect(FORMULARIO).toContain('useEffect(() => { void refreshReceiptSettings() }, [])')
   })
 })

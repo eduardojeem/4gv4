@@ -9,6 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ShieldCheck, Save, CheckCircle2, Loader2, Lock, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRepairWarrantyPolicy, type WarrantyPolicy } from '@/hooks/use-repair-warranty-policy'
+import {
+  appendClause,
+  formatWarrantyMonths,
+  hasClause,
+  WARRANTY_CLAUSES,
+  WARRANTY_NOTES_MAX,
+  WARRANTY_TYPE_LABELS,
+  WARRANTY_TYPES,
+  warrantyMonthOptions,
+} from '@/lib/repairs/warranty'
 
 export function WarrantyPolicySettings() {
   // Antes esto se guardaba en localStorage con claves propias, que ningun otro
@@ -79,13 +89,13 @@ export function WarrantyPolicySettings() {
               <SelectTrigger id="defaultMonths" className="w-full">
                 <SelectValue placeholder="Seleccionar duración por defecto" />
               </SelectTrigger>
+              {/* Las mismas duraciones que el formulario y el comprobante, más la
+                  guardada si es otra. Esta lista tenía 2 meses y el formulario
+                  no, así que elegirlo acá dejaba el formulario en blanco. */}
               <SelectContent>
-                <SelectItem value="0">Sin garantía (0 meses)</SelectItem>
-                <SelectItem value="1">1 Mes</SelectItem>
-                <SelectItem value="2">2 Meses</SelectItem>
-                <SelectItem value="3">3 Meses (Recomendado)</SelectItem>
-                <SelectItem value="6">6 Meses</SelectItem>
-                <SelectItem value="12">12 Meses (1 Año)</SelectItem>
+                {warrantyMonthOptions(defaultMonths).map((months) => (
+                  <SelectItem key={months} value={String(months)}>{formatWarrantyMonths(months)}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -106,9 +116,9 @@ export function WarrantyPolicySettings() {
                 <SelectValue placeholder="Seleccionar tipo de cobertura" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="full">Garantía Completa (Mano de Obra + Repuestos)</SelectItem>
-                <SelectItem value="labor">Solo Mano de Obra</SelectItem>
-                <SelectItem value="parts">Solo Repuestos</SelectItem>
+                {WARRANTY_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>{WARRANTY_TYPE_LABELS[type]}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -123,11 +133,12 @@ export function WarrantyPolicySettings() {
             <Label htmlFor="defaultNotes" className="text-sm font-semibold">
               Cláusulas y Términos Estándar de la Tienda
             </Label>
-            <span className="text-xs text-muted-foreground">Aparecerá pre-cargado en el ticket</span>
+            <span className="text-xs text-muted-foreground">{defaultNotes.length}/{WARRANTY_NOTES_MAX}</span>
           </div>
           <Textarea
             id="defaultNotes"
             rows={4}
+            maxLength={WARRANTY_NOTES_MAX}
             value={defaultNotes}
             onChange={(e) => setDefaultNotes(e.target.value)}
             placeholder="• Aplica únicamente sobre repuestos instalados por nuestro servicio técnico.&#10;• Excluye daños por agua, humedad, caídas o sobretensión.&#10;• Es indispensable presentar este comprobante para hacer efectiva la garantía."
@@ -135,24 +146,17 @@ export function WarrantyPolicySettings() {
           />
           <div className="flex flex-wrap gap-1.5 pt-1">
             <span className="text-xs text-muted-foreground font-medium self-center">Añadir texto frecuente:</span>
-            {[
-              '• No cubre humedad ni contacto con líquidos.',
-              '• No cubre caídas ni pantallas rotas posteriores.',
-              '• Válido únicamente con comprobante impreso o ticket digital.',
-              '• Garantía de batería sujeta a 300 ciclos de carga.'
-            ].map((snippet) => (
+            {WARRANTY_CLAUSES.map((clause) => (
               <Button
-                key={snippet}
+                key={clause}
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={hasClause(defaultNotes, clause)}
                 className="h-6 text-[11px] px-2 border-slate-300 dark:border-slate-700"
-                onClick={() => {
-                  if (defaultNotes.includes(snippet)) return
-                  setDefaultNotes(prev => prev ? `${prev}\n${snippet}` : snippet)
-                }}
+                onClick={() => setDefaultNotes((prev) => appendClause(prev, clause))}
               >
-                + {snippet}
+                + {clause}
               </Button>
             ))}
           </div>
