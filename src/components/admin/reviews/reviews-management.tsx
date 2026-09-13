@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { getVerificationLabel, type ReviewStatus } from '@/lib/reviews/review-domain'
 import { ReviewStars } from '@/components/public/inicio/ReviewStars'
 import { ReviewActionDialog } from './ReviewActionDialog'
+import { ReviewsHelpDialog } from './ReviewsHelpDialog'
 import { ReviewRequestDialog } from './ReviewRequestDialog'
 import type { AdminReview, AdminReviewFilter, AdminReviewStats, AdminVerificationFilter } from './review-admin-types'
 
@@ -145,6 +146,7 @@ export function ReviewsManagement() {
                   <SelectItem value="open">Opinión abierta</SelectItem>
                 </SelectContent>
               </Select>
+              <ReviewsHelpDialog />
               <Button variant="outline" onClick={() => { if (downloadCurrentPage(reviews, stats.storeSlug)) toast.success('Página exportada') }}><Download className="h-4 w-4" />Exportar página</Button>
               <Button onClick={() => setRequestDialogOpen(true)}><Send className="h-4 w-4" />Solicitar opinión</Button>
             </div>

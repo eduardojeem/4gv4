@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 const source = [
   'src/components/admin/reviews/reviews-management.tsx',
   'src/components/admin/reviews/ReviewActionDialog.tsx',
+  'src/components/admin/reviews/ReviewsHelpDialog.tsx',
   'src/components/admin/reviews/ReviewRequestDialog.tsx',
 ].map((path) => readFileSync(resolve(process.cwd(), path), 'utf8')).join('\n')
 
@@ -26,5 +27,12 @@ describe('admin reviews reputation UI', () => {
     expect(source).toContain('opinión honesta')
     expect(source).not.toContain('opiniones positivas')
     expect(source).not.toContain("method: 'DELETE'")
+  })
+
+  it('offers contextual help with workflow and examples', () => {
+    expect(source).toContain('<ReviewsHelpDialog />')
+    expect(source).toContain('Flujo recomendado')
+    expect(source).toContain('Moderá el contenido, no la calificación')
+    expect(source).toContain('Respondé con contexto y una solución')
   })
 })
