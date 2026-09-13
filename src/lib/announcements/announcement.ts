@@ -18,7 +18,13 @@ export type AnnouncementImage = {
 /** Mas de esto no entra en un cartel sin volverse una galeria. */
 export const MAX_ANNOUNCEMENT_IMAGES = 5
 
+/** Cuantos avisos puede tener cargados cada quien. */
+export const MAX_STORE_ANNOUNCEMENTS = 3
+export const MAX_PLATFORM_ANNOUNCEMENTS = 50
+
 export type Announcement = {
+  /** Identifica al aviso dentro de la lista, para editarlo o borrarlo. */
+  id: string
   enabled: boolean
   title: string
   message: string
@@ -35,6 +41,7 @@ export type Announcement = {
 }
 
 export const EMPTY_ANNOUNCEMENT: Announcement = {
+  id: '',
   enabled: false,
   title: '',
   message: '',
@@ -68,6 +75,7 @@ function normalizeImages(value: unknown): AnnouncementImage[] {
 export function normalizeAnnouncement(value: unknown): Announcement {
   const source = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
   return {
+    id: text(source.id, 40),
     enabled: source.enabled === true,
     title: text(source.title, 120),
     message: text(source.message, 600),
@@ -111,7 +119,52 @@ export function announcementImages(announcement: Announcement | null | undefined
 
 /** Una clave por aviso: al editarlo cambia y el cartel vuelve a aparecer. */
 export function announcementStorageKey(scope: string, announcement: Announcement): string {
-  return `aviso:${scope}:${announcement.updatedAt || 'v0'}`
+  return `aviso:${scope}:${announcement.id || 'unico'}:${announcement.updatedAt || 'v0'}`
+}
+
+/**
+ * La lista de avisos cargados, recortada al tope. Acepta tambien un aviso
+ * suelto: asi se leen los que se guardaron cuando habia uno solo.
+ */
+export function normalizeAnnouncementList(value: unknown, max: number): Announcement[] {
+  const entries = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? [value]
+      : []
+
+  return entries
+    .map((entry, index) => {
+      const announcement = normalizeAnnouncement(entry)
+      // Los avisos viejos no tenian id: se les da uno estable por posicion.
+      return announcement.id ? announcement : { ...announcement, id: `aviso-${index + 1}` }
+    })
+    .filter((announcement) => announcement.title || announcement.message || announcement.images.length > 0)
+    .slice(0, Math.max(1, max))
+}
+
+/**
+ * Cual se muestra: el primero vigente de la lista. Si hay varios, los demas
+ * esperan su turno; dos carteles seguidos al entrar serian peor que ninguno.
+ */
+export function pickLiveAnnouncement(
+  announcements: Announcement[] | null | undefined,
+  now: Date,
+): Announcement | null {
+  return (announcements ?? []).find((announcement) => isAnnouncementLive(announcement, now)) ?? null
+}
+
+export type AnnouncementStatus = 'activo' | 'programado' | 'vencido' | 'incompleto' | 'apagado'
+
+/** En que esta cada aviso de la lista, para mostrarlo en el editor. */
+export function announcementStatus(announcement: Announcement, now: Date): AnnouncementStatus {
+  if (!announcement.enabled) return 'apagado'
+  if (!announcement.title.trim() || !announcement.message.trim()) return 'incompleto'
+
+  const today = announcementDayStamp(now)
+  if (announcement.startsAt && today < announcement.startsAt) return 'programado'
+  if (announcement.endsAt && today > announcement.endsAt) return 'vencido'
+  return 'activo'
 }
 
 /**

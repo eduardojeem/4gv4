@@ -9,7 +9,11 @@ import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWit
 import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { StorefrontStyleProvider } from '@/components/public/storefront-style-context'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
-import { normalizeAnnouncement } from '@/lib/announcements/announcement'
+import {
+  MAX_STORE_ANNOUNCEMENTS,
+  normalizeAnnouncementList,
+  pickLiveAnnouncement,
+} from '@/lib/announcements/announcement'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { resolveRequestStorefrontOrganization } from '@/lib/website/request-storefront-organization'
 import { resolveStorefrontStyle } from '@/lib/website/storefront-style'
@@ -74,7 +78,10 @@ export default async function PublicLayout({
           >
             <SkipToContentLink />
           <AnnouncementModal
-            announcement={normalizeAnnouncement(settings?.announcement)}
+            announcement={pickLiveAnnouncement(
+              normalizeAnnouncementList(settings?.announcements ?? settings?.announcement, MAX_STORE_ANNOUNCEMENTS),
+              new Date(),
+            )}
             scope={`tienda:${storefrontOrganization?.slug ?? settings?.company_info?.slug ?? 'tienda'}`}
           />
             <PublicHeader initialSettings={settings} />

@@ -487,6 +487,7 @@ export const CheckoutSettingsSchema = z.object({
 const announcementDate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usá el formato AAAA-MM-DD').or(z.literal(''))
 
 export const AnnouncementSchema = z.object({
+  id: z.string().trim().max(40).optional().default(''),
   enabled: z.boolean().default(false),
   title: z.string().trim().max(120).default(''),
   message: z.string().trim().max(600).default(''),
@@ -520,6 +521,9 @@ export const AnnouncementSchema = z.object({
   }
 })
 
+// Hasta tres avisos por tienda: mas que eso no se alcanzan a mostrar.
+export const AnnouncementsSchema = z.array(AnnouncementSchema).max(3, 'Hasta 3 avisos')
+
 // Esquema completo de configuración del sitio web
 export const WebsiteSettingsSchema = z.object({
   company_info: CompanyInfoSchema,
@@ -530,6 +534,7 @@ export const WebsiteSettingsSchema = z.object({
   offers_carousel: PromotionalCarouselSchema.optional(),
   trust_bar: TrustBarSchema.optional(),
   announcement: AnnouncementSchema.optional(),
+  announcements: AnnouncementsSchema.optional(),
   brands_section: BrandsSectionSchema.optional(),
   product_credit_defaults: ProductCreditDefaultsSchema.optional(),
   services_section: ServicesSectionSchema.optional(),
@@ -554,6 +559,7 @@ export const SETTING_SCHEMAS = {
   offers_carousel: PromotionalCarouselSchema,
   trust_bar: TrustBarSchema,
   announcement: AnnouncementSchema,
+  announcements: AnnouncementsSchema,
   brands_section: BrandsSectionSchema,
   product_credit_defaults: ProductCreditDefaultsSchema,
   services_section: ServicesSectionSchema,

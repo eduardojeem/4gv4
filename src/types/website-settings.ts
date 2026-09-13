@@ -291,6 +291,8 @@ export interface BrandsSectionSettings {
  * que edita el superadmin.
  */
 export interface StoreAnnouncement {
+  /** Identifica al aviso dentro de la lista. */
+  id?: string
   enabled: boolean
   title: string
   message: string
@@ -322,7 +324,9 @@ export interface WebsiteSettings {
   testimonials: Testimonial[]
   process_steps: ProcessStep[]
   process_flows: ProcessFlow[]
+  /** Compatibilidad: antes habia un solo aviso. */
   announcement?: StoreAnnouncement
+  announcements?: StoreAnnouncement[]
   maintenance_mode?: MaintenanceMode
   checkout?: CheckoutSettings
 }

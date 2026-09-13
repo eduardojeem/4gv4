@@ -7,14 +7,15 @@ import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { DEFAULT_PLATFORM_BRANDING } from '@/lib/platform/branding'
 import {
   PLATFORM_ANNOUNCEMENT_TAG,
-  getAnnouncementFromFeatures,
-  withAnnouncementInFeatures,
+  getAnnouncementsFromFeatures,
+  withAnnouncementsInFeatures,
 } from '@/lib/platform/announcement'
-import { normalizeAnnouncement } from '@/lib/announcements/announcement'
+import { MAX_PLATFORM_ANNOUNCEMENTS, normalizeAnnouncement } from '@/lib/announcements/announcement'
 
 const dateOnly = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usá el formato AAAA-MM-DD').or(z.literal(''))
 
 const announcementSchema = z.object({
+  id: z.string().trim().max(40).optional().default(''),
   enabled: z.boolean(),
   title: z.string().trim().max(120),
   message: z.string().trim().max(600),
@@ -28,6 +29,7 @@ const announcementSchema = z.object({
   ctaHref: z.string().trim().max(500).optional().default(''),
   startsAt: dateOnly.optional().default(''),
   endsAt: dateOnly.optional().default(''),
+  updatedAt: z.string().trim().max(40).optional().default(''),
 }).superRefine((value, context) => {
   // Un aviso activo sin texto no se mostraria nunca: mejor decirlo al guardar.
   if (value.enabled && !value.title) {
@@ -64,7 +66,7 @@ export async function GET() {
 
   return NextResponse.json({
     success: true,
-    announcement: getAnnouncementFromFeatures((data as { features?: unknown } | null)?.features),
+    announcements: getAnnouncementsFromFeatures((data as { features?: unknown } | null)?.features),
   })
 }
 
@@ -73,7 +75,10 @@ export async function PUT(request: NextRequest) {
   if (!me) return NextResponse.json({ success: false, error: 'Acceso denegado.' }, { status: 403 })
 
   const body = await request.json().catch(() => null)
-  const validation = announcementSchema.safeParse(body?.announcement)
+  const validation = z
+    .array(announcementSchema)
+    .max(MAX_PLATFORM_ANNOUNCEMENTS, 'Se pueden cargar hasta 50 avisos')
+    .safeParse(body?.announcements)
 
   if (!validation.success) {
     const issue = validation.error.issues[0]
@@ -92,10 +97,16 @@ export async function PUT(request: NextRequest) {
   }
 
   const now = new Date().toISOString()
-  // `updatedAt` identifica la version del aviso: al editarlo, quien ya lo habia
-  // cerrado vuelve a verlo.
-  const announcement = normalizeAnnouncement({ ...validation.data, updatedAt: now })
-  const features = withAnnouncementInFeatures((current as { features?: unknown } | null)?.features, announcement)
+  // Cada aviso lleva su id y su version. El editor sella `updatedAt` solo en los
+  // que cambiaron, para no hacer reaparecer los demas.
+  const announcements = validation.data.map((entry, index) =>
+    normalizeAnnouncement({
+      ...entry,
+      id: entry.id || 'aviso-' + (index + 1) + '-' + now,
+      updatedAt: entry.updatedAt || now,
+    }),
+  )
+  const features = withAnnouncementsInFeatures((current as { features?: unknown } | null)?.features, announcements)
 
   const mutation = current
     ? admin
@@ -142,12 +153,12 @@ export async function PUT(request: NextRequest) {
     action: 'update_marketplace_announcement',
     resource: 'system_settings',
     resourceId: 'system',
-    newValues: { marketplace_announcement: announcement },
+    newValues: { marketplace_announcements: announcements },
     request,
   })
 
   return NextResponse.json({
     success: true,
-    announcement: getAnnouncementFromFeatures((data as { features?: unknown }).features),
+    announcements: getAnnouncementsFromFeatures((data as { features?: unknown }).features),
   })
 }

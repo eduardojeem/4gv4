@@ -5,11 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import {
+  MAX_PLATFORM_ANNOUNCEMENTS,
+  MAX_STORE_ANNOUNCEMENTS,
   announcementCtaKind,
   announcementImages,
+  announcementStatus,
   announcementStorageKey,
   isAnnouncementLive,
   normalizeAnnouncement,
+  normalizeAnnouncementList,
+  pickLiveAnnouncement,
   shouldShowAnnouncement,
   type Announcement,
 } from '@/lib/announcements/announcement'
@@ -17,6 +22,7 @@ import {
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
 const aviso = (extra: Partial<Announcement> = {}): Announcement => ({
+  id: 'aviso-1',
   enabled: true,
   title: 'Semana de descuentos',
   message: 'Del 15 al 20 hay ofertas en todas las tiendas.',
@@ -154,7 +160,9 @@ describe('el aviso de cada tienda', () => {
     for (const ruta of ['src/app/[organizationSlug]/layout.tsx', 'src/app/(public)/layout.tsx']) {
       const layout = leer(ruta)
       expect(layout).toContain('<AnnouncementModal')
-      expect(layout).toContain('normalizeAnnouncement(settings?.announcement)')
+      // De la lista se muestra el primero vigente.
+      expect(layout).toContain('pickLiveAnnouncement(')
+      expect(layout).toContain('normalizeAnnouncementList(settings?.announcements ?? settings?.announcement, MAX_STORE_ANNOUNCEMENTS)')
       expect(layout).toContain('scope={`tienda:')
     }
   })
@@ -233,14 +241,77 @@ describe('las imágenes del cartel', () => {
   })
 
   it('los dos editores suben el archivo a donde corresponde', () => {
-    const superadmin = leer('src/components/superadmin/MarketplaceAnnouncementForm.tsx')
-    expect(superadmin).toContain('<AnnouncementImagesField')
+    const superadmin = leer('src/components/superadmin/MarketplaceAnnouncementsForm.tsx')
     expect(superadmin).toContain("/api/superadmin/platform-branding/logo")
     expect(superadmin).toContain("body.append('assetType', 'announcement')")
 
     const tienda = leer('src/components/admin/website/AnnouncementEditor.tsx')
-    expect(tienda).toContain('<AnnouncementImagesField')
     // Queda bajo la carpeta de esa organización, como los banners.
     expect(tienda).toContain("/api/admin/website/promotion-image")
+
+    // El campo de imágenes es el mismo para los dos.
+    expect(leer('src/components/announcements/AnnouncementsManager.tsx')).toContain('<AnnouncementImagesField')
+  })
+})
+
+describe('varios avisos cargados', () => {
+  const base = (extra: Partial<Announcement> = {}): Announcement => aviso({ id: 'a1', ...extra })
+
+  it('la lista acepta un aviso viejo suelto y le pone un identificador', () => {
+    const lista = normalizeAnnouncementList({ title: 'Viejo', message: 'Texto' }, 3)
+    expect(lista).toHaveLength(1)
+    expect(lista[0]).toMatchObject({ id: 'aviso-1', title: 'Viejo' })
+  })
+
+  it('descarta los vacíos y recorta al tope de cada lado', () => {
+    const muchos = Array.from({ length: 8 }, (_, i) => ({ title: `Aviso ${i}`, message: 'Texto' }))
+    expect(normalizeAnnouncementList([...muchos, { title: '', message: '' }], MAX_STORE_ANNOUNCEMENTS)).toHaveLength(3)
+    expect(normalizeAnnouncementList(muchos, MAX_PLATFORM_ANNOUNCEMENTS)).toHaveLength(8)
+    expect(MAX_STORE_ANNOUNCEMENTS).toBe(3)
+    expect(MAX_PLATFORM_ANNOUNCEMENTS).toBe(50)
+  })
+
+  it('se muestra el primero vigente de la lista', () => {
+    const vencido = base({ id: 'v', title: 'Vencido', endsAt: '2026-09-15' })
+    const vigente = base({ id: 'b', title: 'Vigente' })
+    const otro = base({ id: 'c', title: 'Otro' })
+
+    expect(pickLiveAnnouncement([vencido, vigente, otro], hoy)?.id).toBe('b')
+    expect(pickLiveAnnouncement([vencido], hoy)).toBeNull()
+    expect(pickLiveAnnouncement([], hoy)).toBeNull()
+  })
+
+  it('cada aviso dice en qué está', () => {
+    expect(announcementStatus(base({ enabled: false }), hoy)).toBe('apagado')
+    expect(announcementStatus(base({ message: '' }), hoy)).toBe('incompleto')
+    expect(announcementStatus(base({ startsAt: '2026-09-20' }), hoy)).toBe('programado')
+    expect(announcementStatus(base({ endsAt: '2026-09-10' }), hoy)).toBe('vencido')
+    expect(announcementStatus(base(), hoy)).toBe('activo')
+  })
+
+  it('la marca de «ya lo vi» es por aviso: editar uno no hace reaparecer los otros', () => {
+    const uno = base({ id: 'a1', updatedAt: 'v1' })
+    const dos = base({ id: 'a2', updatedAt: 'v1' })
+    expect(announcementStorageKey('marketplace', uno)).not.toBe(announcementStorageKey('marketplace', dos))
+    expect(announcementStorageKey('marketplace', { ...uno, updatedAt: 'v2' })).not.toBe(
+      announcementStorageKey('marketplace', uno),
+    )
+  })
+
+  it('los dos editores usan la misma lista, con su propio tope', () => {
+    const tienda = leer('src/components/admin/website/AnnouncementEditor.tsx')
+    expect(tienda).toContain('<AnnouncementsManager')
+    expect(tienda).toContain('max={MAX_STORE_ANNOUNCEMENTS}')
+
+    const superadmin = leer('src/components/superadmin/MarketplaceAnnouncementsForm.tsx')
+    expect(superadmin).toContain('<AnnouncementsManager')
+    expect(superadmin).toContain('max={MAX_PLATFORM_ANNOUNCEMENTS}')
+  })
+
+  it('la tienda guarda la lista validada, con su tope', async () => {
+    const { validateSetting } = await import('@/lib/validation/website-settings')
+    const item = { enabled: true, title: 'Hola', message: 'Texto' }
+    expect(validateSetting('announcements', [item, item]).success).toBe(true)
+    expect(validateSetting('announcements', [item, item, item, item]).success).toBe(false)
   })
 })

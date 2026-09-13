@@ -10,7 +10,8 @@ import { MarketplaceOffersSection, type MarketplaceOfferGroup } from '@/componen
 import { getMarketplaceOrganizations, getMarketplaceProductsPage, getMarketplaceBrands, getMarketplaceOffers } from '@/lib/public/marketplace'
 import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsSection'
 import { getPlatformBranding } from '@/lib/platform/branding'
-import { getPlatformAnnouncement } from '@/lib/platform/announcement'
+import { getPlatformAnnouncements } from '@/lib/platform/announcement'
+import { pickLiveAnnouncement } from '@/lib/announcements/announcement'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import { MarketplaceOrgProductGrid } from '@/components/public/MarketplaceOrgProductGrid'
 
@@ -33,7 +34,7 @@ export default async function MarketplacePage() {
     getMarketplaceProductsPage(48),
     getMarketplaceBrands(30),
     getMarketplaceOffers(100),
-    getPlatformAnnouncement(),
+    getPlatformAnnouncements(),
   ])
   const marketplaceProducts = marketplacePage.products
 
@@ -69,7 +70,7 @@ export default async function MarketplacePage() {
 
   return (
     <div>
-      <AnnouncementModal announcement={announcement} scope="marketplace" />
+      <AnnouncementModal announcement={pickLiveAnnouncement(announcement, new Date())} scope="marketplace" />
 
       {/* ── Hero ── */}
       <section className="relative overflow-hidden border-b border-slate-200 dark:border-slate-800">

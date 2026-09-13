@@ -1,9 +1,9 @@
-import { MarketplaceAnnouncementForm } from '@/components/superadmin/MarketplaceAnnouncementForm'
-import { getPlatformAnnouncement } from '@/lib/platform/announcement'
+import { MarketplaceAnnouncementsForm } from '@/components/superadmin/MarketplaceAnnouncementsForm'
+import { getPlatformAnnouncements } from '@/lib/platform/announcement'
 
 export const dynamic = 'force-dynamic'
 
 export default async function MarketplaceAnnouncementPage() {
-  const announcement = await getPlatformAnnouncement()
-  return <MarketplaceAnnouncementForm initial={announcement} />
+  const announcements = await getPlatformAnnouncements()
+  return <MarketplaceAnnouncementsForm initial={announcements} />
 }

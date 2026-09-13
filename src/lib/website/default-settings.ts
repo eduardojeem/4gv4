@@ -394,6 +394,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       endsAt: '',
       updatedAt: '',
     },
+    announcements: [],
     maintenance_mode: {
       enabled: false,
       title: 'Sitio en Mantenimiento',
@@ -524,6 +525,7 @@ export function applyWebsiteSettingsDefaults(
       ...defaults.announcement,
       ...(settings.announcement ?? {})
     },
+    announcements: Array.isArray(settings.announcements) ? settings.announcements : defaults.announcements,
     maintenance_mode: {
       ...defaults.maintenance_mode,
       ...maintenanceMode
