@@ -332,7 +332,7 @@ function buildAlerts(state: Awaited<ReturnType<typeof getCurrentOrganizationSubs
 
 export default async function AdminSubscriptionsPage() {
   const auth = await resolveRequestAuthUser()
-  if ('reason' in auth) redirect('/login')
+  if (!auth.authenticated) return redirect('/login')
 
   const organization = await getCurrentOrganizationContext(auth.user.id)
   if (!organization || !['owner', 'admin'].includes(organization.role)) redirect('/forbidden')

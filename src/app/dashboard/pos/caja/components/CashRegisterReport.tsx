@@ -129,7 +129,7 @@ export function CashRegisterReport({ onCloseRegister, advancedMode = false }: Ca
         </div>
       </div>
 
-      <style jsx global>{`
+      <style>{`
         @media print {
           @page { margin: 1cm; size: portrait; }
           body * { visibility: hidden; }

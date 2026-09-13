@@ -29,8 +29,7 @@ const nextConfig: NextConfig = {
   // Next 16 no debe escribir archivos de instrucciones de agentes al iniciar.
   agentRules: false,
   typescript: {
-    // TODO: Set to false once all TypeScript errors are resolved
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   
   // CRÍTICO: Deshabilitar source maps en producción
@@ -191,11 +190,29 @@ const nextConfig: NextConfig = {
     return [
       {
         // Security headers para todas las rutas.
-        // Nota: no se define Content-Security-Policy acá porque requiere
-        // ajustarla y probarla contra los inline scripts / PWA / Supabase;
-        // dejarla mal configurada rompe la app. Queda como mejora a validar.
+        // CSP comienza en Report-Only para detectar incompatibilidades reales
+        // antes de bloquear scripts, conexiones o iframes legítimos.
         source: '/(.*)',
         headers: [
+          {
+            key: 'Content-Security-Policy-Report-Only',
+            value: [
+              "default-src 'self'",
+              "base-uri 'self'",
+              "object-src 'none'",
+              "frame-ancestors 'self'",
+              "form-action 'self'",
+              "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https:",
+              "font-src 'self' data:",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
+              "frame-src https://challenges.cloudflare.com",
+              "worker-src 'self' blob:",
+              "manifest-src 'self'",
+              'upgrade-insecure-requests',
+            ].join('; '),
+          },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

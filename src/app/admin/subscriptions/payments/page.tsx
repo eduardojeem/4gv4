@@ -83,7 +83,7 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
   if (!hash) redirect('/admin/subscriptions#payment-history')
 
   const auth = await resolveRequestAuthUser()
-  if ('reason' in auth) redirect('/login')
+  if (!auth.authenticated) return redirect('/login')
 
   const organization = await getCurrentOrganizationContext(auth.user.id)
   if (!organization || !['owner', 'admin'].includes(organization.role)) redirect('/forbidden')

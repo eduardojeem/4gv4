@@ -9,7 +9,6 @@ const operationalRoutes = [
   'src/app/api/repairs/inventory/route.ts',
   'src/app/api/repairs/priority/route.ts',
   'src/app/api/repairs/sign/route.ts',
-  'src/app/api/repairs/communications/whatsapp/route.ts',
   'src/app/api/repairs/technicians/[id]/compensation/route.ts',
   'src/app/api/repairs/technicians/[id]/payments/route.ts',
   'src/app/api/repairs/technicians/[id]/payments/[paymentId]/route.ts',

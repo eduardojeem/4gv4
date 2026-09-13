@@ -528,7 +528,7 @@ export function PromotionalCarousel({
         </div>
       </div>
 
-      <style jsx global>{`
+      <style>{`
         @keyframes progressBar {
           0% {
             transform: scaleX(0);

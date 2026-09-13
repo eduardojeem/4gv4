@@ -58,8 +58,13 @@ export async function GET(request: NextRequest) {
           .in('product_id', productIds)
     if (inventoryResult.error) throw inventoryResult.error
 
+    const inventoryRows = (inventoryResult.data ?? []) as Array<{
+      product_id: string
+      stock_quantity: number | null
+      updated_at: string | null
+    }>
     const stockByProduct = new Map(
-      (inventoryResult.data ?? []).map((row) => [row.product_id, row]),
+      inventoryRows.map((row) => [row.product_id, row]),
     )
     const items = (products ?? []).map((product) => {
       const stock = stockByProduct.get(product.id)

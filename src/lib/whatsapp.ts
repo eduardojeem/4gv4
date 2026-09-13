@@ -78,15 +78,18 @@ export const WhatsAppTemplates = {
  * Get business WhatsApp number from environment or config
  */
 export function getBusinessWhatsApp(): string {
-  return process.env.NEXT_PUBLIC_WHATSAPP_BUSINESS || '595981123456'
+  return process.env.NEXT_PUBLIC_WHATSAPP_BUSINESS?.trim() || ''
 }
 
 /**
  * Quick action to contact business
  */
 export function contactBusiness(message?: string): void {
+  const phone = getBusinessWhatsApp()
+  if (!phone) return
+
   openWhatsApp({
-    phone: getBusinessWhatsApp(),
+    phone,
     message: message || WhatsAppTemplates.generalInquiry(),
   })
 }
