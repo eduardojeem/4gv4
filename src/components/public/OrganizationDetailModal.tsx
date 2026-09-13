@@ -27,6 +27,8 @@ import { normalizeCity } from '@/lib/public/city-normalizer'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
+import { getSocialLinks } from '@/lib/public/social-links'
+import { FacebookIcon, InstagramIcon, TikTokIcon } from '@/components/public/SocialIcons'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -71,6 +73,11 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
   const [copied, setCopied] = useState(false)
 
   if (!organization) return null
+
+  // Antes cada enlace se armaba pegando el valor al dominio: quien guardaba
+  // la URL entera terminaba con `instagram.com/https://instagram.com/tienda`.
+  const socialLinks = getSocialLinks(organization)
+  const socialByPlatform = new Map(socialLinks.map((social) => [social.platform, social]))
 
   const storeUrl = `/${organization.slug}/inicio`
   const catalogUrl = `/${organization.slug}/productos`
@@ -297,7 +304,7 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
           )}
 
           {/* ── Redes Sociales y Canales Oficiales ── */}
-          {(organization.instagram || organization.facebook || organization.tiktok) && (
+          {socialLinks.length > 0 && (
             <div className="rounded-2xl border border-border/80 bg-card p-4 space-y-3">
               <div className="flex items-center gap-2 text-xs font-bold text-foreground">
                 <Globe className="h-4 w-4 text-primary" />
@@ -305,9 +312,9 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {organization.instagram && (
+                {socialByPlatform.get('instagram') && (
                   <a
-                    href={`https://instagram.com/${organization.instagram.replace(/^@/, '')}`}
+                    href={socialByPlatform.get('instagram')!.href}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2.5 rounded-xl border border-pink-500/20 bg-pink-500/5 hover:bg-pink-500/15 p-2.5 text-xs font-medium text-foreground transition-all hover:border-pink-500/40 group"
@@ -317,14 +324,14 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] font-bold text-pink-600 dark:text-pink-400">Instagram</p>
-                      <p className="truncate text-xs font-semibold text-foreground">@{organization.instagram.replace(/^@/, '')}</p>
+                      <p className="truncate text-xs font-semibold text-foreground">{socialByPlatform.get('instagram')!.handle}</p>
                     </div>
                   </a>
                 )}
 
-                {organization.facebook && (
+                {socialByPlatform.get('facebook') && (
                   <a
-                    href={organization.facebook.startsWith('http') ? organization.facebook : `https://facebook.com/${organization.facebook}`}
+                    href={socialByPlatform.get('facebook')!.href}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/15 p-2.5 text-xs font-medium text-foreground transition-all hover:border-blue-500/40 group"
@@ -335,15 +342,15 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400">Facebook</p>
                       <p className="truncate text-xs font-semibold text-foreground">
-                        {organization.facebook.replace(/^https?:\/\/(www\.)?facebook\.com\//, '').replace(/\/$/, '') || 'Página Oficial'}
+                        {socialByPlatform.get('facebook')!.handle || 'Página Oficial'}
                       </p>
                     </div>
                   </a>
                 )}
 
-                {organization.tiktok && (
+                {socialByPlatform.get('tiktok') && (
                   <a
-                    href={`https://tiktok.com/@${organization.tiktok.replace(/^@/, '')}`}
+                    href={socialByPlatform.get('tiktok')!.href}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2.5 rounded-xl border border-border bg-muted/30 hover:bg-muted/60 p-2.5 text-xs font-medium text-foreground transition-all hover:border-foreground/30 group"
@@ -353,7 +360,7 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] font-bold text-foreground">TikTok</p>
-                      <p className="truncate text-xs font-semibold text-foreground">@{organization.tiktok.replace(/^@/, '')}</p>
+                      <p className="truncate text-xs font-semibold text-foreground">{socialByPlatform.get('tiktok')!.handle}</p>
                     </div>
                   </a>
                 )}
@@ -464,28 +471,3 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
   )
 }
 
-function InstagramIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
-    </svg>
-  )
-}
-
-function FacebookIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
-    </svg>
-  )
-}
-
-function TikTokIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 3 15.68 6.34 6.34 0 0 0 9.34 22a6.34 6.34 0 0 0 6.34-6.32V8.75a8.16 8.16 0 0 0 4.91 1.62V6.92a4.84 4.84 0 0 1-1-.23z" />
-    </svg>
-  )
-}

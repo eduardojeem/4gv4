@@ -7,6 +7,8 @@ import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { isPublicServicesPageAvailable, isPublicRepairsAvailable } from '@/lib/website/services'
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
+import { getSocialLinks } from '@/lib/public/social-links'
+import { SOCIAL_ICONS } from '@/components/public/SocialIcons'
 import type { WebsiteSettings } from '@/types/website-settings'
 
 export function PublicFooter({
@@ -35,6 +37,9 @@ export function PublicFooter({
   const addressDisplay = company?.address || ''
   const companyName = company?.name || 'Tienda'
   const mapsHref = getCompanyMapsHref(company?.mapsUrl, company?.address)
+  // Las redes se cargaban en «Sitio Web» y solo se veian en la barra superior
+  // del encabezado, que el dueño puede apagar.
+  const socialLinks = getSocialLinks(company)
 
   const servicesEnabled =
     servicesModuleEnabled &&
@@ -59,6 +64,31 @@ export function PublicFooter({
             <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
               {company?.slogan || `${companyName} - Tienda oficial. Catálogo con stock actualizado, garantía y atención personalizada.`}
             </p>
+
+            {socialLinks.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Seguinos</h3>
+                <ul className="mt-2.5 flex flex-wrap items-center gap-2">
+                  {socialLinks.map((social) => {
+                    const Icon = SOCIAL_ICONS[social.platform]
+                    return (
+                      <li key={social.platform}>
+                        <a
+                          href={social.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`${social.label}: ${social.handle}`}
+                          aria-label={`${social.label} de ${companyName}: ${social.handle}`}
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-border/80 text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <Icon className="h-4 w-4" />
+                        </a>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Links */}
