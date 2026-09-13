@@ -7,6 +7,11 @@ const migration = readFileSync(
   'utf8',
 )
 
+const enumFixMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260913213000_fix_repair_quality_check_status_enum.sql'),
+  'utf8',
+).toLowerCase()
+
 describe('repair quality check migration', () => {
   it('keeps the verification history immutable for authenticated users', () => {
     expect(migration).toContain('alter table public.repair_quality_checks enable row level security')
@@ -25,5 +30,16 @@ describe('repair quality check migration', () => {
     expect(cashierBlock).toContain("'repairs.orders.read'")
     expect(cashierBlock).toContain("'repairs.orders.deliver'")
     expect(cashierBlock).not.toContain("'repairs.orders.update'")
+  })
+
+  it('keeps the computed status typed as repair_status', () => {
+    expect(enumFixMigration).toContain('next_status public.repair_status;')
+    expect(enumFixMigration).toContain("next_status := case when p_result = 'failed' then 'reparacion' else 'listo' end;")
+  })
+
+  it('preserves the restricted RPC execution contract', () => {
+    expect(enumFixMigration).toContain('revoke all on function public.record_repair_quality_check')
+    expect(enumFixMigration).toContain('from public, anon, authenticated;')
+    expect(enumFixMigration).toContain('to service_role;')
   })
 })
