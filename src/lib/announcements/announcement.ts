@@ -7,11 +7,24 @@
  * React ni navegador, para poder probarlas.
  */
 
+export type AnnouncementImage = {
+  url: string
+  /** Texto alternativo: lo lee quien no ve la imagen. */
+  alt: string
+  /** Enlace propio de esa imagen, opcional. */
+  href: string
+}
+
+/** Mas de esto no entra en un cartel sin volverse una galeria. */
+export const MAX_ANNOUNCEMENT_IMAGES = 5
+
 export type Announcement = {
   enabled: boolean
   title: string
   message: string
+  /** Compatibilidad: los avisos viejos tenian una sola imagen. */
   imageUrl: string
+  images: AnnouncementImage[]
   ctaLabel: string
   ctaHref: string
   /** Vigencia opcional, en formato AAAA-MM-DD. Vacio: sin limite. */
@@ -26,6 +39,7 @@ export const EMPTY_ANNOUNCEMENT: Announcement = {
   title: '',
   message: '',
   imageUrl: '',
+  images: [],
   ctaLabel: '',
   ctaHref: '',
   startsAt: '',
@@ -36,6 +50,21 @@ export const EMPTY_ANNOUNCEMENT: Announcement = {
 const text = (value: unknown, max: number) =>
   typeof value === 'string' ? value.trim().slice(0, max) : ''
 
+function normalizeImages(value: unknown): AnnouncementImage[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => {
+      const image = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>
+      return {
+        url: text(image.url, 500),
+        alt: text(image.alt, 120),
+        href: text(image.href, 500),
+      }
+    })
+    .filter((image) => Boolean(image.url))
+    .slice(0, MAX_ANNOUNCEMENT_IMAGES)
+}
+
 export function normalizeAnnouncement(value: unknown): Announcement {
   const source = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
   return {
@@ -43,6 +72,7 @@ export function normalizeAnnouncement(value: unknown): Announcement {
     title: text(source.title, 120),
     message: text(source.message, 600),
     imageUrl: text(source.imageUrl, 500),
+    images: normalizeImages(source.images),
     ctaLabel: text(source.ctaLabel, 60),
     ctaHref: text(source.ctaHref, 500),
     startsAt: text(source.startsAt, 10),
@@ -67,6 +97,16 @@ export function isAnnouncementLive(announcement: Announcement | null | undefined
   if (announcement.startsAt && today < announcement.startsAt) return false
   if (announcement.endsAt && today > announcement.endsAt) return false
   return true
+}
+
+/**
+ * Las imagenes del aviso. Los avisos viejos guardaban una sola en `imageUrl`:
+ * se sigue mostrando sin necesidad de migrar nada.
+ */
+export function announcementImages(announcement: Announcement | null | undefined): AnnouncementImage[] {
+  if (!announcement) return []
+  if (announcement.images.length > 0) return announcement.images
+  return announcement.imageUrl ? [{ url: announcement.imageUrl, alt: '', href: '' }] : []
 }
 
 /** Una clave por aviso: al editarlo cambia y el cartel vuelve a aparecer. */

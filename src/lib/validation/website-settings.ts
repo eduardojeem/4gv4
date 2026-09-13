@@ -491,6 +491,11 @@ export const AnnouncementSchema = z.object({
   title: z.string().trim().max(120).default(''),
   message: z.string().trim().max(600).default(''),
   imageUrl: z.string().trim().max(500).optional().default(''),
+  images: z.array(z.object({
+    url: z.string().trim().min(1).max(500),
+    alt: z.string().trim().max(120).optional().default(''),
+    href: z.string().trim().max(500).optional().default(''),
+  })).max(5, 'Hasta 5 imágenes').optional().default([]),
   ctaLabel: z.string().trim().max(60).optional().default(''),
   ctaHref: z.string().trim().max(500).optional().default(''),
   startsAt: announcementDate.optional().default(''),

@@ -294,7 +294,9 @@ export interface StoreAnnouncement {
   enabled: boolean
   title: string
   message: string
+  /** Compatibilidad: los avisos viejos tenían una sola imagen. */
   imageUrl?: string
+  images?: Array<{ url: string; alt?: string; href?: string }>
   ctaLabel?: string
   ctaHref?: string
   /** Vigencia opcional, en formato AAAA-MM-DD. */

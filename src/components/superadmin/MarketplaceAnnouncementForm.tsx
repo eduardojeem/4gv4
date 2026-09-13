@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
+import { AnnouncementImagesField } from '@/components/announcements/AnnouncementImagesField'
 import { isAnnouncementLive, type Announcement } from '@/lib/announcements/announcement'
 
 export function MarketplaceAnnouncementForm({ initial }: { initial: Announcement }) {
@@ -20,6 +21,20 @@ export function MarketplaceAnnouncementForm({ initial }: { initial: Announcement
 
   const set = <K extends keyof Announcement>(field: K, value: Announcement[K]) =>
     setForm((current) => ({ ...current, [field]: value }))
+
+  // Las imagenes se suben al mismo bucket que los assets de marca, que ya tiene
+  // su listado y su borrado en el panel.
+  const uploadAnnouncementImage = async (file: File) => {
+    const body = new FormData()
+    body.append('file', file)
+    body.append('assetType', 'announcement')
+    const res = await fetch('/api/superadmin/platform-branding/logo', { method: 'POST', body })
+    const payload = await res.json().catch(() => null)
+    if (!res.ok || !payload?.success || !payload.url) {
+      throw new Error(payload?.error || 'No se pudo subir la imagen.')
+    }
+    return String(payload.url)
+  }
 
   const live = isAnnouncementLive(form, new Date())
 
@@ -123,17 +138,11 @@ export function MarketplaceAnnouncementForm({ initial }: { initial: Announcement
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="announcement-image">Imagen (opcional)</Label>
-            <Input
-              id="announcement-image"
-              value={form.imageUrl}
-              maxLength={500}
-              onChange={(event) => set('imageUrl', event.target.value)}
-              placeholder="https://…/banner.jpg"
-            />
-            <p className="text-xs text-muted-foreground">Se muestra arriba del título. Conviene una imagen ancha.</p>
-          </div>
+          <AnnouncementImagesField
+            value={form.images}
+            onChange={(images) => set('images', images)}
+            upload={uploadAnnouncementImage}
+          />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
+import { AnnouncementImagesField } from '@/components/announcements/AnnouncementImagesField'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { isAnnouncementLive, normalizeAnnouncement, type Announcement } from '@/lib/announcements/announcement'
 
@@ -28,6 +29,20 @@ export function AnnouncementEditor() {
     setDraft({ ...form, [field]: value })
 
   const live = isAnnouncementLive(form, new Date())
+
+  // Se sube al mismo lugar que los banners promocionales de la tienda, que ya
+  // queda bajo la carpeta de esta organizacion.
+  const uploadAnnouncementImage = async (file: File) => {
+    const body = new FormData()
+    body.append('file', file)
+    body.append('slideId', 'aviso')
+    const res = await fetch('/api/admin/website/promotion-image', { method: 'POST', body })
+    const payload = await res.json().catch(() => null)
+    if (!res.ok || !payload?.success || !payload.url) {
+      throw new Error(payload?.error || 'No se pudo subir la imagen.')
+    }
+    return String(payload.url)
+  }
 
   const save = async () => {
     if (form.enabled && (!form.title.trim() || !form.message.trim())) {
@@ -100,16 +115,11 @@ export function AnnouncementEditor() {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="store-announcement-image">Imagen (opcional)</Label>
-            <Input
-              id="store-announcement-image"
-              value={form.imageUrl}
-              maxLength={500}
-              onChange={(event) => set('imageUrl', event.target.value)}
-              placeholder="https://…/banner.jpg"
-            />
-          </div>
+          <AnnouncementImagesField
+            value={form.images}
+            onChange={(images) => set('images', images)}
+            upload={uploadAnnouncementImage}
+          />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

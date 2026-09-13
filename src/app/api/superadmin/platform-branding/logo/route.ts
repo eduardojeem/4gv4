@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminSupabase()
-    const sanitizedType = ['logo_light', 'logo_dark', 'favicon'].includes(assetType) ? assetType : 'logo_light'
+    const sanitizedType = ['logo_light', 'logo_dark', 'favicon', 'announcement'].includes(assetType) ? assetType : 'logo_light'
     const storagePath = `branding/platform/${sanitizedType}-${randomUUID()}.${extension}`
 
     const { error: uploadError } = await admin.storage

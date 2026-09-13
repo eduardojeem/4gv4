@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import {
   announcementCtaKind,
+  announcementImages,
   announcementStorageKey,
   isAnnouncementLive,
   normalizeAnnouncement,
@@ -20,6 +21,7 @@ const aviso = (extra: Partial<Announcement> = {}): Announcement => ({
   title: 'Semana de descuentos',
   message: 'Del 15 al 20 hay ofertas en todas las tiendas.',
   imageUrl: '',
+  images: [],
   ctaLabel: '',
   ctaHref: '',
   startsAt: '',
@@ -161,5 +163,84 @@ describe('el aviso de cada tienda', () => {
     expect(leer('src/components/admin/website/WebsiteNavigation.tsx')).toContain("id: 'announcement'")
     expect(leer('src/app/admin/website/page.tsx')).toContain("tab === 'announcement'")
     expect(leer('src/components/admin/website/WebsiteSectionIntro.tsx')).toContain('Aviso al entrar a tu tienda')
+  })
+})
+
+describe('las imágenes del cartel', () => {
+  beforeEach(() => {
+    vi.setSystemTime(hoy)
+    window.localStorage.clear()
+  })
+  afterEach(() => vi.useRealTimers())
+
+  const conImagenes = aviso({
+    images: [
+      { url: '/banners/uno.jpg', alt: 'Descuentos de octubre', href: '/marketplace/ofertas' },
+      { url: '/banners/dos.jpg', alt: 'Envíos gratis', href: '' },
+    ],
+  })
+
+  it('un aviso viejo con una sola imagen se sigue viendo', () => {
+    expect(announcementImages(aviso({ imageUrl: '/banners/viejo.jpg' }))).toEqual([
+      { url: '/banners/viejo.jpg', alt: '', href: '' },
+    ])
+    expect(announcementImages(aviso())).toEqual([])
+    // La lista nueva gana sobre la vieja.
+    expect(announcementImages(aviso({ imageUrl: '/viejo.jpg', images: [{ url: '/nuevo.jpg', alt: '', href: '' }] })))
+      .toEqual([{ url: '/nuevo.jpg', alt: '', href: '' }])
+  })
+
+  it('se guardan hasta cinco y se descartan las que no tienen dirección', () => {
+    const guardado = normalizeAnnouncement({
+      images: [
+        { url: ' /a.jpg ', alt: ' Uno ' },
+        { alt: 'sin dirección' },
+        ...Array.from({ length: 6 }, (_, i) => ({ url: `/b${i}.jpg` })),
+      ],
+    })
+    expect(guardado.images).toHaveLength(5)
+    expect(guardado.images[0]).toEqual({ url: '/a.jpg', alt: 'Uno', href: '' })
+  })
+
+  it('muestra la primera y deja elegir las otras', () => {
+    render(<AnnouncementModal announcement={conImagenes} scope="marketplace" />)
+    expect(screen.getByAltText('Descuentos de octubre')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver imagen 2 de 2' }))
+    expect(screen.getByAltText('Envíos gratis')).toBeInTheDocument()
+    expect(screen.queryByAltText('Descuentos de octubre')).not.toBeInTheDocument()
+  })
+
+  it('una imagen con enlace propio lleva a su destino', () => {
+    render(<AnnouncementModal announcement={conImagenes} scope="marketplace" />)
+    expect(screen.getByRole('link', { name: 'Descuentos de octubre' })).toHaveAttribute('href', '/marketplace/ofertas')
+  })
+
+  it('con una sola imagen no hay puntitos que elegir', () => {
+    render(<AnnouncementModal announcement={aviso({ images: [{ url: '/uno.jpg', alt: 'Sola', href: '' }] })} scope="marketplace" />)
+    expect(screen.getByAltText('Sola')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ver imagen/ })).not.toBeInTheDocument()
+  })
+
+  it('la tienda las valida igual, con el mismo tope', async () => {
+    const { validateSetting } = await import('@/lib/validation/website-settings')
+    const base = { enabled: true, title: 'Hola', message: 'Texto' }
+    expect(validateSetting('announcement', { ...base, images: [{ url: '/a.jpg' }] }).success).toBe(true)
+    expect(validateSetting('announcement', {
+      ...base,
+      images: Array.from({ length: 6 }, (_, i) => ({ url: `/b${i}.jpg` })),
+    }).success).toBe(false)
+  })
+
+  it('los dos editores suben el archivo a donde corresponde', () => {
+    const superadmin = leer('src/components/superadmin/MarketplaceAnnouncementForm.tsx')
+    expect(superadmin).toContain('<AnnouncementImagesField')
+    expect(superadmin).toContain("/api/superadmin/platform-branding/logo")
+    expect(superadmin).toContain("body.append('assetType', 'announcement')")
+
+    const tienda = leer('src/components/admin/website/AnnouncementEditor.tsx')
+    expect(tienda).toContain('<AnnouncementImagesField')
+    // Queda bajo la carpeta de esa organización, como los banners.
+    expect(tienda).toContain("/api/admin/website/promotion-image")
   })
 })

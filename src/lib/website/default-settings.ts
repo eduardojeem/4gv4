@@ -387,6 +387,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       title: '',
       message: '',
       imageUrl: '',
+      images: [],
       ctaLabel: '',
       ctaHref: '',
       startsAt: '',
