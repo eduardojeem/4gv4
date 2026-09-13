@@ -1,141 +1,82 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
-import { z } from 'zod'
 
 const updateSchema = z.object({
-  is_approved: z.boolean().optional(),
-  is_visible: z.boolean().optional(),
+  moderation_status: z.enum(['pending', 'published', 'rejected', 'hidden', 'reported']).optional(),
+  moderation_reason: z.string().trim().min(3).max(500).nullable().optional(),
+  business_response: z.string().trim().min(2).max(1000).nullable().optional(),
+}).superRefine((value, context) => {
+  if (
+    value.moderation_status &&
+    ['rejected', 'hidden', 'reported'].includes(value.moderation_status) &&
+    !value.moderation_reason
+  ) {
+    context.addIssue({ code: 'custom', path: ['moderation_reason'], message: 'Indica el motivo de moderación.' })
+  }
 })
 
-/**
- * PATCH /api/admin/reviews/[id]
- * Aprobar/rechazar/ocultar una reseña
- */
 async function patchHandler(
   request: NextRequest,
-  context: AdminAuthContext & { params: Promise<{ id: string }> }
+  context: AdminAuthContext & { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await context.params
-    const supabase = createAdminSupabase()
     const orgId = context.organizationId
-
     if (!orgId) {
-      return NextResponse.json(
-        { success: false, error: 'Organization not found' },
-        { status: 403 }
-      )
+      return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 403 })
     }
 
-    const body = await request.json()
-    const validation = updateSchema.safeParse(body)
-
+    const validation = updateSchema.safeParse(await request.json().catch(() => null))
     if (!validation.success) {
       return NextResponse.json(
         { success: false, error: 'Datos inválidos', details: validation.error.issues },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
-    const updates = {
-      ...validation.data,
-      updated_at: new Date().toISOString(),
+    const now = new Date().toISOString()
+    const updates: Record<string, string | null> = { updated_at: now }
+    if (validation.data.moderation_status) {
+      updates.moderation_status = validation.data.moderation_status
+      updates.moderation_reason = validation.data.moderation_status === 'published'
+        ? null
+        : validation.data.moderation_reason ?? null
+      updates.moderated_at = now
+      updates.moderated_by = context.user.id
+    }
+    if (validation.data.business_response !== undefined) {
+      updates.business_response = validation.data.business_response
+      updates.responded_at = validation.data.business_response ? now : null
+      updates.responded_by = validation.data.business_response ? context.user.id : null
     }
 
+    const supabase = createAdminSupabase()
     const { data: review, error } = await supabase
       .from('organization_reviews')
       .update(updates)
       .eq('id', id)
       .eq('organization_id', orgId)
       .select('*')
-      .single()
+      .maybeSingle()
 
-    if (error || !review) {
-      return NextResponse.json(
-        { success: false, error: 'Reseña no encontrada' },
-        { status: 404 }
-      )
+    if (error) {
+      logger.error('[admin/reviews] Patch error', { error })
+      return NextResponse.json({ success: false, error: 'No se pudo actualizar la reseña' }, { status: 500 })
+    }
+    if (!review) {
+      return NextResponse.json({ success: false, error: 'Reseña no encontrada' }, { status: 404 })
     }
 
     return NextResponse.json({ success: true, data: review })
   } catch (error) {
-    logger.error('[admin/reviews] Patch error', { error })
-    return NextResponse.json(
-      { success: false, error: 'Error interno' },
-      { status: 500 }
-    )
+    logger.error('[admin/reviews] Unexpected patch error', { error })
+    return NextResponse.json({ success: false, error: 'Error interno' }, { status: 500 })
   }
 }
 
-/**
- * DELETE /api/admin/reviews/[id]
- * Eliminar una reseña permanentemente
- */
-async function deleteHandler(
-  request: NextRequest,
-  context: AdminAuthContext & { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await context.params
-    const supabase = createAdminSupabase()
-    const orgId = context.organizationId
-
-    if (!orgId) {
-      return NextResponse.json(
-        { success: false, error: 'Organization not found' },
-        { status: 403 }
-      )
-    }
-
-    const { data: deletedReview, error } = await supabase
-      .from('organization_reviews')
-      .delete()
-      .eq('id', id)
-      .eq('organization_id', orgId)
-      .select('id')
-      .maybeSingle()
-
-    if (error) {
-      logger.error('[admin/reviews] Delete error', { error })
-      return NextResponse.json(
-        { success: false, error: 'No se pudo eliminar la reseña' },
-        { status: 500 }
-      )
-    }
-
-    if (!deletedReview) {
-      return NextResponse.json(
-        { success: false, error: 'Reseña no encontrada' },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    logger.error('[admin/reviews] Unexpected error', { error })
-    return NextResponse.json(
-      { success: false, error: 'Error interno' },
-      { status: 500 }
-    )
-  }
-}
-
-export function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  return withAdminAuth((req, authCtx) =>
-    patchHandler(req, { ...authCtx, params: context.params })
-  )(request)
-}
-
-export function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  return withAdminAuth((req, authCtx) =>
-    deleteHandler(req, { ...authCtx, params: context.params })
-  )(request)
+export function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  return withAdminAuth((req, authContext) => patchHandler(req, { ...authContext, params: context.params }))(request)
 }

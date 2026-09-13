@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
     const { reviewer_name, reviewer_email, rating, comment, captcha_token, invite_token } = validation.data
     const captcha = await verifyTurnstileToken(captcha_token, clientIp)
     if (!captcha.success) {
-      const notConfigured = captcha.reason === 'not_configured'
+      const notConfigured = 'reason' in captcha && captcha.reason === 'not_configured'
       return NextResponse.json(
         {
           success: false,

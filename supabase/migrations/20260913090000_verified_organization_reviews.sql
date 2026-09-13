@@ -64,6 +64,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_org_reviews_repair_verified
 CREATE INDEX IF NOT EXISTS idx_org_reviews_public_status
   ON public.organization_reviews(organization_id, moderation_status, verification_type, created_at DESC);
 
+DROP POLICY IF EXISTS "Public can read approved reviews" ON public.organization_reviews;
+DROP POLICY IF EXISTS "Org admins can manage reviews" ON public.organization_reviews;
+DROP POLICY IF EXISTS "Public can read published reviews" ON public.organization_reviews;
+CREATE POLICY "Public can read published reviews"
+  ON public.organization_reviews FOR SELECT TO anon, authenticated
+  USING (moderation_status = 'published');
+
+REVOKE ALL ON public.organization_reviews FROM anon, authenticated;
+GRANT SELECT (
+  id,
+  organization_id,
+  reviewer_name,
+  rating,
+  comment,
+  moderation_status,
+  verification_type,
+  business_response,
+  responded_at,
+  created_at
+) ON public.organization_reviews TO anon, authenticated;
+GRANT ALL ON public.organization_reviews TO service_role;
+
 CREATE TABLE IF NOT EXISTS public.organization_review_invites (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -107,8 +129,7 @@ CREATE POLICY "Org admins can manage review invites"
   USING (public.get_org_role(organization_id) IN ('owner', 'admin'))
   WITH CHECK (public.get_org_role(organization_id) IN ('owner', 'admin'));
 
-REVOKE ALL ON public.organization_review_invites FROM anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.organization_review_invites TO authenticated;
+REVOKE ALL ON public.organization_review_invites FROM anon, authenticated;
 GRANT ALL ON public.organization_review_invites TO service_role;
 
 CREATE OR REPLACE FUNCTION public.sync_organization_review_legacy_flags()
@@ -312,6 +333,63 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.get_organization_review_public_stats(uuid)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_organization_review_public_stats(uuid)
+  TO service_role;
+
+CREATE OR REPLACE FUNCTION public.get_organization_review_admin_stats(p_organization_id uuid)
+RETURNS TABLE(
+  total bigint,
+  pending bigint,
+  published bigint,
+  rejected bigint,
+  hidden bigint,
+  reported bigint,
+  average numeric,
+  verified_average numeric,
+  verified_count bigint,
+  responded_count bigint,
+  satisfaction_rate integer,
+  breakdown jsonb
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT
+    count(*),
+    count(*) FILTER (WHERE moderation_status = 'pending'),
+    count(*) FILTER (WHERE moderation_status = 'published'),
+    count(*) FILTER (WHERE moderation_status = 'rejected'),
+    count(*) FILTER (WHERE moderation_status = 'hidden'),
+    count(*) FILTER (WHERE moderation_status = 'reported'),
+    COALESCE(avg(rating) FILTER (WHERE moderation_status = 'published'), 0)::numeric(3,2),
+    COALESCE(avg(rating) FILTER (
+      WHERE moderation_status = 'published' AND verification_type IN ('purchase', 'repair')
+    ), 0)::numeric(3,2),
+    count(*) FILTER (
+      WHERE moderation_status = 'published' AND verification_type IN ('purchase', 'repair')
+    ),
+    count(*) FILTER (WHERE moderation_status = 'published' AND business_response IS NOT NULL),
+    CASE WHEN count(*) FILTER (WHERE moderation_status = 'published') = 0 THEN 0
+      ELSE round(
+        100.0 * count(*) FILTER (WHERE moderation_status = 'published' AND rating >= 4)
+        / count(*) FILTER (WHERE moderation_status = 'published')
+      )::integer
+    END,
+    jsonb_build_object(
+      '1', count(*) FILTER (WHERE moderation_status = 'published' AND rating = 1),
+      '2', count(*) FILTER (WHERE moderation_status = 'published' AND rating = 2),
+      '3', count(*) FILTER (WHERE moderation_status = 'published' AND rating = 3),
+      '4', count(*) FILTER (WHERE moderation_status = 'published' AND rating = 4),
+      '5', count(*) FILTER (WHERE moderation_status = 'published' AND rating = 5)
+    )
+  FROM public.organization_reviews
+  WHERE organization_id = p_organization_id;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.get_organization_review_admin_stats(uuid)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_organization_review_admin_stats(uuid)
   TO service_role;
 
 COMMIT;

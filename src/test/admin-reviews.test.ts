@@ -6,6 +6,17 @@ const workspace = process.cwd()
 const read = (path: string) => readFileSync(resolve(workspace, path), 'utf8')
 
 describe('admin reviews API contract & security', () => {
+  it('limits direct public review reads to non-sensitive columns', () => {
+    const migration = read('supabase/migrations/20260913090000_verified_organization_reviews.sql')
+
+    expect(migration).toContain('REVOKE ALL ON public.organization_reviews FROM anon, authenticated')
+    expect(migration).toContain('GRANT SELECT (')
+    const publicGrant = migration.slice(migration.indexOf('GRANT SELECT ('), migration.indexOf(') ON public.organization_reviews'))
+    expect(publicGrant).not.toContain('reviewer_email')
+    expect(publicGrant).not.toContain('sale_id')
+    expect(publicGrant).not.toContain('repair_id')
+  })
+
   it('protects routes with withAdminAuth and scopes all queries to organization_id', () => {
     const route = read('src/app/api/admin/reviews/route.ts')
 
@@ -28,27 +39,28 @@ describe('admin reviews API contract & security', () => {
     expect(route).toContain('rating_asc')
   })
 
-  it('calculates comprehensive stats including star breakdown and satisfaction', () => {
+  it('calculates consistent published and verified stats in the database', () => {
     const route = read('src/app/api/admin/reviews/route.ts')
 
     expect(route).toContain('satisfactionRate')
     expect(route).toContain('breakdown')
-    expect(route).toContain('computedAverage')
-    expect(route).toContain('approvedCount')
-    expect(route).toContain('hiddenCount')
-    expect(route).toContain('pendingCount')
+    expect(route).toContain('get_organization_review_admin_stats')
+    expect(route).toContain('verifiedCount')
+    expect(route).toContain('respondedCount')
   })
 
-  it('supports bulk operations safely in PATCH', () => {
+  it('supports auditable bulk moderation without ordinary permanent deletion', () => {
     const route = read('src/app/api/admin/reviews/route.ts')
 
     expect(route).toContain('bulkActionSchema')
-    expect(route).toContain("'approve_all_pending'")
     expect(route).toContain("'approve'")
     expect(route).toContain("'reject'")
     expect(route).toContain("'show'")
     expect(route).toContain("'hide'")
-    expect(route).toContain("'delete'")
+    expect(route).toContain('moderation_reason')
+    expect(route).toContain('moderated_by')
+    expect(route).not.toContain("action === 'delete'")
+    expect(route).not.toContain("action === 'approve_all_pending'")
     expect(route).toContain(".in('id', ids)")
   })
 
@@ -58,51 +70,21 @@ describe('admin reviews API contract & security', () => {
     expect(singleRoute).toContain('withAdminAuth')
     expect(singleRoute).toContain(".eq('organization_id', orgId)")
     expect(singleRoute).toContain(".eq('id', id)")
+    expect(singleRoute).toContain('business_response')
+    expect(singleRoute).toContain('moderation_status')
+    expect(singleRoute).toContain('moderation_reason')
+    expect(singleRoute).not.toContain('.delete()')
   })
-})
 
-describe('reviews statistics and ratings logic', () => {
-  const sampleReviews = [
-    { rating: 5, is_approved: true, is_visible: true },
-    { rating: 5, is_approved: true, is_visible: true },
-    { rating: 4, is_approved: true, is_visible: true },
-    { rating: 3, is_approved: true, is_visible: false },
-    { rating: 1, is_approved: false, is_visible: true },
-  ]
+  it('creates one-use verified invitations only from completed tenant records', () => {
+    const invitations = read('src/app/api/admin/reviews/invitations/route.ts')
 
-  it('calculates star breakdown and satisfaction rate correctly', () => {
-    const breakdown: Record<1 | 2 | 3 | 4 | 5, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
-    let approvedCount = 0
-    let hiddenCount = 0
-    let pendingCount = 0
-    let sumApproved = 0
-
-    for (const r of sampleReviews) {
-      if (!r.is_approved) {
-        pendingCount++
-      } else if (!r.is_visible) {
-        hiddenCount++
-      } else {
-        approvedCount++
-        sumApproved += r.rating
-      }
-      const star = r.rating as 1 | 2 | 3 | 4 | 5
-      breakdown[star]++
-    }
-
-    expect(pendingCount).toBe(1)
-    expect(approvedCount).toBe(3)
-    expect(hiddenCount).toBe(1)
-    expect(breakdown[5]).toBe(2)
-    expect(breakdown[4]).toBe(1)
-    expect(breakdown[3]).toBe(1)
-    expect(breakdown[1]).toBe(1)
-
-    const avg = Number((sumApproved / approvedCount).toFixed(1))
-    expect(avg).toBe(4.7)
-
-    const satisfied = breakdown[5] + breakdown[4]
-    const satisfactionRate = Math.round((satisfied / sampleReviews.length) * 100)
-    expect(satisfactionRate).toBe(60)
+    expect(invitations).toContain('withAdminAuth')
+    expect(invitations).toContain(".eq('organization_id', orgId)")
+    expect(invitations).toContain(".eq('status', 'completed')")
+    expect(invitations).toContain(".eq('status', 'entregado')")
+    expect(invitations).toContain('randomBytes(32)')
+    expect(invitations).toContain("createHash('sha256')")
+    expect(invitations).toContain('organization_review_invites')
   })
 })
