@@ -36,17 +36,8 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { getTenantSlugFromPathname, isTenantPublicSection } from '@/lib/saas/tenant'
 import { AuthModal } from '@/components/public/AuthModal'
 import { isPublicServicesPageAvailable, isPublicRepairsAvailable } from '@/lib/website/services'
+import { socialProfileUrl } from '@/lib/public/social-links'
 import type { WebsiteSettings } from '@/types/website-settings'
-
-function formatSocialUrl(handleOrUrl: string, platform: 'instagram' | 'facebook' | 'tiktok') {
-  if (!handleOrUrl) return ''
-  if (handleOrUrl.startsWith('http://') || handleOrUrl.startsWith('https://')) return handleOrUrl
-  const clean = handleOrUrl.replace(/^@/, '').trim()
-  if (platform === 'instagram') return `https://instagram.com/${clean}`
-  if (platform === 'facebook') return `https://facebook.com/${clean}`
-  if (platform === 'tiktok') return `https://tiktok.com/@${clean}`
-  return handleOrUrl
-}
 
 export function PublicHeader({
   initialSettings = null,
@@ -96,9 +87,9 @@ export function PublicHeader({
   const mapsUrl = companyInfo?.mapsUrl?.trim() || ''
   const whatsappNumber = (companyInfo?.whatsapp || companyInfo?.phone || '').replace(/\D/g, '')
   const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}` : ''
-  const instagramUrl = companyInfo?.instagram ? formatSocialUrl(companyInfo.instagram, 'instagram') : ''
-  const facebookUrl = companyInfo?.facebook ? formatSocialUrl(companyInfo.facebook, 'facebook') : ''
-  const tiktokUrl = companyInfo?.tiktok ? formatSocialUrl(companyInfo.tiktok, 'tiktok') : ''
+  const instagramUrl = companyInfo?.instagram ? socialProfileUrl(companyInfo.instagram, 'instagram') : ''
+  const facebookUrl = companyInfo?.facebook ? socialProfileUrl(companyInfo.facebook, 'facebook') : ''
+  const tiktokUrl = companyInfo?.tiktok ? socialProfileUrl(companyInfo.tiktok, 'tiktok') : ''
   const hasSocials = Boolean(instagramUrl || facebookUrl || tiktokUrl)
 
   const canAccessDashboard = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'tecnico' || user?.role === 'vendedor'

@@ -7,6 +7,8 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/tienda-demo/inicio' }))
 vi.mock('@/hooks/useWebsiteSettings', () => ({ useWebsiteSettings: () => ({ settings: null, isLoading: false }) }))
 
 import { PublicFooter } from '@/components/public/PublicFooter'
+import { ContactCTA } from '@/components/public/inicio/ContactCTA'
+import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { getSocialLinks, socialHandle, socialProfileUrl } from '@/lib/public/social-links'
 import type { WebsiteSettings } from '@/types/website-settings'
 
@@ -86,6 +88,58 @@ describe('el pie de la tienda', () => {
     expect(screen.getByRole('link', { name: /Facebook de DA Básica/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Instagram de/ })).not.toBeInTheDocument()
   })
+
+  it('van en el cierre, a la misma altura que el copyright', () => {
+    render(<PublicFooter initialSettings={ajustes({ instagram: 'da' })} />)
+
+    const cierre = screen.getByText(/Todos los derechos reservados/).closest('div')
+    expect(cierre).not.toBeNull()
+    expect(cierre!.textContent).toContain('Seguinos')
+    expect(cierre!.querySelector('a[aria-label^=\"Instagram de\"]')).not.toBeNull()
+  })
+})
+
+/**
+ * El pie es el final de la pagina. Quien baja hasta «Contacto» ya esta
+ * buscando como seguir a la tienda, asi que ahi tienen que estar a la vista.
+ */
+describe('la seccion de contacto de la tienda', () => {
+  const empresa = (redes: { instagram?: string; facebook?: string; tiktok?: string }) => ({
+    name: 'DA Básica',
+    phone: '0981000000',
+    email: 'hola@dabasica.com',
+    address: 'Encarnación, Paraguay',
+    hours: { weekdays: 'Lunes a Viernes, 08:00 a 18:00', saturday: '', sunday: '' },
+    ...redes,
+  }) as never
+
+  const dibujar = (redes: { instagram?: string; facebook?: string; tiktok?: string }) =>
+    render(
+      <ContactCTA
+        companyInfo={empresa(redes)}
+        brand={getBrandTheme('blue')}
+        phoneClean="595981000000"
+        contactHref="https://wa.me/595981000000"
+      />
+    )
+
+  it('muestra cada red con su nombre y el usuario', () => {
+    dibujar({ instagram: 'da_confeccioness/', tiktok: '@da' })
+
+    expect(screen.getByText('Seguinos en redes')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Instagram de DA Básica/ })).toHaveAttribute(
+      'href',
+      'https://instagram.com/da_confeccioness'
+    )
+    // El usuario se lee, no solo el icono.
+    expect(screen.getByText('@da_confeccioness')).toBeInTheDocument()
+    expect(screen.getByText('@da')).toBeInTheDocument()
+  })
+
+  it('sin redes cargadas no ocupa lugar', () => {
+    dibujar({})
+    expect(screen.queryByText('Seguinos en redes')).not.toBeInTheDocument()
+  })
 })
 
 describe('el modal de empresas del marketplace', () => {
@@ -98,3 +152,11 @@ describe('el modal de empresas del marketplace', () => {
   })
 })
 
+describe('el encabezado de la tienda', () => {
+  it('usa la misma regla, sin su copia', () => {
+    const fuente = readFileSync(resolve(process.cwd(), 'src/components/public/PublicHeader.tsx'), 'utf8')
+    expect(fuente).toContain('socialProfileUrl(')
+    // Su version pegaba el dominio dos veces con «instagram.com/tienda».
+    expect(fuente).not.toContain('function formatSocialUrl')
+  })
+})

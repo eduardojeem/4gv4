@@ -24,6 +24,8 @@ import { Button } from '@/components/ui/button'
 import type { CompanyInfo } from '@/types/website-settings'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
 import { getCompanyMapsHref, isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
+import { getSocialLinks } from '@/lib/public/social-links'
+import { StoreSocialLinks } from '@/components/public/StoreSocialLinks'
 import { cn } from '@/lib/utils'
 
 interface ContactCTAProps {
@@ -86,6 +88,8 @@ export function ContactCTA({ companyInfo, brand, phoneClean, contactHref }: Cont
     value.replace(/^(lun(?:es)?\s*-?\s*vie(?:rnes)?|s[aá]b(?:ado)?|dom(?:ingo)?)\s*:\s*/i, '').trim()
 
   const mapQuery = companyInfo.address ? encodeURIComponent(companyInfo.address) : null
+  // Quien llega hasta «Contacto» ya esta buscando como seguir a la tienda.
+  const hasSocials = getSocialLinks(companyInfo).length > 0
 
   return (
     <section id="contacto" aria-labelledby="contact-title" className="py-14 sm:py-20 bg-background border-t border-border/80">
@@ -138,6 +142,29 @@ export function ContactCTA({ companyInfo, brand, phoneClean, contactHref }: Cont
               </Button>
             </div>
           </div>
+
+          {/* Redes de la tienda */}
+          {hasSocials && (
+            <div className="mt-10 rounded-2xl border border-border/60 bg-muted/30 p-5 sm:p-6">
+              <div className="flex flex-col items-center gap-1 text-center">
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Seguinos en redes</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Novedades, ofertas y los productos que van entrando.
+                </p>
+              </div>
+
+              <div className="mt-4 flex justify-center">
+                <StoreSocialLinks
+                  company={companyInfo}
+                  companyName={companyInfo.name || 'la tienda'}
+                  className="max-w-2xl"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Tarjetas de Información de Contacto */}
           {(contactItems.length > 0 || hourRows.length > 0) && (
