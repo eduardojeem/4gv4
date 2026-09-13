@@ -86,8 +86,9 @@ describe('los modulos elegidos a mano sobreviven a una revisita', () => {
   it('solo se sugieren en el primer guardado', () => {
     // /api/admin/organization-profile los elige con validacion de plan y
     // auditoria; el onboarding los pisaba con la sugerencia del rubro.
-    expect(RUTA).toContain('if (!alreadyCompleted) {\n    organizationUpdate.enabled_modules = suggestedModules')
-    expect(RUTA).toContain('const enabledModules = alreadyCompleted ? null : suggestedModules')
+    expect(RUTA).toContain('const applySuggestedModules = !alreadyCompleted && suggestedModules.length > 0')
+    expect(RUTA).toContain('const enabledModules = applySuggestedModules ? suggestedModules : null')
+    expect(RUTA).toContain('suggestedModules.length > 0')
   })
 })
 

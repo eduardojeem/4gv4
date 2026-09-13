@@ -61,6 +61,8 @@ const onboardingSchema = z.object({
   brandColor: z.string().trim().refine(isKnownBrandColor, 'Color de marca invalido').default(DEFAULT_BRAND_COLOR),
   // La tienda de una organizacion nueva arranca sin publicar y nada lo decia.
   storefrontPublic: z.boolean().default(false),
+  // Publicar la deja visible para cualquiera: se confirma, como en «Sitio Web».
+  confirmPublication: z.boolean().default(false),
 })
 
 export async function POST(request: Request) {
@@ -131,6 +133,25 @@ export async function POST(request: Request) {
       {
         error: 'Confirma que el cambio de moneda no convierte precios, saldos ni operaciones existentes.',
         code: 'CURRENCY_CHANGE_CONFIRMATION_REQUIRED',
+      },
+      { status: 409 }
+    )
+  }
+
+  // La visibilidad actual: hace falta para saber si esto publica la tienda y
+  // para volver atras si el guardado falla.
+  const { data: currentPublication } = await admin
+    .from('organizations')
+    .select('storefront_public, marketplace_public')
+    .eq('id', organizationId)
+    .maybeSingle()
+
+  const wasPublic = currentPublication?.storefront_public === true
+  if (input.storefrontPublic && !wasPublic && !input.confirmPublication) {
+    return NextResponse.json(
+      {
+        error: 'Confirma que querés publicar la tienda: va a quedar visible para cualquiera.',
+        code: 'PUBLICATION_CONFIRMATION_REQUIRED',
       },
       { status: 409 }
     )
@@ -244,7 +265,25 @@ export async function POST(request: Request) {
 
   if (updateError) {
     logger.error('Failed to complete onboarding', { error: updateError.message, organizationId })
-    return NextResponse.json({ error: 'No se pudo finalizar el onboarding.' }, { status: 500 })
+    // La visibilidad se aplico antes de la RPC: si el resto no se guardo, se
+    // vuelve a dejar como estaba en vez de publicar o despublicar a medias.
+    const { error: revertError } = await admin
+      .from('organizations')
+      .update({
+        storefront_public: currentPublication?.storefront_public ?? false,
+        marketplace_public: currentPublication?.marketplace_public ?? false,
+        updated_at: now,
+      })
+      .eq('id', organizationId)
+
+    if (revertError) {
+      logger.error('Failed to revert storefront publication after onboarding error', {
+        error: revertError.message,
+        organizationId,
+      })
+    }
+
+    return NextResponse.json({ error: 'No se pudo finalizar el onboarding. No se guardó nada.' }, { status: 500 })
   }
 
   // El contenido del sitio se SIEMBRA, no se reaplica. El array se llamaba
@@ -313,10 +352,14 @@ export async function POST(request: Request) {
     operating_model: input.operatingModel,
     updated_at: now,
   }
-  if (!alreadyCompleted) {
+  // Una lista vacia significa «ningun modulo», no «todos»: si el plan no
+  // habilita ninguno de los sugeridos, se deja sin tocar y la organizacion
+  // conserva los de su plan.
+  const applySuggestedModules = !alreadyCompleted && suggestedModules.length > 0
+  if (applySuggestedModules) {
     organizationUpdate.enabled_modules = suggestedModules
   }
-  const enabledModules = alreadyCompleted ? null : suggestedModules
+  const enabledModules = applySuggestedModules ? suggestedModules : null
   const { error: profileUpdateError } = await admin
     .from('organizations')
     .update(organizationUpdate)

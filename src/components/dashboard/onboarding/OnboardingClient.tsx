@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ElementType } from 'react'
+import { useEffect, useMemo, useRef, useState, type ElementType } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -301,6 +301,13 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   return <p id={id} role="alert" className="mt-1 text-xs font-medium text-destructive">{message}</p>
 }
 
+import {
+  clearOnboardingDraft,
+  isDraftWorthRestoring,
+  readOnboardingDraft,
+  writeOnboardingDraft,
+} from '@/lib/onboarding/draft'
+
 export function OnboardingClient({
   organization,
   subscription,
@@ -318,6 +325,9 @@ export function OnboardingClient({
   const [activeTab, setActiveTab] = useState('essential')
   const [error, setError] = useState('')
   const [confirmCurrencyChange, setConfirmCurrencyChange] = useState(false)
+  const [confirmPublication, setConfirmPublication] = useState(false)
+  const [draftRestored, setDraftRestored] = useState(false)
+  const draftChecked = useRef(false)
   const initialPhone = parsePhone(initialCompanyInfo.phone)
   const [countryCode, setCountryCode] = useState(initialPhone.code)
   const [localPhone, setLocalPhone] = useState(initialPhone.local)
@@ -342,9 +352,14 @@ export function OnboardingClient({
     return next
   }, [form])
 
+  // Publicar deja la tienda visible para cualquiera: se confirma, igual que en
+  // «Sitio Web», en vez de alcanzar con mover el interruptor.
+  const publishingNow = form.storefrontPublic && !initialCompanyInfo.storefrontPublic
+
   const canSubmit = isAdmin
     && Object.keys(fieldErrors).length === 0
     && (!currencyChanged || confirmCurrencyChange)
+    && (!publishingNow || confirmPublication)
     && (!isRevisit || hasChanges)
 
   // Suggested modules calculation based on chosen vertical & model
@@ -365,6 +380,33 @@ export function OnboardingClient({
     })
   }, [form.currency, form.language])
 
+  // Se retoma lo que habia quedado a medio cargar en este equipo.
+  useEffect(() => {
+    if (draftChecked.current) return
+    draftChecked.current = true
+    const draft = readOnboardingDraft(organization.id)
+    if (!isDraftWorthRestoring(draft, initialCompanyInfo, new Date())) return
+    setForm(draft!.form as CompanyInfoForm)
+    setCountryCode(draft!.countryCode || countryCode)
+    setLocalPhone(draft!.localPhone || localPhone)
+    setDraftRestored(true)
+  }, [organization.id, initialCompanyInfo, countryCode, localPhone])
+
+  // El borrador se escribe mientras escribe, no al final.
+  useEffect(() => {
+    if (!draftChecked.current) return
+    if (!hasChanges) {
+      clearOnboardingDraft(organization.id)
+      return
+    }
+    writeOnboardingDraft(organization.id, {
+      form: form as unknown as Record<string, unknown>,
+      countryCode,
+      localPhone,
+      savedAt: new Date().toISOString(),
+    })
+  }, [form, countryCode, localPhone, hasChanges, organization.id])
+
   useEffect(() => {
     if (!hasChanges) return
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -377,7 +419,20 @@ export function OnboardingClient({
 
   const updateToggle = (field: 'storefrontPublic', value: boolean) => {
     setForm((current) => ({ ...current, [field]: value }))
+    if (field === 'storefrontPublic' && !value) setConfirmPublication(false)
     setError('')
+  }
+
+  const discardChanges = () => {
+    setForm(initialCompanyInfo)
+    const phone = parsePhone(initialCompanyInfo.phone)
+    setCountryCode(phone.code)
+    setLocalPhone(phone.local)
+    setConfirmCurrencyChange(false)
+    setConfirmPublication(false)
+    setDraftRestored(false)
+    setError('')
+    clearOnboardingDraft(organization.id)
   }
 
   const updateField = (field: keyof CompanyInfoForm, value: string) => {
@@ -414,6 +469,11 @@ export function OnboardingClient({
       setError('Confirmá el impacto del cambio de moneda antes de guardar.')
       return
     }
+    if (publishingNow && !confirmPublication) {
+      setActiveTab('public')
+      setError('Confirmá que querés publicar la tienda antes de guardar.')
+      return
+    }
 
     try {
       setSaving(true)
@@ -421,7 +481,7 @@ export function OnboardingClient({
       const response = await fetch('/api/onboarding/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, confirmCurrencyChange }),
+        body: JSON.stringify({ ...form, confirmCurrencyChange, confirmPublication }),
       })
       const payload = await response.json().catch(() => null) as {
         error?: string
@@ -430,6 +490,9 @@ export function OnboardingClient({
       if (!response.ok) throw new Error(payload?.error || 'No se pudo guardar la configuración')
 
       clearOnboardingStatusCache()
+      // Lo guardado ya no necesita borrador.
+      clearOnboardingDraft(organization.id)
+      setDraftRestored(false)
       toast.success(isRevisit ? 'Cambios guardados' : 'Configuración inicial completada')
       // El servidor ya no descarta el error de la siembra: si el contenido
       // inicial del sitio no se pudo escribir, se dice en vez de responder
@@ -519,6 +582,19 @@ export function OnboardingClient({
                 </TabsTrigger>
               </TabsList>
             </div>
+
+            {draftRestored ? (
+              <div className="p-5 pb-0">
+                <Alert className="rounded-xl border-primary/30 bg-primary/5">
+                  <RotateCcw className="h-5 w-5" />
+                  <AlertTitle className="font-semibold">Retomamos lo que habías cargado</AlertTitle>
+                  <AlertDescription className="text-xs leading-relaxed">
+                    Quedó guardado en este dispositivo, sin enviarse. Revisalo y guardá, o descartalo para volver a
+                    lo que está publicado.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            ) : null}
 
             {error ? (
               <div className="p-5 pb-0">
@@ -952,6 +1028,19 @@ export function OnboardingClient({
                     </p>
                   </div>
                 </div>
+
+                {publishingNow ? (
+                  <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-emerald-500/40 bg-background/80 p-3 transition-colors hover:bg-background">
+                    <Checkbox
+                      checked={confirmPublication}
+                      onCheckedChange={(checked) => setConfirmPublication(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <span className="text-xs font-medium leading-5 text-foreground">
+                      Entiendo que al guardar, mi tienda queda visible para cualquiera con el enlace.
+                    </span>
+                  </label>
+                ) : null}
               </div>
 
               {/* Color de marca.
@@ -1289,7 +1378,9 @@ export function OnboardingClient({
       </div>
 
       {/* Barra Fija / Flotante de Acciones */}
-      <footer className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/90 px-4 py-3 backdrop-blur-md shadow-lg sm:sticky sm:inset-x-auto sm:bottom-4 sm:rounded-2xl sm:border">
+      {/* El panel dibuja su propia navegacion fija abajo en pantallas chicas:
+          sin este z-index y este margen, tapaba el boton de guardar. */}
+      <footer className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-[60] mx-2 rounded-2xl border bg-background/95 px-4 py-3 backdrop-blur-md shadow-lg lg:bottom-4 lg:mx-0 lg:sticky lg:inset-x-auto">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div className="hidden min-w-0 sm:block">
             <p className="truncate text-sm font-semibold text-foreground">
@@ -1313,14 +1404,7 @@ export function OnboardingClient({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setForm(initialCompanyInfo)
-                  const phone = parsePhone(initialCompanyInfo.phone)
-                  setCountryCode(phone.code)
-                  setLocalPhone(phone.local)
-                  setConfirmCurrencyChange(false)
-                  setError('')
-                }}
+                onClick={discardChanges}
                 className="gap-1.5 text-xs"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
