@@ -41,6 +41,10 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminSupabase: () => createFakeClient(),
 }))
 
+vi.mock('next/cache', () => ({
+  unstable_cache: <T extends (...args: never[]) => unknown>(callback: T) => callback,
+}))
+
 import { getMarketplaceProductsPage } from '@/lib/public/marketplace'
 
 function productRow(id: string) {

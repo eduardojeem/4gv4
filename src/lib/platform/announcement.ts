@@ -32,7 +32,7 @@ export function withAnnouncementsInFeatures(features: unknown, announcements: An
   }
 }
 
-async function getPlatformAnnouncementsUncached() {
+export async function getPlatformAnnouncementsUncached() {
   const admin = createAdminSupabase()
   const { data } = await admin
     .from('system_settings')

@@ -22,12 +22,54 @@ export const MAX_ANNOUNCEMENT_IMAGES = 5
 export const MAX_STORE_ANNOUNCEMENTS = 3
 export const MAX_PLATFORM_ANNOUNCEMENTS = 50
 
+export type AnnouncementFrequency = 'always' | 'once_per_day' | 'once_per_session'
+
+export type AnnouncementBadgeVariant =
+  | 'primary'
+  | 'amber'
+  | 'emerald'
+  | 'purple'
+  | 'rose'
+  | 'cyan'
+  | 'indigo'
+  | 'orange'
+  | 'teal'
+  | 'slate'
+
+export type AnnouncementCarouselAnimation = 'slide' | 'fade' | 'zoom'
+
+export type AnnouncementImageBackdrop = 'ambient' | 'dark' | 'tinted' | 'light'
+
+export type AnnouncementImageFit = 'contain' | 'cover'
+
+export type AnnouncementImageEffect = 'zoom' | 'glow' | 'none'
+
 export type Announcement = {
   /** Identifica al aviso dentro de la lista, para editarlo o borrarlo. */
   id: string
   enabled: boolean
   title: string
   message: string
+  /** Etiqueta destacada personalizable (ej: "✨ Novedad", "🔥 Oferta especial", "🚀 Lanzamiento"). */
+  badgeLabel?: string
+  /** Color o estilo del badge destacado. */
+  badgeVariant?: AnnouncementBadgeVariant
+  /** Nota o texto pequeño de pie (ej: "* Válido hasta agotar stock", "Cupos limitados"). */
+  highlightNote?: string
+  /** Efecto de animación en la transición de imágenes ('slide' | 'fade' | 'zoom'). */
+  carouselAnimation?: AnnouncementCarouselAnimation
+  /** Segundos de rotación automática entre imágenes (0 = manual). Por defecto: 3s. */
+  carouselIntervalSeconds?: number
+  /** Fondo ambiental del carrusel/imagen ('ambient' | 'dark' | 'tinted' | 'light'). */
+  imageBackdrop?: AnnouncementImageBackdrop
+  /** Modo de ajuste de la imagen ('contain' | 'cover'). */
+  imageFit?: AnnouncementImageFit
+  /** Efecto visual/interactivo en la imagen ('zoom' | 'glow' | 'none'). */
+  imageEffect?: AnnouncementImageEffect
+  /** Frecuencia con la que se muestra el aviso al visitante. Por defecto: una vez por día. */
+  frequency?: AnnouncementFrequency
+  /** Tiempo en segundos antes del auto-cierre del cartel (0 = sin auto-cierre). Por defecto: 5 segundos. */
+  autoCloseSeconds?: number
   /** Compatibilidad: los avisos viejos tenian una sola imagen. */
   imageUrl: string
   images: AnnouncementImage[]
@@ -45,6 +87,16 @@ export const EMPTY_ANNOUNCEMENT: Announcement = {
   enabled: false,
   title: '',
   message: '',
+  badgeLabel: 'Novedad destacada',
+  badgeVariant: 'primary',
+  highlightNote: '',
+  carouselAnimation: 'slide',
+  carouselIntervalSeconds: 3,
+  imageBackdrop: 'ambient',
+  imageFit: 'contain',
+  imageEffect: 'zoom',
+  frequency: 'once_per_day',
+  autoCloseSeconds: 5,
   imageUrl: '',
   images: [],
   ctaLabel: '',
@@ -74,11 +126,68 @@ function normalizeImages(value: unknown): AnnouncementImage[] {
 
 export function normalizeAnnouncement(value: unknown): Announcement {
   const source = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  const rawFreq = source.frequency
+  const frequency: AnnouncementFrequency =
+    rawFreq === 'always' || rawFreq === 'once_per_session' ? rawFreq : 'once_per_day'
+
+  const rawSeconds = source.autoCloseSeconds
+  const autoCloseSeconds =
+    typeof rawSeconds === 'number' && Number.isFinite(rawSeconds)
+      ? Math.max(0, Math.min(120, Math.round(rawSeconds)))
+      : (rawSeconds === 0 ? 0 : 5)
+
+  const rawBadgeVariant = source.badgeVariant
+  const badgeVariant: AnnouncementBadgeVariant =
+    rawBadgeVariant === 'amber' ||
+    rawBadgeVariant === 'emerald' ||
+    rawBadgeVariant === 'purple' ||
+    rawBadgeVariant === 'rose' ||
+    rawBadgeVariant === 'cyan' ||
+    rawBadgeVariant === 'indigo' ||
+    rawBadgeVariant === 'orange' ||
+    rawBadgeVariant === 'teal' ||
+    rawBadgeVariant === 'slate'
+      ? rawBadgeVariant
+      : 'primary'
+
+  const rawAnimation = source.carouselAnimation
+  const carouselAnimation: AnnouncementCarouselAnimation =
+    rawAnimation === 'fade' || rawAnimation === 'zoom' ? rawAnimation : 'slide'
+
+  const rawCarouselSeconds = source.carouselIntervalSeconds
+  const carouselIntervalSeconds =
+    typeof rawCarouselSeconds === 'number' && Number.isFinite(rawCarouselSeconds)
+      ? Math.max(0, Math.min(30, Math.round(rawCarouselSeconds)))
+      : (rawCarouselSeconds === 0 ? 0 : 3)
+
+  const rawBackdrop = source.imageBackdrop
+  const imageBackdrop: AnnouncementImageBackdrop =
+    rawBackdrop === 'dark' || rawBackdrop === 'tinted' || rawBackdrop === 'light'
+      ? rawBackdrop
+      : 'ambient'
+
+  const rawFit = source.imageFit
+  const imageFit: AnnouncementImageFit = rawFit === 'cover' ? 'cover' : 'contain'
+
+  const rawEffect = source.imageEffect
+  const imageEffect: AnnouncementImageEffect =
+    rawEffect === 'glow' || rawEffect === 'none' ? rawEffect : 'zoom'
+
   return {
     id: text(source.id, 40),
     enabled: source.enabled === true,
     title: text(source.title, 120),
     message: text(source.message, 600),
+    badgeLabel: text(source.badgeLabel ?? 'Novedad destacada', 40),
+    badgeVariant,
+    highlightNote: text(source.highlightNote, 120),
+    carouselAnimation,
+    carouselIntervalSeconds,
+    imageBackdrop,
+    imageFit,
+    imageEffect,
+    frequency,
+    autoCloseSeconds,
     imageUrl: text(source.imageUrl, 500),
     images: normalizeImages(source.images),
     ctaLabel: text(source.ctaLabel, 60),
@@ -168,15 +277,21 @@ export function announcementStatus(announcement: Announcement, now: Date): Annou
 }
 
 /**
- * Se muestra una vez por dia: si el visitante ya lo cerro hoy, no vuelve a
- * aparecer hasta mañana.
+ * Evalúa si se debe mostrar el aviso según su frecuencia configurada:
+ * - 'always': siempre que esté vigente (en cada recarga/visita).
+ * - 'once_per_session': una vez por sesión del navegador.
+ * - 'once_per_day': una vez por día (si ya lo cerró hoy, no vuelve hasta mañana).
  */
 export function shouldShowAnnouncement(
   announcement: Announcement | null | undefined,
   now: Date,
   lastSeen: string | null,
+  sessionSeen?: boolean,
 ): boolean {
   if (!isAnnouncementLive(announcement, now)) return false
+  const frequency = announcement?.frequency ?? 'once_per_day'
+  if (frequency === 'always') return true
+  if (frequency === 'once_per_session') return !sessionSeen
   return lastSeen !== announcementDayStamp(now)
 }
 

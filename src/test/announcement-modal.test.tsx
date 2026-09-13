@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
@@ -54,9 +54,22 @@ describe('cuándo se muestra el aviso', () => {
   })
 
   it('una vez por día: si ya lo cerró hoy, no vuelve hasta mañana', () => {
-    expect(shouldShowAnnouncement(aviso(), hoy, null)).toBe(true)
-    expect(shouldShowAnnouncement(aviso(), hoy, '2026-09-16')).toBe(false)
-    expect(shouldShowAnnouncement(aviso(), hoy, '2026-09-15')).toBe(true)
+    expect(shouldShowAnnouncement(aviso({ frequency: 'once_per_day' }), hoy, null)).toBe(true)
+    expect(shouldShowAnnouncement(aviso({ frequency: 'once_per_day' }), hoy, '2026-09-16')).toBe(false)
+    expect(shouldShowAnnouncement(aviso({ frequency: 'once_per_day' }), hoy, '2026-09-15')).toBe(true)
+  })
+
+  it('cada vez que actualiza o entra: se muestra siempre que esté vigente', () => {
+    expect(shouldShowAnnouncement(aviso({ frequency: 'always' }), hoy, '2026-09-16')).toBe(true)
+    expect(shouldShowAnnouncement(aviso({ frequency: 'always' }), hoy, null)).toBe(true)
+    // Pero si no está habilitado, no se muestra
+    expect(shouldShowAnnouncement(aviso({ frequency: 'always', enabled: false }), hoy, null)).toBe(false)
+  })
+
+  it('una vez por sesión: se muestra si no se vio en la sesión actual', () => {
+    expect(shouldShowAnnouncement(aviso({ frequency: 'once_per_session' }), hoy, null, false)).toBe(true)
+    expect(shouldShowAnnouncement(aviso({ frequency: 'once_per_session' }), hoy, '2026-09-16', false)).toBe(true)
+    expect(shouldShowAnnouncement(aviso({ frequency: 'once_per_session' }), hoy, null, true)).toBe(false)
   })
 
   it('si el dueño lo edita, quien ya lo había cerrado vuelve a verlo', () => {
@@ -75,8 +88,48 @@ describe('cuándo se muestra el aviso', () => {
   })
 
   it('lo guardado se lee con la forma esperada, venga como venga', () => {
-    expect(normalizeAnnouncement({ enabled: 'sí', title: 42 })).toMatchObject({ enabled: false, title: '' })
-    expect(normalizeAnnouncement(null)).toMatchObject({ enabled: false, message: '' })
+    expect(normalizeAnnouncement({ enabled: 'sí', title: 42 })).toMatchObject({ enabled: false, title: '', frequency: 'once_per_day' })
+    expect(normalizeAnnouncement({ frequency: 'always' })).toMatchObject({ frequency: 'always' })
+    expect(normalizeAnnouncement({ frequency: 'once_per_session' })).toMatchObject({ frequency: 'once_per_session' })
+    expect(normalizeAnnouncement({ frequency: 'desconocido' })).toMatchObject({ frequency: 'once_per_day' })
+    expect(normalizeAnnouncement({ autoCloseSeconds: 10 })).toMatchObject({ autoCloseSeconds: 10 })
+    expect(normalizeAnnouncement({
+      badgeLabel: '🔥 Gran Oferta',
+      badgeVariant: 'rose',
+      highlightNote: '* Válido hasta agotar stock',
+      carouselAnimation: 'zoom',
+      carouselIntervalSeconds: 5,
+      imageBackdrop: 'dark',
+      imageFit: 'cover',
+      imageEffect: 'glow',
+    })).toMatchObject({
+      badgeLabel: '🔥 Gran Oferta',
+      badgeVariant: 'rose',
+      highlightNote: '* Válido hasta agotar stock',
+      carouselAnimation: 'zoom',
+      carouselIntervalSeconds: 5,
+      imageBackdrop: 'dark',
+      imageFit: 'cover',
+      imageEffect: 'glow',
+    })
+    expect(normalizeAnnouncement({ badgeVariant: 'cyan' })).toMatchObject({ badgeVariant: 'cyan' })
+    expect(normalizeAnnouncement({ badgeVariant: 'indigo' })).toMatchObject({ badgeVariant: 'indigo' })
+    expect(normalizeAnnouncement({ badgeVariant: 'orange' })).toMatchObject({ badgeVariant: 'orange' })
+    expect(normalizeAnnouncement({ badgeVariant: 'teal' })).toMatchObject({ badgeVariant: 'teal' })
+    expect(normalizeAnnouncement({ badgeVariant: 'slate' })).toMatchObject({ badgeVariant: 'slate' })
+    expect(normalizeAnnouncement(null)).toMatchObject({
+      enabled: false,
+      message: '',
+      frequency: 'once_per_day',
+      autoCloseSeconds: 5,
+      badgeLabel: 'Novedad destacada',
+      badgeVariant: 'primary',
+      carouselAnimation: 'slide',
+      carouselIntervalSeconds: 3,
+      imageBackdrop: 'ambient',
+      imageFit: 'contain',
+      imageEffect: 'zoom',
+    })
   })
 })
 
@@ -84,6 +137,7 @@ describe('el cartel', () => {
   beforeEach(() => {
     vi.setSystemTime(hoy)
     window.localStorage.clear()
+    window.sessionStorage.clear()
   })
   afterEach(() => vi.useRealTimers())
 
@@ -92,6 +146,21 @@ describe('el cartel', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('Semana de descuentos')).toBeInTheDocument()
     expect(screen.getByText(/Del 15 al 20/)).toBeInTheDocument()
+  })
+
+  it('muestra la etiqueta personalizada y la nota al pie si están configuradas', () => {
+    render(
+      <AnnouncementModal
+        announcement={aviso({
+          badgeLabel: '🚀 Lanzamiento VIP',
+          badgeVariant: 'purple',
+          highlightNote: '* Solo para los primeros 50 registrados',
+        })}
+        scope="marketplace"
+      />
+    )
+    expect(screen.getByText('🚀 Lanzamiento VIP')).toBeInTheDocument()
+    expect(screen.getByText('* Solo para los primeros 50 registrados')).toBeInTheDocument()
   })
 
   it('al cerrarlo se anota el día y no vuelve a aparecer', () => {
@@ -105,6 +174,31 @@ describe('el cartel', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('al cerrarlo con frecuencia una vez por sesión, no vuelve en la misma sesión', () => {
+    const avisoSesion = aviso({ frequency: 'once_per_session' })
+    const { unmount } = render(<AnnouncementModal announcement={avisoSesion} scope="marketplace" />)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Seguir mirando' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(window.sessionStorage.getItem(announcementStorageKey('marketplace', avisoSesion))).toBe('seen')
+    unmount()
+
+    render(<AnnouncementModal announcement={avisoSesion} scope="marketplace" />)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('con frecuencia cada vez que actualiza, vuelve a aparecer tras cerrar y recargar', () => {
+    const avisoAlways = aviso({ frequency: 'always' })
+    const { unmount } = render(<AnnouncementModal announcement={avisoAlways} scope="marketplace" />)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Seguir mirando' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    unmount()
+
+    render(<AnnouncementModal announcement={avisoAlways} scope="marketplace" />)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
   it('el botón lleva al enlace configurado', () => {
     render(<AnnouncementModal announcement={aviso({ ctaLabel: 'Ver ofertas', ctaHref: '/marketplace/productos' })} scope="marketplace" />)
     expect(screen.getByRole('link', { name: /Ver ofertas/ })).toHaveAttribute('href', '/marketplace/productos')
@@ -115,9 +209,47 @@ describe('el cartel', () => {
     expect(screen.queryByRole('link', { name: 'Click' })).not.toBeInTheDocument()
   })
 
+  it('se cierra automáticamente a los 5 segundos si no se interactúa', () => {
+    vi.useFakeTimers()
+    render(<AnnouncementModal announcement={aviso({ autoCloseSeconds: 5 })} scope="marketplace" />)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(5000)
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    vi.useRealTimers()
+  })
+
   it('sin aviso configurado no se dibuja nada', () => {
     const { container } = render(<AnnouncementModal announcement={null} scope="marketplace" />)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('en modo previsualización se abre directamente y no se autocierra', () => {
+    vi.useFakeTimers()
+    const onCerrar = vi.fn()
+    render(
+      <AnnouncementModal
+        announcement={aviso({ autoCloseSeconds: 5 })}
+        scope="marketplace"
+        isPreview
+        isOpen
+        onClose={onCerrar}
+      />
+    )
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    // No debe autocerrarse en preview
+    act(() => {
+      vi.advanceTimersByTime(10000)
+    })
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    // Al hacer clic en Seguir mirando se llama a onClose
+    fireEvent.click(screen.getByRole('button', { name: 'Seguir mirando' }))
+    expect(onCerrar).toHaveBeenCalled()
+    vi.useRealTimers()
   })
 })
 
@@ -154,6 +286,9 @@ describe('el aviso de cada tienda', () => {
     expect(validateSetting('announcement', { enabled: true, title: '', message: '' }).success).toBe(false)
     expect(validateSetting('announcement', { enabled: true, title: 'H', message: 'M', ctaLabel: 'Ir', ctaHref: 'javascript:alert(1)' }).success).toBe(false)
     expect(validateSetting('announcement', { enabled: true, title: 'H', message: 'M', startsAt: '2026-10-05', endsAt: '2026-10-01' }).success).toBe(false)
+    expect(validateSetting('announcement', { enabled: true, title: 'H', message: 'M', frequency: 'always' }).success).toBe(true)
+    expect(validateSetting('announcement', { enabled: true, title: 'H', message: 'M', frequency: 'once_per_session' }).success).toBe(true)
+    expect(validateSetting('announcement', { enabled: true, title: 'H', message: 'M', frequency: 'invalid_freq' }).success).toBe(false)
   })
 
   it('la tienda lo muestra al entrar, con su propia cuenta por tienda', () => {
@@ -228,6 +363,41 @@ describe('las imágenes del cartel', () => {
     render(<AnnouncementModal announcement={aviso({ images: [{ url: '/uno.jpg', alt: 'Sola', href: '' }] })} scope="marketplace" />)
     expect(screen.getByAltText('Sola')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Ver imagen/ })).not.toBeInTheDocument()
+  })
+
+  it('con varias imágenes rota automáticamente cada 3 segundos', () => {
+    vi.useFakeTimers()
+    render(<AnnouncementModal announcement={conImagenes} scope="marketplace" />)
+    expect(screen.getByAltText('Descuentos de octubre')).toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(3000)
+    })
+    expect(screen.getByAltText('Envíos gratis')).toBeInTheDocument()
+
+    // Puede cerrarse inmediatamente con el botón de cruz (X)
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar aviso' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    vi.useRealTimers()
+  })
+
+  it('permite pausar la rotación y navegar con el teclado', () => {
+    render(<AnnouncementModal announcement={conImagenes} scope="marketplace" />)
+    expect(screen.getByAltText('Descuentos de octubre')).toBeInTheDocument()
+
+    // Navegar con la flecha derecha del teclado
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(screen.getByAltText('Envíos gratis')).toBeInTheDocument()
+
+    // Navegar de vuelta con la flecha izquierda
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(screen.getByAltText('Descuentos de octubre')).toBeInTheDocument()
+
+    // Botón de pausa/play disponible
+    const pauseButton = screen.getByRole('button', { name: 'Pausar carrusel' })
+    expect(pauseButton).toBeInTheDocument()
+    fireEvent.click(pauseButton)
+    expect(screen.getByRole('button', { name: 'Reanudar carrusel' })).toBeInTheDocument()
   })
 
   it('la tienda las valida igual, con el mismo tope', async () => {
@@ -313,5 +483,11 @@ describe('varios avisos cargados', () => {
     const item = { enabled: true, title: 'Hola', message: 'Texto' }
     expect(validateSetting('announcements', [item, item]).success).toBe(true)
     expect(validateSetting('announcements', [item, item, item, item]).success).toBe(false)
+  })
+
+  it('para borrar un aviso se solicita confirmación con mensaje de advertencia', () => {
+    const manager = leer('src/components/announcements/AnnouncementsManager.tsx')
+    expect(manager).toContain('¿Eliminar aviso?')
+    expect(manager).toContain('Esta acción quitará el aviso de la lista')
   })
 })

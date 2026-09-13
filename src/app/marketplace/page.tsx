@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Building2, Package, ShoppingBag, Sparkles, Store, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,6 +13,7 @@ import { getPlatformAnnouncements } from '@/lib/platform/announcement'
 import { pickLiveAnnouncement } from '@/lib/announcements/announcement'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import { MarketplaceOrgProductGrid } from '@/components/public/MarketplaceOrgProductGrid'
+import { MarketplaceOrgMarquee } from '@/components/public/MarketplaceOrgMarquee'
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding()
@@ -214,34 +214,8 @@ export default async function MarketplacePage() {
             </Button>
           </div>
 
-          {/* Horizontal scroll de logos */}
-          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-            {organizations.map((org) => (
-              <Link
-                key={org.id}
-                href={`/${org.slug}/inicio`}
-                className="group flex shrink-0 flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-950 dark:hover:border-cyan-700"
-                style={{ scrollSnapAlign: 'start' }}
-              >
-                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
-                  {org.logo_url ? (
-                    <Image
-                      src={org.logo_url}
-                      alt={org.name}
-                      width={48}
-                      height={48}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <Building2 className="h-5 w-5 text-slate-400" />
-                  )}
-                </div>
-                <span className="max-w-[88px] truncate text-center text-xs font-medium text-slate-700 dark:text-slate-300">
-                  {org.name}
-                </span>
-              </Link>
-            ))}
-          </div>
+          {/* Carrusel en movimiento de empresas asociadas */}
+          <MarketplaceOrgMarquee organizations={organizations} className="mt-2" />
         </section>
       )}
 
