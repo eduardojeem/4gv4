@@ -151,6 +151,15 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * La sucursal activa, o null si el componente se usa fuera del provider (por
+ * ejemplo en una prueba o en una pantalla sin sucursales). Para lo que puede
+ * funcionar sin sucursal elegida, en vez de romper la pantalla.
+ */
+export function useOptionalBranch() {
+  return useContext(BranchContext)
+}
+
 export function useBranch() {
   const context = useContext(BranchContext)
   if (!context) {

@@ -27,7 +27,6 @@ import {
   Clock,
   Coins,
   Building2,
-  Copy,
 } from 'lucide-react'
 import {
   Select,
@@ -40,6 +39,7 @@ import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Customer } from '@/hooks/use-customer-state'
+import { useOptionalBranch } from '@/contexts/branch-context'
 
 export const PARAGUAY_BANKS = [
   'Banco Itaú',
@@ -80,6 +80,19 @@ export interface DebtItem {
   repairCategory?: 'in_progress' | 'ready_for_pickup' | 'delivered_unpaid'
   debtReason?: string
   creditId?: string
+  /** Si se puede cobrar desde la sucursal activa. */
+  collectable?: boolean
+  /** Por qué no se puede cobrar desde acá. */
+  blockedReason?: string
+}
+
+/** Una clave por intento de cobro: reintentar el mismo no cobra dos veces. */
+function newIdempotencyKey() {
+  try {
+    return `cobro-${crypto.randomUUID()}`
+  } catch {
+    return `cobro-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  }
 }
 
 interface PaymentResult {
@@ -137,30 +150,26 @@ export function CustomerGlobalPaymentModal({
   const [mode, setMode] = useState<'auto' | 'manual'>('auto')
   const [manualAllocations, setManualAllocations] = useState<Record<string, number>>({})
   const [notes, setNotes] = useState('')
+  const [collectableDebt, setCollectableDebt] = useState(0)
+  // El sobrante no se acredita solo: tiene que confirmarse.
+  const [creditExcess, setCreditExcess] = useState(false)
+  const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey)
+  const branchId = useOptionalBranch()?.selectedBranchId ?? null
 
   // Receipt / Success state
   const [paymentResult, setPaymentResult] = useState<PaymentResult | null>(null)
-
-  const handleCopyBankInfo = () => {
-    const bankDetails = `*Datos para Transferencia Bancaria:*
-Titular: Mi Empresa S.A.
-RUC: 80012345-6
-Banco: Banco Itaú
-Cta Cte Nº: 123456789
-Alias SIPAP: 0981123456`
-    navigator.clipboard.writeText(bankDetails)
-    toast.success('Datos bancarios de la empresa copiados al portapapeles')
-  }
 
   const fetchDebts = async () => {
     if (!customer?.id) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/customers/${customer.id}/collect-payment`)
+      const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : ''
+      const res = await fetch(`/api/customers/${customer.id}/collect-payment${query}`)
       const data = await res.json()
       if (data.success) {
         setDebts(data.debts || [])
         setTotalDebt(data.totalDebt || 0)
+        setCollectableDebt(data.collectableDebt ?? data.totalDebt ?? 0)
         setOverdueDebt(data.overdueDebt || 0)
         setStoreBalance(data.storeBalance || 0)
 
@@ -194,9 +203,11 @@ Alias SIPAP: 0981123456`
       setLastFourDigits('')
       setMode('auto')
       setNotes('')
+      setCreditExcess(false)
+      setIdempotencyKey(newIdempotencyKey())
       fetchDebts()
     }
-  }, [open, customer?.id])
+  }, [open, customer?.id, branchId]) // eslint-disable-line react-hooks/exhaustive-deps -- fetchDebts se recrea en cada render; recargar al abrir, al cambiar de cliente o de sucursal es lo buscado
 
   const numericAmount = useMemo(() => {
     const cleaned = amountInput.replace(/[^0-9]/g, '')
@@ -218,7 +229,7 @@ Alias SIPAP: 0981123456`
 
     if (mode === 'auto') {
       for (const d of debts) {
-        if (remaining <= 0) {
+        if (remaining <= 0 || d.collectable === false) {
           result.push({
             debt: d,
             allocated: 0,
@@ -239,7 +250,7 @@ Alias SIPAP: 0981123456`
       }
     } else {
       for (const d of debts) {
-        const manualVal = manualAllocations[d.id] || 0
+        const manualVal = d.collectable === false ? 0 : manualAllocations[d.id] || 0
         const alloc = Math.min(manualVal, d.pendingAmount)
         const newPending = Math.max(0, d.pendingAmount - alloc)
         result.push({
@@ -262,11 +273,24 @@ Alias SIPAP: 0981123456`
     return Math.max(0, numericAmount - totalAllocated)
   }, [numericAmount, totalAllocated])
 
+  // Tarjeta y transferencia sin comprobante no se pueden conciliar después.
+  const missingProof = paymentMethod === 'transfer' && !referenceNumber.trim()
+    ? 'Ingresá el número de comprobante de la transferencia.'
+    : paymentMethod === 'card' && !voucherNumber.trim()
+      ? 'Ingresá el número de cupón del POS.'
+      : paymentMethod === 'card' && lastFourDigits && lastFourDigits.length !== 4
+        ? 'Los últimos dígitos de la tarjeta son 4 números.'
+        : null
+
   const handleQuickAmount = (amt: number) => {
     setAmountInput(amt.toString())
   }
 
   const handlePaySingleDebt = (debt: DebtItem) => {
+    if (debt.collectable === false) {
+      toast.warning(debt.blockedReason || 'Esta deuda no se puede cobrar desde esta sucursal.')
+      return
+    }
     setMode('manual')
     const newManual: Record<string, number> = {}
     debts.forEach((d) => {
@@ -295,7 +319,15 @@ Alias SIPAP: 0981123456`
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!customer?.id || numericAmount <= 0) {
-      toast.warning('Ingresa un monto válido a abonar.')
+      toast.warning('Ingresá un monto válido a cobrar.')
+      return
+    }
+    if (missingProof) {
+      toast.warning(missingProof)
+      return
+    }
+    if (excessToStoreCredit > 0 && !creditExcess) {
+      toast.warning(`Sobran ${formatCurrency(excessToStoreCredit)}. Confirmá que van a saldo a favor o ajustá el monto.`)
       return
     }
 
@@ -318,16 +350,21 @@ Alias SIPAP: 0981123456`
         mode,
         allocations:
           mode === 'manual'
-            ? Object.entries(manualAllocations).map(([id, amt]) => {
-                const debt = debts.find((d) => d.id === id)
-                return {
-                  id,
-                  type: debt?.type || 'installment',
-                  amount: amt,
-                }
-              })
+            ? Object.entries(manualAllocations)
+                .filter(([, amt]) => amt > 0)
+                .map(([id, amt]) => {
+                  const debt = debts.find((d) => d.id === id)
+                  return {
+                    id,
+                    type: debt?.type || 'installment',
+                    amount: amt,
+                  }
+                })
             : undefined,
         notes,
+        creditExcessToStoreCredit: excessToStoreCredit > 0 && creditExcess,
+        idempotencyKey,
+        branchId: branchId ?? undefined,
       }
 
       const res = await fetch(`/api/customers/${customer.id}/collect-payment`, {
@@ -337,11 +374,20 @@ Alias SIPAP: 0981123456`
       })
 
       const data = await res.json()
-      if (data.success) {
-        toast.success(data.message || 'Pago registrado exitosamente')
+      // 207: se cobró una parte y se cortó en una deuda. Lo cobrado ya está
+      // registrado, así que se muestra el recibo de eso y se avisa del resto.
+      const partial = res.status === 207 && Array.isArray(data.appliedAllocations) && data.appliedAllocations.length > 0
+      if (data.success || partial) {
+        if (partial) {
+          toast.error(data.error || 'El cobro se registró en parte.')
+        } else {
+          toast.success(data.message || 'Cobro registrado')
+        }
+        if (data.storeCreditWarning) toast.warning(data.storeCreditWarning)
+        setIdempotencyKey(newIdempotencyKey())
         setPaymentResult({
           receiptNumber: data.receiptNumber,
-          totalAmount: data.totalAmount,
+          totalAmount: data.totalAmount ?? data.totalApplied ?? 0,
           appliedAllocations: data.appliedAllocations || [],
           excessToStoreCredit: data.excessToStoreCredit || 0,
           paymentMethod: data.paymentMethod || paymentMethod,
@@ -355,11 +401,15 @@ Alias SIPAP: 0981123456`
         })
         if (onSuccess) onSuccess()
       } else {
-        toast.error(data.error || 'Error al procesar el abono')
+        // Se mantiene la clave: reintentar este mismo cobro no cobra dos veces
+        // una reparación que sí haya entrado.
+        toast.error(data.error || 'No se pudo registrar el cobro')
+        if (data.code === 'EXCESS_REQUIRES_CONFIRMATION') setCreditExcess(false)
+        fetchDebts()
       }
     } catch (err) {
       console.error(err)
-      toast.error('Error de comunicación con el servidor')
+      toast.error('No se pudo conectar con el servidor. Revisá si el cobro quedó registrado antes de reintentar.')
     } finally {
       setSubmitting(false)
     }
@@ -413,7 +463,7 @@ Alias SIPAP: 0981123456`
   }
 
   return (
-    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+    <Dialog open={open} onOpenChange={(val) => { if (!val && !submitting) onClose() }}>
       <DialogContent className="max-w-3xl lg:max-w-4xl p-0 gap-0 max-h-[92vh] flex flex-col overflow-hidden">
         {/* ── Header ── */}
         <DialogHeader className="p-4 sm:p-6 bg-slate-900 text-white border-b border-slate-800">
@@ -641,10 +691,10 @@ Alias SIPAP: 0981123456`
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     <button
                       type="button"
-                      onClick={() => handleQuickAmount(totalDebt)}
+                      onClick={() => handleQuickAmount(collectableDebt)}
                       className="px-2 py-1 rounded-md text-[11px] font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
                     >
-                      Pagar Todo ({formatCurrency(totalDebt)})
+                      Pagar Todo ({formatCurrency(collectableDebt)})
                     </button>
                     {overdueDebt > 0 && overdueDebt !== totalDebt && (
                       <button
@@ -764,15 +814,6 @@ Alias SIPAP: 0981123456`
                           Detalles de Transferencia Bancaria (SIPAP)
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleCopyBankInfo}
-                        className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 hover:underline flex items-center gap-1 cursor-pointer"
-                        title="Copiar datos bancarios para pasar al cliente"
-                      >
-                        <Copy className="h-3 w-3" />
-                        Copiar Cuentas Bancarias
-                      </button>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -800,7 +841,7 @@ Alias SIPAP: 0981123456`
                       <div className="space-y-1">
                         <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
                           <span>Nº Comprobante SIPAP</span>
-                          <span className="text-[9.5px] text-slate-400 font-normal">(Opcional)</span>
+                          <span className="text-[9.5px] text-rose-600 font-semibold">(Obligatorio)</span>
                         </Label>
                         <Input
                           type="text"
@@ -887,7 +928,7 @@ Alias SIPAP: 0981123456`
                       <div className="space-y-1">
                         <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
                           <span>Nº Ticket / Cupón</span>
-                          <span className="text-[9.5px] text-slate-400 font-normal">(Opcional)</span>
+                          <span className="text-[9.5px] text-rose-600 font-semibold">(Obligatorio)</span>
                         </Label>
                         <Input
                           type="text"
@@ -985,6 +1026,11 @@ Alias SIPAP: 0981123456`
                                   <p className="font-bold text-slate-900 dark:text-white truncate">
                                     {debt.title}
                                   </p>
+                                  {debt.collectable === false && (
+                                    <Badge className="border border-slate-300 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[9px] font-bold h-4 px-1.5" title={debt.blockedReason}>
+                                      Otra sucursal
+                                    </Badge>
+                                  )}
                                   {isRepair ? (
                                     isDelivered ? (
                                       <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 text-[9px] font-bold h-4 px-1.5">
@@ -1051,6 +1097,8 @@ Alias SIPAP: 0981123456`
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handlePaySingleDebt(debt)}
+                                disabled={debt.collectable === false}
+                                title={debt.blockedReason}
                                 className={cn(
                                   "h-7 px-2.5 text-[11px] font-semibold transition-all",
                                   isInProgress
@@ -1091,6 +1139,8 @@ Alias SIPAP: 0981123456`
                                     placeholder="0"
                                     value={manualAllocations[debt.id] ? manualAllocations[debt.id].toLocaleString('es-PY') : ''}
                                     onChange={(e) => handleManualAllocationChange(debt.id, e.target.value)}
+                                    disabled={debt.collectable === false}
+                                    aria-label={`Monto para ${debt.title}`}
                                     className="h-8 text-xs font-bold text-right tabular-nums"
                                   />
                                 </div>
@@ -1151,6 +1201,11 @@ Alias SIPAP: 0981123456`
                               <div className="space-y-1">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <p className="font-bold text-slate-900 dark:text-white">{d.title}</p>
+                                  {d.collectable === false && (
+                                    <Badge className="border border-slate-300 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[9px] font-bold" title={d.blockedReason}>
+                                      Otra sucursal
+                                    </Badge>
+                                  )}
                                   {isRepair ? (
                                     isDelivered ? (
                                       <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 text-[9px] font-bold">
@@ -1191,6 +1246,8 @@ Alias SIPAP: 0981123456`
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handlePaySingleDebt(d)}
+                                disabled={d.collectable === false}
+                                title={d.blockedReason}
                                 className={cn(
                                   "h-7 px-2.5 text-[11px] font-semibold",
                                   isInProgress
@@ -1214,6 +1271,29 @@ Alias SIPAP: 0981123456`
                 </div>
               </div>
 
+              {excessToStoreCredit > 0 && (
+                <label className="flex items-start gap-2.5 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
+                  <input
+                    type="checkbox"
+                    checked={creditExcess}
+                    onChange={(e) => setCreditExcess(e.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>
+                    Sobran <strong>{formatCurrency(excessToStoreCredit)}</strong> después de cubrir las deudas.
+                    Acreditarlos como saldo a favor del cliente
+                    {paymentMethod === 'cash' ? ' (entran también a la caja abierta)' : ''}.
+                  </span>
+                </label>
+              )}
+
+              {missingProof && numericAmount > 0 && (
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-rose-600" role="alert">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {missingProof}
+                </p>
+              )}
+
               {/* Botón de Confirmación */}
               <div className="flex items-center justify-between pt-2">
                 <Button
@@ -1227,7 +1307,12 @@ Alias SIPAP: 0981123456`
 
                 <Button
                   type="submit"
-                  disabled={submitting || numericAmount <= 0}
+                  disabled={
+                    submitting ||
+                    numericAmount <= 0 ||
+                    Boolean(missingProof) ||
+                    (excessToStoreCredit > 0 && !creditExcess)
+                  }
                   className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold gap-2 px-6 shadow-md"
                 >
                   {submitting ? (
