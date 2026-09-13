@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import {
+  ArrowDownRight,
+  ArrowUpRight,
   Building2,
   CheckCircle2,
   CreditCard,
@@ -47,23 +49,122 @@ const resources: Array<{ key: keyof PlanRow; label: string; icon: typeof Users }
   { key: 'products', label: 'Productos', icon: Package },
 ]
 
-function FeatureValue({ value }: { value: string }) {
-  if (value === 'Incluido') return <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-  if (value === 'No incluido') return <X className="h-4 w-4 text-muted-foreground/40" />
-  return <span className="text-xs font-medium">{value}</span>
+const features: Array<{ key: 'marketplace' | 'analytics' | 'credits'; label: string }> = [
+  { key: 'marketplace', label: 'Marketplace web' },
+  { key: 'analytics', label: 'Analytics y reportes' },
+  { key: 'credits', label: 'Créditos y cuotas' },
+]
+
+/**
+ * Un tilde o una cruz no dicen nada en voz alta, y la vista de tabla mostraba
+ * el mismo dato como texto: la misma informacion en dos idiomas distintos.
+ */
+function FeatureValue({ value, label }: { value: string; label: string }) {
+  if (value === 'Incluido') {
+    return (
+      <>
+        <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden="true" />
+        <span className="sr-only">{label}: incluido</span>
+      </>
+    )
+  }
+  if (value === 'No incluido') {
+    return (
+      <>
+        <X className="h-4 w-4 text-muted-foreground/50" aria-hidden="true" />
+        <span className="sr-only">{label}: no incluido</span>
+      </>
+    )
+  }
+  return <span className="text-xs font-medium text-foreground">{value}</span>
 }
 
-function PlanCard({ plan, isCurrent, canChangePlan }: { plan: PlanRow; isCurrent: boolean; canChangePlan: boolean }) {
+/** Adonde te lleva el boton respecto del plan que ya tenes. */
+type PlanDirection = 'current' | 'up' | 'down' | 'same-price'
+
+function planDirection(plan: PlanRow, currentPrice: number | null, currentPlanCode: string): PlanDirection {
+  if (plan.code === currentPlanCode) return 'current'
+  if (currentPrice === null) return 'same-price'
+  if (plan.priceMonthly > currentPrice) return 'up'
+  if (plan.priceMonthly < currentPrice) return 'down'
+  return 'same-price'
+}
+
+/** El destino viaja en la URL: antes se elegia el plan dos veces. */
+function changePlanHref(code: string) {
+  return `/admin/subscriptions/change-plan?plan=${encodeURIComponent(code)}`
+}
+
+function PlanCta({
+  plan,
+  direction,
+  canChangePlan,
+  className,
+  size = 'default',
+}: {
+  plan: PlanRow
+  direction: PlanDirection
+  canChangePlan: boolean
+  className?: string
+  size?: 'default' | 'sm'
+}) {
+  if (direction === 'current') {
+    return (
+      <Button variant="outline" size={size} className={cn('font-bold', className)} disabled>
+        <CheckCircle2 className="mr-1.5 h-4 w-4 text-primary" />
+        Tu plan
+      </Button>
+    )
+  }
+
+  if (!canChangePlan) {
+    return (
+      <Button variant="outline" size={size} className={cn('font-semibold', className)} disabled>
+        Solo el propietario
+      </Button>
+    )
+  }
+
   return (
-    <div className={cn(
-      'relative flex flex-col rounded-3xl border bg-white dark:bg-slate-900 transition-all duration-300 hover:shadow-lg',
-      isCurrent
-        ? 'border-indigo-500 shadow-md ring-2 ring-indigo-500/20 dark:border-indigo-400'
-        : 'border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-    )}>
+    <Button
+      asChild
+      size={size}
+      variant={direction === 'up' ? 'default' : 'outline'}
+      className={cn('font-bold', className)}
+    >
+      <Link href={changePlanHref(plan.code)}>
+        {direction === 'up' ? (
+          <ArrowUpRight className="mr-1.5 h-4 w-4" />
+        ) : direction === 'down' ? (
+          <ArrowDownRight className="mr-1.5 h-4 w-4" />
+        ) : null}
+        {direction === 'up' ? `Subir a ${plan.name}` : direction === 'down' ? `Bajar a ${plan.name}` : `Elegir ${plan.name}`}
+      </Link>
+    </Button>
+  )
+}
+
+function PlanCard({
+  plan,
+  direction,
+  canChangePlan,
+}: {
+  plan: PlanRow
+  direction: PlanDirection
+  canChangePlan: boolean
+}) {
+  const isCurrent = direction === 'current'
+
+  return (
+    <div
+      className={cn(
+        'relative flex flex-col rounded-3xl border bg-card transition-shadow',
+        isCurrent ? 'border-primary shadow-md ring-2 ring-primary/20' : 'border-border hover:shadow-lg'
+      )}
+    >
       {isCurrent && (
         <div className="absolute -top-3 left-6">
-          <Badge className="rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-xs gap-1 text-xs px-3 py-0.5 font-bold border-0">
+          <Badge className="gap-1 rounded-full border-0 bg-primary px-3 py-0.5 text-xs font-bold text-primary-foreground shadow-xs">
             <CheckCircle2 className="h-3 w-3" />
             Plan actual
           </Badge>
@@ -72,68 +173,44 @@ function PlanCard({ plan, isCurrent, canChangePlan }: { plan: PlanRow; isCurrent
 
       {plan.isPopular && !isCurrent && (
         <div className="absolute -top-3 left-6">
-          <Badge className="rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs gap-1 text-xs px-3 py-0.5 font-bold border-0">
+          <Badge className="gap-1 rounded-full border-0 bg-amber-500 px-3 py-0.5 text-xs font-bold text-white shadow-xs">
             <Star className="h-3 w-3 fill-white" />
-            Más popular
+            Más elegido
           </Badge>
         </div>
       )}
 
       <div className="p-6 pt-7">
-        <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">{plan.name}</h3>
+        <h3 className="text-xl font-extrabold text-foreground">{plan.name}</h3>
         <div className="mt-2 flex items-baseline gap-1">
-          <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-50">{plan.priceLabel}</span>
-          {plan.priceMonthly > 0 && (
-            <span className="text-xs font-semibold text-muted-foreground">/mes</span>
-          )}
+          <span className="text-2xl font-black tabular-nums text-foreground sm:text-3xl">{plan.priceLabel}</span>
+          {plan.priceMonthly > 0 && <span className="text-xs font-semibold text-muted-foreground">/mes</span>}
         </div>
       </div>
 
-      <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-4 space-y-2.5 bg-slate-50/50 dark:bg-slate-800/20">
+      <div className="space-y-2.5 border-t border-border bg-muted/30 px-6 py-4">
         {resources.map(({ key, label, icon: Icon }) => (
           <div key={key} className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-medium">
-              <Icon className="h-3.5 w-3.5 text-indigo-500" />
+            <div className="flex items-center gap-2 font-medium text-muted-foreground">
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
               {label}
             </div>
-            <span className="font-bold font-mono text-slate-900 dark:text-slate-100">{plan[key] as string}</span>
+            <span className="font-bold tabular-nums text-foreground">{plan[key] as string}</span>
           </div>
         ))}
       </div>
 
-      <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-4 space-y-2">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-slate-600 dark:text-slate-400 font-medium">Marketplace Web</span>
-          <FeatureValue value={plan.marketplace} />
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-slate-600 dark:text-slate-400 font-medium">Analytics & Reportes</span>
-          <FeatureValue value={plan.analytics} />
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-slate-600 dark:text-slate-400 font-medium">Créditos & Cuotas</span>
-          <FeatureValue value={plan.credits} />
-        </div>
+      <div className="space-y-2 border-t border-border px-6 py-4">
+        {features.map(({ key, label }) => (
+          <div key={key} className="flex items-center justify-between text-xs">
+            <span className="font-medium text-muted-foreground">{label}</span>
+            <FeatureValue value={plan[key]} label={label} />
+          </div>
+        ))}
       </div>
 
-      <div className="mt-auto border-t border-slate-100 dark:border-slate-800 p-5">
-        {isCurrent ? (
-          <Button variant="outline" className="w-full rounded-2xl h-10 text-xs font-bold border-indigo-200 bg-indigo-50/50 text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-300" disabled>
-            <CheckCircle2 className="mr-1.5 h-4 w-4 text-indigo-600" />
-            Plan actual
-          </Button>
-        ) : canChangePlan ? (
-          <Button asChild className="w-full rounded-2xl h-10 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white shadow-xs" variant="default">
-            <Link href="/admin/subscriptions/change-plan">
-              <CreditCard className="mr-1.5 h-4 w-4" />
-              Elegir {plan.name}
-            </Link>
-          </Button>
-        ) : (
-          <Button className="w-full rounded-2xl h-10 text-xs font-semibold" variant="outline" disabled>
-            Solo propietario
-          </Button>
-        )}
+      <div className="mt-auto border-t border-border p-5">
+        <PlanCta plan={plan} direction={direction} canChangePlan={canChangePlan} className="h-10 w-full rounded-2xl text-xs" />
       </div>
     </div>
   )
@@ -142,21 +219,36 @@ function PlanCard({ plan, isCurrent, canChangePlan }: { plan: PlanRow; isCurrent
 export function PlansComparison({ plans, currentPlanCode, canChangePlan }: Props) {
   const [view, setView] = useState<'table' | 'cards'>('cards')
 
+  const currentPrice = plans.find((plan) => plan.code === currentPlanCode)?.priceMonthly ?? null
+
+  // Con tres planes en una grilla de cuatro quedaba una columna vacia.
+  const gridCols =
+    plans.length >= 4
+      ? 'sm:grid-cols-2 xl:grid-cols-4'
+      : plans.length === 3
+        ? 'sm:grid-cols-2 lg:grid-cols-3'
+        : 'sm:grid-cols-2'
+
   return (
-    <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-sm overflow-hidden">
-      <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
+    <Card className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+      <CardHeader className="border-b border-border pb-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
-              Comparativa de Planes
-            </CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">Compara límites, módulos y beneficios de cada nivel</p>
+            <CardTitle className="text-lg font-extrabold text-foreground">Comparativa de planes</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Los límites y beneficios de cada nivel, comparados con el tuyo
+            </p>
           </div>
-          <div className="flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/80 dark:bg-slate-800/80 p-1 self-start sm:self-auto">
+          <div
+            role="group"
+            aria-label="Forma de ver los planes"
+            className="flex items-center gap-1 self-start rounded-xl border border-border bg-muted/60 p-1 sm:self-auto"
+          >
             <Button
               variant={view === 'cards' ? 'secondary' : 'ghost'}
               size="sm"
-              className="h-7 gap-1.5 px-3 text-xs rounded-lg font-semibold"
+              className="h-7 gap-1.5 rounded-lg px-3 text-xs font-semibold"
+              aria-pressed={view === 'cards'}
               onClick={() => setView('cards')}
             >
               <LayoutGrid className="h-3.5 w-3.5" />
@@ -165,7 +257,8 @@ export function PlansComparison({ plans, currentPlanCode, canChangePlan }: Props
             <Button
               variant={view === 'table' ? 'secondary' : 'ghost'}
               size="sm"
-              className="h-7 gap-1.5 px-3 text-xs rounded-lg font-semibold"
+              className="h-7 gap-1.5 rounded-lg px-3 text-xs font-semibold"
+              aria-pressed={view === 'table'}
               onClick={() => setView('table')}
             >
               <List className="h-3.5 w-3.5" />
@@ -177,12 +270,12 @@ export function PlansComparison({ plans, currentPlanCode, canChangePlan }: Props
 
       <CardContent className="p-6">
         {view === 'cards' ? (
-          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4 pt-2">
+          <div className={cn('grid gap-6 pt-2', gridCols)}>
             {plans.map((plan) => (
               <PlanCard
                 key={plan.code}
                 plan={plan}
-                isCurrent={plan.code === currentPlanCode}
+                direction={planDirection(plan, currentPrice, currentPlanCode)}
                 canChangePlan={canChangePlan}
               />
             ))}
@@ -190,44 +283,57 @@ export function PlansComparison({ plans, currentPlanCode, canChangePlan }: Props
         ) : (
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader className="bg-slate-50/75 dark:bg-slate-800/50">
-                <TableRow className="border-slate-100 dark:border-slate-800">
-                  <TableHead className="font-bold text-xs">Plan</TableHead>
-                  <TableHead className="font-bold text-xs">Precio</TableHead>
-                  <TableHead className="font-bold text-xs">Usuarios</TableHead>
-                  <TableHead className="font-bold text-xs">Sucursales</TableHead>
-                  <TableHead className="font-bold text-xs">Cajas</TableHead>
-                  <TableHead className="font-bold text-xs">Productos</TableHead>
-                  <TableHead className="font-bold text-xs">Marketplace</TableHead>
-                  <TableHead className="font-bold text-xs">Analytics</TableHead>
-                  <TableHead className="font-bold text-xs">Créditos</TableHead>
-                  <TableHead className="font-bold text-xs text-right" />
+              <TableHeader className="bg-muted/50">
+                <TableRow className="border-border">
+                  <TableHead className="text-xs font-bold">Plan</TableHead>
+                  <TableHead className="text-xs font-bold">Precio</TableHead>
+                  <TableHead className="text-xs font-bold">Usuarios</TableHead>
+                  <TableHead className="text-xs font-bold">Sucursales</TableHead>
+                  <TableHead className="text-xs font-bold">Cajas</TableHead>
+                  <TableHead className="text-xs font-bold">Productos</TableHead>
+                  {features.map(({ key, label }) => (
+                    <TableHead key={key} className="text-xs font-bold">
+                      {label}
+                    </TableHead>
+                  ))}
+                  <TableHead className="text-right text-xs font-bold" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {plans.map((plan) => {
-                  const isCurrent = plan.code === currentPlanCode
+                  const direction = planDirection(plan, currentPrice, currentPlanCode)
                   return (
-                    <TableRow key={plan.code} className={cn('border-slate-100 dark:border-slate-800', isCurrent && 'bg-indigo-50/40 dark:bg-indigo-950/20 font-semibold')}>
-                      <TableCell className="font-bold text-xs">
+                    <TableRow
+                      key={plan.code}
+                      className={cn('border-border', direction === 'current' && 'bg-primary/5 font-semibold')}
+                    >
+                      <TableCell className="text-xs font-bold">
                         <div className="flex items-center gap-2">
                           {plan.name}
-                          {isCurrent && <Badge className="bg-indigo-600 text-white border-0 text-[10px] py-0 px-2">Actual</Badge>}
+                          {direction === 'current' && (
+                            <Badge className="border-0 bg-primary px-2 py-0 text-[10px] text-primary-foreground">Actual</Badge>
+                          )}
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono font-bold text-xs">{plan.priceLabel}</TableCell>
-                      <TableCell className="text-xs">{plan.users}</TableCell>
-                      <TableCell className="text-xs">{plan.branches}</TableCell>
-                      <TableCell className="text-xs">{plan.cashRegisters}</TableCell>
-                      <TableCell className="text-xs">{plan.products}</TableCell>
-                      <TableCell className="text-xs">{plan.marketplace}</TableCell>
-                      <TableCell className="text-xs">{plan.analytics}</TableCell>
-                      <TableCell className="text-xs">{plan.credits}</TableCell>
+                      <TableCell className="text-xs font-bold tabular-nums">{plan.priceLabel}</TableCell>
+                      <TableCell className="text-xs tabular-nums">{plan.users}</TableCell>
+                      <TableCell className="text-xs tabular-nums">{plan.branches}</TableCell>
+                      <TableCell className="text-xs tabular-nums">{plan.cashRegisters}</TableCell>
+                      <TableCell className="text-xs tabular-nums">{plan.products}</TableCell>
+                      {features.map(({ key, label }) => (
+                        <TableCell key={key} className="text-xs">
+                          <FeatureValue value={plan[key]} label={label} />
+                        </TableCell>
+                      ))}
                       <TableCell className="text-right">
-                        {!isCurrent && canChangePlan && (
-                          <Button asChild size="sm" variant="outline" className="rounded-xl h-8 text-xs font-semibold">
-                            <Link href="/admin/subscriptions/change-plan">Elegir</Link>
-                          </Button>
+                        {direction !== 'current' && canChangePlan && (
+                          <PlanCta
+                            plan={plan}
+                            direction={direction}
+                            canChangePlan={canChangePlan}
+                            size="sm"
+                            className="h-8 rounded-xl text-xs"
+                          />
                         )}
                       </TableCell>
                     </TableRow>

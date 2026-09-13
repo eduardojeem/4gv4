@@ -3,10 +3,11 @@
 import type React from 'react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, Mail, MapPin, Phone, Save } from 'lucide-react'
+import { AlertCircle, Building2, Check, Mail, MapPin, Phone, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 import type { BillingProfile } from '@/lib/saas/subscription-service'
 
 type EditableProfile = Pick<BillingProfile, 'business_name' | 'ruc' | 'billing_email' | 'fiscal_address' | 'phone'>
@@ -16,17 +17,33 @@ function validateProfile(values: EditableProfile) {
   const errors: ProfileErrors = {}
   const ruc = values.ruc?.replace(/[^\d]/g, '') || ''
 
-  if (!values.business_name?.trim()) errors.business_name = 'Ingresa la razon social.'
-  if (!ruc) errors.ruc = 'Ingresa el RUC o CI del cliente.'
-  if (!values.billing_email?.trim()) errors.billing_email = 'Ingresa el correo de facturacion.'
+  if (!values.business_name?.trim()) errors.business_name = 'Ingresá la razón social.'
+  if (!ruc) errors.ruc = 'Ingresá el RUC o la cédula.'
+  if (!values.billing_email?.trim()) errors.billing_email = 'Ingresá el correo de facturación.'
   if (values.billing_email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.billing_email.trim())) {
-    errors.billing_email = 'Ingresa un correo valido.'
+    errors.billing_email = 'Ese correo no parece válido.'
   }
-  if (!values.phone?.trim()) errors.phone = 'Ingresa el telefono del cliente.'
-  if (!values.fiscal_address?.trim()) errors.fiscal_address = 'Ingresa la direccion fiscal.'
+  if (!values.phone?.trim()) errors.phone = 'Ingresá el teléfono.'
+  if (!values.fiscal_address?.trim()) errors.fiscal_address = 'Ingresá la dirección fiscal.'
 
   return errors
 }
+
+const FIELDS: Array<{
+  key: keyof EditableProfile
+  label: string
+  placeholder: string
+  icon: typeof Building2
+  type?: string
+  wide?: boolean
+  hint?: string
+}> = [
+  { key: 'business_name', label: 'Razón social', placeholder: 'Mi Empresa S.A.', icon: Building2 },
+  { key: 'ruc', label: 'RUC o cédula', placeholder: '80000000-1', icon: Building2, hint: 'Como figura en tu constancia' },
+  { key: 'billing_email', label: 'Correo de facturación', placeholder: 'contabilidad@empresa.com', icon: Mail, type: 'email' },
+  { key: 'phone', label: 'Teléfono de contacto', placeholder: '+595 981 123 456', icon: Phone },
+  { key: 'fiscal_address', label: 'Dirección fiscal', placeholder: 'Avda. Principal 1234, Asunción', icon: MapPin, wide: true },
+]
 
 export function BillingProfileForm({ profile }: { profile: BillingProfile | null }) {
   const router = useRouter()
@@ -48,7 +65,9 @@ export function BillingProfileForm({ profile }: { profile: BillingProfile | null
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
       setStatus('error')
-      setMessage('Revisa los datos marcados antes de guardar.')
+      setMessage('Revisá los datos marcados antes de guardar.')
+      const primero = FIELDS.find((field) => nextErrors[field.key])
+      if (primero) document.getElementById(primero.key)?.focus()
       return
     }
 
@@ -75,133 +94,86 @@ export function BillingProfileForm({ profile }: { profile: BillingProfile | null
       router.refresh()
     } catch {
       setStatus('error')
-      setMessage('No se pudo conectar con el servidor. Intenta nuevamente.')
+      setMessage('No se pudo conectar con el servidor. Intentá nuevamente.')
     }
   }
 
   function update(key: keyof EditableProfile, value: string) {
     setValues((current) => ({ ...current, [key]: value }))
     setErrors((current) => ({ ...current, [key]: undefined }))
-    if (status === 'error') {
+    // La confirmacion verde se quedaba pegada: seguias editando y la pantalla
+    // seguia diciendo «Datos guardados» con cambios sin guardar.
+    if (status !== 'saving') {
       setStatus('idle')
       setMessage('')
     }
   }
 
   return (
-    <form onSubmit={submit} className="space-y-6">
+    // Sin noValidate el navegador cortaba el submit antes de tiempo y estos
+    // mensajes, que dicen que pasa en cada campo, no se veian nunca.
+    <form onSubmit={submit} noValidate className="space-y-6">
       <div className="grid gap-5 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="business_name" className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            Razón Social
-          </Label>
-          <div className="relative">
-            <Building2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              id="business_name"
-              className="pl-10 rounded-2xl border-slate-200 dark:border-slate-800 h-11 text-sm bg-white dark:bg-slate-900 shadow-2xs focus-visible:ring-indigo-500"
-              required
-              placeholder="Ej: Mi Empresa S.A."
-              aria-invalid={Boolean(errors.business_name)}
-              value={values.business_name || ''}
-              onChange={(event) => update('business_name', event.target.value)}
-            />
-          </div>
-          {errors.business_name && <p className="text-xs font-medium text-rose-500">{errors.business_name}</p>}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="ruc" className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            RUC o Documento de Identidad
-          </Label>
-          <Input
-            id="ruc"
-            required
-            aria-invalid={Boolean(errors.ruc)}
-            placeholder="Ej: 80000000-1"
-            className="rounded-2xl border-slate-200 dark:border-slate-800 h-11 text-sm bg-white dark:bg-slate-900 shadow-2xs focus-visible:ring-indigo-500 font-mono"
-            value={values.ruc || ''}
-            onChange={(event) => update('ruc', event.target.value)}
-          />
-          {errors.ruc && <p className="text-xs font-medium text-rose-500">{errors.ruc}</p>}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="billing_email" className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            Correo de Facturación
-          </Label>
-          <div className="relative">
-            <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              id="billing_email"
-              className="pl-10 rounded-2xl border-slate-200 dark:border-slate-800 h-11 text-sm bg-white dark:bg-slate-900 shadow-2xs focus-visible:ring-indigo-500"
-              type="email"
-              required
-              placeholder="contabilidad@empresa.com"
-              aria-invalid={Boolean(errors.billing_email)}
-              value={values.billing_email || ''}
-              onChange={(event) => update('billing_email', event.target.value)}
-            />
-          </div>
-          {errors.billing_email && <p className="text-xs font-medium text-rose-500">{errors.billing_email}</p>}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="phone" className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            Teléfono de Contacto
-          </Label>
-          <div className="relative">
-            <Phone className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              id="phone"
-              className="pl-10 rounded-2xl border-slate-200 dark:border-slate-800 h-11 text-sm bg-white dark:bg-slate-900 shadow-2xs focus-visible:ring-indigo-500 font-mono"
-              required
-              placeholder="+595 981 123 456"
-              aria-invalid={Boolean(errors.phone)}
-              value={values.phone || ''}
-              onChange={(event) => update('phone', event.target.value)}
-            />
-          </div>
-          {errors.phone && <p className="text-xs font-medium text-rose-500">{errors.phone}</p>}
-        </div>
-
-        <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="fiscal_address" className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            Dirección Fiscal
-          </Label>
-          <div className="relative">
-            <MapPin className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              id="fiscal_address"
-              className="pl-10 rounded-2xl border-slate-200 dark:border-slate-800 h-11 text-sm bg-white dark:bg-slate-900 shadow-2xs focus-visible:ring-indigo-500"
-              required
-              placeholder="Avda. Principal 1234, Asunción, Paraguay"
-              aria-invalid={Boolean(errors.fiscal_address)}
-              value={values.fiscal_address || ''}
-              onChange={(event) => update('fiscal_address', event.target.value)}
-            />
-          </div>
-          {errors.fiscal_address && <p className="text-xs font-medium text-rose-500">{errors.fiscal_address}</p>}
-        </div>
+        {FIELDS.map(({ key, label, placeholder, icon: Icon, type, wide, hint }) => {
+          const error = errors[key]
+          return (
+            <div key={key} className={cn('space-y-2', wide && 'md:col-span-2')}>
+              <Label htmlFor={key} className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {label}
+              </Label>
+              <div className="relative">
+                <Icon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id={key}
+                  type={type}
+                  required
+                  placeholder={placeholder}
+                  aria-invalid={Boolean(error)}
+                  aria-describedby={error ? `${key}-error` : hint ? `${key}-hint` : undefined}
+                  className={cn(
+                    'h-11 rounded-2xl pl-10 text-sm shadow-2xs',
+                    error && 'border-destructive focus-visible:ring-destructive'
+                  )}
+                  value={values[key] || ''}
+                  onChange={(event) => update(key, event.target.value)}
+                />
+              </div>
+              {error ? (
+                <p id={`${key}-error`} className="text-xs font-medium text-destructive">
+                  {error}
+                </p>
+              ) : hint ? (
+                <p id={`${key}-hint`} className="text-xs text-muted-foreground">
+                  {hint}
+                </p>
+              ) : null}
+            </div>
+          )
+        })}
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800 pt-5">
-        <Button
-          type="submit"
-          disabled={status === 'saving'}
-          className="rounded-2xl h-11 px-6 font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs gap-2"
-        >
+      <div className="flex flex-col justify-between gap-4 border-t border-border pt-5 sm:flex-row sm:items-center">
+        <Button type="submit" disabled={status === 'saving'} className="h-11 gap-2 rounded-2xl px-6 font-bold">
           <Save className="h-4 w-4" />
-          {status === 'saving' ? 'Guardando perfil...' : 'Guardar datos de facturación'}
+          {status === 'saving' ? 'Guardando...' : 'Guardar datos'}
         </Button>
+
         {status === 'saved' && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-semibold text-xs border border-emerald-200 dark:border-emerald-800">
-            ✓ {message}
+          <span
+            role="status"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+          >
+            <Check className="h-3.5 w-3.5" />
+            {message}
           </span>
         )}
         {status === 'error' && (
-          <span role="alert" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 font-semibold text-xs border border-rose-200 dark:border-rose-800">
-            ⚠ {message}
+          <span
+            role="alert"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs font-semibold text-destructive"
+          >
+            <AlertCircle className="h-3.5 w-3.5" />
+            {message}
           </span>
         )}
       </div>

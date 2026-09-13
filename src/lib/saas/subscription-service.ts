@@ -202,6 +202,12 @@ export function isSupportedPlanCode(value: unknown) {
   return SUPPORTED_PLAN_CODES.has(value.toLowerCase().trim())
 }
 
+/**
+ * Cuantos pagos trae el historial. La pantalla avisa cuando llego al tope,
+ * asi nadie cree que esta viendo todo lo que hay.
+ */
+export const SUBSCRIPTION_PAYMENTS_PAGE_SIZE = 25
+
 export function getPlanLimit(plan: Pick<PlanRecord, 'limits'>, resourceType: ResourceType): number | null {
   const value = plan.limits?.[resourceType]
   if (value === null || typeof value === 'undefined') return null
@@ -592,7 +598,7 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
       .select('id, organization_id, subscription_id, plan_id, amount, currency, status, payment_method, provider, provider_payment_id, external_reference, receipt_url, paid_at, created_at')
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
-      .limit(25),
+      .limit(SUBSCRIPTION_PAYMENTS_PAGE_SIZE),
     supabase
       .from('subscription_promo_redemptions')
       .select('id, promo_code_id, redeemed_at, benefit_snapshot, redeemed_by')

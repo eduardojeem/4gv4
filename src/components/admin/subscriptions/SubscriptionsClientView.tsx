@@ -41,6 +41,7 @@ import { PlansComparison, type PlanRow } from '@/components/admin/subscriptions/
 import { PromoCodeRedeemer } from '@/components/admin/subscriptions/PromoCodeRedeemer'
 import {
   getPlanLimit,
+  SUBSCRIPTION_PAYMENTS_PAGE_SIZE,
   type BillingProfile,
   type OrganizationUsage,
   type PlanRecord,
@@ -724,14 +725,14 @@ export function SubscriptionsClientView({
           />
 
           {/* REUBICACIÓN CONTEXTUAL DE LA GUÍA DE FACTURACIÓN */}
-          <Card className="rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-indigo-50/40 via-white to-purple-50/30 shadow-2xs dark:border-indigo-950/40 dark:from-indigo-950/20 dark:via-slate-900 dark:to-purple-950/20 overflow-hidden">
+          <Card className="overflow-hidden rounded-3xl border border-border bg-muted/30 shadow-2xs">
             <CardHeader className="p-5 sm:p-6 pb-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600/10 text-indigo-600 dark:bg-indigo-400/20 dark:text-indigo-300">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <Info className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-slate-100">
+                  <CardTitle className="text-base font-extrabold text-foreground sm:text-lg">
                     ¿Cómo funciona tu suscripción y facturación?
                   </CardTitle>
                   <CardDescription className="text-xs mt-0.5">
@@ -748,19 +749,19 @@ export function SubscriptionsClientView({
 
         {/* TAB 3: PAYMENT & BILLING HISTORY */}
         <TabsContent value="payments" className="space-y-6 focus-visible:outline-none">
-          <Card id="payment-history" className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 shadow-sm overflow-hidden">
-            <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
+          <Card id="payment-history" className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+            <CardHeader className="border-b border-border pb-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/20 dark:text-emerald-300">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Receipt className="h-5 w-5" />
                   </div>
                   <div>
-                    <CardTitle className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
-                      Historial de Pagos y Facturación
+                    <CardTitle className="text-lg font-extrabold text-foreground">
+                      Historial de pagos
                     </CardTitle>
-                    <CardDescription className="text-xs mt-0.5">
-                      Comprobantes, pagos regulares, códigos promocionales y vouchers
+                    <CardDescription className="mt-0.5 text-xs">
+                      Cobros, canjes de código y activaciones manuales
                     </CardDescription>
                   </div>
                 </div>
@@ -848,13 +849,13 @@ export function SubscriptionsClientView({
             <CardContent className="p-0">
               {filteredPayments.length === 0 ? (
                 <div className="p-8 sm:p-10 text-center">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 shadow-2xs">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-muted text-muted-foreground shadow-2xs">
                     <Layers className="h-6 w-6" />
                   </div>
-                  <h4 className="mt-3 text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                  <h4 className="mt-3 text-sm font-extrabold text-foreground">
                     {paymentFilter === 'all' ? 'Alta de Suscripción Actual' : 'Sin resultados para este filtro'}
                   </h4>
-                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+                  <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
                     {paymentFilter === 'all' ? (
                       subscriptionStatus === 'trialing' ? (
                         <>Tu organización está operando con un <strong>Período de Prueba (Trial)</strong> asignado automáticamente al registrarte.</>
@@ -867,7 +868,7 @@ export function SubscriptionsClientView({
                       'No se encontraron registros con la modalidad seleccionada. Prueba seleccionando "Todos".'
                     )}
                   </p>
-                  <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground">
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                     Plan {currentPlan.name} · Estado: {subscriptionStatusLabel(subscriptionStatus)}
                   </div>
@@ -875,8 +876,8 @@ export function SubscriptionsClientView({
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader className="bg-slate-50/80 dark:bg-slate-800/60">
-                      <TableRow className="border-slate-100 dark:border-slate-800">
+                    <TableHeader className="bg-muted/50">
+                      <TableRow className="border-border">
                         <TableHead className="font-bold text-xs">Fecha</TableHead>
                         <TableHead className="font-bold text-xs">Plan</TableHead>
                         <TableHead className="font-bold text-xs">Modalidad</TableHead>
@@ -894,12 +895,14 @@ export function SubscriptionsClientView({
                         const matchingRedemption = modality.matchingRedemption
 
                         return (
-                          <TableRow key={payment.id} className="border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                            <TableCell className="font-medium text-xs text-slate-700 dark:text-slate-300">
+                          <TableRow key={payment.id} className="border-border hover:bg-muted/40">
+                            <TableCell className="text-xs font-medium text-muted-foreground">
                               {date(payment.paid_at || payment.created_at)}
                             </TableCell>
-                            <TableCell className="font-bold text-xs text-slate-900 dark:text-slate-100">
-                              {plans.find((p) => p.code === payment.plan_id)?.name || payment.plan_id || currentPlan.name}
+                            <TableCell className="text-xs font-bold text-foreground">
+                              {/* Sin plan guardado va un guion: poner el plan actual
+                                  atribuia un cobro viejo al plan de hoy. */}
+                              {plans.find((p) => p.code === payment.plan_id)?.name || payment.plan_id || '—'}
                             </TableCell>
                             <TableCell>
                               <Badge
@@ -911,7 +914,7 @@ export function SubscriptionsClientView({
                               </Badge>
                             </TableCell>
                             <TableCell className="text-xs">
-                              <span className="capitalize font-semibold text-slate-700 dark:text-slate-300">
+                              <span className="font-semibold capitalize text-foreground">
                                 {payment.payment_method === 'activation_code' || payment.provider === 'activation'
                                   ? 'Canje de Código'
                                   : payment.provider === 'pagopar'
@@ -921,7 +924,7 @@ export function SubscriptionsClientView({
                                       : payment.payment_method || payment.provider || 'Manual'}
                               </span>
                             </TableCell>
-                            <TableCell className="font-bold font-mono text-xs text-slate-900 dark:text-slate-100">
+                            <TableCell className="text-xs font-bold tabular-nums text-foreground">
                               {money(payment.amount, payment.currency)}
                             </TableCell>
                             <TableCell>
@@ -947,7 +950,7 @@ export function SubscriptionsClientView({
                                   )}
                                 </div>
                               ) : (
-                                <span className="font-mono text-slate-600 dark:text-slate-400">
+                                <span className="font-mono text-muted-foreground">
                                   {payment.external_reference || payment.provider_payment_id || '—'}
                                 </span>
                               )}
@@ -971,24 +974,31 @@ export function SubscriptionsClientView({
                   </Table>
                 </div>
               )}
+
+              {payments.length >= SUBSCRIPTION_PAYMENTS_PAGE_SIZE && (
+                <p className="border-t border-border px-4 py-3 text-center text-xs text-muted-foreground">
+                  Se muestran los últimos {SUBSCRIPTION_PAYMENTS_PAGE_SIZE} movimientos. Si necesitás un comprobante más
+                  antiguo, escribinos y te lo enviamos.
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* TAB 4: BILLING PROFILE */}
         <TabsContent value="billing" className="space-y-6 focus-visible:outline-none">
-          <Card id="billing-form" className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 shadow-sm overflow-hidden">
-            <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
+          <Card id="billing-form" className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+            <CardHeader className="border-b border-border pb-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:bg-blue-400/20 dark:text-blue-300">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <Building2 className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
-                    Perfil de Facturación Fiscal
+                  <CardTitle className="text-lg font-extrabold text-foreground">
+                    Datos para tus facturas
                   </CardTitle>
-                  <CardDescription className="text-xs mt-0.5">
-                    Datos tributarios requeridos para la emisión y timbrado de facturas legales
+                  <CardDescription className="mt-0.5 text-xs">
+                    Con estos datos se emiten y timbran las facturas legales de tu suscripción
                   </CardDescription>
                 </div>
               </div>
