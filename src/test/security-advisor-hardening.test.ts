@@ -51,8 +51,8 @@ describe('Security Advisor hardening contracts', () => {
     expect(migration).toContain(
       'DROP POLICY IF EXISTS "Anyone can submit a review"'
     )
-    expect(publicReviewsRoute).toContain('is_approved: false')
-    expect(publicReviewsRoute).not.toContain('is_approved: true')
+    expect(publicReviewsRoute).toContain("moderation_status: 'pending'")
+    expect(publicReviewsRoute).not.toContain("moderation_status: 'published'")
   })
 
   it('removes broad avatar listing and scopes object operations', () => {

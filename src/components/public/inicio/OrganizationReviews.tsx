@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { BadgeCheck, ChevronLeft, ChevronRight, MessageSquareText, RefreshCw, ShieldCheck } from 'lucide-react'
@@ -30,6 +30,8 @@ const FILTERS: Array<{ value: PublicReviewFilter; label: string }> = [
   { value: 'purchase', label: 'Compras' },
   { value: 'repair', label: 'Reparaciones' },
 ]
+
+const subscribeToNothing = () => () => {}
 
 const fetcher = async (url: string): Promise<ReviewsResponse> => {
   const response = await fetch(url)
@@ -75,6 +77,11 @@ function ReviewsSummary({ stats }: { stats: PublicReviewStats }) {
 export function OrganizationReviews() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const mounted = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  )
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const inviteToken = searchParams.get('review')
   const [filter, setFilter] = useState<PublicReviewFilter>('all')
@@ -85,9 +92,10 @@ export function OrganizationReviews() {
     tenantSlug,
   )
   const { data, error, isLoading, mutate } = useSWR<ReviewsResponse>(url, fetcher, { revalidateOnFocus: false })
-  const reviews = data?.data?.reviews ?? []
-  const stats = data?.data?.stats ?? EMPTY_STATS
-  const total = data?.data?.pagination.total ?? 0
+  const hydratedData = mounted ? data : undefined
+  const reviews = hydratedData?.data?.reviews ?? []
+  const stats = hydratedData?.data?.stats ?? EMPTY_STATS
+  const total = hydratedData?.data?.pagination.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   function selectFilter(nextFilter: PublicReviewFilter) {
@@ -128,11 +136,11 @@ export function OrganizationReviews() {
         </div>
 
         <div className="mt-4 min-h-48" aria-live="polite">
-          {isLoading ? (
+           {!mounted || isLoading ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Cargando opiniones">
               {[1, 2, 3].map((item) => <div key={item} className="h-44 animate-pulse rounded-xl border bg-card" />)}
             </div>
-          ) : error || data?.success === false ? (
+           ) : error || hydratedData?.success === false ? (
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center">
               <p className="text-sm text-destructive">No pudimos cargar las opiniones.</p>
               <Button variant="outline" size="sm" onClick={() => void mutate()} className="mt-3">
