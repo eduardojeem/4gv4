@@ -75,6 +75,8 @@ describe('RepairPaymentDialog', () => {
     expect(screen.getByRole('button', { name: 'Confirmar Cobro' })).toBeDisabled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Crédito' }))
+    // Por defecto, una sola cuota.
+    expect(screen.getByLabelText('N° de cuotas')).toHaveValue(1)
     expect(screen.getByRole('button', { name: 'Registrar Crédito' })).toBeEnabled()
   })
 

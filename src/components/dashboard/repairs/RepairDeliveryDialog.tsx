@@ -260,7 +260,7 @@ export function RepairDeliveryDialog({
     setAmount('')
     setReference('')
     setDeliverUnpaid(false)
-    setInstallmentCount('3')
+    setInstallmentCount('1')
     setFrequency('monthly')
     setInterestRate('0')
     setIsOpeningRegister(false)

@@ -130,6 +130,8 @@ describe('RepairDeliveryDialog', () => {
 
     expect(await screen.findByText('Caja cerrada')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Crédito' }))
+    // Por defecto, una sola cuota.
+    expect(screen.getByLabelText('N° de cuotas')).toHaveValue(1)
     expect(screen.getByRole('button', { name: 'Registrar Crédito y Entregar' })).toBeEnabled()
   })
 
