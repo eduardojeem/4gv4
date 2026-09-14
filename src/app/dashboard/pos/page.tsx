@@ -55,6 +55,7 @@ import { useSharedSettings } from '@/hooks/use-shared-settings'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { SupabaseStatus } from '@/components/supabase-status'
 import { formatCurrency as formatCurrencyBase } from '@/lib/currency'
+import { cn } from '@/lib/utils'
 import { 
   calculateRepairTotal, 
   createRepairCartItem, 
@@ -569,6 +570,7 @@ function POSPageContent() {
   // están ahora encapsulados en usePOSSearch.
   const posSearch = usePOSSearch({ products: inventoryProducts as Product[] })
   const {
+    catalogView, setCatalogView, catalogCounts, otherViewMatches,
     searchTerm, setSearchTerm, handleSearchChange, handleSearchKeyDown,
     debouncedSearchTerm,
     showSuggestions, setShowSuggestions, searchSuggestions,
@@ -2001,10 +2003,39 @@ function POSPageContent() {
             <div className="flex-1 min-h-0 p-2.5 sm:p-3 md:p-4 overflow-y-auto pb-24 md:pb-4" role="main" aria-label="Lista de productos">
               <div className="mb-2.5 space-y-2.5">
                 <div className="pos-panel flex items-center justify-between px-3 py-1.5 rounded-lg">
-                  <h2 className="pos-heading text-base md:text-lg font-semibold text-foreground flex items-center gap-2" id="products-heading">
-                    <Package className="h-4 w-4 text-primary" />
-                    Productos <span className="text-muted-foreground font-normal text-xs">({filteredProducts.length})</span>
-                  </h2>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h2 className="pos-heading text-base md:text-lg font-semibold text-foreground flex items-center gap-2" id="products-heading">
+                      {catalogView === 'services' ? <Wrench className="h-4 w-4 text-primary" /> : <Package className="h-4 w-4 text-primary" />}
+                      {catalogView === 'services' ? 'Servicios' : 'Productos'} <span className="text-muted-foreground font-normal text-xs">({filteredProducts.length})</span>
+                    </h2>
+                    {/* Productos y servicios por separado; sin servicios cargados no hace falta elegir. */}
+                    {(catalogCounts.services > 0 || catalogView === 'services') && (
+                      <div role="tablist" aria-label="Mostrar productos o servicios" className="inline-flex items-center rounded-lg border border-border/60 bg-muted/50 p-0.5">
+                        {([
+                          { value: 'products', label: 'Productos', count: catalogCounts.products, Icon: Package },
+                          { value: 'services', label: 'Servicios', count: catalogCounts.services, Icon: Wrench },
+                        ] as const).map(({ value, label, count, Icon }) => (
+                          <button
+                            key={value}
+                            type="button"
+                            role="tab"
+                            aria-selected={catalogView === value}
+                            onClick={() => setCatalogView(value)}
+                            className={cn(
+                              'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                              catalogView === value
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground',
+                            )}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                            {label}
+                            <span className="tabular-nums opacity-70">{count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5 bg-muted/50 px-2.5 py-1 rounded-full border border-border/50">
                       <Tag className="h-3 w-3 text-muted-foreground" />
@@ -2144,8 +2175,22 @@ function POSPageContent() {
                   <div className="pos-state-icon p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
                     <Package className="h-10 w-10 text-muted-foreground/50" />
                   </div>
-                  <h3 className="text-lg font-medium text-foreground mb-1">No se encontraron productos</h3>
+                  <h3 className="text-lg font-medium text-foreground mb-1">
+                    {catalogView === 'services' ? 'No se encontraron servicios' : 'No se encontraron productos'}
+                  </h3>
                   <p className="text-muted-foreground text-sm max-w-xs mx-auto">Intenta ajustar los términos de búsqueda o los filtros seleccionados</p>
+                  {otherViewMatches > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={() => setCatalogView(catalogView === 'services' ? 'products' : 'services')}
+                    >
+                      {catalogView === 'services'
+                        ? `Ver ${otherViewMatches} producto${otherViewMatches === 1 ? '' : 's'} que coinciden`
+                        : `Ver ${otherViewMatches} servicio${otherViewMatches === 1 ? '' : 's'} que coinciden`}
+                    </Button>
+                  )}
                 </div>
               )}
 

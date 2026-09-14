@@ -17,6 +17,12 @@ import { toast } from 'sonner'
 import { hasProductCredit } from '../lib/product-credit'
 import { applyProductCreditFilter, type ProductCreditSort } from '../lib/product-credit-filter'
 import { useSmartSearch } from './useSmartSearch'
+import {
+  DEFAULT_POS_CATALOG_VIEW,
+  countByCatalogView,
+  matchesCatalogView,
+  type POSCatalogView,
+} from '../lib/catalog-view'
 import type { Product } from '@/types/product-unified'
 
 const PREFS_KEY = 'pos.prefs'
@@ -41,6 +47,13 @@ export interface UsePOSSearchReturn {
   setSelectedSuggestionIndex: (v: number) => void
   selectSuggestion: (s: string) => void
   recentSearches: string[]
+
+  // Productos o servicios. Arranca siempre en productos.
+  catalogView: POSCatalogView
+  setCatalogView: (v: POSCatalogView) => void
+  catalogCounts: { products: number; services: number }
+  /** Coincidencias de la búsqueda en la otra vista, para avisar que existen. */
+  otherViewMatches: number
 
   // Filtros
   selectedCategory: string
@@ -116,6 +129,10 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
     [smartSearchSuggestions]
   )
 
+  // --- Vista del catálogo ---
+  // No se persiste: la caja abre en productos, que es lo que se vende a diario.
+  const [catalogView, setCatalogViewState] = useState<POSCatalogView>(DEFAULT_POS_CATALOG_VIEW)
+
   // --- Filtros ---
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [showFeatured, setShowFeatured] = useState(false)
@@ -164,7 +181,13 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
   // Resetear página al cambiar filtros
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy, creditOnly, minimumInstallments, creditSort])
+  }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy, creditOnly, minimumInstallments, creditSort, catalogView])
+
+  // Al cambiar de vista la categoría elegida puede no existir en la otra.
+  const setCatalogView = useCallback((view: POSCatalogView) => {
+    setCatalogViewState(view)
+    setSelectedCategory('all')
+  }, [])
 
   // Restaurar preferencias desde localStorage (solo al montar)
   useEffect(() => {
@@ -346,12 +369,19 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
   }, [])
 
   // --- Categorías y rango de precios derivados del catálogo ---
+  const catalogCounts = useMemo(() => countByCatalogView(products), [products])
+
+  const viewProducts = useMemo(
+    () => products.filter((product) => matchesCatalogView(product, catalogView)),
+    [products, catalogView]
+  )
+
   const categories = useMemo(() => {
-    const names = products
+    const names = viewProducts
       .map(p => (typeof p.category === 'object' ? (p.category as any)?.name : p.category))
       .filter((name): name is string => !!name && typeof name === 'string')
     return ['all', ...Array.from(new Set(names)).sort((a, b) => a.localeCompare(b))]
-  }, [products])
+  }, [viewProducts])
 
   const priceRangeLimits = useMemo(() => {
     if (products.length === 0) return { min: 0, max: 0 }
@@ -365,7 +395,8 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
   )
 
   // --- Filtrado, ordenamiento y paginación ---
-  const filteredList = useMemo(() => {
+  // Primero todo lo que coincide con búsqueda y filtros; después la vista.
+  const matchingList = useMemo(() => {
     return products.filter(product => {
       const searchLower = debouncedSearchTerm.toLowerCase()
       const categoryName =
@@ -420,6 +451,17 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
     stockFilter,
   ])
 
+  const filteredList = useMemo(
+    () => matchingList.filter((product) => matchesCatalogView(product, catalogView)),
+    [matchingList, catalogView]
+  )
+
+  // Si se busca un servicio estando en productos (o al revés), la grilla queda
+  // vacía: se cuenta cuántos hay del otro lado para ofrecer cambiar de vista.
+  const otherViewMatches = debouncedSearchTerm
+    ? matchingList.length - filteredList.length
+    : 0
+
   const filteredProducts = useMemo(() => {
     const sorted = [...filteredList].sort((a, b) => {
       let cmp = 0
@@ -455,6 +497,11 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
   }, [filteredProducts, currentPage, itemsPerPage])
 
   return {
+    catalogView,
+    setCatalogView,
+    catalogCounts,
+    otherViewMatches,
+
     searchTerm,
     setSearchTerm,
     handleSearchChange,
