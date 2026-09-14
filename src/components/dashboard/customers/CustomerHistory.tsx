@@ -97,6 +97,10 @@ import { formatCurrency } from '@/lib/currency'
 import { useCustomerPurchases } from '@/hooks/useCustomerData'
 import { useCustomerRepairs } from '@/hooks/useCustomerRepairs'
 import { TimelineView } from './TimelineView'
+import { Pill, describePayment } from './CustomerHistoryList'
+import { useCustomerHistory, type CustomerHistoryItem } from '@/hooks/use-customer-history'
+import { useCustomerSalesMetricsMap } from '@/hooks/use-customer-metrics'
+import { normalizeSaleStatus } from '@/lib/sales-status'
 import { paymentMethodLabel } from '@/lib/i18n/labels'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
@@ -144,6 +148,52 @@ interface HistoryItem {
   amount?: number
   status: 'completed' | 'pending' | 'cancelled' | 'refunded' | 'in_progress'
   details?: any
+  /** Estado de pago calculado en el servidor (pagado, parcial, con deuda, a crédito). */
+  payment?: CustomerHistoryItem
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  completed: 'Completada',
+  in_progress: 'En proceso',
+  pending: 'Pendiente',
+  cancelled: 'Cancelada',
+  refunded: 'Reembolsada',
+}
+
+/**
+ * El estado de la reparación, desde el enum en castellano. Antes cualquier
+ * reparación con `final_cost` cargado figuraba «Completada», aunque siguiera
+ * en el taller.
+ */
+function repairStage(status: string): RepairRecord['status'] {
+  switch (status) {
+    case 'listo':
+    case 'entregado':
+      return 'completed'
+    case 'diagnostico':
+    case 'reparacion':
+      return 'in_progress'
+    case 'cancelado':
+      return 'cancelled'
+    default:
+      return 'pending'
+  }
+}
+
+function purchaseStage(status: string): PurchaseRecord['status'] {
+  if (String(status).toLowerCase() === 'refunded') return 'refunded'
+  return normalizeSaleStatus(status) ?? 'completed'
+}
+
+function PaymentCell({ payment }: { payment?: CustomerHistoryItem }) {
+  if (!payment) return <span className="text-xs text-muted-foreground">—</span>
+  const info = describePayment(payment)
+  return (
+    <div className="space-y-0.5">
+      <Pill tone={info.tone}>{info.label}</Pill>
+      {info.hint && <p className="text-[11px] text-muted-foreground">{info.hint}</p>}
+    </div>
+  )
 }
 
 // Datos de ejemplo (en una aplicación real, estos vendrían de la API)
@@ -223,8 +273,9 @@ function HistoryItemCard({ item, index, mode }: { item: HistoryItem; index: numb
                 </h4>
                 <Badge className={getStatusColor(item.status)}>
                   {getStatusIcon(item.status)}
-                  <span className="ml-1 capitalize">{item.status}</span>
+                  <span className="ml-1">{STATUS_LABELS[item.status] ?? item.status}</span>
                 </Badge>
+                {item.payment && <PaymentCell payment={item.payment} />}
               </div>
               <p className={`text-gray-600 dark:text-gray-400 mb-2 ${isCompact ? 'text-xs' : 'text-sm'}`}>
                 {item.description}
@@ -340,9 +391,22 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
     fetchRepairs(customer.id)
   }, [customer.id, fetchRepairs])
 
+  // Pagado, parcial, con deuda o a crédito: la misma regla que el cobro.
+  const { items: historyItems, summary: historySummary } = useCustomerHistory(customer.id)
+  const paymentByKey = useMemo(() => {
+    const map = new Map<string, CustomerHistoryItem>()
+    for (const item of historyItems) map.set(`${item.kind}-${item.id}`, item)
+    return map
+  }, [historyItems])
+  const spend = useCustomerSalesMetricsMap([customer.id])[customer.id]
+
   const purchases: PurchaseRecord[] = useMemo(() => {
     return (Array.isArray(purchasesData) && purchasesData.length)
-      ? (purchasesData as unknown as PurchaseRecord[])
+      ? (purchasesData as unknown as PurchaseRecord[]).map((purchase) => ({
+          ...purchase,
+          items: Array.isArray(purchase.items) ? purchase.items : [],
+          status: purchaseStage(purchase.status),
+        }))
       : mockPurchases
   }, [purchasesData])
 
@@ -354,19 +418,15 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
         device: `${repair.device_brand} ${repair.device_model}`,
         deviceType: 'other' as const,
         issue: repair.problem_description,
-        status:
-          repair.status === 'entregado' || repair.final_cost ? 'completed' :
-          repair.status === 'listo' ? 'completed' :
-          repair.status === 'cancelado' ? 'cancelled' :
-          repair.status === 'reparacion' || repair.status === 'diagnostico' ? 'in_progress' :
-          'pending',
-        cost: (repair.final_cost ?? repair.estimated_cost) || 0,
+        status: repairStage(repair.status),
+        // El total que usa el cobro (repuestos, mano de obra) cuando ya llegó.
+        cost: paymentByKey.get(`repair-${repair.id}`)?.total ?? ((repair.final_cost ?? repair.estimated_cost) || 0),
         technician: 'No asignado',
         notes: ''
       }))
     }
     return mockRepairs
-  }, [repairs])
+  }, [repairs, paymentByKey])
 
   // Helper de rango de fechas para filtros
   const isWithinDateFilter = (dateStr: string, filter: string) => {
@@ -397,10 +457,11 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
         type: 'purchase',
         date: purchase.date,
         title: `Compra #${purchase.invoiceNumber}`,
-        description: `${purchase.items.length} artículo${purchase.items.length > 1 ? 's' : ''} - ${paymentMethodLabel(purchase.paymentMethod)}`,
+        description: `${purchase.items.length} artículo${purchase.items.length !== 1 ? 's' : ''} - ${paymentMethodLabel(purchase.paymentMethod)}`,
         amount: purchase.total,
         status: purchase.status,
-        details: purchase
+        details: purchase,
+        payment: paymentByKey.get(`sale-${purchase.id}`),
       })
     })
 
@@ -414,13 +475,14 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
         description: `${repair.issue} - ${repair.technician}`,
         amount: repair.cost,
         status: repair.status,
-        details: repair
+        details: repair,
+        payment: paymentByKey.get(`repair-${repair.id}`),
       })
     })
 
     // Ordenar por fecha (más reciente primero)
     return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [purchases, repairRecords])
+  }, [purchases, repairRecords, paymentByKey])
 
   // Filtrar elementos del historial
   const filteredItems = useMemo(() => {
@@ -452,7 +514,9 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
     }
 
     // Filtrar por estado
-    if (statusFilter !== "all") {
+    if (statusFilter === "with_balance") {
+      filtered = filtered.filter(item => item.payment && item.payment.payment !== 'cancelled' && (item.payment.balance ?? 0) > 0)
+    } else if (statusFilter !== "all") {
       filtered = filtered.filter(item => item.status === statusFilter)
     }
 
@@ -517,10 +581,12 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
   // Calcular estadísticas
   const stats = useMemo(() => {
     const totalRepairs = repairRecords.length
-    const totalRepairCost = repairRecords.reduce((sum, repair) => sum + repair.cost, 0)
+    // Gastado con la misma regla que la lista y la ficha: sin anuladas ni
+    // reparaciones en curso. Antes se sumaba todo, canceladas incluidas.
+    const totalRepairCost = spend?.repairTotal ?? repairRecords.filter(r => r.status === 'completed').reduce((sum, repair) => sum + repair.cost, 0)
     const totalPurchases = purchases.length
-    const totalPurchaseAmount = purchases.reduce((sum, purchase) => sum + purchase.total, 0)
-    const totalSpent = totalRepairCost + totalPurchaseAmount
+    const totalPurchaseAmount = spend?.purchaseTotal ?? purchases.filter(p => p.status !== 'cancelled').reduce((sum, purchase) => sum + purchase.total, 0)
+    const totalSpent = spend?.total ?? totalRepairCost + totalPurchaseAmount
     const avgOrderValue = totalPurchases > 0 ? totalPurchaseAmount / totalPurchases : 0
     const totalRefunds = purchases
       .filter(p => p.status === 'refunded')
@@ -535,7 +601,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
       avgOrderValue,
       totalRefunds
     }
-  }, [repairRecords, purchases])
+  }, [repairRecords, purchases, spend])
 
   const isCompact = mode === 'compact'
   const isEnhanced = mode === 'enhanced'
@@ -624,8 +690,11 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                 <TrendingUp className="h-6 w-6 text-white" />
               </div>
               <div>
-                <p className={`font-medium text-purple-700 dark:text-purple-300 ${isCompact ? 'text-xs' : 'text-sm'}`}>Valor Promedio</p>
-                <p className={`font-bold text-purple-900 dark:text-purple-100 ${isCompact ? 'text-xl' : 'text-2xl'}`}>{formatCurrency(stats.avgOrderValue)}</p>
+                <p className={`font-medium text-purple-700 dark:text-purple-300 ${isCompact ? 'text-xs' : 'text-sm'}`}>Deuda pendiente</p>
+                <p className={`font-bold text-purple-900 dark:text-purple-100 ${isCompact ? 'text-xl' : 'text-2xl'}`}>{formatCurrency(historySummary?.owed ?? 0)}</p>
+                {historySummary && historySummary.dueOnPickup > 0 && (
+                  <p className="text-xs text-purple-700/80 dark:text-purple-300/80">+ {formatCurrency(historySummary.dueOnPickup)} al retirar</p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -682,6 +751,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                 <SelectItem value="pending">Pendiente</SelectItem>
                 <SelectItem value="in_progress">En Progreso</SelectItem>
                 <SelectItem value="cancelled">Cancelado</SelectItem>
+                <SelectItem value="with_balance">Con saldo pendiente</SelectItem>
               </SelectContent>
             </Select>
             <Select value={dateFilter} onValueChange={setDateFilter}>
@@ -776,11 +846,12 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                           <p className={isCompact ? "text-xs text-gray-600 dark:text-gray-400" : "text-sm text-gray-600 dark:text-gray-400"}>{repair.issue}</p>
                           <div className={isCompact ? "flex items-center gap-1 mt-1" : "flex items-center gap-2 mt-1"}>
                             <Badge className={`text-xs ${getStatusColor(repair.status)}`}>
-                              {repair.status === 'completed' ? 'Completada' :
-                                repair.status === 'in_progress' ? 'En Progreso' :
-                                  repair.status === 'pending' ? 'Pendiente' : 'Cancelada'}
+                              {STATUS_LABELS[repair.status]}
                             </Badge>
                             <span className="text-xs text-gray-500">{formatDate(repair.date)}</span>
+                          </div>
+                          <div className="mt-1">
+                            <PaymentCell payment={paymentByKey.get(`repair-${repair.id}`)} />
                           </div>
                         </div>
                         <div className="text-right">
@@ -809,19 +880,20 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 dark:text-white">
-                            {purchase.items.length} artículo{purchase.items.length > 1 ? 's' : ''}
+                            {purchase.items.length} artículo{purchase.items.length !== 1 ? 's' : ''}
                           </p>
                           <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {purchase.items[0].name}
+                            {purchase.items[0]?.name ?? 'Sin detalle de artículos'}
                             {purchase.items.length > 1 && ` y ${purchase.items.length - 1} más`}
                           </p>
                           <div className={isCompact ? "flex items-center gap-1 mt-1" : "flex items-center gap-2 mt-1"}>
                             <Badge className={`text-xs ${getStatusColor(purchase.status)}`}>
-                              {purchase.status === 'completed' ? 'Completada' :
-                                purchase.status === 'pending' ? 'Pendiente' :
-                                  purchase.status === 'cancelled' ? 'Cancelada' : 'Reembolsada'}
+                              {STATUS_LABELS[purchase.status]}
                             </Badge>
                             <span className="text-xs text-gray-500">{formatDate(purchase.date)}</span>
+                          </div>
+                          <div className="mt-1">
+                            <PaymentCell payment={paymentByKey.get(`sale-${purchase.id}`)} />
                           </div>
                         </div>
                         <div className="text-right">
@@ -856,8 +928,8 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                         <TableHead>Dispositivo</TableHead>
                         <TableHead>Problema</TableHead>
                         <TableHead>Estado</TableHead>
-                        <TableHead>Técnico</TableHead>
                         <TableHead>Costo</TableHead>
+                        <TableHead>Pago</TableHead>
                         <TableHead>Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -883,19 +955,15 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                             <Badge className={getStatusColor(repair.status)}>
                               <div className="flex items-center gap-1">
                                 {getStatusIcon(repair.status)}
-                                <span>
-                                  {repair.status === 'completed' ? 'Completada' :
-                                    repair.status === 'in_progress' ? 'En Progreso' :
-                                      repair.status === 'pending' ? 'Pendiente' : 'Cancelada'}
-                                </span>
+                                <span>{STATUS_LABELS[repair.status]}</span>
                               </div>
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm text-gray-600 dark:text-gray-400">{repair.technician}</span>
+                            <span className="font-semibold">{formatCurrency(repair.cost)}</span>
                           </TableCell>
                           <TableCell>
-                            <span className="font-semibold">{formatCurrency(repair.cost)}</span>
+                            <PaymentCell payment={paymentByKey.get(`repair-${repair.id}`)} />
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
@@ -909,9 +977,6 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                                 }}
                               >
                                 <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                                <Edit className="h-4 w-4" />
                               </Button>
                             </div>
                           </TableCell>
@@ -964,22 +1029,23 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                           </TableCell>
                           <TableCell>
                             <div>
-                              <p className="font-medium">{purchase.items.length} artículo{purchase.items.length > 1 ? 's' : ''}</p>
+                              <p className="font-medium">{purchase.items.length} artículo{purchase.items.length !== 1 ? 's' : ''}</p>
                               <p className="text-sm text-gray-600 dark:text-gray-400">
-                                {purchase.items[0].name}
+                                {purchase.items[0]?.name ?? 'Sin detalle de artículos'}
                                 {purchase.items.length > 1 && ` y ${purchase.items.length - 1} más`}
                               </p>
                             </div>
                           </TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(purchase.status)}>
-                              {purchase.status === 'completed' ? 'Completada' :
-                                purchase.status === 'pending' ? 'Pendiente' :
-                                  purchase.status === 'cancelled' ? 'Cancelada' : 'Reembolsada'}
+                              {STATUS_LABELS[purchase.status]}
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm text-gray-600 dark:text-gray-400">{paymentMethodLabel(purchase.paymentMethod)}</span>
+                            <div className="space-y-1">
+                              <span className="block text-xs text-gray-600 dark:text-gray-400">{paymentMethodLabel(purchase.paymentMethod)}</span>
+                              <PaymentCell payment={paymentByKey.get(`sale-${purchase.id}`)} />
+                            </div>
                           </TableCell>
                           <TableCell>
                             <span className="font-semibold">{formatCurrency(purchase.total)}</span>
@@ -996,9 +1062,6 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                                 }}
                               >
                                 <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                                <Download className="h-4 w-4" />
                               </Button>
                             </div>
                           </TableCell>
@@ -1043,13 +1106,13 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                   <p className="text-gray-900">{selectedRepair.issue}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Técnico</label>
-                  <p className="text-gray-900">{selectedRepair.technician}</p>
+                  <label className="text-sm font-medium text-gray-600">Pago</label>
+                  <PaymentCell payment={paymentByKey.get(`repair-${selectedRepair.id}`)} />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">Estado</label>
                   <Badge className={getStatusColor(selectedRepair.status)}>
-                    {selectedRepair.status}
+                    {STATUS_LABELS[selectedRepair.status]}
                   </Badge>
                 </div>
                 <div>
@@ -1091,8 +1154,12 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
                 <div>
                   <label className="text-sm font-medium text-gray-600">Estado</label>
                   <Badge className={getStatusColor(selectedPurchase.status)}>
-                    {selectedPurchase.status}
+                    {STATUS_LABELS[selectedPurchase.status]}
                   </Badge>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Pago</label>
+                  <PaymentCell payment={paymentByKey.get(`sale-${selectedPurchase.id}`)} />
                 </div>
               </div>
               <div>

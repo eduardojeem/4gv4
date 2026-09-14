@@ -80,8 +80,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       const salesResponse = await customerService.getCustomerSales(customerId)
       const salesData = salesResponse.success ? salesResponse.data || [] : []
 
-      // Fetch repairs data
-      const repairsData = await fetchRepairs(customerId, ['pending', 'received', 'in_progress', 'diagnosis'])
+      // Todas sus reparaciones. Se filtraba por 'pending', 'received'… en inglés,
+      // que el enum `repair_status` (en castellano) rechaza: la consulta fallaba
+      // y la línea de tiempo nunca mostraba reparaciones.
+      const repairsData = await fetchRepairs(customerId)
 
       // Combine and format activities
       const combinedActivities: ActivityItem[] = [

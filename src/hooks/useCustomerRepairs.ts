@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import type { RepairStatus } from '@/types/repairs'
 
 export interface CustomerRepair {
     id: string
@@ -26,13 +27,18 @@ export function useCustomerRepairs() {
 
     const supabase = createClient()
 
-    const fetchRepairs = useCallback(async (customerId: string, statusFilter?: string[]) => {
+    // Los estados van en castellano, como el enum `repair_status` de la base.
+    // Se tipan para que un filtro en inglés ('pending', 'in_progress') no
+    // compile: la base lo rechaza y la ficha del cliente quedaba sin reparaciones.
+    const fetchRepairs = useCallback(async (customerId: string, statusFilter?: RepairStatus[]) => {
         try {
             setLoading(true)
             let query = supabase
                 .from('repairs')
                 .select('id, ticket_number, device_brand, device_model, problem_description, status, estimated_cost, final_cost, paid_amount, payment_status, delivered_at, created_at')
                 .eq('customer_id', customerId)
+                .is('deleted_at', null)
+                .order('created_at', { ascending: false })
 
             if (statusFilter && statusFilter.length > 0) {
                 query = query.in('status', statusFilter)
@@ -49,7 +55,7 @@ export function useCustomerRepairs() {
                 ? String((error as any).message)
                 : JSON.stringify(error)
             console.error('Error fetching customer repairs:', msg)
-            toast.error(msg || 'Error al cargar reparaciones del cliente')
+            toast.error('No se pudieron cargar las reparaciones del cliente.')
             return []
         } finally {
             setLoading(false)
