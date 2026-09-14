@@ -232,10 +232,15 @@ export function RepairDeliveryDialog({
     }
   }, [allowPayment, selected, balanceDue])
 
+  // Si el técnico ya certificó que funciona y queda saldo, no hay nada que
+  // elegir en «Resultado»: la única tarjeta posible era un clic de más antes
+  // de cobrar. Se abre directo en «Cobrar saldo y entregar».
+  const opensOnPayment = verifiedOutcome === 'repaired' && allowPayment && balanceDue > 0
+
   useEffect(() => {
     if (open) {
       setIdempotencyKey(`repair-delivery-${crypto.randomUUID()}`)
-      setStep('outcome')
+      setStep(opensOnPayment ? 'payment' : 'outcome')
       setSelected(verifiedOutcome)
       setUnrepairedDraft(verifiedOutcome && verifiedOutcome !== 'repaired' ? {
         charge: { mode: 'none' },
@@ -244,7 +249,7 @@ export function RepairDeliveryDialog({
       } : null)
       void refreshCashStatus()
     }
-  }, [open, repair?.id, refreshCashStatus, verifiedOutcome, alreadyPaid])
+  }, [open, repair?.id, refreshCashStatus, verifiedOutcome, alreadyPaid, opensOnPayment])
 
   const handleClose = () => {
     if (isSubmitting) return
@@ -564,6 +569,14 @@ export function RepairDeliveryDialog({
                 {cashStatus === 'open' ? 'Caja abierta' : 'Caja cerrada'}
               </span>
               {cashStatus === 'closed' && <Button type="button" size="sm" variant="outline" onClick={() => setIsOpeningRegister(true)}>Abrir caja</Button>}
+            </div>
+          )}
+
+          {/* Quien cobra ve que el equipo fue verificado sin volver al paso anterior. */}
+          {step === 'payment' && selected === 'repaired' && repair.qualityCheck && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              <RepairQualityBadge qualityCheck={repair.qualityCheck} />
+              <span>Resultado técnico registrado por {repair.qualityCheck.checkedBy?.name || 'personal técnico'}.</span>
             </div>
           )}
 

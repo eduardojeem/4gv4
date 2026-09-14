@@ -94,7 +94,8 @@ describe('RepairDeliveryDialog', () => {
       onConfirm={vi.fn()}
     />)
 
-    expect(screen.getByRole('heading', { name: 'Confirmar entrega — anticipo recibido' })).toBeVisible()
+    // Verificado y con saldo: abre en el cobro, con el anticipo a la vista.
+    expect(screen.getByRole('heading', { name: 'Cobrar saldo y entregar' })).toBeVisible()
     expect(screen.getByText('Anticipo recibido: 40')).toBeVisible()
     expect(screen.getByText('Saldo pendiente al entregar: 60')).toBeVisible()
   })
@@ -116,7 +117,6 @@ describe('RepairDeliveryDialog', () => {
     cashRegisterMocks.checkOpenSession.mockResolvedValue(null)
 
     render(<RepairDeliveryDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
 
     expect(await screen.findByText('Caja cerrada')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Cobrar y Entregar' })).toBeDisabled()
@@ -127,7 +127,6 @@ describe('RepairDeliveryDialog', () => {
     cashRegisterMocks.checkOpenSession.mockResolvedValue(null)
 
     render(<RepairDeliveryDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
 
     expect(await screen.findByText('Caja cerrada')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Crédito' }))
@@ -158,6 +157,23 @@ describe('RepairDeliveryDialog', () => {
     }))
   })
 
+  /** Con la verificación aprobada y saldo pendiente, «Resultado» era un clic de más. */
+  it('opens straight on collecting the balance when the device was verified as working', async () => {
+    render(<RepairDeliveryDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
+
+    expect(screen.getByRole('heading', { name: 'Cobrar saldo y entregar' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Monto a cobrar')).toHaveValue('100')
+    expect(screen.queryByText('¿Cuál fue el resultado?')).not.toBeInTheDocument()
+    expect(await screen.findByText('Caja abierta')).toBeVisible()
+  })
+
+  it('still starts on the result when a verified repair is already paid', () => {
+    render(<RepairDeliveryDialog open repair={{ ...repair, paidAmount: 100 }} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
+
+    expect(screen.getByText('¿Cuál fue el resultado?')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Confirmar Entrega' })).toBeEnabled()
+  })
+
   it('does not let the cashier replace the certified technical result', () => {
     render(<RepairDeliveryDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
 
@@ -183,7 +199,6 @@ describe('RepairDeliveryDialog', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
     expect(await screen.findByText('Caja abierta')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Cobrar saldo y entregar' })).toBeInTheDocument()
     expect(screen.getByLabelText('Monto a cobrar')).toHaveValue('100')
@@ -220,7 +235,6 @@ describe('RepairDeliveryDialog', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
     expect(await screen.findByText('Caja abierta')).toBeVisible()
     fireEvent.change(screen.getByLabelText('Monto a cobrar'), { target: { value: '40' } })
 
@@ -250,7 +264,6 @@ describe('RepairDeliveryDialog', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
     expect(await screen.findByText('Caja abierta')).toBeVisible()
     fireEvent.change(screen.getByLabelText('Monto a cobrar'), { target: { value: '70' } })
 
@@ -269,7 +282,6 @@ describe('RepairDeliveryDialog', () => {
     cashRegisterMocks.openRegister.mockResolvedValue(true)
 
     render(<RepairDeliveryDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
     expect(await screen.findByText('Caja cerrada')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Transferencia' }))
     fireEvent.change(screen.getByLabelText('Monto a cobrar'), { target: { value: '40' } })
@@ -293,7 +305,6 @@ describe('RepairDeliveryDialog', () => {
     const onConfirm = vi.fn().mockRejectedValue(apiError)
 
     render(<RepairDeliveryDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={onConfirm} />)
-    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
     expect(await screen.findByText('Caja abierta')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Cobrar y Entregar' }))
 
