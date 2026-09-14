@@ -47,6 +47,7 @@ function normalizeCustomerPayload(payload: z.infer<typeof repairCustomerSchema>)
   const isWholesale = Boolean(payload.is_wholesale || payload.customer_type === 'wholesale' || payload.customer_type === 'mayorista')
   const customerType = isWholesale ? 'wholesale' : (payload.customer_type || 'regular')
   const { is_wholesale, alternate_phone, alternate_phone_label, company_name, ...rest } = payload
+  void is_wholesale
   // Las columnas del contacto alternativo solo se mandan si hay algo que
   // guardar. Asi un despliegue sin la migracion sigue creando clientes como
   // siempre, y solo falla -con motivo- si alguien intenta usar el campo nuevo.
