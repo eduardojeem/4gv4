@@ -73,6 +73,14 @@ export function ActiveOrganizationProvider({ children }: { children: ReactNode }
   )
 }
 
+/**
+ * La empresa activa, o null fuera del provider (una prueba, una pantalla
+ * pública). Para lo que puede esperar a conocerla en vez de romper.
+ */
+export function useOptionalActiveOrganization() {
+  return useContext(ActiveOrganizationContext)
+}
+
 export function useActiveOrganization() {
   const context = useContext(ActiveOrganizationContext)
   if (!context) {

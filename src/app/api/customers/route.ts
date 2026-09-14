@@ -7,8 +7,8 @@ import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 import { duplicatesMessage, findCustomerDuplicates } from '@/lib/customers/duplicate-check'
 
 const customerSchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  email: z.string().trim().email().optional().or(z.literal('')).nullable(),
+  name: z.string({ message: 'Ingresá el nombre del cliente.' }).trim().min(1, 'Ingresá el nombre del cliente.').max(200, 'El nombre admite hasta 200 caracteres.'),
+  email: z.string().trim().email('El correo no es válido.').optional().or(z.literal('')).nullable(),
   phone: z.string().trim().max(50).optional().nullable(),
   // Contacto de un tercero: el celular del cliente suele ser el equipo que dejo
   // en el taller, asi que ahi no se lo puede ubicar.
@@ -19,8 +19,21 @@ const customerSchema = z.object({
   ruc: z.string().trim().max(50).optional().nullable(),
   segment: z.string().trim().max(50).optional().nullable(),
   customer_type: z.string().trim().max(50).optional().nullable(),
-  credit_limit: z.number().optional().nullable(),
-  discount_percentage: z.number().optional().nullable(),
+  // Los mismos rangos que valida el formulario. La API aceptaba cualquier número:
+  // desde una edición masiva o una llamada directa se podía guardar un límite de
+  // crédito negativo o un descuento del 500%.
+  credit_limit: z.number({ message: 'El límite de crédito debe ser un número.' })
+    .finite()
+    .min(0, 'El límite de crédito no puede ser negativo.')
+    .max(1_000_000_000_000, 'El límite de crédito es demasiado alto.')
+    .optional()
+    .nullable(),
+  discount_percentage: z.number({ message: 'El descuento debe ser un número.' })
+    .finite()
+    .min(0, 'El descuento no puede ser negativo.')
+    .max(100, 'El descuento no puede superar el 100%.')
+    .optional()
+    .nullable(),
   payment_terms: z.string().trim().max(120).optional().nullable(),
   preferred_contact: z.string().trim().max(50).optional().nullable(),
   tags: z.array(z.string()).optional().nullable(),
@@ -191,7 +204,14 @@ export const POST = withTenantAuth({ permission: ['crm.customers.manage', 'pos.s
     const validation = customerSchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
+      // El primer problema, dicho en castellano: «Error de validación» a secas
+      // no le decía a nadie qué campo corregir.
+      return NextResponse.json({
+        success: false,
+        error: validation.error.issues[0]?.message || 'Revisá los datos del cliente.',
+        field: validation.error.issues[0]?.path.join('.'),
+        details: validation.error.issues,
+      }, { status: 400 })
     }
 
     const supabase = await createClient()
@@ -238,7 +258,14 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
     const validation = customerUpdateSchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
+      // El primer problema, dicho en castellano: «Error de validación» a secas
+      // no le decía a nadie qué campo corregir.
+      return NextResponse.json({
+        success: false,
+        error: validation.error.issues[0]?.message || 'Revisá los datos del cliente.',
+        field: validation.error.issues[0]?.path.join('.'),
+        details: validation.error.issues,
+      }, { status: 400 })
     }
 
     const { id, ...updates } = validation.data

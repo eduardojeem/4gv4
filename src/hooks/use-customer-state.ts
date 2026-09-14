@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useDebounce } from "./use-debounce"
 import { searchCustomers } from '@/lib/customers/search'
 import { paginateCustomers } from '@/lib/customers/pagination'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import {
   applyCustomerSpend,
   COMPUTED_SPEND_FIELDS,
@@ -336,15 +337,24 @@ export function useCustomerState() {
     }
   }, [])
 
-  // Realtime subscription for automatic updates
+  // Tiempo real, solo de la empresa activa.
+  //
+  // Se escuchaba toda la tabla `customers`. RLS acota lo que llega, pero quien
+  // pertenece a varias empresas veía aparecer en la lista clientes de otra.
+  // Sin empresa conocida todavía no se escucha nada: mejor esperar que filtrar
+  // de más.
+  const organizationId = useOptionalActiveOrganization()?.organization?.id ?? null
+
   useEffect(() => {
+    if (!organizationId) return
     const supabase = createClient()
+    const filter = `organization_id=eq.${organizationId}`
 
     const channel = supabase
-      .channel('customers_realtime')
+      .channel(`customers_realtime:${organizationId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'customers' },
+        { event: 'INSERT', schema: 'public', table: 'customers', filter },
         (payload) => {
           const mappedCustomer = withEmptySpend(mapRawToCustomer(payload.new as Record<string, unknown>))
           setState(prev => {
@@ -356,9 +366,9 @@ export function useCustomerState() {
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'customers' },
+        { event: 'UPDATE', schema: 'public', table: 'customers', filter },
         (payload) => {
-          const mappedCustomer = mapRawToCustomer(payload.new as any)
+          const mappedCustomer = mapRawToCustomer(payload.new as Record<string, unknown>)
           setState(prev => ({
             ...prev,
             customers: prev.customers.map(c =>
@@ -369,11 +379,16 @@ export function useCustomerState() {
       )
       .on(
         'postgres_changes',
+        // Supabase no aplica filtros a los DELETE (la fila vieja solo trae la
+        // clave). No hace falta: se quita por id, y un id de otra empresa no está
+        // en esta lista.
         { event: 'DELETE', schema: 'public', table: 'customers' },
         (payload) => {
+          const deletedId = (payload.old as { id?: string } | null)?.id
+          if (!deletedId) return
           setState(prev => ({
             ...prev,
-            customers: prev.customers.filter(c => c.id !== (payload.old as any).id)
+            customers: prev.customers.filter(c => c.id !== deletedId)
           }))
         }
       )
@@ -384,7 +399,7 @@ export function useCustomerState() {
         channel.unsubscribe()
       }
     }
-  }, [])
+  }, [organizationId])
 
   // Debounce search term for better performance
   const debouncedSearchTerm = useDebounce(state.filters.search, 300)
