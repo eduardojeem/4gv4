@@ -1,5 +1,8 @@
+import { isCancelledSaleStatus } from '@/lib/sales-status'
+
 /**
- * Total gastado por cliente para las listas (tabla y tarjetas).
+ * Total gastado por cliente. Es la única regla: la usan la lista, el detalle,
+ * la analítica y la ficha de reparaciones.
  *
  * Antes se calculaba solo con la tabla `sales`, o sea unicamente las ventas
  * hechas en el POS. Un cliente que compro por la tienda publica (que guarda en
@@ -22,6 +25,12 @@ export type CustomerSpendMetrics = {
   lastAmount: number
   /** Fecha de la operacion mas reciente. */
   lastDate: string | null
+  /** Lo gastado en compras (POS + tienda pública). */
+  purchaseTotal: number
+  /** Lo gastado en reparaciones terminadas. */
+  repairTotal: number
+  /** Lo gastado en el año calendario en curso. */
+  yearTotal: number
 }
 
 export type SpendRow = {
@@ -32,7 +41,10 @@ export type SpendRow = {
 }
 
 export type SpendSources = {
-  /** Ventas del POS. Todas cuentan: son operaciones ya cerradas. */
+  /**
+   * Ventas del POS. Las anuladas no cuentan: antes se sumaban todas, así que
+   * una venta anulada seguía figurando como plata gastada.
+   */
   sales?: SpendRow[] | null
   /** Pedidos de la tienda publica. Los cancelados no cuentan. */
   orders?: SpendRow[] | null
@@ -43,6 +55,12 @@ export type SpendSources = {
 function toAmount(value: unknown): number {
   const amount = Number(value)
   return Number.isFinite(amount) ? amount : 0
+}
+
+/** Una venta anulada no es plata gastada. */
+export function isCountableSale(status: string | null | undefined) {
+  const normalized = String(status ?? '').trim().toLowerCase()
+  return !isCancelledSaleStatus(normalized) && normalized !== 'cancelado'
 }
 
 /** Un pedido cancelado no es plata gastada. */
@@ -75,12 +93,14 @@ function addRow(
   target: Record<string, CustomerSpendMetrics>,
   row: SpendRow,
   kind: 'purchase' | 'repair',
+  year: number,
 ) {
   const customerId = String(row.customer_id ?? '').trim()
   if (!customerId) return
 
   const amount = toAmount(row.amount)
   const date = row.date ?? null
+  const thisYear = date ? new Date(date).getFullYear() === year : false
   const current = target[customerId]
 
   if (!current) {
@@ -91,14 +111,23 @@ function addRow(
       total: amount,
       lastAmount: amount,
       lastDate: date,
+      purchaseTotal: kind === 'purchase' ? amount : 0,
+      repairTotal: kind === 'repair' ? amount : 0,
+      yearTotal: thisYear ? amount : 0,
     }
     return
   }
 
   current.count += 1
-  if (kind === 'purchase') current.purchaseCount += 1
-  else current.repairCount += 1
+  if (kind === 'purchase') {
+    current.purchaseCount += 1
+    current.purchaseTotal += amount
+  } else {
+    current.repairCount += 1
+    current.repairTotal += amount
+  }
   current.total += amount
+  if (thisYear) current.yearTotal += amount
 
   // La operacion mas reciente puede venir de cualquiera de las tres fuentes,
   // asi que se compara por fecha en vez de confiar en el orden de la consulta.
@@ -109,17 +138,21 @@ function addRow(
   }
 }
 
-export function aggregateCustomerSpend(sources: SpendSources): Record<string, CustomerSpendMetrics> {
+export function aggregateCustomerSpend(
+  sources: SpendSources,
+  now: Date = new Date(),
+): Record<string, CustomerSpendMetrics> {
   const result: Record<string, CustomerSpendMetrics> = {}
+  const year = now.getFullYear()
 
   for (const row of sources.sales ?? []) {
-    addRow(result, row, 'purchase')
+    if (isCountableSale(row.status)) addRow(result, row, 'purchase', year)
   }
   for (const row of sources.orders ?? []) {
-    if (isCountableOrder(row.status)) addRow(result, row, 'purchase')
+    if (isCountableOrder(row.status)) addRow(result, row, 'purchase', year)
   }
   for (const row of sources.repairs ?? []) {
-    if (isCountableRepair(row.status)) addRow(result, row, 'repair')
+    if (isCountableRepair(row.status)) addRow(result, row, 'repair', year)
   }
 
   return result

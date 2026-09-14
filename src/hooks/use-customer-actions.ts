@@ -1,6 +1,14 @@
 import { useCallback, Dispatch, SetStateAction } from "react"
 import { toast } from "sonner"
-import { Customer, CustomerFilters, CustomerState, mapRawToCustomer } from "./use-customer-state"
+import {
+  Customer,
+  CustomerFilters,
+  CustomerState,
+  keepComputedSpend,
+  mapRawToCustomer,
+  syncCustomerSpend,
+  withEmptySpend,
+} from "./use-customer-state"
 import { AppError, ErrorCode } from "@/lib/errors"
 import { logger } from "@/lib/logging"
 
@@ -148,6 +156,15 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
         })
       }
 
+      // Recargar traía las columnas viejas: los totales se vuelven a calcular.
+      if (setState) {
+        void syncCustomerSpend(setState, customers).catch((spendError) => {
+          logger.warn('Customer spend sync failed after refresh', {
+            error: spendError instanceof Error ? spendError.message : String(spendError),
+          })
+        })
+      }
+
       return customers
     } catch (error: any) {
       const appError = error instanceof AppError ? error : new AppError(
@@ -169,13 +186,14 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(toCustomerPayload(customerData)),
       }))
-      const customer = mapRawToCustomer(result.data)
+      const customer = withEmptySpend(mapRawToCustomer(result.data))
 
       if (setState) {
-        setState(prev => ({
-          ...prev,
-          customers: [customer, ...prev.customers]
-        }))
+        setState(prev => {
+          // El evento en tiempo real puede haberlo agregado antes que esta respuesta.
+          if (prev.customers.some((item) => item.id === customer.id)) return prev
+          return { ...prev, customers: [customer, ...prev.customers] }
+        })
       }
 
       toast.success("Cliente creado exitosamente")
@@ -205,8 +223,9 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       if (setState) {
         setState(prev => ({
           ...prev,
-          customers: prev.customers.map(item => item.id === id ? customer : item),
-          selectedCustomer: prev.selectedCustomer?.id === id ? customer : prev.selectedCustomer,
+          // La respuesta trae la fila cruda: se conservan los totales calculados.
+          customers: prev.customers.map(item => item.id === id ? keepComputedSpend(customer, item) : item),
+          selectedCustomer: prev.selectedCustomer?.id === id ? keepComputedSpend(customer, prev.selectedCustomer) : prev.selectedCustomer,
         }))
       }
 

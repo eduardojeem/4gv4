@@ -58,9 +58,11 @@ export function CustomerDetailMetrics({ customer, stats }: CustomerDetailMetrics
   const outstanding = stats?.pendingDebt ?? creditSummary?.total_pending ?? creditSummary?.saldo_pendiente ?? customer.credit_outstanding ?? 0
   const availableCredit = stats?.availableCredit ?? creditSummary?.available_credit ?? Math.max(0, creditLimit - outstanding)
 
-  const effectiveSpent = stats?.totalSpent ?? (customer as any).total_spent_this_year ?? customer.lifetime_value ?? 0
+  const effectiveSpent = stats?.totalSpent ?? customer.lifetime_value ?? 0
   const effectivePurchases = stats?.totalPurchases ?? customer.total_purchases ?? 0
-  const effectiveLastVisit = stats?.lastVisit ?? customer.last_visit ?? customer.last_activity ?? null
+  // La última visita es la última operación. `last_activity` es la última
+  // edición de la ficha: cambiar un teléfono ponía la visita en hoy.
+  const effectiveLastVisit = stats?.lastVisit ?? customer.last_visit ?? null
 
   const spentSubtext = stats?.salesCount !== undefined && stats?.repairsCount !== undefined
     ? `${stats.salesCount} ${stats.salesCount === 1 ? 'venta' : 'ventas'} · ${stats.repairsCount} ${stats.repairsCount === 1 ? 'reparación' : 'reparaciones'}`

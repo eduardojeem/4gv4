@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Customer } from '@/hooks/use-customer-state'
-import { aggregateCustomerSpend, type CustomerSpendMetrics } from '@/lib/customers/customer-spend'
+import type { CustomerSpendMetrics } from '@/lib/customers/customer-spend'
+import { fetchCustomerSpend } from '@/lib/customers/customer-spend-client'
+import { isCountableSale } from '@/lib/customers/customer-spend'
 
 /** Se deriva del tipo de la agregacion para que no puedan divergir. */
 export type CustomerMetrics = CustomerSpendMetrics
@@ -16,69 +18,34 @@ export type UseCustomerMetricsOptions = {
 }
 
 // Map de métricas por cliente (para listas)
+//
+// Lo calcula el servidor con la regla única (ver /api/customers/spend). Antes
+// eran tres consultas desde el navegador que Supabase cortaba en 1000 filas,
+// sin filtro de empresa y contando ventas anuladas.
 export function useCustomerSalesMetricsMap(customerIds: string[]) {
-  const [metrics, setMetrics] = useState<Record<string, CustomerMetrics>>({})
+  const [loaded, setLoaded] = useState<{ key: string; metrics: Record<string, CustomerMetrics> } | null>(null)
+  const key = JSON.stringify([...new Set(customerIds)].sort())
+
   useEffect(() => {
-    const fetchMetrics = async () => {
-      if (!customerIds || customerIds.length === 0) {
-        setMetrics({})
-        return
-      }
-      const supabase = createClient()
+    const ids = JSON.parse(key) as string[]
+    if (ids.length === 0) return
+    let cancelled = false
 
-      // Tres fuentes: el total gastado antes salia solo de `sales` (POS), asi
-      // que quien compro por la tienda publica o pago una reparacion aparecia
-      // en cero aunque su ficha de detalle si lo contara.
-      const [salesResult, ordersResult, repairsResult] = await Promise.all([
-        supabase
-          .from('sales')
-          .select('customer_id, total_amount, created_at')
-          .in('customer_id', customerIds),
-        supabase
-          .from('customer_orders')
-          .select('customer_id, total, status, created_at')
-          .in('customer_id', customerIds),
-        supabase
-          .from('repairs')
-          .select('customer_id, final_cost, estimated_cost, status, created_at')
-          .in('customer_id', customerIds),
-      ])
+    fetchCustomerSpend(ids)
+      .then((metrics) => { if (!cancelled) setLoaded({ key, metrics }) })
+      // Sin datos se deja el mapa vacío: la pantalla cae a los totales ya
+      // calculados de cada cliente en vez de mostrar un parcial como completo.
+      .catch(() => { if (!cancelled) setLoaded({ key, metrics: {} }) })
 
-      // Si las tres fallan no hay nada que mostrar. Si falla solo una, se usa
-      // lo que si vino: un total parcial es mejor que un cero enganoso.
-      if (salesResult.error && ordersResult.error && repairsResult.error) {
-        setMetrics({})
-        return
-      }
+    return () => { cancelled = true }
+  }, [key])
 
-      type Row = Record<string, unknown>
-
-      setMetrics(aggregateCustomerSpend({
-        sales: (salesResult.data ?? []).map((row: Row) => ({
-          customer_id: row.customer_id as string | null,
-          amount: row.total_amount as number | null,
-          date: row.created_at as string | null,
-        })),
-        orders: (ordersResult.data ?? []).map((row: Row) => ({
-          customer_id: row.customer_id as string | null,
-          amount: row.total as number | null,
-          date: row.created_at as string | null,
-          status: row.status as string | null,
-        })),
-        repairs: (repairsResult.data ?? []).map((row: Row) => ({
-          customer_id: row.customer_id as string | null,
-          // Mismo criterio que usa el resto del sistema para lo que paga el
-          // cliente por una reparacion (ver customer-outstanding).
-          amount: (row.final_cost ?? row.estimated_cost) as number | null,
-          date: row.created_at as string | null,
-          status: row.status as string | null,
-        })),
-      }))
-    }
-    fetchMetrics()
-  }, [JSON.stringify(customerIds)])
-  return metrics
+  // Solo vale el resultado de la lista pedida ahora: si cambió, hasta que
+  // llegue la nueva no se muestran los totales de la anterior.
+  return loaded?.key === key ? loaded.metrics : EMPTY_METRICS
 }
+
+const EMPTY_METRICS: Record<string, CustomerMetrics> = {}
 
 // Métricas agregadas para AnalyticsDashboard (compatibles)
 export function useCustomerMetrics(customers: Customer[], options?: UseCustomerMetricsOptions) {
@@ -87,7 +54,8 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
   const segmentBy = options?.segmentBy || 'segment'
 
   const totalCustomers = customers.length
-  const totalRevenue = customers.reduce((sum, c) => sum + ((c as any).total_spent_this_year ?? c.lifetime_value ?? 0), 0)
+  // Total histórico real: los clientes ya llegan con lo gastado calculado.
+  const totalRevenue = customers.reduce((sum, c) => sum + (c.lifetime_value || 0), 0)
   const avgCustomerValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0
   const activeCustomers = customers.filter(c => {
     const st = String(c.status || 'active').toLowerCase().trim()
@@ -123,7 +91,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
         const supabase = createClient()
         const { data, error } = await supabase
           .from('sales')
-          .select('total_amount, created_at')
+          .select('total_amount, created_at, status')
           .gte('created_at', start.toISOString())
 
         if (cancelled) return
@@ -136,6 +104,8 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
         for (const row of data) {
           const created = (row as any).created_at as string | null
           if (!created) continue
+          // Una venta anulada no es ingreso del mes.
+          if (!isCountableSale((row as { status?: string | null }).status)) continue
           const d = new Date(created)
           const key = `${d.getFullYear()}-${d.getMonth()}`
           const cur = map.get(key) || { revenue: 0, count: 0 }
@@ -197,7 +167,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
 
   const topCustomers = useMemo(() => {
     const ranked = customers
-      .map(c => ({ customer: c, value: ((c as any).total_spent_this_year ?? c.lifetime_value ?? 0) as number }))
+      .map(c => ({ customer: c, value: c.lifetime_value || 0 }))
       .sort((a, b) => b.value - a.value)
     return ranked.map((item, idx) => ({ ...item, rank: idx + 1 }))
   }, [customers])

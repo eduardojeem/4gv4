@@ -57,7 +57,8 @@ import {
   Coins,
   Receipt
 } from 'lucide-react'
-import { Customer } from '@/hooks/use-customer-state'
+import { Customer, keepComputedSpend } from '@/hooks/use-customer-state'
+import { useCustomerSalesMetricsMap } from '@/hooks/use-customer-metrics'
 import { useCustomerData, useCustomerPurchases, prefetchCustomerPurchases } from '@/hooks/useCustomerData'
 import { useCustomerRepairs } from '@/hooks/useCustomerRepairs'
 import { useCustomerCredits } from '@/hooks/use-customer-credits'
@@ -587,11 +588,18 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
   const { data: freshData, error: customerError, mutate: refreshCustomer } = useCustomerData(customer.id)
 
   // Use fresh data if available, otherwise fallback to prop
-  const currentCustomer = freshData ? { ...customer, ...freshData } : customer
+  // La recarga trae la fila cruda: se conservan los totales ya calculados.
+  const currentCustomer = freshData ? keepComputedSpend({ ...customer, ...freshData } as Customer, customer) : customer
 
   const { data: sales } = useCustomerPurchases(currentCustomer.id)
   const { repairs, fetchRepairs } = useCustomerRepairs()
   const { creditSummary } = useCustomerCredits(currentCustomer.id, currentCustomer)
+  // Los totales salen de la misma regla que la lista y la analítica. Antes el
+  // detalle sumaba solo las últimas 100 ventas, ignoraba la tienda pública y
+  // contaba las reparaciones con otro criterio: el mismo cliente tenía dos
+  // «gastados» distintos.
+  const spendMap = useCustomerSalesMetricsMap([currentCustomer.id])
+  const spend = spendMap[currentCustomer.id]
 
   React.useEffect(() => {
     fetchRepairs(currentCustomer.id)
@@ -601,33 +609,19 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
   const repairsList = React.useMemo(() => (Array.isArray(repairs) ? repairs : []), [repairs])
 
   const stats = React.useMemo(() => {
-    const salesSum = salesList.reduce((sum: number, s: any) => sum + Number(s.total || s.total_amount || 0), 0)
-    const repairsSum = repairsList.reduce((sum: number, r: any) => {
-      const cost = Number(r.final_cost ?? r.estimated_cost ?? 0)
-      const paid = Number(r.paid_amount ?? 0)
-      return sum + (paid > 0 ? paid : (r.status?.toLowerCase() === 'entregado' ? cost : 0))
-    }, 0)
-
-    const totalSpent = (salesSum + repairsSum) > 0
-      ? (salesSum + repairsSum)
-      : Number((currentCustomer as any).total_spent_this_year ?? currentCustomer.lifetime_value ?? 0)
-
-    const totalPurchases = (salesList.length + repairsList.length) > 0
-      ? (salesList.length + repairsList.length)
-      : Number(currentCustomer.total_purchases ?? 0)
-
+    // Mientras llega el cálculo se usa lo que ya trae el cliente desde la lista,
+    // que sale de la misma regla. Nunca de las columnas viejas de la ficha.
+    const fromList = (currentCustomer as Customer & { spend_synced?: boolean }).spend_synced ? currentCustomer : null
+    const salesSum = spend?.purchaseTotal ?? 0
+    const repairsSum = spend?.repairTotal ?? 0
+    const totalSpent = spend?.total ?? fromList?.lifetime_value ?? 0
+    const salesCount = spend?.purchaseCount ?? fromList?.total_purchases ?? salesList.length
+    const repairsCount = spend?.repairCount ?? (fromList as { total_repairs?: number } | null)?.total_repairs ?? repairsList.length
+    const totalPurchases = salesCount + repairsCount
     const averageTicket = totalPurchases > 0 ? Math.round(totalSpent / totalPurchases) : 0
 
-    const allDates = [
-      ...salesList.map((s: any) => s.created_at || s.date),
-      ...repairsList.map((r: any) => r.created_at),
-      currentCustomer.last_visit,
-      currentCustomer.last_activity,
-    ].filter(Boolean) as string[]
-
-    const lastVisit = allDates.length > 0
-      ? allDates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
-      : null
+    // La última visita es la última operación, no la última edición de la ficha.
+    const lastVisit = spend?.lastDate ?? fromList?.last_visit ?? null
 
     const creditLimit = creditSummary?.credit_limit ?? currentCustomer.credit_limit ?? 0
     const pendingDebt = creditSummary?.total_pending ?? (currentCustomer as any).credit_outstanding ?? (currentCustomer as any).pending_amount ?? 0
@@ -639,8 +633,8 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
       salesTotal: salesSum,
       repairsTotal: repairsSum,
       totalPurchases,
-      salesCount: salesList.length,
-      repairsCount: repairsList.length,
+      salesCount,
+      repairsCount,
       lastVisit,
       averageTicket,
       pendingDebt,
@@ -648,7 +642,7 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
       creditLimit,
       storeBalance,
     }
-  }, [salesList, repairsList, currentCustomer, creditSummary])
+  }, [salesList, repairsList, currentCustomer, creditSummary, spend])
 
   // Si la recarga falla se seguian mostrando los datos que traia la lista, sin
   // ninguna senal: el credito y el saldo podian estar viejos y nadie lo sabia.

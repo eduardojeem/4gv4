@@ -3,6 +3,7 @@ import {
   aggregateCustomerSpend,
   isCountableOrder,
   isCountableRepair,
+  isCountableSale,
 } from './customer-spend'
 
 const row = (customer_id: string, amount: number, date: string, status?: string) =>
@@ -168,5 +169,46 @@ describe('isCountableRepair', () => {
     expect(isCountableRepair('cancelado')).toBe(false)
     expect(isCountableRepair('cancelled')).toBe(false)
     expect(isCountableRepair(null)).toBe(false)
+  })
+})
+
+/**
+ * Las ventas del POS se sumaban todas, incluidas las anuladas: una venta anulada
+ * seguía figurando como plata gastada.
+ */
+describe('las ventas anuladas', () => {
+  it('no suman en ninguno de sus nombres', () => {
+    const result = aggregateCustomerSpend({
+      sales: [
+        row('c1', 100, '2026-01-01', 'completed'),
+        row('c1', 900, '2026-01-02', 'cancelled'),
+        row('c1', 800, '2026-01-03', 'cancelada'),
+        row('c1', 700, '2026-01-04', 'Cancelado'),
+        row('c1', 50, '2026-01-05'),
+      ],
+    })
+    expect(result.c1.total).toBe(150)
+    expect(result.c1.purchaseCount).toBe(2)
+  })
+
+  it('isCountableSale deja pasar las que no tienen estado', () => {
+    expect(isCountableSale(null)).toBe(true)
+    expect(isCountableSale('pending')).toBe(true)
+    expect(isCountableSale('cancelled')).toBe(false)
+  })
+})
+
+describe('los totales por fuente y del año', () => {
+  it('separa compras de reparaciones y cuenta el año en curso', () => {
+    const result = aggregateCustomerSpend({
+      sales: [row('c1', 100, '2026-03-01'), row('c1', 40, '2025-12-31')],
+      orders: [row('c1', 60, '2026-05-01', 'DELIVERED')],
+      repairs: [row('c1', 30, '2026-09-01', 'entregado')],
+    }, new Date('2026-09-13T12:00:00Z'))
+
+    expect(result.c1.purchaseTotal).toBe(200)
+    expect(result.c1.repairTotal).toBe(30)
+    expect(result.c1.total).toBe(230)
+    expect(result.c1.yearTotal).toBe(190)
   })
 })

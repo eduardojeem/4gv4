@@ -4,12 +4,20 @@ import { createClient } from "@/lib/supabase/client"
 import { useDebounce } from "./use-debounce"
 import { searchCustomers } from '@/lib/customers/search'
 import { paginateCustomers } from '@/lib/customers/pagination'
+import {
+  applyCustomerSpend,
+  COMPUTED_SPEND_FIELDS,
+  fetchCustomerSpend,
+} from '@/lib/customers/customer-spend-client'
 
 export interface Customer {
   id: string  // UUID from Supabase
   profile_id?: string // Linked user profile ID
   customerCode: string
   name: string
+  first_name?: string | null
+  last_name?: string | null
+  company_name?: string | null
   email: string
   phone: string
   alternate_phone?: string | null
@@ -49,6 +57,8 @@ export interface Customer {
   assigned_salesperson: string
   last_purchase_amount: number
   total_spent_this_year: number
+  /** true cuando los totales ya salen de las operaciones reales y no de las columnas viejas. */
+  spend_synced?: boolean
   avatar?: string
   repairs_history?: Record<string, unknown>[]
   sales_history?: Record<string, unknown>[]
@@ -164,6 +174,47 @@ export function mapRawToCustomer(raw: Record<string, any>): Customer {
   } as Customer
 }
 
+/**
+ * Conserva en `next` los totales ya calculados de `prev`.
+ *
+ * Un evento en tiempo real o una edición traen la fila cruda de la tabla, con
+ * `lifetime_value` y compañía desactualizados: reemplazar el cliente entero
+ * volvía a mostrar esos números viejos después de cada cambio.
+ */
+export function keepComputedSpend(next: Customer, prev?: Customer | null): Customer {
+  if (!prev?.spend_synced) return next
+  const kept: Record<string, unknown> = {}
+  for (const field of COMPUTED_SPEND_FIELDS) kept[field] = (prev as unknown as Record<string, unknown>)[field]
+  return { ...next, ...kept } as Customer
+}
+
+/**
+ * Calcula en el servidor lo gastado por esos clientes y lo pone en la lista.
+ * Solo toca los campos calculados, así no pisa una edición que haya llegado
+ * mientras tanto.
+ */
+export async function syncCustomerSpend<S extends { customers: Customer[] }>(
+  setState: React.Dispatch<React.SetStateAction<S>>,
+  customers: Customer[],
+) {
+  if (customers.length === 0) return
+  const spend = await fetchCustomerSpend(customers.map((customer) => customer.id))
+  const enriched = new Map(applyCustomerSpend(customers, spend).map((customer) => [customer.id, customer]))
+
+  setState((prev) => ({
+    ...prev,
+    customers: prev.customers.map((customer) => {
+      const computed = enriched.get(customer.id)
+      return computed ? keepComputedSpend(customer, computed as Customer) : customer
+    }),
+  }))
+}
+
+/** Un cliente recién creado todavía no gastó nada. */
+export function withEmptySpend(customer: Customer): Customer {
+  return applyCustomerSpend([customer], {})[0] as Customer
+}
+
 export function useCustomerState() {
   // Core state — only source-of-truth data lives here.
   // filteredCustomers and paginatedCustomers are derived via useMemo (not stored in state).
@@ -188,6 +239,18 @@ export function useCustomerState() {
   // Load customers on mount with progressive loading
   useEffect(() => {
     let isMounted = true
+    let spendWarningShown = false
+
+    const enrich = async (list: Customer[]) => {
+      try {
+        if (isMounted) await syncCustomerSpend(setState, list)
+      } catch {
+        if (isMounted && !spendWarningShown) {
+          spendWarningShown = true
+          toast.warning('No se pudieron calcular los totales gastados. Los montos pueden no estar al día.')
+        }
+      }
+    }
 
     const loadCustomers = async () => {
       try {
@@ -212,6 +275,7 @@ export function useCustomerState() {
           customers: page1Customers,
           loading: false,
         }))
+        void enrich(page1Customers)
 
         // If there are more pages, fetch in parallel in the background
         if (totalPages > 1) {
@@ -227,17 +291,30 @@ export function useCustomerState() {
           if (!isMounted) return
 
           const additionalCustomers: Customer[] = []
+          let failedPages = 0
           for (const batch of remainingBatches) {
             if (batch.status === 'fulfilled') {
               additionalCustomers.push(...batch.value)
+            } else {
+              failedPages += 1
             }
           }
 
+          // Una página que fallaba se descartaba callada: faltaban clientes y
+          // nada lo decía.
+          if (failedPages > 0) {
+            toast.warning(`No se pudieron cargar ${failedPages} ${failedPages === 1 ? 'página' : 'páginas'} de clientes. Recargá para ver la lista completa.`)
+          }
+
           if (additionalCustomers.length > 0) {
-            setState(prev => ({
-              ...prev,
-              customers: [...page1Customers, ...additionalCustomers],
-            }))
+            setState(prev => {
+              // Dos altas pueden caer en páginas distintas si se crearon mientras
+              // se cargaba: se evita mostrar el mismo cliente dos veces.
+              const seen = new Set(prev.customers.map((customer) => customer.id))
+              const extra = additionalCustomers.filter((customer) => !seen.has(customer.id))
+              return { ...prev, customers: [...prev.customers, ...extra] }
+            })
+            void enrich(additionalCustomers)
           }
         }
       } catch (error: unknown) {
@@ -269,11 +346,12 @@ export function useCustomerState() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'customers' },
         (payload) => {
-          const mappedCustomer = mapRawToCustomer(payload.new as any)
-          setState(prev => ({
-            ...prev,
-            customers: [mappedCustomer, ...prev.customers]
-          }))
+          const mappedCustomer = withEmptySpend(mapRawToCustomer(payload.new as Record<string, unknown>))
+          setState(prev => {
+            // Quien lo creó ya lo agregó a la lista: sin esto aparecía dos veces.
+            if (prev.customers.some((customer) => customer.id === mappedCustomer.id)) return prev
+            return { ...prev, customers: [mappedCustomer, ...prev.customers] }
+          })
         }
       )
       .on(
@@ -284,7 +362,7 @@ export function useCustomerState() {
           setState(prev => ({
             ...prev,
             customers: prev.customers.map(c =>
-              c.id === mappedCustomer.id ? mappedCustomer : c
+              c.id === mappedCustomer.id ? keepComputedSpend(mappedCustomer, c) : c
             )
           }))
         }
@@ -364,7 +442,8 @@ export function useCustomerState() {
     }
 
     if (state.filters.spent_min > 0) {
-      filtered = filtered.filter(customer => (((customer.total_spent_this_year as number) ?? customer.lifetime_value) || 0) >= state.filters.spent_min)
+      // «Gastado» es el total histórico, el mismo que muestran la lista y el detalle.
+      filtered = filtered.filter(customer => (customer.lifetime_value || 0) >= state.filters.spent_min)
     }
 
     if (state.filters.loyalty_points_min > 0) {

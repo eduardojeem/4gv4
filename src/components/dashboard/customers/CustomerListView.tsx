@@ -666,7 +666,7 @@ function TableView({
                     </TableCell>
                     <TableCell className={cn(compact ? "py-1.5" : "py-3")}>
                       <div className={cn("font-bold tabular-nums text-slate-900 dark:text-white", compact ? "text-xs" : "text-sm")}>
-                        {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as { total_spent_this_year?: number }).total_spent_this_year ?? customer.lifetime_value) || 0)}
+                        {formatters.currency((metricsMap[customer.id]?.total ?? customer.lifetime_value) || 0)}
                       </div>
                     </TableCell>
                     <TableCell className={cn(compact ? "py-1.5" : "py-3")}>
@@ -1021,7 +1021,7 @@ function CustomerCard({
                 "font-bold tabular-nums text-slate-900 dark:text-white",
                 compact ? "text-sm" : "text-xl"
               )}>
-                {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as { total_spent_this_year?: number }).total_spent_this_year ?? customer.lifetime_value) || 0)}
+                {formatters.currency((metricsMap[customer.id]?.total ?? customer.lifetime_value) || 0)}
               </span>
             </div>
 
