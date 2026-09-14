@@ -19,6 +19,9 @@ export async function POST(request: NextRequest, context: RouteParams) {
       imageType?: unknown
     }
 
+    const rawImages = Array.isArray((body as any).images)
+      ? (body as any).images.filter((img: any): img is { url: string; description?: string; imageType?: string } => typeof img?.url === 'string' && img.url.length > 0)
+      : []
     const urls = Array.isArray(body.urls)
       ? body.urls.filter((url): url is string => typeof url === 'string' && url.length > 0)
       : []
@@ -26,20 +29,32 @@ export async function POST(request: NextRequest, context: RouteParams) {
       ? body.imageType.trim()
       : 'general'
 
-    if (urls.length === 0) {
+    if (urls.length === 0 && rawImages.length === 0) {
       return NextResponse.json({ error: 'No hay imagenes para agregar.' }, { status: 400 })
     }
 
     const exists = await assertRepairExists(ctx, id)
     if (!exists) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
 
+    const rowsToInsert = rawImages.length > 0
+      ? rawImages.map((img: any) => ({
+          repair_id: id,
+          image_url: img.url,
+          image_type: img.imageType || imageType,
+          description: img.description || null,
+          uploaded_by: ctx.userId || null,
+        }))
+      : urls.map((url) => ({
+          repair_id: id,
+          image_url: url,
+          image_type: imageType,
+          description: null,
+          uploaded_by: ctx.userId || null,
+        }))
+
     const { error } = await ctx.supabase
       .from('repair_images')
-      .insert(urls.map((url) => ({
-        repair_id: id,
-        image_url: url,
-        image_type: imageType,
-      })))
+      .insert(rowsToInsert)
 
     if (error) throw error
 
@@ -47,6 +62,41 @@ export async function POST(request: NextRequest, context: RouteParams) {
     if (fetchError) throw fetchError
 
     return NextResponse.json({ repair })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error interno del servidor'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest, context: RouteParams) {
+  try {
+    const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
+    if (isNextResponse(ctx)) return ctx
+
+    const { id } = await context.params
+    const body = await request.json().catch(() => ({})) as { imageId?: string; url?: string }
+
+    if (!body.imageId && !body.url) {
+      return NextResponse.json({ error: 'Falta imageId o url para eliminar la imagen.' }, { status: 400 })
+    }
+
+    const exists = await assertRepairExists(ctx, id)
+    if (!exists) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
+
+    let query = ctx.supabase.from('repair_images').delete().eq('repair_id', id)
+    if (body.imageId) {
+      query = query.eq('id', body.imageId)
+    } else if (body.url) {
+      query = query.eq('image_url', body.url)
+    }
+
+    const { error } = await query
+    if (error) throw error
+
+    const { data: repair, error: fetchError } = await fetchRepairById(ctx, id)
+    if (fetchError) throw fetchError
+
+    return NextResponse.json({ success: true, repair })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error interno del servidor'
     return NextResponse.json({ error: message }, { status: 500 })

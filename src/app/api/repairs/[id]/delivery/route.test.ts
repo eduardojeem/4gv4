@@ -4,6 +4,7 @@ const closeFinancial = vi.fn()
 const closeUnrepaired = vi.fn()
 const fetchRepair = vi.fn()
 const awardRepairPoints = vi.fn()
+const resolveContext = vi.fn()
 const ctx = {
   supabase: { rpc: vi.fn() },
   userId: 'user-1',
@@ -14,7 +15,7 @@ const ctx = {
 }
 
 vi.mock('@/app/api/repairs/_lib', () => ({
-  resolveRepairRouteContext: vi.fn(async () => ctx),
+  resolveRepairRouteContext: (...args: unknown[]) => resolveContext(...args),
   isNextResponse: vi.fn(() => false),
   fetchRepairById: (...args: unknown[]) => fetchRepair(...args),
 }))
@@ -36,6 +37,7 @@ vi.mock('@/lib/loyalty/repair-points', () => ({
 describe('POST /api/repairs/:id/delivery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resolveContext.mockResolvedValue(ctx)
     closeFinancial.mockResolvedValue({
       payment_id: null, idempotent: false, total: 250_000, payment_status: 'pagado',
     })
@@ -44,7 +46,35 @@ describe('POST /api/repairs/:id/delivery', () => {
     fetchRepair.mockResolvedValue({ data: {
       id: 'repair-1', status: 'entregado', customer_id: 'customer-1',
       payment_status: 'pagado', final_cost: 250_000,
+      qualityCheck: { result: 'passed' },
     }, error: null })
+  })
+
+  it('requires the specific delivery permission', async () => {
+    const { POST } = await import('./route')
+    const request = { json: async () => ({
+      outcome: 'repaired', allowOutstandingBalance: true, idempotencyKey: 'delivery-123',
+    }) } as never
+
+    await POST(request, { params: Promise.resolve({ id: 'repair-1' }) })
+
+    expect(resolveContext).toHaveBeenCalledWith(request, 'repairs.orders.deliver')
+  })
+
+  it('blocks a repaired delivery when the last functional check did not pass', async () => {
+    fetchRepair.mockResolvedValueOnce({ data: {
+      id: 'repair-1', status: 'listo', qualityCheck: { result: 'failed' },
+    }, error: null })
+    const { POST } = await import('./route')
+    const request = { json: async () => ({
+      outcome: 'repaired', allowOutstandingBalance: true, idempotencyKey: 'delivery-123',
+    }) } as never
+
+    const response = await POST(request, { params: Promise.resolve({ id: 'repair-1' }) })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ code: 'REPAIR_QUALITY_CHECK_FAILED' })
+    expect(closeFinancial).not.toHaveBeenCalled()
   })
 
   it('requires explicit outstanding balance consent', async () => {

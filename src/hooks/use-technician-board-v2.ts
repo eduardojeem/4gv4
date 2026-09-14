@@ -13,6 +13,7 @@ interface UseTechnicianBoardV2Options {
      * ofrece cobrar) en vez de marcar entregado en silencio con el drag.
      */
     onRequestDeliver?: (repair: Repair) => void
+    onRequestQualityCheck?: (repair: Repair) => void
 }
 
 export function useTechnicianBoardV2(options?: UseTechnicianBoardV2Options) {
@@ -103,6 +104,12 @@ export function useTechnicianBoardV2(options?: UseTechnicianBoardV2Options) {
         if (status === 'entregado') {
             setDraggedRepairId(null)
             options?.onRequestDeliver?.(repairToMove)
+            return
+        }
+
+        if (status === 'listo') {
+            setDraggedRepairId(null)
+            options?.onRequestQualityCheck?.(repairToMove)
             return
         }
 

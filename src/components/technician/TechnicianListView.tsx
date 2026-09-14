@@ -36,7 +36,7 @@ import {
   Wrench,
   CheckCircle2,
   PauseCircle,
-  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react'
 import type { Repair, RepairStatus } from '@/types/repairs'
 import { cn } from '@/lib/utils'
@@ -49,6 +49,7 @@ interface TechnicianListViewProps {
   onView: (repair: Repair) => void
   onEdit: (repair: Repair) => void
   onDeliver?: (repair: Repair) => void
+  onQualityCheck?: (repair: Repair) => void
   onStatusChange?: (id: string, status: RepairStatus) => void
   onClaimWarranty?: (repair: Repair) => void
 }
@@ -145,6 +146,7 @@ export const TechnicianListView = memo<TechnicianListViewProps>(
     onView,
     onEdit,
     onDeliver,
+    onQualityCheck,
     onStatusChange,
     onClaimWarranty,
   }) {
@@ -523,6 +525,19 @@ export const TechnicianListView = memo<TechnicianListViewProps>(
                             </Button>
 
                             {/* Si está listo: Botón de Entrega */}
+                            {onQualityCheck && (statusKey === 'reparacion' || statusKey === 'listo') && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-lg text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/30"
+                                title={repair.qualityCheck ? 'Repetir prueba técnica' : 'Verificar funcionamiento'}
+                                aria-label={repair.qualityCheck ? 'Repetir prueba técnica' : 'Verificar funcionamiento'}
+                                onClick={() => onQualityCheck(repair)}
+                              >
+                                <ShieldCheck className="h-4 w-4" />
+                              </Button>
+                            )}
+
                             {onDeliver && statusKey === 'listo' && (
                               <Button
                                 variant="ghost"

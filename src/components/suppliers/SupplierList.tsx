@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Edit, Trash2, Star, Mail, Phone, MapPin, Building2, ChevronRight, Eye } from 'lucide-react'
+import { Edit, Trash2, Star, Mail, Phone, MapPin, Building2, ChevronRight, Eye, ShoppingCart, MessageCircle } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -16,6 +16,8 @@ interface SupplierListProps {
     suppliers: UISupplier[]
     onEdit: (supplier: UISupplier) => void
     onDelete: (id: string) => void
+    onViewDetail?: (supplier: UISupplier) => void
+    onCreateOrder?: (supplier: UISupplier) => void
     loading?: boolean
     selectedIds?: string[]
     onSelectionChange?: (ids: string[]) => void
@@ -46,7 +48,16 @@ const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-export function SupplierList({ suppliers, onEdit, onDelete, loading, selectedIds = [], onSelectionChange }: SupplierListProps) {
+export function SupplierList({
+    suppliers,
+    onEdit,
+    onDelete,
+    onViewDetail,
+    onCreateOrder,
+    loading,
+    selectedIds = [],
+    onSelectionChange
+}: SupplierListProps) {
     const router = useRouter()
     const [hoveredRow, setHoveredRow] = useState<string | null>(null)
 
@@ -69,10 +80,14 @@ export function SupplierList({ suppliers, onEdit, onDelete, loading, selectedIds
     const handleRowClick = (supplier: UISupplier, e: React.MouseEvent) => {
         // Don't navigate if clicking on action buttons or checkbox
         const target = e.target as HTMLElement
-        if (target.closest('button') || target.closest('[role="checkbox"]')) {
+        if (target.closest('button') || target.closest('[role="checkbox"]') || target.closest('a')) {
             return
         }
-        router.push(`/dashboard/suppliers/${supplier.id}`)
+        if (onViewDetail) {
+            onViewDetail(supplier)
+        } else {
+            router.push(`/dashboard/suppliers/${supplier.id}`)
+        }
     }
 
     if (loading) {
@@ -221,19 +236,38 @@ export function SupplierList({ suppliers, onEdit, onDelete, loading, selectedIds
                                     </Badge>
                                 </TableCell>
                                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex justify-end gap-2">
+                                    <div className="flex justify-end gap-1">
                                         <Button
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => router.push(`/dashboard/suppliers/${supplier.id}`)}
-                                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                            onClick={() => {
+                                                if (onViewDetail) {
+                                                    onViewDetail(supplier)
+                                                } else {
+                                                    router.push(`/dashboard/suppliers/${supplier.id}`)
+                                                }
+                                            }}
+                                            className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+                                            title="Ver Detalle"
                                         >
                                             <Eye className="h-4 w-4" />
                                         </Button>
+                                        {onCreateOrder && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => onCreateOrder(supplier)}
+                                                className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                                                title="Nueva Orden de Compra"
+                                            >
+                                                <ShoppingCart className="h-4 w-4" />
+                                            </Button>
+                                        )}
                                         <Button
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => onEdit(supplier)}
+                                            title="Editar"
                                         >
                                             <Edit className="h-4 w-4" />
                                         </Button>
@@ -241,7 +275,8 @@ export function SupplierList({ suppliers, onEdit, onDelete, loading, selectedIds
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => onDelete(supplier.id)}
-                                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                            title="Eliminar"
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>

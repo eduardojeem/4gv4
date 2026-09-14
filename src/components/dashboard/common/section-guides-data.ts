@@ -34,7 +34,11 @@ import {
   FileText,
   CheckCircle2,
   TrendingUp,
-  Clock
+  Clock,
+  ArrowLeftRight,
+  PackageCheck,
+  RotateCcw,
+  Wrench,
 } from 'lucide-react'
 import type { SectionGuideData } from './SectionGuideModal'
 
@@ -459,26 +463,100 @@ export const ORDERS_GUIDE: SectionGuideData = {
 }
 
 export const AFTER_SALES_GUIDE: SectionGuideData = {
-  title: '¿Cómo funciona el flujo de Devoluciones y Garantías?',
-  subtitle: 'Dónde se inician los reclamos y cómo se resuelven las devoluciones de dinero o los retrabajos.',
-  badgeText: 'Posventa',
+  title: '¿Cómo funciona el módulo de Posventa, Garantías y Devoluciones?',
+  subtitle: 'Guía operativa paso a paso para abrir reclamos, gestionar garantías vigentes o vencidas, cambios con balance y devoluciones con control de caja y stock.',
+  badgeText: 'Posventa & Garantías',
   icon: ShieldCheck,
   gradient: 'from-blue-600 via-indigo-600 to-slate-900',
   steps: [
     {
-      title: '¿Dónde se inicia?',
-      description: 'Desde la pestaña "Ventas y reparaciones" de esta misma sección: buscá el comprobante por número, cliente o teléfono y usá "Devolver" o "Reclamar". También podés abrirlo con el botón "Nuevo Reclamo".'
+      title: '1. Localización del comprobante original',
+      description: 'Todo reclamo auditado debe respaldarse en un comprobante previo. En la pestaña "Ventas y reparaciones", buscá por código de venta (POS-...), ticket de servicio (REP-...), nombre del cliente o teléfono. Podés revisar el detalle con "Ver detalle", reimprimir el ticket térmico con marca de REIMPRESIÓN o hacer clic directo en "Devolver / Cambiar" o "Iniciar Reclamo".',
+      icon: Receipt,
     },
     {
-      title: 'Garantía de taller',
-      description: 'Al aprobar una garantía de reparación se genera automáticamente una orden de retrabajo en ₲ 0, heredando equipo, cliente y técnico, con una nota interna que aclara qué cubre la garantía y qué se le puede cobrar.'
+      title: '2. Selección de trámite y control de plazos',
+      description: 'Al crear el expediente seleccionás el tipo de reclamo: Devolución (reintegro de dinero), Cambio (reemplazo por otro artículo), Garantía de producto (falla técnica de fábrica) o Garantía de reparación (taller). El sistema calcula en tiempo real si el producto está dentro del plazo de garantía (ej. 3 meses) o de cambio/devolución (ej. 7 días). Si el plazo expiró, exige autorización expresa de excepción comercial.',
+      icon: CalendarClock,
     },
     {
-      title: 'Devolución de dinero y stock',
-      description: 'Al completar el caso elegís si el dinero sale por caja (necesita una sesión abierta) o queda como saldo a favor del cliente. En el mismo paso definís si la mercadería vuelve al stock vendible o va a cuarentena.'
-    }
+      title: '3. Cambios de producto y cálculo de balance',
+      description: 'Si el cliente realiza un cambio, el buscador de catálogo te permite seleccionar el artículo de reemplazo verificando su stock físico. El sistema calcula en tiempo real la diferencia financiera: si el nuevo producto es más caro, indica el monto a cobrar al cliente; si es más económico, calcula el saldo a favor a devolver.',
+      icon: ArrowLeftRight,
+    },
+    {
+      title: '4. Retrabajo automático en taller (Garantía de reparación)',
+      description: 'Cuando la organización tiene módulo de taller y se aprueba un reclamo por una reparación previa, el sistema genera automáticamente una nueva orden técnica de retrabajo en ₲ 0. Hereda el dispositivo, datos del cliente y técnico original, registrando notas internas para auditoría técnica.',
+      icon: Wrench,
+    },
+    {
+      title: '5. Cierre del caso, destino físico del stock y caja',
+      description: 'Al completar el expediente se define el destino de la mercadería: "Vuelve al stock" (reingresa como vendible), "Vuelve con falla / Cuarentena" (ingresa bloqueado para reclamo a proveedor) o "No vuelve nada" (el cliente conserva la unidad). Si hay reintegro de dinero, podés emitirlo en efectivo (requiere sesión de caja POS abierta) o acreditarlo como saldo a favor del cliente.',
+      icon: PackageCheck,
+    },
+    {
+      title: '6. Historial y trazabilidad del expediente',
+      description: 'Cada expediente pasa por los estados: Abierto → Aprobado → Completado (o Rechazado). Se registran los motivos, notas técnicas internas, número de expediente único y excepciones comerciales autorizadas, garantizando que no existan fugas de dinero ni mercadería sin justificación.',
+      icon: FileText,
+    },
   ],
-  tip: 'Desde "Ventas y reparaciones" también podés ver el detalle de cualquier comprobante y reimprimir un ticket de venta, que sale marcado como REIMPRESIÓN.'
+  examples: [
+    {
+      goal: 'Devolución de producto dentro del plazo con reintegro en efectivo',
+      icon: RotateCcw,
+      setup: [
+        'En "Ventas y reparaciones", buscá la venta POS-... y presioná "Devolver / Cambiar".',
+        'Tipo de trámite: seleccioná "Devolución". El sistema valida que está dentro del plazo de 7 días de compra.',
+        'Ingresá el motivo manifestado: "Cliente devuelve accesorio sellado sin uso por incompatibilidad".',
+        'Al completar la resolución: seleccioná Reintegro en efectivo e indicá "Vuelve al stock" (producto en perfecto estado).',
+      ],
+      result: 'El accesorio reingresa inmediatamente al inventario vendible, sale el dinero de la caja registradora abierta del turno actual quedando registrado en el arqueo, y el caso se cierra como Completado.',
+    },
+    {
+      goal: 'Cambio de producto por un modelo superior abonando la diferencia',
+      icon: ShoppingBag,
+      setup: [
+        'Abrí "Nuevo Reclamo" → Buscá el comprobante de venta original y seleccioná el producto comprado (ej. Auricular de ₲ 150.000).',
+        'Elegí tipo "Cambio" → En el buscador de reemplazo seleccioná el modelo superior (ej. Auricular Bluetooth de ₲ 250.000).',
+        'El sistema calcula automáticamente la diferencia financiera: "Abona el cliente: +₲ 100.000".',
+        'Destino del producto devuelto: "Vuelve al stock" y confirmás la apertura del expediente.',
+      ],
+      result: 'El expediente documenta el canje con balance exacto de precios, el producto anterior reingresa al stock vendible y el cliente se lleva el nuevo modelo pagando la diferencia.',
+    },
+    {
+      goal: 'Falla de producto fuera de plazo pero con excepción comercial autorizada',
+      icon: AlertTriangle,
+      setup: [
+        'En el comprobante original presioná "Iniciar Reclamo" y elegí "Garantía de producto".',
+        'El sistema detecta el vencimiento y muestra alerta ámbar: "Garantía expirada hace 5 días" bloqueando el botón de registro.',
+        'Marcá la casilla obligatoria: "Autorizar excepción comercial fuera de plazo" e ingresá en notas la autorización gerencial.',
+        'Al resolver el reclamo, seleccioná destino "Vuelve con falla / Cuarentena" para tramitar RMA con el proveedor.',
+      ],
+      result: 'Se registra el caso con auditoría explícita de la excepción comercial. El artículo defectuoso va a cuarentena aislada sin inflar el inventario vendible.',
+    },
+    {
+      goal: 'Garantía de reparación de taller con generación de orden de retrabajo',
+      icon: Wrench,
+      setup: [
+        'En la pestaña "Ventas y reparaciones", seleccioná Reparaciones y buscá el ticket REP-000123.',
+        'Hacé clic en "Iniciar Reclamo" → Elegí "Garantía de reparación" (verificando que está dentro de los meses de garantía otorgados).',
+        'Ingresá la descripción de la falla: "Módulo táctil presenta líneas tras 14 días de uso".',
+        'Al aprobar el caso desde el panel, el sistema confirma la apertura de la orden de retrabajo.',
+      ],
+      result: 'Se crea automáticamente una nueva orden técnica en ₲ 0 asignada al mismo técnico, con el equipo precargado y vinculada al reclamo para que el cliente no pague doble.',
+    },
+    {
+      goal: 'Devolución acreditada como saldo a favor en cuenta corriente del cliente',
+      icon: Wallet,
+      setup: [
+        'Iniciá el expediente de Devolución respaldado en la venta del cliente.',
+        'Al completar la resolución: en método de reintegro seleccioná "Saldo a favor en cuenta corriente (Store Credit)".',
+        'Elegí como destino de mercadería "Vuelve con falla" (va a cuarentena).',
+      ],
+      result: 'No sale efectivo físico de la caja del turno; el importe queda disponible en el saldo a favor del cliente para descontarse automáticamente en su próxima compra en el POS.',
+    },
+  ],
+  tip: 'Para emitir reintegros de dinero en efectivo es obligatorio contar con una sesión de caja abierta en el POS. Si la caja no está disponible, podés resolver el expediente acreditando el monto como saldo a favor del cliente.',
 }
 
 export const POS_GUIDE: SectionGuideData = {

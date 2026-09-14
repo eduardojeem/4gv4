@@ -26,6 +26,7 @@ export type DbRepairStatus = RepairStatus
 export type RepairPriority = 'low' | 'medium' | 'high'
 export type RepairUrgency = 'normal' | 'urgent'
 export type RepairDeliveryOutcome = 'repaired' | 'unrepairable' | 'withdrawn'
+export type RepairQualityCheckResult = 'passed' | 'failed' | 'unrepairable' | 'withdrawn'
 export type RepairPricingMode = 'automatic' | 'budget' | 'manual'
 export type RepairPaymentStatus = 'pendiente' | 'parcial' | 'pagado'
 export type DeviceType = 'smartphone' | 'tablet' | 'laptop' | 'desktop' | 'accessory' | 'other'
@@ -157,6 +158,21 @@ export interface RepairPayment {
   createdBy?: string | null
 }
 
+export interface RepairQualityCheck {
+  id: string
+  result: RepairQualityCheckResult
+  checklist: {
+    powersOn: boolean
+    reportedIssueResolved: boolean
+    basicFunctions: boolean
+    physicalCondition: boolean
+    accessoriesVerified: boolean
+  }
+  note?: string | null
+  checkedBy?: { id: string; name: string } | null
+  checkedAt: string
+}
+
 export interface RepairNotifications {
   customer: boolean
   technician: boolean
@@ -213,6 +229,7 @@ export interface Repair {
   warrantyExpiresAt?: string | null
   pickedUpAt?: string | null  // Fecha en que el cliente retiró el equipo
   deliveryOutcome?: RepairDeliveryOutcome | null  // Resultado de la entrega
+  qualityCheck?: RepairQualityCheck | null
   createdAt: string
   estimatedCompletion: string | null
   completedAt: string | null

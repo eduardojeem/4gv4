@@ -29,14 +29,88 @@ function jsonResponse(body: unknown, status = 200) {
  * de si ese aviso alcanzo a salir antes: una prueba que pasa o falla segun lo
  * rapido que escriba el runner.
  */
-function llamadaDeGuardado(fetchMock: { mock: { calls: any[][] } }) {
-  const call = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST' || init?.method === 'PUT')
+function llamadaDeGuardado(fetchMock: { mock: { calls: unknown[][] } }) {
+  const call = fetchMock.mock.calls.find(([, rawInit]) => {
+    const init = rawInit as RequestInit | undefined
+    return init?.method === 'POST' || init?.method === 'PUT'
+  })
   expect(call, 'no se llamo a guardar').toBeDefined()
-  return { method: call![1].method as string, body: JSON.parse(call![1].body as string) }
+  const init = call![1] as RequestInit
+  return { method: init.method as string, body: JSON.parse(init.body as string) }
 }
 
 describe('CustomerQuickCreateDialog', () => {
   beforeEach(() => { vi.unstubAllGlobals() })
+
+  it('separa nombre y apellido, capitaliza al escribir y guarda el nombre completo', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      success: true,
+      data: {
+        id: 'cust-persona-1',
+        name: 'Juan Pérez-De La Cruz',
+        first_name: 'Juan',
+        last_name: 'Pérez-De La Cruz',
+        phone: '0981123456',
+      },
+    }, 201))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<CustomerQuickCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
+
+    const nombre = screen.getByLabelText(/^Nombre/i)
+    const apellido = screen.getByLabelText(/^Apellido/i)
+    await user.type(nombre, 'juan')
+    await user.type(apellido, 'pérez-de la cruz')
+    await user.type(screen.getByLabelText(/^Teléfono/i), '0981123456')
+
+    expect(nombre).toHaveValue('Juan')
+    expect(apellido).toHaveValue('Pérez-De La Cruz')
+
+    await user.click(screen.getByRole('button', { name: /Crear Cliente/i }))
+
+    await waitFor(() => expect(llamadaDeGuardado(fetchMock).method).toBe('POST'))
+    expect(llamadaDeGuardado(fetchMock).body).toMatchObject({
+      first_name: 'Juan',
+      last_name: 'Pérez-De La Cruz',
+      name: 'Juan Pérez-De La Cruz',
+    })
+  })
+
+  it('permite agregar la empresa solamente cuando el cliente es mayorista', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      success: true,
+      data: {
+        id: 'cust-mayorista-1',
+        name: 'Ana Gómez',
+        first_name: 'Ana',
+        last_name: 'Gómez',
+        company_name: 'Deportes Central S.A.',
+        phone: '0981123456',
+        customer_type: 'wholesale',
+      },
+    }, 201))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<CustomerQuickCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
+
+    expect(screen.queryByLabelText(/Empresa \/ razón social/i)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Tarifa Mayorista/i }))
+
+    await user.type(screen.getByLabelText(/^Nombre/i), 'ana')
+    await user.type(screen.getByLabelText(/^Apellido/i), 'gómez')
+    await user.type(screen.getByLabelText(/Empresa \/ razón social/i), 'deportes central s.a.')
+    await user.type(screen.getByLabelText(/^Teléfono/i), '0981123456')
+    await user.click(screen.getByRole('button', { name: /Crear Cliente/i }))
+
+    await waitFor(() => expect(llamadaDeGuardado(fetchMock).method).toBe('POST'))
+    expect(llamadaDeGuardado(fetchMock).body).toMatchObject({
+      company_name: 'Deportes Central S.A.',
+      customer_type: 'wholesale',
+      is_wholesale: true,
+    })
+  })
 
   it('no crea un cliente sin teléfono', async () => {
     // Sin telefono la mitad de las funciones no sirven: no hay forma de avisarle
@@ -47,7 +121,8 @@ describe('CustomerQuickCreateDialog', () => {
 
     render(<CustomerQuickCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
 
-    await user.type(screen.getByLabelText(/Nombre o razón social/i), 'Ana Pérez')
+    await user.type(screen.getByLabelText(/^Nombre/i), 'Ana')
+    await user.type(screen.getByLabelText(/^Apellido/i), 'Pérez')
     await user.click(screen.getByRole('button', { name: /Crear Cliente/i }))
 
     expect(await screen.findByText(/tel[eé]fono debe tener al menos/i)).toBeInTheDocument()
@@ -63,7 +138,8 @@ describe('CustomerQuickCreateDialog', () => {
 
     render(<CustomerQuickCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
 
-    await user.type(screen.getByLabelText(/Nombre o razón social/i), 'Ana Pérez')
+    await user.type(screen.getByLabelText(/^Nombre/i), 'Ana')
+    await user.type(screen.getByLabelText(/^Apellido/i), 'Pérez')
     await user.type(screen.getByLabelText(/^Teléfono/i), '0981123456')
     await user.type(screen.getByLabelText(/Otro tel[eé]fono/i), '0982999999')
     await user.click(screen.getByRole('button', { name: /Crear Cliente/i }))
@@ -82,7 +158,8 @@ describe('CustomerQuickCreateDialog', () => {
 
     render(<CustomerQuickCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
 
-    await user.type(screen.getByLabelText(/Nombre o razón social/i), 'Ana Pérez')
+    await user.type(screen.getByLabelText(/^Nombre/i), 'Ana')
+    await user.type(screen.getByLabelText(/^Apellido/i), 'Pérez')
     await user.type(screen.getByLabelText(/^Teléfono/i), '0981123456')
     await user.type(screen.getByLabelText(/Otro tel[eé]fono/i), '0982999999')
     await user.type(screen.getByLabelText(/qui[eé]n es ese tel[eé]fono/i), 'Hermana')
@@ -95,6 +172,29 @@ describe('CustomerQuickCreateDialog', () => {
       alternate_phone: '0982999999',
       alternate_phone_label: 'Hermana',
     })
+  })
+
+  it('normaliza el nombre y cierra el modal después de crear el cliente', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const onCreated = vi.fn()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({
+        success: true,
+        data: { id: 'cust-2', name: 'Juan Pérez-De La Cruz', phone: '0981123456' },
+      }, 201))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<CustomerQuickCreateDialog open onClose={onClose} onCreated={onCreated} />)
+
+    await user.type(screen.getByLabelText(/^Nombre/i), 'juan pérez-de la cruz')
+    await user.type(screen.getByLabelText(/^Teléfono/i), '0981123456')
+    await user.click(screen.getByRole('button', { name: /Crear Cliente/i }))
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalled())
+    expect(llamadaDeGuardado(fetchMock).body.name).toBe('Juan Pérez-De La Cruz')
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('carga y guarda los cambios al editar', async () => {
@@ -147,26 +247,17 @@ describe('CustomerQuickCreateDialog', () => {
     }))
   })
 
-  it('el nombre de una empresa no se parte en dos campos', async () => {
-    // El dialogo pedia nombre y apellido por separado. Una razon social no tiene
-    // apellido, y partirla para editarla y volver a unirla al guardar reordenaba
-    // lo que la persona habia escrito.
-    const user = userEvent.setup()
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ success: true, data: { id: 'c-9' } }, 201))
-    vi.stubGlobal('fetch', fetchMock)
+  it('separa el nombre completo de clientes anteriores al editarlos', async () => {
+    render(
+      <CustomerQuickCreateDialog
+        open
+        onClose={vi.fn()}
+        customerToEdit={{ id: 'c-9', name: 'Carlos Benítez López', phone: '0981123456' }}
+      />
+    )
 
-    render(<CustomerQuickCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
-
-    expect(screen.queryByLabelText(/^Apellido/i)).not.toBeInTheDocument()
-
-    await user.type(screen.getByLabelText(/Nombre o razón social/i), 'Comercial San Miguel S.A.')
-    await user.type(screen.getByLabelText(/^Teléfono/i), '0981123456')
-    await user.click(screen.getByRole('button', { name: /Crear Cliente/i }))
-
-    await waitFor(() => expect(llamadaDeGuardado(fetchMock).method).toBe('POST'))
-    expect(llamadaDeGuardado(fetchMock).body.name).toBe('Comercial San Miguel S.A.')
+    await waitFor(() => expect(screen.getByLabelText(/^Nombre/i)).toHaveValue('Carlos'))
+    expect(screen.getByLabelText(/^Apellido/i)).toHaveValue('Benítez López')
   })
 
   it('detecta cliente existente por teléfono o RUC y permite seleccionarlo para la reparación', async () => {

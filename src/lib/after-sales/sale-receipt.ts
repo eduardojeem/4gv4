@@ -18,6 +18,10 @@ export type StoredSaleItem = {
   quantity: number
   unitPrice: number
   discount?: number | null
+  imageUrl?: string | null
+  warrantyMonths?: number | null
+  returnWindowDays?: number | null
+  exchangeWindowDays?: number | null
 }
 
 export type StoredSalePayment = {

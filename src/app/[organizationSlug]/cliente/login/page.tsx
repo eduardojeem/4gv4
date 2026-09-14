@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   User,
+  UserPlus,
   Wrench,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -466,8 +467,8 @@ export default function TenantCustomerLoginPage() {
                       disabled={linking}
                       onClick={handleLinkCustomer}
                     >
-                      {linking ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Link2 className="mr-2 h-3.5 w-3.5" />}
-                      Vincularme
+                      {linking ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <UserPlus className="mr-2 h-3.5 w-3.5" />}
+                      Ser cliente
                     </Button>
                     <Button
                       type="button"

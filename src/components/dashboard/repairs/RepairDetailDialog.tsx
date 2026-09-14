@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,7 +38,8 @@ import {
   Edit, Printer, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
   PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown,
-  Loader2, Sparkles, History, FileCheck2, User, TrendingUp, ShieldCheck, UserCheck, ArrowRight
+  Loader2, Sparkles, History, FileCheck2, User, TrendingUp, ShieldCheck, UserCheck, ArrowRight,
+  UploadCloud, Trash2, Plus, Pencil, AlertTriangle
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -44,6 +47,7 @@ import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Repair, RepairDeliveryOutcome, RepairStatus } from '@/types/repairs'
+import { RepairQualityBadge } from './RepairQualityBadge'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { getAvailableTransitions } from '@/lib/repairs/state-machine'
 import { getRepairStatusGuidance } from '@/lib/repairs/status-guidance'
@@ -86,6 +90,7 @@ interface RepairDetailDialogProps {
   onClose: () => void
   onEdit?: (repair: Repair) => void
   onDeliver?: (repair: Repair) => void
+  onQualityCheck?: (repair: Repair) => void
   onQuickPay?: (repair: Repair) => void
   onCostSaved?: () => void | Promise<void>
   onStatusChange?: (id: string, status: RepairStatus) => Promise<boolean>
@@ -111,6 +116,7 @@ export function RepairDetailDialog({
   onClose,
   onEdit,
   onDeliver,
+  onQualityCheck,
   onQuickPay,
   onCostSaved,
   onStatusChange,
@@ -149,7 +155,25 @@ export function RepairDetailDialog({
     setLocalRepair(propRepair)
   }, [propRepair])
 
-  const activeRepair = propRepair || localRepair
+  const activeRepair = localRepair || propRepair
+
+  // Referencia y estado para destacar y dirigir la atención al técnico
+  const technicianSectionRef = useRef<HTMLDivElement>(null)
+  const [highlightTechnician, setHighlightTechnician] = useState(false)
+
+  // Estado para edición inline de Descripción Detallada
+  const [isEditingDescription, setIsEditingDescription] = useState(false)
+  const [descriptionDraft, setDescriptionDraft] = useState('')
+  const [isSavingDescription, setIsSavingDescription] = useState(false)
+
+  // Estado para carga de imágenes en detalle de reparación
+  const [isUploadFormOpen, setIsUploadFormOpen] = useState(false)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
+  const [imageDescriptionDraft, setImageDescriptionDraft] = useState('')
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [deletingImageId, setDeletingImageId] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [authorizedPersons, setAuthorizedPersons] = useState<Array<{
     id: string
@@ -252,6 +276,12 @@ export function RepairDetailDialog({
   React.useEffect(() => {
     if (!open) {
       setShowSensitiveData(false)
+      setHighlightTechnician(false)
+      setIsEditingDescription(false)
+      setIsUploadFormOpen(false)
+      setSelectedImageFile(null)
+      setImagePreviewUrl(null)
+      setImageDescriptionDraft('')
     }
   }, [open])
 
@@ -301,6 +331,160 @@ export function RepairDetailDialog({
     }
     void performStatusChange(nextStatus)
   }
+
+  const handleJumpToTechnician = () => {
+    setHighlightTechnician(true)
+    technicianSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setSelectedTechnicianId(repair?.technician?.id || '')
+    setTimeout(() => {
+      setTechnicianEditorOpen(true)
+    }, 200)
+  }
+
+  const handleSaveDescription = async () => {
+    if (!repair) return
+    setIsSavingDescription(true)
+    try {
+      const res = await fetch(`/api/repairs/${repair.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: descriptionDraft.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al guardar la descripción')
+      }
+      if (data.repair) {
+        setLocalRepair(data.repair)
+      } else {
+        setLocalRepair(prev => prev ? { ...prev, description: descriptionDraft.trim() } : null)
+      }
+      setIsEditingDescription(false)
+      onCostSaved?.()
+      toast.success('Descripción detallada actualizada correctamente')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo guardar la descripción'
+      toast.error(msg)
+    } finally {
+      setIsSavingDescription(false)
+    }
+  }
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Por favor seleccioná un archivo de imagen válido')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('La imagen no puede superar los 10MB')
+      return
+    }
+    setSelectedImageFile(file)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setImagePreviewUrl(event.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleCancelImageUpload = () => {
+    setSelectedImageFile(null)
+    setImagePreviewUrl(null)
+    setImageDescriptionDraft('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    setIsUploadFormOpen(false)
+  }
+
+  const handleUploadImage = async () => {
+    if (!selectedImageFile || !repair) return
+    setIsUploadingImage(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', selectedImageFile)
+      formData.append('bucket', 'repair-images')
+      const cleanFileName = selectedImageFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      formData.append('path', `repairs/${repair.id}/${Date.now()}-${cleanFileName}`)
+
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok || !uploadData.success || !uploadData.url) {
+        throw new Error(uploadData.error || 'Error al subir el archivo')
+      }
+
+      const imgUrl = uploadData.url
+      const attachRes = await fetch(`/api/repairs/${repair.id}/images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          images: [{
+            url: imgUrl,
+            description: imageDescriptionDraft.trim() || undefined,
+            imageType: 'general',
+          }],
+        }),
+      })
+      const attachData = await attachRes.json()
+      if (!attachRes.ok) {
+        throw new Error(attachData.error || 'Error al vincular la imagen a la reparación')
+      }
+
+      if (attachData.repair) {
+        setLocalRepair(attachData.repair)
+      } else {
+        setLocalRepair(prev => prev ? {
+          ...prev,
+          images: [...(prev.images || []), { id: `local-${Date.now()}`, url: imgUrl, description: imageDescriptionDraft.trim() || undefined }]
+        } : null)
+      }
+
+      handleCancelImageUpload()
+      onCostSaved?.()
+      toast.success('Imagen agregada exitosamente')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al cargar la imagen'
+      toast.error(msg)
+    } finally {
+      setIsUploadingImage(false)
+    }
+  }
+
+  const handleDeleteImage = async (image: { id?: string; url: string }) => {
+    if (!repair) return
+    if (!window.confirm('¿Deseas eliminar esta imagen de la reparación?')) return
+    const targetKey = image.id || image.url
+    setDeletingImageId(targetKey)
+    try {
+      const res = await fetch(`/api/repairs/${repair.id}/images`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageId: image.id, url: image.url }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al eliminar la imagen')
+      }
+      if (data.repair) {
+        setLocalRepair(data.repair)
+      } else {
+        setLocalRepair(prev => prev ? {
+          ...prev,
+          images: (prev.images || []).filter(img => img.url !== image.url && (!image.id || img.id !== image.id))
+        } : null)
+      }
+      onCostSaved?.()
+      toast.success('Imagen eliminada')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo eliminar la imagen'
+      toast.error(msg)
+    } finally {
+      setDeletingImageId(null)
+    }
+  }
   const lineTotals = (activeRepair.parts || []).reduce((totals, part) => {
     const amount = Math.max(0, part.cost * part.quantity - (part.discountAmount ?? 0))
     const lineType = normalizeRepairLineType(part.lineType)
@@ -341,6 +525,23 @@ export function RepairDetailDialog({
   const currentFinalTotal = financial.priceDefined ? financial.total : (repairCostSummary.finalTotal ?? 0)
   const grossProfit = Math.max(0, currentFinalTotal - totalInternalCost)
   const profitMargin = currentFinalTotal > 0 ? (grossProfit / currentFinalTotal) * 100 : 0
+
+  const getPaymentActionLabel = () => {
+    if (!financial.priceDefined) {
+      return financial.paid > 0 ? 'Registrar otro adelanto' : 'Registrar adelanto'
+    }
+    if (repair.status === 'entregado') {
+      return 'Cobrar saldo'
+    }
+    if (repair.status === 'listo') {
+      return `Cobrar saldo (${formatCurrency(financial.balance)})`
+    }
+    // En proceso de taller (recibido, diagnostico, reparacion, pausado)
+    if (financial.paid > 0) {
+      return `Registrar pago a cuenta (${formatCurrency(financial.balance)})`
+    }
+    return `Registrar adelanto (${formatCurrency(financial.balance)})`
+  }
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return 'Pendiente'
@@ -955,9 +1156,28 @@ export function RepairDetailDialog({
               </div>
             </div>
             {recommendedStatus === 'reparacion' && !repair.technician?.id && (
-              <p role="status" className="mx-auto mt-2 max-w-4xl text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                Asigná un técnico desde “Editar” para habilitar el inicio de la reparación.
-              </p>
+              <div
+                role="status"
+                className="mx-auto mt-2.5 flex max-w-4xl flex-wrap items-center justify-between gap-2.5 rounded-lg border-2 border-rose-400 bg-rose-50/95 px-3.5 py-2 text-xs font-medium text-rose-900 shadow-sm dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-200"
+              >
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>
+                    <strong>Técnico requerido:</strong> Asigná un técnico para habilitar el inicio de la reparación.
+                  </span>
+                </div>
+                {onTechnicianChange && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleJumpToTechnician}
+                    className="h-7 gap-1.5 bg-rose-600 px-3 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 active:scale-95"
+                  >
+                    <UserCheck className="h-3.5 w-3.5" />
+                    Asignar técnico ahora
+                  </Button>
+                )}
+              </div>
             )}
           </section>
         )}
@@ -966,14 +1186,59 @@ export function RepairDetailDialog({
           <div className="space-y-4 p-3 sm:space-y-5 sm:p-6">
             {/* Mensaje de Estado de Pago */}
             {repair.status === 'listo' && (
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900/50 rounded-lg p-4">
+              <div role="status" className={cn(
+                'rounded-lg border p-4',
+                repair.qualityCheck?.result === 'passed'
+                  ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/30'
+                  : repair.qualityCheck
+                    ? 'border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/30'
+                    : 'border-yellow-200 bg-yellow-50 dark:border-yellow-900/50 dark:bg-yellow-900/20',
+              )}>
                 <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5" />
+                  {repair.qualityCheck?.result === 'passed' ? (
+                    <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  ) : repair.qualityCheck ? (
+                    <AlertTriangle className="mt-0.5 h-5 w-5 text-rose-600 dark:text-rose-400" />
+                  ) : (
+                    <AlertCircle className="mt-0.5 h-5 w-5 text-yellow-600 dark:text-yellow-500" />
+                  )}
                   <div>
-                    <h4 className="font-semibold text-yellow-800 dark:text-yellow-400">Equipo Listo para Entrega</h4>
-                    <p className="text-sm text-yellow-700 dark:text-yellow-500/90 mt-1">
-                      Podés cobrar al entregar o continuar por POS si necesitás agregar productos.
+                    <h4 className={cn(
+                      'font-semibold',
+                      repair.qualityCheck?.result === 'passed'
+                        ? 'text-emerald-800 dark:text-emerald-300'
+                        : repair.qualityCheck
+                          ? 'text-rose-800 dark:text-rose-300'
+                          : 'text-yellow-800 dark:text-yellow-400',
+                    )}>
+                      {repair.qualityCheck?.result === 'passed'
+                        ? 'Funcionamiento verificado'
+                        : repair.qualityCheck
+                          ? 'Retiro sin reparación confirmado'
+                          : 'Verificación técnica pendiente'}
+                    </h4>
+                    <p className={cn(
+                      'mt-1 text-sm',
+                      repair.qualityCheck?.result === 'passed'
+                        ? 'text-emerald-700 dark:text-emerald-400/90'
+                        : repair.qualityCheck
+                          ? 'text-rose-700 dark:text-rose-400/90'
+                          : 'text-yellow-700 dark:text-yellow-500/90',
+                    )}>
+                      {repair.qualityCheck?.result === 'passed'
+                        ? 'El equipo superó la prueba técnica y puede entregarse como reparado.'
+                        : repair.qualityCheck
+                          ? 'El resultado técnico ya está registrado. Entregá el equipo respetando ese resultado.'
+                          : 'Antes de entregar, registrá si el equipo funciona o si se retira sin reparación.'}
                     </p>
+                    <div className="mt-2">
+                      <RepairQualityBadge qualityCheck={repair.qualityCheck} />
+                      {repair.qualityCheck?.checkedBy && (
+                        <p className="mt-1 text-xs text-yellow-700/80 dark:text-yellow-400/80">
+                          Verificado por {repair.qualityCheck.checkedBy.name} · {new Date(repair.qualityCheck.checkedAt).toLocaleString('es-PY')}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1160,9 +1425,7 @@ export function RepairDetailDialog({
                         }}
                       >
                         <DollarSign className="h-4 w-4" />
-                        {financial.priceDefined
-                          ? `Pagar monto pendiente (${formatCurrency(financial.balance)})`
-                          : financial.paid > 0 ? 'Registrar otro adelanto' : 'Registrar adelanto'}
+                        {getPaymentActionLabel()}
                       </Button>
                     )}
                   </div>
@@ -1540,35 +1803,76 @@ export function RepairDetailDialog({
                     </div>
                   )}
                   <Separator />
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 shrink-0 rounded-lg bg-muted flex items-center justify-center">
-                      <Wrench className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Técnico asignado</p>
-                      <p className={cn(
-                        "text-sm font-medium truncate",
-                        !repair.technician?.name && "text-muted-foreground italic"
-                      )}>
-                        {repair.technician?.name || 'Sin asignar'}
-                      </p>
-                    </div>
-                    {onTechnicianChange && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={repair.status === 'entregado' || repair.status === 'cancelado'}
-                        onClick={() => {
-                          setSelectedTechnicianId(repair.technician?.id || '')
-                          setTechnicianEditorOpen(true)
-                        }}
-                        className="h-8 shrink-0 text-xs"
+                  {(() => {
+                    const isTechnicianMissing = (recommendedStatus === 'reparacion' || repair.status === 'recibido' || repair.status === 'diagnostico') && !repair.technician?.id
+                    const isRedAlert = isTechnicianMissing || highlightTechnician
+                    return (
+                      <div
+                        ref={technicianSectionRef}
+                        className={cn(
+                          "rounded-xl p-2.5 transition-all duration-300",
+                          isRedAlert
+                            ? "border-2 border-rose-500 bg-rose-50/90 dark:bg-rose-950/40 ring-4 ring-rose-500/20 shadow-md"
+                            : "border border-transparent"
+                        )}
                       >
-                        {repair.technician ? 'Cambiar técnico' : 'Asignar técnico'}
-                      </Button>
-                    )}
-                  </div>
+                        {isRedAlert && (
+                          <div className="mb-2 flex items-center justify-between gap-1">
+                            <Badge variant="destructive" className="gap-1 text-[10px] font-bold uppercase tracking-wider shadow-xs">
+                              <AlertTriangle className="h-3 w-3" />
+                              Técnico requerido
+                            </Badge>
+                            <span className="text-[10px] font-medium text-rose-700 dark:text-rose-300">
+                              Asigná para reparar
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "h-9 w-9 shrink-0 rounded-lg flex items-center justify-center transition-colors",
+                            isRedAlert
+                              ? "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"
+                              : "bg-muted text-muted-foreground"
+                          )}>
+                            <Wrench className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className={cn(
+                              "text-[10px] uppercase tracking-wide",
+                              isRedAlert ? "font-semibold text-rose-700 dark:text-rose-300" : "text-muted-foreground"
+                            )}>
+                              Técnico asignado
+                            </p>
+                            <p className={cn(
+                              "text-sm font-medium truncate",
+                              !repair.technician?.name && (isRedAlert ? "font-bold text-rose-800 dark:text-rose-200" : "text-muted-foreground italic")
+                            )}>
+                              {repair.technician?.name || 'Sin asignar'}
+                            </p>
+                          </div>
+                          {onTechnicianChange && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={isRedAlert ? "default" : "outline"}
+                              disabled={repair.status === 'entregado' || repair.status === 'cancelado'}
+                              onClick={() => {
+                                setSelectedTechnicianId(repair.technician?.id || '')
+                                setTechnicianEditorOpen(true)
+                              }}
+                              className={cn(
+                                "h-8 shrink-0 text-xs",
+                                isRedAlert && "bg-rose-600 text-white hover:bg-rose-700 font-semibold shadow-xs"
+                              )}
+                            >
+                              <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+                              {repair.technician ? 'Cambiar técnico' : 'Asignar técnico'}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 {/* Garantía compacta */}
@@ -1715,12 +2019,75 @@ export function RepairDetailDialog({
                     </div>
 
                     <div className="space-y-2">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Descripción Detallada</h3>
-                      <div className="rounded-xl border bg-card p-5 shadow-sm">
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                          {repair.description || 'Sin descripción detallada.'}
-                        </p>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                          <FileText className="h-3.5 w-3.5" />
+                          Descripción Detallada
+                        </h3>
+                        {!isEditingDescription && repair.status !== 'entregado' && repair.status !== 'cancelado' && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            aria-label="Editar descripción detallada"
+                            title="Editar descripción detallada"
+                            onClick={() => {
+                              setDescriptionDraft(repair.description || '')
+                              setIsEditingDescription(true)
+                            }}
+                            className="h-7 px-2 text-xs font-semibold text-sky-600 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/30"
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            {repair.description ? 'Editar' : 'Agregar descripción'}
+                          </Button>
+                        )}
                       </div>
+
+                      {isEditingDescription ? (
+                        <div className="rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50/30 dark:bg-sky-950/20 p-4 space-y-3 shadow-xs">
+                          <Textarea
+                            value={descriptionDraft}
+                            onChange={(e) => setDescriptionDraft(e.target.value)}
+                            placeholder="Ingresá la descripción detallada del trabajo realizado, fallas observadas o detalles técnicos..."
+                            className="min-h-[110px] text-sm bg-background resize-y"
+                            disabled={isSavingDescription}
+                            autoFocus
+                          />
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-[11px] text-muted-foreground">
+                              {descriptionDraft.length} caracteres
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setIsEditingDescription(false)}
+                                disabled={isSavingDescription}
+                                className="h-8 text-xs"
+                              >
+                                Cancelar
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={handleSaveDescription}
+                                disabled={isSavingDescription}
+                                className="h-8 gap-1.5 bg-sky-600 text-xs font-semibold text-white hover:bg-sky-700"
+                              >
+                                {isSavingDescription ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                Guardar descripción
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border bg-card p-5 shadow-sm">
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                            {repair.description || <span className="text-muted-foreground italic">Sin descripción detallada.</span>}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -1870,9 +2237,7 @@ export function RepairDetailDialog({
                         onClick={() => { onClose(); onQuickPay(activeRepair) }}
                       >
                         <DollarSign className="mr-2 h-4 w-4" />
-                        {financial.priceDefined
-                          ? `Cobrar saldo pendiente (${formatCurrency(financial.balance)})`
-                          : financial.paid > 0 ? 'Registrar otro adelanto' : 'Registrar adelanto'}
+                        {getPaymentActionLabel()}
                       </Button>
                     )}
                   </TabsContent>
@@ -1892,47 +2257,197 @@ export function RepairDetailDialog({
                   </TabsContent>
 
                   {/* Imágenes */}
-                  <TabsContent value="images" className="mt-4 space-y-2">
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-                      <ImageIcon className="h-4 w-4" />
-                      Galería de Imágenes
-                    </h3>
+                  <TabsContent value="images" className="mt-4 space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                        <ImageIcon className="h-4 w-4" />
+                        Galería de Imágenes
+                        {repair.images && repair.images.length > 0 && (
+                          <Badge variant="secondary" className="ml-1 text-xs">
+                            {repair.images.length}
+                          </Badge>
+                        )}
+                      </h3>
+                      {repair.status !== 'entregado' && repair.status !== 'cancelado' && !isUploadFormOpen && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => setIsUploadFormOpen(true)}
+                          className="h-8 gap-1.5 bg-sky-600 px-3 text-xs font-semibold text-white shadow-xs hover:bg-sky-700 active:scale-95"
+                        >
+                          <UploadCloud className="h-3.5 w-3.5" />
+                          Cargar imagen
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Formulario de carga */}
+                    {isUploadFormOpen && (
+                      <div className="rounded-2xl border border-sky-300 bg-sky-50/40 p-4 shadow-xs dark:border-sky-800/80 dark:bg-sky-950/20 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <UploadCloud className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-sky-950 dark:text-sky-200">
+                              Subir foto a la reparación
+                            </h4>
+                          </div>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                            onClick={handleCancelImageUpload}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        {!selectedImageFile ? (
+                          <label className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-sky-300 dark:border-sky-800 bg-background p-6 cursor-pointer hover:border-sky-500 hover:bg-sky-50/50 dark:hover:bg-sky-950/30 transition-all">
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleImageFileChange}
+                            />
+                            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-sky-100 dark:bg-sky-900/60 text-sky-600 dark:text-sky-300">
+                              <UploadCloud className="h-5 w-5" />
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs font-semibold text-foreground">
+                                Hacé clic aquí para seleccionar o tomar una foto
+                              </p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                Formatos soportados: JPG, PNG, WEBP (hasta 10MB)
+                              </p>
+                            </div>
+                          </label>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start bg-background p-3 rounded-xl border">
+                            {imagePreviewUrl && (
+                              <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border bg-muted shadow-xs">
+                                <img
+                                  src={imagePreviewUrl}
+                                  alt="Vista previa"
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1 w-full space-y-2.5">
+                              <div>
+                                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                  Descripción o detalle de la imagen (opcional)
+                                </label>
+                                <Input
+                                  value={imageDescriptionDraft}
+                                  onChange={(e) => setImageDescriptionDraft(e.target.value)}
+                                  placeholder="Ej.: Pantalla astillada, detalle de placa, estado de ingreso..."
+                                  className="mt-1 h-9 text-xs"
+                                  disabled={isUploadingImage}
+                                />
+                              </div>
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleCancelImageUpload}
+                                  disabled={isUploadingImage}
+                                  className="h-8 text-xs"
+                                >
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={handleUploadImage}
+                                  disabled={isUploadingImage}
+                                  className="h-8 gap-1.5 bg-sky-600 text-xs font-semibold text-white hover:bg-sky-700"
+                                >
+                                  {isUploadingImage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
+                                  {isUploadingImage ? 'Subiendo imagen...' : 'Confirmar y subir'}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {(!repair.images || repair.images.length === 0) ? (
                       <div className="bg-muted/20 border border-dashed rounded-2xl p-10 text-center text-muted-foreground">
                         <ImageIcon className="h-10 w-10 mx-auto mb-3 opacity-30 text-primary" />
                         <p className="text-xs sm:text-sm font-medium">No hay imágenes adjuntas a esta reparación.</p>
+                        {repair.status !== 'entregado' && repair.status !== 'cancelado' && !isUploadFormOpen && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setIsUploadFormOpen(true)}
+                            className="mt-3 text-xs gap-1.5"
+                          >
+                            <UploadCloud className="h-3.5 w-3.5" />
+                            Cargar primera imagen
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {repair.images.map((image, index) => (
-                          <a
-                            key={index}
-                            href={image.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="group relative aspect-square rounded-2xl overflow-hidden border bg-muted shadow-xs transition-all active:scale-[0.98]"
-                            title="Tocar para ver imagen completa"
-                          >
-                            <img
-                              src={image.url}
-                              alt={image.description || `Imagen ${index + 1}`}
-                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                              loading="lazy"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex flex-col justify-end p-2.5">
-                              {image.description ? (
-                                <p className="text-white text-[11px] font-medium truncate drop-shadow-sm">
-                                  {image.description}
-                                </p>
-                              ) : (
-                                <span className="text-[10px] text-white/90 font-medium">
-                                  Foto #{index + 1}
-                                </span>
-                              )}
+                        {repair.images.map((image, index) => {
+                          const imageKey = image.id || image.url || String(index)
+                          const isDeleting = deletingImageId === (image.id || image.url)
+                          return (
+                            <div
+                              key={imageKey}
+                              className="group relative aspect-square rounded-2xl overflow-hidden border bg-muted shadow-xs transition-all"
+                            >
+                              <img
+                                src={image.url}
+                                alt={image.description || `Imagen ${index + 1}`}
+                                className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                loading="lazy"
+                              />
+                              <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                <a
+                                  href={image.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/70 text-white backdrop-blur-xs hover:bg-black transition-colors"
+                                  title="Ver imagen completa"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                                {repair.status !== 'entregado' && repair.status !== 'cancelado' && (
+                                  <button
+                                    type="button"
+                                    disabled={isDeleting}
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      void handleDeleteImage(image)
+                                    }}
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-600/90 text-white backdrop-blur-xs hover:bg-rose-700 transition-colors disabled:opacity-50"
+                                    title="Eliminar imagen"
+                                  >
+                                    {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                                  </button>
+                                )}
+                              </div>
+                              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent flex flex-col justify-end p-2.5">
+                                {image.description ? (
+                                  <p className="text-white text-[11px] font-medium truncate drop-shadow-sm">
+                                    {image.description}
+                                  </p>
+                                ) : (
+                                  <span className="text-[10px] text-white/90 font-medium">
+                                    Foto #{index + 1}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </a>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </TabsContent>
@@ -1946,6 +2461,20 @@ export function RepairDetailDialog({
           <Button variant="outline" onClick={onClose} className="min-h-11 sm:min-h-9">
             Cerrar
           </Button>
+
+          {onQualityCheck && (repair.status === 'reparacion' || repair.status === 'listo') && (
+            <Button
+              variant="outline"
+              className="min-h-11 gap-2 border-blue-200 text-blue-700 hover:bg-blue-50 sm:min-h-9 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/30"
+              onClick={() => {
+                onClose()
+                onQualityCheck(repair)
+              }}
+            >
+              <ShieldCheck className="h-4 w-4" />
+              {repair.qualityCheck ? 'Repetir prueba' : 'Verificar funcionamiento'}
+            </Button>
+          )}
 
           {onEdit && (
             <Button
@@ -1972,27 +2501,23 @@ export function RepairDetailDialog({
                   }}
                 >
                   <DollarSign className="h-4 w-4" />
-                  {!financial.priceDefined
-                    ? 'Registrar adelanto'
-                    : repair.status === 'entregado'
-                      ? 'Cobrar saldo'
-                      : `Pagar monto pendiente (${formatCurrency(financial.balance)})`}
+                  {getPaymentActionLabel()}
                 </Button>
               )}
-              {repair.status !== 'entregado' && repair.status !== 'cancelado' && (
-              <Button
-                variant="outline"
-                className="min-h-11 gap-2 sm:min-h-9"
-                onClick={() => {
-                  if (repair.customer?.id) {
-                    window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
-                  }
-                  onClose()
-                }}
-              >
-                <ExternalLink className="h-4 w-4" />
-                + Productos en POS
-              </Button>
+              {repair.status === 'listo' && (
+                <Button
+                  variant="outline"
+                  className="min-h-11 gap-2 sm:min-h-9"
+                  onClick={() => {
+                    if (repair.customer?.id) {
+                      window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
+                    }
+                    onClose()
+                  }}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  + Productos en POS
+                </Button>
               )}
               {onDeliver && repair.status === 'listo' && (
                 <Button
@@ -2270,7 +2795,17 @@ export function RepairDetailDialog({
               setSavingQuickEdit(true)
               const success = await onTechnicianChange(repair.id, selectedTechnicianId)
               setSavingQuickEdit(false)
-              if (success) setTechnicianEditorOpen(false)
+              if (success) {
+                const assigned = technicians?.find(t => t.id === selectedTechnicianId)
+                if (assigned) {
+                  setLocalRepair(prev => prev ? {
+                    ...prev,
+                    technician: { id: assigned.id, name: assigned.name }
+                  } : null)
+                }
+                setHighlightTechnician(false)
+                setTechnicianEditorOpen(false)
+              }
             }}
           >
             {savingQuickEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

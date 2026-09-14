@@ -1,6 +1,6 @@
-import type { RepairDeliveryOutcome } from '@/types/repairs'
+import type { RepairDeliveryOutcome, RepairQualityCheckResult } from '@/types/repairs'
 
-export type RepairQualityCheckResult = 'passed' | 'failed' | 'unrepairable' | 'withdrawn'
+export type { RepairQualityCheckResult } from '@/types/repairs'
 
 export type RepairQualityChecklist = {
   powersOn: boolean

@@ -8,7 +8,7 @@ import { HelpButton } from '@/components/help/HelpButton'
 
 interface RepairHeaderProps {
   onRefresh: () => void
-  onNewRepair: () => void
+  onNewRepair?: () => void
   onOpenReceiptSettings?: () => void
   isLoading?: boolean
   totalRepairs: number
@@ -91,7 +91,7 @@ export function RepairHeader({
 
           <div className="flex flex-col gap-3 lg:min-w-[260px] lg:max-w-[320px]">
             <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-              <Button
+              {onNewRepair && <Button
                 data-help-id="repair-new"
                 onClick={onNewRepair}
                 className="h-10 flex-1 gap-2 rounded-xl bg-emerald-500 text-white shadow-sm shadow-emerald-950/20 hover:bg-emerald-400 focus-visible:ring-2 focus-visible:ring-emerald-200 font-bold"
@@ -101,7 +101,7 @@ export function RepairHeader({
                 <kbd className="ml-auto hidden h-6 items-center rounded-full border border-emerald-200/70 bg-emerald-50 px-2 font-mono text-[10px] font-semibold text-emerald-900 sm:inline-flex">
                   Ctrl + N
                 </kbd>
-              </Button>
+              </Button>}
               <div className="flex gap-2">
                 <Button
                   variant="outline"

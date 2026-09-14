@@ -73,4 +73,10 @@ describe('RepairRow financial visibility', () => {
     expect(screen.queryByText('Pagado')).not.toBeInTheDocument()
     expect(screen.getByText('En Reparación')).toBeVisible()
   })
+
+  it('keeps the generic unverified message out of the table list', () => {
+    renderRow({ ...repair, status: 'listo', qualityCheck: null })
+
+    expect(screen.queryByText('Sin verificar')).not.toBeInTheDocument()
+  })
 })

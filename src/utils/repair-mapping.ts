@@ -1,4 +1,4 @@
-import { Repair, RepairPriority, RepairUrgency, RepairDeliveryOutcome, DeviceType, RepairStatus, RepairCloseout } from '@/types/repairs'
+import { Repair, RepairPriority, RepairUrgency, RepairDeliveryOutcome, DeviceType, RepairStatus, RepairCloseout, RepairQualityCheck } from '@/types/repairs'
 
 interface SupabaseCustomer {
     id?: string
@@ -94,6 +94,16 @@ interface SupabaseRepairCloseout {
     parts_resolution?: Array<{ repairPartId: string; productId?: string | null; name: string; quantity: number; unitPrice: number; disposition: 'consumed' | 'restocked' }>
 }
 
+interface SupabaseRepairQualityCheck {
+    id: string
+    result: RepairQualityCheck['result']
+    checklist?: Partial<RepairQualityCheck['checklist']> | null
+    note?: string | null
+    created_by?: string | null
+    created_at: string
+    checkedBy?: { id: string; full_name?: string | null } | Array<{ id: string; full_name?: string | null }> | null
+}
+
 interface SupabaseRepair {
     id: string
     ticket_number?: string
@@ -148,6 +158,7 @@ interface SupabaseRepair {
     notes?: SupabaseRepairNote[]
     payments?: SupabaseRepairPayment[]
     closeout?: SupabaseRepairCloseout | SupabaseRepairCloseout[] | null
+    qualityCheck?: SupabaseRepairQualityCheck | SupabaseRepairQualityCheck[] | null
     currentCostRevision?: SupabaseCostRevision | SupabaseCostRevision[] | null
 }
 
@@ -165,6 +176,10 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         ? (r.technician[0] ?? undefined)
         : r.technician
     const closeout = Array.isArray(r.closeout) ? (r.closeout[0] ?? null) : (r.closeout ?? null)
+    const qualityCheck = Array.isArray(r.qualityCheck) ? (r.qualityCheck[0] ?? null) : (r.qualityCheck ?? null)
+    const qualityCheckedBy = qualityCheck
+        ? (Array.isArray(qualityCheck.checkedBy) ? qualityCheck.checkedBy[0] : qualityCheck.checkedBy)
+        : null
     const costRevision = Array.isArray(r.currentCostRevision)
         ? (r.currentCostRevision[0] ?? null)
         : (r.currentCostRevision ?? null)
@@ -285,6 +300,20 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         warrantyExpiresAt: r.warranty_expires_at || null,
         pickedUpAt: r.picked_up_at || null,
         deliveryOutcome: (r.delivery_outcome as RepairDeliveryOutcome) || null,
+        qualityCheck: qualityCheck ? {
+            id: qualityCheck.id,
+            result: qualityCheck.result,
+            checklist: {
+                powersOn: qualityCheck.checklist?.powersOn === true,
+                reportedIssueResolved: qualityCheck.checklist?.reportedIssueResolved === true,
+                basicFunctions: qualityCheck.checklist?.basicFunctions === true,
+                physicalCondition: qualityCheck.checklist?.physicalCondition === true,
+                accessoriesVerified: qualityCheck.checklist?.accessoriesVerified === true,
+            },
+            note: qualityCheck.note ?? null,
+            checkedBy: qualityCheckedBy ? { id: qualityCheckedBy.id, name: qualityCheckedBy.full_name || 'Personal técnico' } : null,
+            checkedAt: qualityCheck.created_at,
+        } : null,
         createdAt: r.created_at,
         estimatedCompletion: r.estimated_completion ?? null,
         completedAt: r.completed_at ?? null,

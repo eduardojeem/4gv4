@@ -34,6 +34,8 @@ import type { RepairFormData as PersistRepairFormData } from '@/contexts/Repairs
 import type { Repair } from '@/types/repairs'
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import { RepairDeliveryDialog } from '@/components/dashboard/repairs/RepairDeliveryDialog'
+import { RepairQualityCheckDialog } from '@/components/dashboard/repairs/RepairQualityCheckDialog'
+import { useBranch } from '@/contexts/branch-context'
 import { Pagination } from '@/components/ui/pagination'
 import { cn } from '@/lib/utils'
 
@@ -91,6 +93,7 @@ function MetricCard({
 
 export default function TechnicianPanel() {
   const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
+  const [qualityCheckTarget, setQualityCheckTarget] = useState<Repair | null>(null)
   const [warrantyClaimTarget, setWarrantyClaimTarget] = useState<Repair | null>(null)
 
   const {
@@ -108,11 +111,20 @@ export default function TechnicianPanel() {
     refreshRepairs,
     updateStatus,
     deliverRepair,
-  } = useTechnicianBoard({ onRequestDeliver: setDeliverTarget })
+  } = useTechnicianBoard({ onRequestDeliver: setDeliverTarget, onRequestQualityCheck: setQualityCheckTarget })
 
   const { technicians } = useTechnicians()
 
   const { user } = useAuth()
+  const { selectedBranchId } = useBranch()
+  const handleStatusChange = async (id: string, status: Repair['status']) => {
+    if (status === 'listo') {
+      const target = repairs.find((repair) => repair.id === id)
+      if (target) setQualityCheckTarget(target)
+      return Boolean(target)
+    }
+    return updateStatus(id, status)
+  }
   const canCreateRepair = roleHasPermission(
     mapLegacyRoleToOrganizationRole(user?.role),
     'repairs.orders.create'
@@ -143,11 +155,14 @@ export default function TechnicianPanel() {
 
   const [cardsPage, setCardsPage] = useState<number>(1)
   const [cardsPageSize, setCardsPageSize] = useState<number>(20)
-
-  // Reset cardsPage to 1 when search or filter changes
-  useEffect(() => {
+  const handleSearchTermChange = (term: string) => {
+    setSearchTerm(term)
     setCardsPage(1)
-  }, [searchTerm, showMyRepairsOnly])
+  }
+  const handleMyRepairsChange = (show: boolean) => {
+    setShowMyRepairsOnly(show)
+    setCardsPage(1)
+  }
 
   const cardsTotalPages = Math.max(1, Math.ceil(filteredRepairs.length / cardsPageSize))
   const safeCardsPage = Math.min(Math.max(1, cardsPage), cardsTotalPages)
@@ -481,9 +496,9 @@ export default function TechnicianPanel() {
             <div className="w-full lg:flex-1">
               <TechnicianFilters
                 searchTerm={searchTerm}
-                setSearchTerm={setSearchTerm}
+                setSearchTerm={handleSearchTermChange}
                 showMyRepairsOnly={showMyRepairsOnly}
-                setShowMyRepairsOnly={setShowMyRepairsOnly}
+                setShowMyRepairsOnly={handleMyRepairsChange}
                 canViewAllRepairs={canViewAllRepairs}
                 onRefresh={refreshRepairs}
                 isLoading={isLoading}
@@ -546,7 +561,8 @@ export default function TechnicianPanel() {
             onEdit={handleEditRepair}
             onView={handleViewRepair}
             onDeliver={(repair) => setDeliverTarget(repair)}
-            onStatusChange={updateStatus}
+            onQualityCheck={setQualityCheckTarget}
+            onStatusChange={handleStatusChange}
             onClaimWarranty={(repair) => setWarrantyClaimTarget(repair)}
           />
         ) : viewMode === 'cards' ? (
@@ -556,6 +572,7 @@ export default function TechnicianPanel() {
               onView={handleViewRepair}
               onEdit={handleEditRepair}
               onDeliver={(repair) => setDeliverTarget(repair)}
+              onQualityCheck={setQualityCheckTarget}
               onClaimWarranty={(repair) => setWarrantyClaimTarget(repair)}
             />
             {filteredRepairs.length > cardsPageSize && (
@@ -613,15 +630,28 @@ export default function TechnicianPanel() {
           handleEditRepair(repair)
         }}
         onDeliver={(repair) => setDeliverTarget(repair)}
-        onStatusChange={updateStatus}
+        onQualityCheck={setQualityCheckTarget}
+        onStatusChange={handleStatusChange}
       />
 
       <RepairDeliveryDialog
         open={!!deliverTarget}
         repair={deliverTarget}
         onOpenChange={(open) => !open && setDeliverTarget(null)}
+        onOpenQualityCheck={(repair) => {
+          setDeliverTarget(null)
+          setQualityCheckTarget(repair)
+        }}
         onConfirm={async (id, payload) => { await deliverRepair(id, payload.outcome, payload.note) }}
         allowPayment={false}
+      />
+
+      <RepairQualityCheckDialog
+        open={!!qualityCheckTarget}
+        repair={qualityCheckTarget}
+        branchId={selectedBranchId}
+        onOpenChange={(open) => !open && setQualityCheckTarget(null)}
+        onSaved={refreshRepairs}
       />
 
       {warrantyClaimTarget && (

@@ -472,9 +472,18 @@ export function RepairFormDialogV2({
    * que arrancar con el valor por defecto.
    */
   const garantiaAplicadaRef = useRef(false)
+  const garantiaCargaVistaRef = useRef(false)
   useEffect(() => {
-    if (!open) { garantiaAplicadaRef.current = false; return }
-    if (mode !== 'add' || warrantyPolicy.loading || garantiaAplicadaRef.current) return
+    if (!open) {
+      garantiaAplicadaRef.current = false
+      garantiaCargaVistaRef.current = false
+      return
+    }
+    if (warrantyPolicy.loading) {
+      garantiaCargaVistaRef.current = true
+      return
+    }
+    if (mode !== 'add' || !garantiaCargaVistaRef.current || garantiaAplicadaRef.current) return
     if (initialData?.warrantyMonths !== undefined) return
 
     const campos = getValues()
@@ -880,6 +889,9 @@ export function RepairFormDialogV2({
       setEditingCustomer({
         id,
         name: name || selectedQuickCustomer?.name || '',
+        first_name: selectedQuickCustomer?.first_name || null,
+        last_name: selectedQuickCustomer?.last_name || null,
+        company_name: selectedQuickCustomer?.company_name || null,
         phone: phone || selectedQuickCustomer?.phone || '',
         email: email || selectedQuickCustomer?.email || '',
         ruc: document || selectedQuickCustomer?.ruc || '',
@@ -1217,6 +1229,9 @@ export function RepairFormDialogV2({
                       setSelectedQuickCustomer({
                         id: customerId,
                         name: customerData.name || '',
+                        first_name: customerData.first_name || null,
+                        last_name: customerData.last_name || null,
+                        company_name: customerData.company_name || null,
                         phone: customerData.phone || '',
                         email: customerData.email || '',
                         ruc: customerData.ruc || '',

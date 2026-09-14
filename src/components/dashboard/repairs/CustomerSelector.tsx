@@ -20,6 +20,9 @@ interface RepairCustomerRow {
     id: string
     customer_code?: string | null
     name?: string | null
+    first_name?: string | null
+    last_name?: string | null
+    company_name?: string | null
     email?: string | null
     phone?: string | null
     alternate_phone?: string | null
@@ -43,6 +46,10 @@ function mapCustomerRow(row: RepairCustomerRow): Customer {
         id: row.id,
         customerCode: row.customer_code || `CLI-${row.id.slice(0, 6)}`,
         name: row.name || '',
+        first_name: row.first_name || null,
+        last_name: row.last_name || null,
+        company_name: row.company_name || null,
+        company: row.company_name || '',
         email: row.email || '',
         phone: row.phone || '',
         alternate_phone: row.alternate_phone || null,

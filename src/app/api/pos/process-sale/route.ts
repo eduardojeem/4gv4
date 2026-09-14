@@ -6,6 +6,8 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { creditBusinessDate } from '@/lib/credits/installments'
 import { getCurrencyFractionDigits } from '@/lib/currency'
 import { firstPaymentError, type FirstInstallmentPayment } from '@/lib/credits/first-payment'
+import { validateDeliveryQualityCheck } from '@/lib/repairs/quality-check'
+import type { RepairDeliveryOutcome, RepairQualityCheckResult } from '@/types/repairs'
 
 type JsonRecord = Record<string, unknown>
 
@@ -346,6 +348,43 @@ export const POST = withTenantAuth(
     }
 
     const supabase = createAdminSupabase()
+    if (body.p_mark_repairs_delivered === true && repairIds.length > 0) {
+      const deliveryOutcome = typeof body.p_delivery_outcome === 'string'
+        ? body.p_delivery_outcome as RepairDeliveryOutcome
+        : null
+      if (!deliveryOutcome || !['repaired', 'withdrawn', 'unrepairable'].includes(deliveryOutcome)) {
+        return NextResponse.json({ success: false, error: 'Seleccioná un resultado de entrega válido.' }, { status: 400 })
+      }
+
+      const { data: repairRows, error: qualityError } = await supabase
+        .from('repairs')
+        .select('id, qualityCheck:repair_quality_checks!repairs_current_quality_check_fk(result)')
+        .in('id', repairIds)
+        .eq('organization_id', organization.id)
+        .eq('branch_id', branchScope.branchId)
+
+      if (qualityError) {
+        return NextResponse.json({
+          success: false,
+          code: 'REPAIR_QUALITY_CHECK_REQUIRED',
+          error: 'No se pudo comprobar la verificación técnica. Revisá que la migración de control de calidad esté aplicada.',
+        }, { status: 503 })
+      }
+      if ((repairRows ?? []).length !== repairIds.length) {
+        return NextResponse.json({ success: false, error: 'Una de las reparaciones no pertenece a la sucursal activa.' }, { status: 400 })
+      }
+
+      for (const repair of repairRows ?? []) {
+        const joined = Array.isArray(repair.qualityCheck) ? repair.qualityCheck[0] : repair.qualityCheck
+        const validation = validateDeliveryQualityCheck(
+          joined?.result as RepairQualityCheckResult | null | undefined,
+          deliveryOutcome,
+        )
+        if ('code' in validation) {
+          return NextResponse.json({ success: false, code: validation.code, error: validation.message }, { status: 409 })
+        }
+      }
+    }
     if (payments.some(payment => payment.payment_method === 'credit') && credit) {
       if (credit.start_date !== creditBusinessDate()) return errorResponse({ message: 'CREDIT_START_DATE_CHANGED' })
       // A missing migration must never silently save the old (next-cycle) schedule.

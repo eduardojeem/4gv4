@@ -24,6 +24,9 @@ interface CustomerSelectorV3Props {
     alternate_phone_label?: string | null
     customer_type?: string
     is_wholesale?: boolean
+    first_name?: string | null
+    last_name?: string | null
+    company_name?: string | null
   }
   onChange: (
     customerId: string,
@@ -36,6 +39,9 @@ interface CustomerSelectorV3Props {
       alternate_phone_label?: string | null
       customer_type?: string
       is_wholesale?: boolean
+      first_name?: string | null
+      last_name?: string | null
+      company_name?: string | null
     }
   ) => void
   error?: string

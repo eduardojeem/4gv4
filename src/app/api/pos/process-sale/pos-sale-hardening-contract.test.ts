@@ -21,4 +21,13 @@ describe('endurecimiento de venta POS', () => {
     expect(processor).toContain('total: Number.isFinite(Number(saleResult?.data?.total))')
     expect(processor).toContain('formatCurrency(persistedReceipt.total)')
   })
+
+  it('valida el control técnico antes de cobrar y entregar una reparación', () => {
+    const validationAt = route.indexOf('validateDeliveryQualityCheck')
+    const saleAt = route.indexOf("supabase.rpc('process_pos_sale_atomic_v5'")
+
+    expect(validationAt).toBeGreaterThan(-1)
+    expect(validationAt).toBeLessThan(saleAt)
+    expect(route).toContain('REPAIR_QUALITY_CHECK_REQUIRED')
+  })
 })

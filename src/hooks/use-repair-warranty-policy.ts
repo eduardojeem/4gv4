@@ -100,7 +100,9 @@ export type RepairWarrantyPolicyState = {
 
 export function useRepairWarrantyPolicy(enabled = true): RepairWarrantyPolicyState {
   const [policy, setPolicy] = useState<WarrantyPolicy>(FALLBACK_WARRANTY_POLICY)
-  const [loading, setLoading] = useState(enabled)
+  // Empieza cargando aunque el consumidor se monte cerrado. Al abrir el modal
+  // por primera vez no debe existir un render que exponga el respaldo como real.
+  const [loading, setLoading] = useState(true)
   const [canEdit, setCanEdit] = useState(false)
   const [persisted, setPersisted] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -113,8 +115,14 @@ export function useRepairWarrantyPolicy(enabled = true): RepairWarrantyPolicySta
     // abrirlo se vuelve a entrar en carga antes de exponer el respaldo de 3
     // meses; si no, el formulario lo toma como definitivo y ya no aplica la
     // política real cuando llega del servidor.
-    setLoading(true)
-    setError(null)
+    // Se difiere al microtask para no encadenar un render sincrónico dentro
+    // del efecto. La carga queda marcada antes de que pueda resolverse la
+    // petición iniciada debajo.
+    void Promise.resolve().then(() => {
+      if (!vigente) return
+      setLoading(true)
+      setError(null)
+    })
 
     void refreshReceiptSettings({ force: true }).then((snapshot) => {
       if (!vigente) return

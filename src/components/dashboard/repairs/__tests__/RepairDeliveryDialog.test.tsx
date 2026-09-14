@@ -48,6 +48,14 @@ const repair = {
   finalCost: 100,
   estimatedCost: 100,
   paidAmount: 0,
+  qualityCheck: {
+    id: 'quality-1', result: 'passed', checkedAt: '2026-09-13T12:00:00Z',
+    checkedBy: { id: 'tech-1', name: 'Ana Técnica' },
+    checklist: {
+      powersOn: true, reportedIssueResolved: true, basicFunctions: true,
+      physicalCondition: true, accessoriesVerified: true,
+    },
+  },
 } as Repair
 
 describe('RepairDeliveryDialog', () => {
@@ -126,19 +134,17 @@ describe('RepairDeliveryDialog', () => {
     expect(screen.getByRole('button', { name: 'Registrar Crédito y Entregar' })).toBeEnabled()
   })
 
-  it('does not keep the suggested payment after returning and choosing withdrawn', async () => {
+  it('uses the previously verified unrepaired outcome without suggesting payment', async () => {
     const onConfirm = vi.fn().mockResolvedValue(undefined)
     render(
       <RepairDeliveryDialog
         open
-        repair={repair}
+        repair={{ ...repair, qualityCheck: { ...repair.qualityCheck!, result: 'withdrawn', note: 'El cliente decidió retirar.' } }}
         onOpenChange={vi.fn()}
         onConfirm={onConfirm}
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Reparado y funcionando/i }))
-    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
     fireEvent.click(screen.getByRole('button', { name: /Retirado sin reparar/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar y entregar' }))
 
@@ -150,6 +156,20 @@ describe('RepairDeliveryDialog', () => {
       settlement: { kind: 'none' },
       idempotencyKey: expect.stringMatching(/^repair-delivery-/),
     }))
+  })
+
+  it('does not let the cashier replace the certified technical result', () => {
+    render(<RepairDeliveryDialog open repair={repair} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
+
+    expect(screen.getByText(/resultado técnico registrado por Ana Técnica/i)).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Retirado sin reparar/i })).not.toBeInTheDocument()
+  })
+
+  it('blocks the flow when the ready device has no technical verification', () => {
+    render(<RepairDeliveryDialog open repair={{ ...repair, qualityCheck: null }} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
+
+    expect(screen.getByText(/falta la verificación técnica/i)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Confirmar Entrega' })).toBeDisabled()
   })
 
   it('registers a full transfer and repaired delivery without outstanding consent', async () => {
@@ -283,5 +303,29 @@ describe('RepairDeliveryDialog', () => {
     expect(screen.getByRole('button', { name: 'Abrir caja' })).toBeEnabled()
     expect(screen.getByRole('heading', { name: 'Cobrar saldo y entregar' })).toBeVisible()
     expect(screen.getByLabelText('Monto a cobrar')).toHaveValue('100')
+  })
+
+  it('shows technical verification warning and allows opening technical verification modal', () => {
+    const onOpenChange = vi.fn()
+    const onOpenQualityCheck = vi.fn()
+    const unverifiedRepair = { ...repair, qualityCheck: undefined }
+
+    render(
+      <RepairDeliveryDialog
+        open
+        repair={unverifiedRepair}
+        onOpenChange={onOpenChange}
+        onConfirm={vi.fn()}
+        onOpenQualityCheck={onOpenQualityCheck}
+      />
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Falta la verificación técnica')
+    const openQualityBtn = screen.getByRole('button', { name: /Abrir verificación técnica/i })
+    expect(openQualityBtn).toBeVisible()
+
+    fireEvent.click(openQualityBtn)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(onOpenQualityCheck).toHaveBeenCalledWith(unverifiedRepair)
   })
 })

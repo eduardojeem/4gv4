@@ -125,7 +125,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     // Obtener estado actual de la reparación
     const { data: currentRepair, error: fetchError } = await supabase
       .from('repairs')
-      .select('id, status, technician_id, completed_at')
+      .select('id, status, technician_id, completed_at, qualityCheck:repair_quality_checks!repairs_current_quality_check_fk(result)')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .eq('branch_id', branchScope.branchId)
@@ -137,10 +137,14 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     }
 
     const currentStatus = currentRepair.status as RepairStage
+    const qualityCheck = Array.isArray(currentRepair.qualityCheck)
+      ? currentRepair.qualityCheck[0]
+      : currentRepair.qualityCheck
 
     // Validar transición con la state machine
     const validation = canTransition(currentStatus, stage, {
       technician_id: currentRepair.technician_id,
+      quality_check_result: qualityCheck?.result ?? null,
     })
 
     if (!validation.allowed) {

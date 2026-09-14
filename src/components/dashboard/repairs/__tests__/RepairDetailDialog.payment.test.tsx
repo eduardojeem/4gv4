@@ -114,7 +114,7 @@ describe('RepairDetailDialog payment summary', () => {
     const paymentMessage = within(screen.getByRole('region', { name: 'Estado del pago' })).getByRole('status')
     expect(paymentMessage).toHaveTextContent(/Anticipo recibido:.*40/)
     expect(paymentMessage).toHaveTextContent(/Saldo pendiente al entregar:.*60/)
-    expect(screen.getByRole('button', { name: 'Cobrar saldo' })).toBeEnabled()
+    expect(screen.getAllByRole('button', { name: 'Cobrar saldo' })[0]).toBeEnabled()
   })
 
   it('shows an advance without claiming the repair is fully paid when price is unknown', () => {
@@ -186,7 +186,7 @@ describe('RepairDetailDialog payment summary', () => {
       />,
     )
 
-    const payButton = screen.getAllByRole('button', { name: /Pagar monto pendiente/i })[0]
+    const payButton = screen.getAllByRole('button', { name: /Registrar pago a cuenta|Pagar monto pendiente/i })[0]
     expect(payButton).toBeInTheDocument()
     await user.click(payButton)
 

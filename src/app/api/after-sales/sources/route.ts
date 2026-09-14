@@ -27,7 +27,22 @@ interface SaleRow {
     product_id: string | null
     quantity: number | null
     unit_price: number | null
-    products?: { name: string | null; image_url: string | null } | { name: string | null; image_url: string | null }[] | null
+    products?:
+      | {
+          name: string | null
+          image_url: string | null
+          warranty_months?: number | null
+          return_window_days?: number | null
+          exchange_window_days?: number | null
+        }
+      | {
+          name: string | null
+          image_url: string | null
+          warranty_months?: number | null
+          return_window_days?: number | null
+          exchange_window_days?: number | null
+        }[]
+      | null
   }> | null
 }
 
@@ -102,7 +117,7 @@ export const GET = withTenantAuth(
           .select(
             `id, code, total_amount, created_at,
              customers:customers!customer_id(name),
-             sale_items(id, product_id, quantity, unit_price, products(name, image_url))`,
+             sale_items(id, product_id, quantity, unit_price, products(name, image_url, warranty_months, return_window_days, exchange_window_days))`,
             { count: 'exact' }
           )
           .eq('organization_id', organization.id)
@@ -121,14 +136,20 @@ export const GET = withTenantAuth(
           subtitle: firstOf(sale.customers)?.name || 'Sin cliente',
           amount: Number(sale.total_amount || 0),
           date: sale.created_at,
-          items: (sale.sale_items ?? []).map((item) => ({
-            id: item.id,
-            product_id: item.product_id,
-            name: firstOf(item.products)?.name || 'Producto',
-            imageUrl: firstOf(item.products)?.image_url ?? null,
-            quantity: Number(item.quantity) || 1,
-            unitPrice: Number(item.unit_price) || 0,
-          })),
+          items: (sale.sale_items ?? []).map((item) => {
+            const product = firstOf(item.products)
+            return {
+              id: item.id,
+              product_id: item.product_id,
+              name: product?.name || 'Producto',
+              imageUrl: product?.image_url ?? null,
+              quantity: Number(item.quantity) || 1,
+              unitPrice: Number(item.unit_price) || 0,
+              warrantyMonths: product?.warranty_months ?? 3,
+              returnWindowDays: product?.return_window_days ?? 7,
+              exchangeWindowDays: product?.exchange_window_days ?? 7,
+            }
+          }),
         }))
 
         return NextResponse.json({

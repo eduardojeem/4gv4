@@ -82,7 +82,7 @@ export default async function OrganizationPublicLayout({
               repairsModuleEnabled={repairsModuleEnabled}
               servicesModuleEnabled={servicesModuleEnabled}
             />
-            <CustomerLinkBanner />
+            <CustomerLinkBanner storeName={settings?.company_info?.name || storefrontOrganization.name} />
             <div className="flex-1 pb-16 lg:pb-0">{children}</div>
             <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
             <StoreMobileBottomNav offersEnabled={settings?.offers_section?.enabled !== false} />

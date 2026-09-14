@@ -43,4 +43,10 @@ describe('RepairCard payment status', () => {
     expect(screen.getByLabelText('Estado financiero de la reparación')).toBeVisible()
     expect(screen.getByText('Entregado con saldo pendiente')).toBeVisible()
   })
+
+  it('keeps the generic unverified message out of the card list', () => {
+    render(<RepairCard repair={{ ...repair, status: 'listo', qualityCheck: null }} />)
+
+    expect(screen.queryByText('Sin verificar')).not.toBeInTheDocument()
+  })
 })

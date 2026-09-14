@@ -227,19 +227,17 @@ export function PublicHeader({
 
   return (
     <header
-      className={`sticky top-0 z-50 w-full transition-all duration-300 ${
+      className={cn(
+        'sticky top-0 z-50 w-full transition-all duration-300 border-b',
+        // Fondo completamente sólido y opaco en móvil y escritorio (sin transparencias ni sangrado de contenido):
+        'bg-background text-foreground',
         scrolled
-          ? 'shadow-md shadow-black/5 dark:shadow-black/20 py-0.5 border-b border-border/60 bg-background/95 backdrop-blur-md'
-          : 'py-1.5 border-b border-border/40 bg-background/90 backdrop-blur-md'
-      } ${
-        companyInfo?.headerStyle === 'accent'
-          ? 'bg-primary text-primary-foreground border-primary/20'
-          : companyInfo?.headerStyle === 'dark'
-          ? 'bg-slate-950 text-white border-slate-900'
-          : companyInfo?.headerStyle === 'solid'
-          ? 'bg-background text-foreground border-border/80'
-          : 'bg-background/90 backdrop-blur-md border-border/40'
-      }`}
+          ? 'shadow-md shadow-black/5 dark:shadow-black/20 py-0.5 border-border/80'
+          : 'py-1.5 border-border/60',
+        companyInfo?.headerStyle === 'accent' && 'bg-primary text-primary-foreground border-primary/20',
+        companyInfo?.headerStyle === 'dark' && 'bg-slate-950 text-white border-slate-900',
+        companyInfo?.headerStyle === 'solid' && 'bg-background text-foreground border-border/80'
+      )}
     >
       {/* Top bar — only when the org provides contact or location info */}
       {showTopBar && (phoneDisplay || weekdayHours || addressDisplay || hasSocials || emailDisplay || whatsappUrl) && (
@@ -565,147 +563,199 @@ export function PublicHeader({
 
           {user?.id && repairsEnabled && <PublicRepairReadyNotifications userId={user.id} />}
 
-          {/* User menu / Profile Button */}
-          {user ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-2 rounded-full border border-border/80 bg-background/90 hover:bg-muted/80 pl-1 pr-2.5 py-1 text-xs font-semibold text-foreground transition-all shadow-xs hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  aria-label="Mi Perfil"
-                  title="Mi Perfil y Configuración"
-                >
-                  <Avatar className="h-7 w-7 border border-border">
-                    <AvatarImage
-                      src={user?.profile?.avatar_url || ''}
-                      alt={user?.profile?.name || 'Usuario'}
-                    />
-                    <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
-                      {userInitials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="hidden sm:inline font-bold text-xs truncate max-w-[100px]">
-                    {user?.profile?.name?.split(' ')[0] || 'Mi Perfil'}
-                  </span>
-                  <ChevronRight className="h-3.5 w-3.5 rotate-90 text-muted-foreground shrink-0" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-64 p-2 shadow-xl rounded-2xl border-border/80" align="end" sideOffset={8}>
-                <DropdownMenuLabel className="font-normal p-1">
-                  <div className="flex items-center gap-2.5 px-1 py-1.5">
-                    <Avatar className="h-9 w-9 border border-border shadow-xs">
-                      <AvatarImage src={user?.profile?.avatar_url || ''} alt={user?.profile?.name || 'Usuario'} />
-                      <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">{userInitials}</AvatarFallback>
+          {/* Desktop User menu / Profile Button */}
+          <div className="hidden xl:flex items-center">
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 rounded-full border border-border/80 bg-background/90 hover:bg-muted/80 pl-1 pr-2.5 py-1 text-xs font-semibold text-foreground transition-all shadow-xs hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    aria-label="Mi Perfil"
+                    title="Mi Perfil y Configuración"
+                  >
+                    <Avatar className="h-7 w-7 border border-border">
+                      <AvatarImage
+                        src={user?.profile?.avatar_url || ''}
+                        alt={user?.profile?.name || 'Usuario'}
+                      />
+                      <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
+                        {userInitials}
+                      </AvatarFallback>
                     </Avatar>
-                    <div className="flex flex-col space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-bold leading-none truncate">
-                          {user?.profile?.name || 'Usuario'}
+                    <span className="hidden sm:inline font-bold text-xs truncate max-w-[100px]">
+                      {user?.profile?.name?.split(' ')[0] || 'Mi Perfil'}
+                    </span>
+                    <ChevronRight className="h-3.5 w-3.5 rotate-90 text-muted-foreground shrink-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-64 p-2 shadow-xl rounded-2xl border-border/80" align="end" sideOffset={8}>
+                  <DropdownMenuLabel className="font-normal p-1">
+                    <div className="flex items-center gap-2.5 px-1 py-1.5">
+                      <Avatar className="h-9 w-9 border border-border shadow-xs">
+                        <AvatarImage src={user?.profile?.avatar_url || ''} alt={user?.profile?.name || 'Usuario'} />
+                        <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">{userInitials}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-bold leading-none truncate">
+                            {user?.profile?.name || 'Usuario'}
+                          </p>
+                        </div>
+                        <p className="text-xs leading-none text-muted-foreground break-all truncate">
+                          {user?.email || 'usuario@email.com'}
                         </p>
                       </div>
-                      <p className="text-xs leading-none text-muted-foreground break-all truncate">
-                        {user?.email || 'usuario@email.com'}
-                      </p>
                     </div>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href={withTenantPrefix('/perfil')} className="flex items-center gap-2.5 cursor-pointer font-semibold text-foreground">
-                    <User className="h-4 w-4 text-primary" />
-                    <span>Ver Mi Perfil</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href={withTenantPrefix('/track')} className="flex items-center gap-2.5 cursor-pointer">
-                    <Truck className="h-4 w-4 text-muted-foreground" />
-                    <span>Rastrear Pedidos</span>
-                  </Link>
-                </DropdownMenuItem>
-                {tenantPrefix && <DropdownMenuItem asChild>
-                  <Link href={withTenantPrefix('/perfil/autorizados')} className="flex items-center gap-2.5 cursor-pointer">
-                    <Shield className="h-4 w-4 text-muted-foreground" />
-                    <span>Personas Autorizadas</span>
-                  </Link>
-                </DropdownMenuItem>}
-                {canAccessDashboard && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer font-medium text-primary">
-                        <LayoutDashboard className="h-4 w-4" />
-                        <span>Panel Administrativo</span>
-                      </Link>
-                    </DropdownMenuItem>
-                  </>
-                )}
-                <DropdownMenuSeparator />
-                <InstallPrompt variant="menu-item" />
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setLogoutOpen(true)}
-                  className="flex items-center gap-2.5 cursor-pointer text-destructive focus:text-destructive"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Cerrar Sesión
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-3.5 py-1.5 shadow-sm shadow-primary/20 transition-all duration-200 hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.97] font-bold text-xs"
-                  aria-label="Mi Perfil"
-                >
-                  <User className="h-3.5 w-3.5" />
-                  <span>Mi Perfil</span>
-                  <ChevronRight className="h-3.5 w-3.5 rotate-90 text-primary-foreground/70 shrink-0" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 p-2 shadow-xl rounded-2xl border-border/80" align="end" sideOffset={8}>
-                <DropdownMenuLabel className="font-normal p-1">
-                  <p className="text-xs font-bold text-foreground">Acceso a tu cuenta</p>
-                  <p className="text-[11px] text-muted-foreground">Iniciá sesión para ver tus compras y perfil</p>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setAuthOpen(true)}
-                  className="flex items-center gap-2.5 cursor-pointer font-semibold text-primary"
-                >
-                  <User className="h-4 w-4" />
-                  <span>Iniciar sesión / Registro</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href={withTenantPrefix('/track')} className="flex items-center gap-2.5 cursor-pointer text-foreground font-medium">
-                    <Truck className="h-4 w-4 text-muted-foreground" />
-                    <span>Rastrear Pedido</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <InstallPrompt variant="menu-item" />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href={withTenantPrefix('/perfil')} className="flex items-center gap-2.5 cursor-pointer font-semibold text-foreground">
+                      <User className="h-4 w-4 text-primary" />
+                      <span>Ver Mi Perfil</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={withTenantPrefix('/track')} className="flex items-center gap-2.5 cursor-pointer">
+                      <Truck className="h-4 w-4 text-muted-foreground" />
+                      <span>Rastrear Pedidos</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  {tenantPrefix && <DropdownMenuItem asChild>
+                    <Link href={withTenantPrefix('/perfil/autorizados')} className="flex items-center gap-2.5 cursor-pointer">
+                      <Shield className="h-4 w-4 text-muted-foreground" />
+                      <span>Personas Autorizadas</span>
+                    </Link>
+                  </DropdownMenuItem>}
+                  {canAccessDashboard && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer font-medium text-primary">
+                          <LayoutDashboard className="h-4 w-4" />
+                          <span>Panel Administrativo</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuSeparator />
+                  <InstallPrompt variant="menu-item" />
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setLogoutOpen(true)}
+                    className="flex items-center gap-2.5 cursor-pointer text-destructive focus:text-destructive"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Cerrar Sesión
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-3.5 py-1.5 shadow-sm shadow-primary/20 transition-all duration-200 hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.97] font-bold text-xs"
+                    aria-label="Mi Perfil"
+                  >
+                    <User className="h-3.5 w-3.5" />
+                    <span>Mi Perfil</span>
+                    <ChevronRight className="h-3.5 w-3.5 rotate-90 text-primary-foreground/70 shrink-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56 p-2 shadow-xl rounded-2xl border-border/80" align="end" sideOffset={8}>
+                  <DropdownMenuLabel className="font-normal p-1">
+                    <p className="text-xs font-bold text-foreground">Acceso a tu cuenta</p>
+                    <p className="text-[11px] text-muted-foreground">Iniciá sesión para ver tus compras y perfil</p>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setAuthOpen(true)}
+                    className="flex items-center gap-2.5 cursor-pointer font-semibold text-primary"
+                  >
+                    <User className="h-4 w-4" />
+                    <span>Iniciar sesión / Registro</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={withTenantPrefix('/track')} className="flex items-center gap-2.5 cursor-pointer text-foreground font-medium">
+                      <Truck className="h-4 w-4 text-muted-foreground" />
+                      <span>Rastrear Pedido</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <InstallPrompt variant="menu-item" />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
 
-          {/* Mobile & Tablet menu toggle */}
-          <button
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/80 bg-background text-foreground hover:bg-muted transition-colors xl:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label={mobileMenuOpen ? 'Cerrar menu' : 'Abrir menu'}
-            aria-expanded={mobileMenuOpen}
-            aria-controls="public-mobile-menu"
-          >
-            {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-          </button>
+          {/* Mobile & Tablet menu toggle (Unified modern solid button) */}
+          {user ? (
+            <button
+              type="button"
+              className={cn(
+                "flex h-9 items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-bold transition-all shadow-xs xl:hidden active:scale-95",
+                mobileMenuOpen
+                  ? "border-primary bg-primary/10 text-primary ring-2 ring-primary/20"
+                  : "border-border/80 bg-muted/60 hover:bg-muted text-foreground"
+              )}
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú y perfil'}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="public-mobile-menu"
+            >
+              <Avatar className="h-6 w-6 border border-border/80 shrink-0">
+                <AvatarImage
+                  src={user?.profile?.avatar_url || ''}
+                  alt={user?.profile?.name || 'Usuario'}
+                />
+                <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
+                  {userInitials}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-xs font-bold truncate max-w-[80px]">
+                {user?.profile?.name?.split(' ')[0] || 'Menú'}
+              </span>
+              {mobileMenuOpen ? (
+                <X className="h-4 w-4 shrink-0" />
+              ) : (
+                <Menu className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={cn(
+                "flex h-9 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-all shadow-xs xl:hidden active:scale-95",
+                mobileMenuOpen
+                  ? "bg-primary text-primary-foreground shadow-primary/25"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20"
+              )}
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="public-mobile-menu"
+            >
+              {mobileMenuOpen ? (
+                <>
+                  <X className="h-4 w-4" />
+                  <span>Cerrar</span>
+                </>
+              ) : (
+                <>
+                  <Menu className="h-4 w-4" />
+                  <span>Menú</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
       {mobileSearchOpen && (
         <div
           id="public-mobile-search"
-          className="border-t border-border/60 bg-background/95 px-3 py-2.5 sm:px-4 md:hidden"
+          className="border-t border-border/60 bg-background px-3 py-2.5 sm:px-4 md:hidden"
         >
           <form onSubmit={handleSearchSubmit} className="container flex items-center gap-2 px-0">
             <div className="relative min-w-0 flex-1">
@@ -765,7 +815,7 @@ export function PublicHeader({
           <div
             id="public-mobile-menu"
             ref={mobileMenuRef}
-            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xs flex-col bg-card p-5 shadow-2xl border-l border-border/80 transition-transform duration-300 animate-in slide-in-from-right"
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xs flex-col bg-card opacity-100 p-5 shadow-2xl border-l border-border/80 transition-transform duration-300 animate-in slide-in-from-right"
           >
             {/* Cabecera del Drawer con Logo y Botón Cerrar */}
             <div className="flex items-center justify-between pb-4 border-b border-border/60">

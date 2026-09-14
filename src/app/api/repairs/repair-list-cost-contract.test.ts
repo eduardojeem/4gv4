@@ -10,4 +10,12 @@ describe('repair list cost contract', () => {
     expect(variants).toContain('parts:repair_parts(*)')
     expect(variants).toContain('currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)')
   })
+
+  it('reloads the current technical check after saving it', () => {
+    const source = readFileSync(join(process.cwd(), 'src', 'app', 'api', 'repairs', 'route.ts'), 'utf8')
+    const qualityCheckJoins = source.match(/qualityCheck:repair_quality_checks!repairs_current_quality_check_fk/g) ?? []
+
+    expect(qualityCheckJoins).toHaveLength(4)
+    expect(source).toContain('checkedBy:profiles!created_by(id, full_name)')
+  })
 })

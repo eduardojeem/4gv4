@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Eye, Pencil, Trash2, MoreVertical, PackageCheck, DollarSign, Shield } from 'lucide-react'
+import { Eye, Pencil, Trash2, MoreVertical, PackageCheck, DollarSign, Shield, ShieldCheck } from 'lucide-react'
 import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
 import { getWarrantyStatus } from '@/lib/warranty-utils'
 
@@ -20,11 +20,12 @@ interface RepairCardsViewProps {
   onEdit?: (repair: Repair) => void
   onDelete?: (repairId: string) => void
   onDeliver?: (repair: Repair) => void
+  onQualityCheck?: (repair: Repair) => void
   onQuickPay?: (repair: Repair) => void
   onClaimWarranty?: (repair: Repair) => void
 }
 
-export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, onQuickPay, onClaimWarranty }: RepairCardsViewProps) {
+export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, onQualityCheck, onQuickPay, onClaimWarranty }: RepairCardsViewProps) {
   if (repairs.length === 0) return null
 
   return (
@@ -111,6 +112,12 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, 
                       Marcar Entregado
                     </DropdownMenuItem>
                   </>
+                )}
+                {onQualityCheck && (repair.status === 'reparacion' || repair.status === 'listo') && (
+                  <DropdownMenuItem onClick={() => onQualityCheck(repair)} className="text-blue-700 dark:text-blue-300">
+                    <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                    {repair.qualityCheck ? 'Repetir prueba técnica' : 'Verificar funcionamiento'}
+                  </DropdownMenuItem>
                 )}
                 {(repair.status === 'entregado' || repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0)) && (
                   <>

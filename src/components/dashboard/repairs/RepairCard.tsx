@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Clock, ShieldCheck, User, Wrench, Zap, ImageIcon } from 'lucide-react'
 import { Repair } from '@/types/repairs'
 import { statusConfig, priorityConfig } from '@/config/repair-constants'
+import { RepairQualityBadge } from './RepairQualityBadge'
 import { formatCurrency } from '@/lib/currency'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -153,6 +154,9 @@ export const RepairCard = memo<RepairCardProps>(
               >
                 {status.label}
               </Badge>
+              {(repair.status === 'listo' || repair.status === 'entregado') && repair.qualityCheck && (
+                <RepairQualityBadge qualityCheck={repair.qualityCheck} />
+              )}
               {(repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0)) && (
                 <WarrantyBadge repair={repair} size="sm" showDaysRemaining />
               )}

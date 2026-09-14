@@ -61,7 +61,7 @@ export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?:
     <>
       <nav
         aria-label="Navegación móvil y tablet de la tienda"
-        className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/80 bg-background/95 backdrop-blur-xl px-2 shadow-lg lg:hidden"
+        className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/80 bg-background px-2 shadow-lg lg:hidden"
       >
         {/* Accesos principales de la tienda; Marketplace permanece visible arriba. */}
         {tabs.map((tab) => {

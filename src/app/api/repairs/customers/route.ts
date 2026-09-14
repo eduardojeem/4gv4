@@ -9,6 +9,9 @@ import { duplicatesMessage, findCustomerDuplicates } from '@/lib/customers/dupli
 
 const repairCustomerSchema = z.object({
   name: z.string().trim().min(1).max(200),
+  first_name: z.string().trim().max(120).optional().nullable(),
+  last_name: z.string().trim().max(120).optional().nullable(),
+  company_name: z.string().trim().max(200).optional().nullable(),
   email: z.string().trim().email().optional().or(z.literal('')).nullable(),
   phone: z.string().trim().max(50).optional().nullable(),
   address: z.string().trim().max(500).optional().nullable(),
@@ -27,10 +30,23 @@ const repairCustomerUpdateSchema = repairCustomerSchema.partial().extend({
   id: z.string().uuid(),
 })
 
+const CUSTOMER_COLUMNS: string = 'id, customer_code, name, first_name, last_name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at'
+const CUSTOMER_COLUMNS_WITH_COMPANY: string = 'id, customer_code, name, first_name, last_name, company_name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at'
+
+/**
+ * `customers.company_name` llega con una migración. Pedirla en una base que
+ * todavía no la tiene hacía fallar toda la consulta: el selector de clientes
+ * de reparaciones quedaba vacío con «No se pudieron cargar los clientes».
+ */
+function isMissingCompanyColumn(error: unknown) {
+  const { code, message } = (error ?? {}) as { code?: string; message?: string }
+  return (code === '42703' || code === 'PGRST204') && String(message ?? '').includes('company_name')
+}
+
 function normalizeCustomerPayload(payload: z.infer<typeof repairCustomerSchema>) {
   const isWholesale = Boolean(payload.is_wholesale || payload.customer_type === 'wholesale' || payload.customer_type === 'mayorista')
   const customerType = isWholesale ? 'wholesale' : (payload.customer_type || 'regular')
-  const { is_wholesale, alternate_phone, alternate_phone_label, ...rest } = payload
+  const { is_wholesale, alternate_phone, alternate_phone_label, company_name, ...rest } = payload
   // Las columnas del contacto alternativo solo se mandan si hay algo que
   // guardar. Asi un despliegue sin la migracion sigue creando clientes como
   // siempre, y solo falla -con motivo- si alguien intenta usar el campo nuevo.
@@ -49,6 +65,9 @@ function normalizeCustomerPayload(payload: z.infer<typeof repairCustomerSchema>)
     address: payload.address || null,
     city: payload.city || null,
     ruc: payload.ruc || null,
+    first_name: payload.first_name || null,
+    last_name: payload.last_name || null,
+    ...(isWholesale && company_name ? { company_name } : {}),
     customer_type: customerType,
     segment: isWholesale ? 'wholesale' : 'regular',
     status: 'active' as const,
@@ -57,7 +76,7 @@ function normalizeCustomerPayload(payload: z.infer<typeof repairCustomerSchema>)
 }
 
 function normalizeCustomerUpdatePayload(payload: z.infer<typeof repairCustomerUpdateSchema>) {
-  const { id, is_wholesale, alternate_phone, alternate_phone_label, ...rest } = payload
+  const { id, is_wholesale, alternate_phone, alternate_phone_label, company_name, ...rest } = payload
   const isWholesale = is_wholesale !== undefined
     ? is_wholesale
     : payload.customer_type !== undefined
@@ -103,6 +122,11 @@ function normalizeCustomerUpdatePayload(payload: z.infer<typeof repairCustomerUp
   if (payload.ruc !== undefined) {
     updates.ruc = payload.ruc || null
   }
+  // Solo si vino el dato: una edición que no toca la empresa no depende de que
+  // la columna exista. Al dejar de ser mayorista se limpia si se la manda vacía.
+  if (company_name !== undefined) {
+    updates.company_name = isWholesale === false ? null : (company_name || null)
+  }
 
   return { id, updates }
 }
@@ -121,28 +145,36 @@ export const GET = withTenantAuth({ permission: [...readPermissions], module: 'r
     const term = sanitizeSearchTerm(searchParams.get('q'))
 
     const supabase = await createClient()
-    let query = supabase
-      .from('customers')
-      .select('id, customer_code, name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at')
-      .eq('organization_id', organization.id)
+    const search = (columns: string) => {
+      let query = supabase
+        .from('customers')
+        .select(columns)
+        .eq('organization_id', organization.id)
 
-    if (term) {
-      const digits = term.replace(/\D/g, '')
-      const orFilters = [
-        `name.ilike.%${term}%`,
-        `email.ilike.%${term}%`,
-        `customer_code.ilike.%${term}%`,
-        `ruc.ilike.%${term}%`,
-      ]
-      // Buscar por teléfono solo si el término tiene dígitos: de lo
-      // contrario `phone.ilike.%%` matchea todo y arruina el resto del filtro.
-      if (digits) orFilters.push(`phone.ilike.%${digits}%`)
-      query = query.or(orFilters.join(','))
+      if (term) {
+        const digits = term.replace(/\D/g, '')
+        const orFilters = [
+          `name.ilike.%${term}%`,
+          `email.ilike.%${term}%`,
+          `customer_code.ilike.%${term}%`,
+          `ruc.ilike.%${term}%`,
+        ]
+        // Buscar por teléfono solo si el término tiene dígitos: de lo
+        // contrario `phone.ilike.%%` matchea todo y arruina el resto del filtro.
+        if (digits) orFilters.push(`phone.ilike.%${digits}%`)
+        query = query.or(orFilters.join(','))
+      }
+
+      return query
+        .order('created_at', { ascending: false })
+        .limit(term ? 50 : 20)
     }
 
-    const { data, error } = await query
-      .order('created_at', { ascending: false })
-      .limit(term ? 50 : 20)
+    let { data, error } = await search(CUSTOMER_COLUMNS_WITH_COMPANY)
+    if (error && isMissingCompanyColumn(error)) {
+      logger.warn('customers.company_name no existe: falta aplicar la migración add_customer_company_name')
+      ;({ data, error } = await search(CUSTOMER_COLUMNS))
+    }
 
     if (error) throw error
 
@@ -180,15 +212,16 @@ export const POST = withTenantAuth({ permission: [...writePermissions], module: 
     }
 
     const now = new Date().toISOString()
+    const row = normalizeCustomerPayload(validation.data)
     const { data, error } = await supabase
       .from('customers')
       .insert({
-        ...normalizeCustomerPayload(validation.data),
+        ...row,
         organization_id: organization.id,
         created_at: now,
         updated_at: now,
       })
-      .select('id, customer_code, name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at')
+      .select('company_name' in row ? CUSTOMER_COLUMNS_WITH_COMPANY : CUSTOMER_COLUMNS)
       .single()
 
     if (error) throw error
@@ -227,13 +260,23 @@ export const PUT = withTenantAuth({ permission: [...writePermissions], module: '
       )
     }
 
-    const { data, error } = await supabase
+    const save = (row: Record<string, unknown>) => supabase
       .from('customers')
-      .update(updates)
+      .update(row)
       .eq('id', id)
       .eq('organization_id', organization.id)
-      .select('id, customer_code, name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at')
+      .select('company_name' in row ? CUSTOMER_COLUMNS_WITH_COMPANY : CUSTOMER_COLUMNS)
       .single()
+
+    let { data, error } = await save(updates)
+    // El formulario manda la empresa vacía en cada edición de un cliente común.
+    // Sin la columna, vaciar un dato que no existe no es motivo para no guardar
+    // lo demás: el update falló entero, así que reintentarlo no duplica nada.
+    if (error && isMissingCompanyColumn(error) && !updates.company_name) {
+      const withoutCompany = { ...updates }
+      delete withoutCompany.company_name
+      ;({ data, error } = await save(withoutCompany))
+    }
 
     if (error) throw error
 

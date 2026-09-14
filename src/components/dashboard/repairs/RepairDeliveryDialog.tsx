@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
-import { CheckCircle2, PackageX, Wrench, Loader2, AlertTriangle, DollarSign, ExternalLink, ArrowLeft, CreditCard } from 'lucide-react'
+import { CheckCircle2, PackageX, Wrench, Loader2, AlertTriangle, DollarSign, ExternalLink, ArrowLeft, CreditCard, ShieldCheck } from 'lucide-react'
 import { Repair, RepairDeliveryOutcome } from '@/types/repairs'
 import { useCashRegister } from '@/hooks/useCashRegister'
 import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashRegisterDialog'
@@ -34,6 +34,8 @@ import {
   UnrepairedCloseoutPanel,
   type UnrepairedCloseoutDraft,
 } from './UnrepairedCloseoutPanel'
+import { getDeliveryOutcomeForQualityResult } from '@/lib/repairs/quality-check'
+import { RepairQualityBadge } from './RepairQualityBadge'
 
 export interface RepairedDeliveryConfirmPayload {
   idempotencyKey: string
@@ -63,6 +65,7 @@ interface RepairDeliveryDialogProps {
    * Default true.
    */
   allowPayment?: boolean
+  onOpenQualityCheck?: (repair: Repair) => void
 }
 
 const outcomes: {
@@ -109,6 +112,7 @@ export function RepairDeliveryDialog({
   onOpenChange,
   onConfirm,
   allowPayment = true,
+  onOpenQualityCheck,
 }: RepairDeliveryDialogProps) {
   const cashRegister = useCashRegister()
   const checkOpenSessionRef = useRef(cashRegister.checkOpenSession)
@@ -136,6 +140,9 @@ export function RepairDeliveryDialog({
   const [isOpening, setIsOpening] = useState(false)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [unrepairedDraft, setUnrepairedDraft] = useState<UnrepairedCloseoutDraft | null>(null)
+  const verifiedOutcome = repair?.qualityCheck
+    ? getDeliveryOutcomeForQualityResult(repair.qualityCheck.result)
+    : null
 
   const totalDue = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
   const alreadyPaid = repair?.paidAmount ?? 0
@@ -228,9 +235,16 @@ export function RepairDeliveryDialog({
   useEffect(() => {
     if (open) {
       setIdempotencyKey(`repair-delivery-${crypto.randomUUID()}`)
+      setStep('outcome')
+      setSelected(verifiedOutcome)
+      setUnrepairedDraft(verifiedOutcome && verifiedOutcome !== 'repaired' ? {
+        charge: { mode: 'none' },
+        parts: [],
+        settlement: alreadyPaid > 0 ? { kind: 'store_credit' } : { kind: 'none' },
+      } : null)
       void refreshCashStatus()
     }
-  }, [open, repair?.id, refreshCashStatus])
+  }, [open, repair?.id, refreshCashStatus, verifiedOutcome, alreadyPaid])
 
   const handleClose = () => {
     if (isSubmitting) return
@@ -453,8 +467,39 @@ export function RepairDeliveryDialog({
         <div className="space-y-4 py-1">
           {step === 'outcome' && <div className="space-y-3" data-help-id="repair-delivery-resolution">
             <p className="text-sm font-medium">¿Cuál fue el resultado?</p>
+            {repair.qualityCheck ? (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <RepairQualityBadge qualityCheck={repair.qualityCheck} />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Resultado técnico registrado por {repair.qualityCheck.checkedBy?.name || 'personal técnico'} el{' '}
+                  {new Date(repair.qualityCheck.checkedAt).toLocaleString('es-PY')}.
+                  El cajero confirma la entrega, pero no puede cambiar esta verificación.
+                </p>
+              </div>
+            ) : (
+              <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 space-y-2.5">
+                <div>
+                  <p className="font-semibold">Falta la verificación técnica</p>
+                  <p className="mt-1 text-xs text-rose-700 dark:text-rose-300/90">Un técnico debe comprobar el funcionamiento o marcar el equipo como no reparado antes de entregarlo.</p>
+                </div>
+                {onOpenQualityCheck && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      onOpenChange(false)
+                      onOpenQualityCheck(repair)
+                    }}
+                    className="h-8 gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    Abrir verificación técnica
+                  </Button>
+                )}
+              </div>
+            )}
             <div className="flex flex-col gap-2">
-              {outcomes.map((o) => {
+              {outcomes.filter((outcome) => outcome.value === verifiedOutcome).map((o) => {
                 const Icon = o.icon
                 const isSelected = selected === o.value
                 return (

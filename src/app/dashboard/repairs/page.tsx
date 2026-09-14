@@ -25,6 +25,7 @@ import { useComponentPreload, useAutoPreload } from '@/hooks/use-component-prelo
 import { useRepairFilters } from '@/hooks/use-repair-filters'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useBranch } from '@/contexts/branch-context'
+import { useAuth } from '@/contexts/auth-context'
 import { branchHeaders } from '@/lib/branches/client'
 
 // Repair Components
@@ -43,6 +44,7 @@ import { RepairSuccessDialog } from '@/components/dashboard/repairs/RepairSucces
 import { RepairReceiptSettingsDialog } from '@/components/dashboard/repairs/RepairReceiptSettingsDialog'
 import { RepairCardsView } from '@/components/dashboard/repairs/RepairCardsView'
 import { RepairDeliveryDialog, type RepairDeliveryConfirmPayload } from '@/components/dashboard/repairs/RepairDeliveryDialog'
+import { RepairQualityCheckDialog } from '@/components/dashboard/repairs/RepairQualityCheckDialog'
 import { RepairPaymentDialog, type RepairPaymentResult } from '@/components/dashboard/repairs/RepairPaymentDialog'
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
 import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
@@ -99,6 +101,9 @@ function RepairsPageContent() {
   const { technicians } = useTechnicians()
   const { settings: sharedSettings } = useSharedSettings()
   const { selectedBranchId, selectedBranch } = useBranch()
+  const { user } = useAuth()
+  const canManageRepairs = user?.role === 'super_admin' || user?.role === 'admin' || Boolean(user?.permissions?.includes('repairs.manage'))
+  const canDeliverRepairs = canManageRepairs || Boolean(user?.permissions?.includes('repairs.deliver'))
   const repairListCompanyInfo = useMemo(() => ({
     name: sharedSettings.companyName,
     phone: sharedSettings.companyPhone,
@@ -139,6 +144,7 @@ function RepairsPageContent() {
   const [detailRepair, setDetailRepair] = useState<Repair | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
+  const [qualityCheckTarget, setQualityCheckTarget] = useState<Repair | null>(null)
   const [payTarget, setPayTarget] = useState<Repair | null>(null)
   const [warrantyClaimTarget, setWarrantyClaimTarget] = useState<Repair | null>(null)
   const [pageSize] = useState<number>(25)
@@ -148,6 +154,15 @@ function RepairsPageContent() {
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [showReceiptSettingsDialog, setShowReceiptSettingsDialog] = useState(false)
   const [quickAccessOpen, setQuickAccessOpen] = useState(false)
+
+  const handleStatusChange = useCallback(async (id: string, status: Repair['status']) => {
+    if (status === 'listo') {
+      const target = repairs.find((repair) => repair.id === id)
+      if (target) setQualityCheckTarget(target)
+      return Boolean(target)
+    }
+    return updateStatus(id, status)
+  }, [repairs, updateStatus])
   const [statsOpen, setStatsOpen] = useState(false)
   const searchParams = useSearchParams()
   const requestedTechnicianId = searchParams.get('technician') || ''
@@ -827,8 +842,8 @@ function RepairsPageContent() {
     <div className="flex flex-col gap-4 bg-slate-50 p-4 sm:p-5 lg:p-6 dark:bg-slate-950">
       <RepairHeader
         onRefresh={refreshRepairs}
-        onNewRepair={handleNewRepair}
-        onOpenReceiptSettings={() => setShowReceiptSettingsDialog(true)}
+        onNewRepair={canManageRepairs ? handleNewRepair : undefined}
+        onOpenReceiptSettings={canManageRepairs ? () => setShowReceiptSettingsDialog(true) : undefined}
         isLoading={isLoading}
         totalRepairs={repairs.length}
         activeRepairs={repairPulse.activeRepairs}
@@ -908,6 +923,7 @@ function RepairsPageContent() {
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
                 onPreload={(view) => preload(view)}
+                allowedModes={canManageRepairs ? undefined : ['table', 'cards']}
               />
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <Badge variant="outline" className="rounded-full px-3 py-1">
@@ -974,7 +990,7 @@ function RepairsPageContent() {
         ) : uiFiltered.length === 0 ? (
           <RepairEmptyState
             hasFilters={hasActiveFilters}
-            onNewRepair={handleNewRepair}
+            onNewRepair={canManageRepairs ? handleNewRepair : undefined}
             onClearFilters={() => {
               setSearchTerm('')
               setStatusFilter('all')
@@ -987,11 +1003,12 @@ function RepairsPageContent() {
         ) : viewMode === 'table' ? (
           <RepairList
             repairs={visibleRepairs}
-            onStatusChange={updateStatus}
-            onEdit={handleEditRepair}
+            onStatusChange={canManageRepairs ? handleStatusChange : undefined}
+            onEdit={canManageRepairs ? handleEditRepair : undefined}
             onView={handleViewRepair}
-            onDelete={handleDeleteClick}
-            onDeliver={setDeliverTarget}
+            onDelete={canManageRepairs ? handleDeleteClick : undefined}
+            onDeliver={canDeliverRepairs ? setDeliverTarget : undefined}
+            onQualityCheck={canManageRepairs ? setQualityCheckTarget : undefined}
             onQuickPay={setPayTarget}
             onClaimWarranty={(r) => setWarrantyClaimTarget(r)}
             isLoading={false}
@@ -1001,9 +1018,10 @@ function RepairsPageContent() {
           <RepairCardsView
             repairs={visibleRepairs}
             onView={handleViewRepair}
-            onEdit={handleEditRepair}
-            onDelete={handleDeleteClick}
-            onDeliver={setDeliverTarget}
+            onEdit={canManageRepairs ? handleEditRepair : undefined}
+            onDelete={canManageRepairs ? handleDeleteClick : undefined}
+            onDeliver={canDeliverRepairs ? setDeliverTarget : undefined}
+            onQualityCheck={canManageRepairs ? setQualityCheckTarget : undefined}
             onQuickPay={setPayTarget}
             onClaimWarranty={(r) => setWarrantyClaimTarget(r)}
           />
@@ -1011,10 +1029,12 @@ function RepairsPageContent() {
           <div className="h-[calc(100vh-300px)] min-h-[500px]">
             <RepairKanban
               repairs={uiFiltered}
-              onStatusChange={async (id, status) => { await updateStatus(id, status) }}
-              onEdit={handleEditRepair}
+              onStatusChange={async (id, status) => {
+                if (canManageRepairs) await handleStatusChange(id, status)
+              }}
+              onEdit={canManageRepairs ? handleEditRepair : undefined}
               onView={handleViewRepair}
-              onRequestDeliver={setDeliverTarget}
+              onRequestDeliver={canDeliverRepairs ? setDeliverTarget : undefined}
             />
           </div>
         ) : (
@@ -1100,21 +1120,30 @@ function RepairsPageContent() {
         open={isDetailOpen}
         repair={activeDetailRepair}
         onClose={() => setIsDetailOpen(false)}
-        onEdit={(repair) => {
+        onEdit={canManageRepairs ? (repair) => {
             setIsDetailOpen(false)
             handleEditRepair(repair)
-        }}
-        onDeliver={(repair) => setDeliverTarget(repair)}
+        } : undefined}
+        onDeliver={canDeliverRepairs ? (repair) => setDeliverTarget(repair) : undefined}
+        onQualityCheck={canManageRepairs ? setQualityCheckTarget : undefined}
         onQuickPay={(repair) => setPayTarget(repair)}
         onCostSaved={refreshRepairs}
-        onStatusChange={updateStatus}
-        technicians={technicianOptions}
-        onTechnicianChange={async (repairId, technicianId) => assignTechnician(repairId, technicianId)}
-        onWarrantyChange={async (repairId, warranty) => Boolean(await updateRepair(repairId, {
+        onStatusChange={canManageRepairs ? handleStatusChange : undefined}
+        technicians={canManageRepairs ? technicianOptions : undefined}
+        onTechnicianChange={canManageRepairs ? async (repairId, technicianId) => assignTechnician(repairId, technicianId) : undefined}
+        onWarrantyChange={canManageRepairs ? async (repairId, warranty) => Boolean(await updateRepair(repairId, {
           warrantyMonths: warranty.months,
           warrantyType: warranty.type,
           warrantyNotes: warranty.months === 0 ? '' : warranty.notes,
-        }))}
+        })) : undefined}
+      />
+
+      <RepairQualityCheckDialog
+        open={!!qualityCheckTarget}
+        repair={qualityCheckTarget}
+        branchId={selectedBranchId}
+        onOpenChange={(open) => !open && setQualityCheckTarget(null)}
+        onSaved={refreshRepairs}
       />
 
       <RepairDeleteDialog
@@ -1131,6 +1160,10 @@ function RepairsPageContent() {
         open={!!deliverTarget}
         repair={deliverTarget}
         onOpenChange={(open) => !open && setDeliverTarget(null)}
+        onOpenQualityCheck={canManageRepairs ? (repair) => {
+          setDeliverTarget(null)
+          setQualityCheckTarget(repair)
+        } : undefined}
         onConfirm={async (id, payload: RepairDeliveryConfirmPayload) => {
           const response = await fetch(`/api/repairs/${id}/delivery`, {
             method: 'POST',

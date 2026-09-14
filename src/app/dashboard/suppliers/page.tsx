@@ -3,11 +3,13 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Download, LayoutGrid, List, Trash2, CheckCircle, XCircle, Clock, RefreshCw, FileDown, X, Scale, Truck, Info, Shield, ArrowLeft, Loader2 } from 'lucide-react'
+import { Plus, Download, LayoutGrid, List, Trash2, CheckCircle, XCircle, Clock, RefreshCw, FileDown, X, Scale, Truck, Info, Shield, ArrowLeft, Loader2, ShoppingCart } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { SupplierModal } from '@/components/dashboard/supplier-modal'
+import { SupplierDetailModal } from '@/components/suppliers/SupplierDetailModal'
+import { CreateOrderModal } from '@/components/suppliers/CreateOrderModal'
 import { SearchBar } from '@/components/suppliers/SearchBar'
 import { FilterTags, type FilterTag } from '@/components/suppliers/FilterTags'
 import { SupplierGrid } from '@/components/suppliers/SupplierGrid'
@@ -109,6 +111,15 @@ export default function SuppliersPage() {
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add')
   const [selectedSupplier, setSelectedSupplier] = useState<UISupplier | null>(null)
 
+  // Detail Modal state
+  const [detailSupplier, setDetailSupplier] = useState<UISupplier | null>(null)
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
+
+  // Create Order Modal state
+  const [orderSupplier, setOrderSupplier] = useState<UISupplier | null>(null)
+  const [orderSeedProduct, setOrderSeedProduct] = useState<any | null>(null)
+  const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false)
+
   // Filter state
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
@@ -208,6 +219,28 @@ export default function SuppliersPage() {
     setSelectedIds([])
   }
 
+  const handleViewDetail = useCallback((supplier: UISupplier) => {
+    setDetailSupplier(supplier)
+    setIsDetailModalOpen(true)
+  }, [])
+
+  const handleCreateOrder = useCallback((supplier: UISupplier, product?: any | null) => {
+    setOrderSupplier(supplier)
+    setOrderSeedProduct(product || null)
+    setIsCreateOrderOpen(true)
+  }, [])
+
+  const handleNotesSaved = useCallback((notes: string | null) => {
+    setDetailSupplier(prev => (prev ? { ...prev, notes } : null))
+    refresh({})
+  }, [refresh])
+
+  const handleOrderCreated = useCallback(() => {
+    setIsCreateOrderOpen(false)
+    refresh({})
+    toast.success('Orden de compra creada exitosamente')
+  }, [refresh])
+
   const handleSaveSupplier = async (supplierData: Partial<UISupplier>) => {
     try {
       setIsSaving(true)
@@ -215,6 +248,7 @@ export default function SuppliersPage() {
         await createSupplier(supplierData)
       } else if (selectedSupplier) {
         await updateSupplier(selectedSupplier.id, supplierData)
+        setDetailSupplier(prev => (prev && prev.id === selectedSupplier.id ? { ...prev, ...supplierData } : prev))
       }
       setIsModalOpen(false)
     } catch (error) {
@@ -428,6 +462,17 @@ export default function SuppliersPage() {
             <Download className="h-3.5 w-3.5" />
             Exportar
           </Button>
+          {suppliers.length > 0 && (
+            <Button
+              onClick={() => handleCreateOrder(suppliers[0])}
+              variant="outline"
+              size="sm"
+              className="gap-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40"
+            >
+              <ShoppingCart className="h-3.5 w-3.5" />
+              Nueva orden
+            </Button>
+          )}
           <Button onClick={handleAddSupplier} size="sm" className="gap-2">
             <Plus className="h-3.5 w-3.5" />
             Nuevo proveedor
@@ -620,6 +665,8 @@ export default function SuppliersPage() {
           suppliers={filteredSuppliers}
           onEdit={handleEditSupplier}
           onDelete={handleDeleteClick}
+          onViewDetail={handleViewDetail}
+          onCreateOrder={handleCreateOrder}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
         />
@@ -628,6 +675,8 @@ export default function SuppliersPage() {
           suppliers={filteredSuppliers}
           onEdit={handleEditSupplier}
           onDelete={handleDeleteClick}
+          onViewDetail={handleViewDetail}
+          onCreateOrder={handleCreateOrder}
           loading={loading}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
@@ -670,6 +719,38 @@ export default function SuppliersPage() {
         mode={modalMode}
         loading={isSaving}
       />
+
+      {/* Detail Modal */}
+      <SupplierDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        supplier={detailSupplier}
+        onEdit={(sup) => {
+          setIsDetailModalOpen(false)
+          handleEditSupplier(sup)
+        }}
+        onCreateOrder={(sup, prod) => {
+          setIsDetailModalOpen(false)
+          handleCreateOrder(sup, prod)
+        }}
+        onNotesSaved={handleNotesSaved}
+      />
+
+      {/* Create Order Modal */}
+      {orderSupplier && (
+        <CreateOrderModal
+          isOpen={isCreateOrderOpen}
+          onClose={() => {
+            setIsCreateOrderOpen(false)
+            setOrderSupplier(null)
+            setOrderSeedProduct(null)
+          }}
+          supplierId={orderSupplier.id}
+          supplierName={orderSupplier.name}
+          initialProduct={orderSeedProduct}
+          onOrderCreated={handleOrderCreated}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>

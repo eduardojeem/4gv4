@@ -86,7 +86,16 @@ export function CustomerAlerts({ customers, onViewCustomer }: CustomerAlertsProp
 
   const groups = useMemo<AlertGroup[]>(() => {
     const result: AlertGroup[] = []
-    const debtOf = (customer: Customer) => outstandingByCustomer?.get(customer.id) ?? 0
+    const debtOf = (customer: Customer): number => {
+      if (!outstandingByCustomer) return 0
+      if (typeof (outstandingByCustomer as any)?.get === 'function') {
+        return (outstandingByCustomer as any).get(customer.id) ?? 0
+      }
+      if (typeof outstandingByCustomer === 'object') {
+        return (outstandingByCustomer as unknown as Record<string, number>)[customer.id] ?? 0
+      }
+      return 0
+    }
 
     // 1. Saldo pendiente (deuda) — lo más importante para un taller
     const withDebt = customers

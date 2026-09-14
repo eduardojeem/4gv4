@@ -18,6 +18,7 @@ import { createClient } from '@/lib/supabase/server'
 import { awardPaidRepairLoyaltyPoints } from '@/lib/loyalty/repair-points'
 import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
 import { logger } from '@/lib/logger'
+import { validateDeliveryQualityCheck } from '@/lib/repairs/quality-check'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -40,7 +41,7 @@ async function resolveCashSessionId(ctx: Awaited<ReturnType<typeof resolveRepair
 
 export async function POST(request: NextRequest, context: RouteParams) {
   try {
-    const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
+    const ctx = await resolveRepairRouteContext(request, 'repairs.orders.deliver')
     if (isNextResponse(ctx)) return ctx
 
     const body = await request.json().catch(() => ({}))
@@ -49,6 +50,21 @@ export async function POST(request: NextRequest, context: RouteParams) {
       : null
     const unrepaired = outcome === 'withdrawn' || outcome === 'unrepairable'
     const { id } = await context.params
+    const { data: currentRepair, error: currentRepairError } = await fetchRepairById(ctx, id)
+    if (currentRepairError) throw currentRepairError
+    if (!currentRepair) return NextResponse.json({ error: 'Reparación no encontrada.' }, { status: 404 })
+    const currentQualityCheck = Array.isArray(currentRepair.qualityCheck)
+      ? currentRepair.qualityCheck[0]
+      : currentRepair.qualityCheck
+    if (outcome === 'repaired' || unrepaired) {
+      const qualityValidation = validateDeliveryQualityCheck(currentQualityCheck?.result ?? null, outcome)
+      if ('code' in qualityValidation) {
+        return NextResponse.json(
+          { error: qualityValidation.message, code: qualityValidation.code },
+          { status: 409 },
+        )
+      }
+    }
     if (unrepaired) {
       const parsed = parseUnrepairedCloseoutRequest(body)
       if (!parsed.success) {

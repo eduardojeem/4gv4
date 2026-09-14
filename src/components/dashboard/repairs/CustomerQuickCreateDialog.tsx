@@ -52,12 +52,11 @@ import { validateCustomerContact, normalizePhone, MIN_PHONE_DIGITS, ALTERNATE_PH
 import { useCustomerDuplicates } from '@/hooks/use-customer-duplicates'
 import { duplicatesMessage, type CustomerDuplicate, type DuplicateField } from '@/lib/customers/duplicate-check'
 
-// Un solo campo de nombre en vez de nombre + apellido: la base guarda un solo
-// `name`, una empresa no tiene apellido, y partir el nombre para editarlo y
-// volver a unirlo al guardar reordenaba lo que la persona habia escrito.
 const customerSchema = z
     .object({
-        name: z.string().min(2, 'El nombre o razón social debe tener al menos 2 caracteres'),
+        first_name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+        last_name: z.string().optional().or(z.literal('')),
+        company_name: z.string().optional().or(z.literal('')),
         phone: z.string().min(MIN_PHONE_DIGITS, `El teléfono debe tener al menos ${MIN_PHONE_DIGITS} dígitos`),
         alternate_phone: z.string().optional().or(z.literal('')),
         alternate_phone_label: z.string().optional().or(z.literal('')),
@@ -66,7 +65,7 @@ const customerSchema = z
     })
     .superRefine((data, ctx) => {
         const errors = validateCustomerContact({
-            name: data.name,
+            name: `${data.first_name} ${data.last_name || ''}`.trim(),
             phone: data.phone,
             email: data.email,
             alternatePhone: data.alternate_phone,
@@ -92,6 +91,9 @@ type CustomerFormData = z.infer<typeof customerSchema>
 export type QuickCustomerData = {
     id: string
     name?: string | null
+    first_name?: string | null
+    last_name?: string | null
+    company_name?: string | null
     phone?: string | null
     email?: string | null
     alternate_phone?: string | null
@@ -106,6 +108,9 @@ type SavedCustomerRow = {
     id: string
     customer_code?: string | null
     name?: string | null
+    first_name?: string | null
+    last_name?: string | null
+    company_name?: string | null
     phone?: string | null
     alternate_phone?: string | null
     alternate_phone_label?: string | null
@@ -129,8 +134,34 @@ interface CustomerQuickCreateDialogProps {
     customerToEdit?: QuickCustomerData | null
 }
 
+function capitalizeCustomerName(value: string): string {
+    return value
+        .replace(/(^|[\s-])(\p{L})/gu, (_, separator: string, letter: string) => (
+            `${separator}${letter.toLocaleUpperCase('es-PY')}`
+        ))
+}
+
+function normalizedCustomerName(value: string): string {
+    return capitalizeCustomerName(value.trim().replace(/\s+/g, ' '))
+        .replace(/(?:\p{L}\.){2,}/gu, (initials) => initials.toLocaleUpperCase('es-PY'))
+}
+
+function splitLegacyCustomerName(customer: QuickCustomerData): { firstName: string; lastName: string } {
+    if (customer.first_name?.trim() || customer.last_name?.trim()) {
+        return {
+            firstName: customer.first_name?.trim() || '',
+            lastName: customer.last_name?.trim() || '',
+        }
+    }
+
+    const [firstName = '', ...lastName] = (customer.name || '').trim().split(/\s+/)
+    return { firstName, lastName: lastName.join(' ') }
+}
+
 const EMPTY_FORM: CustomerFormData = {
-    name: '',
+    first_name: '',
+    last_name: '',
+    company_name: '',
     phone: '',
     alternate_phone: '',
     alternate_phone_label: '',
@@ -155,6 +186,7 @@ export function CustomerQuickCreateDialog({
         register,
         handleSubmit,
         watch,
+        setValue,
         formState: { errors },
         reset,
     } = useForm<CustomerFormData>({
@@ -204,8 +236,11 @@ export function CustomerQuickCreateDialog({
         if (!open) return
 
         if (customerToEdit) {
+            const personName = splitLegacyCustomerName(customerToEdit)
             reset({
-                name: customerToEdit.name || '',
+                first_name: personName.firstName,
+                last_name: personName.lastName,
+                company_name: customerToEdit.company_name || '',
                 phone: customerToEdit.phone || '',
                 alternate_phone: customerToEdit.alternate_phone || '',
                 alternate_phone_label: customerToEdit.alternate_phone_label || '',
@@ -234,11 +269,18 @@ export function CustomerQuickCreateDialog({
     function toCustomer(row: SavedCustomerRow, data: CustomerFormData): Customer & { is_wholesale?: boolean } {
         const alternatePhone = data.alternate_phone?.trim() ? normalizePhone(data.alternate_phone) : null
         const createdAt = row.created_at || new Date().toISOString()
+        const firstName = row.first_name || normalizedCustomerName(data.first_name)
+        const lastName = row.last_name || normalizedCustomerName(data.last_name || '')
+        const fullName = [firstName, lastName].filter(Boolean).join(' ')
 
         return {
             id: row.id,
             customerCode: row.customer_code || `CLI-${String(row.id).slice(0, 6)}`,
-            name: String(row.name || data.name).trim(),
+            name: String(row.name || fullName).trim(),
+            first_name: firstName,
+            last_name: lastName,
+            company_name: row.company_name || (isWholesale ? normalizedCustomerName(data.company_name || '') : ''),
+            company: row.company_name || (isWholesale ? normalizedCustomerName(data.company_name || '') : ''),
             phone: row.phone || normalizePhone(data.phone),
             alternate_phone: row.alternate_phone ?? alternatePhone,
             alternate_phone_label: row.alternate_phone_label ?? (alternatePhone ? (data.alternate_phone_label || null) : null),
@@ -348,8 +390,13 @@ export function CustomerQuickCreateDialog({
         setIsSubmitting(true)
         try {
             const alternatePhone = data.alternate_phone?.trim() ? normalizePhone(data.alternate_phone) : null
+            const firstName = normalizedCustomerName(data.first_name)
+            const lastName = normalizedCustomerName(data.last_name || '')
             const payload = {
-                name: data.name.trim(),
+                name: [firstName, lastName].filter(Boolean).join(' '),
+                first_name: firstName,
+                last_name: lastName || null,
+                company_name: isWholesale ? normalizedCustomerName(data.company_name || '') || null : null,
                 phone: normalizePhone(data.phone),
                 alternate_phone: alternatePhone,
                 // Sin telefono, la aclaracion de quien atiende no significa nada.
@@ -409,6 +456,7 @@ export function CustomerQuickCreateDialog({
             reset(EMPTY_FORM)
             setIsWholesale(false)
             setSendWebInvite(false)
+            onClose()
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error)
             console.error('Error al guardar el cliente:', message)
@@ -567,28 +615,53 @@ export function CustomerQuickCreateDialog({
                             </span>
                         </div>
 
-                        {/* Nombre o Razón Social */}
-                        <div className="space-y-1.5">
-                            <Label htmlFor="name" className="text-xs font-semibold text-foreground flex items-center justify-between">
-                                <span>Nombre o razón social <span className="text-red-500 font-bold">*</span></span>
-                            </Label>
-                            <div className="relative">
-                                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="first_name" className="text-xs font-semibold text-foreground">
+                                    Nombre <span className="text-red-500 font-bold">*</span>
+                                </Label>
+                                <div className="relative">
+                                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
+                                    <Input
+                                        id="first_name"
+                                        {...register('first_name')}
+                                        onChange={(event) => setValue('first_name', capitalizeCustomerName(event.target.value), {
+                                            shouldDirty: true,
+                                            shouldValidate: true,
+                                        })}
+                                        placeholder="Ej: Juan"
+                                        autoCapitalize="words"
+                                        className={cn(
+                                            "pl-9 h-10 text-xs sm:text-sm font-medium rounded-xl transition-all shadow-2xs",
+                                            errors.first_name && 'border-red-500 focus-visible:ring-red-500'
+                                        )}
+                                        disabled={isSubmitting}
+                                        autoFocus
+                                    />
+                                </div>
+                                {errors.first_name && (
+                                    <p className="text-[11px] font-medium text-red-500 mt-1">{errors.first_name.message}</p>
+                                )}
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="last_name" className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                    <span>Apellido</span>
+                                    <span className="text-[10px] text-muted-foreground font-normal">Opcional</span>
+                                </Label>
                                 <Input
-                                    id="name"
-                                    {...register('name')}
-                                    placeholder="Ej: Juan Pérez / Electro Servicios S.R.L."
-                                    className={cn(
-                                        "pl-9 h-10 text-xs sm:text-sm font-medium rounded-xl transition-all shadow-2xs",
-                                        errors.name && 'border-red-500 focus-visible:ring-red-500'
-                                    )}
+                                    id="last_name"
+                                    {...register('last_name')}
+                                    onChange={(event) => setValue('last_name', capitalizeCustomerName(event.target.value), {
+                                        shouldDirty: true,
+                                        shouldValidate: true,
+                                    })}
+                                    placeholder="Ej: Pérez"
+                                    autoCapitalize="words"
+                                    className="h-10 text-xs sm:text-sm font-medium rounded-xl transition-all shadow-2xs"
                                     disabled={isSubmitting}
-                                    autoFocus
                                 />
                             </div>
-                            {errors.name && (
-                                <p className="text-[11px] font-medium text-red-500 mt-1">{errors.name.message}</p>
-                            )}
                         </div>
 
                         {/* RUC / CI */}
@@ -805,6 +878,29 @@ export function CustomerQuickCreateDialog({
                                     </div>
                                 </div>
                             </div>
+
+                            {isWholesale && (
+                                <div className="space-y-1.5 rounded-xl border border-violet-200/80 bg-violet-50/40 p-3 dark:border-violet-800/60 dark:bg-violet-950/20">
+                                    <Label htmlFor="company_name" className="text-xs font-semibold text-violet-950 dark:text-violet-100 flex items-center justify-between">
+                                        <span>Empresa / razón social</span>
+                                        <span className="text-[10px] font-normal text-violet-700 dark:text-violet-300">Opcional</span>
+                                    </Label>
+                                    <div className="relative">
+                                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-violet-500/80" />
+                                        <Input
+                                            id="company_name"
+                                            {...register('company_name')}
+                                            placeholder="Ej: Deportes Central S.A."
+                                            autoCapitalize="words"
+                                            className="pl-9 h-10 text-xs sm:text-sm font-medium rounded-xl bg-white dark:bg-slate-900"
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+                                    <p className="text-[10px] leading-relaxed text-violet-700 dark:text-violet-300">
+                                        Identifica el negocio del responsable sin reemplazar su nombre personal.
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Opción Enviar Invitación al Portal Web Público */}
                             <div

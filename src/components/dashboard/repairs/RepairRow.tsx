@@ -20,6 +20,7 @@ import {
 import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle, PackageCheck, DollarSign, Shield } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, deviceTypeConfig } from '@/config/repair-constants'
+import { RepairQualityBadge } from './RepairQualityBadge'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { formatDistanceToNow } from 'date-fns'
@@ -49,10 +50,11 @@ type RepairCustomerDetails = Repair['customer'] & {
 interface RepairRowProps {
   repair: Repair
   onStatusChange?: (id: string, status: RepairStatus) => void
-  onEdit: (repair: Repair) => void
+  onEdit?: (repair: Repair) => void
   onView?: (repair: Repair) => void
   onDelete?: (id: string) => void
   onDeliver?: (repair: Repair) => void
+  onQualityCheck?: (repair: Repair) => void
   onQuickPay?: (repair: Repair) => void
   onClaimWarranty?: (repair: Repair) => void
   companyInfo?: RepairPrintCompanyInfo
@@ -66,7 +68,7 @@ const DEFAULT_COMPANY_INFO: RepairPrintCompanyInfo = {
 }
 
 export const RepairRow = memo<RepairRowProps>(
-  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver, onQuickPay, onClaimWarranty, companyInfo }) {
+  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver, onQualityCheck, onQuickPay, onClaimWarranty, companyInfo }) {
     const StatusIcon = statusConfig[repair.status]?.icon || Clock
     const priority = priorityConfig[repair.priority] || priorityConfig.medium
     const { notifyRepairStatus, notifyRepairReady, sendPaymentReminder } = useWhatsApp()
@@ -194,7 +196,7 @@ export const RepairRow = memo<RepairRowProps>(
         </TableCell>
 
         <TableCell>
-          <div className="flex min-w-[150px] items-center">
+          <div className="flex min-w-[150px] flex-col items-start gap-1">
             <Badge
               variant="outline"
               className={cn(
@@ -207,6 +209,9 @@ export const RepairRow = memo<RepairRowProps>(
                 {statusConfig[repair.status].label}
               </span>
             </Badge>
+            {(repair.status === 'listo' || repair.status === 'entregado') && repair.qualityCheck && (
+              <RepairQualityBadge qualityCheck={repair.qualityCheck} />
+            )}
           </div>
         </TableCell>
 
@@ -278,14 +283,16 @@ export const RepairRow = memo<RepairRowProps>(
             <DropdownMenuContent align="end" className="w-48 dark:bg-popover/95 dark:border-muted/50 backdrop-blur-sm">
               <DropdownMenuLabel className="text-foreground dark:text-foreground">Acciones</DropdownMenuLabel>
               <DropdownMenuSeparator className="dark:bg-muted/50" />
-              <DropdownMenuItem onClick={() => onView ? onView(repair) : onEdit(repair)} className="dark:hover:bg-muted/50">
+              <DropdownMenuItem onClick={() => { if (onView) onView(repair); else onEdit?.(repair) }} className="dark:hover:bg-muted/50">
                 <Eye className="mr-2 h-4 w-4" />
                 Ver detalle
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onEdit(repair)} className="dark:hover:bg-muted/50">
-                <Edit className="mr-2 h-4 w-4" />
-                Editar reparación
-              </DropdownMenuItem>
+              {onEdit && (
+                <DropdownMenuItem onClick={() => onEdit(repair)} className="dark:hover:bg-muted/50">
+                  <Edit className="mr-2 h-4 w-4" />
+                  Editar reparación
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator className="dark:bg-muted/50" />
               <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">
                 Comprobantes
@@ -382,6 +389,12 @@ export const RepairRow = memo<RepairRowProps>(
                   </DropdownMenuItem>
                 </>
               )}
+              {onQualityCheck && (repair.status === 'reparacion' || repair.status === 'listo') && (
+                <DropdownMenuItem onClick={() => onQualityCheck(repair)} className="text-blue-700 dark:text-blue-300">
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  {repair.qualityCheck ? 'Repetir prueba técnica' : 'Verificar funcionamiento'}
+                </DropdownMenuItem>
+              )}
               {(repair.status === 'entregado' || repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0)) && (
                 <>
                   <DropdownMenuSeparator className="dark:bg-muted/50" />
@@ -394,11 +407,11 @@ export const RepairRow = memo<RepairRowProps>(
                   </DropdownMenuItem>
                 </>
               )}
-              <DropdownMenuSeparator className="dark:bg-muted/50" />
-              <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">
+              {onStatusChange && <DropdownMenuSeparator className="dark:bg-muted/50" />}
+              {onStatusChange && <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">
                 Cambiar estado
-              </DropdownMenuLabel>
-              {Object.entries(statusConfig).map(([key, config]) => {
+              </DropdownMenuLabel>}
+              {onStatusChange && Object.entries(statusConfig).map(([key, config]) => {
                 const Icon = config.icon
                 if (key === repair.status || key === 'entregado') return null
                 return (
@@ -414,14 +427,14 @@ export const RepairRow = memo<RepairRowProps>(
                   </DropdownMenuItem>
                 )
               })}
-              <DropdownMenuSeparator className="dark:bg-muted/50" />
-              <DropdownMenuItem
+              {onDelete && <DropdownMenuSeparator className="dark:bg-muted/50" />}
+              {onDelete && <DropdownMenuItem
                 className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-300 focus:bg-red-50 dark:focus:bg-red-950/40"
                 onClick={() => onDelete?.(repair.id)}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Eliminar
-              </DropdownMenuItem>
+              </DropdownMenuItem>}
             </DropdownMenuContent>
           </DropdownMenu>
         </TableCell>

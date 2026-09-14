@@ -23,6 +23,10 @@ const REPAIR_SELECT_VARIANTS = [
     images:repair_images(id, image_url, description),
     payments:repair_payments(*),
     parts:repair_parts(*),
+    qualityCheck:repair_quality_checks!repairs_current_quality_check_fk(
+      id, result, checklist, note, created_by, created_at,
+      checkedBy:profiles!created_by(id, full_name)
+    ),
     currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
   `,
   `
@@ -32,6 +36,10 @@ const REPAIR_SELECT_VARIANTS = [
     images:repair_images(id, image_url, description),
     payments:repair_payments(*),
     parts:repair_parts(*),
+    qualityCheck:repair_quality_checks!repairs_current_quality_check_fk(
+      id, result, checklist, note, created_by, created_at,
+      checkedBy:profiles!created_by(id, full_name)
+    ),
     currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
   `,
   `
@@ -41,6 +49,10 @@ const REPAIR_SELECT_VARIANTS = [
     images:repair_images(id, image_url, description),
     payments:repair_payments(*),
     parts:repair_parts(*),
+    qualityCheck:repair_quality_checks!repairs_current_quality_check_fk(
+      id, result, checklist, note, created_by, created_at,
+      checkedBy:profiles!created_by(id, full_name)
+    ),
     currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
   `,
 ]
@@ -53,6 +65,10 @@ const FULL_REPAIR_SELECT = `
   parts:repair_parts(*),
   notes:repair_notes(*),
   payments:repair_payments(*),
+  qualityCheck:repair_quality_checks!repairs_current_quality_check_fk(
+    id, result, checklist, note, created_by, created_at,
+    checkedBy:profiles!created_by(id, full_name)
+  ),
   currentCostRevision:repair_cost_revisions!repairs_current_cost_revision_fk(*)
 `
 

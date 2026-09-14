@@ -19,7 +19,24 @@ interface SaleItemRow {
   quantity: number | null
   unit_price: number | null
   discount_amount?: number | null
-  products?: { name: string | null; sku: string | null } | { name: string | null; sku: string | null }[] | null
+  products?:
+    | {
+        name: string | null
+        sku: string | null
+        image_url?: string | null
+        warranty_months?: number | null
+        return_window_days?: number | null
+        exchange_window_days?: number | null
+      }
+    | {
+        name: string | null
+        sku: string | null
+        image_url?: string | null
+        warranty_months?: number | null
+        return_window_days?: number | null
+        exchange_window_days?: number | null
+      }[]
+    | null
 }
 
 function firstOf<T>(value: T | T[] | null | undefined): T | null {
@@ -105,7 +122,7 @@ export const GET = withTenantAuth(
           `id, code, total_amount, subtotal_amount, tax_amount, discount_amount,
            payment_method, payment_status, created_at, created_by,
            customers:customers!customer_id(name, phone, email),
-           sale_items(id, product_id, quantity, unit_price, discount_amount, products(name, sku))`
+            sale_items(id, product_id, quantity, unit_price, discount_amount, products(name, sku, image_url, warranty_months, return_window_days, exchange_window_days))`
         )
         .eq('id', id)
         .eq('organization_id', organization.id)
@@ -148,9 +165,13 @@ export const GET = withTenantAuth(
             product_id: item.product_id,
             name: product?.name || 'Producto',
             sku: product?.sku ?? null,
+            imageUrl: product?.image_url ?? null,
             quantity: Number(item.quantity) || 1,
             unitPrice: Number(item.unit_price) || 0,
             discount: item.discount_amount == null ? null : Number(item.discount_amount),
+            warrantyMonths: product?.warranty_months ?? 3,
+            returnWindowDays: product?.return_window_days ?? 7,
+            exchangeWindowDays: product?.exchange_window_days ?? 7,
           }
         }),
         payments: (paymentRows ?? []).map((payment) => ({
