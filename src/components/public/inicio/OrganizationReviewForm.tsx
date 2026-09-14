@@ -12,10 +12,12 @@ import { ReviewStarsInput } from './ReviewStars'
 export function OrganizationReviewForm({
   tenantSlug,
   inviteToken,
+  hasRepairs = false,
   onSuccess,
 }: {
   tenantSlug: string | null
   inviteToken: string | null
+  hasRepairs?: boolean
   onSuccess: () => void
 }) {
   const [name, setName] = useState('')
@@ -84,7 +86,9 @@ export function OrganizationReviewForm({
       {inviteToken && (
         <div className="flex gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-200">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          Este enlace permitirá comprobar tu compra o reparación sin mostrar sus datos.
+          {hasRepairs
+            ? 'Este enlace permitirá comprobar tu compra o reparación sin mostrar sus datos.'
+            : 'Este enlace permitirá comprobar tu compra sin mostrar sus datos.'}
         </div>
       )}
 

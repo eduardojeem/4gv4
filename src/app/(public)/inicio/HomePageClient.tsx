@@ -281,7 +281,7 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
       )}
 
       {/* ── 10. Reseñas y Opiniones de Clientes ── */}
-      <OrganizationReviews />
+      <OrganizationReviews hasRepairs={capabilities.hasRepairs} />
 
       {/* ── 11. Centro de Contacto y Asesoramiento WhatsApp ── */}
       <ContactCTA

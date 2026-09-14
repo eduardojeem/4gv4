@@ -74,7 +74,14 @@ function ReviewsSummary({ stats }: { stats: PublicReviewStats }) {
   )
 }
 
-export function OrganizationReviews() {
+/**
+ * Opiniones públicas de la tienda.
+ *
+ * `hasRepairs` sale del módulo de reparaciones de la empresa. Sin él, la
+ * sección ofrecía un filtro «Reparaciones» y hablaba de reparaciones
+ * comprobadas en tiendas que no reparan nada.
+ */
+export function OrganizationReviews({ hasRepairs = false }: { hasRepairs?: boolean }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const mounted = useSyncExternalStore(
@@ -112,14 +119,16 @@ export function OrganizationReviews() {
           </div>
           <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Experiencias reales de clientes</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">
-            Distinguimos las opiniones abiertas de las compras y reparaciones comprobadas por el sistema.
+            {hasRepairs
+              ? 'Distinguimos las opiniones abiertas de las compras y reparaciones comprobadas por el sistema.'
+              : 'Distinguimos las opiniones abiertas de las compras comprobadas por el sistema.'}
           </p>
         </header>
 
         <div className="mt-8"><ReviewsSummary stats={stats} /></div>
 
         <div className="mt-6 flex gap-2 overflow-x-auto pb-2" role="group" aria-label="Filtrar opiniones">
-          {FILTERS.map((item) => (
+          {FILTERS.filter((item) => hasRepairs || item.value !== 'repair').map((item) => (
             <Button
               key={item.value}
               type="button"
@@ -174,7 +183,7 @@ export function OrganizationReviews() {
         <div className={cn('mx-auto mt-10 max-w-2xl rounded-xl border bg-background p-5 sm:p-6', inviteToken && 'border-emerald-500/40')}>
           <h3 className="text-lg font-semibold">{inviteToken ? 'Contanos tu experiencia verificada' : '¿Ya nos visitaste? Dejanos tu opinión'}</h3>
           <p className="mb-5 mt-1 text-sm text-muted-foreground">Las opiniones se revisan por contenido, no por la cantidad de estrellas.</p>
-          <OrganizationReviewForm tenantSlug={tenantSlug} inviteToken={inviteToken} onSuccess={() => void mutate()} />
+          <OrganizationReviewForm tenantSlug={tenantSlug} inviteToken={inviteToken} hasRepairs={hasRepairs} onSuccess={() => void mutate()} />
         </div>
       </div>
     </section>

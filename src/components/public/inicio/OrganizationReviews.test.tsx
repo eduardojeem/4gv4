@@ -61,6 +61,23 @@ describe('OrganizationReviews', () => {
     expect(vi.mocked(useSWR).mock.calls.at(-1)?.[0]).toContain('offset=6')
   })
 
+  /** Una tienda sin taller no puede tener reparaciones verificadas. */
+  it('does not mention repairs when the business has no repairs module', () => {
+    render(<OrganizationReviews hasRepairs={false} />)
+
+    expect(screen.queryByRole('button', { name: 'Reparaciones' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/reparaciones comprobadas/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/compras comprobadas por el sistema/i)).toBeInTheDocument()
+  })
+
+  it('offers the repairs filter when the business repairs devices', () => {
+    render(<OrganizationReviews hasRepairs />)
+    fireEvent.click(screen.getByRole('button', { name: 'Reparaciones' }))
+
+    expect(vi.mocked(useSWR).mock.calls.at(-1)?.[0]).toContain('verification=repair')
+    expect(screen.getByText(/compras y reparaciones comprobadas/i)).toBeInTheDocument()
+  })
+
   it('offers a verified-only filter', () => {
     render(<OrganizationReviews />)
     fireEvent.click(screen.getByRole('button', { name: 'Verificadas' }))
