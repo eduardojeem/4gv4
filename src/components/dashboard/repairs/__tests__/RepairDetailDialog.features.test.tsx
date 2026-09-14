@@ -259,6 +259,39 @@ describe('RepairDetailDialog new features', () => {
     expect(screen.queryByText('Equipo Listo para Entrega')).not.toBeInTheDocument()
   })
 
+  it('muestra en el detalle de una reparación entregada el resultado técnico y su nota', () => {
+    render(
+      <RepairDetailDialog
+        open
+        repair={{
+          ...sampleRepair,
+          status: 'entregado',
+          deliveryOutcome: 'unrepairable',
+          qualityCheck: {
+            id: 'quality-delivered',
+            result: 'unrepairable',
+            checklist: {
+              powersOn: false,
+              reportedIssueResolved: false,
+              basicFunctions: false,
+              physicalCondition: true,
+              accessoriesVerified: true,
+            },
+            note: 'Placa en corto.',
+            checkedBy: { id: 'tech-1', name: 'Laura Gómez' },
+            checkedAt: '2026-09-13T20:00:00Z',
+          },
+        }}
+        onClose={vi.fn()}
+      />
+    )
+
+    const block = screen.getByTestId('repair-detail-quality-check')
+    expect(block).toHaveTextContent('No fue posible reparar')
+    expect(block).toHaveTextContent('Verificado por Laura Gómez')
+    expect(block).toHaveTextContent('Nota técnica: Placa en corto.')
+  })
+
   it('resalta en rojo un retiro sin reparación dentro del detalle', () => {
     render(
       <RepairDetailDialog

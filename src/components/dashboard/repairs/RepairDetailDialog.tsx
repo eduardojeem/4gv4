@@ -1234,9 +1234,12 @@ export function RepairDetailDialog({
                     <div className="mt-2">
                       <RepairQualityBadge qualityCheck={repair.qualityCheck} />
                       {repair.qualityCheck?.checkedBy && (
-                        <p className="mt-1 text-xs text-yellow-700/80 dark:text-yellow-400/80">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           Verificado por {repair.qualityCheck.checkedBy.name} · {new Date(repair.qualityCheck.checkedAt).toLocaleString('es-PY')}
                         </p>
+                      )}
+                      {repair.qualityCheck?.note && (
+                        <p className="mt-1 text-xs text-muted-foreground">Nota técnica: {repair.qualityCheck.note}</p>
                       )}
                     </div>
                   </div>
@@ -1304,6 +1307,18 @@ export function RepairDetailDialog({
                           Entregado el{' '}
                           {format(new Date(repair.pickedUpAt), "d 'de' MMMM yyyy, HH:mm", { locale: es })}
                         </p>
+                      )}
+                      {/* La verificación técnica se ve acá y no en la lista, para no cargarla. */}
+                      {repair.qualityCheck && (
+                        <div data-testid="repair-detail-quality-check" className="mt-3 space-y-1 border-t border-current/10 pt-3">
+                          <RepairQualityBadge qualityCheck={repair.qualityCheck} />
+                          <p className="text-xs text-muted-foreground">
+                            Verificado{repair.qualityCheck.checkedBy ? ` por ${repair.qualityCheck.checkedBy.name}` : ''} · {new Date(repair.qualityCheck.checkedAt).toLocaleString('es-PY')}
+                          </p>
+                          {repair.qualityCheck.note && (
+                            <p className="text-xs text-muted-foreground">Nota técnica: {repair.qualityCheck.note}</p>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

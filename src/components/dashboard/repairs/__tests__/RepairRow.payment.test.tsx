@@ -79,4 +79,10 @@ describe('RepairRow financial visibility', () => {
 
     expect(screen.queryByText('Sin verificar')).not.toBeInTheDocument()
   })
+
+  /** El resultado técnico se ve en el detalle, no en la fila. */
+  it('does not show the technical result in the table row', () => {
+    renderRow({ ...repair, status: 'listo', qualityCheck: { id: 'q1', result: 'passed', checklist: { powersOn: true, reportedIssueResolved: true, basicFunctions: true, physicalCondition: true, accessoriesVerified: true }, checkedAt: '2026-09-13T20:00:00Z' } })
+    expect(screen.queryByText('Probado · Funciona')).not.toBeInTheDocument()
+  })
 })

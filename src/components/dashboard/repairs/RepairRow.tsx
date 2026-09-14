@@ -20,7 +20,6 @@ import {
 import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle, PackageCheck, DollarSign, Shield } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, deviceTypeConfig } from '@/config/repair-constants'
-import { RepairQualityBadge } from './RepairQualityBadge'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { formatDistanceToNow } from 'date-fns'
@@ -209,9 +208,6 @@ export const RepairRow = memo<RepairRowProps>(
                 {statusConfig[repair.status].label}
               </span>
             </Badge>
-            {(repair.status === 'listo' || repair.status === 'entregado') && repair.qualityCheck && (
-              <RepairQualityBadge qualityCheck={repair.qualityCheck} />
-            )}
           </div>
         </TableCell>
 
