@@ -42,8 +42,9 @@ type SortKey = 'default' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newes
 type ViewMode = 'grid' | 'compact'
 
 /** Productos por página al entrar. */
-const PAGE_SIZE = 25
-const PAGE_SIZE_OPTIONS = [12, 25, 50, 100]
+const PAGE_SIZE = 28
+// Múltiplos de 4: la grilla de escritorio tiene 4 columnas y no quedan filas a medias.
+const PAGE_SIZE_OPTIONS = [12, 28, 48, 100]
 
 type Props = {
   products: MarketplaceProduct[]
