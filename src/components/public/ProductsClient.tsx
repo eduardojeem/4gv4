@@ -41,7 +41,9 @@ import { getOfferPricing, isOnOffer } from '@/lib/public/marketplace-offers'
 type SortKey = 'default' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newest' | 'name_asc'
 type ViewMode = 'grid' | 'compact'
 
-const PAGE_SIZE = 24
+/** Productos por página al entrar. */
+const PAGE_SIZE = 25
+const PAGE_SIZE_OPTIONS = [12, 25, 50, 100]
 
 type Props = {
   products: MarketplaceProduct[]
@@ -97,7 +99,7 @@ export function ProductsClient({
   const [sortOpen, setSortOpen] = useState(false)
   const [view, setView] = useState<ViewMode>('grid')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(16)
+  const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [selected, setSelected] = useState<MarketplaceProduct | null>(null)
   
   const sortRef = useRef<HTMLDivElement>(null)
@@ -936,7 +938,7 @@ export function ProductsClient({
           <div className="flex items-center gap-1.5 order-3">
             <span className="text-[11px] font-semibold text-muted-foreground">Ver:</span>
             <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/80">
-              {[12, 16, 24, 48].map((size) => (
+              {PAGE_SIZE_OPTIONS.map((size) => (
                 <button
                   key={size}
                   type="button"
