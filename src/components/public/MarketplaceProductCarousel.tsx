@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Eye, Pause, Play, Sparkles, Store, Tag, ArrowRight } from 'lucide-react'
@@ -11,12 +11,26 @@ import type { MarketplaceProduct } from '@/lib/public/marketplace'
 import { MarketplaceProductModal } from './MarketplaceProductModal'
 import { FavoriteButton } from './Favorites'
 import { cn } from '@/lib/utils'
+import { getOfferPricing } from '@/lib/public/marketplace-offers'
 
 type Props = {
   products: MarketplaceProduct[]
   variant?: 'default' | 'offers' | 'featured'
   autoPlay?: boolean
   autoPlayInterval?: number
+}
+
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
+
+function subscribeReducedMotion(onChange: () => void) {
+  if (typeof window === 'undefined' || !window.matchMedia) return () => {}
+  const media = window.matchMedia(REDUCED_MOTION_QUERY)
+  media.addEventListener?.('change', onChange)
+  return () => media.removeEventListener?.('change', onChange)
+}
+
+function getReducedMotion() {
+  return typeof window !== 'undefined' && Boolean(window.matchMedia?.(REDUCED_MOTION_QUERY).matches)
 }
 
 function ProductImage({ product }: { product: MarketplaceProduct }) {
@@ -46,11 +60,19 @@ export function MarketplaceProductCarousel({
   const [selected, setSelected] = useState<MarketplaceProduct | null>(null)
   const [isPaused, setIsPaused] = useState(false)
   const [userToggledPause, setUserToggledPause] = useState(false)
+  const prefersReducedMotion = useSyncExternalStore(subscribeReducedMotion, getReducedMotion, () => false)
 
   const isOffers = variant === 'offers'
   const isFeatured = variant === 'featured'
   const normalizedProducts = useMemo(() => products.slice(0, 30), [products])
-  const enableAutoPlay = (autoPlay ?? (isFeatured || isOffers || normalizedProducts.length >= 4)) && !userToggledPause
+  // Las ofertas quedan quietas: con precio tachado y descuento, que la tarjeta
+  // se vaya mientras se compara no ayuda. Nunca se mueve si el sistema pide
+  // reducir el movimiento.
+  const enableAutoPlay =
+    (autoPlay ?? (isFeatured || (!isOffers && normalizedProducts.length >= 4))) &&
+    !userToggledPause &&
+    !prefersReducedMotion
+
 
   function scroll(direction: 'left' | 'right') {
     const track = trackRef.current
@@ -126,7 +148,7 @@ export function MarketplaceProductCarousel({
           className={cn(
             'pointer-events-none absolute left-0 top-0 z-10 h-full w-12 bg-gradient-to-r to-transparent transition-opacity',
             isOffers
-              ? 'from-rose-50/80 dark:from-slate-950'
+              ? 'from-muted/60'
               : isFeatured
                 ? 'from-amber-50/80 dark:from-slate-950'
                 : 'from-white dark:from-slate-950'
@@ -137,7 +159,7 @@ export function MarketplaceProductCarousel({
           className={cn(
             'pointer-events-none absolute right-0 top-0 z-10 h-full w-12 bg-gradient-to-l to-transparent transition-opacity',
             isOffers
-              ? 'from-rose-50/80 dark:from-slate-950'
+              ? 'from-muted/60'
               : isFeatured
                 ? 'from-amber-50/80 dark:from-slate-950'
                 : 'from-white dark:from-slate-950'
@@ -152,13 +174,10 @@ export function MarketplaceProductCarousel({
           aria-label="Pasarela de productos del marketplace"
         >
           {normalizedProducts.map((product, idx) => {
-            const hasOffer = Boolean(
-              product.has_offer && product.offer_price && product.offer_price < product.sale_price
-            )
-            const displayPrice = hasOffer ? product.offer_price! : product.sale_price
-            const discountPct = hasOffer
-              ? Math.round((1 - product.offer_price! / product.sale_price) * 100)
-              : 0
+            const offer = getOfferPricing(product)
+            const hasOffer = offer.hasOffer
+            const displayPrice = offer.price
+            const discountPct = offer.percent
 
             return (
               <div
@@ -167,14 +186,14 @@ export function MarketplaceProductCarousel({
                 className={cn(
                   'group relative flex w-[calc((100%-0.5rem)/2)] max-w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 sm:w-64 bg-card shadow-2xs',
                   isOffers
-                    ? 'border-rose-200/70 hover:border-rose-300 hover:shadow-xl hover:shadow-rose-500/10 dark:border-rose-900/40 dark:hover:border-rose-700'
+                    ? 'border-border/80 hover:border-rose-400/60 hover:shadow-lg'
                     : isFeatured
                       ? 'border-amber-200/80 hover:border-amber-400 hover:shadow-xl hover:shadow-amber-500/15 dark:border-amber-900/40 dark:hover:border-amber-600 ring-1 ring-transparent hover:ring-amber-400/30'
                       : 'border-border/80 hover:border-cyan-300 hover:shadow-lg hover:shadow-cyan-500/5 dark:hover:border-cyan-800'
                 )}
               >
                 {/* Imagen (clic abre el detalle) */}
-                <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: product.sale_price }} /></div>
+                <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: displayPrice }} /></div>
                 <div
                   onClick={() => setSelected(product)}
                   role="button"
@@ -184,7 +203,7 @@ export function MarketplaceProductCarousel({
                   className={cn(
                     'relative aspect-square overflow-hidden cursor-pointer',
                     isOffers
-                      ? 'bg-gradient-to-br from-rose-50/80 to-rose-100/40 dark:from-rose-950/20 dark:to-rose-900/10'
+                      ? 'bg-muted/40'
                       : isFeatured
                         ? 'bg-gradient-to-br from-amber-50/70 to-orange-50/40 dark:from-amber-950/25 dark:to-slate-900'
                         : 'bg-gradient-to-br from-muted/50 to-muted/20'
@@ -195,8 +214,11 @@ export function MarketplaceProductCarousel({
                   {/* Badges superiores */}
                   <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1.5 pointer-events-none">
                     {hasOffer && discountPct > 0 && (
-                      <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
-                        <Tag className="h-2.5 w-2.5" />
+                      <span className={cn(
+                        'flex items-center gap-1 rounded-full bg-rose-600 font-bold text-white shadow-sm',
+                        isOffers ? 'px-3 py-1 text-xs' : 'px-2.5 py-0.5 text-[10px]'
+                      )}>
+                        <Tag className={isOffers ? 'h-3 w-3' : 'h-2.5 w-2.5'} />
                         -{discountPct}%
                       </span>
                     )}
@@ -227,11 +249,11 @@ export function MarketplaceProductCarousel({
                     >
                       <Store className={cn(
                         'h-3.5 w-3.5 shrink-0',
-                        isOffers ? 'text-rose-500' : isFeatured ? 'text-amber-600 dark:text-amber-400' : 'text-cyan-600 dark:text-cyan-400'
+                        isOffers ? 'text-muted-foreground' : isFeatured ? 'text-amber-600 dark:text-amber-400' : 'text-cyan-600 dark:text-cyan-400'
                       )} />
                       <span className={cn(
                         'truncate max-w-[170px]',
-                        isOffers ? 'text-rose-700 dark:text-rose-400' : isFeatured ? 'text-amber-800 dark:text-amber-300' : 'text-cyan-700 dark:text-cyan-400'
+                        isOffers ? 'text-foreground' : isFeatured ? 'text-amber-800 dark:text-amber-300' : 'text-cyan-700 dark:text-cyan-400'
                       )}>
                         {product.organization_name}
                       </span>
@@ -255,7 +277,7 @@ export function MarketplaceProductCarousel({
                   </div>
 
                   <div className="mt-2 space-y-2 border-t border-border/40 pt-2 sm:mt-3.5 sm:space-y-3 sm:pt-2.5">
-                    <div className="flex items-baseline gap-2">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                       <p
                         className={cn(
                           'text-base sm:text-lg font-bold tabular-nums leading-none',
@@ -270,10 +292,15 @@ export function MarketplaceProductCarousel({
                       </p>
                       {hasOffer && (
                         <p className="text-xs text-muted-foreground line-through">
-                          {formatPrice(product.sale_price)}
+                          {formatPrice(offer.regularPrice)}
                         </p>
                       )}
                     </div>
+                    {hasOffer && (
+                      <p className="-mt-1 text-[11px] font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 sm:-mt-1.5 sm:text-xs">
+                        Ahorrás {formatPrice(offer.savings)}
+                      </p>
+                    )}
 
                     {/* Botones de acción: Ver detalle + Ir a tienda */}
                     <div className="grid grid-cols-2 gap-1 pt-0.5 sm:gap-1.5 sm:pt-1">

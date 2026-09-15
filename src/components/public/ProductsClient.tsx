@@ -36,6 +36,7 @@ import { MarketplaceProductModal } from './MarketplaceProductModal'
 import { FavoriteButton } from './Favorites'
 import { getCategoryIcon } from './CategoryCarousel'
 import { cn } from '@/lib/utils'
+import { getOfferPricing, isOnOffer } from '@/lib/public/marketplace-offers'
 
 type SortKey = 'default' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newest' | 'name_asc'
 type ViewMode = 'grid' | 'compact'
@@ -50,6 +51,8 @@ type Props = {
   initialCategory?: string
   initialSubcategory?: string
   initialBrand?: string
+  /** Llega con `?ofertas=1`, desde «Ver todas las ofertas». */
+  initialOnlyOffers?: boolean
   /**
    * Oculta el buscador de esta barra. Lo usa /marketplace/buscar, que ya tiene el
    * suyo en el encabezado: dos buscadores sobre el mismo `?q=` se pisaban entre si.
@@ -74,6 +77,7 @@ export function ProductsClient({
   initialCategory = '',
   initialSubcategory = '',
   initialBrand = '',
+  initialOnlyOffers = false,
   hideSearch = false,
 }: Props) {
   const router = useRouter()
@@ -81,7 +85,14 @@ export function ProductsClient({
   const searchParams = useSearchParams()
 
   const [query, setQuery] = useState(initialQuery)
-  const [onlyOffers, setOnlyOffers] = useState(false)
+  const [onlyOffers, setOnlyOffers] = useState(initialOnlyOffers)
+  // «Ver todas las ofertas» navega a la misma página: el componente no se
+  // vuelve a montar, así que el pedido se aplica cuando cambia el parámetro.
+  const [lastOnlyOffersRequest, setLastOnlyOffersRequest] = useState(initialOnlyOffers)
+  if (lastOnlyOffersRequest !== initialOnlyOffers) {
+    setLastOnlyOffersRequest(initialOnlyOffers)
+    if (initialOnlyOffers) setOnlyOffers(true)
+  }
   const [sort, setSort] = useState<SortKey>('default')
   const [sortOpen, setSortOpen] = useState(false)
   const [view, setView] = useState<ViewMode>('grid')
@@ -227,7 +238,7 @@ export function ProductsClient({
 
   // ─── Filtrado y Ordenamiento Local ──────────────────────────────────────────
   const offersCount = useMemo(
-    () => products.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price).length,
+    () => products.filter(isOnOffer).length,
     [products]
   )
 
@@ -240,11 +251,15 @@ export function ProductsClient({
 
     // Filtro por ofertas localmente
     if (onlyOffers) {
-      result = result.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price)
+      result = result.filter(isOnOffer)
     }
 
+    // Viendo solo ofertas, «Relevancia» ordena por mayor descuento: es lo que
+    // se busca al filtrar ofertas.
+    const effectiveSort: SortKey = onlyOffers && sort === 'default' ? 'discount_desc' : sort
+
     // Ordenar localmente
-    switch (sort) {
+    switch (effectiveSort) {
       case 'price_asc':
         result = [...result].sort((a, b) => {
           const pa = a.has_offer && a.offer_price ? a.offer_price : a.sale_price
@@ -261,9 +276,9 @@ export function ProductsClient({
         break
       case 'discount_desc':
         result = [...result].sort((a, b) => {
-          const discA = a.has_offer && a.offer_price ? (1 - a.offer_price / a.sale_price) : 0
-          const discB = b.has_offer && b.offer_price ? (1 - b.offer_price / b.sale_price) : 0
-          return discB - discA
+          const pa = getOfferPricing(a)
+          const pb = getOfferPricing(b)
+          return pb.percent - pa.percent || pb.savings - pa.savings
         })
         break
       case 'newest':
@@ -690,14 +705,10 @@ export function ProductsClient({
         <div className={gridClass}>
           {paginated.map((product) => {
             const imageSrc = resolveProductImageUrl(product.image)
-            const hasOffer =
-              product.has_offer &&
-              product.offer_price != null &&
-              product.offer_price < product.sale_price
-            const displayPrice = hasOffer ? product.offer_price! : product.sale_price
-            const discountPct = hasOffer
-              ? Math.round((1 - product.offer_price! / product.sale_price) * 100)
-              : 0
+            const offer = getOfferPricing(product)
+            const hasOffer = offer.hasOffer
+            const displayPrice = offer.price
+            const discountPct = offer.percent
             const isCompact = view === 'compact'
 
             return (
@@ -709,7 +720,7 @@ export function ProductsClient({
                 )}
               >
                 {/* Imagen (clic abre modal de detalle) */}
-                <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: product.sale_price }} /></div>
+                <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: displayPrice }} /></div>
                 <div
                   onClick={() => setSelected(product)}
                   role="button"
@@ -796,12 +807,13 @@ export function ProductsClient({
                   {/* Precios y Botones */}
                   <div className="mt-3 space-y-2.5 border-t border-border/60 pt-2">
                     <div>
-                      <p className="text-base font-bold tabular-nums text-foreground">
+                      <p className={cn('text-base font-bold tabular-nums', hasOffer ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
                         {formatPrice(displayPrice)}
                       </p>
                       {hasOffer && (
-                        <p className="text-[11px] text-muted-foreground line-through">
-                          {formatPrice(product.sale_price)}
+                        <p className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] tabular-nums">
+                          <span className="text-muted-foreground line-through">{formatPrice(offer.regularPrice)}</span>
+                          <span className="font-semibold text-emerald-700 dark:text-emerald-400">Ahorrás {formatPrice(offer.savings)}</span>
                         </p>
                       )}
                     </div>

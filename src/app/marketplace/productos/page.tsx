@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { MarketplaceProductCarousel } from '@/components/public/MarketplaceProductCarousel'
 import { ProductsClient } from '@/components/public/ProductsClient'
 import { CategoryCarouselSection } from '@/components/public/CategoryCarouselSection'
-import { getMarketplaceProductsPage, getMarketplaceCategories, getMarketplaceBrands } from '@/lib/public/marketplace'
+import { getMarketplaceProductsPage, getMarketplaceCategories, getMarketplaceBrands, getMarketplaceOffers } from '@/lib/public/marketplace'
+import { getOfferPricing, mergeOffersIntoCatalog, sortOffersByDiscount } from '@/lib/public/marketplace-offers'
 
 export const metadata: Metadata = {
   title: 'Productos | Marketplace MiPOS',
@@ -15,22 +16,39 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 type PageProps = {
-  searchParams: Promise<{ q?: string; categoria?: string; subcategoria?: string; marca?: string }>
+  searchParams: Promise<{ q?: string; categoria?: string; subcategoria?: string; marca?: string; ofertas?: string }>
 }
 
 export default async function MarketplaceProductsPage({ searchParams }: PageProps) {
-  const { q, categoria, subcategoria, marca } = await searchParams
+  const { q, categoria, subcategoria, marca, ofertas } = await searchParams
+  const hasFilters = Boolean(q || categoria || subcategoria || marca)
 
-  const [productPage, categories, categoryBrands, allBrands] = await Promise.all([
+  const [productPage, categories, categoryBrands, allBrands, allOffers] = await Promise.all([
     getMarketplaceProductsPage(120, { q, categoria, subcategoria, marca }),
     getMarketplaceCategories(),
     categoria ? getMarketplaceBrands(30, { categoria }) : Promise.resolve([]),
     getMarketplaceBrands(60),
+    // Las ofertas se piden aparte: sacarlas de los primeros 120 productos del
+    // catálogo dejaba afuera las demás. Con filtros, la página filtrada ya
+    // trae las que corresponden.
+    hasFilters ? Promise.resolve([]) : getMarketplaceOffers(100),
   ])
-  const products = productPage.products
 
   const brands = categoria && categoryBrands.length > 0 ? categoryBrands : allBrands
-  const offerProducts = products.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price)
+  const offerProducts = sortOffersByDiscount(hasFilters ? productPage.products : allOffers)
+  // Sin filtros, el catálogo incluye todas las ofertas para que el filtro
+  // «Ofertas» no cuente solo las que entraron en la primera página.
+  const products = hasFilters ? productPage.products : mergeOffersIntoCatalog(productPage.products, offerProducts)
+  const bestDiscount = offerProducts.length > 0 ? getOfferPricing(offerProducts[0]).percent : 0
+  const offersHref = (() => {
+    const params = new URLSearchParams()
+    if (q) params.set('q', q)
+    if (categoria) params.set('categoria', categoria)
+    if (subcategoria) params.set('subcategoria', subcategoria)
+    if (marca) params.set('marca', marca)
+    params.set('ofertas', '1')
+    return `/marketplace/productos?${params.toString()}#catalogo`
+  })()
 
   const explicitFeatured = products.filter((p) => p.featured)
   const nonFeatured = products.filter((p) => !p.featured)
@@ -117,27 +135,35 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
       </section>
 
       {/* ── Carrusel ofertas ─────────────────────────────────────────────────── */}
-      {offerProducts.length > 0 && !categoria && !marca && (
-        <section className="border-b border-rose-100 bg-gradient-to-b from-rose-50/50 via-rose-50/20 to-white py-8 dark:border-rose-900/20 dark:from-rose-950/20 dark:via-slate-950 dark:to-slate-950">
+      {/* También con categoría o marca elegida: antes se ocultaba justo cuando
+          alguien buscaba algo concreto. */}
+      {offerProducts.length > 0 && (
+        <section aria-labelledby="ofertas-titulo" className="border-b border-border/80 bg-muted/30 py-8">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500 text-white shadow-sm shadow-rose-500/30">
-                  <Flame className="h-4 w-4" />
+            <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-600 text-white">
+                  <Flame className="h-5 w-5" aria-hidden="true" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                    Ofertas destacadas
+                  <h2 id="ofertas-titulo" className="text-lg font-bold tracking-tight text-foreground sm:text-xl">
+                    {hasFilters ? 'Ofertas en esta búsqueda' : 'Ofertas del marketplace'}
                   </h2>
-                  <p className="text-xs text-rose-600 dark:text-rose-400">
-                    Precios promocionales por tiempo limitado
+                  <p className="text-xs text-muted-foreground sm:text-sm">
+                    {offerProducts.length} producto{offerProducts.length !== 1 ? 's' : ''} con descuento, de mayor a menor
+                    {bestDiscount > 0 && (
+                      <span className="ml-1.5 font-semibold text-rose-600 dark:text-rose-400">· hasta -{bestDiscount}%</span>
+                    )}
                   </p>
                 </div>
               </div>
 
-              <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-300">
-                {offerProducts.length} ofertas
-              </span>
+              <Button asChild size="sm" variant="outline" className="gap-1.5 rounded-xl bg-card">
+                <Link href={offersHref}>
+                  Ver todas las ofertas
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
             </div>
 
             <MarketplaceProductCarousel products={offerProducts} variant="offers" />
@@ -188,9 +214,10 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
 
 
       {/* ── Catálogo completo con Filtros por Categoría, Subcategoría y Marca ── */}
-      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <section id="catalogo" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-8 sm:px-6 lg:px-8">
         <ProductsClient
           products={products}
+          initialOnlyOffers={ofertas === '1'}
           categories={categories}
           brands={brands}
           initialQuery={q ?? ''}
