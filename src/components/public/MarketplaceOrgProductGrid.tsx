@@ -20,6 +20,10 @@ type Org = {
   city?: string | null
   address?: string | null
   maps_url?: string | null
+  instagram?: string | null
+  facebook?: string | null
+  tiktok?: string | null
+  whatsapp?: string | null
   products_count: number
   featured_products: PublicProduct[]
 }
@@ -80,6 +84,14 @@ export function MarketplaceOrgProductGrid({ organizations }: Props) {
                   organization_city: org.city ?? null,
                   organization_address: org.address ?? null,
                   organization_maps_url: org.maps_url ?? null,
+                  organization_contact: org.instagram || org.facebook || org.tiktok || org.whatsapp
+                    ? {
+                        instagram: org.instagram ?? null,
+                        facebook: org.facebook ?? null,
+                        tiktok: org.tiktok ?? null,
+                        whatsapp: org.whatsapp ?? null,
+                      }
+                    : null,
                 }
                 return (
                   <div

@@ -106,6 +106,14 @@ export type MarketplaceOrganization = {
   review_count?: number | null
 }
 
+/** Redes y WhatsApp de la tienda, tal como los cargó en «Sitio Web». */
+export type MarketplaceOrganizationContact = {
+  instagram: string | null
+  facebook: string | null
+  tiktok: string | null
+  whatsapp: string | null
+}
+
 export type MarketplaceProduct = PublicProduct & {
   organization_id: string
   organization_name: string
@@ -114,7 +122,23 @@ export type MarketplaceProduct = PublicProduct & {
   organization_city?: string | null
   organization_address?: string | null
   organization_maps_url?: string | null
+  /** Para que el detalle muestre por dónde seguir a la tienda o consultarle. */
+  organization_contact?: MarketplaceOrganizationContact | null
   created_at?: string | null
+}
+
+const contactText = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null)
+
+export function pickOrganizationContact(
+  companyInfo: Record<string, unknown> | null | undefined
+): MarketplaceOrganizationContact | null {
+  const contact = {
+    instagram: contactText(companyInfo?.instagram),
+    facebook: contactText(companyInfo?.facebook),
+    tiktok: contactText(companyInfo?.tiktok),
+    whatsapp: contactText(companyInfo?.whatsapp),
+  }
+  return Object.values(contact).some(Boolean) ? contact : null
 }
 
 export type MarketplaceCategory = {
@@ -672,6 +696,7 @@ async function getMarketplaceProductsPageUncached(
         organization_city: city,
         organization_address: address,
         organization_maps_url: mapsHref,
+        organization_contact: pickOrganizationContact(companyInfo),
       }
     })
     .filter((product): product is MarketplaceProduct => product !== null)
@@ -1108,6 +1133,7 @@ async function getMarketplaceOffersUncached(limit = 100): Promise<MarketplacePro
         organization_city: city,
         organization_address: address,
         organization_maps_url: mapsHref,
+        organization_contact: pickOrganizationContact(companyInfo),
         created_at: product.created_at ?? null,
       }
     })
