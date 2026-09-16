@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Building2, Globe, Save, X, AlertCircle } from 'lucide-react'
+import { Building2, Globe, Save, X, AlertCircle, BadgeCheck, Loader2, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,7 +28,15 @@ import { cn } from '@/lib/utils'
 import type { Brand } from '@/hooks/useBrands'
 import type { Database } from '@/lib/supabase/types'
 
-type BrandInsert = Database['public']['Tables']['brands']['Insert']
+type BrandInsert = Database['public']['Tables']['brands']['Insert'] & { global_brand_id?: string | null }
+
+/** Marca oficial del catálogo de la plataforma. */
+type CatalogBrand = {
+  id: string
+  name: string
+  logo_url?: string | null
+  website?: string | null
+}
 
 interface BrandModalProps {
   isOpen: boolean
@@ -77,8 +85,43 @@ export function BrandModal({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Catálogo global: el logo de una marca lo define la plataforma, no cada
+  // empresa. Antes el marketplace mostraba la primera imagen cargada por
+  // cualquiera como logo de esa marca.
+  const [official, setOfficial] = useState<CatalogBrand | null>(null)
+  const [catalogQuery, setCatalogQuery] = useState('')
+  const [catalogResults, setCatalogResults] = useState<CatalogBrand[]>([])
+  const [loadingCatalog, setLoadingCatalog] = useState(false)
+  const [ownBrand, setOwnBrand] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen || ownBrand || official) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      setLoadingCatalog(true)
+      try {
+        const response = await fetch(`/api/brands/catalog?search=${encodeURIComponent(catalogQuery)}`)
+        const payload = await response.json().catch(() => null)
+        if (!cancelled) setCatalogResults(payload?.success ? payload.data ?? [] : [])
+      } catch {
+        if (!cancelled) setCatalogResults([])
+      } finally {
+        if (!cancelled) setLoadingCatalog(false)
+      }
+    }, 250)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [isOpen, catalogQuery, ownBrand, official])
+
   // Initialize form when brand changes
   useEffect(() => {
+    const linked = brand?.global_brand_id
+      ? { id: brand.global_brand_id, name: brand.name, logo_url: brand.logo_url }
+      : null
+    setOfficial(linked)
+    setOwnBrand(Boolean(brand) && !linked)
+    setCatalogQuery('')
+    setCatalogResults([])
+
     if (brand) {
       setFormData({
         name: brand.name,
@@ -103,6 +146,8 @@ export function BrandModal({
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
+
+    if (official) return true
 
     if (!formData.name.trim()) {
       newErrors.name = 'El nombre es requerido'
@@ -142,7 +187,10 @@ export function BrandModal({
     try {
       // Clean up data before sending - ensure proper null values
       const dataToSend: BrandInsert = {
-        name: formData.name.trim(),
+        // Con marca oficial, el servidor reemplaza nombre y logo por los del
+        // catálogo: acá se manda el vínculo, no una copia.
+        global_brand_id: official?.id ?? null,
+        name: (official?.name ?? formData.name).trim(),
         description: formData.description?.trim() || null,
         website: normalizeWebsite(formData.website),
         country: formData.country || null,
@@ -209,24 +257,102 @@ export function BrandModal({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name" className="text-sm font-medium">
-                      Nombre de la Marca *
-                    </Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => handleInputChange('name', e.target.value)}
-                      placeholder="Ej: Apple, Samsung, Xiaomi"
-                      className={cn(errors.name && 'border-red-500')}
-                    />
-                    {errors.name && (
-                      <p className="text-sm text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {errors.name}
+                  {/* Marca oficial: el nombre y el logo salen del catálogo de la plataforma. */}
+                  {official ? (
+                    <div className="flex items-center gap-3 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3">
+                      {official.logo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={official.logo_url} alt="" className="h-10 w-10 rounded-md bg-white object-contain p-1" />
+                      ) : (
+                        <span className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-sm font-bold">
+                          {official.name.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                          <BadgeCheck className="h-4 w-4 text-emerald-600" />
+                          {official.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Marca oficial: el nombre y el logo los define la plataforma.</p>
+                      </div>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => { setOfficial(null); setOwnBrand(false) }}>
+                        Cambiar
+                      </Button>
+                    </div>
+                  ) : ownBrand ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="name" className="text-sm font-medium">Nombre de la marca propia *</Label>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setOwnBrand(false)}>
+                          Buscar en el catálogo
+                        </Button>
+                      </div>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => handleInputChange('name', e.target.value)}
+                        placeholder="Ej: Panadería del barrio"
+                        className={cn(errors.name && 'border-red-500')}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Se muestra con su inicial. Los logos los carga la plataforma para las marcas del catálogo.
                       </p>
-                    )}
-                  </div>
+                      {errors.name && (
+                        <p className="text-sm text-red-500 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          {errors.name}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="catalog" className="text-sm font-medium">Marca oficial *</Label>
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          id="catalog"
+                          value={catalogQuery}
+                          onChange={(e) => setCatalogQuery(e.target.value)}
+                          placeholder="Buscá la marca: Samsung, Apple, Xiaomi…"
+                          className="pl-9"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border p-1">
+                        {loadingCatalog ? (
+                          <p className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Buscando…
+                          </p>
+                        ) : catalogResults.length === 0 ? (
+                          <p className="p-3 text-sm text-muted-foreground">
+                            No encontramos esa marca en el catálogo.
+                          </p>
+                        ) : (
+                          catalogResults.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => { setOfficial(item); handleInputChange('name', item.name) }}
+                              className="flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors hover:bg-muted"
+                            >
+                              {item.logo_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={item.logo_url} alt="" className="h-8 w-8 rounded bg-white object-contain p-0.5" />
+                              ) : (
+                                <span className="flex h-8 w-8 items-center justify-center rounded bg-muted text-xs font-bold">
+                                  {item.name.charAt(0).toUpperCase()}
+                                </span>
+                              )}
+                              <span className="text-sm font-medium text-foreground">{item.name}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setOwnBrand(true)}>
+                        No está en el catálogo: es una marca propia
+                      </Button>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="description" className="text-sm font-medium">

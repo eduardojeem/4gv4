@@ -814,7 +814,7 @@ async function getMarketplaceBrandsUncached(
 
   let query = supabase
     .from('products')
-    .select('organization_id, brand, brand_id, category_id, brands:brand_id(name, logo_url), organizations!inner(id)')
+    .select('organization_id, brand, brand_id, category_id, brands:brand_id(name, logo_url, global_brands:global_brand_id(name, logo_url)), organizations!inner(id)')
     .in('organization_id', showcaseOrganizationIds)
     .eq('is_active', true)
     .eq('visibility', 'public')
@@ -832,15 +832,28 @@ async function getMarketplaceBrandsUncached(
 
   if (error || !data) return []
 
-  type BrandRow = { organization_id: string; brand: string | null; brands: { name: string; logo_url?: string | null } | null }
+  type BrandRow = {
+    organization_id: string
+    brand: string | null
+    brands: {
+      name: string
+      logo_url?: string | null
+      global_brands?: { name: string; logo_url?: string | null } | null
+    } | null
+  }
   const brands = new Map<string, MarketplaceBrand & { organizationIds: Set<string>; nameCounts: Map<string, number> }>()
 
   ;((data ?? []) as unknown as BrandRow[]).forEach((row) => {
-    const rawName = (row.brands?.name ?? row.brand ?? '').trim()
+    const official = row.brands?.global_brands ?? null
+    // El nombre oficial manda: «samsung» y «Samsung Electronics» son la misma
+    // marca en la vitrina.
+    const rawName = (official?.name ?? row.brands?.name ?? row.brand ?? '').trim()
     if (!rawName) return
 
     const key = rawName.toLowerCase()
-    const brandLogo = row.brands?.logo_url || null
+    // Solo el logo del catálogo global. Antes se tomaba el de la marca de cada
+    // empresa y la primera imagen cargada representaba a la marca para todas.
+    const brandLogo = official?.logo_url || null
 
     const existing = brands.get(key) ?? {
       name: rawName,

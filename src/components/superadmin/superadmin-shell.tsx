@@ -32,6 +32,7 @@ import {
   Shield,
   Sparkles,
   Store,
+  Tag,
   TicketPercent,
   Trash2,
   Users,
@@ -167,6 +168,16 @@ const navItems: NavItem[] = [
       { title: 'Landing', href: '/superadmin/web-content/landing', icon: LayoutTemplate },
       { title: 'Marketplace', href: '/superadmin/web-content/marketplace', icon: Store },
       { title: 'Aviso del marketplace', href: '/superadmin/web-content/anuncio', icon: Megaphone },
+    ],
+  },
+  {
+    title: 'Catalogo global',
+    href: '/superadmin/brands',
+    icon: Tag,
+    description: 'Marcas oficiales que comparten todas las empresas',
+    section: 'content',
+    children: [
+      { title: 'Marcas', href: '/superadmin/brands', icon: Tag },
     ],
   },
   {

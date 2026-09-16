@@ -1,0 +1,50 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
+
+const MIGRACION = leer('supabase/migrations/20260915120000_global_brands_catalog.sql')
+const API_EMPRESA = leer('src/app/api/brands/route.ts')
+const API_CATALOGO = leer('src/app/api/brands/catalog/route.ts')
+const API_SUPERADMIN = leer('src/app/api/superadmin/global-brands/route.ts')
+const MARKETPLACE = leer('src/lib/public/marketplace.ts')
+
+/**
+ * El marketplace agrupa las marcas por nombre y mostraba el primer logo
+ * cargado: la imagen que subía una empresa representaba a esa marca para todas.
+ * El logo pasa a ser un dato de la plataforma.
+ */
+describe('catálogo global de marcas', () => {
+  it('la marca de la empresa apunta al catálogo, que administra la plataforma', () => {
+    expect(MIGRACION).toContain('create table if not exists public.global_brands')
+    expect(MIGRACION).toContain('add column if not exists global_brand_id uuid')
+    // Sin política de escritura: solo el service role (superadmin) puede tocarlo.
+    expect(MIGRACION).toContain('for select using')
+    expect(MIGRACION).not.toMatch(/for (insert|update|delete)/i)
+  })
+
+  it('la API de la empresa nunca guarda el logo que manda el navegador', () => {
+    expect(API_EMPRESA).toContain('resolveTenantBrandFields')
+    expect(API_EMPRESA).toContain('global_brand_id')
+  })
+
+  it('la empresa solo lee el catálogo', () => {
+    expect(API_CATALOGO).toContain('searchGlobalBrands')
+    expect(API_CATALOGO).not.toMatch(/export const (POST|PUT|DELETE)/)
+  })
+
+  it('el catálogo se administra desde el superadmin, con auditoría', () => {
+    expect(API_SUPERADMIN).toContain('getSuperAdminUser')
+    expect(API_SUPERADMIN).toContain('logSuperAdminAction')
+    // Un logo oficial sale de un origen permitido.
+    expect(API_SUPERADMIN).toContain('isSupportedImageSource')
+    // La baja es lógica: borrar desvincularía las marcas de las empresas.
+    expect(API_SUPERADMIN).toContain("update({ is_active: false")
+  })
+
+  it('el marketplace muestra solo el logo oficial', () => {
+    expect(MARKETPLACE).toContain('global_brands:global_brand_id(name, logo_url)')
+    expect(MARKETPLACE).toContain('const brandLogo = official?.logo_url || null')
+  })
+})
