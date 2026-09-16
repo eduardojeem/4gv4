@@ -32,6 +32,7 @@ import {
   Shield,
   Sparkles,
   Store,
+  FolderTree,
   Tag,
   TicketPercent,
   Trash2,
@@ -171,13 +172,14 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    title: 'Catalogo global',
+    title: 'Marcas y categorias',
     href: '/superadmin/brands',
     icon: Tag,
-    description: 'Marcas oficiales que comparten todas las empresas',
+    description: 'Marcas oficiales y taxonomia que comparten todas las empresas',
     section: 'content',
     children: [
       { title: 'Marcas', href: '/superadmin/brands', icon: Tag },
+      { title: 'Categorias', href: '/superadmin/categories', icon: FolderTree },
     ],
   },
   {

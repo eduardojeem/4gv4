@@ -43,6 +43,16 @@ describe('catálogo global de marcas', () => {
     expect(API_SUPERADMIN).toContain("update({ is_active: false")
   })
 
+  it('el superadmin también administra la taxonomía de categorías', () => {
+    const api = leer('src/app/api/superadmin/global-categories/route.ts')
+    const menu = leer('src/components/superadmin/superadmin-shell.tsx')
+
+    expect(api).toContain('getSuperAdminUser')
+    expect(api).toContain('planCategoryLinks')
+    expect(menu).toContain("href: '/superadmin/brands'")
+    expect(menu).toContain("href: '/superadmin/categories'")
+  })
+
   it('el marketplace muestra solo el logo oficial', () => {
     expect(MARKETPLACE).toContain('global_brands:global_brand_id(name, logo_url)')
     expect(MARKETPLACE).toContain('const brandLogo = official?.logo_url || null')
