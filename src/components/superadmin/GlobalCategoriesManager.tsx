@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CornerDownRight, FolderTree, Link2, Loader2, Plus, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { CornerDownRight, FolderTree, Link2, Loader2, Plus, RefreshCw, RotateCcw, Search, Trash2, Unlink } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,6 +43,15 @@ type Draft = {
 
 const EMPTY_DRAFT: Draft = { name: '', parent_id: '', aliases: '', description: '', sort_order: '0', is_active: true }
 
+type Filter = 'all' | 'roots' | 'unused' | 'inactive'
+
+const FILTERS: Array<{ id: Filter; label: string; hint: string }> = [
+  { id: 'all', label: 'Todas', hint: 'Toda la taxonomía' },
+  { id: 'roots', label: 'Principales', hint: 'Solo las categorías madre' },
+  { id: 'unused', label: 'Sin uso', hint: 'Ninguna empresa las usa todavía' },
+  { id: 'inactive', label: 'De baja', hint: 'Fuera de la taxonomía' },
+]
+
 export function GlobalCategoriesManager() {
   const [categories, setCategories] = useState<GlobalCategory[]>([])
   const [summary, setSummary] = useState({ tenantTotal: 0, tenantLinked: 0, pendingLinks: 0 })
@@ -52,6 +61,7 @@ export function GlobalCategoriesManager() {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
   const [linking, setLinking] = useState(false)
+  const [filter, setFilter] = useState<Filter>('all')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -79,12 +89,22 @@ export function GlobalCategoriesManager() {
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase()
-    if (!needle) return categories
-    return categories.filter((category) =>
-      category.name.toLowerCase().includes(needle) ||
-      (category.aliases ?? []).some((alias) => alias.toLowerCase().includes(needle))
-    )
-  }, [categories, search])
+    return categories.filter((category) => {
+      const matchesSearch = !needle ||
+        category.name.toLowerCase().includes(needle) ||
+        (category.aliases ?? []).some((alias) => alias.toLowerCase().includes(needle))
+      if (!matchesSearch) return false
+      if (filter === 'roots') return !category.parent_id
+      if (filter === 'unused') return (category.linked_count ?? 0) === 0
+      if (filter === 'inactive') return !category.is_active
+      return true
+    })
+  }, [categories, search, filter])
+
+  const parentName = useMemo(() => {
+    const byId = new Map(categories.map((category) => [category.id, category.name]))
+    return (parentId: string | null) => (parentId ? byId.get(parentId) ?? null : null)
+  }, [categories])
 
   const save = async () => {
     if (!draft) return
@@ -138,6 +158,22 @@ export function GlobalCategoriesManager() {
     }
   }
 
+  const reactivate = async (category: GlobalCategory) => {
+    try {
+      const response = await fetch('/api/superadmin/global-categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: category.id, is_active: true }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo reactivar.')
+      toast.success(`${category.name} vuelve a la taxonomía`)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo reactivar.')
+    }
+  }
+
   const deactivate = async (category: GlobalCategory) => {
     try {
       const response = await fetch(`/api/superadmin/global-categories?id=${category.id}`, { method: 'DELETE' })
@@ -154,11 +190,11 @@ export function GlobalCategoriesManager() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-50">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <FolderTree className="h-6 w-6 text-sky-400" />
             Categorías globales
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-muted-foreground">
             La taxonomía con la que el marketplace agrupa las categorías de todas las empresas.
           </p>
         </div>
@@ -181,52 +217,104 @@ export function GlobalCategoriesManager() {
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { label: 'En la taxonomía', value: categories.length },
-          { label: 'Activas', value: categories.filter((c) => c.is_active).length },
           { label: 'Categorías de empresas', value: summary.tenantTotal },
           { label: 'Vinculadas', value: summary.tenantLinked },
+          {
+            label: 'Sin vincular',
+            value: summary.tenantTotal - summary.tenantLinked,
+            warn: summary.tenantTotal - summary.tenantLinked > 0,
+          },
         ].map((cell) => (
-          <div key={cell.label} className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
-            <dt className="text-[11px] uppercase tracking-wide text-slate-500">{cell.label}</dt>
-            <dd className="mt-0.5 text-xl font-bold tabular-nums text-slate-100">{cell.value}</dd>
+          <div key={cell.label} className="rounded-xl border bg-card px-4 py-3">
+            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{cell.label}</dt>
+            <dd className={cn('mt-0.5 text-xl font-bold tabular-nums', cell.warn ? 'text-amber-600 dark:text-amber-400' : 'text-foreground')}>
+              {cell.value}
+            </dd>
           </div>
         ))}
       </dl>
 
-      <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar por nombre o alias"
-          className="border-slate-800 bg-slate-900/60 pl-9 text-slate-100"
-        />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar por nombre o alias"
+            className="pl-9"
+          />
+        </div>
+        <div role="tablist" aria-label="Filtrar categorías" className="flex flex-wrap gap-1.5">
+          {FILTERS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={filter === item.id}
+              title={item.hint}
+              onClick={() => setFilter(item.id)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                filter === item.id
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-accent hover:text-foreground',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <span className="ml-auto text-xs tabular-nums text-muted-foreground">{visible.length} de {categories.length}</span>
       </div>
 
+      {summary.pendingLinks > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm text-amber-900 dark:text-amber-200">
+            Hay <strong>{summary.pendingLinks}</strong> categoría{summary.pendingLinks === 1 ? '' : 's'} de empresas que coinciden por nombre con esta taxonomía y todavía no están vinculadas.
+          </p>
+          <Button size="sm" variant="outline" onClick={() => void linkExisting()} disabled={linking} className="gap-1.5">
+            {linking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+            Vincular ahora
+          </Button>
+        </div>
+      )}
+
       {error ? (
-        <div role="alert" className="rounded-xl border border-rose-900/60 bg-rose-950/30 p-4 text-sm text-rose-300">{error}</div>
+        <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{error}</div>
       ) : loading ? (
-        <p className="flex items-center gap-2 text-sm text-slate-400">
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando taxonomía…
         </p>
       ) : visible.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-800 p-10 text-center">
-          <p className="font-medium text-slate-200">
+        <div className="rounded-xl border border-dashed border-border p-10 text-center">
+          <p className="font-medium text-foreground">
             {categories.length === 0 ? 'La taxonomía está vacía' : 'Ninguna categoría coincide'}
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-slate-800 overflow-hidden rounded-xl border border-slate-800">
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
           {visible.map((category) => (
-            <li key={category.id} className="flex flex-wrap items-center gap-3 bg-slate-900/40 px-4 py-3">
-              {category.parent_id && <CornerDownRight className="h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />}
+            <li key={category.id} className="flex flex-wrap items-center gap-3 bg-card px-4 py-3">
+              {category.parent_id && <CornerDownRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
               <div className={cn('min-w-0 flex-1', category.parent_id && 'pl-1')}>
-                <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-slate-100">
+                <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-foreground">
                   {category.name}
+                  {parentName(category.parent_id) && (
+                    <span className="text-xs font-normal text-muted-foreground">en {parentName(category.parent_id)}</span>
+                  )}
                   {!category.is_active && (
-                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400">De baja</span>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">De baja</span>
+                  )}
+                  {(category.linked_count ?? 0) === 0 && category.is_active && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400"
+                      title="Ninguna empresa usa esta categoría todavía"
+                    >
+                      <Unlink className="h-3 w-3" /> sin uso
+                    </span>
                   )}
                 </p>
-                <p className="truncate text-xs text-slate-500">
+                <p className="truncate text-xs text-muted-foreground">
                   {category.slug}
                   {(category.aliases?.length ?? 0) > 0 && ` · alias: ${category.aliases!.join(', ')}`}
                   {` · ${category.linked_count ?? 0} categoría${(category.linked_count ?? 0) === 1 ? '' : 's'} de empresas`}
@@ -249,9 +337,19 @@ export function GlobalCategoriesManager() {
                 >
                   Editar
                 </Button>
-                {category.is_active && (
-                  <Button variant="ghost" size="sm" className="text-rose-400 hover:text-rose-300" onClick={() => void deactivate(category)}>
+                {category.is_active ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => void deactivate(category)}
+                    aria-label={`Dar de baja ${category.name}`}
+                  >
                     <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="sm" onClick={() => void reactivate(category)} aria-label={`Reactivar ${category.name}`}>
+                    <RotateCcw className="h-4 w-4" />
                   </Button>
                 )}
               </div>

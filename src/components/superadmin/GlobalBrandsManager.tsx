@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BadgeCheck, Loader2, Plus, RefreshCw, Search, Tag, Trash2 } from 'lucide-react'
+import { BadgeCheck, ImageOff, Link2, Loader2, Plus, RefreshCw, RotateCcw, Search, Tag, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,6 +42,15 @@ type Draft = {
 
 const EMPTY_DRAFT: Draft = { name: '', aliases: '', logo_url: '', website: '', description: '', is_active: true }
 
+type Filter = 'all' | 'active' | 'no-logo' | 'inactive'
+
+const FILTERS: Array<{ id: Filter; label: string }> = [
+  { id: 'all', label: 'Todas' },
+  { id: 'active', label: 'Activas' },
+  { id: 'no-logo', label: 'Sin logo' },
+  { id: 'inactive', label: 'De baja' },
+]
+
 export function GlobalBrandsManager() {
   const [brands, setBrands] = useState<GlobalBrand[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,6 +58,9 @@ export function GlobalBrandsManager() {
   const [search, setSearch] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
+  const [filter, setFilter] = useState<Filter>('all')
+  const [linking, setLinking] = useState(false)
+  const [summary, setSummary] = useState({ tenantTotal: 0, tenantLinked: 0, pendingLinks: 0 })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -58,6 +70,11 @@ export function GlobalBrandsManager() {
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo cargar el catálogo.')
       setBrands(payload.data ?? [])
+      setSummary({
+        tenantTotal: payload.tenantTotal ?? 0,
+        tenantLinked: payload.tenantLinked ?? 0,
+        pendingLinks: payload.pendingLinks ?? 0,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el catálogo.')
     } finally {
@@ -69,19 +86,24 @@ export function GlobalBrandsManager() {
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase()
-    if (!needle) return brands
-    return brands.filter((brand) =>
-      brand.name.toLowerCase().includes(needle) ||
-      (brand.aliases ?? []).some((alias) => alias.toLowerCase().includes(needle))
-    )
-  }, [brands, search])
+    return brands.filter((brand) => {
+      const matchesSearch = !needle ||
+        brand.name.toLowerCase().includes(needle) ||
+        (brand.aliases ?? []).some((alias) => alias.toLowerCase().includes(needle))
+      if (!matchesSearch) return false
+      if (filter === 'active') return brand.is_active
+      if (filter === 'inactive') return !brand.is_active
+      if (filter === 'no-logo') return !brand.logo_url
+      return true
+    })
+  }, [brands, search, filter])
 
   const stats = useMemo(() => ({
     total: brands.length,
-    activas: brands.filter((b) => b.is_active).length,
-    conLogo: brands.filter((b) => b.logo_url).length,
-    vinculadas: brands.reduce((sum, b) => sum + (b.linked_count ?? 0), 0),
-  }), [brands])
+    sinLogo: brands.filter((b) => !b.logo_url).length,
+    marcasEmpresas: summary.tenantTotal,
+    vinculadas: summary.tenantLinked,
+  }), [brands, summary])
 
   const save = async () => {
     if (!draft) return
@@ -114,6 +136,44 @@ export function GlobalBrandsManager() {
     }
   }
 
+  /** Vincula por nombre las marcas de empresas que hoy están sueltas. */
+  const linkExisting = async () => {
+    setLinking(true)
+    try {
+      const response = await fetch('/api/superadmin/global-brands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'link-existing' }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo vincular.')
+      toast.success(payload.linked > 0
+        ? `${payload.linked} marca${payload.linked === 1 ? '' : 's'} de empresas vinculada${payload.linked === 1 ? '' : 's'}`
+        : 'No había marcas para vincular por nombre')
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo vincular.')
+    } finally {
+      setLinking(false)
+    }
+  }
+
+  const reactivate = async (brand: GlobalBrand) => {
+    try {
+      const response = await fetch('/api/superadmin/global-brands', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: brand.id, is_active: true }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo reactivar.')
+      toast.success(`${brand.name} vuelve al catálogo`)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo reactivar.')
+    }
+  }
+
   const deactivate = async (brand: GlobalBrand) => {
     try {
       const response = await fetch(`/api/superadmin/global-brands?id=${brand.id}`, { method: 'DELETE' })
@@ -130,18 +190,28 @@ export function GlobalBrandsManager() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-50">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <Tag className="h-6 w-6 text-violet-400" />
             Catálogo global de marcas
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-muted-foreground">
             El logo oficial de cada marca. Las empresas eligen de esta lista; las marcas propias van sin logo.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => void load()} disabled={loading} className="gap-1.5">
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             Actualizar
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => void linkExisting()}
+            disabled={linking || summary.pendingLinks === 0}
+            className="gap-1.5"
+            title="Vincula por nombre las marcas de empresas que todavía no están en el catálogo"
+          >
+            {linking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+            Vincular por nombre ({summary.pendingLinks})
           </Button>
           <Button onClick={() => setDraft({ ...EMPTY_DRAFT })} className="gap-1.5">
             <Plus className="h-4 w-4" />
@@ -153,68 +223,95 @@ export function GlobalBrandsManager() {
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { label: 'En el catálogo', value: stats.total },
-          { label: 'Activas', value: stats.activas },
-          { label: 'Con logo oficial', value: stats.conLogo },
-          { label: 'Usadas por empresas', value: stats.vinculadas },
+          { label: 'Sin logo oficial', value: stats.sinLogo, warn: stats.sinLogo > 0 },
+          { label: 'Marcas de empresas', value: stats.marcasEmpresas },
+          { label: 'Vinculadas', value: stats.vinculadas },
         ].map((cell) => (
-          <div key={cell.label} className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
-            <dt className="text-[11px] uppercase tracking-wide text-slate-500">{cell.label}</dt>
-            <dd className="mt-0.5 text-xl font-bold tabular-nums text-slate-100">{cell.value}</dd>
+          <div key={cell.label} className="rounded-xl border bg-card px-4 py-3">
+            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{cell.label}</dt>
+            <dd className={cn('mt-0.5 text-xl font-bold tabular-nums', cell.warn ? 'text-amber-600 dark:text-amber-400' : 'text-foreground')}>
+              {cell.value}
+            </dd>
           </div>
         ))}
       </dl>
 
-      <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar por nombre o alias"
-          className="border-slate-800 bg-slate-900/60 pl-9 text-slate-100"
-        />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar por nombre o alias"
+            className="pl-9"
+          />
+        </div>
+        <div role="tablist" aria-label="Filtrar marcas" className="flex flex-wrap gap-1.5">
+          {FILTERS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={filter === item.id}
+              onClick={() => setFilter(item.id)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                filter === item.id
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-accent hover:text-foreground',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <span className="ml-auto text-xs text-muted-foreground tabular-nums">{visible.length} de {brands.length}</span>
       </div>
 
       {error ? (
-        <div role="alert" className="rounded-xl border border-rose-900/60 bg-rose-950/30 p-4 text-sm text-rose-300">
+        <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
         </div>
       ) : loading ? (
-        <p className="flex items-center gap-2 text-sm text-slate-400">
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando catálogo…
         </p>
       ) : visible.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-800 p-10 text-center">
-          <p className="font-medium text-slate-200">
+        <div className="rounded-xl border border-dashed border-border p-10 text-center">
+          <p className="font-medium text-foreground">
             {brands.length === 0 ? 'El catálogo está vacío' : 'Ninguna marca coincide'}
           </p>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-muted-foreground">
             {brands.length === 0
               ? 'Agregá las marcas que venden las empresas, con su logo oficial.'
               : 'Probá con otro nombre.'}
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-slate-800 overflow-hidden rounded-xl border border-slate-800">
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
           {visible.map((brand) => (
-            <li key={brand.id} className="flex flex-wrap items-center gap-3 bg-slate-900/40 px-4 py-3">
+            <li key={brand.id} className="flex flex-wrap items-center gap-3 bg-card px-4 py-3">
               {brand.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={brand.logo_url} alt="" className="h-10 w-10 rounded-lg bg-white object-contain p-1" />
+                <img src={brand.logo_url} alt="" className="h-10 w-10 rounded-lg bg-background object-contain p-1" />
               ) : (
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800 text-sm font-bold text-slate-300">
-                  {brand.name.charAt(0).toUpperCase()}
+                <span
+                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                  title="Sin logo oficial: en el marketplace se muestra la inicial"
+                >
+                  <ImageOff className="h-4 w-4" aria-hidden="true" />
                 </span>
               )}
 
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-100">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                   {brand.name}
                   {brand.logo_url && <BadgeCheck className="h-4 w-4 text-emerald-400" aria-label="Con logo oficial" />}
                   {!brand.is_active && (
-                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400">De baja</span>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">De baja</span>
                   )}
                 </p>
-                <p className="truncate text-xs text-slate-500">
+                <p className="truncate text-xs text-muted-foreground">
                   {brand.slug}
                   {(brand.aliases?.length ?? 0) > 0 && ` · alias: ${brand.aliases!.join(', ')}`}
                   {` · ${brand.linked_count ?? 0} empresa${(brand.linked_count ?? 0) === 1 ? '' : 's'}`}
@@ -237,9 +334,19 @@ export function GlobalBrandsManager() {
                 >
                   Editar
                 </Button>
-                {brand.is_active && (
-                  <Button variant="ghost" size="sm" className="text-rose-400 hover:text-rose-300" onClick={() => void deactivate(brand)}>
+                {brand.is_active ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => void deactivate(brand)}
+                    aria-label={`Dar de baja ${brand.name}`}
+                  >
                     <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="sm" onClick={() => void reactivate(brand)} aria-label={`Reactivar ${brand.name}`}>
+                    <RotateCcw className="h-4 w-4" />
                   </Button>
                 )}
               </div>
@@ -275,8 +382,20 @@ export function GlobalBrandsManager() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="gb-logo">Logo oficial (URL)</Label>
-                <Input id="gb-logo" value={draft.logo_url} onChange={(e) => setDraft({ ...draft, logo_url: e.target.value })} placeholder="https://…" />
-                <p className="text-xs text-muted-foreground">Tiene que estar alojado en un origen permitido por la plataforma.</p>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-background">
+                    {draft.logo_url.trim() ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={draft.logo_url.trim()} alt="" className="h-full w-full object-contain p-1" />
+                    ) : (
+                      <ImageOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                    )}
+                  </span>
+                  <Input id="gb-logo" value={draft.logo_url} onChange={(e) => setDraft({ ...draft, logo_url: e.target.value })} placeholder="https://…" />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Tiene que estar alojado en un origen permitido por la plataforma. Sin logo, la marca se muestra con su inicial.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="gb-website">Sitio</Label>

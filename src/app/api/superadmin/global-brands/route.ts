@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { brandSlug } from '@/lib/brands/global-catalog'
+import { brandSlug, findGlobalBrandByName, type GlobalBrand } from '@/lib/brands/global-catalog'
 import { isSupportedImageSource } from '@/lib/image-url-policy'
 import { logger } from '@/lib/logger'
 
@@ -67,7 +67,21 @@ export async function GET(request: NextRequest) {
       linked_count: usageByBrand.get(brand.id) ?? 0,
     }))
 
-    return NextResponse.json({ success: true, data: brands, count: count ?? brands.length })
+    // Marcas de empresas sueltas que coinciden por nombre con el catálogo: el
+    // trabajo pendiente, a la vista antes de tocar nada.
+    const { data: unlinked } = await admin.from('brands').select('id, name').is('global_brand_id', null)
+    const catalog = (data ?? []) as unknown as GlobalBrand[]
+    const pendingLinks = ((unlinked ?? []) as Array<{ name: string }>)
+      .filter((brand) => findGlobalBrandByName(brand.name, catalog)).length
+
+    return NextResponse.json({
+      success: true,
+      data: brands,
+      count: count ?? brands.length,
+      tenantTotal: (usage ?? []).length + (unlinked ?? []).length,
+      tenantLinked: (usage ?? []).length,
+      pendingLinks,
+    })
   } catch (error) {
     logger.error('[superadmin/global-brands] GET', { error })
     return NextResponse.json({ success: false, error: 'No se pudo cargar el catálogo de marcas.' }, { status: 500 })
@@ -79,7 +93,46 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 })
 
   try {
-    const validation = brandSchema.safeParse(await request.json().catch(() => null))
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null
+
+    // Acción aparte: vincular por nombre las marcas de empresas sueltas.
+    if (body?.action === 'link-existing') {
+      const admin = createAdminSupabase()
+      const [{ data: catalog }, { data: unlinked }] = await Promise.all([
+        admin.from('global_brands').select(CATALOG_COLUMNS).eq('is_active', true),
+        admin.from('brands').select('id, name').is('global_brand_id', null),
+      ])
+
+      let linked = 0
+      for (const brand of ((unlinked ?? []) as Array<{ id: string; name: string }>)) {
+        const match = findGlobalBrandByName(brand.name, (catalog ?? []) as unknown as GlobalBrand[])
+        if (!match) continue
+        const { error } = await admin
+          .from('brands')
+          .update({
+            global_brand_id: match.id,
+            name: match.name,
+            logo_url: match.logo_url ?? null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', brand.id)
+          .is('global_brand_id', null)
+        if (!error) linked += 1
+      }
+
+      await logSuperAdminAction({
+        actorId: user.id,
+        actorEmail: user.email,
+        action: 'update',
+        resource: 'brands',
+        newValues: { linked, action: 'link-existing' },
+        request,
+      })
+
+      return NextResponse.json({ success: true, linked })
+    }
+
+    const validation = brandSchema.safeParse(body)
     if (!validation.success) {
       return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá los datos.' }, { status: 400 })
     }

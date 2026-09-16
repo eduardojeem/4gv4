@@ -29,7 +29,7 @@ export default async function SuperAdminLayout({ children }: { children: React.R
   ])
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-slate-950">
+    <div className="flex h-dvh flex-col overflow-hidden bg-sidebar">
       {supportSession && <SupportSessionBanner session={supportSession} />}
       <div className="min-h-0 flex-1">
         <SuperAdminShell userEmail={user.email} branding={branding}>
