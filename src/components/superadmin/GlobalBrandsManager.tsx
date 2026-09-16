@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BadgeCheck, ImageOff, Link2, Loader2, Plus, RefreshCw, RotateCcw, Search, Tag, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BadgeCheck, ImageOff, Link2, Loader2, Plus, RefreshCw, RotateCcw, Search, Tag, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,6 +61,8 @@ export function GlobalBrandsManager() {
   const [filter, setFilter] = useState<Filter>('all')
   const [linking, setLinking] = useState(false)
   const [summary, setSummary] = useState({ tenantTotal: 0, tenantLinked: 0, pendingLinks: 0 })
+  const [uploading, setUploading] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -104,6 +106,32 @@ export function GlobalBrandsManager() {
     marcasEmpresas: summary.tenantTotal,
     vinculadas: summary.tenantLinked,
   }), [brands, summary])
+
+  /**
+   * Sube el logo al almacenamiento de la plataforma.
+   *
+   * Pegar una dirección dejaba el logo colgando de un servidor ajeno: si esa
+   * imagen cambiaba, cambiaba el logo de la marca en todo el marketplace.
+   */
+  const uploadLogo = async (file: File) => {
+    if (!draft) return
+    setUploading(true)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      body.append('name', draft.name || 'marca')
+      const response = await fetch('/api/superadmin/global-brands/logo', { method: 'POST', body })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo subir el logo.')
+      setDraft((current) => (current ? { ...current, logo_url: payload.url } : current))
+      toast.success('Logo subido')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo subir el logo.')
+    } finally {
+      setUploading(false)
+      if (fileInput.current) fileInput.current.value = ''
+    }
+  }
 
   const save = async () => {
     if (!draft) return
@@ -391,10 +419,33 @@ export function GlobalBrandsManager() {
                       <ImageOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     )}
                   </span>
-                  <Input id="gb-logo" value={draft.logo_url} onChange={(e) => setDraft({ ...draft, logo_url: e.target.value })} placeholder="https://…" />
+                  <div className="flex-1 space-y-1.5">
+                    <Input id="gb-logo" value={draft.logo_url} onChange={(e) => setDraft({ ...draft, logo_url: e.target.value })} placeholder="Subí un archivo o pegá una dirección" />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        ref={fileInput}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/avif,image/svg+xml"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) void uploadLogo(file)
+                        }}
+                      />
+                      <Button type="button" variant="outline" size="sm" onClick={() => fileInput.current?.click()} disabled={uploading} className="gap-1.5">
+                        {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                        {uploading ? 'Subiendo…' : 'Subir logo'}
+                      </Button>
+                      {draft.logo_url && (
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setDraft({ ...draft, logo_url: '' })}>
+                          Quitar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Tiene que estar alojado en un origen permitido por la plataforma. Sin logo, la marca se muestra con su inicial.
+                  PNG, JPG, WebP, AVIF o SVG, hasta 2 MB. Sin logo, la marca se muestra con su inicial.
                 </p>
               </div>
               <div className="space-y-1.5">

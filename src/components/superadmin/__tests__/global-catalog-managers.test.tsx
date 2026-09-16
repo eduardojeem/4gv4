@@ -72,6 +72,31 @@ describe('catálogo de marcas del superadmin', () => {
     await waitFor(() => expect(posts).toEqual([{ action: 'link-existing' }]))
   })
 
+  /** Pegar una dirección dejaba el logo colgando de un servidor ajeno. */
+  it('permite subir el logo al almacenamiento de la plataforma', async () => {
+    const subidas: Array<{ url: string; body: unknown }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/logo')) {
+        subidas.push({ url: String(url), body: init?.body })
+        return { ok: true, status: 200, json: async () => ({ success: true, url: 'https://cdn/plataforma/samsung.png' }) }
+      }
+      return { ok: true, status: 200, json: async () => marcas }
+    }))
+
+    render(<GlobalBrandsManager />)
+    fireEvent.click(await screen.findByRole('button', { name: /Nueva marca/ }))
+
+    const archivo = new File(['x'], 'samsung.png', { type: 'image/png' })
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [archivo] } })
+
+    await waitFor(() => expect(subidas).toHaveLength(1))
+    expect(subidas[0].body).toBeInstanceOf(FormData)
+    await waitFor(() =>
+      expect(screen.getByLabelText('Logo oficial (URL)')).toHaveValue('https://cdn/plataforma/samsung.png')
+    )
+  })
+
   it('una marca de baja se puede reactivar, no borrar', async () => {
     servidor(marcas)
     render(<GlobalBrandsManager />)
