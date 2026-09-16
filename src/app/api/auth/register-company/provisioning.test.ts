@@ -28,7 +28,7 @@ describe('buildCompanyRegistrationRedirectUrl', () => {
     })
 
     expect(buildCompanyRegistrationRedirectUrl(request)).toBe(
-      'https://app.example.com/auth/callback?next=/dashboard/onboarding'
+      'https://app.example.com/auth/confirm?next=/dashboard/onboarding'
     )
   })
 
@@ -40,7 +40,7 @@ describe('buildCompanyRegistrationRedirectUrl', () => {
     const request = new Request('https://public.example.com/api/auth/register-company')
 
     expect(buildCompanyRegistrationRedirectUrl(request)).toBe(
-      'https://public.example.com/auth/callback?next=/dashboard/onboarding'
+      'https://public.example.com/auth/confirm?next=/dashboard/onboarding'
     )
   })
 })

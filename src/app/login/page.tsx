@@ -61,6 +61,8 @@ export default function LoginPage() {
   const reduceMotion = useReducedMotion()
   const { branding } = usePlatformBranding()
   const registeredCompany = searchParams.get('registered') === '1' ? searchParams.get('company') : null
+  /** Se acaba de registrar y todavía no confirmó el correo. */
+  const esperaConfirmacion = registeredCompany !== null && searchParams.get('confirmar') === '1'
   const callbackError =
     searchParams.get('error') === 'auth_callback_error'
       ? 'No se pudo completar la verificación del enlace. Solicitá uno nuevo o iniciá sesión nuevamente.'
@@ -546,7 +548,9 @@ export default function LoginPage() {
                         <div>
                           <p className="font-semibold text-xs sm:text-sm text-emerald-100">¡Empresa creada con éxito!</p>
                           <p className="mt-0.5 text-xs text-emerald-200/80">
-                            Iniciá sesión para comenzar a configurar {registeredCompany}.
+                            {esperaConfirmacion
+                              ? `Te mandamos un correo para activar la cuenta. Abrí ese enlace y seguís configurando ${registeredCompany}.`
+                              : `Iniciá sesión para comenzar a configurar ${registeredCompany}.`}
                           </p>
                         </div>
                       </div>

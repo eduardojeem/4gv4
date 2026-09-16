@@ -1,4 +1,14 @@
-const ONBOARDING_REDIRECT_PATH = '/auth/callback?next=/dashboard/onboarding'
+/**
+ * A dónde vuelve quien activa su cuenta desde el correo.
+ *
+ * Iba a `/auth/callback`, que es del servidor: la sesión de ese correo viaja en
+ * el `#` de la URL, que el servidor no puede leer, así que caía en una ruta
+ * protegida sin cookie y el proxy lo mandaba a `/saas`, la portada comercial.
+ * `/auth/confirm` es una página pública que lee el `#`, deja la sesión y recién
+ * entonces entra al onboarding. Es el mismo destino que ya usan las
+ * invitaciones que crea el superadmin.
+ */
+const ONBOARDING_REDIRECT_PATH = '/auth/confirm?next=/dashboard/onboarding'
 
 type SupabaseLikeResult = {
   error?: {

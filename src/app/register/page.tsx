@@ -318,7 +318,10 @@ function RegisterForm() {
       setTimeout(() => {
         const redirectTarget = encodeURIComponent('/dashboard/onboarding')
         const registeredCompany = encodeURIComponent(previewSlug)
-        router.push(`/login?registered=1&company=${registeredCompany}&redirect=${redirectTarget}`)
+        // Con confirmación pendiente el ingreso rechaza igual: la pantalla de
+        // login lo dice en vez de invitar a intentarlo.
+        const pendiente = result.data?.requiresEmailConfirmation ? '&confirmar=1' : ''
+        router.push(`/login?registered=1&company=${registeredCompany}&redirect=${redirectTarget}${pendiente}`)
         router.refresh()
       }, 900)
     } catch (err) {
