@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { LinkSuggestionsPanel, type LinkSuggestion } from './LinkSuggestionsPanel'
 
 /**
  * Catálogo global de marcas.
@@ -61,6 +62,7 @@ export function GlobalBrandsManager() {
   const [filter, setFilter] = useState<Filter>('all')
   const [linking, setLinking] = useState(false)
   const [summary, setSummary] = useState({ tenantTotal: 0, tenantLinked: 0, pendingLinks: 0 })
+  const [suggestions, setSuggestions] = useState<LinkSuggestion[]>([])
   const [uploading, setUploading] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -77,6 +79,7 @@ export function GlobalBrandsManager() {
         tenantLinked: payload.tenantLinked ?? 0,
         pendingLinks: payload.pendingLinks ?? 0,
       })
+      setSuggestions(payload.suggestions ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el catálogo.')
     } finally {
@@ -165,13 +168,13 @@ export function GlobalBrandsManager() {
   }
 
   /** Vincula por nombre las marcas de empresas que hoy están sueltas. */
-  const linkExisting = async () => {
+  const linkExisting = async (ids?: string[]) => {
     setLinking(true)
     try {
       const response = await fetch('/api/superadmin/global-brands', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'link-existing' }),
+        body: JSON.stringify({ action: 'link-existing', ...(ids ? { ids } : {}) }),
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo vincular.')
@@ -231,16 +234,6 @@ export function GlobalBrandsManager() {
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             Actualizar
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => void linkExisting()}
-            disabled={linking || summary.pendingLinks === 0}
-            className="gap-1.5"
-            title="Vincula por nombre las marcas de empresas que todavía no están en el catálogo"
-          >
-            {linking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-            Vincular por nombre ({summary.pendingLinks})
-          </Button>
           <Button onClick={() => setDraft({ ...EMPTY_DRAFT })} className="gap-1.5">
             <Plus className="h-4 w-4" />
             Nueva marca
@@ -263,6 +256,13 @@ export function GlobalBrandsManager() {
           </div>
         ))}
       </dl>
+
+      <LinkSuggestionsPanel
+        suggestions={suggestions}
+        itemLabel="marca"
+        busy={linking}
+        onApply={(ids) => void linkExisting(ids)}
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-sm">

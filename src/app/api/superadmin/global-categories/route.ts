@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { categorySlug, planCategoryLinks, sortGlobalCategories, type GlobalCategory } from '@/lib/categories/global-catalog'
+import { categorySlug, sortGlobalCategories, suggestCategoryLinks, type GlobalCategory } from '@/lib/categories/global-catalog'
 import { logger } from '@/lib/logger'
 
 /**
@@ -38,7 +38,7 @@ export async function GET() {
     const admin = createAdminSupabase()
     const [{ data, error }, { data: tenantCategories }] = await Promise.all([
       admin.from('global_categories').select(COLUMNS),
-      admin.from('categories').select('id, name, global_category_id'),
+      admin.from('categories').select('id, name, global_category_id, organization_id, organizations(name)'),
     ])
 
     if (error) throw error
@@ -54,19 +54,35 @@ export async function GET() {
       linked_count: linkedCount.get(category.id) ?? 0,
     }))
 
-    // Cuántas categorías de empresas se vincularían por nombre: el trabajo que
-    // queda pendiente, visible antes de tocar nada.
-    const pendingLinks = planCategoryLinks(
-      (tenantCategories ?? []) as Array<{ id: string; name: string; global_category_id?: string | null }>,
-      (data ?? []) as GlobalCategory[],
-    ).length
+    // Las categorías de empresas que se vincularían por nombre, una por una:
+    // el trabajo pendiente se revisa antes de aplicarlo.
+    const rows = (tenantCategories ?? []) as unknown as Array<{
+      id: string
+      name: string
+      global_category_id?: string | null
+      organizations?: { name?: string } | Array<{ name?: string }> | null
+    }>
+    const catalogById = new Map(((data ?? []) as GlobalCategory[]).map((category) => [category.id, category]))
+    const suggestions = suggestCategoryLinks(rows, (data ?? []) as GlobalCategory[]).map((link) => {
+      const row = rows.find((item) => item.id === link.id)!
+      const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
+      return {
+        id: link.id,
+        name: row.name,
+        organizationName: organization?.name ?? null,
+        targetId: link.global_category_id,
+        targetName: catalogById.get(link.global_category_id)?.name ?? '',
+        exact: link.exact,
+      }
+    })
 
     return NextResponse.json({
       success: true,
       data: categories,
-      tenantTotal: (tenantCategories ?? []).length,
-      tenantLinked: ((tenantCategories ?? []) as Array<{ global_category_id: string | null }>).filter((row) => row.global_category_id).length,
-      pendingLinks,
+      tenantTotal: rows.length,
+      tenantLinked: rows.filter((row) => row.global_category_id).length,
+      pendingLinks: suggestions.length,
+      suggestions,
     })
   } catch (error) {
     logger.error('[superadmin/global-categories] GET', { error })
@@ -83,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     // Acción aparte: vincular por nombre las categorías de empresas sueltas.
     if (body?.action === 'link-existing') {
-      return await linkExisting(user, request)
+      return await linkExisting(user, request, body.ids)
     }
 
     const validation = categorySchema.safeParse(body)
@@ -140,20 +156,24 @@ export async function POST(request: NextRequest) {
 }
 
 /** Vincula por nombre las categorías de empresas que hoy están sueltas. */
-async function linkExisting(user: { id: string; email: string | null }, request: NextRequest) {
+async function linkExisting(user: { id: string; email: string | null }, request: NextRequest, ids?: unknown) {
   const admin = createAdminSupabase()
   const [{ data: catalog }, { data: tenantCategories }] = await Promise.all([
     admin.from('global_categories').select(COLUMNS),
     admin.from('categories').select('id, name, global_category_id'),
   ])
 
-  const plan = planCategoryLinks(
+  const plan = suggestCategoryLinks(
     (tenantCategories ?? []) as Array<{ id: string; name: string; global_category_id?: string | null }>,
     (catalog ?? []) as GlobalCategory[],
   )
 
+  // Se puede mandar una selección: sin ella se vincula todo lo que coincide.
+  const onlyIds = Array.isArray(ids) ? new Set(ids.map(String)) : null
+
   let linked = 0
   for (const link of plan) {
+    if (onlyIds && !onlyIds.has(link.id)) continue
     const { error } = await admin
       .from('categories')
       .update({ global_category_id: link.global_category_id })

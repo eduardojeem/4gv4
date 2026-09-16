@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { brandSlug, findGlobalBrandByName, type GlobalBrand } from '@/lib/brands/global-catalog'
+import { brandSlug, suggestBrandLinks, type GlobalBrand } from '@/lib/brands/global-catalog'
 import { isSupportedImageSource } from '@/lib/image-url-policy'
 import { logger } from '@/lib/logger'
 
@@ -67,12 +67,34 @@ export async function GET(request: NextRequest) {
       linked_count: usageByBrand.get(brand.id) ?? 0,
     }))
 
-    // Marcas de empresas sueltas que coinciden por nombre con el catálogo: el
-    // trabajo pendiente, a la vista antes de tocar nada.
-    const { data: unlinked } = await admin.from('brands').select('id, name').is('global_brand_id', null)
+    // Las marcas de empresas sueltas que coinciden por nombre con el catálogo:
+    // se muestran una por una antes de vincular, para poder revisarlas.
+    const { data: unlinked } = await admin
+      .from('brands')
+      .select('id, name, organization_id, organizations(name)')
+      .is('global_brand_id', null)
+
     const catalog = (data ?? []) as unknown as GlobalBrand[]
-    const pendingLinks = ((unlinked ?? []) as Array<{ name: string }>)
-      .filter((brand) => findGlobalBrandByName(brand.name, catalog)).length
+    const catalogById = new Map(catalog.map((brand) => [brand.id, brand]))
+    const rows = (unlinked ?? []) as unknown as Array<{
+      id: string
+      name: string
+      organizations?: { name?: string } | Array<{ name?: string }> | null
+    }>
+    const suggestions = suggestBrandLinks(rows, catalog).map((link) => {
+      const row = rows.find((item) => item.id === link.id)!
+      const target = catalogById.get(link.global_brand_id)
+      const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
+      return {
+        id: link.id,
+        name: row.name,
+        organizationName: organization?.name ?? null,
+        targetId: link.global_brand_id,
+        targetName: target?.name ?? '',
+        targetLogoUrl: target?.logo_url ?? null,
+        exact: link.exact,
+      }
+    })
 
     return NextResponse.json({
       success: true,
@@ -80,7 +102,8 @@ export async function GET(request: NextRequest) {
       count: count ?? brands.length,
       tenantTotal: (usage ?? []).length + (unlinked ?? []).length,
       tenantLinked: (usage ?? []).length,
-      pendingLinks,
+      pendingLinks: suggestions.length,
+      suggestions,
     })
   } catch (error) {
     logger.error('[superadmin/global-brands] GET', { error })
@@ -103,9 +126,16 @@ export async function POST(request: NextRequest) {
         admin.from('brands').select('id, name').is('global_brand_id', null),
       ])
 
+      // Se puede mandar una selección: sin ella se vincula todo lo que coincide.
+      const onlyIds = Array.isArray(body.ids) ? new Set(body.ids.map(String)) : null
+
+      const catalogRows = (catalog ?? []) as unknown as GlobalBrand[]
+      const byId = new Map(catalogRows.map((brand) => [brand.id, brand]))
+
       let linked = 0
-      for (const brand of ((unlinked ?? []) as Array<{ id: string; name: string }>)) {
-        const match = findGlobalBrandByName(brand.name, (catalog ?? []) as unknown as GlobalBrand[])
+      for (const link of suggestBrandLinks((unlinked ?? []) as Array<{ id: string; name: string }>, catalogRows)) {
+        if (onlyIds && !onlyIds.has(link.id)) continue
+        const match = byId.get(link.global_brand_id)
         if (!match) continue
         const { error } = await admin
           .from('brands')
@@ -115,7 +145,7 @@ export async function POST(request: NextRequest) {
             logo_url: match.logo_url ?? null,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', brand.id)
+          .eq('id', link.id)
           .is('global_brand_id', null)
         if (!error) linked += 1
       }

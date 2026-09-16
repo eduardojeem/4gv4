@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { LinkSuggestionsPanel, type LinkSuggestion } from './LinkSuggestionsPanel'
 
 /**
  * Taxonomía global de categorías.
@@ -62,6 +63,7 @@ export function GlobalCategoriesManager() {
   const [saving, setSaving] = useState(false)
   const [linking, setLinking] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
+  const [suggestions, setSuggestions] = useState<LinkSuggestion[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -76,6 +78,7 @@ export function GlobalCategoriesManager() {
         tenantLinked: payload.tenantLinked ?? 0,
         pendingLinks: payload.pendingLinks ?? 0,
       })
+      setSuggestions(payload.suggestions ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar la taxonomía.')
     } finally {
@@ -137,13 +140,13 @@ export function GlobalCategoriesManager() {
     }
   }
 
-  const linkExisting = async () => {
+  const linkExisting = async (ids?: string[]) => {
     setLinking(true)
     try {
       const response = await fetch('/api/superadmin/global-categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'link-existing' }),
+        body: JSON.stringify({ action: 'link-existing', ...(ids ? { ids } : {}) }),
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo vincular.')
@@ -202,10 +205,6 @@ export function GlobalCategoriesManager() {
           <Button variant="outline" onClick={() => void load()} disabled={loading} className="gap-1.5">
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             Actualizar
-          </Button>
-          <Button variant="outline" onClick={() => void linkExisting()} disabled={linking || summary.pendingLinks === 0} className="gap-1.5">
-            {linking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-            Vincular por nombre ({summary.pendingLinks})
           </Button>
           <Button onClick={() => setDraft({ ...EMPTY_DRAFT })} className="gap-1.5">
             <Plus className="h-4 w-4" />
@@ -267,17 +266,12 @@ export function GlobalCategoriesManager() {
         <span className="ml-auto text-xs tabular-nums text-muted-foreground">{visible.length} de {categories.length}</span>
       </div>
 
-      {summary.pendingLinks > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-          <p className="text-sm text-amber-900 dark:text-amber-200">
-            Hay <strong>{summary.pendingLinks}</strong> categoría{summary.pendingLinks === 1 ? '' : 's'} de empresas que coinciden por nombre con esta taxonomía y todavía no están vinculadas.
-          </p>
-          <Button size="sm" variant="outline" onClick={() => void linkExisting()} disabled={linking} className="gap-1.5">
-            {linking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-            Vincular ahora
-          </Button>
-        </div>
-      )}
+      <LinkSuggestionsPanel
+        suggestions={suggestions}
+        itemLabel="categoría"
+        busy={linking}
+        onApply={(ids) => void linkExisting(ids)}
+      />
 
       {error ? (
         <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{error}</div>

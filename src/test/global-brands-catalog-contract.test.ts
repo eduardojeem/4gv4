@@ -48,7 +48,7 @@ describe('catálogo global de marcas', () => {
     const menu = leer('src/components/superadmin/superadmin-shell.tsx')
 
     expect(api).toContain('getSuperAdminUser')
-    expect(api).toContain('planCategoryLinks')
+    expect(api).toContain('suggestCategoryLinks')
     expect(menu).toContain("href: '/superadmin/brands'")
     expect(menu).toContain("href: '/superadmin/categories'")
   })

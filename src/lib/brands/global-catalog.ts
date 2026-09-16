@@ -84,6 +84,44 @@ export function resolveTenantBrandFields(
   }
 }
 
+/** Igual pero sin plurales ni espacios: «JBL» y «J B L» son la misma marca. */
+function compact(value: string): string {
+  return normalizeBrandName(value).replace(/\s+/g, '')
+}
+
+/**
+ * La marca del catálogo parecida, cuando no hay una igual. Es una propuesta
+ * para revisar: vuelve marcada como aproximada.
+ */
+export function findSimilarGlobalBrand(name: string | null | undefined, catalog: GlobalBrand[]): GlobalBrand | null {
+  const needle = compact(name ?? '')
+  if (needle.length < 3) return null
+
+  for (const brand of catalog) {
+    if (brand.is_active === false) continue
+    if (compact(brand.name) === needle) return brand
+    if ((brand.aliases ?? []).some((alias) => compact(alias) === needle)) return brand
+  }
+
+  return null
+}
+
+export type BrandLinkSuggestion = { id: string; global_brand_id: string; exact: boolean }
+
+/** Lo que se propone vincular: primero los nombres iguales, después los parecidos. */
+export function suggestBrandLinks(
+  tenantBrands: Array<{ id: string; name: string; global_brand_id?: string | null }>,
+  catalog: GlobalBrand[],
+): BrandLinkSuggestion[] {
+  return tenantBrands.flatMap<BrandLinkSuggestion>((brand) => {
+    if (brand.global_brand_id) return []
+    const exact = findGlobalBrandByName(brand.name, catalog)
+    if (exact) return [{ id: brand.id, global_brand_id: exact.id, exact: true }]
+    const similar = findSimilarGlobalBrand(brand.name, catalog)
+    return similar ? [{ id: brand.id, global_brand_id: similar.id, exact: false }] : []
+  })
+}
+
 /** Marcas del catálogo que coinciden con lo que se está escribiendo. */
 export function searchGlobalBrands(query: string | null | undefined, catalog: GlobalBrand[], limit = 20): GlobalBrand[] {
   const needle = normalizeBrandName(query)

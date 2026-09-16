@@ -11,7 +11,11 @@ const marcas = {
   success: true,
   tenantTotal: 105,
   tenantLinked: 4,
-  pendingLinks: 22,
+  pendingLinks: 2,
+  suggestions: [
+    { id: 't1', name: 'samsung', organizationName: 'Store Center', targetId: 'b1', targetName: 'Samsung', targetLogoUrl: null },
+    { id: 't2', name: 'SAMSUNG', organizationName: 'DA', targetId: 'b1', targetName: 'Samsung', targetLogoUrl: null },
+  ],
   data: [
     { id: 'b1', name: 'Samsung', slug: 'samsung', aliases: ['Samsung Electronics'], logo_url: 'https://cdn/samsung.png', website: null, description: null, is_active: true, linked_count: 6 },
     { id: 'b2', name: 'Panadería', slug: 'panaderia', aliases: [], logo_url: null, website: null, description: null, is_active: true, linked_count: 0 },
@@ -23,7 +27,11 @@ const categorias = {
   success: true,
   tenantTotal: 116,
   tenantLinked: 0,
-  pendingLinks: 14,
+  pendingLinks: 1,
+  suggestions: [
+    { id: 'tc1', name: 'Telefonía', organizationName: 'DA', targetId: 'c2', targetName: 'Celulares', exact: true },
+    { id: 'tc2', name: 'Pantallas', organizationName: 'Store Center', targetId: 'c2', targetName: 'Celulares', exact: false },
+  ],
   data: [
     { id: 'c1', name: 'Electrónica', slug: 'electronica', description: null, parent_id: null, level: 0, aliases: ['Tecnología'], icon: null, sort_order: 1, is_active: true, linked_count: 3 },
     { id: 'c2', name: 'Celulares', slug: 'celulares', description: null, parent_id: 'c1', level: 1, aliases: [], icon: null, sort_order: 1, is_active: true, linked_count: 0 },
@@ -62,14 +70,29 @@ describe('catálogo de marcas del superadmin', () => {
     expect(screen.getByText('Panadería')).toBeInTheDocument()
   })
 
-  /** Hay 22 nombres repetidos entre empresas: vincularlos a mano no escala. */
-  it('vincula por nombre las marcas de empresas sueltas', async () => {
-    const posts: unknown[] = []
-    servidor(marcas, (body) => posts.push(body))
+  /** El botón aplicaba los vínculos de una: antes hay que poder revisarlos. */
+  it('muestra qué se va a vincular y con cuál del catálogo', async () => {
+    servidor(marcas)
     render(<GlobalBrandsManager />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Vincular por nombre \(22\)/ }))
-    await waitFor(() => expect(posts).toEqual([{ action: 'link-existing' }]))
+    fireEvent.click(await screen.findByRole('button', { name: /Ver cuáles/ }))
+    const panel = within(screen.getByRole('region', { name: 'marcas de empresas para vincular' }))
+    expect(panel.getByText('samsung')).toBeInTheDocument()
+    expect(panel.getByText('· Store Center')).toBeInTheDocument()
+    expect(panel.getAllByText('Samsung').length).toBeGreaterThan(0)
+  })
+
+  it('vincula solo lo marcado', async () => {
+    const posts: Array<Record<string, unknown>> = []
+    servidor(marcas, (body) => posts.push(body as Record<string, unknown>))
+    render(<GlobalBrandsManager />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Ver cuáles/ }))
+    const panel = within(screen.getByRole('region', { name: 'marcas de empresas para vincular' }))
+    fireEvent.click(panel.getAllByRole('checkbox')[1])
+
+    fireEvent.click(screen.getByRole('button', { name: /Vincular 1/ }))
+    await waitFor(() => expect(posts).toEqual([{ action: 'link-existing', ids: ['t1'] }]))
   })
 
   /** Pegar una dirección dejaba el logo colgando de un servidor ajeno. */
@@ -127,13 +150,30 @@ describe('el superadmin sigue el tema elegido', () => {
 })
 
 describe('categorías globales del superadmin', () => {
-  it('avisa cuántas categorías de empresas quedan sin vincular', async () => {
+  it('muestra qué categoría de qué empresa se une a cuál', async () => {
     servidor(categorias)
     render(<GlobalCategoriesManager />)
 
-    const vincular = await screen.findByRole('button', { name: /Vincular ahora/ })
-    expect(vincular.closest('div')!).toHaveTextContent('14 categorías de empresas que coinciden por nombre')
+    fireEvent.click(await screen.findByRole('button', { name: /Ver cuáles/ }))
+    const panel = within(screen.getByRole('region', { name: 'categorías de empresas para vincular' }))
+    expect(panel.getByText('Telefonía')).toBeInTheDocument()
+    expect(panel.getByText('· DA')).toBeInTheDocument()
     expect(screen.getByText('Sin vincular').closest('div')!).toHaveTextContent('116')
+  })
+
+  /** Una coincidencia aproximada es una propuesta: no se aplica sola. */
+  it('deja sin marcar las coincidencias aproximadas', async () => {
+    servidor(categorias)
+    render(<GlobalCategoriesManager />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Ver cuáles/ }))
+    const panel = within(screen.getByRole('region', { name: 'categorías de empresas para vincular' }))
+    expect(panel.getByText('aproximada')).toBeInTheDocument()
+
+    const casillas = panel.getAllByRole('checkbox') as HTMLInputElement[]
+    expect(casillas[0].checked).toBe(true)
+    expect(casillas[1].checked).toBe(false)
+    expect(screen.getByRole('button', { name: /Vincular 1/ })).toBeInTheDocument()
   })
 
   it('muestra de qué categoría madre cuelga cada una y cuáles no se usan', async () => {

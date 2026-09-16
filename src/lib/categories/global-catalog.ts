@@ -77,6 +77,56 @@ export function sortGlobalCategories(catalog: GlobalCategory[]): GlobalCategory[
   return [...result, ...order(catalog.filter((category) => !seen.has(category.id)))]
 }
 
+/** Igual pero sin plurales: «Pendrive» y «Pendrives» son la misma categoría. */
+function singular(value: string): string {
+  const normalized = normalizeCategoryName(value)
+  return normalized.endsWith('es') ? normalized.slice(0, -2) : normalized.endsWith('s') ? normalized.slice(0, -1) : normalized
+}
+
+/**
+ * La categoría global parecida, cuando no hay una igual. Es una propuesta para
+ * revisar, no una certeza: por eso vuelve marcada como aproximada.
+ */
+export function findSimilarGlobalCategory(
+  name: string | null | undefined,
+  catalog: GlobalCategory[],
+): GlobalCategory | null {
+  const needle = singular(name ?? '')
+  if (needle.length < 4) return null
+
+  for (const category of catalog) {
+    if (category.is_active === false) continue
+    if (singular(category.name) === needle) return category
+    if ((category.aliases ?? []).some((alias) => singular(alias) === needle)) return category
+  }
+
+  return null
+}
+
+export type CategoryLinkSuggestion = {
+  id: string
+  global_category_id: string
+  /** `false` cuando el nombre no es igual, solo parecido. */
+  exact: boolean
+}
+
+/**
+ * Lo que se propone vincular: primero los nombres iguales, después los
+ * parecidos. Solo categorías sueltas: vincular no pisa lo ya decidido.
+ */
+export function suggestCategoryLinks(
+  tenantCategories: Array<{ id: string; name: string; global_category_id?: string | null }>,
+  catalog: GlobalCategory[],
+): CategoryLinkSuggestion[] {
+  return tenantCategories.flatMap<CategoryLinkSuggestion>((category) => {
+    if (category.global_category_id) return []
+    const exact = findGlobalCategoryByName(category.name, catalog)
+    if (exact) return [{ id: category.id, global_category_id: exact.id, exact: true }]
+    const similar = findSimilarGlobalCategory(category.name, catalog)
+    return similar ? [{ id: category.id, global_category_id: similar.id, exact: false }] : []
+  })
+}
+
 /**
  * Qué categorías de empresas se vincularían con el catálogo, por nombre.
  * Devuelve solo las que hoy están sueltas: vincular no pisa lo ya decidido.
