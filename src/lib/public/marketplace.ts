@@ -63,6 +63,37 @@ async function resolveCategoryIds(
   return ids.length > 0 ? ids : [id]
 }
 
+/**
+ * Estados que sacan a la tienda de la vitrina pública: `past_due`, `canceled` y
+ * `suspended`. Una organización sin fila de suscripción se deja pasar a
+ * propósito —ya optó explícitamente por publicarse con `marketplace_public` y
+ * `storefront_public`—: excluir por un dato faltante vaciaría la sección sin
+ * que nadie sepa por qué.
+ */
+export const SHOWCASE_BLOCKED_SUBSCRIPTION_STATUSES = ['past_due', 'canceled', 'suspended'] as const
+
+export function blockedShowcaseOrganizationIds(
+  rows: Array<{ organization_id: string; status: string | null }> | null | undefined
+): Set<string> {
+  const blocked = new Set<string>(SHOWCASE_BLOCKED_SUBSCRIPTION_STATUSES)
+  return new Set((rows ?? []).filter((row) => blocked.has(String(row.status ?? ''))).map((row) => row.organization_id))
+}
+
+/**
+ * Las organizaciones que hoy pueden mostrarse. El directorio ya las filtraba,
+ * pero el catálogo, las marcas, las categorías y las ofertas no: una tienda
+ * suspendida salía del listado y sus productos seguían apareciendo.
+ */
+async function getShowcaseOrganizationIds(supabase: ReturnType<typeof createAdminSupabase>): Promise<string[]> {
+  const [{ data: organizations }, { data: subscriptions }] = await Promise.all([
+    supabase.from('organizations').select('id').eq('marketplace_public', true).eq('storefront_public', true),
+    supabase.from('subscriptions').select('organization_id, status'),
+  ])
+
+  const blocked = blockedShowcaseOrganizationIds(subscriptions as Array<{ organization_id: string; status: string | null }> | null)
+  return ((organizations ?? []) as Array<{ id: string }>).map((row) => row.id).filter((id) => !blocked.has(id))
+}
+
 export type MarketplaceOrganization = {
   id: string
   name: string
@@ -398,11 +429,8 @@ async function getMarketplaceOrganizationsUncached(
    * `storefront_public`—: excluir por un dato faltante vaciaria la seccion sin
    * que nadie sepa por que.
    */
-  const ESTADOS_FUERA_DE_VITRINA = new Set(['past_due', 'canceled', 'suspended'])
-  const excluidas = new Set(
-    ((subscriptionRows ?? []) as Array<{ organization_id: string; status: string | null }>)
-      .filter((row) => ESTADOS_FUERA_DE_VITRINA.has(String(row.status ?? '')))
-      .map((row) => row.organization_id)
+  const excluidas = blockedShowcaseOrganizationIds(
+    subscriptionRows as Array<{ organization_id: string; status: string | null }> | null
   )
 
   return organizationRows.filter((organization) => !excluidas.has(organization.id)).map((organization) => {
@@ -552,10 +580,13 @@ async function getMarketplaceProductsPageUncached(
   options?: MarketplaceProductFilters
 ): Promise<MarketplaceProductsPage> {
   const supabase = createAdminSupabase()
+  const showcaseOrganizationIds = await getShowcaseOrganizationIds(supabase)
+  if (showcaseOrganizationIds.length === 0) return { products: [], total: 0 }
 
   let query = supabase
     .from('products')
     .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, categories(id, name, parent_id), organizations!inner(id, name, slug, logo_url)', { count: 'exact' })
+    .in('organization_id', showcaseOrganizationIds)
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
@@ -711,6 +742,8 @@ async function getMarketplaceProductsPageUncached(
 
 async function getMarketplaceCategoriesUncached(): Promise<MarketplaceCategory[]> {
   const supabase = createAdminSupabase()
+  const showcaseOrganizationIds = await getShowcaseOrganizationIds(supabase)
+  if (showcaseOrganizationIds.length === 0) return []
 
   // Doble nivel: si la categoría tenant tiene global_category_id →
   // agrupa por la categoría global (normalizada). Si no → usa la del tenant.
@@ -721,6 +754,7 @@ async function getMarketplaceCategoriesUncached(): Promise<MarketplaceCategory[]
       categories(id, name, parent_id, global_category_id, global_categories:global_category_id(id, name, slug, parent_id)),
       organizations!inner(id)
     `)
+    .in('organization_id', showcaseOrganizationIds)
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
@@ -775,9 +809,13 @@ async function getMarketplaceBrandsUncached(
 ): Promise<MarketplaceBrand[]> {
   const supabase = createAdminSupabase()
 
+  const showcaseOrganizationIds = await getShowcaseOrganizationIds(supabase)
+  if (showcaseOrganizationIds.length === 0) return []
+
   let query = supabase
     .from('products')
     .select('organization_id, brand, brand_id, category_id, brands:brand_id(name, logo_url), organizations!inner(id)')
+    .in('organization_id', showcaseOrganizationIds)
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
@@ -1025,12 +1063,15 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
 async function getMarketplaceOffersUncached(limit = 100): Promise<MarketplaceProduct[]> {
   const supabase = createAdminSupabase()
 
-  // 1. Obtener todas las organizaciones públicas en el marketplace
+  // 1. Las organizaciones que hoy pueden mostrarse: publicadas y con la
+  // suscripción al día, el mismo criterio del directorio y del catálogo.
+  const showcaseOrganizationIds = await getShowcaseOrganizationIds(supabase)
+  if (showcaseOrganizationIds.length === 0) return []
+
   const { data: organizations } = await supabase
     .from('organizations')
     .select('id, name, slug, logo_url')
-    .eq('marketplace_public', true)
-    .eq('storefront_public', true)
+    .in('id', showcaseOrganizationIds)
 
   if (!organizations || organizations.length === 0) return []
 
