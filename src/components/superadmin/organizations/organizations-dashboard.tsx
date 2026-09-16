@@ -86,11 +86,11 @@ export type SuperAdminOrganization = {
 export const VERTICAL_META: Record<string, { label: string; icon: string; badge: string }> = {
   electronics: { label: 'Tecnología & Celulares', icon: '📱', badge: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800' },
   clothing: { label: 'Ropa & Moda', icon: '👗', badge: 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300 border-pink-200 dark:border-pink-800' },
-  general: { label: 'Comercio General', icon: '🏬', badge: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700' },
+  general: { label: 'Comercio General', icon: '🏬', badge: 'bg-muted text-foreground/80 border-border' },
   food: { label: 'Alimentos & Gastronomía', icon: '🍔', badge: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
   cosmetics: { label: 'Cosmética & Belleza', icon: '💄', badge: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800' },
   hardware: { label: 'Ferretería & Construcción', icon: '🔨', badge: 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border-orange-200 dark:border-orange-800' },
-  other: { label: 'Otros Rubros', icon: '🏷️', badge: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700' },
+  other: { label: 'Otros Rubros', icon: '🏷️', badge: 'bg-muted text-foreground/80 border-border' },
 }
 
 export const MODULE_META: Record<string, { label: string; short: string; color: string }> = {
@@ -104,9 +104,9 @@ export const MODULE_META: Record<string, { label: string; short: string; color: 
   services: { label: 'Servicios', short: 'Servicios', color: 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300' },
   credits: { label: 'Créditos', short: 'Cuotas', color: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300' },
   delivery: { label: 'Delivery', short: 'Delivery', color: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300' },
-  analytics: { label: 'Analítica', short: 'KPIs', color: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300' },
+  analytics: { label: 'Analítica', short: 'KPIs', color: 'bg-muted text-foreground/80 border-border' },
   promotions: { label: 'Promociones', short: 'Promos', color: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300' },
-  security: { label: 'Seguridad', short: 'Auditoría', color: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300' },
+  security: { label: 'Seguridad', short: 'Auditoría', color: 'bg-muted text-foreground/80 border-border' },
 }
 
 function RubroBadge({ vertical, model }: { vertical?: string | null; model?: string | null }) {
@@ -118,7 +118,7 @@ function RubroBadge({ vertical, model }: { vertical?: string | null; model?: str
         <span className="truncate">{meta.label}</span>
       </Badge>
       {model && model !== 'retail' && (
-        <p className="text-[9px] text-slate-400 font-medium capitalize truncate pl-1">
+        <p className="text-[9px] text-muted-foreground font-medium capitalize truncate pl-1">
           {model === 'wholesale' ? 'Mayorista' : model === 'repair' ? 'Taller' : model === 'service' ? 'Servicios' : model}
         </p>
       )}
@@ -134,7 +134,7 @@ function ModulesPreview({ modules }: { modules?: string[] | null }) {
   return (
     <div className="flex flex-wrap items-center gap-1 max-w-[200px]">
       {visible.map((m) => {
-        const meta = MODULE_META[m] || { label: m, short: m, color: 'bg-slate-100 text-slate-600 border-slate-200' }
+        const meta = MODULE_META[m] || { label: m, short: m, color: 'bg-muted text-foreground/80 border-border' }
         return (
           <span
             key={m}
@@ -146,7 +146,7 @@ function ModulesPreview({ modules }: { modules?: string[] | null }) {
         )
       })}
       {remaining > 0 && (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-muted text-muted-foreground border border-border">
           +{remaining}
         </span>
       )}
@@ -168,14 +168,14 @@ function getInitials(name: string) {
 }
 
 const PLAN_COLORS: Record<string, string> = {
-  FREE: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  FREE: 'border-border bg-muted/40 text-foreground/80',
   BASIC: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300',
   PRO: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300',
   ENTERPRISE: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
 }
 
 const PLAN_AVATAR_BG: Record<string, string> = {
-  FREE: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+  FREE: 'bg-muted-foreground/15 text-foreground/80',
   BASIC: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200',
   PRO: 'bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-200',
   ENTERPRISE: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200',
@@ -187,9 +187,9 @@ const SUB_COLORS: Record<string, string> = {
   past_due: 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-300',
   unpaid: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300',
   suspended: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300',
-  canceled: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
-  cancelled: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
-  expired: 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
+  canceled: 'border-border bg-muted/40 text-foreground/80',
+  cancelled: 'border-border bg-muted/40 text-foreground/80',
+  expired: 'border-border bg-muted text-foreground/80',
 }
 
 const SUB_LABELS: Record<string, string> = {
@@ -200,7 +200,7 @@ const SUB_LABELS: Record<string, string> = {
 function SubscriptionBadge({ org }: { org: SuperAdminOrganization }) {
   const status = org.subscription_status
   const label = SUB_LABELS[status ?? ''] ?? status ?? 'Sin suscripción'
-  const style = SUB_COLORS[status ?? ''] ?? 'border-slate-200 bg-slate-50 text-slate-500'
+  const style = SUB_COLORS[status ?? ''] ?? 'border-border bg-muted/40 text-muted-foreground'
 
   const timing = getSubscriptionTiming(status, org.trial_ends_at, org.current_period_ends_at)
 
@@ -221,20 +221,20 @@ function SubscriptionBadge({ org }: { org: SuperAdminOrganization }) {
 
 function MemberBar({ org }: { org: SuperAdminOrganization }) {
   const { staff_total, staff_active, staff_invited, customers_total } = org
-  if (staff_total === 0 && customers_total === 0) return <span className="text-xs text-slate-400 font-medium">Sin miembros</span>
+  if (staff_total === 0 && customers_total === 0) return <span className="text-xs text-muted-foreground font-medium">Sin miembros</span>
   const activePercent = staff_total > 0 ? Math.round((staff_active / staff_total) * 100) : 0
 
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted-foreground/15">
           <div className="h-full rounded-full bg-emerald-500 transition-all duration-300" style={{ width: `${activePercent}%` }} />
         </div>
-        <span className="text-xs font-bold tabular-nums text-slate-700 dark:text-slate-300">
-          {staff_active}<span className="text-slate-400 font-normal">/{staff_total} personal</span>
+        <span className="text-xs font-bold tabular-nums text-foreground/80">
+          {staff_active}<span className="text-muted-foreground font-normal">/{staff_total} personal</span>
         </span>
       </div>
-      <p className="text-[11px] text-slate-400 font-medium">
+      <p className="text-[11px] text-muted-foreground font-medium">
         {staff_invited > 0 ? `${staff_invited} invitado${staff_invited !== 1 ? 's' : ''} · ` : ''}{customers_total} cliente{customers_total !== 1 ? 's' : ''}
       </p>
     </div>
@@ -296,7 +296,7 @@ function OrganizationFocusPanel({
   return (
     <div className="space-y-6">
       {/* Top Banner Navigation */}
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-cyan-200 bg-gradient-to-r from-cyan-50/80 via-white to-blue-50/80 p-3.5 dark:border-cyan-800/60 dark:from-cyan-950/40 dark:via-slate-900 dark:to-blue-950/40 shadow-xs">
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-cyan-200 bg-gradient-to-r from-cyan-50/80 via-card to-blue-50/80 p-3.5 dark:border-cyan-800/60 dark:from-cyan-950/40 dark:to-blue-950/40 shadow-xs">
         <div className="flex items-center gap-2 text-xs font-bold text-cyan-900 dark:text-cyan-200">
           <Sparkles className="h-4 w-4 text-cyan-600" />
           <span>Mostrando Ficha de Organización Seleccionada</span>
@@ -313,13 +313,13 @@ function OrganizationFocusPanel({
       </div>
 
       {/* Main Focus Card */}
-      <section className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 shadow-md dark:border-slate-800 dark:bg-slate-900/95">
+      <section className="overflow-hidden rounded-3xl border border-border bg-card/95 shadow-md">
 
         {/* Header Hero */}
-        <div className="flex flex-col gap-5 border-b border-slate-100 bg-slate-50/60 p-6 dark:border-slate-800 dark:bg-slate-950/40 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-5 border-b border-border bg-muted/40 p-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <div className={cn(
-              'flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl font-black shadow-md ring-2 ring-white dark:ring-slate-800',
+              'flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl font-black shadow-md ring-2 ring-background',
               PLAN_AVATAR_BG[organization.plan] ?? PLAN_AVATAR_BG.FREE
             )}>
               {getInitials(organization.name)}
@@ -327,7 +327,7 @@ function OrganizationFocusPanel({
 
             <div className="space-y-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
+                <h2 className="truncate text-xl sm:text-2xl font-black text-foreground tracking-tight">
                   {organization.name}
                 </h2>
                 <Badge variant="outline" className={cn('rounded-full px-2.5 py-0.5 text-xs font-extrabold shadow-2xs', PLAN_COLORS[organization.plan] ?? PLAN_COLORS.FREE)}>
@@ -341,21 +341,21 @@ function OrganizationFocusPanel({
                 <button
                   type="button"
                   onClick={() => void onCopyUrl(organization.slug)}
-                  className="inline-flex items-center gap-1 font-mono font-bold text-slate-600 dark:text-slate-300 hover:text-cyan-600 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 font-mono font-bold text-foreground/80 hover:text-cyan-600 transition-colors cursor-pointer"
                   title="Copiar URL pública"
                 >
                   <span>/{organization.slug}/inicio</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400" />
+                  <Copy className="h-3.5 w-3.5 text-muted-foreground" />
                 </button>
-                <span className="text-slate-300 dark:text-slate-700">·</span>
+                <span className="text-muted-foreground/60">·</span>
                 <button
                   type="button"
                   onClick={copyId}
-                  className="inline-flex items-center gap-1 font-mono text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 font-mono text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                   title="Copiar UUID de organización"
                 >
                   <span className="truncate max-w-[120px] sm:max-w-[200px]">ID: {organization.id}</span>
-                  <Copy className="h-3 w-3 text-slate-400" />
+                  <Copy className="h-3 w-3 text-muted-foreground" />
                 </button>
               </div>
             </div>
@@ -381,20 +381,20 @@ function OrganizationFocusPanel({
                 Expediente Completo
               </Link>
             </Button>
-            <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer">
+            <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer">
               <a href={`/${organization.slug}/inicio`} target="_blank" rel="noreferrer">
                 <Globe className="h-3.5 w-3.5 text-cyan-600" />
                 Abrir tienda
-                <ExternalLink className="h-3 w-3 text-slate-400" />
+                <ExternalLink className="h-3 w-3 text-muted-foreground" />
               </a>
             </Button>
-            <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer">
+            <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer">
               <Link href={`/superadmin/users?organization=${organization.id}`}>
                 <Users className="h-3.5 w-3.5 text-violet-600" />
                 Usuarios
               </Link>
             </Button>
-            <Button asChild size="sm" className="gap-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 cursor-pointer">
+            <Button asChild size="sm" className="gap-1.5 rounded-xl text-xs font-bold bg-foreground text-background cursor-pointer">
               <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(organization.slug)}`}>
                 <CreditCard className="h-3.5 w-3.5 text-amber-500" />
                 Suscripción
@@ -411,46 +411,46 @@ function OrganizationFocusPanel({
         )}
 
         {/* Focus KPI Bar */}
-        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4 border-b border-border">
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Owner de la Empresa</p>
-            <p className="truncate text-sm font-extrabold text-slate-900 dark:text-slate-100">{organization.owner_name || 'Sin nombre registrado'}</p>
-            <p className="truncate text-xs text-slate-500 font-medium">{organization.owner_email || 'Sin email registrado'}</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Owner de la Empresa</p>
+            <p className="truncate text-sm font-extrabold text-foreground">{organization.owner_name || 'Sin nombre registrado'}</p>
+            <p className="truncate text-xs text-muted-foreground font-medium">{organization.owner_email || 'Sin email registrado'}</p>
           </div>
 
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Equipo & Personal</p>
-            <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Equipo & Personal</p>
+            <p className="text-sm font-extrabold text-foreground">
               {organization.staff_active} de {organization.staff_total} activos
             </p>
-            <p className="text-xs text-slate-500 font-medium">{organization.staff_invited} invitados · {organization.staff_suspended} suspendidos</p>
+            <p className="text-xs text-muted-foreground font-medium">{organization.staff_invited} invitados · {organization.staff_suspended} suspendidos</p>
           </div>
 
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Clientes Registrados</p>
-            <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">{organization.customers_total} usuarios finales</p>
-            <p className="text-xs text-slate-500 font-medium">Cuentas de portal público</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Clientes Registrados</p>
+            <p className="text-sm font-extrabold text-foreground">{organization.customers_total} usuarios finales</p>
+            <p className="text-xs text-muted-foreground font-medium">Cuentas de portal público</p>
           </div>
 
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Ciclo de Facturación</p>
-            <p className={cn('text-sm font-extrabold', timing?.urgent ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Ciclo de Facturación</p>
+            <p className={cn('text-sm font-extrabold', timing?.urgent ? 'text-red-600 dark:text-red-400' : 'text-foreground')}>
               {timing?.label ?? 'Sin fecha de renovación'}
             </p>
-            <p className="text-xs text-slate-500 font-medium">Hasta {formatDate(organization.current_period_ends_at || organization.trial_ends_at)}</p>
+            <p className="text-xs text-muted-foreground font-medium">Hasta {formatDate(organization.current_period_ends_at || organization.trial_ends_at)}</p>
           </div>
         </div>
 
         {/* Tabbed Detail Section */}
         <div className="p-6 space-y-4">
-          <div className="flex items-center gap-1 rounded-2xl border border-slate-200/90 bg-slate-100/80 p-1 dark:border-slate-800 dark:bg-slate-800/80 w-fit">
+          <div className="flex items-center gap-1 rounded-2xl border border-border bg-muted p-1 w-fit">
             <button
               onClick={() => setActiveTab('overview')}
               className={cn(
                 'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
                 activeTab === 'overview'
-                  ? 'bg-white text-slate-900 shadow-2xs dark:bg-slate-900 dark:text-slate-50'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
+                  ? 'bg-card text-foreground shadow-2xs'
+                  : 'text-foreground/80 hover:text-foreground'
               )}
             >
               <Building2 className="h-3.5 w-3.5 text-cyan-500" />
@@ -461,8 +461,8 @@ function OrganizationFocusPanel({
               className={cn(
                 'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
                 activeTab === 'members'
-                  ? 'bg-white text-slate-900 shadow-2xs dark:bg-slate-900 dark:text-slate-50'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
+                  ? 'bg-card text-foreground shadow-2xs'
+                  : 'text-foreground/80 hover:text-foreground'
               )}
             >
               <Users className="h-3.5 w-3.5 text-violet-500" />
@@ -473,8 +473,8 @@ function OrganizationFocusPanel({
               className={cn(
                 'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
                 activeTab === 'billing'
-                  ? 'bg-white text-slate-900 shadow-2xs dark:bg-slate-900 dark:text-slate-50'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
+                  ? 'bg-card text-foreground shadow-2xs'
+                  : 'text-foreground/80 hover:text-foreground'
               )}
             >
               <CreditCard className="h-3.5 w-3.5 text-amber-500" />
@@ -485,22 +485,22 @@ function OrganizationFocusPanel({
           {activeTab === 'overview' && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 pt-2">
               {/* Rubro & Módulos Habilitados Card */}
-              <div className="rounded-3xl border border-violet-200/90 bg-gradient-to-br from-violet-50/60 via-white to-cyan-50/40 p-5 dark:border-violet-900/60 dark:from-violet-950/30 dark:via-slate-900 dark:to-cyan-950/20 space-y-4 sm:col-span-2 lg:col-span-3 shadow-2xs">
+              <div className="rounded-3xl border border-violet-200/90 bg-gradient-to-br from-violet-50/60 via-card to-cyan-50/40 p-5 dark:border-violet-900/60 dark:from-violet-950/30 dark:to-cyan-950/20 space-y-4 sm:col-span-2 lg:col-span-3 shadow-2xs">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white dark:bg-slate-800 text-2xl shadow-sm border border-violet-200/80 dark:border-violet-900/50">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-card text-2xl shadow-sm border border-violet-200/80 dark:border-violet-900/50">
                       {VERTICAL_META[organization.business_vertical || 'general']?.icon || '🏬'}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                        <span className="text-xs font-black uppercase tracking-wider text-foreground">
                           {VERTICAL_META[organization.business_vertical || 'general']?.label || 'Comercio General'}
                         </span>
                         <Badge variant="outline" className="text-[10px] font-bold">
                           Modelo: {organization.operating_model === 'wholesale' ? 'Mayorista' : organization.operating_model === 'repair' ? 'Taller' : organization.operating_model === 'service' ? 'Servicios' : 'Minorista'}
                         </Badge>
                       </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <p className="text-[11px] text-muted-foreground">
                         Configuración vertical de catálogo, flujos de venta y módulos operativos del negocio.
                       </p>
                     </div>
@@ -519,12 +519,12 @@ function OrganizationFocusPanel({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
                   {(organization.enabled_modules && organization.enabled_modules.length > 0
                     ? organization.enabled_modules
                     : ['pos', 'inventory', 'crm', 'ecommerce']
                   ).map((m) => {
-                    const meta = MODULE_META[m] || { label: m, short: m, color: 'bg-slate-100 text-slate-700 border-slate-200' }
+                    const meta = MODULE_META[m] || { label: m, short: m, color: 'bg-muted text-foreground/80 border-border' }
                     return (
                       <span
                         key={m}
@@ -538,32 +538,32 @@ function OrganizationFocusPanel({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/40 space-y-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Fecha de Creación</span>
-                <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatDate(organization.created_at)}</p>
-                <p className="text-xs text-slate-500">Registrado en la base de datos</p>
+              <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">Fecha de Creación</span>
+                <p className="text-sm font-bold text-foreground">{formatDate(organization.created_at)}</p>
+                <p className="text-xs text-muted-foreground">Registrado en la base de datos</p>
               </div>
 
-              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/40 space-y-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Última Actualización</span>
-                <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatDate(organization.updated_at)}</p>
-                <p className="text-xs text-slate-500">Último cambio de configuración</p>
+              <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">Última Actualización</span>
+                <p className="text-sm font-bold text-foreground">{formatDate(organization.updated_at)}</p>
+                <p className="text-xs text-muted-foreground">Último cambio de configuración</p>
               </div>
 
-              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/40 space-y-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Proveedor de Cobros</span>
-                <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{organization.subscription_provider || 'Manual / Transferencia'}</p>
-                <p className="text-xs text-slate-500">Pasarela asignada</p>
+              <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">Proveedor de Cobros</span>
+                <p className="text-sm font-bold text-foreground">{organization.subscription_provider || 'Manual / Transferencia'}</p>
+                <p className="text-xs text-muted-foreground">Pasarela asignada</p>
               </div>
             </div>
           )}
 
           {activeTab === 'members' && (
-            <div className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-5 dark:border-slate-800 dark:bg-slate-950/40 space-y-3">
+            <div className="rounded-2xl border border-border bg-muted/40 p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">Desglose de Personal</h4>
-                  <p className="text-xs text-slate-500">Usuarios con permisos de administración o ventas.</p>
+                  <h4 className="text-sm font-extrabold text-foreground">Desglose de Personal</h4>
+                  <p className="text-xs text-muted-foreground">Usuarios con permisos de administración o ventas.</p>
                 </div>
                 <Button asChild size="sm" variant="outline" className="h-7 text-xs font-bold rounded-lg">
                   <Link href={`/superadmin/users?organization=${organization.id}`}>
@@ -573,16 +573,16 @@ function OrganizationFocusPanel({
                 </Button>
               </div>
               <div className="grid gap-2 sm:grid-cols-3 pt-2">
-                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-center">
-                  <span className="text-xs font-semibold text-slate-400">Activos</span>
+                <div className="p-3 rounded-xl bg-card border border-border text-center">
+                  <span className="text-xs font-semibold text-muted-foreground">Activos</span>
                   <p className="text-xl font-black text-emerald-600">{organization.staff_active}</p>
                 </div>
-                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-center">
-                  <span className="text-xs font-semibold text-slate-400">Invitados pendientes</span>
+                <div className="p-3 rounded-xl bg-card border border-border text-center">
+                  <span className="text-xs font-semibold text-muted-foreground">Invitados pendientes</span>
                   <p className="text-xl font-black text-amber-600">{organization.staff_invited}</p>
                 </div>
-                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-center">
-                  <span className="text-xs font-semibold text-slate-400">Suspendidos</span>
+                <div className="p-3 rounded-xl bg-card border border-border text-center">
+                  <span className="text-xs font-semibold text-muted-foreground">Suspendidos</span>
                   <p className="text-xl font-black text-red-600">{organization.staff_suspended}</p>
                 </div>
               </div>
@@ -590,8 +590,8 @@ function OrganizationFocusPanel({
           )}
 
           {activeTab === 'billing' && (
-            <div className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-5 dark:border-slate-800 dark:bg-slate-950/40 space-y-3">
-              <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">Acciones de Facturación Directas</h4>
+            <div className="rounded-2xl border border-border bg-muted/40 p-5 space-y-3">
+              <h4 className="text-sm font-extrabold text-foreground">Acciones de Facturación Directas</h4>
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <Button asChild size="sm" variant="outline" className="rounded-xl text-xs font-bold gap-1.5">
                   <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(organization.slug)}`}>
@@ -633,22 +633,22 @@ function StatCard({
   tone?: 'default' | 'success' | 'warning' | 'info'
 }) {
   const iconTones = {
-    default: 'text-slate-500 bg-slate-100 dark:bg-slate-800',
+    default: 'text-muted-foreground bg-muted',
     success: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-300',
     warning: 'text-amber-600 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-300',
     info:    'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/50 dark:text-cyan-300',
   }
 
   return (
-    <div className="flex flex-1 items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex flex-1 items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:shadow-md">
       <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl', iconTones[tone])}>
         <Icon className="h-5 w-5" />
       </div>
       <div className="flex flex-col min-w-0">
-        <p className="truncate text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
+        <p className="truncate text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
         <div className="flex items-baseline gap-2">
-          <span className="text-xl font-black text-slate-900 dark:text-slate-50">{value}</span>
-          <span className="truncate text-xs text-slate-400">{sub}</span>
+          <span className="text-xl font-black text-foreground">{value}</span>
+          <span className="truncate text-xs text-muted-foreground">{sub}</span>
         </div>
       </div>
     </div>
@@ -797,8 +797,8 @@ export function OrganizationsDashboard({
     { key: 'no_sub', label: 'Sin suscripción' },
   ]
 
-  const thClass = 'px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400'
-  const thBtn = 'flex cursor-pointer select-none items-center whitespace-nowrap hover:text-slate-900 dark:hover:text-slate-100 transition-colors'
+  const thClass = 'px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground'
+  const thBtn = 'flex cursor-pointer select-none items-center whitespace-nowrap hover:text-foreground transition-colors'
 
   // Robot Mascot Mood & Insight
   const robotMood: RobotMood = focusedOrganization
@@ -815,23 +815,23 @@ export function OrganizationsDashboard({
       {/* Header */}
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1.5">
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-400">
+          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
             <Building2 className="h-3.5 w-3.5 text-cyan-500" />
             Superadmin · Gestión Multiempresa SaaS
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-50">
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
             Directorio de Organizaciones
           </h1>
-          <p className="max-w-2xl text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+          <p className="max-w-2xl text-xs sm:text-sm text-muted-foreground">
             Control operativo de empresas, planes, owners y suscripciones del ecosistema multiempresa.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer" onClick={() => router.refresh()}>
+          <Button variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer" onClick={() => router.refresh()}>
             <RefreshCw className="h-3.5 w-3.5" />
             Actualizar
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer" onClick={exportCsv} disabled={filtered.length === 0}>
+          <Button variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer" onClick={exportCsv} disabled={filtered.length === 0}>
             <Download className="h-3.5 w-3.5" />
             Exportar CSV
           </Button>
@@ -877,12 +877,12 @@ export function OrganizationsDashboard({
       )}
 
       {/* Main Table / Grid Card */}
-      <Card className="rounded-3xl border border-slate-200/90 bg-white/95 shadow-sm dark:border-slate-800 dark:bg-slate-900/95 overflow-hidden">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/50 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40 space-y-3">
+      <Card className="rounded-3xl border border-border bg-card/95 shadow-sm overflow-hidden">
+        <CardHeader className="border-b border-border bg-muted/40 px-6 py-4 space-y-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-50">
+                <CardTitle className="text-base font-bold text-foreground">
                   Directorio de Empresas
                 </CardTitle>
                 <Badge variant="outline" className="text-xs font-bold px-2 py-0.5 bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800">
@@ -896,13 +896,13 @@ export function OrganizationsDashboard({
 
             <div className="flex flex-wrap items-center gap-2">
               {/* View Switcher */}
-              <div className="flex items-center gap-1 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 p-1">
+              <div className="flex items-center gap-1 rounded-xl bg-muted p-1">
                 <button
                   type="button"
                   onClick={() => setViewMode('table')}
                   className={cn(
-                    'p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors cursor-pointer',
-                    viewMode === 'table' ? 'bg-white shadow-2xs text-slate-900 dark:bg-slate-900 dark:text-slate-50' : ''
+                    'p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors cursor-pointer',
+                    viewMode === 'table' ? 'bg-card shadow-2xs text-foreground' : ''
                   )}
                   title="Vista de Tabla"
                 >
@@ -912,8 +912,8 @@ export function OrganizationsDashboard({
                   type="button"
                   onClick={() => setViewMode('grid')}
                   className={cn(
-                    'p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors cursor-pointer',
-                    viewMode === 'grid' ? 'bg-white shadow-2xs text-slate-900 dark:bg-slate-900 dark:text-slate-50' : ''
+                    'p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors cursor-pointer',
+                    viewMode === 'grid' ? 'bg-card shadow-2xs text-foreground' : ''
                   )}
                   title="Vista de Cuadrícula"
                 >
@@ -923,7 +923,7 @@ export function OrganizationsDashboard({
 
               {/* Search */}
               <div className="relative w-full sm:w-64">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="h-8 pl-8 text-xs rounded-xl"
                   placeholder="Buscar empresa, slug, owner..."
@@ -933,13 +933,13 @@ export function OrganizationsDashboard({
               </div>
 
               {/* Plan filter */}
-              <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1">
                 <button
                   type="button"
                   onClick={() => setPlanFilter('ALL')}
                   className={cn(
                     'h-6 rounded-lg px-2.5 text-xs font-bold transition-all cursor-pointer',
-                    planFilter === 'ALL' ? 'bg-slate-900 text-white shadow-2xs dark:bg-slate-800' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                    planFilter === 'ALL' ? 'bg-foreground text-background shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   Todos
@@ -951,7 +951,7 @@ export function OrganizationsDashboard({
                     onClick={() => setPlanFilter(p)}
                     className={cn(
                       'h-6 rounded-lg px-2.5 text-xs font-bold transition-all cursor-pointer',
-                      planFilter === p ? 'bg-slate-900 text-white shadow-2xs dark:bg-slate-800' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                      planFilter === p ? 'bg-foreground text-background shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                     )}
                   >
                     {p}
@@ -962,7 +962,7 @@ export function OrganizationsDashboard({
           </div>
 
           {/* Status filter pills */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border">
             {filterPills.map((f) => {
               const count = f.key === 'all'
                 ? organizations.length
@@ -977,14 +977,14 @@ export function OrganizationsDashboard({
                   className={cn(
                     'flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer',
                     statusFilter === f.key
-                      ? 'bg-white text-slate-900 shadow-2xs dark:bg-slate-900 dark:text-slate-50 border border-slate-200 dark:border-slate-700'
-                      : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
+                      ? 'bg-card text-foreground shadow-2xs border border-border'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <span>{f.label}</span>
                   <span className={cn(
                     'flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-extrabold',
-                    statusFilter === f.key ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                    statusFilter === f.key ? 'bg-foreground text-background' : 'bg-muted-foreground/15 text-foreground/80'
                   )}>
                     {count}
                   </span>
@@ -1008,7 +1008,7 @@ export function OrganizationsDashboard({
           {viewMode === 'table' ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px]">
-                <thead className="sticky top-0 z-10 border-b border-slate-100 bg-slate-50/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
+                <thead className="sticky top-0 z-10 border-b border-border bg-muted/40 backdrop-blur">
                   <tr>
                     <th className={cn(thClass, 'pl-4')}>
                       <button className={thBtn} onClick={() => toggleSort('name')}>
@@ -1041,19 +1041,19 @@ export function OrganizationsDashboard({
                     <th className={cn(thClass, 'pr-4 text-right')}>Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-border">
                   {filtered.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-20 text-center">
-                        <Minus className="mx-auto h-8 w-8 text-slate-300" />
-                        <p className="mt-3 text-xs font-bold text-slate-500">No se encontraron organizaciones con estos filtros</p>
+                        <Minus className="mx-auto h-8 w-8 text-muted-foreground/60" />
+                        <p className="mt-3 text-xs font-bold text-muted-foreground">No se encontraron organizaciones con estos filtros</p>
                       </td>
                     </tr>
                   ) : (
                     pagination.items.map((org) => (
                       <tr
                         key={org.id}
-                        className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                        className="transition-colors hover:bg-muted/50"
                       >
                         {/* Empresa */}
                         <td className="py-2 pl-4 pr-3">
@@ -1067,16 +1067,16 @@ export function OrganizationsDashboard({
                             <div className="min-w-0">
                               <Link
                                 href={`/superadmin/organizations?q=${encodeURIComponent(org.slug)}`}
-                                className="truncate text-xs font-extrabold text-slate-900 dark:text-slate-100 hover:text-cyan-600 transition-colors block"
+                                className="truncate text-xs font-extrabold text-foreground hover:text-cyan-600 transition-colors block"
                               >
                                 {org.name}
                               </Link>
-                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                                 <span>/{org.slug}</span>
                                 <button
                                   type="button"
                                   onClick={() => void copyUrl(org.slug)}
-                                  className="hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
+                                  className="hover:text-foreground cursor-pointer"
                                   title="Copiar URL"
                                   aria-label={`Copiar URL de ${org.name}`}
                                 >
@@ -1112,11 +1112,11 @@ export function OrganizationsDashboard({
                         {/* Owner */}
                         <td className="px-3 py-2">
                           <div className="max-w-[180px]">
-                            <p className="truncate text-[11px] sm:text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            <p className="truncate text-[11px] sm:text-xs font-semibold text-foreground/80">
                               {org.owner_name || (org.owner_email?.split('@')[0]) || '—'}
                             </p>
                             {org.owner_email && (
-                              <p className="truncate text-[10px] text-slate-400">{org.owner_email}</p>
+                              <p className="truncate text-[10px] text-muted-foreground">{org.owner_email}</p>
                             )}
                           </div>
                         </td>
@@ -1127,7 +1127,7 @@ export function OrganizationsDashboard({
                         </td>
 
                         {/* Creada */}
-                        <td className="px-3 py-2 text-[11px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        <td className="px-3 py-2 text-[11px] font-medium text-muted-foreground whitespace-nowrap">
                           {formatDate(org.created_at)}
                         </td>
 
@@ -1138,7 +1138,7 @@ export function OrganizationsDashboard({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400"
+                              className="h-7 w-7 rounded-lg cursor-pointer text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400"
                               title="Editar organización"
                               aria-label={`Editar ${org.name}`}
                               onClick={() => setEditingOrg({
@@ -1155,24 +1155,24 @@ export function OrganizationsDashboard({
                             >
                               <Wrench className="h-3 w-3" />
                             </Button>
-                            <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400" title="Ver detalle completo">
+                            <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400" title="Ver detalle completo">
                               <Link href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`} aria-label={`Ver detalle de ${org.name}`}>
                                 <Building2 className="h-3 w-3" />
                               </Link>
                             </Button>
                             <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Abrir tienda pública">
                               <a href={`/${org.slug}/inicio`} target="_blank" rel="noreferrer" aria-label={`Abrir tienda de ${org.name}`}>
-                                <Globe className="h-3 w-3 text-slate-500" />
+                                <Globe className="h-3 w-3 text-muted-foreground" />
                               </a>
                             </Button>
                             <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Gestionar usuarios">
                               <Link href={`/superadmin/users?organization=${org.id}`} aria-label={`Ver usuarios de ${org.name}`}>
-                                <Users className="h-3 w-3 text-slate-500" />
+                                <Users className="h-3 w-3 text-muted-foreground" />
                               </Link>
                             </Button>
                             <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Suscripción y pagos">
                               <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`} aria-label={`Ver suscripción de ${org.name}`}>
-                                <CreditCard className="h-3 w-3 text-slate-500" />
+                                <CreditCard className="h-3 w-3 text-muted-foreground" />
                               </Link>
                             </Button>
                           </div>
@@ -1188,13 +1188,13 @@ export function OrganizationsDashboard({
             <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.length === 0 ? (
                 <div className="col-span-full py-16 text-center">
-                  <Minus className="mx-auto h-8 w-8 text-slate-300" />
-                  <p className="mt-3 text-xs font-bold text-slate-500">No se encontraron organizaciones con estos filtros</p>
+                  <Minus className="mx-auto h-8 w-8 text-muted-foreground/60" />
+                  <p className="mt-3 text-xs font-bold text-muted-foreground">No se encontraron organizaciones con estos filtros</p>
                 </div>
               ) : (
                 pagination.items.map((org) => (
-                  <Card key={org.id} className="flex flex-col overflow-hidden transition-all hover:shadow-md dark:border-slate-800">
-                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800/60 dark:bg-slate-900/40">
+                  <Card key={org.id} className="flex flex-col overflow-hidden transition-all hover:shadow-md">
+                    <div className="flex items-start justify-between gap-3 border-b border-border bg-muted/40 p-4">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={cn(
                           'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-sm',
@@ -1205,11 +1205,11 @@ export function OrganizationsDashboard({
                         <div className="min-w-0">
                           <Link
                             href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`}
-                            className="truncate text-sm font-bold text-slate-900 dark:text-slate-100 hover:text-cyan-600 transition-colors block"
+                            className="truncate text-sm font-bold text-foreground hover:text-cyan-600 transition-colors block"
                           >
                             {org.name}
                           </Link>
-                          <p className="truncate text-xs text-slate-400">/{org.slug}</p>
+                          <p className="truncate text-xs text-muted-foreground">/{org.slug}</p>
                         </div>
                       </div>
                       <Badge variant="outline" className={cn('rounded-full text-[10px] font-bold px-2 py-0.5', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
@@ -1217,32 +1217,32 @@ export function OrganizationsDashboard({
                       </Badge>
                     </div>
 
-                    <div className="flex-1 space-y-3 p-4 bg-white dark:bg-slate-950/20">
+                    <div className="flex-1 space-y-3 p-4 bg-card">
                       <div className="flex flex-col gap-1.5">
                         <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-500">Suscripción</span>
+                          <span className="text-muted-foreground">Suscripción</span>
                           <SubscriptionBadge org={org} />
                         </div>
                         <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-500">Rubro</span>
+                          <span className="text-muted-foreground">Rubro</span>
                           <RubroBadge vertical={org.business_vertical} model={org.operating_model} />
                         </div>
                       </div>
 
-                      <div className="border-t border-slate-100 pt-3 dark:border-slate-800/60">
-                        <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>Personal: <strong className="text-slate-900 dark:text-slate-100">{org.staff_total}</strong></span>
-                          <span>Clientes: <strong className="text-slate-900 dark:text-slate-100">{org.customers_total}</strong></span>
+                      <div className="border-t border-border pt-3">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Personal: <strong className="text-foreground">{org.staff_total}</strong></span>
+                          <span>Clientes: <strong className="text-foreground">{org.customers_total}</strong></span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-100 bg-slate-50 p-3 flex items-center justify-end gap-1 dark:border-slate-800 dark:bg-slate-900">
+                    <div className="border-t border-border bg-muted/40 p-3 flex items-center justify-end gap-1">
                       <EnterSupportButton iconOnly organizationId={org.id} organizationName={org.name} />
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 rounded-lg cursor-pointer text-slate-500 hover:text-violet-600 dark:hover:text-violet-400"
+                        className="h-7 w-7 rounded-lg cursor-pointer text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400"
                         title="Editar organización"
                         onClick={() => setEditingOrg({
                           id: org.id,
@@ -1260,12 +1260,12 @@ export function OrganizationsDashboard({
                       </Button>
                       <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Gestionar usuarios">
                         <Link href={`/superadmin/users?organization=${org.id}`}>
-                          <Users className="h-4 w-4 text-slate-500" />
+                          <Users className="h-4 w-4 text-muted-foreground" />
                         </Link>
                       </Button>
                       <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Suscripción y pagos">
                         <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`}>
-                          <CreditCard className="h-4 w-4 text-slate-500" />
+                          <CreditCard className="h-4 w-4 text-muted-foreground" />
                         </Link>
                       </Button>
                     </div>
@@ -1277,7 +1277,7 @@ export function OrganizationsDashboard({
 
           {/* Pagination */}
           <Pagination
-            className="border-t border-slate-100 dark:border-slate-800 px-6 py-4"
+            className="border-t border-border px-6 py-4"
             currentPage={pagination.page}
             totalPages={pagination.totalPages}
             itemsPerPage={pagination.pageSize}

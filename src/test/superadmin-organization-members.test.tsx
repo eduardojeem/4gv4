@@ -239,3 +239,77 @@ describe('el encabezado deja de sumar clientes al equipo', () => {
     expect(document.body.textContent).not.toContain('5 usuarios')
   })
 })
+
+// ── Último acceso y auditoría ───────────────────────────────────────────────
+
+const haceDias = (dias: number) => new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
+
+/**
+ * La ficha decía cuánto factura, pero no si todavía usan el sistema: una
+ * empresa que dejó de entrar hace meses se veía igual que una que entró hoy.
+ */
+describe('la ficha dice si la empresa sigue entrando al sistema', () => {
+  const conAccesos = () => base({
+    owner: { id: 'owner-1', email: 'dueno@hca.com.py', full_name: 'Hugo Cáceres', avatar_url: null, last_sign_in_at: haceDias(2) } as never,
+    members: [
+      { ...miembro('owner', 'active', 'Hugo Cáceres'), user_id: 'owner-1', last_sign_in_at: haceDias(2) },
+      { ...miembro('technician', 'active', 'Ana Villalba'), user_id: 'u-ana', last_sign_in_at: haceDias(75) },
+      { ...miembro('seller', 'invited', 'Beto Ramírez'), user_id: 'u-beto', last_sign_in_at: null },
+      miembro('customer', 'active', 'Cliente Uno'),
+    ],
+  })
+
+  it('muestra el último acceso del equipo en el encabezado', () => {
+    render(<OrganizationDetailView data={conAccesos()} />)
+    expect(screen.getByText('Último acceso: Hace 2 días')).toBeInTheDocument()
+  })
+
+  it('cada persona dice cuándo entró, y quién nunca entró', async () => {
+    render(<OrganizationDetailView data={conAccesos()} />)
+    await abrirEquipo()
+    expect(screen.getByText('Último acceso: Hace 2 meses')).toBeInTheDocument()
+    expect(screen.getByText('Último acceso: Nunca entró')).toBeInTheDocument()
+    expect(screen.getByText('1 entró esta semana')).toBeInTheDocument()
+  })
+
+  /** Sin el dato no se afirma nada: «nunca entró» sería falso. */
+  it('si no se pudo consultar, no inventa un último acceso', async () => {
+    render(<OrganizationDetailView data={base()} />)
+    await abrirEquipo()
+    expect(screen.queryByText(/Último acceso:/)).not.toBeInTheDocument()
+  })
+})
+
+describe('la ficha muestra lo que se hizo sobre la organización', () => {
+  it('lista los últimos cambios con quién los hizo y enlaza a la auditoría filtrada', () => {
+    render(<OrganizationDetailView data={base({
+      recent_audit: {
+        total: 14,
+        events: [
+          { id: 'a1', action: 'support.started', resource: 'organizations', severity: 'medium', created_at: '2026-09-10T10:00:00Z', actor: 'Soporte Plataforma' },
+          { id: 'a2', action: 'update', resource: 'organization_settings', severity: 'low', created_at: '2026-09-01T10:00:00Z', actor: null },
+        ],
+      },
+    })} />)
+
+    expect(screen.getByText('Cambios registrados')).toBeInTheDocument()
+    expect(screen.getByText('Soporte iniciado')).toBeInTheDocument()
+    expect(screen.getByText('Soporte Plataforma')).toBeInTheDocument()
+    expect(screen.getByText('Sistema')).toBeInTheDocument()
+    expect(screen.getByText('Los últimos 2 de 14 eventos.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Ver en auditoría/ })).toHaveAttribute(
+      'href',
+      '/superadmin/audit-logs?org=3f2b1a44-1111-4222-8333-444455556666&period=30d',
+    )
+  })
+
+  it('un fallo al leer la auditoría no se muestra como «sin cambios»', () => {
+    render(<OrganizationDetailView data={base({ recent_audit: null })} />)
+    expect(screen.getByText(/No se pudo leer la auditoría/)).toBeInTheDocument()
+  })
+
+  it('sin eventos lo dice', () => {
+    render(<OrganizationDetailView data={base({ recent_audit: { total: 0, events: [] } })} />)
+    expect(screen.getByText('No hay cambios registrados sobre esta organización.')).toBeInTheDocument()
+  })
+})

@@ -256,10 +256,10 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="flex max-h-[94vh] flex-col overflow-hidden p-0 sm:max-w-2xl rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl">
+      <DialogContent className="flex max-h-[94vh] flex-col overflow-hidden p-0 sm:max-w-2xl rounded-3xl border border-border shadow-2xl">
         
         {/* Header */}
-        <div className="border-b border-slate-200/90 bg-gradient-to-r from-slate-50 via-white to-violet-50/50 p-5 dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-violet-950/30">
+        <div className="border-b border-border bg-gradient-to-r from-muted/40 via-card to-violet-50/50 p-5 dark:to-violet-950/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-600 text-white font-black text-sm shadow-md">
@@ -267,14 +267,14 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <DialogTitle className="text-lg font-black text-slate-900 dark:text-slate-50 tracking-tight">
+                  <DialogTitle className="text-lg font-black text-foreground tracking-tight">
                     {showConfirmation ? 'Confirmar Modificación Crítica' : 'Editar Organización, Rubro & Módulos'}
                   </DialogTitle>
                   <Badge variant="outline" className="text-[10px] font-mono font-bold">
                     /{organization.slug}
                   </Badge>
                 </div>
-                <DialogDescription className="text-xs text-slate-500 font-medium">
+                <DialogDescription className="text-xs text-muted-foreground font-medium">
                   {showConfirmation
                     ? 'Revisa el impacto antes de aplicar los cambios en producción.'
                     : 'Actualiza identidad comercial, rubro, plan SaaS, módulos y estado operativo.'}
@@ -298,41 +298,41 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
 
         {/* ⚠️ STEP 2: CONFIRMATION & IMPACT VIEW */}
         {showConfirmation ? (
-          <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50/50 dark:bg-slate-950/40">
+          <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-muted/40">
             
             {/* Danger Hero Warning */}
-            <div className="rounded-3xl border border-red-300 bg-gradient-to-br from-red-50 via-white to-rose-50 p-5 dark:border-red-900/70 dark:from-red-950/40 dark:via-slate-900 dark:to-rose-950/30 shadow-xs space-y-3">
+            <div className="rounded-3xl border border-red-300 bg-gradient-to-br from-red-50 via-card to-rose-50 p-5 dark:border-red-900/70 dark:from-red-950/40 dark:to-rose-950/30 shadow-xs space-y-3">
               <div className="flex items-center gap-2.5 text-red-700 dark:text-red-400 font-extrabold text-sm">
                 <ShieldAlert className="h-5 w-5 shrink-0 text-red-600" />
                 <span>¿Confirmas la aplicación de estos cambios?</span>
               </div>
               <p className="text-xs text-red-800 dark:text-red-300 leading-relaxed font-medium">
-                Estás a punto de modificar la configuración operativa de <strong className="font-black text-slate-900 dark:text-slate-100">{organization.name}</strong>. Esta acción afectará el acceso de sus usuarios, el catálogo y las URLs públicas.
+                Estás a punto de modificar la configuración operativa de <strong className="font-black text-foreground">{organization.name}</strong>. Esta acción afectará el acceso de sus usuarios, el catálogo y las URLs públicas.
               </p>
             </div>
 
             {/* Change Diff Summary */}
-            <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 p-4 space-y-3 text-xs shadow-2xs">
-              <p className="font-extrabold uppercase tracking-wider text-[10px] text-slate-400">
+            <div className="rounded-2xl border border-border bg-card p-4 space-y-3 text-xs shadow-2xs">
+              <p className="font-extrabold uppercase tracking-wider text-[10px] text-muted-foreground">
                 Resumen de Cambios a Aplicar
               </p>
               
               <ul className="space-y-2.5">
                 {name.trim() !== organization.name && (
-                  <li className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-slate-500 font-medium">Nombre de la Empresa:</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200">
-                      {organization.name} <ArrowRight className="inline h-3 w-3 text-slate-400 mx-1" /> <strong className="text-violet-600 dark:text-violet-400">{name}</strong>
+                  <li className="flex items-center justify-between gap-2 border-b border-border pb-2">
+                    <span className="text-muted-foreground font-medium">Nombre de la Empresa:</span>
+                    <span className="font-bold text-foreground">
+                      {organization.name} <ArrowRight className="inline h-3 w-3 text-muted-foreground mx-1" /> <strong className="text-violet-600 dark:text-violet-400">{name}</strong>
                     </span>
                   </li>
                 )}
 
                 {isSlugChanged && (
-                  <li className="flex flex-col gap-1 border-b border-slate-100 dark:border-slate-800 pb-2">
+                  <li className="flex flex-col gap-1 border-b border-border pb-2">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-slate-500 font-medium">Subdominio Público:</span>
+                      <span className="text-muted-foreground font-medium">Subdominio Público:</span>
                       <span className="font-mono font-bold">
-                        /{organization.slug} <ArrowRight className="inline h-3 w-3 text-slate-400 mx-1" /> <strong className="text-red-600 dark:text-red-400">/{slug}</strong>
+                        /{organization.slug} <ArrowRight className="inline h-3 w-3 text-muted-foreground mx-1" /> <strong className="text-red-600 dark:text-red-400">/{slug}</strong>
                       </span>
                     </div>
                     <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium bg-amber-50 dark:bg-amber-950/40 p-2 rounded-xl">
@@ -342,8 +342,8 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
                 )}
 
                 {businessVertical !== (organization.business_vertical || 'general') && (
-                  <li className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-slate-500 font-medium">Rubro Comercial:</span>
+                  <li className="flex items-center justify-between gap-2 border-b border-border pb-2">
+                    <span className="text-muted-foreground font-medium">Rubro Comercial:</span>
                     <span className="font-bold">
                       {organization.business_vertical || 'general'} → <strong className="text-cyan-600">{businessVertical}</strong>
                     </span>
@@ -351,20 +351,20 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
                 )}
 
                 {isPlanChanged && (
-                  <li className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-slate-500 font-medium">Plan SaaS:</span>
+                  <li className="flex items-center justify-between gap-2 border-b border-border pb-2">
+                    <span className="text-muted-foreground font-medium">Plan SaaS:</span>
                     <span className="font-bold">
-                      {organization.plan} <ArrowRight className="inline h-3 w-3 text-slate-400 mx-1" /> <strong className="text-violet-600 dark:text-violet-400">{plan}</strong>
+                      {organization.plan} <ArrowRight className="inline h-3 w-3 text-muted-foreground mx-1" /> <strong className="text-violet-600 dark:text-violet-400">{plan}</strong>
                     </span>
                   </li>
                 )}
 
                 {isStatusChanged && (
-                  <li className="flex flex-col gap-1 border-b border-slate-100 dark:border-slate-800 pb-2">
+                  <li className="flex flex-col gap-1 border-b border-border pb-2">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-slate-500 font-medium">Estado de Suscripción:</span>
+                      <span className="text-muted-foreground font-medium">Estado de Suscripción:</span>
                       <span className="font-bold">
-                        {organization.subscription_status || 'active'} <ArrowRight className="inline h-3 w-3 text-slate-400 mx-1" /> <strong className={cn(isDangerousStatus ? 'text-red-600 dark:text-red-400' : 'text-emerald-600')}>{status}</strong>
+                        {organization.subscription_status || 'active'} <ArrowRight className="inline h-3 w-3 text-muted-foreground mx-1" /> <strong className={cn(isDangerousStatus ? 'text-red-600 dark:text-red-400' : 'text-emerald-600')}>{status}</strong>
                       </span>
                     </div>
                     {isDangerousStatus && (
@@ -375,8 +375,8 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
                   </li>
                 )}
 
-                <li className="flex flex-col gap-1 border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <span className="text-slate-500 font-medium">Módulos Habilitados ({enabledModules.length}):</span>
+                <li className="flex flex-col gap-1 border-b border-border pb-2">
+                  <span className="text-muted-foreground font-medium">Módulos Habilitados ({enabledModules.length}):</span>
                   <div className="flex flex-wrap gap-1 pt-1">
                     {enabledModules.map((mod) => (
                       <Badge key={mod} variant="secondary" className="text-[10px] font-bold">
@@ -396,7 +396,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
             )}
 
             {/* Confirmation Footer */}
-            <div className="pt-3 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-200 dark:border-slate-800">
+            <div className="pt-3 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-border">
               <Button
                 type="button"
                 variant="ghost"
@@ -429,7 +429,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
           </div>
         ) : (
           /* 🛠️ STEP 1: MAIN EDIT FORM */
-          <form onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50/50 dark:bg-slate-950/40">
+          <form onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto p-6 space-y-5 bg-muted/40">
             
             {/* Real-time Critical Impact Alert Banners */}
             {isSlugChanged && (
@@ -459,7 +459,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
             {/* Form Fields Grid */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="edit-org-name" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <Label htmlFor="edit-org-name" className="text-xs font-bold text-foreground/80">
                   Nombre de la Empresa <span className="text-red-500">*</span>
                 </Label>
                 <Input
@@ -474,13 +474,13 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
 
               <div className="space-y-1.5 sm:col-span-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="edit-org-slug" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <Label htmlFor="edit-org-slug" className="text-xs font-bold text-foreground/80">
                     Subdominio / Slug de Tienda <span className="text-red-500">*</span>
                   </Label>
-                  <span className="text-[10px] text-slate-400">URL pública: /{slug}/inicio</span>
+                  <span className="text-[10px] text-muted-foreground">URL pública: /{slug}/inicio</span>
                 </div>
                 <div className="relative">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-slate-400">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">
                     /
                   </span>
                   <Input
@@ -499,7 +499,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
 
               {/* Rubro Comercial & Modelo Operativo */}
               <div className="space-y-1.5">
-                <Label htmlFor="edit-org-vertical" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <Label htmlFor="edit-org-vertical" className="text-xs font-bold text-foreground/80">
                   Rubro Comercial
                 </Label>
                 <Select value={businessVertical} onValueChange={setBusinessVertical}>
@@ -517,7 +517,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="edit-org-model" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <Label htmlFor="edit-org-model" className="text-xs font-bold text-foreground/80">
                   Modelo Operativo
                 </Label>
                 <Select value={operatingModel} onValueChange={setOperatingModel}>
@@ -535,7 +535,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="edit-org-plan" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <Label htmlFor="edit-org-plan" className="text-xs font-bold text-foreground/80">
                   Plan Asignado
                 </Label>
                 <Select value={plan} onValueChange={setPlan}>
@@ -553,7 +553,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="edit-org-status" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <Label htmlFor="edit-org-status" className="text-xs font-bold text-foreground/80">
                   Estado de la Suscripción
                 </Label>
                 <Select value={status} onValueChange={setStatus}>
@@ -571,7 +571,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="edit-org-currency" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <Label htmlFor="edit-org-currency" className="text-xs font-bold text-foreground/80">
                   Moneda Principal
                 </Label>
                 <Select value={currency} onValueChange={setCurrency}>
@@ -589,7 +589,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="edit-org-timezone" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <Label htmlFor="edit-org-timezone" className="text-xs font-bold text-foreground/80">
                   Zona Horaria
                 </Label>
                 <Select value={timezone} onValueChange={setTimezone}>
@@ -608,11 +608,11 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
             </div>
 
             {/* Módulos Habilitados Selector Grid */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 shadow-2xs space-y-3">
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Boxes className="h-4 w-4 text-violet-600" />
-                  <span className="text-xs font-extrabold text-slate-900 dark:text-slate-100">
+                  <span className="text-xs font-extrabold text-foreground">
                     Módulos Funcionales Habilitados
                   </span>
                 </div>
@@ -620,7 +620,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
                   {enabledModules.length} activos
                 </Badge>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium">
+              <p className="text-[11px] text-muted-foreground font-medium">
                 Selecciona las funcionalidades disponibles en el menú y operaciones de este tenant:
               </p>
 
@@ -633,8 +633,8 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
                       className={cn(
                         'flex items-start gap-2.5 rounded-xl border p-2.5 text-xs transition-all cursor-pointer select-none',
                         isChecked
-                          ? 'border-violet-300 bg-violet-50/50 dark:border-violet-800 dark:bg-violet-950/20 text-slate-900 dark:text-slate-100'
-                          : 'border-slate-100 dark:border-slate-800/80 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/30'
+                          ? 'border-violet-300 bg-violet-50/50 dark:border-violet-800 dark:bg-violet-950/20 text-foreground'
+                          : 'border-border text-muted-foreground hover:bg-muted/50'
                       )}
                     >
                       <Checkbox
@@ -644,7 +644,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
                       />
                       <div className="min-w-0">
                         <p className="font-bold">{mod.label}</p>
-                        <p className="text-[10px] text-slate-400">{mod.desc}</p>
+                        <p className="text-[10px] text-muted-foreground">{mod.desc}</p>
                       </div>
                     </label>
                   )
@@ -653,8 +653,8 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
             </div>
 
             {/* Quick 1-Click Status Presets (Unified with Subscriptions) */}
-            <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 dark:border-slate-800 dark:bg-slate-900 shadow-2xs space-y-2">
-              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+            <div className="rounded-2xl border border-border bg-card p-3.5 shadow-2xs space-y-2">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
                 Atajos Rápidos de Estado
               </p>
               <div className="flex flex-wrap gap-2">
@@ -692,12 +692,12 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
             </div>
 
             {/* Cancel at period end switch */}
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 shadow-2xs">
+            <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-4 shadow-2xs">
               <div>
-                <Label htmlFor="edit-org-cancel" className="text-xs font-extrabold cursor-pointer text-slate-900 dark:text-slate-100">
+                <Label htmlFor="edit-org-cancel" className="text-xs font-extrabold cursor-pointer text-foreground">
                   Cancelar Suscripción al Cierre
                 </Label>
-                <p className="text-[11px] text-slate-500 font-medium">
+                <p className="text-[11px] text-muted-foreground font-medium">
                   Mantiene el acceso operativo hasta la fecha de expiración del período.
                 </p>
               </div>
@@ -717,7 +717,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
             )}
 
             {/* Form Action Buttons */}
-            <DialogFooter className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+            <DialogFooter className="pt-2 border-t border-border flex items-center justify-between gap-2">
               <Button
                 type="button"
                 variant="ghost"

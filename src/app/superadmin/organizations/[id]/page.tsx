@@ -10,6 +10,7 @@ import {
   summarizeRepairs,
   summarizeSubscriptionPayments,
 } from '@/lib/superadmin/organization-volume'
+import { organizationAuditFilter } from '@/lib/superadmin/organization-audit'
 
 /** Tope del barrido de ventas para calcular facturacion. */
 const SALES_SCAN_CAP = 20000
@@ -23,6 +24,13 @@ const CREDITS_SCAN_CAP = 5000
  * pide de a tandas.
  */
 const INSTALLMENT_CHUNK = 200
+/**
+ * Tope de usuarios cuyo último acceso se consulta. `auth.admin` se pide de a
+ * uno; un equipo real tiene menos de diez personas.
+ */
+const ACCESS_LOOKUP_CAP = 60
+/** Cuántos eventos de auditoría se muestran en la ficha. */
+const AUDIT_PREVIEW = 8
 
 type Props = {
   params: Promise<{ id: string }>
@@ -201,6 +209,44 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
 
   const profileById = new Map<string, any>((memberProfiles ?? []).map((p: any) => [String(p.id), p] as [string, any]))
 
+  // Último acceso. Vive en `auth.users`, no en `profiles`: sin esto la ficha no
+  // decia si la empresa todavia usa el sistema. Solo el equipo y el dueño; los
+  // clientes de la tienda publica no operan el sistema.
+  const staffUserIds = (memberList as Array<{ user_id: string | null; role: string | null }>)
+    .filter((m) => String(m.role ?? '').toLowerCase() !== 'customer')
+    .map((m) => String(m.user_id ?? ''))
+    .filter(Boolean)
+  const accessUserIds = Array.from(new Set([...(org.owner_id ? [String(org.owner_id)] : []), ...staffUserIds]))
+    .slice(0, ACCESS_LOOKUP_CAP)
+
+  const [accessResults, { data: auditRows, count: auditCount, error: auditError }] = await Promise.all([
+    Promise.all(
+      accessUserIds.map(async (userId) => {
+        const { data, error } = await admin.auth.admin.getUserById(userId)
+        // `undefined`: no se pudo saber. `null`: nunca entro. No son lo mismo.
+        return [userId, error ? undefined : data.user?.last_sign_in_at ?? null] as const
+      })
+    ),
+    // Lo que se hizo sobre esta organizacion: cambios de plan, modulos, soporte.
+    admin
+      .from('audit_log')
+      .select('id, user_id, action, resource, severity, created_at', { count: 'exact' })
+      .or(organizationAuditFilter(String(org.id)))
+      .order('created_at', { ascending: false })
+      .limit(AUDIT_PREVIEW),
+  ])
+  const lastSignInById = new Map<string, string | null | undefined>(accessResults)
+
+  const auditActorIds = Array.from(
+    new Set(((auditRows ?? []) as Array<{ user_id: string | null }>).map((row) => row.user_id).filter(Boolean))
+  ) as string[]
+  const { data: auditActors } = auditActorIds.length
+    ? await admin.from('profiles').select('id, email, full_name').in('id', auditActorIds)
+    : { data: [] as Array<{ id: string; email: string | null; full_name: string | null }> }
+  const actorById = new Map(
+    ((auditActors ?? []) as Array<{ id: string; email: string | null; full_name: string | null }>).map((actor) => [actor.id, actor])
+  )
+
   // El plan vive en dos tablas: `subscription_plans` es la comercial (precio,
   // nombre, features de marketing) y `plans` la tecnica (los limites que el
   // sistema realmente aplica). `mergeCommercialPlans` le da prioridad a los
@@ -238,7 +284,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       .select('id, email, full_name, avatar_url')
       .eq('id', org.owner_id)
       .maybeSingle()
-    ownerProfile = owner
+    ownerProfile = owner ? { ...owner, last_sign_in_at: lastSignInById.get(String(org.owner_id)) } : owner
   }
 
   const sales = salesRows ?? []
@@ -311,6 +357,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
       status: m.status,
       created_at: m.created_at,
       profiles: profileById.get(String(m.user_id)) ?? null,
+      last_sign_in_at: lastSignInById.get(String(m.user_id)),
     })),
     // Una consulta que fallo no es una organizacion sin equipo.
     membersFailed: Boolean(membersError),
@@ -349,6 +396,23 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
     billing_summary: billingSummary,
     activity,
     activityTruncated,
+    // `null` cuando la consulta fallo: no es lo mismo que «sin cambios».
+    recent_audit: auditError
+      ? null
+      : {
+          total: auditCount ?? 0,
+          events: ((auditRows ?? []) as Array<{ id: string; user_id: string | null; action: string; resource: string | null; severity: string | null; created_at: string | null }>).map((row) => {
+            const actor = row.user_id ? actorById.get(row.user_id) : null
+            return {
+              id: row.id,
+              action: row.action,
+              resource: row.resource,
+              severity: row.severity,
+              created_at: row.created_at,
+              actor: actor?.full_name || actor?.email || null,
+            }
+          }),
+        },
   }
 
   return <OrganizationDetailView data={detailData} />

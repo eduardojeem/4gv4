@@ -108,6 +108,8 @@ import {
   type OnlineSummary,
   type RepairSummary,
 } from '@/lib/superadmin/organization-volume'
+import { describeLastAccess, summarizeTeamAccess } from '@/lib/superadmin/last-access'
+import { auditActionLabel } from '@/components/superadmin/AuditLogsDashboard'
 import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
 import { RobotGuide } from '@/components/common/RobotGuide'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
@@ -134,6 +136,8 @@ export type FullOrganizationDetail = {
     email: string | null
     full_name: string | null
     avatar_url: string | null
+    /** `undefined`: no se pudo consultar. `null`: nunca entró. */
+    last_sign_in_at?: string | null
   } | null
   settings: {
     currency?: string | null
@@ -154,6 +158,8 @@ export type FullOrganizationDetail = {
       full_name: string | null
       avatar_url: string | null
     } | null
+    /** `undefined`: no se pudo consultar. `null`: nunca entró. */
+    last_sign_in_at?: string | null
   }>
   subscription: {
     id: string
@@ -243,6 +249,21 @@ export type FullOrganizationDetail = {
   credit_summary: CreditSummary | null
   /** `null` cuando no se pudieron leer los pagos del servicio. */
   billing_summary: BillingSummary | null
+  /**
+   * Los últimos cambios registrados sobre la organización. `null` cuando no se
+   * pudo leer la auditoría.
+   */
+  recent_audit?: {
+    total: number
+    events: Array<{
+      id: string
+      action: string
+      resource: string | null
+      severity: string | null
+      created_at: string | null
+      actor: string | null
+    }>
+  } | null
 }
 
 type Props = {
@@ -274,7 +295,7 @@ function daysUntil(dateStr: string | null | undefined) {
 }
 
 const PLAN_STYLES: Record<string, string> = {
-  FREE: 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  FREE: 'border-border bg-muted text-foreground/80',
   BASIC: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300',
   PRO: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300',
   ENTERPRISE: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
@@ -305,7 +326,7 @@ export const VERTICAL_DESCRIPTIONS: Record<string, { label: string; icon: string
     label: 'Comercio General & Bazar',
     icon: '🏬',
     desc: 'Venta multirubro de artículos variados, compras rápidas en mostrador, promociones y catálogo web.',
-    badge: 'border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200',
+    badge: 'border-border bg-muted text-foreground',
   },
   food: {
     label: 'Alimentos & Gastronomía',
@@ -329,7 +350,7 @@ export const VERTICAL_DESCRIPTIONS: Record<string, { label: string; icon: string
     label: 'Otros Rubros Comerciales',
     icon: '🏷️',
     desc: 'Empresas y comercios especializados con catálogo adaptado a su nicho y operativa comercial.',
-    badge: 'border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200',
+    badge: 'border-border bg-muted text-foreground',
   },
 }
 
@@ -480,7 +501,7 @@ export const MODULE_CATEGORIES = [
         name: 'Auditoría & Trazabilidad',
         short: 'Auditoría',
         icon: ShieldCheck,
-        color: 'text-slate-600 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+        color: 'text-foreground/80 bg-muted border-border',
         summary: 'Registro detallado de acciones críticas, eliminaciones y cambios de precios.',
         capabilities: ['Registro inmutable con IP y usuario', 'Historial de modificaciones de precios', 'Alertas de actividades sospechosas'],
       },
@@ -624,9 +645,12 @@ function MemberRow({
     status: string
     created_at: string | null
     profiles?: { email?: string | null; full_name?: string | null } | null
+    last_sign_in_at?: string | null
   }
   showHint?: boolean
 }) {
+  // `undefined` es «no se pudo consultar»: ahí no se afirma nada.
+  const acceso = member.last_sign_in_at !== undefined ? describeLastAccess(member.last_sign_in_at) : null
   const nombre = member.profiles?.full_name?.trim()
   const correo = member.profiles?.email?.trim()
   const iniciales = (nombre || correo || '??').slice(0, 2).toUpperCase()
@@ -647,6 +671,17 @@ function MemberRow({
             {nombre && correo ? correo : !correo ? 'Sin correo registrado' : ''}
           </p>
           {hint && <p className="mt-0.5 text-[10px] text-muted-foreground/80">{hint}</p>}
+          {acceso && (
+            <p
+              className={cn(
+                'mt-0.5 flex items-center gap-1 text-[10px] font-medium',
+                acceso.stale ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
+              )}
+            >
+              <Clock className="h-3 w-3" aria-hidden="true" />
+              Último acceso: {acceso.label}
+            </p>
+          )}
         </div>
       </div>
 
@@ -975,8 +1010,8 @@ const SUBSCRIPTION_STATUS_STYLES: Record<string, string> = {
   trialing: 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300',
   past_due: 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
   paused: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
-  cancelled: 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  canceled: 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  cancelled: 'border-border bg-muted text-foreground/80',
+  canceled: 'border-border bg-muted text-foreground/80',
   expired: 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
   sin_registro: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
 }
@@ -992,12 +1027,12 @@ function LimitRow({ label, used, limit }: { label: string; used: number | null; 
   const definido = limit !== null && limit !== undefined
 
   return (
-    <div className="flex justify-between border-b border-slate-100 pb-2.5 dark:border-slate-800">
-      <span className="font-medium text-slate-400">{label}</span>
-      <span className="font-bold tabular-nums text-slate-800 dark:text-slate-200">
+    <div className="flex justify-between border-b border-border pb-2.5">
+      <span className="font-medium text-muted-foreground">{label}</span>
+      <span className="font-bold tabular-nums text-foreground">
         {used === null ? '—' : used.toLocaleString('es-PY')}
         {' / '}
-        <span className={cn(!tiene && 'font-medium text-slate-400')}>
+        <span className={cn(!tiene && 'font-medium text-muted-foreground')}>
           {tiene ? max.toLocaleString('es-PY') : definido ? 'Sin tope' : 'No definido'}
         </span>
       </span>
@@ -1009,7 +1044,7 @@ const MODULE_STATE_STYLES: Record<ModuleState, string> = {
   on: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
   trial: 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300',
   off_by_org: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
-  not_in_plan: 'border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
+  not_in_plan: 'border-border bg-muted text-muted-foreground',
   on_outside_plan: 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
 }
 
@@ -1022,7 +1057,7 @@ export function OrganizationDetailView({ data }: Props) {
   const [activeTab, setActiveTab] = useState('overview')
   const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, plan_modules, module_trials, all_plans, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules, repair_summary, online_summary, credit_summary, billing_summary } = data
+  const { organization: org, owner, settings, members, subscription, plan_details, plan_limits, plan_limits_source, plan_modules, module_trials, all_plans, branches, counts, activity, activityTruncated, membersFailed, admin_settings, company_info, billing, settings_modules, repair_summary, online_summary, credit_summary, billing_summary, recent_audit } = data
   // Sin fila en `plans` el sistema aplica los limites del plan Free. Decir
   // «Sin tope» ahi seria falso.
   const sinTope =
@@ -1057,6 +1092,13 @@ export function OrganizationDetailView({ data }: Props) {
   // tabla. Listarlos juntos bajo «Colaboradores» hacia parecer que la empresa
   // tiene 40 empleados cuando tiene 3.
   const equipo = partitionMembers(members)
+  // Solo el equipo dice si la empresa sigue usando el sistema.
+  const accesosConocidos = [
+    ...equipo.staff.map((m) => m.last_sign_in_at),
+    ...(owner && !equipo.staff.some((m) => m.user_id === owner.id) ? [owner.last_sign_in_at] : []),
+  ].filter((value) => value !== undefined)
+  const accesoEquipo = accesosConocidos.length > 0 ? summarizeTeamAccess(accesosConocidos) : null
+  const ultimoAccesoEquipo = accesoEquipo ? describeLastAccess(accesoEquipo.lastAccessAt) : null
   const staffOrdenado = sortStaff(equipo.staff)
 
   const coberturaPagos = billingCoverage(
@@ -1201,16 +1243,16 @@ export function OrganizationDetailView({ data }: Props) {
   return (
     <div className="space-y-6">
       {/* Top Breadcrumb & Return Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white/90 p-3.5 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/90 shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card/90 p-3.5 backdrop-blur-sm shadow-xs">
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="gap-1.5 rounded-xl text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">
+          <Button asChild variant="ghost" size="sm" className="gap-1.5 rounded-xl text-xs font-bold hover:bg-muted cursor-pointer">
             <Link href="/superadmin/organizations">
               <ArrowLeft className="h-4 w-4" />
               Volver al Directorio
             </Link>
           </Button>
-          <span className="text-slate-300 dark:text-slate-700">/</span>
-          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+          <span className="text-muted-foreground/60">/</span>
+          <span className="text-xs font-bold text-foreground">
             Expediente: <strong className="text-violet-600 dark:text-violet-400">{org.name}</strong>
           </span>
         </div>
@@ -1238,18 +1280,18 @@ export function OrganizationDetailView({ data }: Props) {
       </div>
 
       {/* Hero Header Card with Core Tenant Info */}
-      <Card className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 shadow-md dark:border-slate-800 dark:bg-slate-900/95">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-violet-50/80 via-slate-50 to-blue-50/50 p-6 dark:border-slate-800 dark:from-violet-950/30 dark:via-slate-950/40 dark:to-blue-950/20">
+      <Card className="overflow-hidden rounded-3xl border border-border bg-card/95 shadow-md">
+        <div className="border-b border-border bg-gradient-to-r from-violet-50/80 via-muted/40 to-blue-50/50 p-6 dark:from-violet-950/30 dark:to-blue-950/20">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             {/* Left: Avatar & Identity */}
             <div className="flex items-start gap-4">
-              <div className="flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-3xl bg-violet-600 text-white font-black text-2xl shadow-lg ring-4 ring-white dark:ring-slate-800">
+              <div className="flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-3xl bg-violet-600 text-white font-black text-2xl shadow-lg ring-4 ring-background">
                 {org.name.slice(0, 2).toUpperCase()}
               </div>
 
               <div className="space-y-1.5 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight truncate">
+                  <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tight truncate">
                     {org.name}
                   </h1>
                   <Badge variant="outline" className={cn('text-xs font-bold px-2.5 py-0.5 rounded-full', PLAN_STYLES[effectivePlan] ?? PLAN_STYLES.FREE)}>
@@ -1265,30 +1307,30 @@ export function OrganizationDetailView({ data }: Props) {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-medium">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground font-medium">
                   <button
                     type="button"
                     onClick={() => copyToClipboard(`${window.location.origin}/${org.slug}/inicio`, 'URL de tienda')}
                     className="inline-flex items-center gap-1 font-mono font-bold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
                   >
                     <span>/{org.slug}</span>
-                    <Copy className="h-3 w-3 text-slate-400" />
+                    <Copy className="h-3 w-3 text-muted-foreground" />
                   </button>
-                  <span className="text-slate-300 dark:text-slate-700">·</span>
+                  <span className="text-muted-foreground/60">·</span>
                   <Badge variant="outline" className={cn('rounded-lg px-2 py-0 text-[10px] font-extrabold gap-1', verticalMeta.badge)}>
                     <span>{verticalMeta.icon}</span>
                     <span>{verticalMeta.label}</span>
                   </Badge>
-                  <span className="text-slate-300 dark:text-slate-700">·</span>
-                  <span>Moneda: <strong className="text-slate-800 dark:text-slate-200">{settings?.currency || 'PYG'}</strong></span>
-                  <span className="text-slate-300 dark:text-slate-700">·</span>
+                  <span className="text-muted-foreground/60">·</span>
+                  <span>Moneda: <strong className="text-foreground">{settings?.currency || 'PYG'}</strong></span>
+                  <span className="text-muted-foreground/60">·</span>
                   <button
                     type="button"
                     onClick={() => copyToClipboard(org.id, 'UUID de organización')}
-                    className="inline-flex items-center gap-1 font-mono text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                    className="inline-flex items-center gap-1 font-mono text-muted-foreground hover:text-foreground cursor-pointer"
                   >
                     <span>ID: {org.id.slice(0, 13)}…</span>
-                    <Copy className="h-3 w-3 text-slate-400" />
+                    <Copy className="h-3 w-3 text-muted-foreground" />
                   </button>
                 </div>
               </div>
@@ -1302,12 +1344,12 @@ export function OrganizationDetailView({ data }: Props) {
                 asChild
                 variant="outline"
                 size="sm"
-                className="h-9 gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer"
+                className="h-9 gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer"
               >
                 <a href={`/${org.slug}/inicio`} target="_blank" rel="noreferrer">
                   <Globe className="h-3.5 w-3.5 text-cyan-600" />
                   Abrir Tienda
-                  <ExternalLink className="h-3 w-3 text-slate-400" />
+                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
                 </a>
               </Button>
 
@@ -1315,7 +1357,7 @@ export function OrganizationDetailView({ data }: Props) {
                 asChild
                 variant="outline"
                 size="sm"
-                className="h-9 gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer"
+                className="h-9 gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer"
               >
                 <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`}>
                   <CreditCard className="h-3.5 w-3.5 text-violet-600" />
@@ -1327,33 +1369,38 @@ export function OrganizationDetailView({ data }: Props) {
         </div>
 
         {/* Operational Telemetry Metric Bar */}
-        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4 border-b border-border bg-card">
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Equipo</p>
-            <p className="text-base font-black text-slate-900 dark:text-slate-100">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Equipo</p>
+            <p className="text-base font-black text-foreground">
               {membersFailed
                 ? 'Sin dato'
                 : `${equipo.staff.length} ${equipo.staff.length === 1 ? 'persona' : 'personas'}`}
             </p>
-            <p className="text-xs font-medium text-slate-500">
+            <p className="text-xs font-medium text-muted-foreground">
               {membersFailed
                 ? `Owner: ${owner?.full_name || owner?.email || 'Sin asignar'}`
                 : equipo.customers.length > 0
                   ? `+ ${equipo.customers.length.toLocaleString('es-PY')} clientes con cuenta web`
                   : `Owner: ${owner?.full_name || owner?.email || 'Sin asignar'}`}
             </p>
+            {ultimoAccesoEquipo && (
+              <p className={cn('text-xs font-semibold', ultimoAccesoEquipo.stale ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+                Último acceso: {ultimoAccesoEquipo.label}
+              </p>
+            )}
           </div>
 
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Catálogo & Sucursales</p>
-            <p className="text-base font-black text-slate-900 dark:text-slate-100">{counts.products} productos</p>
-            <p className="text-xs text-slate-500 font-medium">{branches.length} sucursales registradas</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Catálogo & Sucursales</p>
+            <p className="text-base font-black text-foreground">{counts.products} productos</p>
+            <p className="text-xs text-muted-foreground font-medium">{branches.length} sucursales registradas</p>
           </div>
 
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Capacidad Funcional</p>
-            <p className="text-base font-black text-slate-900 dark:text-slate-100">{activeCount} módulos activos</p>
-            <p className="text-xs font-medium text-slate-500">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Capacidad Funcional</p>
+            <p className="text-base font-black text-foreground">{activeCount} módulos activos</p>
+            <p className="text-xs font-medium text-muted-foreground">
               {cobertura.percent === null
                 ? 'El plan no tiene módulos cargados'
                 : `${cobertura.active} de ${cobertura.entitled} que da el plan`}
@@ -1361,11 +1408,11 @@ export function OrganizationDetailView({ data }: Props) {
           </div>
 
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Vigencia del Plan</p>
-            <p className="text-base font-black text-slate-900 dark:text-slate-100">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Vigencia del Plan</p>
+            <p className="text-base font-black text-foreground">
               {renewalDays === null ? 'Sin fecha' : renewalDays < 0 ? `${Math.abs(renewalDays)}d vencido` : `${renewalDays}d restantes`}
             </p>
-            <p className="text-xs text-slate-500 font-medium">
+            <p className="text-xs text-muted-foreground font-medium">
               Vence: {formatDate(subscription?.current_period_ends_at || subscription?.trial_ends_at)}
             </p>
           </div>
@@ -1373,7 +1420,7 @@ export function OrganizationDetailView({ data }: Props) {
       </Card>
 
       {/* 🤖 Robot Mascot Contextual Consultant */}
-      <div className="rounded-3xl border border-slate-200/90 bg-gradient-to-r from-blue-50/60 via-white to-violet-50/60 p-5 dark:border-slate-800 dark:from-blue-950/30 dark:via-slate-900 dark:to-violet-950/30 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="rounded-3xl border border-border bg-gradient-to-r from-blue-50/60 via-card to-violet-50/60 p-5 dark:from-blue-950/30 dark:to-violet-950/30 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <RobotGuide
           variant="navy-gold"
           size="md"
@@ -1385,7 +1432,7 @@ export function OrganizationDetailView({ data }: Props) {
             size="sm"
             variant="outline"
             onClick={() => setActiveTab('modules')}
-            className="h-8 rounded-xl text-xs font-bold bg-white/90 dark:bg-slate-900/90 border-violet-300 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-100 cursor-pointer"
+            className="h-8 rounded-xl text-xs font-bold bg-card/90 border-violet-300 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-100 cursor-pointer"
           >
             <Boxes className="h-3.5 w-3.5 mr-1.5 text-violet-600" />
             Ver Matriz de Módulos
@@ -1403,7 +1450,7 @@ export function OrganizationDetailView({ data }: Props) {
 
       {/* Tabs Navigation Section */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <div className="overflow-x-auto rounded-2xl border border-slate-200/90 bg-white/95 p-1.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900/95 w-fit">
+        <div className="overflow-x-auto rounded-2xl border border-border bg-card/95 p-1.5 shadow-2xs w-fit">
           <TabsList className="bg-transparent gap-1 p-0 h-auto">
             <TabsTrigger
               value="overview"
@@ -1975,6 +2022,17 @@ export function OrganizationDetailView({ data }: Props) {
                   field={{ value: formatDate(org.updated_at), source: null }}
                 />
                 <DataRow
+                  icon={Clock}
+                  label="Último acceso del equipo"
+                  field={{
+                    value: accesoEquipo?.lastAccessAt
+                      ? `${ultimoAccesoEquipo?.label} · ${formatDate(accesoEquipo.lastAccessAt)}`
+                      : null,
+                    source: null,
+                  }}
+                  fallback={accesoEquipo ? 'Nadie del equipo entró nunca' : 'No se pudo consultar'}
+                />
+                <DataRow
                   icon={CheckCircle2}
                   label="Configuración inicial"
                   field={{
@@ -2013,23 +2071,73 @@ export function OrganizationDetailView({ data }: Props) {
               </CardContent>
             </Card>
 
+            {/* Lo que se hizo sobre la organizacion desde la plataforma: cambios de
+                plan, de modulos, entradas en modo soporte. Antes habia que ir a la
+                auditoria general y buscarla a mano. */}
+            <Card className="rounded-2xl border border-border bg-card md:col-span-2">
+              <CardHeader className="border-b border-border py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                    <ShieldCheck className="h-4 w-4 text-violet-500" />
+                    Cambios registrados
+                  </CardTitle>
+                  <Button asChild variant="outline" size="sm" className="h-7 gap-1.5 rounded-lg text-xs font-bold">
+                    <Link href={`/superadmin/audit-logs?org=${org.id}&period=30d`}>
+                      Ver en auditoría
+                    </Link>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {!recent_audit ? (
+                  <p className="p-6 text-center text-xs font-medium text-amber-600 dark:text-amber-400">
+                    No se pudo leer la auditoría: puede haber cambios que no se ven acá.
+                  </p>
+                ) : recent_audit.events.length === 0 ? (
+                  <p className="p-6 text-center text-xs font-medium text-muted-foreground">
+                    No hay cambios registrados sobre esta organización.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {recent_audit.events.map((event) => (
+                      <li key={event.id} className="flex items-center justify-between gap-3 px-5 py-2.5 text-xs">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-foreground">
+                            {auditActionLabel(event.action)}
+                            {event.resource && <span className="font-normal text-muted-foreground"> · {event.resource}</span>}
+                          </p>
+                          <p className="truncate text-[11px] text-muted-foreground">{event.actor ?? 'Sistema'}</p>
+                        </div>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">{formatDate(event.created_at)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {recent_audit && recent_audit.total > recent_audit.events.length && (
+                  <p className="border-t border-border px-5 py-2 text-[11px] text-muted-foreground">
+                    Los últimos {recent_audit.events.length} de {recent_audit.total.toLocaleString('es-PY')} eventos.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Quick Rubro Summary Banner linking to full matrix */}
-            <Card className="md:col-span-2 rounded-3xl border border-violet-200/90 bg-gradient-to-br from-violet-50/60 via-white to-cyan-50/40 p-5 shadow-2xs dark:border-violet-900/60 dark:from-violet-950/30 dark:via-slate-900 dark:to-cyan-950/20">
+            <Card className="md:col-span-2 rounded-3xl border border-violet-200/90 bg-gradient-to-br from-violet-50/60 via-card to-cyan-50/40 p-5 shadow-2xs dark:border-violet-900/60 dark:from-violet-950/30 dark:to-cyan-950/20">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-3.5 min-w-0">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white dark:bg-slate-800 text-2xl shadow-sm border border-slate-200/80 dark:border-slate-700">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-card text-2xl shadow-sm border border-border">
                     {verticalMeta.icon}
                   </div>
                   <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-black text-sm text-slate-900 dark:text-slate-100">
+                      <h3 className="font-black text-sm text-foreground">
                         {verticalMeta.label}
                       </h3>
-                      <Badge variant="outline" className="text-[10px] font-bold text-slate-500">
+                      <Badge variant="outline" className="text-[10px] font-bold text-muted-foreground">
                         Modelo {org.operating_model || 'Minorista'}
                       </Badge>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                    <p className="text-xs text-muted-foreground line-clamp-2">
                       {verticalMeta.desc}
                     </p>
                   </div>
@@ -2053,26 +2161,26 @@ export function OrganizationDetailView({ data }: Props) {
         <TabsContent value="modules" className="space-y-6 m-0">
           
           {/* Header Dossier Card */}
-          <Card className="rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xs dark:border-slate-800 dark:bg-slate-900/95 overflow-hidden">
-            <div className="border-b border-slate-100 bg-gradient-to-r from-violet-50/70 via-slate-50 to-cyan-50/50 p-6 dark:border-slate-800 dark:from-violet-950/30 dark:via-slate-950 dark:to-cyan-950/20">
+          <Card className="rounded-3xl border border-border bg-card/95 shadow-2xs overflow-hidden">
+            <div className="border-b border-border bg-gradient-to-r from-violet-50/70 via-muted/40 to-cyan-50/50 p-6 dark:from-violet-950/30 dark:to-cyan-950/20">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
                 <div className="flex items-start gap-4">
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-white dark:bg-slate-800 text-3xl shadow-md border border-slate-200/80 dark:border-slate-700">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-card text-3xl shadow-md border border-border">
                     {verticalMeta.icon}
                   </div>
                   <div className="space-y-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg font-black text-slate-900 dark:text-slate-50">
+                      <h2 className="text-lg font-black text-foreground">
                         {verticalMeta.label}
                       </h2>
                       <Badge variant="outline" className={cn('rounded-full text-[10px] font-extrabold px-2.5 py-0.5', verticalMeta.badge)}>
                         Rubro Comercial Principal
                       </Badge>
-                      <Badge variant="outline" className="rounded-full text-[10px] font-bold px-2.5 py-0.5 border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                      <Badge variant="outline" className="rounded-full text-[10px] font-bold px-2.5 py-0.5 border-border text-foreground/80">
                         Modelo: {org.operating_model === 'wholesale' ? 'Mayorista' : org.operating_model === 'repair' ? 'Taller & SAT' : org.operating_model === 'service' ? 'Servicios' : 'Venta Minorista'}
                       </Badge>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
+                    <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
                       {verticalMeta.desc}
                     </p>
                   </div>
@@ -2094,9 +2202,9 @@ export function OrganizationDetailView({ data }: Props) {
                   Antes se comparaba con los 20 modulos que existen, incluidos
                   los que ese plan nunca va a dar: una cuenta Free al 35% no
                   esta desaprovechando nada, esta en Free. */}
-              <div className="mt-5 space-y-2 border-t border-slate-200/70 pt-4 dark:border-slate-800/70">
+              <div className="mt-5 space-y-2 border-t border-border pt-4">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
-                  <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                  <span className="flex items-center gap-1.5 text-foreground/80">
                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                     Uso del plan {effectivePlan}
                   </span>
@@ -2107,14 +2215,14 @@ export function OrganizationDetailView({ data }: Props) {
                   </span>
                 </div>
                 {cobertura.percent !== null && (
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted-foreground/15">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-violet-500 via-cyan-500 to-emerald-500 transition-all duration-500"
                       style={{ width: `${cobertura.percent}%` }}
                     />
                   </div>
                 )}
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-muted-foreground">
                   {org.enabled_modules === null
                     ? 'Esta organización no eligió módulos: tiene activos todos los que su plan incluye.'
                     : `Eligió ${activeCount} de los ${totalAvailableModules} módulos del catálogo.`}
@@ -2150,10 +2258,10 @@ export function OrganizationDetailView({ data }: Props) {
                 <div key={category.id} className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2">
                         <span>{category.title}</span>
                       </h3>
-                      <p className="text-[11px] text-slate-500">{category.description}</p>
+                      <p className="text-[11px] text-muted-foreground">{category.description}</p>
                     </div>
                     <Badge variant="outline" className="px-2 py-0.5 text-[10px] font-bold">
                       {activeInCategory} activos · {enPlanCategoria} en el plan
@@ -2173,8 +2281,8 @@ export function OrganizationDetailView({ data }: Props) {
                           className={cn(
                             'rounded-2xl border p-4 transition-all space-y-3 flex flex-col justify-between shadow-2xs',
                             isEnabled
-                              ? 'bg-white border-slate-200/90 dark:bg-slate-900/95 dark:border-slate-800 ring-1 ring-emerald-500/20'
-                              : 'bg-slate-50/60 border-slate-200/60 dark:bg-slate-950/40 dark:border-slate-800/40 opacity-70'
+                              ? 'bg-card border-border ring-1 ring-emerald-500/20'
+                              : 'bg-muted/40 border-border opacity-70'
                           )}
                         >
                           <div className="space-y-2.5">
@@ -2184,10 +2292,10 @@ export function OrganizationDetailView({ data }: Props) {
                                   <ModIcon className="h-4 w-4" />
                                 </div>
                                 <div>
-                                  <h4 className="text-xs font-extrabold text-slate-900 dark:text-slate-100">
+                                  <h4 className="text-xs font-extrabold text-foreground">
                                     {mod.name}
                                   </h4>
-                                  <span className="font-mono text-[10px] text-slate-400">{mod.key}</span>
+                                  <span className="font-mono text-[10px] text-muted-foreground">{mod.key}</span>
                                 </div>
                               </div>
 
@@ -2199,7 +2307,7 @@ export function OrganizationDetailView({ data }: Props) {
                               </Badge>
                             </div>
 
-                            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                            <p className="text-[11px] leading-relaxed text-muted-foreground">
                               {mod.summary}
                             </p>
 
@@ -2223,14 +2331,14 @@ export function OrganizationDetailView({ data }: Props) {
                             )}
                           </div>
 
-                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
+                          <div className="pt-2 border-t border-border space-y-1">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
                               Capacidades Incluidas:
                             </span>
                             <ul className="space-y-0.5">
                               {mod.capabilities.map((cap, idx) => (
-                                <li key={idx} className="text-[10px] text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                                  <Check className={cn('h-3 w-3 shrink-0', isEnabled ? 'text-emerald-500' : 'text-slate-400')} />
+                                <li key={idx} className="text-[10px] text-foreground/80 flex items-center gap-1.5">
+                                  <Check className={cn('h-3 w-3 shrink-0', isEnabled ? 'text-emerald-500' : 'text-muted-foreground')} />
                                   <span>{cap}</span>
                                 </li>
                               ))}
@@ -2279,6 +2387,11 @@ export function OrganizationDetailView({ data }: Props) {
                         {equipo.staffActive} {equipo.staffActive === 1 ? 'butaca ocupada' : 'butacas ocupadas'}
                         {plan_limits?.users ? ` de ${Number(plan_limits.users).toLocaleString('es-PY')}` : ''}
                       </Badge>
+                      {accesoEquipo && (
+                        <Badge variant="outline" className="text-[10px] font-bold">
+                          {accesoEquipo.activeLastWeek} {accesoEquipo.activeLastWeek === 1 ? 'entró' : 'entraron'} esta semana
+                        </Badge>
+                      )}
                       {equipo.staffInvited > 0 && (
                         <Badge variant="outline" className="border-sky-200 text-[10px] font-bold text-sky-700 dark:border-sky-900 dark:text-sky-300">
                           {equipo.staffInvited} sin aceptar
@@ -2586,8 +2699,8 @@ export function OrganizationDetailView({ data }: Props) {
 
         {/* Tab 5: Branches */}
         <TabsContent value="branches" className="space-y-4 m-0">
-          <Card className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xs dark:border-slate-800 dark:bg-slate-900/95">
-            <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-5 dark:border-slate-800 dark:bg-slate-950/40">
+          <Card className="overflow-hidden rounded-3xl border border-border bg-card/95 shadow-2xs">
+            <CardHeader className="border-b border-border bg-muted/40 p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-sm font-bold">Puntos de Venta & Sucursales</CardTitle>
@@ -2602,27 +2715,27 @@ export function OrganizationDetailView({ data }: Props) {
             </CardHeader>
             <CardContent className="p-0">
               {branches.length === 0 ? (
-                <p className="p-8 text-center text-xs text-slate-400 font-medium">
+                <p className="p-8 text-center text-xs text-muted-foreground font-medium">
                   No hay sucursales registradas para esta organización.
                 </p>
               ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="divide-y divide-border">
                   {branches.map((b) => (
-                    <div key={b.id} className="flex items-center justify-between p-4 hover:bg-slate-50/50 dark:hover:bg-slate-950/30 transition-colors">
+                    <div key={b.id} className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
                       <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground/80">
                           <Store className="h-4 w-4" />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <p className="font-bold text-xs text-slate-900 dark:text-slate-100">{b.name}</p>
+                            <p className="font-bold text-xs text-foreground">{b.name}</p>
                             {b.is_default && (
                               <Badge variant="outline" className="text-[9px] font-black uppercase bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300">
                                 CASA CENTRAL
                               </Badge>
                             )}
                           </div>
-                          <p className="text-[11px] text-slate-400 font-medium">
+                          <p className="text-[11px] text-muted-foreground font-medium">
                             {b.address || 'Sin dirección'} · {b.city || 'Paraguay'}
                           </p>
                         </div>
@@ -2630,7 +2743,7 @@ export function OrganizationDetailView({ data }: Props) {
 
                       <div className="flex items-center gap-2">
                         {b.phone && (
-                          <span className="text-[11px] font-mono text-slate-500">{b.phone}</span>
+                          <span className="text-[11px] font-mono text-muted-foreground">{b.phone}</span>
                         )}
                         <Badge
                           variant="outline"
@@ -2638,7 +2751,7 @@ export function OrganizationDetailView({ data }: Props) {
                             'text-[10px] font-extrabold uppercase px-2 py-0.5',
                             b.is_active
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300'
-                              : 'bg-slate-50 text-slate-600 border-slate-200'
+                              : 'bg-muted/40 text-foreground/80 border-border'
                           )}
                         >
                           {b.is_active ? 'Activa' : 'Inactiva'}

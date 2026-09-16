@@ -117,6 +117,11 @@ const ACTION_META: Record<string, { label: string; color: string; icon: React.Co
   update_platform_branding: { label: 'Branding de plataforma',  color: 'text-violet-600',  icon: Globe,        category: 'platform' },
 }
 
+/** El nombre de una acción en castellano, para mostrarla fuera de esta pantalla. */
+export function auditActionLabel(action: string): string {
+  return ACTION_META[action]?.label ?? action
+}
+
 const SEVERITY_META: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
   low:      { label: 'Baja',     color: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',         icon: CheckCircle2 },
   medium:   { label: 'Media',    color: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300',   icon: AlertCircle },
@@ -374,9 +379,11 @@ type SortKey = 'date' | 'action' | 'user' | 'severity'
 type FilterCategory = 'all' | 'auth' | 'resource' | 'security' | 'user' | 'platform'
 
 export function AuditLogsDashboard({
-  rows, period, severityParam, page, pageSize, total,
+  rows, period, severityParam, page, pageSize, total, organization = null,
 }: {
   rows: AuditLogRow[]
+  /** Filtro por organización, cuando se llega desde su ficha. */
+  organization?: { id: string; name: string; slug: string } | null
   period: string
   severityParam: string
   page: number
@@ -509,6 +516,21 @@ export function AuditLogsDashboard({
             <Shield className="h-3.5 w-3.5" />
             Auditoría SaaS
           </div>
+          {organization && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="rounded-full border border-violet-300 bg-violet-50 px-3 py-1 font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">
+                Solo {organization.name}
+              </span>
+              {organization.slug && (
+                <Link href={`/superadmin/organizations/${encodeURIComponent(organization.slug)}`} className="text-xs text-violet-600 hover:underline dark:text-violet-400">
+                  Volver a la ficha
+                </Link>
+              )}
+              <button type="button" onClick={() => setUrlParam('org', '')} className="text-xs text-muted-foreground hover:text-foreground">
+                Ver toda la plataforma
+              </button>
+            </div>
+          )}
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Audit logs</h1>
           <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
             Trazabilidad global de accesos, cambios sensibles y acciones críticas en toda la plataforma.
