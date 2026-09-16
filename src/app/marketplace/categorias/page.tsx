@@ -98,7 +98,7 @@ export default async function MarketplaceCategoriesPage() {
 
       {/* ── Sección de Marcas Relacionadas ── */}
       {brands.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8">
+        <section id="marcas" className="mx-auto max-w-7xl scroll-mt-16 px-4 pb-20 sm:px-6 lg:px-8">
           <div className="mb-10 border-t border-border/80 pt-10" />
           <MarketplaceBrandsSection
             brands={brands}

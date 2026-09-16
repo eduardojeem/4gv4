@@ -28,7 +28,8 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/variant-image'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { cn } from '@/lib/utils'
-import { getWhatsAppLink } from '@/lib/whatsapp'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import type { PublicProduct } from '@/types/public'
 import type { PublicCommerceMode } from '@/types/website-settings'
 
@@ -182,14 +183,31 @@ export function OfferDetailModal({
   const currentImage = galleryImages[activeImageIdx] || offer.image || null
   const resolvedActive = resolveProductImageUrl(currentImage)
 
-  const variantLabel = matchedVariant ? matchedVariant.variant_name : ''
-  const whatsappMsg = variantLabel
-    ? `Hola, quiero consultar por la oferta de ${offer.name} — ${variantLabel} (${formatPrice(effectivePrice)}).`
-    : `Hola, quiero consultar por la oferta de ${offer.name} (${formatPrice(effectivePrice)}).`
+  const { settings: websiteSettings } = useWebsiteSettings()
+  const storeName = websiteSettings?.company_info?.name || null
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+  const fullProductUrl = currentOrigin ? `${currentOrigin}${productHref}` : productHref
 
   const whatsappHref =
     contactPhone
-      ? getWhatsAppLink({ phone: contactPhone, message: whatsappMsg })
+      ? getWhatsAppLink({
+          phone: contactPhone,
+          message: buildProductWhatsAppMessage({
+            storeName,
+            productName: offer.name,
+            price: effectivePrice,
+            originalPrice: (matchedVariant?.sale_price ?? offer.sale_price) > effectivePrice ? (matchedVariant?.sale_price ?? offer.sale_price) : null,
+            sku: matchedVariant?.sku || null,
+            variantName: matchedVariant?.variant_name || null,
+            attributes: selectedAttrs,
+            quantity,
+            inStock: effectiveInStock,
+            stockQuantity: effectiveStock,
+            productUrl: fullProductUrl,
+            imageUrl: resolvedActive,
+            intent: effectiveInStock && selectionComplete ? 'order' : 'inquiry',
+          }),
+        })
       : null
 
   const handleSelectAttr = (key: string, value: string) => {

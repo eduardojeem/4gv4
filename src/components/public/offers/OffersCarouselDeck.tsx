@@ -21,7 +21,8 @@ import type { OffersSectionSettings } from '@/types/website-settings'
 import { cn } from '@/lib/utils'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { getWhatsAppLink } from '@/lib/whatsapp'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { resolveProductImageUrl } from '@/lib/images'
 import { toast } from 'sonner'
 import type { PublicProduct } from '@/types/public'
 import { OfferDetailModal, type OfferDetailProduct } from './OfferDetailModal'
@@ -550,13 +551,22 @@ export function OffersCarouselDeck({
                   <a
                     href={getWhatsAppLink({
                       phone: contactPhone,
-                      message: `Hola, quiero consultar por la oferta de ${offer.title} (${offer.priceLabel}).`,
+                      message: buildProductWhatsAppMessage({
+                        storeName: websiteSettings?.company_info?.name || null,
+                        productName: offer.title,
+                        price: offer.offerPrice ?? 0,
+                        originalPrice: offer.salePrice ?? null,
+                        inStock: offer.inStock,
+                        productUrl: typeof window !== 'undefined' ? `${window.location.origin}${offer.ctaHref}` : offer.ctaHref,
+                        imageUrl: offer.image ? resolveProductImageUrl(offer.image) : null,
+                        intent: 'order',
+                      }),
                     })}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-95 shadow-emerald-600/20"
-                    aria-label={`Consultar por ${offer.title} en WhatsApp`}
-                    title={`Consultar por ${offer.title} en WhatsApp`}
+                    aria-label={`Pedir oferta de ${offer.title} en WhatsApp`}
+                    title={`Pedir oferta de ${offer.title} en WhatsApp`}
                   >
                     <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </a>

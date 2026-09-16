@@ -129,7 +129,8 @@ export default async function MarketplacePage() {
               brands={brands}
               variant="carousel"
               maxItems={20}
-              showViewAll={false}
+              showViewAll={true}
+              viewAllHref="/marketplace/categorias#marcas"
             />
           </div>
         </section>
@@ -220,9 +221,9 @@ export default async function MarketplacePage() {
       )}
 
       {/* ── Productos por empresa ── */}
-      {organizations.filter((o) => o.featured_products.length > 0).slice(0, 3).length > 0 && (
+      {organizations.filter((o) => o.featured_products.length > 0).slice(0, 8).length > 0 && (
         <MarketplaceOrgProductGrid
-          organizations={organizations.filter((o) => o.featured_products.length > 0).slice(0, 3)}
+          organizations={organizations.filter((o) => o.featured_products.length > 0).slice(0, 8)}
         />
       )}
     </div>

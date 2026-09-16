@@ -195,6 +195,7 @@ export function MarketplaceProductCarousel({
                 {/* Imagen (clic abre el detalle) */}
                 <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: displayPrice }} /></div>
                 <div
+                  suppressHydrationWarning
                   onClick={() => setSelected(product)}
                   role="button"
                   tabIndex={0}
@@ -266,6 +267,7 @@ export function MarketplaceProductCarousel({
                     )}
 
                     <h3
+                      suppressHydrationWarning
                       onClick={() => setSelected(product)}
                       role="button"
                       tabIndex={0}
@@ -390,6 +392,7 @@ export function MarketplaceProductCarousel({
 
             <button
               type="button"
+              suppressHydrationWarning
               onClick={() => setUserToggledPause((prev) => !prev)}
               className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
               aria-label={userToggledPause ? 'Reanudar pasarela' : 'Pausar pasarela'}

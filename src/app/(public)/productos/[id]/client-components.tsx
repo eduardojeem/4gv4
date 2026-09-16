@@ -26,9 +26,11 @@ import { usePathname } from 'next/navigation'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { cn, formatPrice } from '@/lib/utils'
-import { getWhatsAppLink } from '@/lib/whatsapp'
+import { buildProductWhatsAppMessage } from '@/lib/whatsapp'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
+import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { BranchAvailability } from '@/components/public/BranchAvailability'
+import { WhatsAppProductDialog } from '@/components/public/WhatsAppProductDialog'
 
 const COLOR_HEX_MAP: Record<string, string> = {
   blanco: '#ffffff',
@@ -159,6 +161,7 @@ export function ProductDetailInteractive({
 
   const [selectedImage, setSelectedImage] = useState(0)
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({})
+  const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false)
 
   // Sincronizar imagen cuando cambia la variante o el color seleccionado
   useEffect(() => {
@@ -256,6 +259,21 @@ export function ProductDetailInteractive({
     variant: hasVariants ? selectedVariant : null,
   })
 
+  // El plan con más cuotas, con el mismo cálculo que el selector de cuotas:
+  // `installments_plans` guarda cantidad y tasa, no el monto de cada cuota.
+  const maxInstallmentPlan = useMemo(() => {
+    const plans = [...installmentPlans].filter((plan) => plan && plan.count >= 1).sort((a, b) => a.count - b.count)
+    const plan = plans[plans.length - 1]
+    if (!plan || displayPrice <= 0) return null
+    const built = buildCreditInstallmentPlan({
+      principalAmount: displayPrice,
+      interestRate: plan.rate ?? 0,
+      installmentCount: plan.count,
+      frequency: 'monthly',
+    })
+    return { count: plan.count, perInstallment: built.installments[0]?.amount ?? 0 }
+  }, [installmentPlans, displayPrice])
+
   const companyInfo = settings?.company_info
   const envSupportPhone = (
     process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP ||
@@ -292,75 +310,33 @@ export function ProductDetailInteractive({
   const handleContact = (method: 'whatsapp' | 'email' | 'phone') => {
     const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
     const activePhoto = galleryImages[selectedImage] || product.image || ''
-    const colorAttr = selectedAttributes['color'] || selectedAttributes['Color']
-    const sizeAttr =
-      selectedAttributes['size'] ||
-      selectedAttributes['talle'] ||
-      selectedAttributes['Talle'] ||
-      selectedAttributes['Size']
-
-    let variantDetails = ''
-    if (selectedVariant) {
-      if (colorAttr && sizeAttr) {
-        variantDetails = `🎨 *Color:* ${colorAttr}\n📏 *Talle:* ${sizeAttr}`
-      } else {
-        variantDetails = `✨ *Opción:* ${selectedVariant.variant_name}`
-      }
-    } else if (Object.keys(selectedAttributes).length > 0) {
-      variantDetails = Object.entries(selectedAttributes)
-        .map(([k, v]) => `• *${k}:* ${v}`)
-        .join('\n')
-    }
-
-    const priceFormatted = formatPrice(displayPrice)
-    const originalPriceFormatted = formatPrice(product.sale_price)
-    const priceText = `💰 *Precio:* ${priceFormatted}${
-      hasDiscount ? ` ~(Antes: ${originalPriceFormatted})~` : ''
-    }`
-    const skuText = `🏷️ *SKU:* ${currentSku}`
-    const stockText = `📦 *Disponibilidad:* ${
-      isInStock ? `En stock (${currentStockQuantity} unid.)` : 'Agotado (consultar reposición)'
-    }`
-
-    const messageLines = [
-      `¡Hola! 👋 Me interesa este producto en su tienda:`,
-      ``,
-      `🛍️ *${product.name}*`,
-      ...(variantDetails ? [variantDetails] : []),
-      priceText,
-      skuText,
-      stockText,
-      ``,
-      ...(currentUrl ? [`🔗 *Ver en la web:* ${currentUrl}`] : []),
-      ...(activePhoto && !activePhoto.startsWith('data:') && activePhoto !== '/placeholder-product.svg'
-        ? [`🖼️ *Foto:* ${activePhoto}`]
-        : []),
-      ``,
-      `¿Tienen disponibilidad para envío o retiro? ¡Muchas gracias!`,
-    ]
-
-    const message = messageLines.join('\n')
 
     switch (method) {
       case 'whatsapp':
         if (phoneClean) {
-          window.open(
-            getWhatsAppLink({ phone: phoneDisplay, message }),
-            '_blank',
-            'noopener,noreferrer'
-          )
-        } else if (emailDisplay) {
-          window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${currentSku}&body=${encodeURIComponent(
-            message
-          )}`
+          setWhatsappDialogOpen(true)
         } else {
           toast.error('No hay un número de WhatsApp configurado para la tienda')
         }
         break
       case 'email':
         if (emailDisplay) {
-          window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${currentSku}&body=${encodeURIComponent(
-            message
+          const emailBody = buildProductWhatsAppMessage({
+            storeName: companyInfo?.name || null,
+            productName: product.name,
+            price: displayPrice,
+            originalPrice: hasDiscount ? product.sale_price : null,
+            sku: currentSku,
+            variantName: selectedVariant?.variant_name,
+            attributes: selectedAttributes,
+            inStock: isInStock,
+            stockQuantity: currentStockQuantity,
+            productUrl: currentUrl,
+            imageUrl: activePhoto,
+            intent: 'inquiry',
+          })
+          window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${currentSku || product.name}&body=${encodeURIComponent(
+            emailBody
           )}`
         } else {
           toast.error('No hay correo de contacto configurado')
@@ -794,6 +770,32 @@ export function ProductDetailInteractive({
 
         {/* Disponibilidad por sucursales */}
         <BranchAvailability branches={branchStock} />
+
+        {/* Modal interactivo para consulta y pedido directo por WhatsApp */}
+        {phoneClean && (
+          <WhatsAppProductDialog
+            open={whatsappDialogOpen}
+            onOpenChange={setWhatsappDialogOpen}
+            storeName={companyInfo?.name || null}
+            phone={phoneClean}
+            productName={product.name}
+            price={displayPrice}
+            originalPrice={hasDiscount ? product.sale_price : null}
+            sku={currentSku}
+            variantName={selectedVariant?.variant_name}
+            attributes={selectedAttributes}
+            inStock={isInStock}
+            stockQuantity={currentStockQuantity}
+            installmentText={
+              maxInstallmentPlan
+                ? `${maxInstallmentPlan.count} cuotas de ${formatPrice(maxInstallmentPlan.perInstallment)}`
+                : null
+            }
+            productUrl={typeof window !== 'undefined' ? window.location.href : null}
+            imageUrl={galleryImages[selectedImage] || product.image}
+            initialIntent={isInStock ? 'order' : 'inquiry'}
+          />
+        )}
       </div>
     </div>
   )

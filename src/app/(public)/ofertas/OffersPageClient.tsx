@@ -39,7 +39,8 @@ import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { usesPortraitMedia } from '@/lib/website/storefront-style'
-import { getWhatsAppLink } from '@/lib/whatsapp'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { resolveProductImageUrl } from '@/lib/images'
 import { OfferDetailModal, type OfferDetailProduct } from '@/components/public/offers/OfferDetailModal'
 import type { PublicProduct } from '@/types/public'
 import type { OffersSectionSettings, PublicCommerceMode, WebsiteSettings } from '@/types/website-settings'
@@ -247,6 +248,7 @@ function OfferCard({
   priority,
   commerceMode,
   contactPhone,
+  storeName,
   portrait,
   onOpenDetail,
 }: {
@@ -256,6 +258,8 @@ function OfferCard({
   priority?: boolean
   commerceMode: PublicCommerceMode
   contactPhone: string
+  /** Para que el saludo diga a quién se le escribe, como en el resto de la tienda. */
+  storeName: string | null
   portrait: boolean
   onOpenDetail?: (offer: OfferProduct) => void
 }) {
@@ -280,7 +284,17 @@ function OfferCard({
     commerceMode === 'whatsapp' && contactPhone
       ? getWhatsAppLink({
           phone: contactPhone,
-          message: `Hola, quiero consultar por la oferta de ${offer.name} (${formatPrice(offer.offer_price)}).`,
+          message: buildProductWhatsAppMessage({
+            storeName,
+            productName: offer.name,
+            price: offer.offer_price,
+            originalPrice: offer.sale_price > offer.offer_price ? offer.sale_price : null,
+            inStock: offer.in_stock,
+            stockQuantity: offer.stock_quantity,
+            productUrl: typeof window !== 'undefined' ? `${window.location.origin}${href}` : href,
+            imageUrl: offer.image ? resolveProductImageUrl(offer.image) : null,
+            intent: 'order',
+          }),
         })
       : null
 
@@ -845,6 +859,7 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
                 priority={i < 4}
                 commerceMode={commerceMode}
                 contactPhone={contactPhone}
+                storeName={settings.company_info.name?.trim() || null}
                 portrait={portrait}
               />
             ))}

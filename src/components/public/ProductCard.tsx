@@ -19,7 +19,7 @@ import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { usesPortraitMedia } from '@/lib/website/storefront-style'
-import { getWhatsAppLink } from '@/lib/whatsapp'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 
 interface ProductCardProps {
@@ -168,10 +168,54 @@ export function ProductCard(props: ProductCardProps) {
     websiteSettings?.company_info.whatsapp?.trim() ||
     websiteSettings?.company_info.phone?.trim() ||
     ''
+
+  const storeName = websiteSettings?.company_info.name || null
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+  const fullProductUrl = currentOrigin ? `${currentOrigin}${productHref}` : productHref
+
   const whatsappHref = contactPhone
     ? getWhatsAppLink({
         phone: contactPhone,
-        message: `Hola, quiero consultar por ${product.name} (${formatPrice(displayPrice)}).`,
+        message: buildProductWhatsAppMessage({
+          storeName,
+          productName: product.name,
+          price: displayPrice,
+          originalPrice: originalPrice && originalPrice > displayPrice ? originalPrice : null,
+          sku: product.sku,
+          inStock: isInStock,
+          stockQuantity: product.stock_quantity,
+          installmentText: maxInstallment ? `${maxInstallment.count} cuotas de ${formatPrice(maxInstallment.perInstallment)}` : null,
+          productUrl: fullProductUrl,
+          imageUrl: product.image ? resolveProductImageUrl(product.image) : null,
+          intent: 'inquiry',
+        }),
+      })
+    : null
+
+  // Quick view modal WhatsApp message incorporating the exact selected variant, quantity & calculated total
+  const selectedVariantInStock = hasVariants
+    ? Boolean(selectedVariant && selectedVariant.stock_quantity > 0)
+    : isInStock
+
+  const modalWhatsappHref = contactPhone
+    ? getWhatsAppLink({
+        phone: contactPhone,
+        message: buildProductWhatsAppMessage({
+          storeName,
+          productName: product.name,
+          price: selectedPrice,
+          originalPrice: selectedOriginalPrice && selectedOriginalPrice > selectedPrice ? selectedOriginalPrice : null,
+          sku: selectedVariant?.sku || product.sku,
+          variantName: selectedVariant?.variant_name,
+          attributes: selectedVariant?.attributes,
+          quantity,
+          inStock: selectedVariantInStock,
+          stockQuantity: selectedStock,
+          installmentText: maxInstallment ? `${maxInstallment.count} cuotas de ${formatPrice(maxInstallment.perInstallment)}` : null,
+          productUrl: fullProductUrl,
+          imageUrl: resolvedActive || (product.image ? resolveProductImageUrl(product.image) : null),
+          intent: selectedVariantInStock ? 'order' : 'inquiry',
+        }),
       })
     : null
 
@@ -697,16 +741,16 @@ export function ProductCard(props: ProductCardProps) {
                     )}
                   </button>
                 )}
-                {commerceMode === 'whatsapp' && whatsappHref && (
+                {commerceMode === 'whatsapp' && (modalWhatsappHref || whatsappHref) && (
                   <a
-                    href={whatsappHref}
+                    href={(modalWhatsappHref || whatsappHref)!}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setQuickViewOpen(false)}
                     className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98]"
                   >
                     <MessageCircle className="h-4 w-4" />
-                    Consultar por WhatsApp
+                    {selectedVariantInStock ? 'Pedir por WhatsApp' : 'Consultar por WhatsApp'}
                   </a>
                 )}
                 <Link

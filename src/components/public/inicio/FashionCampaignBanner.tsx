@@ -21,7 +21,7 @@ import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { formatPrice, cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
-import { getWhatsAppLink } from '@/lib/whatsapp'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
 import type { PublicProduct } from '@/types/public'
 import { NEWEST_PRODUCTS_SWR_OPTIONS, fetchPublicProducts, newestProductsKey } from './newest-products'
 
@@ -143,17 +143,34 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
     return { label: 'RECIÉN LLEGADO', icon: TrendingUp, color: 'text-sky-400' }
   }, [currentProduct])
 
+  const productHref = currentProduct
+    ? `${tenantPrefix}/productos/${currentProduct.id}`
+    : `${tenantPrefix}/productos`
+
   const whatsappMessage = currentProduct
-    ? `Hola! Quiero consultar por ${currentProduct.name} (${formatPrice(displayPrice)}).`
-    : 'Hola! Quiero consultar por la colección de básicos.'
+    ? buildProductWhatsAppMessage({
+        storeName: settings?.company_info?.name || null,
+        productName: currentProduct.name,
+        price: displayPrice,
+        originalPrice: originalPrice && originalPrice > displayPrice ? originalPrice : null,
+        sku: currentProduct.sku,
+        inStock: currentProduct.in_stock,
+        stockQuantity: currentProduct.stock_quantity,
+        productUrl: typeof window !== 'undefined' ? `${window.location.origin}${productHref}` : productHref,
+        imageUrl: currentProduct.image ? resolveProductImageUrl(currentProduct.image) : null,
+        intent: 'inquiry',
+      })
+    : buildProductWhatsAppMessage({
+        storeName: settings?.company_info?.name || null,
+        productName: 'Colección de productos y novedades',
+        price: 0,
+        intent: 'inquiry',
+      })
 
   const whatsappHref = phoneClean
     ? getWhatsAppLink({ phone: phoneClean, message: whatsappMessage })
     : null
 
-  const productHref = currentProduct
-    ? `${tenantPrefix}/productos/${currentProduct.id}`
-    : `${tenantPrefix}/productos`
 
   return (
     <section

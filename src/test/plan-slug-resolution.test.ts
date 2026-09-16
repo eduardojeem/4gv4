@@ -16,7 +16,8 @@ const MIGRACION = leer('supabase/migrations/20260902160000_fix_plan_public_slugs
  */
 describe('precedencia al resolver el plan', () => {
   it('la pantalla busca primero por slug y solo después por tier', () => {
-    expect(PAGINA).toMatch(/find\(\(plan\) => plan\.slug === planParam\)\s*\n?\s*\?\? availablePlans\.find\(\(plan\) => plan\.tier === planParam\)/)
+    // El salto de linea entre ambas busquedas es formato, no comportamiento.
+    expect(PAGINA).toMatch(/find\(\(plan\) => plan\.slug === planParam\)\s*\?\?\s*availablePlans\.find\(\(plan\) => plan\.tier === planParam\)/)
   })
 
   it('la pantalla ya no mezcla ambos en una sola condición', () => {

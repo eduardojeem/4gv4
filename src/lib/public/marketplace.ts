@@ -112,6 +112,7 @@ export type MarketplaceOrganizationContact = {
   facebook: string | null
   tiktok: string | null
   whatsapp: string | null
+  phone: string | null
 }
 
 export type MarketplaceProduct = PublicProduct & {
@@ -137,6 +138,7 @@ export function pickOrganizationContact(
     facebook: contactText(companyInfo?.facebook),
     tiktok: contactText(companyInfo?.tiktok),
     whatsapp: contactText(companyInfo?.whatsapp),
+    phone: contactText(companyInfo?.phone),
   }
   return Object.values(contact).some(Boolean) ? contact : null
 }
@@ -305,7 +307,7 @@ async function getMarketplaceOrganizationsUncached(
       .gt('stock_quantity', 0)
       .order('featured', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(limit * 4),
+      .limit(limit * 12),
     supabase
       .from('organization_settings')
       .select('organization_id, city, company_address')
@@ -457,7 +459,7 @@ async function getMarketplaceOrganizationsUncached(
       business_type: businessType,
       products_count: productCountByOrganization.get(organization.id) ?? 0,
       products_total: productTotalByOrganization.get(organization.id) ?? 0,
-      featured_products: organizationProducts.slice(0, 3).map(toPublicProduct),
+      featured_products: organizationProducts.slice(0, 12).map(toPublicProduct),
       review_rating_avg: organization.review_rating_avg ?? null,
       review_count: organization.review_count ?? null,
     }

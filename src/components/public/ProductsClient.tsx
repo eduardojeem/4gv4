@@ -347,7 +347,7 @@ export function ProductsClient({
   return (
     <>
       {/* ── TOOLBAR DE BÚSQUEDA Y FILTROS EN 1 SOLA LÍNEA ULTRA COMPACTA (STICKY) ── */}
-      <div className="sticky top-16 z-30 mb-3 sm:mb-5 space-y-1.5 rounded-xl sm:rounded-2xl border border-border/80 bg-background/95 p-1.5 sm:p-2.5 shadow-sm backdrop-blur-xl transition-all">
+      <div suppressHydrationWarning className="sticky top-16 z-30 mb-3 sm:mb-5 space-y-1.5 rounded-xl sm:rounded-2xl border border-border/80 bg-background/95 p-1.5 sm:p-2.5 shadow-sm backdrop-blur-xl transition-all">
         
         {/* ── FILA ÚNICA: Buscador + Ofertas + Marca + Orden + Vista ── */}
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -370,23 +370,24 @@ export function ProductsClient({
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
                   aria-label="Limpiar búsqueda"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
           )}
 
-          {/* Botón Ofertas (al lado del buscador) */}
+          {/* Toggle Solo Ofertas */}
           {offersCount > 0 && (
             <button
               type="button"
-              onClick={() => setOnlyOffers((v) => !v)}
+              onClick={() => updateUrlParam('soloOfertas', onlyOffers ? '' : 'true')}
               className={cn(
-                'shrink-0 flex items-center gap-1 rounded-lg sm:rounded-xl border px-2 sm:px-2.5 h-8 sm:h-9 text-[11px] sm:text-xs font-bold transition-all shadow-2xs select-none',
+                'shrink-0 flex items-center gap-1 rounded-lg sm:rounded-xl border px-2 sm:px-2.5 h-8 sm:h-9 text-[11px] sm:text-xs font-semibold transition-all shadow-2xs select-none',
                 onlyOffers
-                  ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800/40 dark:bg-rose-950/30 dark:text-rose-400'
-                  : 'border-border/80 bg-background text-muted-foreground hover:text-foreground hover:border-primary/40'
+                  ? 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 ring-1 ring-rose-500/20'
+                  : 'border-border/80 bg-background text-foreground hover:border-rose-300 dark:hover:border-rose-800'
               )}
+              aria-pressed={onlyOffers}
             >
               <Tag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-rose-500" />
               <span className="hidden xs:inline">Ofertas</span>
@@ -405,6 +406,7 @@ export function ProductsClient({
           {contextBrands.length > 0 && (
             <div className="relative shrink-0">
               <select
+                suppressHydrationWarning
                 value={initialBrand}
                 onChange={(e) => updateUrlParam('marca', e.target.value)}
                 className="h-8 sm:h-9 max-w-[90px] xs:max-w-[120px] sm:max-w-none rounded-lg sm:rounded-xl border border-border/80 bg-background px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50"
@@ -725,6 +727,7 @@ export function ProductsClient({
                 {/* Imagen (clic abre modal de detalle) */}
                 <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: displayPrice }} /></div>
                 <div
+                  suppressHydrationWarning
                   onClick={() => setSelected(product)}
                   role="button"
                   tabIndex={0}
@@ -794,6 +797,7 @@ export function ProductsClient({
 
                     {/* Nombre del Producto */}
                     <h3
+                      suppressHydrationWarning
                       onClick={() => setSelected(product)}
                       role="button"
                       tabIndex={0}
@@ -880,7 +884,7 @@ export function ProductsClient({
 
       {/* ── PAGINACIÓN ─────────────────────────────────────────────────────── */}
       {(totalPages > 1 || filtered.length > 12) && (
-        <div className="mt-10 pt-6 border-t border-border/60 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div suppressHydrationWarning className="mt-10 pt-6 border-t border-border/60 flex flex-col sm:flex-row items-center justify-between gap-4">
           
           {/* Resumen de Resultados */}
           <div className="text-xs text-muted-foreground order-2 sm:order-1 text-center sm:text-left">

@@ -92,6 +92,7 @@ export function FavoriteButton({ item, className }: { item: Favorite; className?
   return (
     <button
       type="button"
+      suppressHydrationWarning
       aria-label={`${saved ? 'Quitar de' : 'Agregar a'} favoritos: ${item.name}`}
       aria-pressed={saved}
       disabled={state.busy || !!state.error}

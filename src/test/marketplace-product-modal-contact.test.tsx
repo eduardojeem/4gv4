@@ -34,6 +34,7 @@ describe('detalle de producto del marketplace: contacto de la tienda', () => {
             facebook: 'StoreCenterPY',
             tiktok: '@storecenter',
             whatsapp: '0981 123 456',
+            phone: null,
           },
         }}
       />
@@ -44,9 +45,26 @@ describe('detalle de producto del marketplace: contacto de la tienda', () => {
     expect(seller.getByRole('link', { name: 'Facebook de Store Center: StoreCenterPY' })).toHaveAttribute('href', 'https://facebook.com/StoreCenterPY')
     expect(seller.getByRole('link', { name: /TikTok de Store Center/ })).toHaveAttribute('href', 'https://tiktok.com/@storecenter')
 
+    // El mismo mensaje que manda la ficha de la tienda: producto, precio y oferta.
     const whatsapp = seller.getByRole('link', { name: /Consultar por WhatsApp/ })
     expect(whatsapp.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/595981123456\?text=/)
-    expect(decodeURIComponent(whatsapp.getAttribute('href')!)).toContain('«Perfume 9 PM»')
+    const mensaje = decodeURIComponent(whatsapp.getAttribute('href')!.split('?text=')[1])
+    expect(mensaje).toContain('¡Hola *Store Center*!')
+    expect(mensaje).toContain('Perfume 9 PM')
+    expect(mensaje).toContain('243.000')
+    expect(mensaje).toContain('14% OFF')
+  })
+
+  /** Una tienda que cargó solo el teléfono también puede recibir la consulta. */
+  it('usa el teléfono de la tienda cuando no hay WhatsApp aparte', () => {
+    render(
+      <MarketplaceProductModal
+        open
+        onClose={vi.fn()}
+        product={{ ...base, organization_contact: { instagram: null, facebook: null, tiktok: null, whatsapp: null, phone: '0981 123 456' } }}
+      />
+    )
+    expect(screen.getByRole('link', { name: /Consultar por WhatsApp/ }).getAttribute('href')).toContain('wa.me/595981123456')
   })
 
   it('sin redes ni WhatsApp no deja un bloque vacío', () => {
@@ -64,7 +82,7 @@ describe('detalle de producto del marketplace: contacto de la tienda', () => {
 
   it('toma de «Sitio Web» solo los datos cargados', () => {
     expect(pickOrganizationContact({ instagram: ' tienda ', facebook: '', whatsapp: 123 })).toEqual({
-      instagram: 'tienda', facebook: null, tiktok: null, whatsapp: null,
+      instagram: 'tienda', facebook: null, tiktok: null, whatsapp: null, phone: null,
     })
     expect(pickOrganizationContact({ address: 'Centro' })).toBeNull()
     expect(pickOrganizationContact(null)).toBeNull()

@@ -67,6 +67,7 @@ export default function RootLayout({
         <ThemeInitScript />
       </head>
       <body
+        suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased theme-transition`}
       >
         <ThemeProvider defaultColorScheme={DEFAULT_SYSTEM_COLOR_SCHEME}>
