@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BadgeCheck, ImageOff, Link2, Loader2, Plus, RefreshCw, RotateCcw, Search, Tag, Trash2, Upload } from 'lucide-react'
+import { BadgeCheck, ImageOff, Loader2, Plus, RefreshCw, RotateCcw, Search, Tag, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { LinkSuggestionsPanel, type LinkSuggestion } from './LinkSuggestionsPanel'
+import { UnmatchedCatalogPanel, type UnmatchedEntry } from './UnmatchedCatalogPanel'
 
 /**
  * Catálogo global de marcas.
@@ -63,6 +64,8 @@ export function GlobalBrandsManager() {
   const [linking, setLinking] = useState(false)
   const [summary, setSummary] = useState({ tenantTotal: 0, tenantLinked: 0, pendingLinks: 0 })
   const [suggestions, setSuggestions] = useState<LinkSuggestion[]>([])
+  const [unmatched, setUnmatched] = useState<UnmatchedEntry[]>([])
+  const [creating, setCreating] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -80,6 +83,7 @@ export function GlobalBrandsManager() {
         pendingLinks: payload.pendingLinks ?? 0,
       })
       setSuggestions(payload.suggestions ?? [])
+      setUnmatched(payload.unmatched ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el catálogo.')
     } finally {
@@ -189,6 +193,29 @@ export function GlobalBrandsManager() {
     }
   }
 
+  /** Sube al catálogo las marcas elegidas y vincula las fichas que las usan. */
+  const createFromTenant = async (entries: UnmatchedEntry[]) => {
+    setCreating(true)
+    try {
+      const response = await fetch('/api/superadmin/global-brands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create-from-tenant',
+          entries: entries.map((entry) => ({ name: entry.name, ids: entry.ids })),
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo crear.')
+      toast.success(`${payload.created} marca${payload.created === 1 ? '' : 's'} en el catálogo · ${payload.linked} ficha${payload.linked === 1 ? '' : 's'} vinculada${payload.linked === 1 ? '' : 's'}`)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo crear.')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const reactivate = async (brand: GlobalBrand) => {
     try {
       const response = await fetch('/api/superadmin/global-brands', {
@@ -262,6 +289,13 @@ export function GlobalBrandsManager() {
         itemLabel="marca"
         busy={linking}
         onApply={(ids) => void linkExisting(ids)}
+      />
+
+      <UnmatchedCatalogPanel
+        entries={unmatched}
+        itemLabel="marca"
+        busy={creating}
+        onCreate={(entries) => void createFromTenant(entries)}
       />
 
       <div className="flex flex-wrap items-center gap-2">

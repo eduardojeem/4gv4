@@ -16,6 +16,10 @@ const marcas = {
     { id: 't1', name: 'samsung', organizationName: 'Store Center', targetId: 'b1', targetName: 'Samsung', targetLogoUrl: null },
     { id: 't2', name: 'SAMSUNG', organizationName: 'DA', targetId: 'b1', targetName: 'Samsung', targetLogoUrl: null },
   ],
+  unmatched: [
+    { name: 'Xiaomi', count: 6, organizations: ['4G celulares', 'HCA Celular'], ids: ['u1', 'u2'] },
+    { name: 'JBL', count: 3, organizations: ['Store Center'], ids: ['u3'] },
+  ],
   data: [
     { id: 'b1', name: 'Samsung', slug: 'samsung', aliases: ['Samsung Electronics'], logo_url: 'https://cdn/samsung.png', website: null, description: null, is_active: true, linked_count: 6 },
     { id: 'b2', name: 'Panadería', slug: 'panaderia', aliases: [], logo_url: null, website: null, description: null, is_active: true, linked_count: 0 },
@@ -31,6 +35,9 @@ const categorias = {
   suggestions: [
     { id: 'tc1', name: 'Telefonía', organizationName: 'DA', targetId: 'c2', targetName: 'Celulares', exact: true },
     { id: 'tc2', name: 'Pantallas', organizationName: 'Store Center', targetId: 'c2', targetName: 'Celulares', exact: false },
+  ],
+  unmatched: [
+    { name: 'Periféricos', count: 3, organizations: ['MiReparaciones'], ids: ['uc1'] },
   ],
   data: [
     { id: 'c1', name: 'Electrónica', slug: 'electronica', description: null, parent_id: null, level: 0, aliases: ['Tecnología'], icon: null, sort_order: 1, is_active: true, linked_count: 3 },
@@ -75,8 +82,8 @@ describe('catálogo de marcas del superadmin', () => {
     servidor(marcas)
     render(<GlobalBrandsManager />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Ver cuáles/ }))
-    const panel = within(screen.getByRole('region', { name: 'marcas de empresas para vincular' }))
+    const panel = within(await screen.findByRole('region', { name: 'marcas de empresas para vincular' }))
+    fireEvent.click(panel.getByRole('button', { name: /Ver cuáles/ }))
     expect(panel.getByText('samsung')).toBeInTheDocument()
     expect(panel.getByText('· Store Center')).toBeInTheDocument()
     expect(panel.getAllByText('Samsung').length).toBeGreaterThan(0)
@@ -87,12 +94,45 @@ describe('catálogo de marcas del superadmin', () => {
     servidor(marcas, (body) => posts.push(body as Record<string, unknown>))
     render(<GlobalBrandsManager />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Ver cuáles/ }))
-    const panel = within(screen.getByRole('region', { name: 'marcas de empresas para vincular' }))
+    const panel = within(await screen.findByRole('region', { name: 'marcas de empresas para vincular' }))
+    fireEvent.click(panel.getByRole('button', { name: /Ver cuáles/ }))
     fireEvent.click(panel.getAllByRole('checkbox')[1])
 
-    fireEvent.click(screen.getByRole('button', { name: /Vincular 1/ }))
+    fireEvent.click(panel.getByRole('button', { name: /Vincular 1/ }))
     await waitFor(() => expect(posts).toEqual([{ action: 'link-existing', ids: ['t1'] }]))
+  })
+
+  /**
+   * Vincular por nombre solo alcanza a lo que ya está en el catálogo: las
+   * marcas que no existen ahí quedaban invisibles, y son casi todas.
+   */
+  it('muestra las marcas de empresas que todavía no están en el catálogo', async () => {
+    servidor(marcas)
+    render(<GlobalBrandsManager />)
+
+    const panel = within(await screen.findByRole('region', { name: 'marcas que faltan en el catálogo' }))
+    fireEvent.click(panel.getByRole('button', { name: /Ver cuáles/ }))
+    expect(panel.getByText('Xiaomi')).toBeInTheDocument()
+    expect(panel.getByText('· 4G celulares, HCA Celular')).toBeInTheDocument()
+    expect(panel.getByText('6')).toBeInTheDocument()
+  })
+
+  /** Crear en el catálogo escribe para todas las empresas: se elige a mano. */
+  it('crea solo las marcas elegidas y vincula sus fichas', async () => {
+    const posts: Array<Record<string, unknown>> = []
+    servidor(marcas, (body) => posts.push(body as Record<string, unknown>))
+    render(<GlobalBrandsManager />)
+
+    const panel = within(await screen.findByRole('region', { name: 'marcas que faltan en el catálogo' }))
+    fireEvent.click(panel.getByRole('button', { name: /Ver cuáles/ }))
+    expect(panel.getByRole('button', { name: /Crear en el catálogo/ })).toBeDisabled()
+
+    fireEvent.click(panel.getAllByRole('checkbox')[0])
+    fireEvent.click(panel.getByRole('button', { name: /Crear 1 en el catálogo/ }))
+
+    await waitFor(() => expect(posts).toEqual([
+      { action: 'create-from-tenant', entries: [{ name: 'Xiaomi', ids: ['u1', 'u2'] }] },
+    ]))
   })
 
   /** Pegar una dirección dejaba el logo colgando de un servidor ajeno. */
@@ -143,6 +183,8 @@ describe('el superadmin sigue el tema elegido', () => {
       'src/app/superadmin/layout.tsx',
       'src/components/superadmin/GlobalBrandsManager.tsx',
       'src/components/superadmin/GlobalCategoriesManager.tsx',
+      'src/components/superadmin/LinkSuggestionsPanel.tsx',
+      'src/components/superadmin/UnmatchedCatalogPanel.tsx',
     ]) {
       expect(readFileSync(resolve(process.cwd(), ruta), 'utf8')).not.toMatch(paleta)
     }
@@ -154,8 +196,8 @@ describe('categorías globales del superadmin', () => {
     servidor(categorias)
     render(<GlobalCategoriesManager />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Ver cuáles/ }))
-    const panel = within(screen.getByRole('region', { name: 'categorías de empresas para vincular' }))
+    const panel = within(await screen.findByRole('region', { name: 'categorías de empresas para vincular' }))
+    fireEvent.click(panel.getByRole('button', { name: /Ver cuáles/ }))
     expect(panel.getByText('Telefonía')).toBeInTheDocument()
     expect(panel.getByText('· DA')).toBeInTheDocument()
     expect(screen.getByText('Sin vincular').closest('div')!).toHaveTextContent('116')
@@ -166,14 +208,24 @@ describe('categorías globales del superadmin', () => {
     servidor(categorias)
     render(<GlobalCategoriesManager />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Ver cuáles/ }))
-    const panel = within(screen.getByRole('region', { name: 'categorías de empresas para vincular' }))
+    const panel = within(await screen.findByRole('region', { name: 'categorías de empresas para vincular' }))
+    fireEvent.click(panel.getByRole('button', { name: /Ver cuáles/ }))
     expect(panel.getByText('aproximada')).toBeInTheDocument()
 
     const casillas = panel.getAllByRole('checkbox') as HTMLInputElement[]
     expect(casillas[0].checked).toBe(true)
     expect(casillas[1].checked).toBe(false)
-    expect(screen.getByRole('button', { name: /Vincular 1/ })).toBeInTheDocument()
+    expect(panel.getByRole('button', { name: /Vincular 1/ })).toBeInTheDocument()
+  })
+
+  it('muestra las categorías de empresas que la taxonomía no contempla', async () => {
+    servidor(categorias)
+    render(<GlobalCategoriesManager />)
+
+    const panel = within(await screen.findByRole('region', { name: 'categorías que faltan en el catálogo' }))
+    fireEvent.click(panel.getByRole('button', { name: /Ver cuáles/ }))
+    expect(panel.getByText('Periféricos')).toBeInTheDocument()
+    expect(panel.getByText(/Entran como categorías principales/)).toBeInTheDocument()
   })
 
   it('muestra de qué categoría madre cuelga cada una y cuáles no se usan', async () => {

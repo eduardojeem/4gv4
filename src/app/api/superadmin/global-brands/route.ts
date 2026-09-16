@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { brandSlug, suggestBrandLinks, type GlobalBrand } from '@/lib/brands/global-catalog'
+import { brandSlug, normalizeBrandName, suggestBrandLinks, type GlobalBrand } from '@/lib/brands/global-catalog'
+import { groupUnmatched } from '@/lib/catalog/unmatched'
 import { isSupportedImageSource } from '@/lib/image-url-policy'
 import { logger } from '@/lib/logger'
 
@@ -96,6 +97,19 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // Y las que no tienen a dónde vincularse: el catálogo recién arranca, así
+    // que la mayoría de las marcas de empresas no existe todavía como oficial.
+    const suggested = new Set(suggestions.map((suggestion) => suggestion.id))
+    const unmatched = groupUnmatched(
+      rows
+        .filter((row) => !suggested.has(row.id))
+        .map((row) => {
+          const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
+          return { id: row.id, name: row.name, organizationName: organization?.name ?? null }
+        }),
+      normalizeBrandName,
+    )
+
     return NextResponse.json({
       success: true,
       data: brands,
@@ -104,6 +118,7 @@ export async function GET(request: NextRequest) {
       tenantLinked: (usage ?? []).length,
       pendingLinks: suggestions.length,
       suggestions,
+      unmatched,
     })
   } catch (error) {
     logger.error('[superadmin/global-brands] GET', { error })
@@ -162,6 +177,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, linked })
     }
 
+    // Crear en el catálogo una marca que hoy solo existe en las empresas, y
+    // vincular de una las filas que la usan: es el camino para las que no
+    // tienen equivalente oficial todavía.
+    if (body?.action === 'create-from-tenant') {
+      return await createFromTenant(user, request, body.entries)
+    }
+
     const validation = brandSchema.safeParse(body)
     if (!validation.success) {
       return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá los datos.' }, { status: 400 })
@@ -209,6 +231,82 @@ export async function POST(request: NextRequest) {
     logger.error('[superadmin/global-brands] POST', { error })
     return NextResponse.json({ success: false, error: 'No se pudo crear la marca.' }, { status: 500 })
   }
+}
+
+const createFromTenantSchema = z.object({
+  entries: z
+    .array(
+      z.object({
+        name: z.string().trim().min(2, 'El nombre es muy corto.').max(120),
+        ids: z.array(z.string().uuid()).max(500).optional(),
+      }),
+    )
+    .min(1, 'Elegí al menos una marca.')
+    .max(60),
+})
+
+/** Sube al catálogo los nombres elegidos y vincula las marcas que los usan. */
+async function createFromTenant(user: { id: string; email: string | null }, request: NextRequest, entries: unknown) {
+  const validation = createFromTenantSchema.safeParse({ entries })
+  if (!validation.success) {
+    return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá los datos.' }, { status: 400 })
+  }
+
+  const admin = createAdminSupabase()
+  let created = 0
+  let linked = 0
+
+  for (const entry of validation.data.entries) {
+    const name = entry.name.trim()
+    const slug = brandSlug(name)
+
+    const { data: inserted, error } = await admin
+      .from('global_brands')
+      .insert({ name, slug, aliases: [], logo_url: null, website: null, description: null, is_active: true })
+      .select('id, name, logo_url')
+      .single()
+
+    let target = inserted as { id: string; name: string; logo_url: string | null } | null
+
+    if (error) {
+      // Ya estaba en el catálogo (otro nombre con el mismo slug): se usa esa.
+      if (error.code !== '23505') {
+        logger.error('[superadmin/global-brands] create-from-tenant', { error: error.message, name })
+        continue
+      }
+      const { data: existing } = await admin.from('global_brands').select('id, name, logo_url').eq('slug', slug).maybeSingle()
+      target = (existing as { id: string; name: string; logo_url: string | null } | null) ?? null
+    } else {
+      created += 1
+    }
+
+    if (!target) continue
+
+    const { data: updated } = await admin
+      .from('brands')
+      .update({
+        global_brand_id: target.id,
+        name: target.name,
+        logo_url: target.logo_url ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .is('global_brand_id', null)
+      .in('id', entry.ids ?? [])
+      .select('id')
+
+    linked += (updated ?? []).length
+  }
+
+  await logSuperAdminAction({
+    actorId: user.id,
+    actorEmail: user.email,
+    action: 'create',
+    resource: 'global_brands',
+    newValues: { created, linked, action: 'create-from-tenant' },
+    request,
+  })
+
+  return NextResponse.json({ success: true, created, linked })
 }
 
 export async function PUT(request: NextRequest) {

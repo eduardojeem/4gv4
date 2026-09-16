@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { categorySlug, sortGlobalCategories, suggestCategoryLinks, type GlobalCategory } from '@/lib/categories/global-catalog'
+import { categorySlug, normalizeCategoryName, sortGlobalCategories, suggestCategoryLinks, type GlobalCategory } from '@/lib/categories/global-catalog'
+import { groupUnmatched } from '@/lib/catalog/unmatched'
 import { logger } from '@/lib/logger'
 
 /**
@@ -76,6 +77,19 @@ export async function GET() {
       }
     })
 
+    // Y las que no tienen a dónde vincularse: la taxonomía no las contempla
+    // todavía, así que hay que crearlas antes de poder vincular nada.
+    const suggested = new Set(suggestions.map((suggestion) => suggestion.id))
+    const unmatched = groupUnmatched(
+      rows
+        .filter((row) => !row.global_category_id && !suggested.has(row.id))
+        .map((row) => {
+          const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
+          return { id: row.id, name: row.name, organizationName: organization?.name ?? null }
+        }),
+      normalizeCategoryName,
+    )
+
     return NextResponse.json({
       success: true,
       data: categories,
@@ -83,6 +97,7 @@ export async function GET() {
       tenantLinked: rows.filter((row) => row.global_category_id).length,
       pendingLinks: suggestions.length,
       suggestions,
+      unmatched,
     })
   } catch (error) {
     logger.error('[superadmin/global-categories] GET', { error })
@@ -100,6 +115,12 @@ export async function POST(request: NextRequest) {
     // Acción aparte: vincular por nombre las categorías de empresas sueltas.
     if (body?.action === 'link-existing') {
       return await linkExisting(user, request, body.ids)
+    }
+
+    // Crear en la taxonomía una categoría que hoy solo existe en las empresas,
+    // y vincular de una las filas que la usan.
+    if (body?.action === 'create-from-tenant') {
+      return await createFromTenant(user, request, body.entries)
     }
 
     const validation = categorySchema.safeParse(body)
@@ -153,6 +174,91 @@ export async function POST(request: NextRequest) {
     logger.error('[superadmin/global-categories] POST', { error })
     return NextResponse.json({ success: false, error: 'No se pudo crear la categoría.' }, { status: 500 })
   }
+}
+
+const createFromTenantSchema = z.object({
+  entries: z
+    .array(
+      z.object({
+        name: z.string().trim().min(2, 'El nombre es muy corto.').max(120),
+        ids: z.array(z.string().uuid()).max(500).optional(),
+      }),
+    )
+    .min(1, 'Elegí al menos una categoría.')
+    .max(60),
+})
+
+/**
+ * Sube a la taxonomía los nombres elegidos y vincula las categorías que los
+ * usan. Entran como principales: de qué categoría cuelgan se decide después,
+ * con el árbol a la vista.
+ */
+async function createFromTenant(user: { id: string; email: string | null }, request: NextRequest, entries: unknown) {
+  const validation = createFromTenantSchema.safeParse({ entries })
+  if (!validation.success) {
+    return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá los datos.' }, { status: 400 })
+  }
+
+  const admin = createAdminSupabase()
+  let created = 0
+  let linked = 0
+
+  for (const entry of validation.data.entries) {
+    const name = entry.name.trim()
+    const slug = categorySlug(name)
+
+    const { data: inserted, error } = await admin
+      .from('global_categories')
+      .insert({
+        name,
+        slug,
+        description: null,
+        parent_id: null,
+        level: 0,
+        aliases: [],
+        icon: null,
+        sort_order: 0,
+        is_active: true,
+      })
+      .select('id')
+      .single()
+
+    let targetId = (inserted as { id: string } | null)?.id ?? null
+
+    if (error) {
+      // Ya estaba en la taxonomía (mismo slug): se vincula contra esa.
+      if (error.code !== '23505') {
+        logger.error('[superadmin/global-categories] create-from-tenant', { error: error.message, name })
+        continue
+      }
+      const { data: existing } = await admin.from('global_categories').select('id').eq('slug', slug).maybeSingle()
+      targetId = (existing as { id: string } | null)?.id ?? null
+    } else {
+      created += 1
+    }
+
+    if (!targetId) continue
+
+    const { data: updated } = await admin
+      .from('categories')
+      .update({ global_category_id: targetId })
+      .is('global_category_id', null)
+      .in('id', entry.ids ?? [])
+      .select('id')
+
+    linked += (updated ?? []).length
+  }
+
+  await logSuperAdminAction({
+    actorId: user.id,
+    actorEmail: user.email,
+    action: 'create',
+    resource: 'global_categories',
+    newValues: { created, linked, action: 'create-from-tenant' },
+    request,
+  })
+
+  return NextResponse.json({ success: true, created, linked })
 }
 
 /** Vincula por nombre las categorías de empresas que hoy están sueltas. */

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CornerDownRight, FolderTree, Link2, Loader2, Plus, RefreshCw, RotateCcw, Search, Trash2, Unlink } from 'lucide-react'
+import { CornerDownRight, FolderTree, Loader2, Plus, RefreshCw, RotateCcw, Search, Trash2, Unlink } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { LinkSuggestionsPanel, type LinkSuggestion } from './LinkSuggestionsPanel'
+import { UnmatchedCatalogPanel, type UnmatchedEntry } from './UnmatchedCatalogPanel'
 
 /**
  * Taxonomía global de categorías.
@@ -64,6 +65,8 @@ export function GlobalCategoriesManager() {
   const [linking, setLinking] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [suggestions, setSuggestions] = useState<LinkSuggestion[]>([])
+  const [unmatched, setUnmatched] = useState<UnmatchedEntry[]>([])
+  const [creating, setCreating] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -79,6 +82,7 @@ export function GlobalCategoriesManager() {
         pendingLinks: payload.pendingLinks ?? 0,
       })
       setSuggestions(payload.suggestions ?? [])
+      setUnmatched(payload.unmatched ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar la taxonomía.')
     } finally {
@@ -158,6 +162,29 @@ export function GlobalCategoriesManager() {
       toast.error(err instanceof Error ? err.message : 'No se pudo vincular.')
     } finally {
       setLinking(false)
+    }
+  }
+
+  /** Sube a la taxonomía las categorías elegidas y vincula las que las usan. */
+  const createFromTenant = async (entries: UnmatchedEntry[]) => {
+    setCreating(true)
+    try {
+      const response = await fetch('/api/superadmin/global-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create-from-tenant',
+          entries: entries.map((entry) => ({ name: entry.name, ids: entry.ids })),
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo crear.')
+      toast.success(`${payload.created} categoría${payload.created === 1 ? '' : 's'} en la taxonomía · ${payload.linked} vinculada${payload.linked === 1 ? '' : 's'}`)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo crear.')
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -271,6 +298,13 @@ export function GlobalCategoriesManager() {
         itemLabel="categoría"
         busy={linking}
         onApply={(ids) => void linkExisting(ids)}
+      />
+
+      <UnmatchedCatalogPanel
+        entries={unmatched}
+        itemLabel="categoría"
+        busy={creating}
+        onCreate={(entries) => void createFromTenant(entries)}
       />
 
       {error ? (

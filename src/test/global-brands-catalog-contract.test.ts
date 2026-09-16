@@ -43,6 +43,21 @@ describe('catálogo global de marcas', () => {
     expect(API_SUPERADMIN).toContain("update({ is_active: false")
   })
 
+  /**
+   * Vincular por nombre no alcanza: casi ninguna marca de empresa existe en el
+   * catálogo todavía, y esas quedaban fuera de la pantalla.
+   */
+  it('las que no están en el catálogo se pueden crear desde ahí', () => {
+    const categorias = leer('src/app/api/superadmin/global-categories/route.ts')
+
+    for (const api of [API_SUPERADMIN, categorias]) {
+      expect(api).toContain('groupUnmatched')
+      expect(api).toContain("action === 'create-from-tenant'")
+      // Vincular nunca pisa lo que ya decidió alguien.
+      expect(api).toMatch(/\.is\('global_(brand|category)_id', null\)/)
+    }
+  })
+
   it('el superadmin también administra la taxonomía de categorías', () => {
     const api = leer('src/app/api/superadmin/global-categories/route.ts')
     const menu = leer('src/components/superadmin/superadmin-shell.tsx')
