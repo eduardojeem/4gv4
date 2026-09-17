@@ -1,4 +1,5 @@
 import {
+    BookOpen,
     LayoutDashboard,
     Users,
     Rocket,
@@ -196,6 +197,23 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/dashboard/onboarding',
                 description: 'Datos, rubro, moneda y visibilidad de la tienda',
                 permissions: ['settings.read']
+            }
+        ]
+    },
+    {
+        // La ayuda estaba repartida en quince modales, cada uno visible solo si
+        // ya estabas parado en la pantalla correcta: el panel no tenia ninguna
+        // puerta de entrada a una guia completa.
+        id: 'help',
+        label: 'Ayuda',
+        items: [
+            {
+                key: 'guide',
+                label: 'Guía del sistema',
+                icon: BookOpen,
+                href: '/admin/guia',
+                description: 'Cómo funciona cada sección, con ejemplos, y los primeros pasos',
+                permissions: [] // Para cualquiera que pueda entrar al panel
             }
         ]
     }

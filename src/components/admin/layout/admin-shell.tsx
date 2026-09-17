@@ -31,7 +31,7 @@ interface AdminShellProps {
 
 export function AdminShell({ active, onNavigate, topRightActions, onContextAction, children, compact = false }: AdminShellProps) {
   const [searchOpen, setSearchOpen] = useState(false)
-  const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration'])
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration', 'help'])
   const { hasPermission, isAdmin } = useAuth()
   const { sidebarCollapsed: collapsed, toggleSidebar } = useAdminLayout()
   const { modules: planModules } = useSubscriptionStatus()

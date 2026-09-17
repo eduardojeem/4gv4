@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   Crown,
+  HelpCircle,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -50,7 +51,7 @@ interface AdminLayoutProps {
 function AdminLayoutContent({ children }: AdminLayoutProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration'])
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration', 'help'])
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const { sidebarCollapsed: collapsed, toggleSidebar } = useAdminLayout()
@@ -372,6 +373,14 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                 aria-haspopup="dialog"
               >
                 <Search className="h-5 w-5" />
+              </Button>
+
+              {/* La guia no tenia como abrirse desde el panel: el unico boton
+                  de ayuda global vivia en el header del dashboard. */}
+              <Button asChild variant="ghost" size="icon" className="h-9 w-9">
+                <Link href="/admin/guia" aria-label="Abrir la guía del sistema" title="Guía del sistema">
+                  <HelpCircle className="h-5 w-5" />
+                </Link>
               </Button>
 
               {user?.role === 'super_admin' && (

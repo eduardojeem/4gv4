@@ -396,7 +396,7 @@ export default function AdminHome() {
             <StatCard
               label="Equipo Activo"
               value={`${overviewMetrics.activeUsersCount} usuarios`}
-              secondary="Colaboradores habilitados"
+              secondary="Miembros activos de esta organización"
               icon={Users}
               tone="info"
               href="/admin/users"

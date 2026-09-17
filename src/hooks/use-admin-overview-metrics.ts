@@ -69,10 +69,17 @@ export function useAdminOverviewMetrics() {
         productsQuery = productsQuery.eq('organization_id', organization.id)
       }
 
-      // 4. Usuarios / Colaboradores activos
+      // 4. Colaboradores activos de ESTA organización (via membresías)
+      //    Antes se consultaba `profiles` sin filtrar por org_id, lo que
+      //    devolvía usuarios de toda la plataforma.
       let usersQuery = supabase
-        .from('profiles')
-        .select('id, status', { count: 'exact' })
+        .from('organization_members')
+        .select('user_id, status', { count: 'exact' })
+        .eq('status', 'active')
+
+      if (organization?.id) {
+        usersQuery = usersQuery.eq('organization_id', organization.id)
+      }
 
       const [salesRes, cashRes, productsRes, usersRes] = await Promise.allSettled([
         salesQuery,
@@ -110,13 +117,8 @@ export function useAdminOverviewMetrics() {
 
       let activeUsersCount = 0
       if (usersRes.status === 'fulfilled' && !usersRes.value.error) {
-        if (usersRes.value.data) {
-          activeUsersCount = usersRes.value.data.filter(
-            (u: any) => (u.status || 'active') === 'active'
-          ).length
-        } else {
-          activeUsersCount = usersRes.value.count ?? 0
-        }
+        // La consulta ya filtra status='active', así que el count es directo.
+        activeUsersCount = usersRes.value.count ?? (usersRes.value.data?.length ?? 0)
       }
 
       setMetrics({
