@@ -16,7 +16,8 @@ import {
   toOnboardingAdminSettings,
 } from '@/lib/organization/admin-settings'
 import { BusinessProfileInputSchema, getSuggestedModules } from '@/lib/organization/business-profile'
-import { getWebsiteDefaultsForVertical } from '@/lib/website/default-settings'
+import { getWebsiteDefaultsForVertical, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { buildStarterCheckout, buildStarterTrustBar, provisionStarterKit } from '@/lib/organization/starter-kit'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { DEFAULT_BRAND_COLOR, isKnownBrandColor } from '@/lib/website/brand-colors'
 
@@ -201,14 +202,17 @@ export async function POST(request: Request) {
     address: input.address,
     // `sunday` no se manda: la RPC fusiona `hours` clave por clave y el
     // domingo que el admin haya cargado se conserva.
+    // Sin horario inventado: si no lo cargó, queda vacío y la tienda no lo muestra.
     hours: {
-      weekdays: input.weekdays || 'Lunes a viernes, 08:00 a 18:00',
-      saturday: input.saturday || 'Sabado, 08:00 a 12:00',
+      weekdays: input.weekdays || '',
+      saturday: input.saturday || '',
     },
     logoUrl: input.logoUrl || '',
     brandColor: input.brandColor,
     ruc: input.ruc || '',
-    whatsapp: input.whatsapp || '',
+    // El teléfono es obligatorio y casi siempre es el WhatsApp del negocio: sin
+    // número, el modo WhatsApp y el botón flotante no tienen a dónde escribir.
+    whatsapp: input.whatsapp || input.phone || '',
     businessType: input.businessType || '',
     instagram: input.instagram || '',
     facebook: input.facebook || '',
@@ -290,10 +294,18 @@ export async function POST(request: Request) {
   // `initialWebsiteRows` —la intencion era «solo la primera vez»— pero el
   // upsert corria en cada guardado y reemplazaba el encabezado y los pasos de
   // proceso que el admin hubiera escrito en /admin/website.
+  // El cobro y la barra de confianza también se siembran: sin fila, la tienda
+  // mostraba los predeterminados genéricos —tarjeta a domicilio, transferencia
+  // sin cuentas, «Envíos rápidos»— aunque no ofreciera nada de eso.
+  const starterCheckout = buildStarterCheckout(getWebsiteSettingsDefaults().checkout, {
+    hasWhatsapp: Boolean(input.whatsapp || input.phone),
+  })
   const seedableKeys = [
     { key: 'hero_content', value: verticalDefaults.hero_content },
     { key: 'hero_stats', value: verticalDefaults.hero_stats },
     { key: 'process_steps', value: verticalDefaults.process_steps },
+    { key: 'checkout', value: starterCheckout },
+    { key: 'trust_bar', value: buildStarterTrustBar(starterCheckout) },
   ].filter((row) => row.value !== undefined)
 
   const { data: existingRows, error: existingRowsError } = await admin
@@ -372,6 +384,16 @@ export async function POST(request: Request) {
     }, { status: 500 })
   }
 
+  // La primera vez: caja principal y categorías del rubro elegido, si todavía
+  // no tiene. Una empresa creada antes de esto también las recibe al terminar.
+  const starterKit = alreadyCompleted
+    ? { cashRegister: false, categories: 0 }
+    : await provisionStarterKit(
+        admin,
+        { organizationId, vertical: input.businessVertical, userId: user.id },
+        (message, meta) => logger.warn(message, meta),
+      )
+
   const { error: auditError } = await admin.from('tenant_audit_log').insert({
     organization_id: organizationId,
     user_id: user.id,
@@ -384,6 +406,7 @@ export async function POST(request: Request) {
       enabled_modules: enabledModules,
       storefront_public: input.storefrontPublic,
       seeded_website_keys: rowsToSeed.map((row) => row.key),
+      starter_kit: starterKit,
     },
   })
 

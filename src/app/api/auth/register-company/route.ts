@@ -13,6 +13,7 @@ import {
   getProvisioningFailures,
   isExistingConfirmedAuthUser,
 } from './provisioning'
+import { provisionStarterKit } from '@/lib/organization/starter-kit'
 
 type RegisterAdminClient = ReturnType<typeof createAdminSupabase>
 type RegisteredAuthUser = {
@@ -224,6 +225,7 @@ export async function POST(request: Request) {
         slug: companySlug,
         plan: resolvedPlanTier,
         owner_id: userId,
+        ...(input.businessVertical ? { business_vertical: input.businessVertical } : {}),
       })
       .select('id, name, slug, plan')
       .single()
@@ -354,7 +356,16 @@ export async function POST(request: Request) {
       )
     }
 
+    // Caja principal y categorías del rubro: lo que hace falta para vender el
+    // primer día. Si algo no se crea, el alta sigue: se puede crear a mano.
+    const starterKit = await provisionStarterKit(
+      admin,
+      { organizationId: organization.id, vertical: input.businessVertical ?? null, userId },
+      (message, meta) => logger.warn(message, meta),
+    )
+
     logger.info('Company registered', {
+      starterKit,
       userId,
       organizationId: organization.id,
       slug: organization.slug,

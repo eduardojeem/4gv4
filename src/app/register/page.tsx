@@ -63,8 +63,20 @@ const FIELD_LABELS: Record<string, string> = {
   password: 'Contraseña',
   companyName: 'Nombre de la empresa',
   companySlug: 'Subdominio',
+  businessVertical: 'Rubro',
   plan: 'Plan',
 }
+
+// El rubro define con qué categorías, textos y pasos arranca la tienda.
+const BUSINESS_VERTICAL_OPTIONS = [
+  { value: 'electronics', label: 'Tecnología, celulares y servicio técnico' },
+  { value: 'clothing', label: 'Ropa, calzado y moda' },
+  { value: 'cosmetics', label: 'Cosmética y belleza' },
+  { value: 'food', label: 'Alimentos y gastronomía' },
+  { value: 'hardware', label: 'Ferretería y construcción' },
+  { value: 'general', label: 'Comercio general / multirubro' },
+  { value: 'other', label: 'Otro rubro' },
+] as const
 
 type FieldErrors = Record<string, string>
 
@@ -76,6 +88,7 @@ function RegisterForm() {
     fullName: '',
     companyName: '',
     companySlug: '',
+    businessVertical: '',
   })
   // Track whether the user has manually edited the slug field.
   const [slugTouched, setSlugTouched] = useState(false)
@@ -279,6 +292,7 @@ function RegisterForm() {
           password: formData.password,
           companyName: formData.companyName,
           companySlug: previewSlug,
+          ...(formData.businessVertical ? { businessVertical: formData.businessVertical } : {}),
           plan: selectedPlan,
           captchaToken,
         }),
@@ -643,6 +657,28 @@ function RegisterForm() {
                               {fieldErrors.companyName}
                             </p>
                           )}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="businessVertical" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            Rubro
+                          </Label>
+                          <select
+                            id="businessVertical"
+                            value={formData.businessVertical}
+                            onChange={(e) => handleInputChange('businessVertical', e.target.value)}
+                            disabled={loading}
+                            aria-describedby="hint-businessVertical"
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-sm text-slate-900 focus-visible:border-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 dark:border-slate-800 dark:bg-slate-950/70 dark:text-white"
+                          >
+                            <option value="">Elegí a qué se dedica tu empresa</option>
+                            {BUSINESS_VERTICAL_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <p id="hint-businessVertical" className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Tu tienda arranca con las categorías y los textos de tu rubro. Lo podés cambiar después.
+                          </p>
                         </div>
 
                         <div className="space-y-1.5">

@@ -1,3 +1,4 @@
+import { provisionStarterKit } from '@/lib/organization/starter-kit'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
@@ -81,6 +82,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No se pudo crear la organización.' }, { status: 500 })
   }
 
+  // La caja principal, igual que en el registro. Las categorías llegan cuando
+  // la empresa elige su rubro en el onboarding.
+  const starterKit = await provisionStarterKit(admin, { organizationId: org.id, userId: superAdmin.id }, (message, meta) =>
+    console.warn(`[superadmin/organizations] ${message}`, meta),
+  )
+
   await logSuperAdminAction({
     actorId: superAdmin.id,
     actorEmail: superAdmin.email,
@@ -96,6 +103,7 @@ export async function POST(request: NextRequest) {
       timezone: input.timezone,
       trial_ends_at: trialEndsAt,
       owner_email: input.ownerEmail,
+      starter_kit: starterKit,
     },
     request,
   })

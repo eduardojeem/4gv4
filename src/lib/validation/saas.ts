@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { slugifyTenantName } from '@/lib/saas/tenant'
 import { validatePassword } from '@/lib/auth/password-validation'
 import { captchaTokenSchema } from '@/lib/auth/captcha'
+import { BUSINESS_VERTICALS } from '@/lib/organization/business-profile'
 
 export const registerCompanySchema = z.object({
   fullName: z.string().trim().min(2, 'El nombre completo es requerido').max(120),
@@ -25,6 +26,10 @@ export const registerCompanySchema = z.object({
     .max(48)
     .regex(/^[a-z0-9][a-z0-9-]*$/, 'Plan invalido'),
   captchaToken: captchaTokenSchema,
+  // Opcional para no romper integraciones que ya llaman a la API. Con el rubro
+  // desde el alta, la tienda arranca con sus categorías y sus textos, en vez de
+  // quedar como «general» hasta terminar la configuración.
+  businessVertical: z.enum(BUSINESS_VERTICALS).optional(),
 }).transform((value) => ({
   ...value,
   companySlug: slugifyTenantName(value.companySlug || value.companyName),
