@@ -260,7 +260,16 @@ export function ReportsCustomersTab({
       setIsExportingPdf(true)
       await exportCustomersSectionPDF({
         title: `Reporte de Clientes y Canales${brand ? ` - ${brand}` : ''}`,
-        customers: filteredCustomers,
+        // El reporte puede no traer el desglose por canal de un cliente; el PDF
+        // lo necesita completo, así que lo que falta cuenta como cero.
+        customers: filteredCustomers.map((customer) => ({
+          ...customer,
+          posSpent: customer.posSpent ?? 0,
+          posOrdersCount: customer.posOrdersCount ?? 0,
+          webSpent: customer.webSpent ?? 0,
+          webOrdersCount: customer.webOrdersCount ?? 0,
+          channel: customer.channel ?? 'all',
+        })),
         metrics: {
           totalCustomers: customersReportData.length,
           totalSpent: totalSalesToIdentified,
