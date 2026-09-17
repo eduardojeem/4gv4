@@ -6,6 +6,8 @@ import { canCreateResource } from '@/lib/saas/subscription-service'
 import { canWriteGlobalUserIdentity } from '@/lib/auth/admin-role-scope'
 import { CONTACT_REVEAL_ACTION, isCustomerRole, maskCustomerContact } from '@/lib/admin/contact-privacy'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
+import { isCompletedSaleStatus } from '@/lib/sales-status'
+import { normalizeOrderStatus } from '@/lib/orders/flow'
 import { WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/wholesale-access'
 import {
   canAssignRoleFromUserManagement,
@@ -144,7 +146,10 @@ function mapProfile(
     is_wholesale: resolvedPermissions.includes(WHOLESALE_PRICE_PERMISSION),
     organizations,
     branches,
-    last_sign_in_at: lastSignInAt ?? profile.updated_at ?? null,
+    // Solo el acceso real. Antes caía a `updated_at`, así que alguien que nunca
+    // inició sesión aparecía con la fecha en que se editó su perfil, como si
+    // hubiera entrado ese día.
+    last_sign_in_at: lastSignInAt ?? null,
     updated_at: profile.updated_at,
     created_at: profile.created_at,
   }
@@ -186,6 +191,58 @@ async function fetchUserBranchAssignments(
   } catch (err) {
     logger.warn('Error fetching branch assignments', { error: String(err) })
   }
+
+  return map
+}
+
+/**
+ * La última compra de cada cliente en esta organización: mostrador o pedido web.
+ * Es lo que la tienda quiere saber de un cliente; el acceso a la cuenta dice
+ * otra cosa.
+ */
+async function fetchLastPurchases(
+  supabaseAdmin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  profileIds: string[]
+) {
+  const map = new Map<string, string | null>()
+  if (profileIds.length === 0) return map
+
+  const { data: customers, error } = await supabaseAdmin
+    .from('customers')
+    .select('id, profile_id')
+    .eq('organization_id', organizationId)
+    .in('profile_id', profileIds)
+
+  if (error || !customers?.length) {
+    if (error) logger.warn('Could not load customer records for last purchase', { error: error.message })
+    return map
+  }
+
+  const profileByCustomer = new Map<string, string>()
+  for (const row of customers as Array<{ id: string; profile_id: string }>) {
+    profileByCustomer.set(row.id, row.profile_id)
+  }
+  const customerIds = [...profileByCustomer.keys()]
+
+  const [sales, orders] = await Promise.all([
+    supabaseAdmin.from('sales').select('customer_id, created_at, status').in('customer_id', customerIds),
+    supabaseAdmin.from('customer_orders').select('customer_id, created_at, status').in('customer_id', customerIds),
+  ])
+
+  const consider = (rows: Array<{ customer_id: string | null; created_at: string | null; status: string | null }> | null, cancelled: (status: string | null) => boolean) => {
+    for (const row of rows ?? []) {
+      if (!row.customer_id || !row.created_at || cancelled(row.status)) continue
+      const profileId = profileByCustomer.get(row.customer_id)
+      if (!profileId) continue
+      const current = map.get(profileId)
+      if (!current || row.created_at > current) map.set(profileId, row.created_at)
+    }
+  }
+
+  // Una venta anulada o un pedido cancelado no son una compra.
+  consider(sales.data, (status) => !isCompletedSaleStatus(status))
+  consider(orders.data, (status) => normalizeOrderStatus(status) === 'CANCELLED')
 
   return map
 }
@@ -428,21 +485,26 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
       }
     }
 
-    const [branchesByUserId, lastSignInsByUserId] = await Promise.all([
+    const [branchesByUserId, lastSignInsByUserId, lastPurchasesByUserId] = await Promise.all([
       fetchUserBranchAssignments(supabaseAdmin, profileIds),
       fetchUserLastSignIns(supabaseAdmin, profileIds),
+      // La última compra solo hace falta para los clientes de la tienda.
+      scope === 'customers'
+        ? fetchLastPurchases(supabaseAdmin, context.organizationId, profileIds)
+        : Promise.resolve(new Map<string, string | null>()),
     ])
 
-    const mappedUsers = profileRows.map((p) =>
-      mapProfile(
+    const mappedUsers = profileRows.map((p) => ({
+      ...mapProfile(
         p,
         membersByUserId.get(p.id),
         permissionsByUserId.get(p.id),
         [],
         branchesByUserId.get(p.id) ?? [],
         lastSignInsByUserId.get(p.id)
-      )
-    )
+      ),
+      last_purchase_at: lastPurchasesByUserId.get(p.id) ?? null,
+    }))
 
     const stats = {
       ...buildOrganizationMemberStats(allMembers),

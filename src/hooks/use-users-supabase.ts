@@ -10,6 +10,8 @@ export interface SupabaseUser extends User {
   updated_at?: string
   /** El correo y el teléfono vienen tapados: son de un cliente de la tienda. */
   contactMasked?: boolean
+  /** Última compra en esta organización. `null` si nunca compró. */
+  lastPurchase?: string | null
   /** Acceso a precios mayoristas (permiso products.read_wholesale_prices). */
   isWholesale?: boolean
   branches?: Array<{
@@ -71,6 +73,8 @@ type ApiUserProfile = {
   is_wholesale?: boolean | null
   /** El contacto viene tapado porque es un cliente de la tienda. */
   contactMasked?: boolean | null
+  /** Última compra del cliente en esta organización: mostrador o pedido web. */
+  last_purchase_at?: string | null
 }
 
 const DEFAULT_STATUS: ProfileStatus = 'active'
@@ -153,6 +157,7 @@ export function useUsersSupabase({
     lastActivity: profile.updated_at || new Date().toISOString(),
     notes: '',
     contactMasked: Boolean(profile.contactMasked),
+    lastPurchase: profile.last_purchase_at ?? null,
   })
 
   const fetchUsers = useCallback(async () => {

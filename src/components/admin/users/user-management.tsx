@@ -723,6 +723,7 @@ export function UserManagement() {
                   setIsViewDialogOpen(true)
                 }}
                 onRevealContact={(user) => { void revealCustomerContact(user.id) }}
+                activityColumn="purchase"
               />
             </CardContent>
           </Card>

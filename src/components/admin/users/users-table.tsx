@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   Table,
   TableBody,
@@ -46,6 +46,12 @@ interface UsersTableProps {
   onView: (user: SupabaseUser) => void
   /** Pide el contacto completo de un cliente; sin esto no se ofrece mostrarlo. */
   onRevealContact?: (user: SupabaseUser) => void
+  /**
+   * Qué muestra la última columna. Para el equipo, cuándo entró al sistema;
+   * para los clientes de la tienda, cuándo compró por última vez, que es lo
+   * que sirve para atenderlos.
+   */
+  activityColumn?: 'login' | 'purchase'
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -103,10 +109,15 @@ function getStatusConfig(status: string) {
   return STATUS_CONFIG[status] ?? { label: status, className: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700', dot: 'bg-gray-400' }
 }
 
-function formatLastLogin(value: string | null | undefined): { text: string; fullDate: string; activeTone: 'recent' | 'weekly' | 'old' | 'never' } {
-  if (!value) return { text: 'Nunca', fullDate: 'Sin registros de inicio de sesión', activeTone: 'never' }
+function formatLastLogin(
+  value: string | null | undefined,
+  isPurchase = false
+): { text: string; fullDate: string; activeTone: 'recent' | 'weekly' | 'old' | 'never' } {
+  const emptyLabel = isPurchase ? 'Sin compras' : 'Nunca'
+  const emptyDetail = isPurchase ? 'Todavía no compró en esta tienda' : 'Nunca inició sesión'
+  if (!value) return { text: emptyLabel, fullDate: emptyDetail, activeTone: 'never' }
   const date = new Date(value)
-  if (!Number.isFinite(date.getTime())) return { text: 'Nunca', fullDate: 'Sin registros', activeTone: 'never' }
+  if (!Number.isFinite(date.getTime())) return { text: emptyLabel, fullDate: emptyDetail, activeTone: 'never' }
 
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -161,7 +172,14 @@ export function UsersTable({
   onDelete,
   onView,
   onRevealContact,
+  activityColumn = 'login',
 }: UsersTableProps) {
+  const showsPurchases = activityColumn === 'purchase'
+  const activityLabel = showsPurchases ? 'Última compra' : 'Último acceso'
+  const activityOf = useCallback(
+    (user: SupabaseUser) => (showsPurchases ? user.lastPurchase ?? null : user.lastLogin),
+    [showsPurchases],
+  )
   const [sortDir, setSortDir] = useState<SortDirection>(null)
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
@@ -170,11 +188,11 @@ export function UsersTable({
   const sortedUsers = useMemo(() => {
     if (!sortDir) return users
     return [...users].sort((a, b) => {
-      const ta = getLastLoginTimestamp(a.lastLogin)
-      const tb = getLastLoginTimestamp(b.lastLogin)
+      const ta = getLastLoginTimestamp(activityOf(a))
+      const tb = getLastLoginTimestamp(activityOf(b))
       return sortDir === 'asc' ? ta - tb : tb - ta
     })
-  }, [users, sortDir])
+  }, [users, sortDir, activityOf])
 
   const cycleSortDir = () => {
     setSortDir((prev) => {
@@ -210,10 +228,10 @@ export function UsersTable({
                 <button
                   onClick={cycleSortDir}
                   className="flex items-center gap-1.5 hover:text-foreground transition-colors group"
-                  title={sortDir === null ? 'Ordenar por último acceso' : sortDir === 'desc' ? 'Más reciente primero' : 'Más antiguo primero'}
+                  title={sortDir === null ? `Ordenar por ${activityLabel.toLowerCase()}` : sortDir === 'desc' ? 'Más reciente primero' : 'Más antiguo primero'}
                 >
                   <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                  Último acceso
+                  {activityLabel}
                   <SortIcon
                     className={`h-3.5 w-3.5 transition-colors ${sortDir ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}
                   />
@@ -390,7 +408,7 @@ export function UsersTable({
                     {/* Last login */}
                     <TableCell className="hidden lg:table-cell py-3 text-sm text-muted-foreground">
                       {(() => {
-                        const { text, fullDate, activeTone } = formatLastLogin(user.lastLogin)
+                        const { text, fullDate, activeTone } = formatLastLogin(activityOf(user), showsPurchases)
                         const dotColor =
                           activeTone === 'recent'
                             ? 'bg-emerald-500 animate-pulse'

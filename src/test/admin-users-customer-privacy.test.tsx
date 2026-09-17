@@ -10,6 +10,7 @@ import {
   maskPhone,
 } from '@/lib/admin/contact-privacy'
 import { UsersRoleTree } from '@/components/admin/users/users-role-tree'
+import { UsersTable } from '@/components/admin/users/users-table'
 import type { SupabaseUser } from '@/hooks/use-users-supabase'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
@@ -105,5 +106,69 @@ describe('vista por rol', () => {
     )
     expect(screen.getByText('Sin rol asignado')).toBeInTheDocument()
     expect(screen.getByText('Beto')).toBeInTheDocument()
+  })
+})
+
+describe('última actividad de un cliente', () => {
+  const cliente = (over: Partial<SupabaseUser> = {}): SupabaseUser => ({
+    id: 'c1',
+    name: 'Ana González',
+    email: 'an•••@gmail.com',
+    role: 'cliente',
+    status: 'active',
+    department: '',
+    phone: '••• 523',
+    permissions: [],
+    lastLogin: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    loginAttempts: 0,
+    lastActivity: '2026-01-01T00:00:00Z',
+    notes: '',
+    contactMasked: true,
+    ...over,
+  } as unknown as SupabaseUser)
+
+  const tabla = (user: SupabaseUser, activityColumn: 'login' | 'purchase') =>
+    render(
+      <UsersTable
+        users={[user]}
+        isLoading={false}
+        page={1}
+        pageSize={10}
+        totalCount={1}
+        onPageChange={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onView={vi.fn()}
+        onRevealContact={vi.fn()}
+        activityColumn={activityColumn}
+      />,
+    )
+
+  /** La columna decía «último acceso» y en clientes interesa la compra. */
+  it('en clientes la columna es la última compra', () => {
+    tabla(cliente({ lastPurchase: new Date(Date.now() - 2 * 86_400_000).toISOString() }), 'purchase')
+    expect(screen.getByRole('columnheader', { name: /Última compra/ })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: /Último acceso/ })).not.toBeInTheDocument()
+  })
+
+  it('un cliente que nunca compró lo dice, sin inventar una fecha', () => {
+    tabla(cliente({ lastPurchase: null }), 'purchase')
+    expect(screen.getByText('Sin compras')).toBeInTheDocument()
+  })
+
+  /** Antes, sin acceso real se mostraba la fecha en que se editó el perfil. */
+  it('quien nunca inició sesión figura como «Nunca», no con la fecha del perfil', () => {
+    tabla(cliente({ lastLogin: null }), 'login')
+    expect(screen.getByRole('columnheader', { name: /Último acceso/ })).toBeInTheDocument()
+    expect(screen.getByText('Nunca')).toBeInTheDocument()
+    expect(leer('src/app/api/admin/users/route.ts')).toContain('last_sign_in_at: lastSignInAt ?? null')
+  })
+
+  it('la última compra sale de ventas y pedidos, sin contar lo anulado', () => {
+    const api = leer('src/app/api/admin/users/route.ts')
+    expect(api).toContain('fetchLastPurchases(supabaseAdmin, context.organizationId, profileIds)')
+    expect(api).toContain('consider(sales.data, (status) => !isCompletedSaleStatus(status))')
+    expect(api).toContain("consider(orders.data, (status) => normalizeOrderStatus(status) === 'CANCELLED')")
   })
 })
