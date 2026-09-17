@@ -44,6 +44,8 @@ interface UsersTableProps {
   onEdit: (user: SupabaseUser) => void
   onDelete: (user: SupabaseUser) => void
   onView: (user: SupabaseUser) => void
+  /** Pide el contacto completo de un cliente; sin esto no se ofrece mostrarlo. */
+  onRevealContact?: (user: SupabaseUser) => void
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -157,7 +159,8 @@ export function UsersTable({
   onPageChange,
   onEdit,
   onDelete,
-  onView
+  onView,
+  onRevealContact,
 }: UsersTableProps) {
   const [sortDir, setSortDir] = useState<SortDirection>(null)
 
@@ -270,6 +273,18 @@ export function UsersTable({
                           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
                             <Mail className="h-3 w-3 flex-shrink-0" />
                             <span className="truncate">{user.email}</span>
+                            {user.contactMasked && onRevealContact ? (
+                              <button
+                                type="button"
+                                onClick={() => onRevealContact(user)}
+                                className="ml-0.5 inline-flex shrink-0 items-center gap-1 rounded px-1 text-[11px] font-medium text-primary hover:underline"
+                                aria-label={`Mostrar el contacto de ${user.name}`}
+                                title="El contacto de un cliente se muestra solo cuando se pide, y queda registrado"
+                              >
+                                <Eye className="h-3 w-3" />
+                                Mostrar
+                              </button>
+                            ) : null}
                           </p>
                         </div>
                       </div>

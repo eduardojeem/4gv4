@@ -96,6 +96,7 @@ export function UserManagement() {
     stats,
     isLoading: dataLoading,
     refreshUsers,
+    revealCustomerContact,
     createUser,
     updateUser,
     deleteUser,
@@ -639,6 +640,7 @@ export function UserManagement() {
                   setSelectedUser(user)
                   setIsViewDialogOpen(true)
                 }}
+                onRevealContact={(user) => { void revealCustomerContact(user.id) }}
               />
             </CardContent>
           </Card>
@@ -682,7 +684,8 @@ export function UserManagement() {
             <UserRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <p>
               Clientes vinculados a la organización. Compran en la tienda pública y no ocupan
-              cupo de staff del plan.
+              cupo de staff del plan. Su correo y su teléfono se muestran tapados: se ven al
+              tocar «Mostrar», y esa consulta queda registrada.
             </p>
           </div>
 
@@ -719,6 +722,7 @@ export function UserManagement() {
                   setSelectedUser(user)
                   setIsViewDialogOpen(true)
                 }}
+                onRevealContact={(user) => { void revealCustomerContact(user.id) }}
               />
             </CardContent>
           </Card>

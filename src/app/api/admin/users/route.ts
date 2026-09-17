@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { canCreateResource } from '@/lib/saas/subscription-service'
 import { canWriteGlobalUserIdentity } from '@/lib/auth/admin-role-scope'
+import { CONTACT_REVEAL_ACTION, isCustomerRole, maskCustomerContact } from '@/lib/admin/contact-privacy'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 import { WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/wholesale-access'
 import {
@@ -323,6 +324,9 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
   const idParam = params.get('id')
   const scope = normalizeScope(params.get('scope'))
   const wholesaleOnly = params.get('wholesale') === 'true'
+  // El contacto de un cliente se muestra solo cuando alguien lo pide para ese
+  // cliente, y esa consulta queda registrada.
+  const revealId = params.get('reveal')
 
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
@@ -445,7 +449,12 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
       byRole: await countMembersByRole(supabaseAdmin, context.organizationId),
     }
 
-    return NextResponse.json({ success: true, data: mappedUsers, count: totalCount, stats })
+    return NextResponse.json({
+      success: true,
+      data: await applyContactPrivacy(mappedUsers, revealId, context, supabaseAdmin),
+      count: totalCount,
+      stats,
+    })
   }
 
   // ── Super-admin / global path ─────────────────────────────────────────────
@@ -592,7 +601,42 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
     },
   }
 
-  return NextResponse.json({ success: true, data: mappedUsers, count: totalCount, stats })
+  return NextResponse.json({
+    success: true,
+    data: await applyContactPrivacy(mappedUsers, revealId, context, supabaseAdmin),
+    count: totalCount,
+    stats,
+  })
+}
+
+/**
+ * Tapa el contacto de los clientes. El que se pidió expresamente vuelve
+ * completo y se registra quién lo miró.
+ */
+async function applyContactPrivacy<T extends { id: string; role?: string | null; email?: string | null; phone?: string | null }>(
+  users: T[],
+  revealId: string | null,
+  context: AdminAuthContext,
+  supabaseAdmin: ReturnType<typeof createAdminSupabase>,
+) {
+  const revealed = revealId ? users.find((user) => user.id === revealId && isCustomerRole(user.role)) : null
+
+  if (revealed) {
+    const { error } = await supabaseAdmin.from('audit_log').insert({
+      user_id: context.user.id,
+      action: CONTACT_REVEAL_ACTION,
+      resource: 'users',
+      resource_id: revealed.id,
+      organization_id: context.organizationId,
+      severity: 'medium',
+      new_values: { viewed_by: context.user.id, organization_id: context.organizationId },
+    })
+    if (error) {
+      logger.warn('Could not log customer contact reveal', { error: error.message, userId: revealed.id })
+    }
+  }
+
+  return users.map((user) => (revealed && user.id === revealed.id ? user : maskCustomerContact(user)))
 }
 
 async function updateUser(request: NextRequest, context: AdminAuthContext) {
