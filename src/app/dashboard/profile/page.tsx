@@ -185,10 +185,10 @@ export default function UserProfilePage() {
   }, [initialProfile, initialPrefs])
 
   useEffect(() => {
-    const loadUser = async () => {
+    const loadUser = async (): Promise<Record<string, unknown> | null> => {
       try {
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
+        if (!user) return null
 
         setUserId(user.id)
 
@@ -204,7 +204,7 @@ export default function UserProfilePage() {
         if (!config.supabase.isConfigured) {
           setProfile(baseProfile)
           setInitialProfile(baseProfile)
-          return
+          return null
         }
 
         try {
@@ -213,7 +213,7 @@ export default function UserProfilePage() {
           if (error || !summary) {
             setProfile(baseProfile)
             setInitialProfile(baseProfile)
-            return
+            return null
           }
 
           if (summary.role) setRole(summary.role)
@@ -250,33 +250,53 @@ export default function UserProfilePage() {
             loginStreak: statsData.loginStreak || 0,
             lastActivity: lastActivityLabel
           })
+
+          // Retornar profileRow para que loadPrefsFromRow pueda leer preferences
+          return (profileRow as Record<string, unknown>) ?? null
         } catch (rpcError) {
           logger.error('Error fetching profile summary', { error: rpcError })
           setProfile(baseProfile)
           setInitialProfile(baseProfile)
+          return null
         }
       } catch (e) {
         logger.error('Error loading user', { error: e })
+        return null
       } finally {
         setLoadingUser(false)
       }
     }
 
-    const loadPrefs = () => {
+    // loadPrefs: lee primero del JSONB profiles.preferences (vía la RPC ya ejecutada),
+    // con localStorage como caché offline. Si hay datos de Supabase los usa; si no,
+    // intenta localStorage; si tampoco hay, usa DEFAULT_PREFS.
+    const loadPrefsFromRow = (profileRow: Record<string, unknown> | null) => {
       try {
+        // 1. Intentar desde la columna preferences de la BD
+        const dbPrefs = profileRow?.preferences as Record<string, unknown> | null | undefined
+        if (dbPrefs && typeof dbPrefs === 'object' && Object.keys(dbPrefs).length > 0) {
+          const merged = { ...DEFAULT_PREFS, ...dbPrefs }
+          setPrefs(merged as ProfilePreferences)
+          setInitialPrefs(merged as ProfilePreferences)
+          // Sincronizar cache local
+          localStorage.setItem('profile-preferences', JSON.stringify(merged))
+          return
+        }
+        // 2. Fallback a localStorage (para usuarios que ya tenían datos guardados)
         const raw = localStorage.getItem('profile-preferences')
         if (!raw) return
-        const parsed = JSON.parse(raw)
+        const parsed = JSON.parse(raw) as Record<string, unknown>
         const merged = { ...DEFAULT_PREFS, ...parsed }
-        setPrefs(merged)
-        setInitialPrefs(merged)
+        setPrefs(merged as ProfilePreferences)
+        setInitialPrefs(merged as ProfilePreferences)
       } catch {
-        // no-op
+        // no-op — defaults ya aplicados
       }
     }
 
-    loadUser()
-    loadPrefs()
+    loadUser().then((profileRow) => {
+      loadPrefsFromRow(profileRow ?? null)
+    })
   }, [supabase])
 
   const validate = useCallback(() => {
@@ -296,15 +316,27 @@ export default function UserProfilePage() {
     }
   }, [profile])
 
-  const savePrefs = useCallback((): boolean => {
+  const savePrefs = useCallback(async (): Promise<boolean> => {
     try {
+      // 1. Persistir en localStorage como caché offline rápido
       localStorage.setItem('profile-preferences', JSON.stringify(prefs))
       setInitialPrefs(prefs)
+
+      // 2. Persistir en Supabase para que sea portable entre dispositivos
+      if (userId && config.supabase.isConfigured) {
+        const { error: upsertError } = await supabase
+          .from('profiles')
+          .upsert({ id: userId, preferences: prefs, updated_at: new Date().toISOString() })
+        if (upsertError) {
+          // No es crítico: localStorage ya tiene los datos. Solo loguear.
+          logger.warn('No se pudieron guardar las preferencias en la nube:', upsertError)
+        }
+      }
       return true
     } catch {
       return false
     }
-  }, [prefs])
+  }, [prefs, userId, supabase])
 
   const handleUpdateProfile = useCallback(async (): Promise<boolean> => {
     if (!userId) {
@@ -397,7 +429,7 @@ export default function UserProfilePage() {
       let prefsSaved = false
 
       if (isDirty) profileSaved = await handleUpdateProfile()
-      if (isDirtyPrefs) prefsSaved = savePrefs()
+      if (isDirtyPrefs) prefsSaved = await savePrefs()
 
       const allOk = (!isDirty || profileSaved) && (!isDirtyPrefs || prefsSaved)
       if (allOk) toast.success('Configuracion guardada correctamente')

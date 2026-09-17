@@ -41,7 +41,7 @@ export function DashboardPreferencesForm({ prefs, setPrefs, profile, setProfile 
     description: string
     icon: typeof Bell
     iconColor: string
-    badgeText?: string
+    disclaimer?: string
   }[] = [
     {
       key: 'notifications',
@@ -55,21 +55,24 @@ export function DashboardPreferencesForm({ prefs, setPrefs, profile, setProfile 
       label: 'Recibir emails del sistema',
       description: 'Facturas, cotizaciones y resúmenes de órdenes',
       icon: Mail,
-      iconColor: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
+      iconColor: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40',
+      disclaimer: 'La entrega de emails depende también de la configuración del servidor de correo de tu organización.'
     },
     {
       key: 'pushNotifications',
       label: 'Notificaciones push en navegador',
       description: 'Avisos de inventario crítico y mensajes de clientes',
       icon: Smartphone,
-      iconColor: 'text-purple-500 bg-purple-50 dark:bg-purple-950/40'
+      iconColor: 'text-purple-500 bg-purple-50 dark:bg-purple-950/40',
+      disclaimer: 'Próximamente. Las notificaciones push están en desarrollo y aún no están activas en esta versión.'
     },
     {
       key: 'marketingEmails',
       label: 'Novedades y ofertas comerciales',
       description: 'Boletines mensuales y lanzamientos de nuevas herramientas',
       icon: Sparkles,
-      iconColor: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40'
+      iconColor: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40',
+      disclaimer: 'La baja de marketing tarda hasta 48 h en aplicarse en todos los canales.'
     }
   ]
 
@@ -187,8 +190,14 @@ export function DashboardPreferencesForm({ prefs, setPrefs, profile, setProfile 
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
               <Bell className="h-5 w-5" />
             </div>
-            <div>
-              <CardTitle className="text-xl">Notificaciones y Alertas</CardTitle>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <CardTitle className="text-xl">Notificaciones y Alertas</CardTitle>
+                <Badge variant="outline" className="text-[10px] font-medium gap-1 border-emerald-400/60 text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/30">
+                  <Check className="h-3 w-3" />
+                  Se guarda en tu cuenta
+                </Badge>
+              </div>
               <CardDescription>Configura los canales y la frecuencia de comunicaciones que deseas recibir.</CardDescription>
             </div>
           </div>
@@ -197,26 +206,33 @@ export function DashboardPreferencesForm({ prefs, setPrefs, profile, setProfile 
           {notificationItems.map((item) => (
             <div
               key={item.key}
-              className="flex items-center justify-between rounded-xl border border-border/50 p-3.5 transition-colors hover:border-border hover:bg-muted/30"
+              className="rounded-xl border border-border/50 p-3.5 transition-colors hover:border-border hover:bg-muted/30 space-y-2"
             >
-              <div className="flex items-start gap-3">
-                <div className={cn('rounded-lg p-2 mt-0.5', item.iconColor)}>
-                  <item.icon className="h-4 w-4" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-start gap-3">
+                  <div className={cn('rounded-lg p-2 mt-0.5', item.iconColor)}>
+                    <item.icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <Label className="cursor-pointer text-sm font-medium" htmlFor={item.key}>
+                      {item.label}
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {item.description}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <Label className="cursor-pointer text-sm font-medium" htmlFor={item.key}>
-                    {item.label}
-                  </Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {item.description}
-                  </p>
-                </div>
+                <Switch
+                  id={item.key}
+                  checked={prefs[item.key]}
+                  onCheckedChange={(c) => setPrefs((p) => ({ ...p, [item.key]: c }))}
+                />
               </div>
-              <Switch
-                id={item.key}
-                checked={prefs[item.key]}
-                onCheckedChange={(c) => setPrefs((p) => ({ ...p, [item.key]: c }))}
-              />
+              {item.disclaimer && (
+                <p className="text-[11px] text-muted-foreground/80 pl-11 leading-snug italic">
+                  ℹ️ {item.disclaimer}
+                </p>
+              )}
             </div>
           ))}
         </CardContent>
