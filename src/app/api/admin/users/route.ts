@@ -6,6 +6,7 @@ import { canCreateResource } from '@/lib/saas/subscription-service'
 import { canWriteGlobalUserIdentity } from '@/lib/auth/admin-role-scope'
 import { CONTACT_REVEAL_ACTION, isCustomerRole, maskCustomerContact } from '@/lib/admin/contact-privacy'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
+import { firstUserEditIssue, userEditSchema } from '@/lib/admin/user-edit-validation'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
 import { normalizeOrderStatus } from '@/lib/orders/flow'
 import { WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/wholesale-access'
@@ -703,12 +704,21 @@ async function applyContactPrivacy<T extends { id: string; role?: string | null;
 
 async function updateUser(request: NextRequest, context: AdminAuthContext) {
   const supabaseAdmin = createAdminSupabase()
-  const body = await request.json().catch(() => ({}))
-  const userId = typeof body?.id === 'string' ? body.id : ''
+  const rawBody = await request.json().catch(() => ({}))
+  const userId = typeof rawBody?.id === 'string' ? rawBody.id : ''
 
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Missing user id' }, { status: 400 })
   }
+
+  // Nombre, teléfono, área, rol, estado y permisos se validan acá: se guardaban
+  // tal como llegaban, y un rol desconocido caía en «cliente» sin avisar.
+  const parsed = userEditSchema.safeParse(rawBody)
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, error: firstUserEditIssue(parsed.error) }, { status: 400 })
+  }
+  // Lo validado pisa lo que vino: el resto del cuerpo (branches, mayorista) sigue igual.
+  const body = { ...rawBody, ...parsed.data }
 
   const canAccessUser = await assertUserInOrganization(supabaseAdmin, userId, context)
   if (!canAccessUser) {
