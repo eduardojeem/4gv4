@@ -87,7 +87,11 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
     }
   }, [mobileDrawerOpen])
 
+  // El negocio de la persona, si tiene uno. Con esto alcanza para ofrecerle su
+  // panel: el rol global podía decir «cliente» aunque fuera dueña de una tienda.
+  const business = user?.organization ?? null
   const canAccessDashboard =
+    Boolean(business) ||
     user?.role === 'super_admin' ||
     user?.role === 'admin' ||
     user?.role === 'tecnico' ||
@@ -257,7 +261,7 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
               /* Avatar dropdown cuando está logueado */
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
+                  <Button variant="ghost" className="h-9 w-9 rounded-full p-0" aria-label="Abrir menú de la cuenta">
                     <Avatar className="h-8 w-8 border border-border">
                       <AvatarImage
                         src={user.profile?.avatar_url || ''}
@@ -296,10 +300,25 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                       </p>
                       <DropdownMenuItem asChild>
                         <Link href="/dashboard" className="cursor-pointer font-semibold text-primary">
-                          <LayoutDashboard className="mr-2 h-4 w-4" />
-                          Panel Administrativo (POS)
+                          <LayoutDashboard className="mr-2 h-4 w-4 shrink-0" />
+                          <span className="min-w-0">
+                            Ir al panel de administración
+                            {business && (
+                              <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                                {business.name}
+                              </span>
+                            )}
+                          </span>
                         </Link>
                       </DropdownMenuItem>
+                      {business && (
+                        <DropdownMenuItem asChild>
+                          <Link href={`/${business.slug}/inicio`} className="cursor-pointer">
+                            <Store className="mr-2 h-4 w-4 text-muted-foreground" />
+                            Ver mi tienda
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
 
                       <DropdownMenuSeparator />
                       <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -492,12 +511,25 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                   </div>
 
                   {canAccessDashboard && (
-                    <Button asChild size="sm" className="w-full justify-start gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-xs text-xs">
-                      <Link href="/dashboard" onClick={() => setMobileDrawerOpen(false)}>
-                        <LayoutDashboard className="h-4 w-4" />
-                        Panel Administrativo (POS)
-                      </Link>
-                    </Button>
+                    <div className="space-y-2">
+                      <Button asChild size="sm" className="w-full justify-start gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-xs text-xs">
+                        <Link href="/dashboard" onClick={() => setMobileDrawerOpen(false)}>
+                          <LayoutDashboard className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">
+                            Ir al panel de administración
+                            {business ? ` · ${business.name}` : ''}
+                          </span>
+                        </Link>
+                      </Button>
+                      {business && (
+                        <Button asChild variant="outline" size="sm" className="w-full justify-start gap-2 rounded-xl text-xs font-semibold">
+                          <Link href={`/${business.slug}/inicio`} onClick={() => setMobileDrawerOpen(false)}>
+                            <Store className="h-3.5 w-3.5 text-muted-foreground" />
+                            Ver mi tienda
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
                   )}
 
                   <div className="grid grid-cols-2 gap-2 pt-1">

@@ -18,11 +18,20 @@ export type DeliveryLocation = {
 }
 
 // Tipos para el contexto de autenticación
+/** El negocio del que la persona es parte, si tiene uno. */
+export interface AuthOrganization {
+  id: string
+  name: string
+  slug: string
+  role: string
+}
+
 export interface AuthUser extends SupabaseUser {
   role?: UserRole
   status?: ProfileStatus
   permissions?: string[]
   organizationPermissions?: boolean
+  organization?: AuthOrganization | null
   profile?: {
     name?: string
     avatar_url?: string
@@ -97,6 +106,17 @@ const isDeliveryLocation = (value: unknown): value is DeliveryLocation => {
 const AUTH_SESSION_TIMEOUT_MS = 5000
 const AUTH_PROFILE_TIMEOUT_MS = 4000
 
+/** Solo un negocio con id, nombre y dirección sirve para enlazar al panel. */
+const toAuthOrganization = (value: unknown): AuthOrganization | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const row = value as Record<string, unknown>
+  const id = typeof row.id === 'string' ? row.id : ''
+  const name = typeof row.name === 'string' ? row.name : ''
+  const slug = typeof row.slug === 'string' ? row.slug : ''
+  if (!id || !slug) return null
+  return { id, name: name || slug, slug, role: typeof row.role === 'string' ? row.role : '' }
+}
+
 const getDefaultAuthProfile = (): Partial<AuthUser> => ({
   role: toUserRole('cliente'),
   status: 'active',
@@ -113,6 +133,7 @@ const buildAuthUser = (
   status: userProfile.status ?? 'active',
   permissions: userProfile.permissions ?? [],
   organizationPermissions: userProfile.organizationPermissions ?? false,
+  organization: userProfile.organization ?? null,
   profile: userProfile.profile ?? {}
 })
 
@@ -124,6 +145,7 @@ const toStoredAuthProfile = (authUser: AuthUser | null): Partial<AuthUser> | nul
     status: authUser.status,
     permissions: authUser.permissions ?? [],
     organizationPermissions: authUser.organizationPermissions ?? false,
+    organization: authUser.organization ?? null,
     profile: authUser.profile ?? {},
   }
 }
@@ -231,6 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         permissions?: unknown
         organizationPermissions?: unknown
+        organization?: unknown
       }
 
       const resolvedRole = toUserRole(profilePayload.role)
@@ -243,6 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return {
         role: resolvedRole,
         status: resolvedStatus,
+        organization: toAuthOrganization(profilePayload.organization),
         profile: {
           name: typeof profileData.name === 'string' ? profileData.name : '',
           avatar_url: typeof profileData.avatar_url === 'string' ? profileData.avatar_url : '',
