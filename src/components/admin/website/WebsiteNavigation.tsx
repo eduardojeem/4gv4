@@ -155,7 +155,7 @@ function getSectionBadge(
         : { label: 'Oculto', tone: 'muted' }
     }
     case 'brands': {
-      const enabled = settings.brands_section?.enabled !== false
+      const enabled = Boolean(settings.brands_section?.enabled)
       const count = settings.brands_section?.items?.length || 0
       if (!enabled) return { label: 'Oculto', tone: 'muted' }
       return count > 0 ? { label: `${count}`, tone: 'emerald' } : { label: '0', tone: 'muted' }

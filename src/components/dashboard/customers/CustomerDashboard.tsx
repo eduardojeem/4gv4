@@ -139,11 +139,14 @@ export function CustomerDashboard() {
     if (params.get('new') === 'true') {
       setShowCreateModal(true)
     }
-  }, [])
+    const q = params.get('search') || params.get('q')
+    if (q) {
+      updateFilters({ search: q })
+    }
+  }, [updateFilters])
+
   const [compactMode, setCompactMode] = useState(true)
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
-  const [, setShowExportDialog] = useState(false)
-  const [, setShowImportDialog] = useState(false)
   
   // Estados para navegación
   const [currentView, setCurrentView] = useState<ViewState>('list')
@@ -161,6 +164,19 @@ export function CustomerDashboard() {
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([])
   const [showGuide, setShowGuide] = useState(true)
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || customers.length === 0) return
+    const params = new URLSearchParams(window.location.search)
+    const targetId = params.get('id') || params.get('customerId')
+    if (targetId && !selectedCustomer) {
+      const match = customers.find(c => c.id === targetId)
+      if (match) {
+        setSelectedCustomer(match)
+        setCurrentView('detail')
+      }
+    }
+  }, [customers, selectedCustomer])
+
   // Calculate stats including credit metrics
   const totalCustomers = customers.length
   const activeCustomers = useMemo(() => customers.filter(c => c.status === "active").length, [customers])
@@ -170,13 +186,13 @@ export function CustomerDashboard() {
     const summaries = Object.values(creditSummaries)
     const totalActiveCredits = summaries.reduce((sum, s) => sum + s.active_credits, 0)
     const totalPendingAmount = summaries.reduce((sum, s) => sum + s.total_pending, 0)
-    const customersWithCredits = summaries.length
-    const overduePayments = summaries.filter(s => s.next_payment?.is_overdue).length
+    const customersWithDebt = summaries.filter((summary) => summary.total_pending > 0).length
+    const overduePayments = summaries.filter(s => s.overdue_debt > 0).length
     
     return {
       totalActiveCredits,
       totalPendingAmount,
-      customersWithCredits,
+      customersWithDebt,
       overduePayments
     }
   }, [creditSummaries])
@@ -202,13 +218,13 @@ export function CustomerDashboard() {
         description: `Créditos en estado activo`
       },
       {
-        title: "Clientes con Crédito",
-        value: creditMetrics.customersWithCredits.toLocaleString(),
+        title: "Clientes con saldo",
+        value: creditMetrics.customersWithDebt.toLocaleString(),
         icon: <UserCheck className="h-5 w-5" />,
         change: undefined,
         changeType: "neutral" as const,
         gradient: "from-purple-500 to-violet-500",
-        description: `${totalCustomers > 0 ? Math.round((creditMetrics.customersWithCredits / totalCustomers) * 100) : 0}% del total`
+        description: `${totalCustomers > 0 ? Math.round((creditMetrics.customersWithDebt / totalCustomers) * 100) : 0}% con cuotas o reparaciones pendientes`
       },
       {
         title: "Saldo Pendiente",
@@ -227,7 +243,7 @@ export function CustomerDashboard() {
     installments,
     payments,
     markInstallmentPaid,
-  } = useCredits(hasCreditsModule)
+  } = useCredits(hasCreditsModule && activeTab === 'credits')
 
   const customersWithActiveCredits = useMemo(() => {
     const term = creditSearchTerm.trim().toLowerCase()
@@ -527,11 +543,9 @@ export function CustomerDashboard() {
   }
 
   const handleExport = () => {
-    setShowExportDialog(true)
-  }
-
-  const handleImport = () => {
-    setShowImportDialog(true)
+    const result = exportCustomersToCSV(filteredCustomers)
+    if (result.success) toast.success(`${filteredCustomers.length} cliente(s) exportado(s)`)
+    else toast.error(result.error || 'No se pudieron exportar los clientes')
   }
 
   const focusSearch = () => {
@@ -556,10 +570,6 @@ export function CustomerDashboard() {
       {
         ...customerDashboardShortcuts.export,
         action: handleExport
-      },
-      {
-        ...customerDashboardShortcuts.import,
-        action: handleImport
       },
       {
         ...customerDashboardShortcuts.refresh,
@@ -1023,7 +1033,6 @@ export function CustomerDashboard() {
           { keys: ['Ctrl', 'N'], description: 'Nuevo Cliente', category: 'Acciones' },
           { keys: ['Ctrl', 'K'], description: 'Buscar Cliente', category: 'Navegación' },
           { keys: ['Ctrl', 'E'], description: 'Exportar Clientes', category: 'Acciones' },
-          { keys: ['Ctrl', 'I'], description: 'Importar Clientes', category: 'Acciones' },
           { keys: ['F5'], description: 'Actualizar Lista', category: 'Navegación' },
           { keys: ['Shift', '?'], description: 'Mostrar Ayuda', category: 'Ayuda' },
           { keys: ['Escape'], description: 'Cancelar/Cerrar', category: 'Navegación' }

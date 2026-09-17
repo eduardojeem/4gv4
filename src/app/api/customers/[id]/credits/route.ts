@@ -1,35 +1,45 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
-import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { withTenantAuth } from '@/lib/api/withTenantAuth'
+
+async function getCustomerId(routeContext: unknown): Promise<string | null> {
+  const params = (routeContext as { params?: { id?: string } | Promise<{ id?: string }> } | undefined)?.params
+  const resolved = params ? await Promise.resolve(params) : null
+  return resolved?.id ?? null
+}
 
 /**
  * GET /api/customers/[id]/credits
  * Devuelve los créditos activos y el resumen de créditos del cliente.
  */
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'crm' }, async (_request, { organization }, routeContext) => {
   try {
-    const auth = await requireStaff()
-    const authResponse = getAuthResponse(auth)
-    if (authResponse) return authResponse
-    const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
-    const organization = await getCurrentOrganizationContext(staffAuth.user.id)
-
-    if (!organization) {
-      return NextResponse.json({ error: 'Organización no encontrada' }, { status: 403 })
-    }
-
-    const { id: customerId } = await context.params
+    const customerId = await getCustomerId(routeContext)
+    if (!customerId) return NextResponse.json({ error: 'Cliente inválido' }, { status: 400 })
     const supabase = createAdminSupabase()
+
+    // Este cliente se salta RLS. Primero se valida la pertenencia y luego se
+    // acota también cada tabla que expone organization_id.
+    const customer = await supabase
+      .from('customers')
+      .select('id')
+      .eq('id', customerId)
+      .eq('organization_id', organization.id)
+      .maybeSingle()
+
+    if (customer.error) {
+      return NextResponse.json({ error: 'No se pudo validar el cliente' }, { status: 500 })
+    }
+    if (!customer.data) {
+      return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
+    }
 
     // 1. Obtener créditos de la tabla customer_credits
     const { data: credits, error } = await supabase
       .from('customer_credits')
       .select('*')
       .eq('customer_id', customerId)
+      .eq('organization_id', organization.id)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -53,10 +63,14 @@ export async function GET(
     let paidTotal = 0
 
     if (creditIds.length > 0) {
-      const { data: installments } = await supabase
+      const { data: installments, error: installmentsError } = await supabase
         .from('credit_installments')
         .select('id, amount, amount_paid, status')
         .in('credit_id', creditIds)
+
+      if (installmentsError) {
+        return NextResponse.json({ error: 'No se pudieron cargar las cuotas' }, { status: 500 })
+      }
 
       if (installments) {
         totalInstallments = installments.length
@@ -97,4 +111,4 @@ export async function GET(
       { status: 500 }
     )
   }
-}
+})

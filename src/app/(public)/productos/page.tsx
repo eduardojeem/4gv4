@@ -15,6 +15,7 @@ import {
   StorefrontCollections,
 } from '@/components/public/StorefrontCatalogChrome'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
+import { StoreBrandTicker } from '@/components/public/inicio/StoreBrandTicker'
 import {
   ProductSearch,
   ProductSort,
@@ -74,7 +75,7 @@ export default async function ProductsPage(props: {
   const sort = (searchParams.sort as string) || 'default'
 
   const rawPerPage = Number(searchParams.per_page || searchParams.limit)
-  const ALLOWED_PER_PAGE = [25, 50, 75, 100]
+  const ALLOWED_PER_PAGE = [25, 28, 50, 56, 75, 84, 100, 112]
   const perPage = ALLOWED_PER_PAGE.includes(rawPerPage) ? rawPerPage : PRODUCTS_PER_PAGE
 
   // Resolve wholesale status once
@@ -163,6 +164,11 @@ export default async function ProductsPage(props: {
         categories={categories}
         productsHref={prefixPublicTenantPath(tenantPrefix, '/productos')}
       />
+
+      {/* ── Marquesina Opcional de Marcas en el Catálogo ── */}
+      {Boolean(settings?.brands_section?.enabled) && Boolean(settings?.brands_section?.showOnProducts) && (
+        <StoreBrandTicker settings={settings.brands_section} />
+      )}
 
       {/* Main content */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">

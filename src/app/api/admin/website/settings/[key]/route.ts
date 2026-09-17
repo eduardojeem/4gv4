@@ -7,26 +7,16 @@ import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-s
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
 
-// Rate limiting: Máximo 10 actualizaciones por minuto por usuario
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
-const RATE_LIMIT = 10
+import { rateLimiter } from '@/lib/rate-limiter'
+
+// Mismo límite y mismo contador que el guardado por lote: un mapa en memoria no
+// se comparte entre instancias y cada una contaba por su lado.
+const RATE_LIMIT = 30
 const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minuto
 
-function checkRateLimit(userId: string): { allowed: boolean; remaining: number } {
-  const now = Date.now()
-  const userLimit = rateLimitMap.get(userId)
-
-  if (!userLimit || now > userLimit.resetAt) {
-    rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW })
-    return { allowed: true, remaining: RATE_LIMIT - 1 }
-  }
-
-  if (userLimit.count >= RATE_LIMIT) {
-    return { allowed: false, remaining: 0 }
-  }
-
-  userLimit.count++
-  return { allowed: true, remaining: RATE_LIMIT - userLimit.count }
+async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number }> {
+  const allowed = await rateLimiter.check(`website-settings:${userId}`, RATE_LIMIT, RATE_LIMIT_WINDOW)
+  return { allowed, remaining: allowed ? 1 : 0 }
 }
 
 /**
@@ -54,7 +44,7 @@ async function handler(
     }
 
     // Rate limiting
-    const rateLimit = checkRateLimit(context.user.id)
+    const rateLimit = await checkRateLimit(context.user.id)
     if (!rateLimit.allowed) {
       console.warn('Rate limit exceeded', { 
         userId: context.user.id, 

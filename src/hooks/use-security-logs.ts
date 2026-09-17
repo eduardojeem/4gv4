@@ -15,6 +15,8 @@ export interface SecurityLog {
   resource?: string
   resource_id?: string
   user_agent?: string
+  old_values?: unknown
+  new_values?: unknown
 }
 
 export interface SecurityStats {
@@ -46,9 +48,15 @@ export type SecurityLogUserOption = {
   id: string
   name: string
   email?: string
+  phone?: string
+  customerId?: string
+  customerType?: string
+  customerCreatedAt?: string | null
   role?: string
   status?: string
   avatarUrl?: string
+  activityCount?: number
+  lastActiveAt?: string | null
 }
 
 type SecurityLogsResponse = {

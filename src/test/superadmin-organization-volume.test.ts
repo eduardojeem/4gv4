@@ -21,6 +21,22 @@ const VISTA = leer('src/components/superadmin/organizations/OrganizationDetailVi
  * mezclan. La pantalla solo mostraba el mostrador, asi que una empresa que
  * vende todo por la tienda online se veia como una que no vende.
  */
+
+/** Los pedidos reales se guardan en castellano: la tienda online figuraba sin facturar. */
+describe('pedidos guardados en castellano', () => {
+  it('cuenta lo pagado y lo cancelado igual que en inglés', () => {
+    const r = summarizeOnlineOrders([
+      { status: 'ENTREGADO', payment_status: 'PAGADO', total: 150_000, created_at: '2026-08-01' },
+      { status: 'CONFIRMADO', payment_status: 'PENDIENTE', total: 90_000, created_at: '2026-08-02' },
+      { status: 'CANCELADO', payment_status: 'PENDIENTE', total: 40_000, created_at: '2026-08-03' },
+    ])
+    expect(r.paid).toBe(1)
+    expect(r.revenue).toBe(150_000)
+    expect(r.open).toBe(1)
+    expect(r.cancelled).toBe(1)
+  })
+})
+
 describe('la tienda online se cuenta aparte del mostrador', () => {
   it('solo factura lo que se pagó', () => {
     const r = summarizeOnlineOrders([

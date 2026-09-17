@@ -284,6 +284,12 @@ export interface BrandsSectionSettings {
   title: string
   subtitle?: string
   items: BrandItemSettings[]
+  /** Mostrar la marquesina en la página de inicio (por defecto true) */
+  showOnHome?: boolean
+  /** Mostrar la marquesina en el catálogo general de productos (/productos) */
+  showOnProducts?: boolean
+  /** Mostrar la marquesina en la página de ofertas (/ofertas) */
+  showOnOffers?: boolean
 }
 
 /**

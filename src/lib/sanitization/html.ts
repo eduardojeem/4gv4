@@ -26,8 +26,15 @@ export function sanitizeText(text: string): string {
     // Decodificar entidades comunes para no dejar texto distorsionado
     .replace(/&amp;|&lt;|&gt;|&quot;|&#39;|&#x27;|&nbsp;/gi, (m) => NAMED_ENTITIES[m.toLowerCase()] ?? m)
 
-  // Trim y normalizar espacios
-  return sanitized.trim().replace(/\s+/g, ' ')
+  // Espacios de más se juntan, pero los saltos de línea quedan: juntar todo en un
+  // solo espacio convertía instrucciones de transferencia, avisos y mensajes de
+  // varias líneas en un renglón. Tres o más saltos seguidos quedan en dos.
+  return sanitized
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 /**

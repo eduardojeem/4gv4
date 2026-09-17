@@ -7,6 +7,7 @@ import { CompanyInfoSchema, validateSetting } from '@/lib/validation/website-set
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
 import { z } from 'zod'
 import { getPublicationIssues, resolvePublicationUpdate } from '@/lib/website/publication'
+import { validateTenantSlug } from '@/lib/saas/reserved-slugs'
 
 const slugSchema = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -80,6 +81,17 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
   const canonicalSlug = slug || currentSlug
   if (!canonicalSlug) {
     return NextResponse.json({ error: 'La ruta publica es obligatoria' }, { status: 400 })
+  }
+
+  // Las mismas reglas que al registrarse: sin esto una tienda podía cambiar su
+  // dirección a `dashboard`, `api` o `marketplace`, chocar con esas rutas y
+  // quedar inaccesible. Una dirección que ya tenía se respeta aunque hoy no
+  // cumpla, para no trabar el resto del formulario.
+  if (canonicalSlug !== currentSlug) {
+    const slugCheck = validateTenantSlug(canonicalSlug)
+    if (!slugCheck.ok) {
+      return NextResponse.json({ error: 'message' in slugCheck ? slugCheck.message : 'Dirección inválida' }, { status: 400 })
+    }
   }
 
   const { data: existingOrg } = await admin

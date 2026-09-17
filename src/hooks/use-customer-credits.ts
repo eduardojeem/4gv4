@@ -405,7 +405,11 @@ export function useCustomersWithCredits(customers: Customer[]) {
             throw new Error('Failed to fetch credits')
         }
 
-        const { credits: creditsData, installments: installmentsData } = await response.json()
+        const {
+          credits: creditsData,
+          installments: installmentsData,
+          repairDebts: repairDebtsData,
+        } = await response.json()
         
         const credits = (creditsData || []) as CreditInfo[]
         const installments = (installmentsData || []) as InstallmentInfo[]
@@ -415,8 +419,10 @@ export function useCustomersWithCredits(customers: Customer[]) {
 
         customers.forEach(customer => {
             const customerCredits = credits.filter(c => c.customer_id === customer.id)
+            const repairPending = Math.max(0, Number(repairDebtsData?.[customer.id]?.totalPending || 0))
+            const repairOverdue = Math.max(0, Number(repairDebtsData?.[customer.id]?.overdue || 0))
             
-            if (customerCredits.length > 0) {
+            if (customerCredits.length > 0 || repairPending > 0) {
                 const customerCreditIds = customerCredits.map(c => c.id)
                 const customerInstallments = installments.filter(i => customerCreditIds.includes(i.credit_id))
                 
@@ -435,11 +441,12 @@ export function useCustomersWithCredits(customers: Customer[]) {
                 // completo. Con el importe entero una cuota abonada a medias
                 // inflaba la deuda del cliente en toda la lista de creditos
                 // activos, y contradecia al detalle y al servidor.
-                const totalPending = pendingInstallments.reduce((sum, i) => {
+                const installmentPending = pendingInstallments.reduce((sum, i) => {
                     const amount = Math.max(0, Number(i.amount || 0))
                     const paid = Math.min(amount, Math.max(0, Number(i.amount_paid || 0)))
                     return sum + (amount - paid)
                 }, 0)
+                const totalPending = installmentPending + repairPending
                 
                 // Payment history stats
                 const latePayments = paidInstallments.filter(i => {
@@ -495,7 +502,7 @@ export function useCustomersWithCredits(customers: Customer[]) {
                     credit_utilization: creditUtilization,
                     store_balance: Number((customer as any).store_credit || 0),
                     store_reserved: 0,
-                    overdue_debt: nextPayment?.is_overdue ? (nextPayment.amount || 0) : 0,
+                    overdue_debt: (nextPayment?.is_overdue ? (nextPayment.amount || 0) : 0) + repairOverdue,
                     debts: [],
                     payment_history: {
                         on_time_payments: paidInstallments.length - latePayments.length,

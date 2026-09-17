@@ -31,6 +31,7 @@ import {
   type OfferSlide,
 } from '@/components/public/offers/OffersCarouselDeck'
 import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
+import { StoreBrandTicker } from '@/components/public/inicio/StoreBrandTicker'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { formatCurrency } from '@/lib/currency'
@@ -669,6 +670,11 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
           )}
         </div>
       </section>
+
+      {/* ── Marquesina Opcional de Marcas en Ofertas ── */}
+      {Boolean(settings.brands_section?.enabled) && Boolean(settings.brands_section?.showOnOffers) && (
+        <StoreBrandTicker settings={settings.brands_section} />
+      )}
 
       {/* ── Destacados ── */}
       {carouselSettings.enabled && carouselSlides.length > 0 && (

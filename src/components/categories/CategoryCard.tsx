@@ -33,25 +33,59 @@ interface CategoryCardProps {
     parentName?: string
 }
 
-// Generate a consistent color from a string
-function stringToColor(str: string): { bg: string; text: string; border: string; dot: string } {
+interface CategoryColorTheme {
+    bar: string
+    iconBg: string
+    iconText: string
+    glow: string
+}
+
+const CATEGORY_PALETTES: CategoryColorTheme[] = [
+    {
+        bar: 'from-indigo-500 via-blue-500 to-indigo-600',
+        iconBg: 'bg-indigo-500/10 dark:bg-indigo-500/20 border-indigo-500/20 dark:border-indigo-500/30',
+        iconText: 'text-indigo-600 dark:text-indigo-400',
+        glow: 'group-hover:border-indigo-500/40 dark:group-hover:border-indigo-400/40',
+    },
+    {
+        bar: 'from-emerald-500 via-teal-500 to-emerald-600',
+        iconBg: 'bg-emerald-500/10 dark:bg-emerald-500/20 border-emerald-500/20 dark:border-emerald-500/30',
+        iconText: 'text-emerald-600 dark:text-emerald-400',
+        glow: 'group-hover:border-emerald-500/40 dark:group-hover:border-emerald-400/40',
+    },
+    {
+        bar: 'from-purple-500 via-violet-500 to-purple-600',
+        iconBg: 'bg-purple-500/10 dark:bg-purple-500/20 border-purple-500/20 dark:border-purple-500/30',
+        iconText: 'text-purple-600 dark:text-purple-400',
+        glow: 'group-hover:border-purple-500/40 dark:group-hover:border-purple-400/40',
+    },
+    {
+        bar: 'from-amber-500 via-orange-400 to-amber-600',
+        iconBg: 'bg-amber-500/10 dark:bg-amber-500/20 border-amber-500/20 dark:border-amber-500/30',
+        iconText: 'text-amber-600 dark:text-amber-400',
+        glow: 'group-hover:border-amber-500/40 dark:group-hover:border-amber-400/40',
+    },
+    {
+        bar: 'from-sky-500 via-cyan-500 to-blue-500',
+        iconBg: 'bg-sky-500/10 dark:bg-sky-500/20 border-sky-500/20 dark:border-sky-500/30',
+        iconText: 'text-sky-600 dark:text-sky-400',
+        glow: 'group-hover:border-sky-500/40 dark:group-hover:border-sky-400/40',
+    },
+    {
+        bar: 'from-rose-500 via-pink-500 to-rose-600',
+        iconBg: 'bg-rose-500/10 dark:bg-rose-500/20 border-rose-500/20 dark:border-rose-500/30',
+        iconText: 'text-rose-600 dark:text-rose-400',
+        glow: 'group-hover:border-rose-500/40 dark:group-hover:border-rose-400/40',
+    },
+]
+
+// Generate a consistent cohesive luxury color from a string
+function stringToColor(str: string): CategoryColorTheme {
     let hash = 0
     for (let i = 0; i < str.length; i++) {
         hash = str.charCodeAt(i) + ((hash << 5) - hash)
     }
-    const colors = [
-        { bg: 'bg-violet-50 dark:bg-violet-950/30', text: 'text-violet-600 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', dot: 'bg-violet-500' },
-        { bg: 'bg-blue-50 dark:bg-blue-950/30', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-200 dark:border-blue-800', dot: 'bg-blue-500' },
-        { bg: 'bg-emerald-50 dark:bg-emerald-950/30', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500' },
-        { bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-800', dot: 'bg-amber-500' },
-        { bg: 'bg-rose-50 dark:bg-rose-950/30', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-200 dark:border-rose-800', dot: 'bg-rose-500' },
-        { bg: 'bg-cyan-50 dark:bg-cyan-950/30', text: 'text-cyan-600 dark:text-cyan-400', border: 'border-cyan-200 dark:border-cyan-800', dot: 'bg-cyan-500' },
-        { bg: 'bg-orange-50 dark:bg-orange-950/30', text: 'text-orange-600 dark:text-orange-400', border: 'border-orange-200 dark:border-orange-800', dot: 'bg-orange-500' },
-        { bg: 'bg-pink-50 dark:bg-pink-950/30', text: 'text-pink-600 dark:text-pink-400', border: 'border-pink-200 dark:border-pink-800', dot: 'bg-pink-500' },
-        { bg: 'bg-indigo-50 dark:bg-indigo-950/30', text: 'text-indigo-600 dark:text-indigo-400', border: 'border-indigo-200 dark:border-indigo-800', dot: 'bg-indigo-500' },
-        { bg: 'bg-teal-50 dark:bg-teal-950/30', text: 'text-teal-600 dark:text-teal-400', border: 'border-teal-200 dark:border-teal-800', dot: 'bg-teal-500' },
-    ]
-    return colors[Math.abs(hash) % colors.length]
+    return CATEGORY_PALETTES[Math.abs(hash) % CATEGORY_PALETTES.length]
 }
 
 export function CategoryCard({
@@ -76,14 +110,14 @@ export function CategoryCard({
             whileHover={{ y: -3 }}
             transition={{ duration: 0.18 }}
             className={cn(
-                "group relative overflow-hidden rounded-2xl border bg-card transition-all duration-300 cursor-default",
+                "group relative overflow-hidden rounded-2xl border bg-card transition-all duration-300 cursor-default shadow-2xs",
                 selected
                     ? "border-primary shadow-lg shadow-primary/20 ring-2 ring-primary/20"
-                    : "border-border hover:border-primary/40 hover:shadow-md"
+                    : cn("border-border/70 hover:shadow-md", color.glow)
             )}
         >
             {/* Color accent top bar */}
-            <div className={cn("h-1.5 w-full", color.dot)} />
+            <div className={cn("h-1 w-full bg-gradient-to-r opacity-80 group-hover:opacity-100 transition-opacity", color.bar)} />
 
             {/* Selection Checkbox */}
             {onSelect && (
@@ -147,17 +181,17 @@ export function CategoryCard({
             <div className="p-5">
                 {/* Icon + Name */}
                 <div className="flex items-start gap-3 mb-3">
-                    <div className={cn("rounded-xl p-2.5 shrink-0", color.bg)}>
-                        <FolderOpen className={cn("h-5 w-5", color.text)} />
+                    <div className={cn("rounded-2xl p-2.5 shrink-0 border shadow-2xs transition-transform duration-200 group-hover:scale-105", color.iconBg)}>
+                        <FolderOpen className={cn("h-5 w-5", color.iconText)} />
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
                         <h3 className={cn(
-                            "font-semibold text-base leading-tight truncate",
+                            "font-bold text-base leading-tight truncate text-foreground",
                             !category.is_active && "text-muted-foreground"
                         )}>
                             {category.name}
                         </h3>
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
                             {category.description || 'Sin descripción'}
                         </p>
                     </div>
@@ -166,7 +200,7 @@ export function CategoryCard({
                 {/* Parent badge */}
                 {parentName && (
                     <div className="mb-3">
-                        <Badge variant="outline" className="text-xs bg-muted/50 border-border gap-1">
+                        <Badge variant="outline" className="text-xs bg-muted/50 border-border/80 gap-1 text-muted-foreground font-medium">
                             <ChevronRight className="h-2.5 w-2.5" />
                             {parentName}
                         </Badge>
@@ -174,23 +208,26 @@ export function CategoryCard({
                 )}
 
                 {/* Footer */}
-                <div className="flex items-center justify-between pt-3 border-t border-border/60">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Package className="h-3.5 w-3.5" />
-                        <span className="font-medium text-foreground">{productCount}</span>
-                        <span>productos</span>
+                <div className="flex items-center justify-between pt-3.5 border-t border-border/50">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg border border-border/40">
+                        <Package className="h-3.5 w-3.5 text-primary/70" />
+                        <span className="font-bold text-foreground tabular-nums">{productCount}</span>
+                        <span>{productCount === 1 ? 'producto' : 'productos'}</span>
                     </div>
 
                     <Badge
                         variant="outline"
                         className={cn(
-                            "text-xs px-2 py-0",
+                            "text-xs px-2.5 py-0.5 font-semibold transition-colors",
                             category.is_active
-                                ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400 dark:border-green-800"
-                                : "bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-900 dark:text-gray-500 dark:border-gray-700"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60"
+                                : "bg-muted text-muted-foreground border-border/80"
                         )}
                     >
-                        <span className={cn("mr-1 h-1.5 w-1.5 rounded-full inline-block", category.is_active ? "bg-green-500" : "bg-gray-400")} />
+                        <span className={cn(
+                            "mr-1.5 h-1.5 w-1.5 rounded-full inline-block",
+                            category.is_active ? "bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" : "bg-muted-foreground/50"
+                        )} />
                         {category.is_active ? 'Activa' : 'Inactiva'}
                     </Badge>
                 </div>

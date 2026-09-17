@@ -214,12 +214,14 @@ export function CategoryListView({
 
                             <TableCell>
                                 {category.parent_id && getCategoryName ? (
-                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300">
-                                        <ChevronRight className="h-3 w-3 mr-1" />
+                                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold gap-1">
+                                        <ChevronRight className="h-3 w-3" />
                                         {getCategoryName(category.parent_id)}
                                     </Badge>
                                 ) : (
-                                    <span className="text-muted-foreground text-sm">Raíz</span>
+                                    <span className="text-muted-foreground text-xs font-medium bg-muted/50 px-2 py-0.5 rounded-md border border-border/40">
+                                        Raíz
+                                    </span>
                                 )}
                             </TableCell>
 
@@ -227,19 +229,20 @@ export function CategoryListView({
                                 <Badge
                                     variant="outline"
                                     className={cn(
+                                        "text-xs px-2.5 py-0.5 font-semibold transition-colors",
                                         category.is_active
-                                            ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300"
-                                            : "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950 dark:text-gray-300"
+                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60"
+                                            : "bg-muted text-muted-foreground border-border/80"
                                     )}
                                 >
                                     {category.is_active ? (
                                         <>
-                                            <Eye className="h-3 w-3 mr-1" />
+                                            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" />
                                             Activa
                                         </>
                                     ) : (
                                         <>
-                                            <EyeOff className="h-3 w-3 mr-1" />
+                                            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
                                             Inactiva
                                         </>
                                     )}

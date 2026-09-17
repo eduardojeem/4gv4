@@ -1,4 +1,6 @@
 import { stageToStatus } from '@/lib/repairs/mapping'
+import { normalizeOrderStatus } from '@/lib/orders/flow'
+import { normalizePaymentStatus } from '@/lib/orders/payment-flow'
 
 /**
  * De donde viene la actividad de una organizacion, y cuanto pago por el
@@ -55,8 +57,10 @@ export function summarizeOnlineOrders(orders: OrderLike[]): OnlineSummary {
   let lastOrderAt: string | null = null
 
   for (const order of orders) {
-    const estado = String(order.status ?? '').toUpperCase()
-    const pago = String(order.payment_status ?? '').toUpperCase()
+    // Los pedidos se guardan en castellano («ENTREGADO», «PAGADO»): comparar
+    // contra el valor en ingles dejaba la facturacion online en cero.
+    const estado = order.status ? normalizeOrderStatus(order.status) : ''
+    const pago = order.payment_status ? normalizePaymentStatus(order.payment_status) : ''
 
     // `PARTIAL` no se suma: un pedido cobrado a medias no facturo su total, y
     // sumarlo entero inflaria la facturacion online.

@@ -32,7 +32,9 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Hiciste una compra? Rastreá el estado de tu pedido',
       },
       hero_stats: {
-        enabled: true,
+        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
+        // venta. Se muestran cuando la tienda carga los suyos y las activa.
+        enabled: false,
         repairs: '5.000+',
         satisfaction: '99%',
         avgTime: '24-48h',
@@ -64,7 +66,9 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Hiciste una compra? Rastreá tu pedido',
       },
       hero_stats: {
-        enabled: true,
+        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
+        // venta. Se muestran cuando la tienda carga los suyos y las activa.
+        enabled: false,
         repairs: '10K+',
         satisfaction: '99.5%',
         avgTime: 'En el día',
@@ -96,7 +100,9 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Hiciste un pedido? Consultá el estado de tu delivery',
       },
       hero_stats: {
-        enabled: true,
+        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
+        // venta. Se muestran cuando la tienda carga los suyos y las activa.
+        enabled: false,
         repairs: '15K+',
         satisfaction: '4.9★',
         avgTime: '30-45 min',
@@ -128,7 +134,9 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Tenés un pedido? Rastreá el estado de tu despacho',
       },
       hero_stats: {
-        enabled: true,
+        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
+        // venta. Se muestran cuando la tienda carga los suyos y las activa.
+        enabled: false,
         repairs: '8.000+',
         satisfaction: '98%',
         avgTime: '24h',
@@ -160,7 +168,9 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Tenés una reparación? Rastreá tu equipo',
       },
       hero_stats: {
-        enabled: true,
+        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
+        // venta. Se muestran cuando la tienda carga los suyos y las activa.
+        enabled: false,
         repairs: '10K+',
         satisfaction: '99%',
         avgTime: '24-48h',
@@ -192,7 +202,9 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Tenés un servicio activo? Rastreá tu orden',
       },
       hero_stats: {
-        enabled: true,
+        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
+        // venta. Se muestran cuando la tienda carga los suyos y las activa.
+        enabled: false,
         repairs: '1.500+',
         satisfaction: '100%',
         avgTime: 'Inmediato',
@@ -224,7 +236,9 @@ export function getWebsiteDefaultsForVertical(
       trackRepairText: '¿Hiciste una compra? Rastreá el estado de tu pedido',
     },
     hero_stats: {
-      enabled: true,
+      // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
+      // venta. Se muestran cuando la tienda carga los suyos y las activa.
+      enabled: false,
       repairs: '5.000+',
       satisfaction: '99%',
       avgTime: '24h',
@@ -269,7 +283,9 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       trackRepairText: '¿Hiciste una compra? Rastreá el estado de tu pedido',
     },
     hero_stats: {
-      enabled: true,
+      // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
+      // venta. Se muestran cuando la tienda carga los suyos y las activa.
+      enabled: false,
       repairs: '5.000+',
       satisfaction: '99%',
       avgTime: '24h'
@@ -340,19 +356,13 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       ],
     },
     brands_section: {
-      enabled: true,
-      title: 'Las mejores marcas para toda la familia',
-      subtitle: 'Encontrá indumentaria y calzado original con garantía y envío rápido',
-      items: [
-        { id: 'nike', name: 'Nike', active: true },
-        { id: 'adidas', name: 'Adidas', active: true },
-        { id: 'puma', name: 'Puma', active: true },
-        { id: 'under-armour', name: 'Under Armour', active: true },
-        { id: 'reebok', name: 'Reebok', active: true },
-        { id: 'new-balance', name: 'New Balance', active: true },
-        { id: 'zara', name: 'Zara', active: true },
-        { id: 'vans', name: 'Vans', active: true },
-      ],
+      enabled: false,
+      title: 'Marcas destacadas',
+      subtitle: 'Encontrá productos originales con garantía y respaldo de marca',
+      showOnHome: false,
+      showOnProducts: false,
+      showOnOffers: false,
+      items: [],
     },
     product_credit_defaults: {
       enabled: true,

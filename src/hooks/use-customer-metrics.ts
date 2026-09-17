@@ -6,6 +6,7 @@ import type { Customer } from '@/hooks/use-customer-state'
 import type { CustomerSpendMetrics } from '@/lib/customers/customer-spend'
 import { fetchCustomerSpend } from '@/lib/customers/customer-spend-client'
 import { isCountableSale } from '@/lib/customers/customer-spend'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 /** Se deriva del tipo de la agregacion para que no puedan divergir. */
 export type CustomerMetrics = CustomerSpendMetrics
@@ -49,6 +50,8 @@ const EMPTY_METRICS: Record<string, CustomerMetrics> = {}
 
 // Métricas agregadas para AnalyticsDashboard (compatibles)
 export function useCustomerMetrics(customers: Customer[], options?: UseCustomerMetricsOptions) {
+  const activeOrganization = useOptionalActiveOrganization()
+  const organizationId = activeOrganization?.organization?.id ?? null
   const timeRange = options?.timeRange || '6months'
   const includeInactive = options?.includeInactive ?? true
   const segmentBy = options?.segmentBy || 'segment'
@@ -82,6 +85,10 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
   useEffect(() => {
     let cancelled = false
     const fetchSales = async () => {
+      if (!organizationId) {
+        setRealMonthly(null)
+        return
+      }
       try {
         const start = new Date()
         start.setMonth(start.getMonth() - (months - 1))
@@ -92,6 +99,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
         const { data, error } = await supabase
           .from('sales')
           .select('total_amount, created_at, status')
+          .eq('organization_id', organizationId)
           .gte('created_at', start.toISOString())
 
         if (cancelled) return
@@ -122,7 +130,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
     return () => {
       cancelled = true
     }
-  }, [months])
+  }, [months, organizationId])
 
   const monthlyData = useMemo(() => {
     const now = new Date()

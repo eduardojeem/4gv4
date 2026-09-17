@@ -11,6 +11,7 @@ import {
   ArrowRight, Lightbulb, ShieldCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isCustomHeroTitle } from '@/lib/website/template-hero-titles'
 
 interface SetupGuideProps {
   activeTab: string
@@ -75,7 +76,7 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
       label: 'Portada (Hero)',
       icon: Sparkles,
       description: 'Título principal y garantías de confianza',
-      isCompleted: !!(heroContent?.title?.trim() && heroContent.title !== 'Reparación profesional para tu equipo'),
+      isCompleted: isCustomHeroTitle(heroContent?.title),
       tip: 'Personaliza el mensaje principal del banner para llamar la atención del cliente al entrar al sitio.',
     },
     {

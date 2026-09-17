@@ -51,7 +51,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Customer } from '@/hooks/use-customer-state'
-import { useCustomerSalesMetricsMap, CustomerMetrics } from '@/hooks/use-customer-metrics'
+import type { CustomerMetrics } from '@/hooks/use-customer-metrics'
 import { StatusBadge, StatusToggle, BulkStatusSelector } from '@/components/ui/StatusBadge'
 import { formatters } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
@@ -186,7 +186,21 @@ export function CustomerListView({
     return filtered.sort((a, b) => compareCustomers(a, b, sortField, sortOrder))
   }, [customers, searchTerm, sortField, sortOrder, isControlled])
 
-  const metricsMap = useCustomerSalesMetricsMap(processedCustomers.map(c => c.id))
+  // `useCustomerState` ya sincroniza estos importes con `/api/customers/spend`.
+  // Volver a pedirlos por cada página duplicaba red, memoria y renders.
+  const metricsMap = useMemo<Record<string, CustomerMetrics>>(() => Object.fromEntries(
+    processedCustomers.map((customer) => [customer.id, {
+      count: (customer.total_purchases || 0) + (customer.total_repairs || 0),
+      purchaseCount: customer.total_purchases || 0,
+      repairCount: customer.total_repairs || 0,
+      total: customer.lifetime_value || 0,
+      lastAmount: customer.last_purchase_amount || 0,
+      lastDate: customer.last_activity || null,
+      purchaseTotal: customer.lifetime_value || 0,
+      repairTotal: 0,
+      yearTotal: customer.total_spent_this_year || 0,
+    }]),
+  ), [processedCustomers])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -203,10 +217,11 @@ export function CustomerListView({
   return (
     <div className="space-y-4">
       {/* Header con controles */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 flex-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           {/* Búsqueda */}
-          <div className="relative flex-1 max-w-sm">
+          {!isControlled && (
+          <div className="relative max-w-sm flex-1">
             <button
               type="button"
               onClick={() => submitSearch(draft)}
@@ -235,6 +250,7 @@ export function CustomerListView({
               className="pl-10"
             />
           </div>
+          )}
 
           {/* Contador de resultados */}
           <div className="text-sm text-muted-foreground">
@@ -254,6 +270,7 @@ export function CustomerListView({
               variant={effectiveViewMode === 'table' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => onViewModeChange('table')}
+              aria-label="Vista de tabla"
               className="h-8 px-3"
             >
               <List className="h-4 w-4" />
@@ -262,6 +279,7 @@ export function CustomerListView({
               variant={effectiveViewMode === 'grid' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => onViewModeChange('grid')}
+              aria-label="Vista de tarjetas"
               className="h-8 px-3"
             >
               <Grid3X3 className="h-4 w-4" />
@@ -318,24 +336,40 @@ export function CustomerListView({
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.2 }}
           >
-            <TableView
-              customers={processedCustomers}
-              selectedCustomers={selectedCustomers}
-              allSelected={allSelected}
-              someSelected={someSelected}
-              sortField={sortField}
-              sortOrder={sortOrder}
-              onSort={handleSort}
-              onSelectAll={allSelected ? onClearSelection : onSelectAll}
-              onCustomerToggle={onCustomerToggle}
-              onViewCustomer={onViewCustomer}
-              onEditCustomer={onEditCustomer}
-              onDeleteCustomer={onDeleteCustomer}
-              onToggleCustomerStatus={onToggleCustomerStatus}
-              metricsMap={metricsMap}
-              creditSummaries={creditSummaries}
-              compact={compact}
-            />
+            <div className="md:hidden">
+              <GridView
+                customers={processedCustomers}
+                selectedCustomers={selectedCustomers}
+                onCustomerToggle={onCustomerToggle}
+                onViewCustomer={onViewCustomer}
+                onEditCustomer={onEditCustomer}
+                onDeleteCustomer={onDeleteCustomer}
+                onToggleCustomerStatus={onToggleCustomerStatus}
+                metricsMap={metricsMap}
+                creditSummaries={creditSummaries}
+                compact={false}
+              />
+            </div>
+            <div className="hidden md:block">
+              <TableView
+                customers={processedCustomers}
+                selectedCustomers={selectedCustomers}
+                allSelected={allSelected}
+                someSelected={someSelected}
+                sortField={sortField}
+                sortOrder={sortOrder}
+                onSort={handleSort}
+                onSelectAll={allSelected ? onClearSelection : onSelectAll}
+                onCustomerToggle={onCustomerToggle}
+                onViewCustomer={onViewCustomer}
+                onEditCustomer={onEditCustomer}
+                onDeleteCustomer={onDeleteCustomer}
+                onToggleCustomerStatus={onToggleCustomerStatus}
+                metricsMap={metricsMap}
+                creditSummaries={creditSummaries}
+                compact={compact}
+              />
+            </div>
           </motion.div>
         ) : (
           <motion.div
@@ -474,6 +508,7 @@ function TableView({
                   <Checkbox
                     checked={allSelected || someSelected}
                     onCheckedChange={onSelectAll}
+                    aria-label="Seleccionar todos los clientes"
                     className="border-slate-300 dark:border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                   />
                 </TableHead>
@@ -562,6 +597,7 @@ function TableView({
                       <Checkbox
                         checked={selectedCustomers.includes(customer.id)}
                         onCheckedChange={() => onCustomerToggle(customer.id)}
+                        aria-label={`Seleccionar a ${customer.name}`}
                         className="border-slate-300 dark:border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                       />
                     </TableCell>
@@ -1110,8 +1146,9 @@ function CustomerActions({
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-100 dark:hover:bg-gray-800"
+          className="h-8 w-8 p-0 text-slate-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
           onClick={(e) => e.stopPropagation()}
+          aria-label={`Acciones de ${customer.name}`}
         >
           <MoreVertical className="h-4 w-4" />
         </Button>

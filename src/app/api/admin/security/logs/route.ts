@@ -21,6 +21,7 @@ type AuditLogRow = {
   resource: string | null
   resource_id: string | null
   details: unknown
+  old_values?: unknown
   new_values: unknown
   ip_address: string | null
   user_agent: string | null
@@ -42,6 +43,8 @@ type SecurityLog = {
   resource?: string
   resource_id?: string
   user_agent?: string
+  old_values?: unknown
+  new_values?: unknown
 }
 
 
@@ -55,7 +58,7 @@ const EXPORT_MAX_ROWS = 5000
 /** Acciones que cuentan como intento fallido en la tarjeta de la pantalla. */
 const FAILED_ATTEMPT_ACTIONS = ['login_failed', 'permission_denied', 'unauthorized_admin_access_attempt']
 
-const SELECT_COLUMNS_WITH_ORG = 'id, user_id, action, resource, resource_id, details, new_values, ip_address, user_agent, created_at, severity, organization_id'
+const SELECT_COLUMNS_WITH_ORG = 'id, user_id, action, resource, resource_id, details, old_values, new_values, ip_address, user_agent, created_at, severity, organization_id'
 
 function timeRangeToDate(value: string | null) {
   const now = Date.now()
@@ -101,12 +104,37 @@ function stringifyDetails(value: unknown) {
   return pairs.length > 0 ? pairs.join(' - ') : undefined
 }
 
+function extractDiffSummary(oldValues: unknown, newValues: unknown): string[] {
+  if (!newValues || typeof newValues !== 'object') return []
+  const oldRec = (oldValues && typeof oldValues === 'object') ? (oldValues as Record<string, unknown>) : {}
+  const newRec = newValues as Record<string, unknown>
+  const diffs: string[] = []
+
+  const ignoredKeys = new Set(['updated_at', 'created_at', 'updated_by', 'organization_id', 'id'])
+
+  for (const key of Object.keys(newRec)) {
+    if (ignoredKeys.has(key)) continue
+    const oldVal = oldRec[key]
+    const newVal = newRec[key]
+    if (oldVal !== undefined && oldVal !== newVal) {
+      diffs.push(`${key}: "${String(oldVal)}" ➔ "${String(newVal)}"`)
+    } else if (oldVal === undefined && newVal !== undefined) {
+      diffs.push(`${key}: "${String(newVal)}"`)
+    }
+  }
+
+  return diffs
+}
+
 function buildDetails(row: AuditLogRow) {
-  const detail = stringifyDetails(row.details) || stringifyDetails(row.new_values)
+  const diffs = extractDiffSummary(row.old_values, row.new_values)
+  const diffSummary = diffs.length > 0 ? `Cambios: ${diffs.join(', ')}` : undefined
+  const detail = stringifyDetails(row.details)
   const resource = row.resource || 'sistema'
   const suffix = row.resource_id ? ` (${row.resource_id})` : ''
 
-  return detail ? `${resource}${suffix} - ${detail}` : `${resource}${suffix}`
+  const parts = [detail, diffSummary].filter(Boolean)
+  return parts.length > 0 ? `${resource}${suffix} - ${parts.join(' | ')}` : `${resource}${suffix}`
 }
 
 /**
@@ -221,6 +249,8 @@ function mapLog(row: AuditLogRow, profilesById: Map<string, ProfileData>): Secur
     resource: row.resource || undefined,
     resource_id: row.resource_id || undefined,
     user_agent: row.user_agent || undefined,
+    old_values: row.old_values ?? undefined,
+    new_values: row.new_values ?? undefined,
   }
 }
 
@@ -359,20 +389,77 @@ export async function GET(request: NextRequest) {
   const logs = scopedRows.map((row) => mapLog(row, profilesById))
   const totalCount = response.count ?? logs.length
 
+  // Conteo de actividades estrictamente dentro de esta organización para auditar miembros y clientes
+  const userActivityMap = new Map<string, { count: number; lastActive: string | null }>()
+  type CustomerLookup = {
+    id: string
+    name: string
+    email?: string | null
+    phone?: string | null
+    profile_id?: string | null
+    customer_type?: string | null
+    created_at?: string | null
+  }
+  const customerByProfileId = new Map<string, CustomerLookup>()
+  const customerByEmail = new Map<string, CustomerLookup>()
+
+  if (organizationId) {
+    try {
+      const { data: activityRows } = await admin
+        .from('audit_log')
+        .select('user_id, created_at')
+        .eq('organization_id', organizationId)
+        .not('user_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1000)
+
+      for (const row of activityRows || []) {
+        if (!row.user_id) continue
+        const current = userActivityMap.get(row.user_id)
+        if (!current) {
+          userActivityMap.set(row.user_id, { count: 1, lastActive: row.created_at })
+        } else {
+          userActivityMap.set(row.user_id, { count: current.count + 1, lastActive: current.lastActive })
+        }
+      }
+
+      const { data: custRows } = await admin
+        .from('customers')
+        .select('id, name, email, phone, profile_id, customer_type, created_at')
+        .eq('organization_id', organizationId)
+        .limit(2000)
+
+      for (const c of (custRows || []) as CustomerLookup[]) {
+        if (c.profile_id) customerByProfileId.set(c.profile_id, c)
+        if (c.email) customerByEmail.set(c.email.toLowerCase().trim(), c)
+      }
+    } catch {
+      // Si la agregación de actividad o clientes falla, no bloquea el endpoint
+    }
+  }
+
   const users = organizationMembers
     ? organizationMembers
         .map((m) => {
           const prof = profilesById.get(m.user_id)
-          const name = prof?.full_name || prof?.email || 'Usuario desconocido'
+          const cust = customerByProfileId.get(m.user_id) || (prof?.email ? customerByEmail.get(prof.email.toLowerCase().trim()) : undefined)
+          const name = cust?.name || prof?.full_name || prof?.email || 'Usuario desconocido'
           const role = m.role || prof?.role || 'staff'
           const status = m.status || prof?.status || 'active'
+          const act = userActivityMap.get(m.user_id)
           return {
             id: m.user_id,
             name,
-            email: prof?.email || undefined,
+            email: prof?.email || cust?.email || undefined,
+            phone: cust?.phone || undefined,
+            customerId: cust?.id || undefined,
+            customerType: cust?.customer_type || undefined,
+            customerCreatedAt: cust?.created_at || undefined,
             role,
             status,
             avatarUrl: prof?.avatar_url || undefined,
+            activityCount: act?.count ?? 0,
+            lastActiveAt: act?.lastActive ?? null,
           }
         })
         .sort((a, b) => a.name.localeCompare(b.name))
@@ -382,16 +469,24 @@ export async function GET(request: NextRequest) {
             .filter((log) => log.user_id)
             .map((log) => {
               const prof = log.user_id ? profilesById.get(log.user_id) : undefined
-              const name = prof?.full_name || log.user
+              const cust = log.user_id ? (customerByProfileId.get(log.user_id) || (prof?.email ? customerByEmail.get(prof.email.toLowerCase().trim()) : undefined)) : undefined
+              const name = cust?.name || prof?.full_name || log.user
+              const act = log.user_id ? userActivityMap.get(log.user_id) : undefined
               return [
                 log.user_id as string,
                 {
                   id: log.user_id as string,
                   name,
-                  email: prof?.email || undefined,
+                  email: prof?.email || cust?.email || undefined,
+                  phone: cust?.phone || undefined,
+                  customerId: cust?.id || undefined,
+                  customerType: cust?.customer_type || undefined,
+                  customerCreatedAt: cust?.created_at || undefined,
                   role: prof?.role || 'staff',
                   status: prof?.status || 'active',
                   avatarUrl: prof?.avatar_url || undefined,
+                  activityCount: act?.count ?? 0,
+                  lastActiveAt: act?.lastActive ?? null,
                 },
               ]
             })

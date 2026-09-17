@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import Link from 'next/link'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { SectionCard } from '@/components/admin/website/SectionCard'
@@ -25,17 +26,35 @@ import {
   Image as ImageIcon,
   X,
   Link as LinkIcon,
+  Building2,
+  ExternalLink,
+  RefreshCw,
+  Globe,
+  Check,
+  ShoppingBag,
 } from 'lucide-react'
 import type { BrandsSectionSettings, BrandItemSettings } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { POPULAR_PRESET_BRANDS, getBrandLogoOrFallback } from '@/lib/website/brand-catalog'
 import { cn } from '@/lib/utils'
 
+interface CatalogBrandInfo {
+  id: string
+  name: string
+  logoUrl?: string
+  productCount: number
+  isFromBrandsTable: boolean
+}
+
 export function BrandsSectionEditor() {
   const { settings, isSaving, updateSetting } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults().brands_section!
   const [draft, setDraft] = useState<BrandsSectionSettings | null>(null)
-  
+
+  // Estado para marcas detectadas en la tienda y catálogo
+  const [catalogBrands, setCatalogBrands] = useState<CatalogBrandInfo[]>([])
+  const [isLoadingCatalogBrands, setIsLoadingCatalogBrands] = useState(true)
+
   // Estado para nueva marca personalizada
   const [customBrandName, setCustomBrandName] = useState('')
   const [customBrandLogoUrl, setCustomBrandLogoUrl] = useState('')
@@ -56,6 +75,72 @@ export function BrandsSectionEditor() {
     dirtyContext?.setDirty(hasChanges)
     return () => dirtyContext?.setDirty(false)
   }, [dirtyContext, hasChanges])
+
+  // Cargar marcas registradas en /api/brands y marcas presentes en los productos
+  const loadStoreBrands = useCallback(async () => {
+    setIsLoadingCatalogBrands(true)
+    try {
+      const [brandsRes, productsRes] = await Promise.allSettled([
+        fetch('/api/brands?limit=100').then((r) => (r.ok ? r.json() : null)),
+        fetch('/api/products?per_page=100').then((r) => (r.ok ? r.json() : null)),
+      ])
+
+      const map = new Map<string, CatalogBrandInfo>()
+
+      // 1. Marcas registradas en la sección oficial de marcas (/dashboard/brands)
+      if (
+        brandsRes.status === 'fulfilled' &&
+        brandsRes.value?.success &&
+        Array.isArray(brandsRes.value.data)
+      ) {
+        for (const b of brandsRes.value.data) {
+          if (!b?.name?.trim()) continue
+          const key = b.name.trim().toLowerCase()
+          map.set(key, {
+            id: b.id || key.replace(/\s+/g, '-'),
+            name: b.name.trim(),
+            logoUrl: b.logo_url || undefined,
+            productCount: 0,
+            isFromBrandsTable: true,
+          })
+        }
+      }
+
+      // 2. Marcas extraídas de productos en inventario
+      if (
+        productsRes.status === 'fulfilled' &&
+        productsRes.value?.success &&
+        Array.isArray(productsRes.value.data?.products)
+      ) {
+        for (const p of productsRes.value.data.products) {
+          const brandName = p?.brand?.trim()
+          if (!brandName) continue
+          const key = brandName.toLowerCase()
+          const existing = map.get(key)
+          if (existing) {
+            existing.productCount += 1
+          } else {
+            map.set(key, {
+              id: key.replace(/\s+/g, '-'),
+              name: brandName,
+              productCount: 1,
+              isFromBrandsTable: false,
+            })
+          }
+        }
+      }
+
+      setCatalogBrands(Array.from(map.values()))
+    } catch (err) {
+      console.error('Error al cargar marcas de la tienda:', err)
+    } finally {
+      setIsLoadingCatalogBrands(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadStoreBrands()
+  }, [loadStoreBrands])
 
   const patch = <K extends keyof BrandsSectionSettings>(key: K, value: BrandsSectionSettings[K]) => {
     setDraft((prev) => ({ ...(prev ?? current), [key]: value }))
@@ -139,7 +224,52 @@ export function BrandsSectionEditor() {
     }
   }
 
-  const addPresetBrand = (preset: typeof POPULAR_PRESET_BRANDS[number]) => {
+  const addCatalogBrand = (brandInfo: CatalogBrandInfo) => {
+    const exists = current.items.some(
+      (item) =>
+        item.name.toLowerCase() === brandInfo.name.toLowerCase() || item.id === brandInfo.id
+    )
+    if (exists) {
+      toast.info(`La marca ${brandInfo.name} ya está en la marquesina`)
+      return
+    }
+    const newItem: BrandItemSettings = {
+      id: brandInfo.id,
+      name: brandInfo.name,
+      active: true,
+      imageUrl: brandInfo.logoUrl || undefined,
+    }
+    patch('items', [...current.items, newItem])
+    toast.success(`Marca ${brandInfo.name} sumada a la marquesina`)
+  }
+
+  const syncAllCatalogBrands = () => {
+    if (catalogBrands.length === 0) {
+      toast.info('No se encontraron marcas en el catálogo o la sección de marcas')
+      return
+    }
+    const existingNames = new Set(current.items.map((i) => i.name.toLowerCase()))
+    const toAdd: BrandItemSettings[] = []
+    for (const b of catalogBrands) {
+      if (!existingNames.has(b.name.toLowerCase())) {
+        toAdd.push({
+          id: b.id,
+          name: b.name,
+          active: true,
+          imageUrl: b.logoUrl || undefined,
+        })
+        existingNames.add(b.name.toLowerCase())
+      }
+    }
+    if (toAdd.length === 0) {
+      toast.info('Todas las marcas de tu catálogo ya están en la marquesina')
+      return
+    }
+    patch('items', [...current.items, ...toAdd])
+    toast.success(`Se agregaron ${toAdd.length} marca(s) a la marquesina`)
+  }
+
+  const addPresetBrand = (preset: (typeof POPULAR_PRESET_BRANDS)[number]) => {
     const exists = current.items.some(
       (item) => item.name.toLowerCase() === preset.name.toLowerCase() || item.id === preset.id
     )
@@ -213,15 +343,15 @@ export function BrandsSectionEditor() {
       {/* ── Tarjeta de Control Principal ── */}
       <SectionCard
         title="Marquesina de Marcas Destacadas"
-        description="Seleccioná qué marcas exhibir en la portada de tu tienda con movimiento animado continuo, agregá tus marcas y subí logos personalizados."
+        description="Seleccioná qué marcas exhibir en tu tienda con movimiento continuo, sincronizalas con tus marcas del catálogo y configuralas para tus secciones públicas."
         icon={Tag}
       >
         <div className="space-y-6">
-          {/* Switch de Visibilidad General */}
+          {/* Switch de Activación General */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border bg-muted/20">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm">Mostrar sección en la tienda</span>
+                <span className="font-semibold text-sm">Habilitar marquesina de marcas</span>
                 <span
                   className={cn(
                     'px-2 py-0.5 text-[11px] font-bold rounded-full',
@@ -230,17 +360,17 @@ export function BrandsSectionEditor() {
                       : 'bg-muted text-muted-foreground border'
                   )}
                 >
-                  {current.enabled ? 'Visible al público' : 'Oculta'}
+                  {current.enabled ? 'Activa' : 'Desactivada'}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Al desactivarla, la cinta de logotipos no se mostrará a los clientes en la página de inicio.
+                Control maestro para habilitar o deshabilitar la cinta continua de logotipos en la tienda.
               </p>
             </div>
             <Switch
               checked={current.enabled}
               onCheckedChange={(val) => patch('enabled', val)}
-              aria-label="Activar sección de marcas"
+              aria-label="Activar marquesina de marcas"
             />
           </div>
 
@@ -274,10 +404,210 @@ export function BrandsSectionEditor() {
         </div>
       </SectionCard>
 
-      {/* ── Marcas Populares Sugeridas ── */}
+      {/* ── Visibilidad en Secciones Públicas ── */}
       <SectionCard
-        title="Catálogo de Marcas Disponibles"
-        description="Hacé clic en una marca para sumarla directamente a la marquesina de tu tienda."
+        title="Visibilidad en Secciones Públicas"
+        description="Elegí en qué páginas públicas de la tienda querés mostrar la cinta continua de marcas."
+        icon={Globe}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          {/* Inicio / Portada */}
+          <div className={cn(
+            'p-4 rounded-xl border transition-all space-y-3',
+            Boolean(current.showOnHome)
+              ? 'border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/10'
+              : 'border-border/60 bg-muted/10 opacity-70'
+          )}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground">Página de Inicio</span>
+              <Switch
+                checked={Boolean(current.showOnHome)}
+                onCheckedChange={(val) => patch('showOnHome', val)}
+                aria-label="Mostrar marquesina en inicio"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Exhibe la marquesina animada en la portada principal (/inicio), sobre los productos destacados.
+            </p>
+          </div>
+
+          {/* Catálogo de Productos */}
+          <div className={cn(
+            'p-4 rounded-xl border transition-all space-y-3',
+            current.showOnProducts
+              ? 'border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/10'
+              : 'border-border/60 bg-muted/10 opacity-70'
+          )}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground">Catálogo de Productos</span>
+              <Switch
+                checked={Boolean(current.showOnProducts)}
+                onCheckedChange={(val) => patch('showOnProducts', val)}
+                aria-label="Mostrar marquesina en catálogo de productos"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Muestra la cinta de marcas en la cabecera del catálogo (/productos) para filtrar rápido con 1 clic.
+            </p>
+          </div>
+
+          {/* Página de Ofertas */}
+          <div className={cn(
+            'p-4 rounded-xl border transition-all space-y-3',
+            current.showOnOffers
+              ? 'border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/10'
+              : 'border-border/60 bg-muted/10 opacity-70'
+          )}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground">Página de Ofertas</span>
+              <Switch
+                checked={Boolean(current.showOnOffers)}
+                onCheckedChange={(val) => patch('showOnOffers', val)}
+                aria-label="Mostrar marquesina en ofertas"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Exhibe las marcas en la sección de descuentos (/ofertas) para promociones por fabricante.
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* ── Relación con la Sección de Marcas y Catálogo de Productos ── */}
+      <SectionCard
+        title="Marcas de tu Tienda y Catálogo"
+        description="Marcas registradas en tu sección de Marcas (/dashboard/brands) y asociadas a tus productos. Podés sumarlas a la marquesina o sincronizarlas todas con 1 clic."
+        icon={Building2}
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-muted/20 border border-border/70">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-semibold text-foreground">
+                {isLoadingCatalogBrands
+                  ? 'Detectando marcas de tus productos y tienda...'
+                  : `Detectadas: ${catalogBrands.length} marca(s) en tu inventario y sección de marcas`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={loadStoreBrands}
+                disabled={isLoadingCatalogBrands}
+                className="h-8 text-xs gap-1.5"
+                title="Volver a escanear marcas"
+              >
+                <RefreshCw className={cn('h-3.5 w-3.5', isLoadingCatalogBrands && 'animate-spin')} />
+                Actualizar
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={syncAllCatalogBrands}
+                disabled={isLoadingCatalogBrands || catalogBrands.length === 0}
+                className="h-8 text-xs font-semibold gap-1.5"
+              >
+                <Check className="h-3.5 w-3.5 text-emerald-600" />
+                Sincronizar todas a la marquesina
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                asChild
+                className="h-8 text-xs gap-1.5 text-primary hover:text-primary"
+              >
+                <Link href="/dashboard/brands" target="_blank" rel="noopener noreferrer">
+                  <span>Ir a Gestión de Marcas</span>
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          {isLoadingCatalogBrands ? (
+            <div className="flex items-center justify-center p-6 text-xs text-muted-foreground gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              Cargando marcas de tu catálogo...
+            </div>
+          ) : catalogBrands.length === 0 ? (
+            <div className="p-4 rounded-xl border border-dashed text-center bg-muted/10 space-y-1">
+              <p className="text-xs font-semibold text-muted-foreground">
+                Aún no tenés marcas creadas en la sección de marcas ni asociadas a productos
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Podés crearlas en{' '}
+                <Link href="/dashboard/brands" className="text-primary underline font-medium">
+                  Catálogo &gt; Marcas
+                </Link>{' '}
+                o agregarlas manualmente abajo.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2.5">
+              {catalogBrands.map((b) => {
+                const alreadyInMarquee = current.items.some(
+                  (item) => item.name.toLowerCase() === b.name.toLowerCase() || item.id === b.id
+                )
+
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => addCatalogBrand(b)}
+                    disabled={alreadyInMarquee}
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all text-left',
+                      alreadyInMarquee
+                        ? 'bg-muted/40 text-muted-foreground border-border/40 cursor-not-allowed opacity-60'
+                        : 'bg-card hover:bg-primary/5 hover:border-primary text-foreground shadow-2xs cursor-pointer active:scale-95'
+                    )}
+                  >
+                    {b.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={b.logoUrl}
+                        alt={b.name}
+                        className="h-4 w-6 object-contain rounded-xs"
+                      />
+                    ) : (
+                      <span className="h-4 w-auto flex items-center text-foreground font-bold">
+                        {getBrandLogoOrFallback(b.name) || (
+                          <span className="text-[10px] uppercase font-bold tracking-tight">
+                            {b.name.slice(0, 2)}
+                          </span>
+                        )}
+                      </span>
+                    )}
+
+                    <span className="font-semibold">{b.name}</span>
+
+                    {b.productCount > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-primary/10 text-primary font-bold">
+                        {b.productCount} {b.productCount === 1 ? 'prod.' : 'prods.'}
+                      </span>
+                    )}
+
+                    {alreadyInMarquee ? (
+                      <span className="text-[10px] text-emerald-600 font-bold ml-1">✓ en marquesina</span>
+                    ) : (
+                      <Plus className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </SectionCard>
+
+      {/* ── Marcas Populares y Personalizadas ── */}
+      <SectionCard
+        title="Otras Marcas Populares y Personalizadas"
+        description="Sumá marcas comerciales reconocidas o agregá cualquier otra marca con su propio logo."
         icon={Sparkles}
       >
         <div className="flex flex-wrap gap-2.5">
@@ -406,7 +736,7 @@ export function BrandsSectionEditor() {
         </div>
       </SectionCard>
 
-      {/* ── Lista de Marcas Configuradas ── */}
+      {/* ── Lista de Marcas Configuradas en la Marquesina ── */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -429,9 +759,9 @@ export function BrandsSectionEditor() {
 
         {current.items.length === 0 ? (
           <div className="rounded-xl border border-dashed p-8 text-center bg-muted/10">
-            <p className="text-sm font-semibold text-muted-foreground">No tenés ninguna marca agregada</p>
+            <p className="text-sm font-semibold text-muted-foreground">No tenés ninguna marca en la marquesina</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Elegí alguna de las marcas populares sugeridas arriba o ingresá una marca personalizada.
+              Podés sincronizar las marcas de tu tienda arriba o sumar marcas populares.
             </p>
           </div>
         ) : (
@@ -448,153 +778,127 @@ export function BrandsSectionEditor() {
                     'p-3.5 rounded-xl border bg-card shadow-2xs transition-all space-y-3',
                     item.active
                       ? 'border-border/80'
-                      : 'border-border/40 bg-muted/20 opacity-75'
+                      : 'border-border/40 opacity-60 bg-muted/20'
                   )}
                 >
+                  {/* Fila superior: Logo, Nombre, Switch de Estado, y Botones */}
                   <div className="flex items-center justify-between gap-3">
-                    {/* Logotipo y Nombre */}
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 p-1 text-foreground overflow-hidden">
+                      {/* Logo Preview Container */}
+                      <div className="h-10 w-14 shrink-0 rounded-lg border border-border/70 bg-background/80 flex items-center justify-center p-1.5 shadow-2xs">
                         {hasCustomImage ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={item.imageUrl}
                             alt={item.name}
-                            className="max-h-8 max-w-full object-contain"
+                            className="max-h-7 max-w-full object-contain"
+                            onError={() => {
+                              toast.error(`No se pudo cargar el logo de ${item.name}`)
+                            }}
                           />
-                        ) : presetLogo ? (
-                          <div className="max-h-6 max-w-full flex items-center justify-center">
-                            {presetLogo}
-                          </div>
                         ) : (
-                          <span className="font-bold text-[11px] uppercase tracking-tighter truncate">
-                            {item.name.slice(0, 4)}
+                          <span className="h-5 w-auto flex items-center text-foreground">
+                            {presetLogo || (
+                              <span className="text-[10px] font-extrabold uppercase tracking-tight">
+                                {item.name.slice(0, 3)}
+                              </span>
+                            )}
                           </span>
                         )}
                       </div>
 
                       <div className="min-w-0">
-                        <p className="text-sm font-bold truncate text-foreground">{item.name}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span
-                            className={cn(
-                              'inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.2 rounded-md',
-                              item.active
-                                ? 'text-emerald-700 bg-emerald-500/10 dark:text-emerald-400'
-                                : 'text-muted-foreground bg-muted'
-                            )}
+                        <span className="text-xs font-bold text-foreground truncate block">
+                          {item.name}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                          <span>{hasCustomImage ? 'Logo subido' : 'Logo predeterminado'}</span>
+                          <span>•</span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingLogoIndex(isEditingThisLogo ? null : index)}
+                            className="text-primary hover:underline font-medium"
                           >
-                            {item.active ? (
-                              <>
-                                <Eye className="h-3 w-3" /> Público
-                              </>
-                            ) : (
-                              <>
-                                <EyeOff className="h-3 w-3" /> Oculto
-                              </>
-                            )}
-                          </span>
-
-                          {hasCustomImage && (
-                            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
-                              • Logo propio
-                            </span>
-                          )}
+                            {isEditingThisLogo ? 'Cerrar' : 'Cambiar logo'}
+                          </button>
                         </div>
                       </div>
                     </div>
 
-                    {/* Acciones principales: Switch público y Reordenar */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="flex items-center gap-1.5 mr-1">
-                        <span className="text-xs font-semibold text-muted-foreground">Público:</span>
+                    {/* Acciones: Switch Activo, Mover, Eliminar */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 mr-2">
+                        <span className="text-[11px] font-medium text-muted-foreground hidden sm:inline">
+                          {item.active ? 'Público' : 'Oculto'}
+                        </span>
                         <Switch
                           checked={item.active}
                           onCheckedChange={(val) => updateItem(index, { active: val })}
-                          aria-label={`Marca ${item.name} pública`}
+                          aria-label={`Mostrar marca ${item.name}`}
                         />
                       </div>
 
-                      <div className="flex items-center gap-0.5 border-l pl-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => moveItem(index, -1)}
-                          disabled={index === 0}
-                          className="h-8 w-8 text-muted-foreground"
-                          title="Mover antes"
-                        >
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => moveItem(index, 1)}
-                          disabled={index === current.items.length - 1}
-                          className="h-8 w-8 text-muted-foreground"
-                          title="Mover después"
-                        >
-                          <ArrowDown className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeItem(index)}
-                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          title="Eliminar marca"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground"
+                        disabled={index === 0}
+                        onClick={() => moveItem(index, -1)}
+                        title="Mover arriba"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground"
+                        disabled={index === current.items.length - 1}
+                        onClick={() => moveItem(index, 1)}
+                        title="Mover abajo"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => removeItem(index)}
+                        title="Eliminar marca"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </div>
 
-                  {/* Fila secundaria: Edición del Logo de esta marca */}
-                  <div className="pt-2 border-t border-border/50 flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setEditingLogoIndex(isEditingThisLogo ? null : index)}
-                      className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
-                    >
-                      <ImageIcon className="h-3 w-3" />
-                      {hasCustomImage ? 'Cambiar logo de la marca' : 'Asignar logo / imagen'}
-                    </button>
-
-                    {hasCustomImage && (
-                      <button
-                        type="button"
-                        onClick={() => updateItem(index, { imageUrl: undefined })}
-                        className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        Quitar logo propio
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Panel expandible para editar logo de la marca */}
+                  {/* Panel Desplegable para Editar Logo de esta Marca */}
                   {isEditingThisLogo && (
-                    <div className="p-2.5 rounded-lg border bg-muted/30 space-y-2 mt-2">
-                      <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
-                        <span>Ingresá URL o subí archivo de imagen (PNG, SVG, JPG)</span>
-                        <button
-                          type="button"
-                          onClick={() => setEditingLogoIndex(null)}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
+                    <div className="pt-2 border-t border-border/50 space-y-2 bg-muted/20 -mx-3.5 -mb-3.5 p-3 rounded-b-xl">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-foreground">
+                          Logo personalizado para {item.name}:
+                        </span>
+                        {item.imageUrl && (
+                          <button
+                            type="button"
+                            onClick={() => updateItem(index, { imageUrl: undefined })}
+                            className="text-[10px] text-destructive hover:underline"
+                          >
+                            Restaurar logo original
+                          </button>
+                        )}
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2">
                         <Input
                           value={item.imageUrl || ''}
-                          onChange={(e) => updateItem(index, { imageUrl: e.target.value.trim() || undefined })}
-                          placeholder="https://.../logo.png"
-                          className="h-8 text-xs"
+                          onChange={(e) => updateItem(index, { imageUrl: e.target.value })}
+                          placeholder="https://... o subí un archivo"
+                          className="h-8 text-xs flex-1"
                         />
-                        <label className="shrink-0 cursor-pointer">
+                        <label className="cursor-pointer">
                           <input
                             type="file"
                             accept="image/png,image/jpeg,image/svg+xml,image/webp"

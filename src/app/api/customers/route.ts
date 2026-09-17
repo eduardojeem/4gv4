@@ -5,9 +5,17 @@ import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 import { duplicatesMessage, findCustomerDuplicates } from '@/lib/customers/duplicate-check'
+import {
+  buildCustomerIdentity,
+  normalizeCustomerStatus,
+  normalizeCustomerType,
+  statusForDatabase,
+} from '@/lib/customers/customer-contract'
 
 const customerSchema = z.object({
   name: z.string({ message: 'Ingresá el nombre del cliente.' }).trim().min(1, 'Ingresá el nombre del cliente.').max(200, 'El nombre admite hasta 200 caracteres.'),
+  first_name: z.string().trim().max(120).optional().nullable(),
+  last_name: z.string().trim().max(120).optional().nullable(),
   email: z.string().trim().email('El correo no es válido.').optional().or(z.literal('')).nullable(),
   phone: z.string().trim().max(50).optional().nullable(),
   // Contacto de un tercero: el celular del cliente suele ser el equipo que dejo
@@ -40,12 +48,13 @@ const customerSchema = z.object({
   whatsapp: z.string().trim().max(50).optional().nullable(),
   social_media: z.string().trim().max(200).optional().nullable(),
   company: z.string().trim().max(200).optional().nullable(),
+  company_name: z.string().trim().max(200).optional().nullable(),
   position: z.string().trim().max(120).optional().nullable(),
   referral_source: z.string().trim().max(120).optional().nullable(),
   assigned_salesperson: z.string().trim().max(120).optional().nullable(),
   birthday: z.string().trim().optional().nullable(),
   notes: z.string().trim().max(2000).optional().nullable(),
-  status: z.enum(['active', 'inactive', 'suspended']).optional(),
+  status: z.enum(['active', 'inactive', 'suspended', 'pending', 'activo', 'inactivo', 'suspendido', 'pendiente']).optional(),
 })
 
 const customerUpdateSchema = customerSchema.partial().extend({
@@ -55,10 +64,21 @@ const customerUpdateSchema = customerSchema.partial().extend({
 function normalizeCustomerPayload(payload: z.infer<typeof customerSchema>) {
   return {
     ...payload,
+    ...buildCustomerIdentity(payload),
     email: payload.email || null,
     phone: payload.phone || '',
-    status: payload.status ?? 'active',
+    customer_type: normalizeCustomerType(payload.customer_type),
+    status: statusForDatabase(payload.status ?? 'active'),
     updated_at: new Date().toISOString(),
+  }
+}
+
+function normalizeCustomerResponse<T extends Record<string, unknown>>(customer: T) {
+  return {
+    ...customer,
+    ...buildCustomerIdentity(customer),
+    customer_type: normalizeCustomerType(customer.customer_type),
+    status: normalizeCustomerStatus(customer.status),
   }
 }
 
@@ -94,21 +114,23 @@ async function findCustomersWithHistory(
   organizationId: string,
   ids: string[]
 ): Promise<CustomerBlocker[]> {
-  const { data: rows } = await supabase
+  const { data: rows, error: customersError } = await supabase
     .from('customers')
     .select('id, name')
     .in('id', ids)
     .eq('organization_id', organizationId)
+
+  if (customersError) throw customersError
 
   const names = new Map((rows ?? []).map((row) => [String(row.id), String(row.name ?? 'Cliente')]))
   if (names.size === 0) return []
 
   const [salesResult, creditsResult, repairsResult, storeCreditResult, afterSalesResult] = await Promise.all([
     supabase.from('sales').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
-    supabase.from('customer_credits').select('customer_id').in('customer_id', ids),
+    supabase.from('customer_credits').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
     supabase.from('repairs').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
     // `customer_store_credit_movements` no existe: la tabla es `customer_store_credits`.
-    supabase.from('customer_store_credits').select('customer_id').in('customer_id', ids),
+    supabase.from('customer_store_credits').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
     supabase.from('after_sales_cases').select('customer_id').in('customer_id', ids).eq('organization_id', organizationId),
   ])
 
@@ -121,11 +143,15 @@ async function findCustomersWithHistory(
     return map
   }
 
-  const salesByCustomer = countBy(salesResult.error ? null : salesResult.data)
-  const creditsByCustomer = countBy(creditsResult.error ? null : creditsResult.data)
-  const repairsByCustomer = countBy(repairsResult.error ? null : repairsResult.data)
-  const storeCreditByCustomer = countBy(storeCreditResult.error ? null : storeCreditResult.data)
-  const afterSalesByCustomer = countBy(afterSalesResult.error ? null : afterSalesResult.data)
+  const historyResults = [salesResult, creditsResult, repairsResult, storeCreditResult, afterSalesResult]
+  const historyError = historyResults.find((result) => result.error)?.error
+  if (historyError) throw historyError
+
+  const salesByCustomer = countBy(salesResult.data)
+  const creditsByCustomer = countBy(creditsResult.data)
+  const repairsByCustomer = countBy(repairsResult.data)
+  const storeCreditByCustomer = countBy(storeCreditResult.data)
+  const afterSalesByCustomer = countBy(afterSalesResult.data)
 
   const blocked: CustomerBlocker[] = []
   for (const [id, name] of names) {
@@ -172,7 +198,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,customer_code.ilike.%${search}%,ruc.ilike.%${search}%`)
     }
 
-    if (status && status !== 'all') query = query.eq('status', status)
+    if (status && status !== 'all') query = query.eq('status', statusForDatabase(status))
     if (customerType && customerType !== 'all') query = query.eq('customer_type', customerType)
     if (segment && segment !== 'all') query = query.eq('segment', segment)
     if (city && city !== 'all') query = query.eq('city', city)
@@ -185,7 +211,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
 
     return NextResponse.json({
       success: true,
-      data: data ?? [],
+      data: (data ?? []).map(normalizeCustomerResponse),
       pagination: {
         page,
         limit,
@@ -246,7 +272,7 @@ export const POST = withTenantAuth({ permission: ['crm.customers.manage', 'pos.s
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data }, { status: 201 })
+    return NextResponse.json({ success: true, data: normalizeCustomerResponse(data) }, { status: 201 })
   } catch (error) {
     logger.error('Customers API POST error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo crear el cliente.' }, { status: 500 })
@@ -271,6 +297,25 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
     const { id, ...updates } = validation.data
     const supabase = await createClient()
 
+    const { data: current, error: currentError } = await supabase
+      .from('customers')
+      .select('name, first_name, last_name, company, company_name, customer_type, status')
+      .eq('id', id)
+      .eq('organization_id', organization.id)
+      .single()
+
+    if (currentError) throw currentError
+
+    const normalizedUpdates = {
+      ...updates,
+      ...buildCustomerIdentity({ ...current, ...updates }),
+      ...(updates.customer_type !== undefined
+        ? { customer_type: normalizeCustomerType(updates.customer_type) }
+        : {}),
+      ...(updates.status !== undefined ? { status: statusForDatabase(updates.status) } : {}),
+      updated_at: new Date().toISOString(),
+    }
+
     // Telefono, correo y RUC no se pueden repetir dentro de la misma empresa:
     // el mismo cliente cargado dos veces reparte su deuda, sus compras y sus
     // reparaciones entre fichas distintas.
@@ -291,8 +336,7 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
     const { data, error } = await supabase
       .from('customers')
       .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
+        ...normalizedUpdates,
       })
       .eq('id', id)
       .eq('organization_id', organization.id)
@@ -301,7 +345,7 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data: normalizeCustomerResponse(data) })
   } catch (error) {
     logger.error('Customers API PUT error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo actualizar el cliente.' }, { status: 500 })

@@ -4,10 +4,19 @@ import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { WebsiteSettings } from '@/types/website-settings'
-import { applyWebsiteSettingsDefaults, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { applyWebsiteSettingsDefaults, getWebsiteDefaultsForVertical, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
 import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-settings'
+import { rateLimiter } from '@/lib/rate-limiter'
+import type { BusinessVertical, OperatingModel } from '@/lib/organization/business-profile'
+
+/**
+ * Guardados por minuto por persona. El límite vivía solo en la ruta de una
+ * clave, que el panel ya no usa; y era un mapa en memoria de cada instancia.
+ */
+const SAVE_RATE_LIMIT = 30
+const SAVE_RATE_WINDOW_MS = 60 * 1000
 
 /**
  * GET /api/admin/website/settings
@@ -113,6 +122,13 @@ async function updateHandler(
   context: AdminAuthContext
 ) {
   try {
+    if (!(await rateLimiter.check(`website-settings:${context.user.id}`, SAVE_RATE_LIMIT, SAVE_RATE_WINDOW_MS))) {
+      return NextResponse.json(
+        { success: false, error: 'Guardaste muchas veces seguidas. Esperá un minuto y probá de nuevo.' },
+        { status: 429 }
+      )
+    }
+
     const body = await request.json().catch(() => null)
     const values = body?.values
     if (!values || typeof values !== 'object' || Array.isArray(values)) {
@@ -211,7 +227,25 @@ async function initHandler(
       )
     }
 
-    const defaults = getWebsiteSettingsDefaults()
+    // Los predeterminados del rubro de la tienda, no los genéricos: una tienda de
+    // ropa recibía la portada y los pasos de un catálogo general.
+    const { data: organization } = await adminSupabase
+      .from('organizations')
+      .select('business_vertical, operating_model')
+      .eq('id', orgId)
+      .maybeSingle()
+    const generic = getWebsiteSettingsDefaults()
+    const vertical = getWebsiteDefaultsForVertical(
+      (organization?.business_vertical || 'general') as BusinessVertical,
+      (organization?.operating_model || 'retail') as OperatingModel,
+    )
+    const defaults: WebsiteSettings = {
+      ...generic,
+      ...vertical,
+      company_info: { ...generic.company_info, ...(vertical.company_info ?? {}) },
+      hero_content: { ...generic.hero_content, ...(vertical.hero_content ?? {}) },
+      hero_stats: { ...generic.hero_stats, ...(vertical.hero_stats ?? {}) },
+    }
     const allKeys = Object.keys(defaults) as Array<keyof WebsiteSettings>
 
     const { data: existingRows, error: existingError } = await adminSupabase

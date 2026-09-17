@@ -51,6 +51,7 @@ import { customerTypeLabel } from '@/lib/i18n/labels'
 import { ALTERNATE_PHONE_LABELS } from '@/lib/customers/contact-rules'
 import { useCustomerDuplicates } from '@/hooks/use-customer-duplicates'
 import { duplicatesMessage } from '@/lib/customers/duplicate-check'
+import { normalizeCustomerStatus } from '@/lib/customers/customer-contract'
 
 // Validation Schema
 const customerEditSchema = z.object({
@@ -65,9 +66,10 @@ const customerEditSchema = z.object({
   address: z.string().optional().or(z.literal('')),
   city: z.string().optional().or(z.literal('')),
   company: z.string().optional().or(z.literal('')),
+  company_name: z.string().optional().or(z.literal('')),
   position: z.string().optional().or(z.literal('')),
   ruc: z.string().optional().or(z.literal('')),
-  customer_type: z.enum(['regular', 'premium', 'empresa']),
+  customer_type: z.enum(['regular', 'premium', 'empresa', 'wholesale']),
   segment: z.enum(['vip', 'premium', 'regular', 'new', 'high_value', 'low_value', 'business', 'wholesale']),
   status: z.enum(['active', 'inactive', 'suspended', 'pending']),
   credit_limit: z.number().min(0).optional(),
@@ -90,7 +92,7 @@ interface CustomerEditFormV2Props {
 
 const SEGMENT_OPTIONS = ['vip', 'premium', 'regular', 'new', 'high_value', 'low_value', 'business', 'wholesale'] as const
 const CONTACT_OPTIONS = ['email', 'phone', 'whatsapp', 'sms'] as const
-const TYPE_OPTIONS = ['regular', 'premium', 'empresa'] as const
+const TYPE_OPTIONS = ['regular', 'premium', 'empresa', 'wholesale'] as const
 const STATUS_OPTIONS = ['active', 'inactive', 'suspended', 'pending'] as const
 
 const TAG_SUGGESTIONS = ['VIP', 'Frecuente', 'Taller', 'Mayorista', 'Empresa', 'Con Crédito', 'Puntual', 'Garantía']
@@ -107,7 +109,7 @@ const CREDIT_PRESETS = [
 const safeSegment = (v: string | undefined) => (SEGMENT_OPTIONS as readonly string[]).includes(v || '') ? (v as typeof SEGMENT_OPTIONS[number]) : 'regular'
 const safeContact = (v: string | undefined) => (CONTACT_OPTIONS as readonly string[]).includes(v || '') ? (v as typeof CONTACT_OPTIONS[number]) : 'email'
 const safeType = (v: string | undefined) => (TYPE_OPTIONS as readonly string[]).includes(v || '') ? (v as typeof TYPE_OPTIONS[number]) : 'regular'
-const safeStatus = (v: string | undefined) => (STATUS_OPTIONS as readonly string[]).includes(v || '') ? (v as typeof STATUS_OPTIONS[number]) : 'active'
+const safeStatus = (v: string | undefined) => normalizeCustomerStatus(v)
 
 export function CustomerEditFormV2({ 
   customer, 
@@ -132,6 +134,7 @@ export function CustomerEditFormV2({
       address: customer.address || '',
       city: customer.city || '',
       company: customer.company || '',
+      company_name: customer.company_name || customer.company || '',
       position: customer.position || '',
       ruc: customer.ruc || '',
       customer_type: safeType(customer.customer_type),
@@ -173,6 +176,7 @@ export function CustomerEditFormV2({
           address: res.data.address || '',
           city: res.data.city || '',
           company: (res.data as any).company || '',
+          company_name: (res.data as any).company_name || (res.data as any).company || '',
           position: (res.data as any).position || '',
           ruc: (res.data as any).ruc || '',
           customer_type: safeType(res.data.customer_type as any),
@@ -216,6 +220,7 @@ export function CustomerEditFormV2({
         address: data.address?.trim() || undefined,
         city: data.city?.trim() || undefined,
         company: data.company?.trim() || undefined,
+        company_name: data.company?.trim() || data.company_name?.trim() || undefined,
         position: data.position?.trim() || undefined,
         ruc: data.ruc?.trim() || undefined,
         payment_terms: data.payment_terms?.trim() || undefined,

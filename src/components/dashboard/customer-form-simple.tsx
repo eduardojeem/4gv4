@@ -39,6 +39,7 @@ import { validateCustomerContact, ALTERNATE_PHONE_LABELS } from '@/lib/customers
 import { useCustomerDuplicates } from '@/hooks/use-customer-duplicates'
 import { duplicatesMessage } from '@/lib/customers/duplicate-check'
 import { formatThousands, parseThousands } from '@/lib/currency'
+import { capitalizePersonName } from '@/lib/customers/customer-contract'
 
 export interface SimpleCustomerFormData {
   firstName: string
@@ -53,6 +54,7 @@ export interface SimpleCustomerFormData {
   city?: string
   address: string
   customerType: 'individual' | 'mayorista' | 'empresa' | 'vip'
+  companyName?: string
   creditLimit?: string
   paymentTerms?: string
   notes: string
@@ -156,6 +158,7 @@ export function CustomerFormSimple({
     city: 'Asunción',
     address: '',
     customerType: 'individual',
+    companyName: '',
     creditLimit: '',
     paymentTerms: 'contado',
     notes: '',
@@ -254,6 +257,25 @@ export function CustomerFormSimple({
         </div>
       </div>
 
+      {(formData.customerType === 'empresa' || formData.customerType === 'mayorista') && (
+        <div className="space-y-1.5 rounded-xl border border-blue-200/80 bg-blue-50/60 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+          <Label htmlFor="companyName" className="flex items-center gap-1.5 text-xs font-semibold">
+            <Building2 className="h-3.5 w-3.5 text-blue-600" />
+            Empresa o nombre comercial
+          </Label>
+          <Input
+            id="companyName"
+            value={formData.companyName || ''}
+            onChange={(event) => handleInputChange('companyName', event.target.value)}
+            placeholder="Ej: Distribuidora Norte SRL"
+            className="h-9 rounded-lg border-blue-200 bg-white text-xs dark:border-blue-900 dark:bg-slate-900"
+          />
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Se mostrará en la ficha junto al nombre de la persona de contacto.
+          </p>
+        </div>
+      )}
+
       {/* ─── Bloque 1: Identificación y Contacto ─── */}
       <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] space-y-3">
         <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -271,6 +293,7 @@ export function CustomerFormSimple({
               id="firstName"
               value={formData.firstName}
               onChange={(e) => handleInputChange('firstName', e.target.value)}
+              onBlur={(e) => handleInputChange('firstName', capitalizePersonName(e.target.value))}
               placeholder="Ej: Juan Carlos / Inversiones SRL"
               className={cn(
                 "h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900",
@@ -295,6 +318,7 @@ export function CustomerFormSimple({
               id="lastName"
               value={formData.lastName || ''}
               onChange={(e) => handleInputChange('lastName', e.target.value)}
+              onBlur={(e) => handleInputChange('lastName', capitalizePersonName(e.target.value))}
               placeholder="Ej: Pérez / Comercial"
               className="h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
             />

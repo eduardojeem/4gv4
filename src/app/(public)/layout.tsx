@@ -9,6 +9,7 @@ import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWit
 import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { StorefrontStyleProvider } from '@/components/public/storefront-style-context'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
+import { StorefrontVisitTracker } from '@/components/public/StorefrontVisitTracker'
 import {
   MAX_STORE_ANNOUNCEMENTS,
   normalizeAnnouncementList,
@@ -89,6 +90,7 @@ export default async function PublicLayout({
             <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
             <StoreMobileBottomNav />
             <WhatsAppFloatButton />
+            {storefrontOrganization && <StorefrontVisitTracker organizationId={storefrontOrganization.id} />}
           </div>
         </CartProviderWithDrawer>
       </StorefrontStyleProvider>

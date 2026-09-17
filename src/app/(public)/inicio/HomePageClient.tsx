@@ -234,8 +234,8 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
         <StoreTrustBar settings={settings.trust_bar} />
       )}
 
-      {/* ── 3.2 Marquesina de Marcas Animada (Estilo Giulio Cesare) ── */}
-      {storefrontStyle !== 'classic' && (
+      {/* ── 3.2 Marquesina de Marcas Animada ── */}
+      {Boolean(settings.brands_section?.enabled) && Boolean(settings.brands_section?.showOnHome) && (
         <StoreBrandTicker settings={settings.brands_section} />
       )}
 

@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
-import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { withTenantAuth } from '@/lib/api/withTenantAuth'
+import { siteUrl } from '@/lib/site-url'
+import { linkPublicCustomerAccount } from '@/lib/customers/link-public-customer-account'
 import { z } from 'zod'
 
 const createAccountSchema = z.object({
@@ -21,27 +22,21 @@ function generateTemporaryPassword(): string {
   return password
 }
 
+async function getCustomerId(routeContext: unknown): Promise<string | null> {
+  const params = (routeContext as { params?: { id?: string } | Promise<{ id?: string }> } | undefined)?.params
+  const resolved = params ? await Promise.resolve(params) : null
+  return resolved?.id ?? null
+}
+
 /**
  * POST /api/customers/[id]/create-account
  * Crea una cuenta de auth para un cliente existente y la vincula automáticamente.
  * Puede enviar invitación por email o crear con contraseña temporal.
  */
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export const POST = withTenantAuth({ permission: 'crm.customers.manage', module: 'crm' }, async (request, { organization }, routeContext) => {
   try {
-    const auth = await requireStaff()
-    const authResponse = getAuthResponse(auth)
-    if (authResponse) return authResponse
-    const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
-    const organization = await getCurrentOrganizationContext(staffAuth.user.id)
-
-    if (!organization) {
-      return NextResponse.json({ error: 'Organización no encontrada' }, { status: 403 })
-    }
-
-    const { id: customerId } = await context.params
+    const customerId = await getCustomerId(routeContext)
+    if (!customerId) return NextResponse.json({ error: 'Cliente inválido' }, { status: 400 })
     const body = await request.json().catch(() => ({}))
     const validation = createAccountSchema.safeParse(body)
 
@@ -82,6 +77,14 @@ export async function POST(
     }
 
     const email = customer.email.trim().toLowerCase()
+    const linkUser = (profileId: string) => linkPublicCustomerAccount(supabase, {
+      organizationId: organization.id,
+      profileId,
+      fullName: customer.name,
+      email,
+      phone: customer.phone,
+      customerId,
+    })
 
     // Verificar que no exista ya un usuario auth con ese email
     const { data: usersData } = await supabase.auth.admin.listUsers()
@@ -90,21 +93,8 @@ export async function POST(
     )
 
     if (existingUser) {
-      // Ya existe la cuenta → simplemente vincular
-      const { error: linkError } = await supabase
-        .from('customers')
-        .update({ profile_id: existingUser.id, updated_at: new Date().toISOString() })
-        .eq('id', customerId)
-        .eq('organization_id', organization.id)
-
-      if (linkError) {
-        return NextResponse.json({ error: 'Error al vincular la cuenta existente' }, { status: 500 })
-      }
-
-      await supabase.from('organization_members').upsert(
-        { organization_id: organization.id, user_id: existingUser.id, role: 'customer', status: 'active' },
-        { onConflict: 'organization_id,user_id' }
-      )
+      // La ficha y la membresía se escriben en una sola transacción de base.
+      await linkUser(existingUser.id)
 
       return NextResponse.json({
         success: true,
@@ -131,17 +121,7 @@ export async function POST(
       }
 
       if (inviteData?.user) {
-        // Vincular
-        await supabase
-          .from('customers')
-          .update({ profile_id: inviteData.user.id, updated_at: new Date().toISOString() })
-          .eq('id', customerId)
-          .eq('organization_id', organization.id)
-
-        await supabase.from('organization_members').upsert(
-          { organization_id: organization.id, user_id: inviteData.user.id, role: 'customer', status: 'active' },
-          { onConflict: 'organization_id,user_id' }
-        )
+        await linkUser(inviteData.user.id)
       }
 
       return NextResponse.json({
@@ -172,27 +152,15 @@ export async function POST(
       }
 
       if (createData?.user) {
-        // Vincular
-        await supabase
-          .from('customers')
-          .update({ profile_id: createData.user.id, updated_at: new Date().toISOString() })
-          .eq('id', customerId)
-          .eq('organization_id', organization.id)
-
-        await supabase.from('organization_members').upsert(
-          { organization_id: organization.id, user_id: createData.user.id, role: 'customer', status: 'active' },
-          { onConflict: 'organization_id,user_id' }
-        )
+        await linkUser(createData.user.id)
 
         // Enviar email de reset para que el cliente defina su propia contraseña
-        const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || ''
-        await supabase.auth.admin.generateLink({
-          type: 'recovery',
-          email,
-          options: {
-            redirectTo: `${origin}/auth/reset-password`,
-          },
+        const recovery = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: siteUrl('/auth/reset-password'),
         })
+        if (recovery.error) {
+          return NextResponse.json({ error: 'La cuenta fue creada, pero no se pudo enviar el correo para definir la contraseña.' }, { status: 502 })
+        }
       }
 
       return NextResponse.json({
@@ -209,4 +177,4 @@ export async function POST(
       { status: 500 }
     )
   }
-}
+})

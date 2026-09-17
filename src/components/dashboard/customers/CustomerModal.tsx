@@ -42,8 +42,9 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
-import { useCustomerActions } from '@/hooks/use-customer-actions'
+import { useCustomers } from '@/contexts/CustomerContext'
 import { CustomerFormSimple, SimpleCustomerFormData } from '../customer-form-simple'
+import { classificationForFormType } from '@/lib/customers/customer-contract'
 import { inviteCustomerToStore } from '@/lib/customers/invite-customer-to-store'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/currency'
@@ -64,7 +65,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 }) => {
   const [mode, setMode] = useState(initialMode)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { updateCustomer, createCustomer } = useCustomerActions()
+  const { updateCustomer, createCustomer } = useCustomers()
   const [storeBalance, setStoreBalance] = useState(0)
   const [storeMovements, setStoreMovements] = useState<Array<{ id: string; amount: number; reason: string; source_type: string; created_at: string }>>([])
   const [storeExpanded, setStoreExpanded] = useState(false)
@@ -186,9 +187,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
     try {
       let result
       const fullName = `${formData.firstName} ${formData.lastName || ''}`.trim() || formData.firstName.trim()
-      const segmentValue = formData.customerType === 'individual' ? 'regular' as const :
-        formData.customerType === 'mayorista' ? 'wholesale' as const :
-        formData.customerType === 'vip' ? 'vip' as const : 'business' as const
+      const classification = classificationForFormType(formData.customerType)
 
       // El formulario ya pedia el contacto alternativo y lo validaba, pero acá
       // no se lo mandaba a guardar: se escribia y se perdia sin aviso. Se arma
@@ -203,6 +202,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       if (mode === 'create') {
         const customerData = {
           name: fullName,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          company: formData.companyName,
+          company_name: formData.companyName,
           ruc: formData.ruc?.trim() || undefined,
           email: formData.email?.trim() || undefined,
           phone: formData.phone?.trim() || undefined,
@@ -210,7 +213,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           city: formData.city?.trim() || undefined,
           address: formData.address?.trim() || undefined,
           status: 'active' as const,
-          segment: segmentValue,
+          segment: classification.segment,
+          customer_type: classification.customer_type,
           tags: [],
           notes: formData.notes?.trim() || undefined,
           credit_limit: formData.creditLimit ? parseFloat(formData.creditLimit) : 0,
@@ -245,6 +249,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       } else if (customer) {
         const updatedData = {
           name: fullName,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          company: formData.companyName,
+          company_name: formData.companyName,
           ruc: formData.ruc?.trim() || undefined,
           email: formData.email?.trim() || undefined,
           phone: formData.phone?.trim() || undefined,
@@ -252,7 +260,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           city: formData.city?.trim() || undefined,
           address: formData.address?.trim() || undefined,
           notes: formData.notes?.trim() || undefined,
-          segment: segmentValue,
+          segment: classification.segment,
+          customer_type: classification.customer_type,
           credit_limit: formData.creditLimit ? parseFloat(formData.creditLimit) : 0,
           payment_terms: formData.paymentTerms || 'contado',
         }
@@ -274,8 +283,9 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
     const nameParts = (customer.name || '').trim().split(' ')
     return {
-      firstName: nameParts[0] || '',
-      lastName: nameParts.slice(1).join(' ') || '',
+      firstName: customer.first_name || nameParts[0] || '',
+      lastName: customer.last_name || nameParts.slice(1).join(' ') || '',
+      companyName: customer.company_name || customer.company || '',
       ruc: customer.ruc || '',
       phone: customer.phone || '',
       // Sin esto el campo salia vacio al editar y parecia que el cliente no
@@ -285,9 +295,9 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       email: customer.email || '',
       city: customer.city || 'Asunción',
       address: customer.address || '',
-      customerType: customer.segment === 'wholesale' ? 'mayorista' :
-        customer.segment === 'business' ? 'empresa' :
-        customer.segment === 'vip' ? 'vip' : 'individual',
+      customerType: customer.customer_type === 'wholesale' || customer.segment === 'wholesale' ? 'mayorista' :
+        customer.customer_type === 'empresa' || customer.segment === 'business' || customer.segment === 'empresa' ? 'empresa' :
+        customer.customer_type === 'premium' || customer.segment === 'vip' ? 'vip' : 'individual',
       creditLimit: customer.credit_limit?.toString() || '',
       paymentTerms: customer.payment_terms || 'contado',
       notes: customer.notes || ''

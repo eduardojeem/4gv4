@@ -324,13 +324,15 @@ export function HeroEditor({ initialContent, initialStats, capabilities = DEFAUL
     if (!hasChanges) return
 
     const nextErrors: Record<string, string> = {}
-    if (!heroContent.badge || heroContent.badge.trim().length < 3) {
+    // Con la portada apagada no se exigen los textos, igual que en el servidor.
+    const heroActive = heroContent.enabled !== false
+    if (heroActive && (!heroContent.badge || heroContent.badge.trim().length < 3)) {
       nextErrors.badge = 'La etiqueta debe tener al menos 3 caracteres.'
     }
-    if (!heroContent.title || heroContent.title.trim().length < 10) {
+    if (heroActive && (!heroContent.title || heroContent.title.trim().length < 10)) {
       nextErrors.title = 'El título debe tener al menos 10 caracteres.'
     }
-    if (!heroContent.subtitle || heroContent.subtitle.trim().length < 10) {
+    if (heroActive && (!heroContent.subtitle || heroContent.subtitle.trim().length < 10)) {
       nextErrors.subtitle = 'El subtítulo debe tener al menos 10 caracteres.'
     }
     if (Object.keys(nextErrors).length > 0) {

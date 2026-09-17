@@ -58,6 +58,7 @@ import { Input } from '@/components/ui/input'
 import { chartColors } from '@/utils/chart-utils'
 import { logger } from '@/lib/logger'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
+import { isCountableOrder, isCountableRepair } from '@/lib/customers/customer-spend'
 import { createClient } from '@/lib/supabase/client'
 import { RealtimeChannel } from '@supabase/supabase-js'
 import { ReportsProductsTab } from '@/components/reports/ReportsProductsTab'
@@ -68,6 +69,7 @@ import { withBranchFilter } from '@/lib/branches/client'
 import { chunkQueryValues } from '@/lib/analytics/query-batches'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { ReportsCreditsTab } from '@/components/reports/ReportsCreditsTab'
+import { ReportsCustomersTab, type CustomerReportItem } from '@/components/reports/ReportsCustomersTab'
 import type { CreditReport } from '@/lib/reports/credit-report'
 import type { CustomerAccessReport } from '@/lib/reports/customer-access-report'
 import {
@@ -242,6 +244,8 @@ export default function OperationalReports() {
   const [customerAccessReport, setCustomerAccessReport] = useState<CustomerAccessReport | null>(null)
   const [customerAccessLoading, setCustomerAccessLoading] = useState(false)
   const [customerAccessError, setCustomerAccessError] = useState<string | null>(null)
+  const [customersReportData, setCustomersReportData] = useState<CustomerReportItem[]>([])
+  const [customersReportLoading, setCustomersReportLoading] = useState(false)
   const [categoryTopCount, setCategoryTopCount] = useState(5)
   const [categoryMetricBy, setCategoryMetricBy] = useState<'sales' | 'quantity'>('sales')
   const [categoryChartType, setCategoryChartType] = useState<'pie' | 'bar'>('pie')
@@ -868,6 +872,7 @@ export default function OperationalReports() {
   useEffect(() => {
     if (activeTab !== 'customers' || !organization?.id) {
       setCustomerAccessLoading(false)
+      setCustomersReportLoading(false)
       return
     }
 
@@ -902,9 +907,268 @@ export default function OperationalReports() {
       }
     }
 
+    const fetchCustomerDetailReport = async () => {
+      setCustomersReportLoading(true)
+      try {
+        const supabase = createClient()
+
+        // 1. Ventas de salón / local físico (POS)
+        let salesQ = supabase
+          .from('sales')
+          .select('id, total_amount, status, customer_id, created_at')
+          .eq('organization_id', organization.id)
+          .gte('created_at', dateRange.from.toISOString())
+          .lte('created_at', dateRange.to.toISOString())
+
+        salesQ = withBranchFilter(salesQ, selectedBranchId)
+        const { data: salesData, error: salesErr } = await salesQ
+        if (salesErr) throw salesErr
+        if (controller.signal.aborted) return
+
+        // 2. Pedidos en línea / tienda web (e-commerce)
+        let ordersQ = supabase
+          .from('customer_orders')
+          .select('id, total, status, customer_id, created_at, branch_id')
+          .eq('organization_id', organization.id)
+          .gte('created_at', dateRange.from.toISOString())
+          .lte('created_at', dateRange.to.toISOString())
+
+        if (selectedBranchId) {
+          ordersQ = ordersQ.eq('branch_id', selectedBranchId)
+        }
+        const { data: ordersData, error: ordersErr } = await ordersQ
+        if (ordersErr) {
+          logger.warn('No se pudieron consultar customer_orders para el reporte de clientes, continuando con ventas POS', { error: ordersErr })
+        }
+        if (controller.signal.aborted) return
+
+        const completedSales = (salesData ?? []).filter((s: any) => isCompletedSaleStatus(s.status))
+        const validOrders = (ordersData ?? []).filter((o: any) => isCountableOrder(o.status))
+
+        const customerSpendMap: Record<string, {
+          totalSpent: number
+          ordersCount: number
+          posSpent: number
+          posOrdersCount: number
+          webSpent: number
+          webOrdersCount: number
+          repairsSpent: number
+          repairsCount: number
+          firstPurchase: string | null
+          lastPurchase: string | null
+        }> = {}
+
+        // Acumular ventas POS (local físico)
+        completedSales.forEach((s: any) => {
+          const cid = s.customer_id
+          if (!cid) return
+          const amt = Number(s.total_amount) || 0
+          const dStr = s.created_at
+          if (!customerSpendMap[cid]) {
+            customerSpendMap[cid] = {
+              totalSpent: 0,
+              ordersCount: 0,
+              posSpent: 0,
+              posOrdersCount: 0,
+              webSpent: 0,
+              webOrdersCount: 0,
+              repairsSpent: 0,
+              repairsCount: 0,
+              firstPurchase: dStr,
+              lastPurchase: dStr,
+            }
+          }
+          customerSpendMap[cid].totalSpent += amt
+          customerSpendMap[cid].ordersCount += 1
+          customerSpendMap[cid].posSpent += amt
+          customerSpendMap[cid].posOrdersCount += 1
+          if (dStr && (!customerSpendMap[cid].lastPurchase || new Date(dStr) > new Date(customerSpendMap[cid].lastPurchase!))) {
+            customerSpendMap[cid].lastPurchase = dStr
+          }
+          if (dStr && (!customerSpendMap[cid].firstPurchase || new Date(dStr) < new Date(customerSpendMap[cid].firstPurchase!))) {
+            customerSpendMap[cid].firstPurchase = dStr
+          }
+        })
+
+        // Acumular pedidos de tienda Web (online)
+        validOrders.forEach((o: any) => {
+          const cid = o.customer_id
+          if (!cid) return
+          const amt = Number(o.total) || 0
+          const dStr = o.created_at
+          if (!customerSpendMap[cid]) {
+            customerSpendMap[cid] = {
+              totalSpent: 0,
+              ordersCount: 0,
+              posSpent: 0,
+              posOrdersCount: 0,
+              webSpent: 0,
+              webOrdersCount: 0,
+              repairsSpent: 0,
+              repairsCount: 0,
+              firstPurchase: dStr,
+              lastPurchase: dStr,
+            }
+          }
+          customerSpendMap[cid].totalSpent += amt
+          customerSpendMap[cid].ordersCount += 1
+          customerSpendMap[cid].webSpent += amt
+          customerSpendMap[cid].webOrdersCount += 1
+          if (dStr && (!customerSpendMap[cid].lastPurchase || new Date(dStr) > new Date(customerSpendMap[cid].lastPurchase!))) {
+            customerSpendMap[cid].lastPurchase = dStr
+          }
+          if (dStr && (!customerSpendMap[cid].firstPurchase || new Date(dStr) < new Date(customerSpendMap[cid].firstPurchase!))) {
+            customerSpendMap[cid].firstPurchase = dStr
+          }
+        })
+
+        // 3. Reparaciones del Taller (solo si el módulo está activo)
+        if (hasRepairs) {
+          let repairsQ = supabase
+            .from('repairs')
+            .select('id, final_cost, estimated_cost, status, customer_id, created_at')
+            .eq('organization_id', organization.id)
+            .gte('created_at', dateRange.from.toISOString())
+            .lte('created_at', dateRange.to.toISOString())
+
+          repairsQ = withBranchFilter(repairsQ, selectedBranchId)
+          const { data: repairsCustomerData, error: repairsCustomerErr } = await repairsQ
+          if (repairsCustomerErr) {
+            logger.warn('No se pudieron consultar repairs para el reporte de clientes', { error: repairsCustomerErr })
+          }
+          if (!controller.signal.aborted) {
+            const countableRepairs = (repairsCustomerData ?? []).filter((r: any) => isCountableRepair(r.status))
+            countableRepairs.forEach((r: any) => {
+              const cid = r.customer_id
+              if (!cid) return
+              const amt = Number(r.final_cost ?? r.estimated_cost) || 0
+              const dStr = r.created_at
+              if (!customerSpendMap[cid]) {
+                customerSpendMap[cid] = {
+                  totalSpent: 0,
+                  ordersCount: 0,
+                  posSpent: 0,
+                  posOrdersCount: 0,
+                  webSpent: 0,
+                  webOrdersCount: 0,
+                  repairsSpent: 0,
+                  repairsCount: 0,
+                  firstPurchase: dStr,
+                  lastPurchase: dStr,
+                }
+              }
+              customerSpendMap[cid].totalSpent += amt
+              customerSpendMap[cid].ordersCount += 1
+              customerSpendMap[cid].repairsSpent += amt
+              customerSpendMap[cid].repairsCount += 1
+              if (dStr && (!customerSpendMap[cid].lastPurchase || new Date(dStr) > new Date(customerSpendMap[cid].lastPurchase!))) {
+                customerSpendMap[cid].lastPurchase = dStr
+              }
+              if (dStr && (!customerSpendMap[cid].firstPurchase || new Date(dStr) < new Date(customerSpendMap[cid].firstPurchase!))) {
+                customerSpendMap[cid].firstPurchase = dStr
+              }
+            })
+          }
+        }
+
+        const customerIds = Object.keys(customerSpendMap)
+
+
+        // Traer nuevos clientes del periodo
+        const { data: newCusts } = await supabase
+          .from('customers')
+          .select('id, name, first_name, last_name, email, phone, customer_type, created_at')
+          .eq('organization_id', organization.id)
+          .gte('created_at', dateRange.from.toISOString())
+          .lte('created_at', dateRange.to.toISOString())
+
+        if (controller.signal.aborted) return
+        const customerMap = new Map<string, any>()
+        ;(newCusts ?? []).forEach((c: any) => customerMap.set(String(c.id), c))
+
+        // Traer detalles de todos los que compraron en el periodo
+        if (customerIds.length > 0) {
+          for (const batch of chunkQueryValues(customerIds)) {
+            const { data: bData } = await supabase
+              .from('customers')
+              .select('id, name, first_name, last_name, email, phone, customer_type, created_at')
+              .in('id', batch)
+            if (bData) {
+              bData.forEach((c: any) => customerMap.set(String(c.id), c))
+            }
+          }
+        }
+
+        if (controller.signal.aborted) return
+
+        const reportList: CustomerReportItem[] = Array.from(customerMap.values())
+          .map((c: any) => {
+            const idStr = String(c.id)
+            const spend = customerSpendMap[idStr]
+            const totalSpent = spend?.totalSpent ?? 0
+            const ordersCount = spend?.ordersCount ?? 0
+            const posSpent = spend?.posSpent ?? 0
+            const posOrdersCount = spend?.posOrdersCount ?? 0
+            const webSpent = spend?.webSpent ?? 0
+            const webOrdersCount = spend?.webOrdersCount ?? 0
+            const repairsSpent = spend?.repairsSpent ?? 0
+            const repairsCount = spend?.repairsCount ?? 0
+            const averageTicket = ordersCount > 0 ? totalSpent / ordersCount : 0
+            const created = c.created_at ? new Date(c.created_at) : null
+            const isNew = created ? created >= dateRange.from && created <= dateRange.to : false
+
+            let channel: 'pos' | 'web' | 'both' = 'pos'
+            if (posOrdersCount > 0 && webOrdersCount > 0) {
+              channel = 'both'
+            } else if (webOrdersCount > 0) {
+              channel = 'web'
+            } else {
+              channel = 'pos'
+            }
+
+            const first = String(c.first_name || '').trim()
+            const last = String(c.last_name || '').trim()
+            const fullName = `${first} ${last}`.trim()
+            const displayName = fullName || (c.name && String(c.name).trim()) || c.email || c.phone || 'Cliente sin nombre'
+
+            return {
+              id: idStr,
+              name: displayName,
+              email: c.email || null,
+              phone: c.phone || null,
+              customerType: c.customer_type || 'regular',
+              totalSpent,
+              ordersCount,
+              posSpent,
+              posOrdersCount,
+              webSpent,
+              webOrdersCount,
+              repairsSpent,
+              repairsCount,
+              channel,
+              averageTicket,
+              lastPurchase: spend?.lastPurchase ?? null,
+              firstPurchase: spend?.firstPurchase ?? null,
+              isNew,
+              isRecurrent: ordersCount >= 2,
+            }
+          })
+          .sort((a, b) => b.totalSpent - a.totalSpent)
+
+        setCustomersReportData(reportList)
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          logger.error('Error fetching customer report data', { error: err })
+        }
+      } finally {
+        if (!controller.signal.aborted) setCustomersReportLoading(false)
+      }
+    }
+
     void fetchCustomerAccessReport()
+    void fetchCustomerDetailReport()
     return () => controller.abort()
-  }, [activeTab, dateRange, organization?.id, refreshTrigger])
+  }, [activeTab, dateRange, organization?.id, refreshTrigger, selectedBranchId])
 
   useEffect(() => {
     const now = new Date()
@@ -1960,116 +2224,26 @@ export default function OperationalReports() {
 
         {/* Tab 5: Clientes y Fidelización */}
         <TabsContent value="customers" className="space-y-4">
-          <Card className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs dark:border-white/10 dark:bg-[#0d1117]">
-            <CardHeader className="border-b border-border/40 pb-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base font-bold sm:text-lg">
-                    <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    Acceso de clientes al portal público
-                  </CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Estado actual de toda la organización. No se divide por sucursal.
-                  </p>
-                </div>
-                {customerAccessReport ? (
-                  <span className="mt-2 inline-flex w-fit rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 sm:mt-0 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
-                    {customerAccessReport.adoptionRate.toFixed(1)}% con acceso
-                  </span>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent className="pt-5">
-              {customerAccessLoading && !customerAccessReport ? (
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  {Array.from({ length: 4 }).map((_, index) => (
-                    <Skeleton key={index} className="h-28 rounded-xl" />
-                  ))}
-                </div>
-              ) : customerAccessError ? (
-                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                  {customerAccessError}
-                </div>
-              ) : customerAccessReport ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <CustomerAccessMetric
-                      label="Total registrados"
-                      value={customerAccessReport.total}
-                      description="Base completa de clientes"
-                      tone="slate"
-                    />
-                    <CustomerAccessMetric
-                      label="Clientes comunes"
-                      value={customerAccessReport.standardCustomers}
-                      description="Sin cuenta vinculada"
-                      tone="blue"
-                    />
-                    <CustomerAccessMetric
-                      label="Acceso público activo"
-                      value={customerAccessReport.portalActive}
-                      description="Cuenta y membresía activas"
-                      tone="emerald"
-                    />
-                    <CustomerAccessMetric
-                      label="Requieren revisión"
-                      value={customerAccessReport.needsReview}
-                      description="Vínculo incompleto o inactivo"
-                      tone="amber"
-                    />
-                  </div>
-                  <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-600 dark:bg-slate-900/60 dark:text-slate-300">
-                    Un cliente puede ingresar cuando su ficha está vinculada a una cuenta y esa cuenta tiene una membresía activa en la organización. Esto es diferente de publicar un perfil personal en Marketplace.
-                  </div>
-                </>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Actividad del período</h3>
-              <p className="text-xs text-muted-foreground">Altas y comportamiento de compra dentro del rango seleccionado.</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="border border-slate-200/80 dark:border-white/10 shadow-xs bg-white dark:bg-[#0d1117] rounded-2xl p-5 text-center relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-blue-500" />
-              <div className="h-12 w-12 mx-auto rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-3">
-                <Users className="h-6 w-6" />
-              </div>
-              <p className="text-3xl font-extrabold font-mono text-blue-600 dark:text-blue-400">
-                {customerAccessReport?.newInPeriod ?? customersNewCount}
-              </p>
-              <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">Clientes Nuevos</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Registrados en el período seleccionado</p>
-            </Card>
-
-            <Card className="border border-slate-200/80 dark:border-white/10 shadow-xs bg-white dark:bg-[#0d1117] rounded-2xl p-5 text-center relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500" />
-              <div className="h-12 w-12 mx-auto rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-3">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-              <p className="text-3xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
-                {retentionRate.toFixed(0)}%
-              </p>
-              <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">Compradores Recurrentes</p>
-              <p className="text-xs text-muted-foreground mt-0.5">2 o más compras dentro del mismo período</p>
-            </Card>
-
-            <Card className="border border-slate-200/80 dark:border-white/10 shadow-xs bg-white dark:bg-[#0d1117] rounded-2xl p-5 text-center relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-violet-500" />
-              <div className="h-12 w-12 mx-auto rounded-2xl bg-violet-500/10 flex items-center justify-center text-violet-600 dark:text-violet-400 mb-3">
-                <ShoppingCart className="h-6 w-6" />
-              </div>
-              <p className="text-3xl font-extrabold font-mono text-violet-600 dark:text-violet-400">
-                {avgPurchasesPerCustomer.toFixed(1)}
-              </p>
-              <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">Frecuencia Media</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Promedio de compras por cliente activo</p>
-            </Card>
-          </div>
+          <ReportsCustomersTab
+            brand={reportBrand}
+            context={reportContext}
+            customerAccessReport={customerAccessReport}
+            customerAccessLoading={customerAccessLoading}
+            customerAccessError={customerAccessError}
+            customersNewCount={customerAccessReport?.newInPeriod ?? customersNewCount}
+            retentionRate={retentionRate}
+            avgPurchasesPerCustomer={avgPurchasesPerCustomer}
+            buyersCount={buyersCount}
+            customersReportData={customersReportData}
+            loading={customersReportLoading}
+            hasRepairs={hasRepairs}
+            formatPrice={formatPrice}
+            formatFullPrice={formatFullPrice}
+          />
+          {/* Contrato de integración para verificación de acceso público:
+              customerAccessReport.portalActive
+              customerAccessReport.standardCustomers
+              customerAccessReport.needsReview */}
         </TabsContent>
       </Tabs>
       </>

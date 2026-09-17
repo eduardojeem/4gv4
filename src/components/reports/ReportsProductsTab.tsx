@@ -393,7 +393,7 @@ export function ReportsProductsTab({
 
               return (
                 <div
-                  key={product.name}
+                  key={product.id ? `product-${product.id}-${index}` : `product-${product.name}-${index}`}
                   className={`p-3.5 rounded-xl border transition-all ${
                     isSelected
                       ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/20 shadow-xs'

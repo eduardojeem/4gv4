@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
+  ArrowRight,
   Boxes,
   Building2,
   CalendarDays,
@@ -18,6 +19,8 @@ import {
   LayoutGrid,
   List,
   Minus,
+  Package,
+  Receipt,
   RefreshCw,
   Search,
   Shield,
@@ -41,6 +44,7 @@ import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagin
 import { cn } from '@/lib/utils'
 import { SortIndicator } from '@/components/superadmin/sort-indicator'
 import { countOrganizationsWithoutSubscription, getSubscriptionTiming } from '@/lib/superadmin/organization-directory'
+import { describeLastAccess } from '@/lib/superadmin/last-access'
 import { MonitoringRobotMascot, type RobotMood } from '../MonitoringRobotMascot'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
 
@@ -77,6 +81,13 @@ export type SuperAdminOrganization = {
   business_vertical?: string | null
   operating_model?: string | null
   enabled_modules?: string[] | null
+  /** `false` cuando no se pudo leer `auth.users` o no hay equipo: no se afirma nada. */
+  last_access_known?: boolean
+  /** El acceso más reciente del equipo o del dueño. */
+  last_access_at?: string | null
+  last_sale_at?: string | null
+  /** `null` cuando no se pudieron contar. */
+  products_total?: number | null
 }
 
 // ---------------------------------------------------------------------------
@@ -263,6 +274,220 @@ function PaymentBadge({ status }: { status: string | null }) {
     )}>
       {PAYMENT_LABELS[normalized] ?? status ?? 'Sin registro'}
     </Badge>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
+// Tarjeta de la vista en cuadrícula
+// ---------------------------------------------------------------------------
+
+/** «Hace 3 días» para una venta, con la misma escala que el último acceso. */
+function describeSince(value: string | null | undefined, now: number) {
+  if (!value) return null
+  return describeLastAccess(value, now).label
+}
+
+/**
+ * Una organización de un vistazo.
+ *
+ * La tarjeta mostraba plan, suscripción, rubro y dos conteos: no decía quién es
+ * el dueño, si la empresa todavía entra al sistema o si vende, y para ver la
+ * ficha había que adivinar que el nombre era un enlace.
+ */
+function OrganizationGridCard({
+  org,
+  referenceTime,
+  onEdit,
+  onCopyUrl,
+}: {
+  org: SuperAdminOrganization
+  referenceTime: string
+  onEdit: () => void
+  onCopyUrl: (slug: string) => void
+}) {
+  const now = new Date(referenceTime).getTime()
+  const detailHref = `/superadmin/organizations/${encodeURIComponent(org.slug)}`
+  const access = org.last_access_known ? describeLastAccess(org.last_access_at, now) : null
+  const lastSale = describeSince(org.last_sale_at, now)
+  const timing = getSubscriptionTiming(org.subscription_status, org.trial_ends_at, org.current_period_ends_at)
+  const billingProblem = ['past_due', 'unpaid', 'suspended'].includes(org.subscription_status ?? '')
+  // El vencimiento cercano ya lo dice la insignia de suscripción: acá solo pinta el borde.
+  const paymentTrouble = billingProblem || Boolean(timing?.urgent)
+  const inactive = Boolean(access?.stale)
+
+  // Lo que pide atención primero: cobro y abandono son los dos motivos para llamar.
+  const alerts = [
+    billingProblem && { tone: 'danger' as const, label: 'Problema de cobro' },
+    inactive && { tone: 'warn' as const, label: org.last_access_at ? `Sin entrar: ${access?.label.toLowerCase()}` : 'Nadie del equipo entró' },
+    !org.subscription_status && { tone: 'muted' as const, label: 'Sin suscripción' },
+  ].filter(Boolean) as Array<{ tone: 'danger' | 'warn' | 'muted'; label: string }>
+
+  return (
+    <Card
+      data-testid={`org-card-${org.slug}`}
+      className={cn(
+        'group flex flex-col overflow-hidden border-t-4 transition-shadow hover:shadow-md',
+        paymentTrouble ? 'border-t-red-500' : inactive ? 'border-t-amber-500' : 'border-t-emerald-500/70',
+      )}
+    >
+      {/* Identidad */}
+      <div className="flex items-start gap-3 p-4 pb-3">
+        {org.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={org.logo_url} alt="" className="h-11 w-11 shrink-0 rounded-xl border border-border bg-background object-contain p-1" />
+        ) : (
+          <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-bold', PLAN_AVATAR_BG[org.plan] ?? PLAN_AVATAR_BG.FREE)}>
+            {getInitials(org.name)}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <Link href={detailHref} className="block truncate text-sm font-bold text-foreground hover:underline">
+            {org.name}
+          </Link>
+          <button
+            type="button"
+            onClick={() => onCopyUrl(org.slug)}
+            className="flex max-w-full items-center gap-1 truncate text-xs text-muted-foreground hover:text-foreground"
+            title="Copiar dirección de la tienda"
+          >
+            /{org.slug}
+            <Copy className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
+          </button>
+        </div>
+        <Badge variant="outline" className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
+          {org.plan}
+        </Badge>
+      </div>
+
+      {/* Estado comercial */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4">
+        <SubscriptionBadge org={org} />
+        {org.subscription_status && <PaymentBadge status={org.payment_status} />}
+        {org.cancel_at_period_end && (
+          <Badge variant="outline" className="rounded-full border-amber-200 text-[10px] font-bold text-amber-700 dark:border-amber-900 dark:text-amber-300">
+            Cancela al vencer
+          </Badge>
+        )}
+      </div>
+
+      {alerts.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-1.5 px-4" aria-label="Requiere atención">
+          {alerts.map((alert) => (
+            <li
+              key={alert.label}
+              className={cn(
+                'rounded-md px-2 py-0.5 text-[11px] font-semibold',
+                alert.tone === 'danger' && 'bg-red-500/10 text-red-700 dark:text-red-300',
+                alert.tone === 'warn' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                alert.tone === 'muted' && 'bg-muted text-muted-foreground',
+              )}
+            >
+              {alert.label}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Detalle */}
+      <dl className="mt-3 grid flex-1 grid-cols-2 gap-x-4 gap-y-3 border-t border-border px-4 py-3 text-xs">
+        <div className="col-span-2 min-w-0">
+          <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <User className="h-3 w-3" /> Dueño
+          </dt>
+          <dd className="mt-0.5 truncate font-medium text-foreground">
+            {org.owner_name || org.owner_email || <span className="text-muted-foreground">Sin asignar</span>}
+            {org.owner_name && org.owner_email && <span className="font-normal text-muted-foreground"> · {org.owner_email}</span>}
+          </dd>
+        </div>
+
+        <div className="min-w-0">
+          <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Clock className="h-3 w-3" /> Último acceso
+          </dt>
+          <dd className={cn('mt-0.5 font-medium', access?.stale ? 'text-amber-700 dark:text-amber-300' : 'text-foreground')}>
+            {access ? access.label : <span className="text-muted-foreground">Sin dato</span>}
+          </dd>
+        </div>
+
+        <div className="min-w-0">
+          <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Receipt className="h-3 w-3" /> Última venta
+          </dt>
+          <dd className="mt-0.5 font-medium text-foreground">
+            {lastSale ?? <span className="text-muted-foreground">Sin ventas</span>}
+          </dd>
+        </div>
+
+        <div className="min-w-0">
+          <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Users className="h-3 w-3" /> Equipo
+          </dt>
+          <dd className="mt-0.5 font-medium tabular-nums text-foreground">
+            {org.staff_active}/{org.staff_total}
+            <span className="font-normal text-muted-foreground">
+              {' '}· {org.customers_total} {org.customers_total === 1 ? 'cliente web' : 'clientes web'}
+            </span>
+          </dd>
+        </div>
+
+        <div className="min-w-0">
+          <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Package className="h-3 w-3" /> Productos
+          </dt>
+          <dd className="mt-0.5 font-medium tabular-nums text-foreground">
+            {org.products_total == null ? <span className="text-muted-foreground">Sin dato</span> : org.products_total.toLocaleString('es-PY')}
+          </dd>
+        </div>
+
+        <div className="col-span-2 flex min-w-0 items-center justify-between gap-2">
+          <RubroBadge vertical={org.business_vertical} model={org.operating_model} />
+          <span className="shrink-0 text-[11px] text-muted-foreground">Alta {formatDate(org.created_at)}</span>
+        </div>
+
+        <div className="col-span-2">
+          <ModulesPreview modules={org.enabled_modules} />
+        </div>
+      </dl>
+
+      {/* Acciones */}
+      <div className="flex items-center gap-1 border-t border-border bg-muted/40 p-2.5">
+        <Button asChild size="sm" className="h-8 gap-1.5 rounded-lg text-xs font-bold">
+          <Link href={detailHref}>
+            Ver detalle
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
+        <div className="ml-auto flex items-center gap-0.5">
+          <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Abrir tienda">
+            <a href={`/${org.slug}/inicio`} target="_blank" rel="noreferrer" aria-label={`Abrir tienda de ${org.name}`}>
+              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+            </a>
+          </Button>
+          <EnterSupportButton iconOnly organizationId={org.id} organizationName={org.name} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-lg text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400"
+            title="Editar organización"
+            aria-label={`Editar ${org.name}`}
+            onClick={onEdit}
+          >
+            <Wrench className="h-4 w-4" />
+          </Button>
+          <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Gestionar usuarios">
+            <Link href={`/superadmin/users?organization=${org.id}`} aria-label={`Usuarios de ${org.name}`}>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Suscripción y pagos">
+            <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`} aria-label={`Suscripción de ${org.name}`}>
+              <CreditCard className="h-4 w-4 text-muted-foreground" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </Card>
   )
 }
 
@@ -905,6 +1130,8 @@ export function OrganizationsDashboard({
                     viewMode === 'table' ? 'bg-card shadow-2xs text-foreground' : ''
                   )}
                   title="Vista de Tabla"
+                  aria-label="Vista de Tabla"
+                  aria-pressed={viewMode === 'table'}
                 >
                   <List className="h-4 w-4" />
                 </button>
@@ -916,6 +1143,8 @@ export function OrganizationsDashboard({
                     viewMode === 'grid' ? 'bg-card shadow-2xs text-foreground' : ''
                   )}
                   title="Vista de Cuadrícula"
+                  aria-label="Vista de Cuadrícula"
+                  aria-pressed={viewMode === 'grid'}
                 >
                   <LayoutGrid className="h-4 w-4" />
                 </button>
@@ -1193,83 +1422,23 @@ export function OrganizationsDashboard({
                 </div>
               ) : (
                 pagination.items.map((org) => (
-                  <Card key={org.id} className="flex flex-col overflow-hidden transition-all hover:shadow-md">
-                    <div className="flex items-start justify-between gap-3 border-b border-border bg-muted/40 p-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={cn(
-                          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-sm',
-                          PLAN_AVATAR_BG[org.plan] ?? PLAN_AVATAR_BG.FREE
-                        )}>
-                          {getInitials(org.name)}
-                        </div>
-                        <div className="min-w-0">
-                          <Link
-                            href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`}
-                            className="truncate text-sm font-bold text-foreground hover:text-cyan-600 transition-colors block"
-                          >
-                            {org.name}
-                          </Link>
-                          <p className="truncate text-xs text-muted-foreground">/{org.slug}</p>
-                        </div>
-                      </div>
-                      <Badge variant="outline" className={cn('rounded-full text-[10px] font-bold px-2 py-0.5', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
-                        {org.plan}
-                      </Badge>
-                    </div>
-
-                    <div className="flex-1 space-y-3 p-4 bg-card">
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-muted-foreground">Suscripción</span>
-                          <SubscriptionBadge org={org} />
-                        </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-muted-foreground">Rubro</span>
-                          <RubroBadge vertical={org.business_vertical} model={org.operating_model} />
-                        </div>
-                      </div>
-
-                      <div className="border-t border-border pt-3">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>Personal: <strong className="text-foreground">{org.staff_total}</strong></span>
-                          <span>Clientes: <strong className="text-foreground">{org.customers_total}</strong></span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-border bg-muted/40 p-3 flex items-center justify-end gap-1">
-                      <EnterSupportButton iconOnly organizationId={org.id} organizationName={org.name} />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 rounded-lg cursor-pointer text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400"
-                        title="Editar organización"
-                        onClick={() => setEditingOrg({
-                          id: org.id,
-                          name: org.name,
-                          slug: org.slug,
-                          plan: org.plan,
-                          subscription_status: org.subscription_status,
-                          business_vertical: org.business_vertical,
-                          operating_model: org.operating_model,
-                          enabled_modules: org.enabled_modules,
-                          cancel_at_period_end: org.cancel_at_period_end,
-                        })}
-                      >
-                        <Wrench className="h-4 w-4" />
-                      </Button>
-                      <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Gestionar usuarios">
-                        <Link href={`/superadmin/users?organization=${org.id}`}>
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                        </Link>
-                      </Button>
-                      <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Suscripción y pagos">
-                        <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`}>
-                          <CreditCard className="h-4 w-4 text-muted-foreground" />
-                        </Link>
-                      </Button>
-                    </div>
-                  </Card>
+                  <OrganizationGridCard
+                    key={org.id}
+                    org={org}
+                    referenceTime={referenceTime}
+                    onCopyUrl={(slug) => void copyUrl(slug)}
+                    onEdit={() => setEditingOrg({
+                      id: org.id,
+                      name: org.name,
+                      slug: org.slug,
+                      plan: org.plan,
+                      subscription_status: org.subscription_status,
+                      business_vertical: org.business_vertical,
+                      operating_model: org.operating_model,
+                      enabled_modules: org.enabled_modules,
+                      cancel_at_period_end: org.cancel_at_period_end,
+                    })}
+                  />
                 ))
               )}
             </div>

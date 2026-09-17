@@ -10,6 +10,12 @@ import {
   COMPUTED_SPEND_FIELDS,
   fetchCustomerSpend,
 } from '@/lib/customers/customer-spend-client'
+import {
+  buildCustomerIdentity,
+  normalizeCustomerStatus,
+  normalizeCustomerType,
+  type CustomerStatus,
+} from '@/lib/customers/customer-contract'
 
 export interface Customer {
   id: string  // UUID from Supabase
@@ -25,7 +31,7 @@ export interface Customer {
   alternate_phone_label?: string | null
   ruc?: string
   customer_type: "premium" | "empresa" | "regular" | "wholesale"
-  status: "active" | "inactive" | "suspended"
+  status: CustomerStatus
   total_purchases: number
   total_repairs: number
   registration_date: string
@@ -128,17 +134,19 @@ const initialFilters: CustomerFilters = {
  * Centralized here to avoid duplication in realtime handlers.
  */
 export function mapRawToCustomer(raw: Record<string, any>): Customer {
+  const identity = buildCustomerIdentity(raw)
   return {
     ...raw,
+    ...identity,
     id: raw.id,
     profile_id: raw.profile_id,
     customerCode: raw.customer_code || `CLI-${raw.id?.slice(0, 6)}`,
-    name: raw.name || '',
+    name: identity.name,
     email: raw.email || '',
     phone: raw.phone || '',
     ruc: raw.ruc,
-    customer_type: raw.customer_type || 'regular',
-    status: raw.status || 'active',
+    customer_type: normalizeCustomerType(raw.customer_type),
+    status: normalizeCustomerStatus(raw.status),
     total_purchases: raw.total_purchases || 0,
     total_repairs: raw.total_repairs || 0,
     registration_date: raw.created_at,
@@ -163,7 +171,8 @@ export function mapRawToCustomer(raw: Record<string, any>): Customer {
     tags: raw.tags || [],
     whatsapp: raw.whatsapp,
     social_media: raw.social_media,
-    company: raw.company,
+    company: identity.company,
+    company_name: identity.company_name,
     position: raw.position,
     referral_source: raw.referral_source || '',
     discount_percentage: raw.discount_percentage || 0,
