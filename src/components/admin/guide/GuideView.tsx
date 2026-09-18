@@ -5,10 +5,9 @@ import Link from 'next/link'
 import {
   AlertTriangle,
   ArrowRight,
-  ArrowUpRight,
   BookOpen,
-  Briefcase,
   Building2,
+  Check,
   CheckCircle2,
   ChevronsDown,
   ChevronsUp,
@@ -18,12 +17,9 @@ import {
   HelpCircle,
   LayoutDashboard,
   Lightbulb,
-  Monitor,
-  Package,
   Printer,
   RotateCcw,
   Search,
-  Settings,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
@@ -32,7 +28,6 @@ import {
   Sunrise,
   Sunset,
   Target,
-  Users,
   Wrench,
   X,
   type LucideIcon,
@@ -65,18 +60,17 @@ const CONCEPT_ICONS: Record<string, LucideIcon> = {
   plan: CreditCard,
 }
 
-const VERTICAL_OPTIONS: { id: BusinessVertical; label: string }[] = [
-  { id: 'electronics', label: 'Tecnología / Celulares' },
-  { id: 'clothing', label: 'Indumentaria / Ropa' },
-  { id: 'food', label: 'Gastronomía / Alimentos' },
-  { id: 'hardware', label: 'Ferretería / Repuestos' },
-  { id: 'cosmetics', label: 'Cosmética / Belleza' },
-  { id: 'general', label: 'Comercio General' },
+const VERTICAL_OPTIONS: { id: BusinessVertical; label: string; icon: string }[] = [
+  { id: 'electronics', label: 'Tecnología / Celulares', icon: '📱' },
+  { id: 'clothing', label: 'Indumentaria / Ropa', icon: '👗' },
+  { id: 'food', label: 'Gastronomía / Alimentos', icon: '🍔' },
+  { id: 'hardware', label: 'Ferretería / Repuestos', icon: '🔧' },
+  { id: 'cosmetics', label: 'Cosmética / Belleza', icon: '💄' },
+  { id: 'general', label: 'Comercio General', icon: '🏪' },
 ]
 
-const POPULAR_SEARCH_TAGS = ['caja', 'stock', 'roles', 'transferencia', 'publicar tienda', 'reportes', 'permisos']
+const QUICK_SEARCH_CHIPS = ['caja', 'stock', 'roles', 'transferencia', 'publicar tienda', 'reportes']
 
-// Secciones que corresponden al ámbito Operativo / Dashboard (día a día)
 const DASHBOARD_SECTION_IDS = ['cash-monitor', 'inventory', 'reports']
 
 function iconFor(section: GuideSection): LucideIcon {
@@ -116,7 +110,6 @@ export function GuideView() {
     }
   }, [businessVertical])
 
-  // Atajos de teclado: '/' para buscar, 'Esc' para limpiar
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const targetTag = (e.target as HTMLElement)?.tagName
@@ -150,7 +143,6 @@ export function GuideView() {
     } catch {}
   }
 
-  // Filtrado según módulos del plan y permisos
   const available = useMemo(
     () => filterGuideSections(GUIDE_SECTIONS, { hasPermission, isAdmin, modules: effectiveModules }),
     [hasPermission, isAdmin, effectiveModules],
@@ -159,7 +151,6 @@ export function GuideView() {
   const results = useMemo(() => searchGuideSections(available, query), [available, query])
   const searching = query.trim().length > 0
 
-  // Separación por ámbito: Dashboard (Día a día) vs Admin (Gestión/Control)
   const dashboardSections = useMemo(
     () => results.filter((s) => DASHBOARD_SECTION_IDS.includes(s.id)),
     [results],
@@ -170,7 +161,6 @@ export function GuideView() {
     [results],
   )
 
-  // Conteos para los botones
   const dashboardCount = useMemo(
     () => available.filter((s) => DASHBOARD_SECTION_IDS.includes(s.id)).length,
     [available],
@@ -184,14 +174,12 @@ export function GuideView() {
     [available],
   )
 
-  // Secciones a mostrar según la pestaña activa
   const visibleSections = useMemo(() => {
     if (activeTab === 'dashboard') return dashboardSections
     if (activeTab === 'admin') return adminSections
     return results
   }, [activeTab, dashboardSections, adminSections, results])
 
-  // Agrupamiento de secciones visibles
   const groups = useMemo(
     () =>
       GUIDE_GROUPS.map((group) => ({
@@ -201,12 +189,10 @@ export function GuideView() {
     [visibleSections],
   )
 
-  // Recomendaciones específicas para el rubro seleccionado
   const verticalRec: VerticalRecommendation = useMemo(() => {
     return getVerticalRecommendation(selectedVertical)
   }, [selectedVertical])
 
-  // FAQs consolidadas para el FAQ Hub
   const allFaqs = useMemo(() => {
     return available.flatMap((section) =>
       (section.faq ?? []).map((entry) => ({
@@ -256,46 +242,49 @@ export function GuideView() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6">
-      {/* ── Encabezado Principal ── */}
+      {/* ── Encabezado Limpio y Espacioso ── */}
       <header className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-xs">
+          <div className="flex items-center gap-3.5">
+            <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <BookOpen className="h-5 w-5" aria-hidden />
             </span>
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Guía del sistema</h1>
-              <p className="text-xs text-muted-foreground sm:text-sm">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">Guía del sistema</h1>
+                <Badge variant="secondary" className="hidden text-[10px] sm:inline-block">
+                  Manual interactivo
+                </Badge>
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
                 Qué hace cada sección, con un ejemplo de cada una, y qué te falta para empezar a vender.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Selector de Rubro */}
-            <div className="flex items-center gap-1.5">
-              <span className="hidden text-xs text-muted-foreground sm:inline-block">Rubro:</span>
-              <Select value={selectedVertical} onValueChange={(val) => setSelectedVertical(val as BusinessVertical)}>
-                <SelectTrigger size="sm" className="h-8 gap-1.5 text-xs">
-                  <Store className="h-3.5 w-3.5 text-primary" />
-                  <SelectValue placeholder="Seleccionar rubro" />
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {VERTICAL_OPTIONS.map((item) => (
-                    <SelectItem key={item.id} value={item.id} className="text-xs">
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {/* Selector de Rubro Estilizado */}
+            <Select value={selectedVertical} onValueChange={(val) => setSelectedVertical(val as BusinessVertical)}>
+              <SelectTrigger size="sm" className="h-8.5 gap-1.5 rounded-lg border-border/70 bg-card text-xs">
+                <Store className="h-3.5 w-3.5 text-primary" />
+                <SelectValue placeholder="Seleccionar rubro" />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {VERTICAL_OPTIONS.map((item) => (
+                  <SelectItem key={item.id} value={item.id} className="text-xs">
+                    <span className="mr-1.5">{item.icon}</span>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            {/* Botón de Impresión / PDF */}
+            {/* Botón Imprimir */}
             <Button
               variant="outline"
               size="sm"
               onClick={handlePrint}
-              className="h-8 gap-1.5 text-xs font-medium"
+              className="h-8.5 gap-1.5 rounded-lg border-border/70 bg-card text-xs font-medium"
               title="Abrir vista de impresión o guardar manual en PDF"
             >
               <Printer className="h-3.5 w-3.5 text-muted-foreground" />
@@ -304,7 +293,7 @@ export function GuideView() {
           </div>
         </div>
 
-        {/* ── Buscador ── */}
+        {/* ── Buscador Integrado ── */}
         <div className="space-y-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -312,8 +301,8 @@ export function GuideView() {
               ref={searchInputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por palabra clave: caja, stock, roles, reportes... (tecla '/')"
-              className="h-10 pl-10 pr-12 text-sm shadow-xs"
+              placeholder="Buscar en el manual: caja, stock, roles, reportes, permisos... (tecla '/')"
+              className="h-10.5 rounded-xl border-border/80 bg-card pl-10 pr-12 text-sm shadow-xs transition-shadow focus-visible:ring-1"
               aria-label="Buscar en la guía"
             />
             <div className="absolute right-2.5 top-1/2 flex -translate-y-1/2 items-center gap-1">
@@ -328,7 +317,7 @@ export function GuideView() {
                   <X className="h-3.5 w-3.5" />
                 </Button>
               ) : (
-                <kbd className="pointer-events-none hidden rounded border border-border/80 bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground sm:inline-block">
+                <kbd className="pointer-events-none hidden rounded-md border border-border/80 bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground sm:inline-block">
                   /
                 </kbd>
               )}
@@ -337,16 +326,13 @@ export function GuideView() {
 
           {!searching && (
             <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1 font-medium text-foreground/70">
-                <Sparkles className="h-3 w-3 text-amber-500" />
-                Temas frecuentes:
-              </span>
-              {POPULAR_SEARCH_TAGS.map((tag) => (
+              <span className="text-[11px] font-medium text-muted-foreground/80">Sugerencias:</span>
+              {QUICK_SEARCH_CHIPS.map((tag) => (
                 <button
                   key={tag}
                   type="button"
                   onClick={() => setQuery(tag)}
-                  className="rounded-md border border-border/70 bg-card px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+                  className="rounded-md border border-border/60 bg-muted/20 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
                 >
                   {tag}
                 </button>
@@ -355,23 +341,23 @@ export function GuideView() {
           )}
         </div>
 
-        {/* ── Las 3 Secciones Principales solicitadas + Pestañas de Apoyo ── */}
-        <div className="flex flex-col gap-2.5 border-b border-border/70 pb-3 sm:flex-row sm:items-center sm:justify-between">
-          <nav aria-label="Temas de la guía" className="flex flex-wrap items-center gap-1.5">
+        {/* ── Barra de Navegación Segmentada y Limpia ── */}
+        <div className="rounded-xl border border-border/70 bg-muted/30 p-1">
+          <nav aria-label="Temas de la guía" className="grid grid-cols-2 gap-1 sm:flex sm:flex-wrap sm:items-center">
             {/* 1. Dashboard / Operaciones */}
             <button
               type="button"
               onClick={() => setActiveTab('dashboard')}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+                'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
                 activeTab === 'dashboard'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  ? 'bg-card text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <LayoutDashboard className="h-3.5 w-3.5" />
+              <LayoutDashboard className="h-3.5 w-3.5 text-primary" />
               <span>Dashboard / Operaciones</span>
-              <span className={cn('rounded px-1 text-[10px] tabular-nums', activeTab === 'dashboard' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground')}>
+              <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] font-bold text-muted-foreground">
                 {dashboardCount}
               </span>
             </button>
@@ -381,15 +367,15 @@ export function GuideView() {
               type="button"
               onClick={() => setActiveTab('admin')}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+                'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
                 activeTab === 'admin'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  ? 'bg-card text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <ShieldCheck className="h-3.5 w-3.5" />
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Admin / Gestión</span>
-              <span className={cn('rounded px-1 text-[10px] tabular-nums', activeTab === 'admin' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground')}>
+              <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] font-bold text-muted-foreground">
                 {adminCount}
               </span>
             </button>
@@ -399,238 +385,236 @@ export function GuideView() {
               type="button"
               onClick={() => setActiveTab('rubro')}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+                'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
                 activeTab === 'rubro'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  ? 'bg-card text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <Store className="h-3.5 w-3.5" />
+              <Store className="h-3.5 w-3.5 text-amber-500" />
               <span>Inicio por Rubro</span>
-              <Badge variant="secondary" className="h-4 border-transparent bg-amber-100 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                Guía a medida
-              </Badge>
-            </button>
-
-            {/* Todos los temas */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('all')}
-              className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
-                activeTab === 'all'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-              )}
-            >
-              <span>Todos</span>
-              <span className={cn('rounded px-1 text-[10px] tabular-nums', activeTab === 'all' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground')}>
-                {available.length}
+              <span className="rounded bg-amber-100 px-1.5 py-0.2 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                Guía
               </span>
             </button>
 
-            {/* Primeros pasos */}
+            {/* 4. Primeros pasos */}
             <button
               type="button"
               onClick={() => setActiveTab('first-steps')}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+                'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
                 activeTab === 'first-steps'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  ? 'bg-card text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <span>🚀 Primeros pasos</span>
             </button>
 
-            {/* FAQ */}
+            {/* 5. Todos */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={cn(
+                'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
+                activeTab === 'all'
+                  ? 'bg-card text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <span>Todos</span>
+              <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] font-bold text-muted-foreground">
+                {available.length}
+              </span>
+            </button>
+
+            {/* 6. Preguntas Frecuentes */}
             {faqCount > 0 && (
               <button
                 type="button"
                 onClick={() => setActiveTab('faq')}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+                  'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
                   activeTab === 'faq'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    ? 'bg-card text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 <span>Preguntas Frecuentes</span>
-                <span className={cn('rounded px-1 text-[10px] tabular-nums', activeTab === 'faq' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground')}>
+                <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] font-bold text-muted-foreground">
                   {faqCount}
                 </span>
               </button>
             )}
           </nav>
+        </div>
 
-          {/* Mini lectura y controles */}
-          <div className="flex items-center justify-between gap-3 sm:justify-end">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{readPercent}% leído</span>
-              {readSections.length > 0 && (
-                <button
-                  type="button"
-                  onClick={resetReadProgress}
-                  className="text-muted-foreground hover:text-foreground"
-                  title="Reiniciar progreso"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-
-            {activeTab !== 'first-steps' && activeTab !== 'faq' && activeTab !== 'rubro' && (
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={expandAll}
-                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  title="Expandir todas las tarjetas"
-                >
-                  <ChevronsDown className="mr-1 h-3 w-3" />
-                  Expandir todo
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={collapseAll}
-                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  title="Colapsar todas las tarjetas"
-                >
-                  <ChevronsUp className="mr-1 h-3 w-3" />
-                  Colapsar
-                </Button>
-              </div>
+        {/* ── Barra de Utilidades: Progreso de lectura y Acordeones ── */}
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span>Progreso: <strong className="font-semibold text-foreground">{readPercent}% leído</strong></span>
+            {readSections.length > 0 && (
+              <button
+                type="button"
+                onClick={resetReadProgress}
+                className="text-[11px] text-muted-foreground hover:text-foreground"
+                title="Reiniciar progreso"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </button>
             )}
           </div>
+
+          {activeTab !== 'first-steps' && activeTab !== 'faq' && activeTab !== 'rubro' && (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={expandAll}
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ChevronsDown className="mr-1 h-3.5 w-3.5" />
+                Expandir todo
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={collapseAll}
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ChevronsUp className="mr-1 h-3.5 w-3.5" />
+                Colapsar
+              </Button>
+            </div>
+          )}
         </div>
       </header>
 
-      {/* ── Banner contextual según sección activa ── */}
+      {/* ── SECCIÓN 1: DASHBOARD / OPERACIONES ── */}
       {activeTab === 'dashboard' && !searching && (
-        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-xs">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <LayoutDashboard className="h-4 w-4 text-primary" />
+        <div className="space-y-4">
+          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
                 <h2 className="text-sm font-bold text-foreground sm:text-base">
-                  Panel de Operaciones (El día a día del negocio)
+                  Operaciones Diarias (Mostrador y Salón)
                 </h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Registrar ventas en el punto de venta (POS), abrir y cerrar cajas, controlar stock y atender clientes.
+                </p>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-                Acá trabajan cajeros, vendedores y encargados: registrar ventas en el punto de venta (POS), abrir y cerrar caja, controlar stock y pedidos.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
-                href="/dashboard/pos"
-                className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 shadow-xs"
-              >
-                <span>Abrir POS</span>
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-              <Link
-                href="/dashboard/products"
-                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-xs"
-              >
-                <span>Catálogo</span>
-                <ExternalLink className="h-3 w-3" />
-              </Link>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href="/dashboard/pos"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90"
+                >
+                  <span>Punto de Venta POS</span>
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+                <Link
+                  href="/dashboard/pos/caja"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                >
+                  <span>Cajas del Día</span>
+                </Link>
+                <Link
+                  href="/dashboard/products"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                >
+                  <span>Catálogo</span>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* ── SECCIÓN 2: ADMIN / GESTIÓN ── */}
       {activeTab === 'admin' && !searching && (
-        <div className="rounded-2xl border border-border bg-muted/20 p-4 shadow-xs">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-primary" />
+        <div className="space-y-4">
+          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
                 <h2 className="text-sm font-bold text-foreground sm:text-base">
-                  Panel de Administración (Gestión, Equipo y Control)
+                  Panel de Administración y Control
                 </h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Para el dueño o administrador: configurar equipo, sucursales, controlar finanzas, tienda pública y seguridad.
+                </p>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-                Herramientas del propietario y administradores: invitar colaboradores con roles, ver finanzas y gastos, sucursales, tienda web, seguridad y reportes.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
-                href="/admin/users"
-                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-xs"
-              >
-                <span>Equipo</span>
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-              <Link
-                href="/admin/finances"
-                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-xs"
-              >
-                <span>Finanzas</span>
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-              <Link
-                href="/admin/website"
-                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-xs"
-              >
-                <span>Tienda Web</span>
-                <ExternalLink className="h-3 w-3" />
-              </Link>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href="/admin/users"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                >
+                  <span>Equipo</span>
+                </Link>
+                <Link
+                  href="/admin/finances"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                >
+                  <span>Finanzas</span>
+                </Link>
+                <Link
+                  href="/admin/website"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                >
+                  <span>Tienda Web</span>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── 3. VISTA DEDICADA: INICIO POR RUBRO Y RECOMENDACIONES ── */}
+      {/* ── SECCIÓN 3: INICIO POR RUBRO (RECOMENDACIONES) ── */}
       {activeTab === 'rubro' && !searching ? (
         <div className="space-y-6">
           {/* Tarjeta de encabezado del rubro */}
-          <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5 shadow-xs">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 shadow-xs">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
+              <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Badge className="bg-primary text-primary-foreground">{verticalRec.badge}</Badge>
                   <span className="text-xs text-muted-foreground">• Rubro seleccionado</span>
                 </div>
-                <h2 className="mt-1.5 text-lg font-bold text-foreground sm:text-xl">{verticalRec.title}</h2>
-                <p className="mt-0.5 text-xs font-medium text-primary sm:text-sm">{verticalRec.subtitle}</p>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                <h2 className="text-lg font-bold text-foreground sm:text-xl">{verticalRec.title}</h2>
+                <p className="text-xs font-medium text-primary sm:text-sm">{verticalRec.subtitle}</p>
+                <p className="pt-1 text-xs leading-relaxed text-muted-foreground sm:text-sm">
                   {verticalRec.description}
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border/70 bg-card p-2">
-                <span className="text-xs font-medium text-muted-foreground">Cambiar rubro:</span>
-                <div className="flex flex-wrap gap-1">
-                  {VERTICAL_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setSelectedVertical(opt.id)}
-                      className={cn(
-                        'rounded-md px-2 py-0.5 text-xs font-medium transition-colors',
-                        selectedVertical === opt.id
-                          ? 'bg-primary text-primary-foreground shadow-xs'
-                          : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground',
-                      )}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+              {/* Botones de cambio rápido de rubro */}
+              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-border/70 bg-card p-1.5">
+                {VERTICAL_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setSelectedVertical(opt.id)}
+                    className={cn(
+                      'rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                      selectedVertical === opt.id
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    <span className="mr-1">{opt.icon}</span>
+                    {opt.label.split('/')[0].trim()}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Fase 1: Cómo empezar a usar el sistema en tu rubro */}
+          {/* Plan de Inicio en 4 pasos */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 border-b border-border/70 pb-2">
               <Sparkles className="h-4 w-4 text-amber-500" />
-              <h3 className="text-base font-bold text-foreground">
+              <h3 className="text-sm font-bold text-foreground sm:text-base">
                 Plan de Inicio: 4 pasos para poner a punto {verticalRec.title}
               </h3>
             </div>
@@ -639,7 +623,7 @@ export function GuideView() {
               {verticalRec.startingSteps.map((step) => (
                 <div key={step.step} className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-4 shadow-xs">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5">
                       <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                         {step.step}
                       </span>
@@ -649,10 +633,10 @@ export function GuideView() {
                       {step.description}
                     </p>
                   </div>
-                  <div className="mt-4 pt-2">
+                  <div className="mt-3.5 pt-1">
                     <Link
                       href={step.actionHref}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
                     >
                       <span>{step.actionLabel}</span>
                       <ArrowRight className="h-3 w-3" />
@@ -663,18 +647,18 @@ export function GuideView() {
             </div>
           </div>
 
-          {/* Fase 2: Rutina diaria recomendada */}
+          {/* Rutina Diaria */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 border-b border-border/70 pb-2">
               <Clock className="h-4 w-4 text-primary" />
-              <h3 className="text-base font-bold text-foreground">
+              <h3 className="text-sm font-bold text-foreground sm:text-base">
                 Rutina Diaria Recomendada para {verticalRec.title}
               </h3>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-xs">
-                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
                   <Sunrise className="h-4 w-4" />
                   <span className="text-xs font-bold uppercase tracking-wider">1. Apertura</span>
                 </div>
@@ -684,9 +668,9 @@ export function GuideView() {
               </div>
 
               <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-xs">
-                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                   <ShoppingBag className="h-4 w-4" />
-                  <span className="text-xs font-bold uppercase tracking-wider">2. Mostrador & Ventas</span>
+                  <span className="text-xs font-bold uppercase tracking-wider">2. Mostrador</span>
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                   {verticalRec.dailyRoutine.sales}
@@ -694,9 +678,9 @@ export function GuideView() {
               </div>
 
               <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-xs">
-                <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
+                <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
                   <Sun className="h-4 w-4" />
-                  <span className="text-xs font-bold uppercase tracking-wider">3. Control Mediodía</span>
+                  <span className="text-xs font-bold uppercase tracking-wider">3. Mediodía</span>
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                   {verticalRec.dailyRoutine.midday}
@@ -704,9 +688,9 @@ export function GuideView() {
               </div>
 
               <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-xs">
-                <div className="flex items-center gap-2 text-purple-600 dark:text-purple-400">
+                <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
                   <Sunset className="h-4 w-4" />
-                  <span className="text-xs font-bold uppercase tracking-wider">4. Cierre & Arqueo</span>
+                  <span className="text-xs font-bold uppercase tracking-wider">4. Cierre</span>
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                   {verticalRec.dailyRoutine.closing}
@@ -715,46 +699,14 @@ export function GuideView() {
             </div>
           </div>
 
-          {/* Fase 3: Configuraciones clave del sistema para este rubro */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 border-b border-border/70 pb-2">
-              <Target className="h-4 w-4 text-primary" />
-              <h3 className="text-base font-bold text-foreground">
-                Configuraciones Clave en el Sistema
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {verticalRec.keySettings.map((sett) => (
-                <div key={sett.title} className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-4 shadow-xs">
-                  <div>
-                    <h4 className="text-sm font-semibold text-foreground">{sett.title}</h4>
-                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                      {sett.reason}
-                    </p>
-                  </div>
-                  <div className="mt-3 pt-2">
-                    <Link
-                      href={sett.href}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-                    >
-                      <span>Abrir módulo</span>
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Fase 4: Errores comunes a evitar y Consejo Pro */}
+          {/* Errores comunes + Consejo Pro */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 p-4 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <h4 className="text-sm font-bold">Errores comunes a evitar en tu rubro</h4>
+                <h4 className="text-sm font-bold">Errores a evitar en tu rubro</h4>
               </div>
-              <ul className="mt-2.5 space-y-2 pl-2 text-xs leading-relaxed">
+              <ul className="mt-2.5 space-y-2 text-xs leading-relaxed">
                 {verticalRec.pitfallsToAvoid.map((pit, idx) => (
                   <li key={idx} className="flex items-start gap-2">
                     <span className="font-bold text-amber-600">•</span>
@@ -764,22 +716,24 @@ export function GuideView() {
               </ul>
             </div>
 
-            <div className="rounded-xl border border-emerald-300/60 bg-emerald-50/70 p-4 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-200">
-              <div className="flex items-center gap-2">
-                <Lightbulb className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <h4 className="text-sm font-bold">Consejo de Oro para vender más</h4>
+            <div className="flex flex-col justify-between rounded-xl border border-emerald-300/60 bg-emerald-50/70 p-4 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-200">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Lightbulb className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <h4 className="text-sm font-bold">Consejo de Oro para vender más</h4>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed sm:text-sm">
+                  {verticalRec.proTip}
+                </p>
               </div>
-              <p className="mt-2.5 text-xs leading-relaxed sm:text-sm">
-                {verticalRec.proTip}
-              </p>
-              <div className="mt-4">
+              <div className="mt-3.5 pt-1">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => setActiveTab('dashboard')}
-                  className="h-8 gap-1 border-emerald-400 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300"
+                  className="h-8 gap-1.5 border-emerald-400 bg-transparent text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300"
                 >
-                  <span>Explorar Operaciones</span>
+                  <span>Explorar Operaciones Diarias</span>
                   <ArrowRight className="h-3 w-3" />
                 </Button>
               </div>
@@ -788,10 +742,10 @@ export function GuideView() {
         </div>
       ) : null}
 
-      {/* ── Panel de Primeros Pasos ── */}
+      {/* ── Primeros Pasos ── */}
       {(activeTab === 'all' || activeTab === 'first-steps') && !searching && <FirstStepsPanel />}
 
-      {/* ── Estado y contador de búsqueda ── */}
+      {/* ── Estado de búsqueda ── */}
       {searching && (
         <div className="flex items-center justify-between rounded-xl border border-border/80 bg-card px-4 py-2.5 text-sm" role="status">
           <span className="text-muted-foreground">
@@ -805,7 +759,7 @@ export function GuideView() {
         </div>
       )}
 
-      {/* ── Modo Preguntas Frecuentes (FAQ Hub) ── */}
+      {/* ── FAQ Hub ── */}
       {activeTab === 'faq' ? (
         <section className="space-y-4">
           <div className="border-b border-border/70 pb-2">
@@ -815,7 +769,7 @@ export function GuideView() {
             </p>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {allFaqs.length === 0 ? (
               <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                 No se encontraron preguntas con «{query}».
@@ -841,9 +795,9 @@ export function GuideView() {
           </div>
         </section>
       ) : activeTab !== 'rubro' ? (
-        /* ── Lista de Secciones (según ámbito activo: Todos, Dashboard o Admin) ── */
+        /* ── Lista de Secciones ── */
         groups.map((group) => (
-          <section key={group.id} id={`guia-grupo-${group.id}`} className="space-y-3.5 scroll-mt-20">
+          <section key={group.id} id={`guia-grupo-${group.id}`} className="space-y-3 scroll-mt-20">
             <div className="border-b border-border/60 pb-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-bold tracking-tight text-foreground sm:text-lg">{group.label}</h2>
