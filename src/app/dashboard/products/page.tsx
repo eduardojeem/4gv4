@@ -5,7 +5,7 @@
 
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Info, Plus, RefreshCw, Warehouse, X, Maximize2, Minimize2, Wallet } from "lucide-react";
@@ -20,7 +20,10 @@ import { toast } from "sonner";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { Product } from "@/types/product-unified";
 import { SectionGuideButton } from "@/components/dashboard/common/SectionGuideButton";
-import { PrintLabelsDialog } from "@/components/dashboard/products/labels/PrintLabelsDialog";
+import {
+  PrintLabelsDialog,
+  type LabelDialogProduct,
+} from "@/components/dashboard/products/labels/PrintLabelsDialog";
 import { PRODUCTS_GUIDE } from "@/components/dashboard/common/section-guides-data";
 import {
   MetricsGrid,
@@ -168,7 +171,9 @@ export default function ProductsPage() {
   const [serverSearch, setServerSearch] = useState("");
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
-  const [labelsDialogOpen, setLabelsDialogOpen] = useState(false);
+  // Null: nadie pidio etiquetas. Con contenido: los productos a etiquetar,
+  // sean los seleccionados o uno solo desde la vista rapida.
+  const [labelsTarget, setLabelsTarget] = useState<LabelDialogProduct[] | null>(null);
   const [showGuide, setShowGuide] = useState(true);
 
   const normalizedAlerts = useMemo(() => {
@@ -585,19 +590,24 @@ export default function ProductsPage() {
     clearSelection();
   };
 
+  const toLabelProduct = useCallback(
+    (product: Product): LabelDialogProduct => ({
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      barcode: product.barcode ?? null,
+      price: product.sale_price ?? null,
+      stock: product.stock_quantity ?? null,
+    }),
+    [],
+  );
+
   const productsForLabels = useMemo(
     () =>
       products
         .filter((product) => selectedProductIds.includes(product.id))
-        .map((product) => ({
-          id: product.id,
-          name: product.name,
-          sku: product.sku,
-          barcode: product.barcode ?? null,
-          price: product.sale_price ?? null,
-          stock: product.stock_quantity ?? null,
-        })),
-    [products, selectedProductIds],
+        .map(toLabelProduct),
+    [products, selectedProductIds, toLabelProduct],
   );
 
   const handleBulkExport = () => {
@@ -1014,7 +1024,7 @@ export default function ProductsPage() {
           onBulkActivate={handleBulkActivate}
           onBulkDeactivate={handleBulkDeactivate}
           onBulkExport={handleBulkExport}
-          onBulkPrintLabels={() => setLabelsDialogOpen(true)}
+          onBulkPrintLabels={() => setLabelsTarget(productsForLabels)}
         />
       </div>
 
@@ -1060,9 +1070,11 @@ export default function ProductsPage() {
 
       {/* Etiquetas con codigo de barras de los productos elegidos */}
       <PrintLabelsDialog
-        open={labelsDialogOpen}
-        onOpenChange={setLabelsDialogOpen}
-        products={productsForLabels}
+        open={labelsTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setLabelsTarget(null);
+        }}
+        products={labelsTarget ?? []}
       />
 
       {/* Quick-view modal */}
@@ -1075,6 +1087,10 @@ export default function ProductsPage() {
           handleProductEdit(product);
         }}
         onViewFullDetails={handleViewFullDetails}
+        onPrintLabel={(product) => {
+          setQuickViewProduct(null);
+          setLabelsTarget([toLabelProduct(product)]);
+        }}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

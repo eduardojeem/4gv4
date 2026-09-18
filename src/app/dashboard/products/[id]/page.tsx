@@ -71,6 +71,7 @@ import type { Database } from '@/lib/supabase/types'
 import type { Product } from '@/types/product-unified'
 import { ProductModal } from '@/components/dashboard/product-modal'
 import { PrintLabelsDialog } from '@/components/dashboard/products/labels/PrintLabelsDialog'
+import { resolveLabelCode } from '@/lib/labels/barcode-format'
 import { resolveProductImageUrl } from '@/lib/images'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { cn } from '@/lib/utils'
@@ -327,6 +328,15 @@ export default function ProductDetailPage() {
   }, [product?.images, product?.name])
 
   const normalizedBarcode = (product?.barcode || '').trim()
+  /**
+   * Con qué se puede hacer la etiqueta: el código de barras, o el SKU cuando
+   * no hay. Sin esto, un producto cargado sin código de barras no tenía cómo
+   * imprimir su etiqueta, aunque el SKU se dibuja igual como Code 128.
+   */
+  const labelCode = useMemo(
+    () => resolveLabelCode({ barcode: product?.barcode ?? null, sku: product?.sku ?? null }),
+    [product?.barcode, product?.sku],
+  )
 
   // ─── Variants Processing ───────────────────────────────────────────────────
 
@@ -794,6 +804,23 @@ export default function ProductDetailPage() {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {/* Imprimir la etiqueta es de lo que mas se hace con un producto
+                  recien cargado: va con las acciones principales, no escondido
+                  al lado del codigo de barras. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setLabelsDialogOpen(true)}
+                disabled={!labelCode}
+                title={labelCode
+                  ? 'Imprimir la etiqueta con el código de barras'
+                  : 'Cargale un código de barras o un SKU para poder imprimir la etiqueta'}
+                className="h-9 px-3 text-xs font-semibold rounded-xl gap-1.5 shadow-xs"
+              >
+                <Tag className="h-3.5 w-3.5" />
+                Etiqueta
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -1145,40 +1172,48 @@ export default function ProductDetailPage() {
                           {normalizedBarcode || 'Sin código de barras registrado'}
                         </span>
                       </div>
-                      {normalizedBarcode && (
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleCopyBarcode}
-                            className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                            Copiar
-                          </Button>
+                      {(normalizedBarcode || labelCode) && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {normalizedBarcode && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleCopyBarcode}
+                              className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                              Copiar
+                            </Button>
+                          )}
                           {/* Se podia copiar el numero y buscarlo en Google,
-                              pero no imprimir la etiqueta del estante. */}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setLabelsDialogOpen(true)}
-                            className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1"
-                          >
-                            <Tag className="h-3.5 w-3.5" />
-                            Imprimir etiqueta
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleSearchBarcode}
-                            className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            Buscar en Google
-                          </Button>
+                              pero no imprimir la etiqueta del estante. Sin
+                              codigo de barras se imprime el SKU, que se lee
+                              igual: el producto no queda sin etiqueta. */}
+                          {labelCode && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setLabelsDialogOpen(true)}
+                              className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1"
+                            >
+                              <Tag className="h-3.5 w-3.5" />
+                              {normalizedBarcode ? 'Imprimir etiqueta' : 'Imprimir etiqueta con el SKU'}
+                            </Button>
+                          )}
+                          {normalizedBarcode && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleSearchBarcode}
+                              className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Buscar en Google
+                            </Button>
+                          )}
                         </div>
                       )}
                     </div>

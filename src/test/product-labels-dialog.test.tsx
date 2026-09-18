@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { PrintLabelsDialog } from '@/components/dashboard/products/labels/PrintLabelsDialog'
+
+const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
 /**
  * La pantalla de etiquetas: lo que se puede comprobar sin una impresora.
@@ -64,5 +68,37 @@ describe('diálogo de etiquetas', () => {
       />,
     )
     expect(screen.getByRole('button', { name: /Imprimir/ })).toBeDisabled()
+  })
+})
+
+/**
+ * Se puede llegar a imprimir desde los tres lugares donde alguien mira un
+ * producto: el listado con varios elegidos, la vista rápida y la ficha.
+ */
+describe('desde dónde se imprime', () => {
+  it('el listado lo ofrece con los productos elegidos y desde la vista rápida', () => {
+    const listado = leer('src/app/dashboard/products/page.tsx')
+    expect(listado).toContain('onBulkPrintLabels={() => setLabelsTarget(productsForLabels)}')
+    expect(listado).toContain('setLabelsTarget([toLabelProduct(product)])')
+  })
+
+  it('la vista rápida trae su propia acción', () => {
+    const vistaRapida = leer('src/components/dashboard/products-modern/ProductQuickViewModal.tsx')
+    expect(vistaRapida).toContain('onPrintLabel?: (product: Product) => void')
+    expect(vistaRapida).toContain('onPrintLabel(product)')
+  })
+
+  /** Estaba solo al lado del código, abajo de la ficha: había que buscarlo. */
+  it('la ficha del producto lo tiene en las acciones de arriba', () => {
+    const ficha = leer('src/app/dashboard/products/[id]/page.tsx')
+    const encabezado = ficha.slice(ficha.indexOf('{/* Action Buttons */}'))
+    expect(encabezado.slice(0, 1200)).toContain('setLabelsDialogOpen(true)')
+  })
+
+  /** Sin código de barras se imprime el SKU: el producto no queda sin etiqueta. */
+  it('un producto con SKU y sin código de barras también se puede etiquetar', () => {
+    const ficha = leer('src/app/dashboard/products/[id]/page.tsx')
+    expect(ficha).toContain("resolveLabelCode({ barcode: product?.barcode ?? null, sku: product?.sku ?? null })")
+    expect(ficha).toContain('Imprimir etiqueta con el SKU')
   })
 })

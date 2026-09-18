@@ -59,6 +59,8 @@ export interface ProductQuickViewModalProps {
   onClose: () => void
   onEdit?: (product: Product) => void
   onViewFullDetails?: (product: Product) => void
+  /** Imprime la etiqueta con el codigo de barras de este producto. */
+  onPrintLabel?: (product: Product) => void
 }
 
 const STOCK_LABEL: Record<'in_stock' | 'low_stock' | 'out_of_stock', { label: string; badge: string; text: string; bg: string }> = {
@@ -212,6 +214,7 @@ export function ProductQuickViewModal({
   onClose,
   onEdit,
   onViewFullDetails,
+  onPrintLabel,
 }: ProductQuickViewModalProps) {
   const canViewCost = useCanViewCost()
 
@@ -1305,6 +1308,16 @@ export function ProductQuickViewModal({
           </Button>
 
           <div className="flex items-center gap-2">
+            {onPrintLabel && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPrintLabel(product)}
+                className="rounded-xl h-9 text-xs font-bold border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <Tag className="h-3.5 w-3.5 mr-1.5 text-slate-500" /> Etiqueta
+              </Button>
+            )}
             {onEdit && (
               <Button
                 variant="outline"
