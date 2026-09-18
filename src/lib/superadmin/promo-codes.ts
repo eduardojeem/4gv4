@@ -196,3 +196,50 @@ export function benefitSummary(code: {
   }
   return `${code.duration_days ?? 30} ${unit} adicionales`
 }
+
+export type ExpirationNotice = {
+  isExpired: boolean
+  isExpiringSoon: boolean
+  label: string
+  sublabel?: string
+  daysDiff: number | null
+}
+
+export function getExpirationNotice(expiresAt: string | null | undefined): ExpirationNotice {
+  if (!expiresAt) {
+    return { isExpired: false, isExpiringSoon: false, label: 'Sin vencimiento', daysDiff: null }
+  }
+  const exp = new Date(expiresAt).getTime()
+  const now = Date.now()
+  const diffMs = exp - now
+  const diffDays = Math.ceil(diffMs / 86_400_000)
+
+  if (diffMs < 0) {
+    const overdue = Math.abs(diffDays)
+    return {
+      isExpired: true,
+      isExpiringSoon: false,
+      label: overdue === 0 ? 'Venció hoy' : `Venció hace ${overdue} día${overdue === 1 ? '' : 's'}`,
+      sublabel: new Date(expiresAt).toLocaleDateString('es-PY'),
+      daysDiff: diffDays,
+    }
+  }
+
+  if (diffDays <= 7) {
+    return {
+      isExpired: false,
+      isExpiringSoon: true,
+      label: diffDays === 0 ? 'Vence hoy' : `Vence en ${diffDays} día${diffDays === 1 ? '' : 's'}`,
+      sublabel: new Date(expiresAt).toLocaleDateString('es-PY'),
+      daysDiff: diffDays,
+    }
+  }
+
+  return {
+    isExpired: false,
+    isExpiringSoon: false,
+    label: new Date(expiresAt).toLocaleDateString('es-PY'),
+    sublabel: `Quedan ${diffDays} días`,
+    daysDiff: diffDays,
+  }
+}

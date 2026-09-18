@@ -3,6 +3,7 @@ import {
   benefitSummary,
   buildPromoApplication,
   codeStatus,
+  getExpirationNotice,
   normalizePromoCode,
   promoCodeCreateSchema,
   promoCodeUpdateSchema,
@@ -121,5 +122,32 @@ describe('superadmin promo codes', () => {
         duration_unit: 'months',
       })
     ).toBe('Plan PRO por 3 mes(es)')
+  })
+
+  it('calculates expiration notices accurately', () => {
+    expect(getExpirationNotice(null)).toEqual({
+      isExpired: false,
+      isExpiringSoon: false,
+      label: 'Sin vencimiento',
+      daysDiff: null,
+    })
+
+    const pastDate = new Date(Date.now() - 5 * 86_400_000).toISOString()
+    const pastNotice = getExpirationNotice(pastDate)
+    expect(pastNotice.isExpired).toBe(true)
+    expect(pastNotice.isExpiringSoon).toBe(false)
+    expect(pastNotice.label).toMatch(/Venció hace \d+ días?/)
+
+    const soonDate = new Date(Date.now() + 3 * 86_400_000).toISOString()
+    const soonNotice = getExpirationNotice(soonDate)
+    expect(soonNotice.isExpired).toBe(false)
+    expect(soonNotice.isExpiringSoon).toBe(true)
+    expect(soonNotice.label).toMatch(/Vence en \d+ días?/)
+
+    const futureDate = new Date(Date.now() + 45 * 86_400_000).toISOString()
+    const futureNotice = getExpirationNotice(futureDate)
+    expect(futureNotice.isExpired).toBe(false)
+    expect(futureNotice.isExpiringSoon).toBe(false)
+    expect(futureNotice.sublabel).toMatch(/Quedan \d+ días/)
   })
 })

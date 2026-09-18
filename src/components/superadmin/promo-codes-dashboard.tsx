@@ -17,6 +17,8 @@ import {
   Gift,
   History,
   Info,
+  LayoutGrid,
+  List,
   Loader2,
   MoreVertical,
   Plus,
@@ -58,6 +60,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
+import { benefitSummary, codeStatus, getExpirationNotice } from '@/lib/superadmin/promo-codes'
+
+export { benefitSummary, codeStatus, getExpirationNotice }
 
 export type PromoCode = {
   id: string
@@ -97,47 +102,6 @@ export type Redemption = {
   redeemed_at: string
 }
 
-export function codeStatus(code: PromoCode): {
-  label: string
-  variant: 'default' | 'secondary' | 'destructive' | 'outline'
-  tone: 'active' | 'inactive' | 'expired' | 'exhausted' | 'scheduled'
-} {
-  const now = Date.now()
-  if (!code.is_active) return { label: 'Inactivo', variant: 'secondary', tone: 'inactive' }
-  if (code.expires_at && new Date(code.expires_at).getTime() < now) {
-    return { label: 'Vencido', variant: 'destructive', tone: 'expired' }
-  }
-  if (code.max_redemptions && code.redemption_count >= code.max_redemptions) {
-    return { label: 'Agotado', variant: 'destructive', tone: 'exhausted' }
-  }
-  if (code.starts_at && new Date(code.starts_at).getTime() > now) {
-    return { label: 'Programado', variant: 'outline', tone: 'scheduled' }
-  }
-  return { label: 'Vigente', variant: 'default', tone: 'active' }
-}
-
-export function benefitSummary(code: {
-  benefit_type: string
-  discount_percent?: number | null
-  discount_amount?: number | null
-  target_plan?: string | null
-  duration_days?: number | null
-  duration_unit?: string | null
-}) {
-  if (code.benefit_type === 'discount_percent') return `${code.discount_percent ?? 0}% de descuento`
-  if (code.benefit_type === 'discount_fixed') {
-    return `${Number(code.discount_amount ?? 0).toLocaleString('es-PY')} Gs. de descuento`
-  }
-  const unit = code.duration_unit === 'months' ? 'mes(es)' : 'días'
-  if (code.benefit_type === 'activate_plan') {
-    return `Plan ${code.target_plan ?? 'PRO'} por ${code.duration_days ?? 30} ${unit}`
-  }
-  if (code.benefit_type === 'extend_trial') {
-    return `Prueba extendida por ${code.duration_days ?? 15} ${unit}`
-  }
-  return `${code.duration_days ?? 30} ${unit} adicionales`
-}
-
 function generateRandomCode(prefix = 'PROMO') {
   const year = new Date().getFullYear()
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -156,6 +120,7 @@ export function PromoCodesDashboard() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<'catalog' | 'redemptions'>('catalog')
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
 
   // Filtros y búsquedas
   const [searchQuery, setSearchQuery] = useState('')
@@ -231,6 +196,7 @@ export function PromoCodesDashboard() {
     const active = codes.filter((c) => codeStatus(c).tone === 'active').length
     const totalRedemptions = codes.reduce((sum, c) => sum + c.redemption_count, 0)
     const uniqueBenefitedOrgs = new Set(redemptions.map((r) => r.organization_id)).size
+    const expired = codes.filter((c) => codeStatus(c).tone === 'expired').length
     const expiring = codes.filter((c) => {
       if (!c.expires_at || !c.is_active) return false
       const exp = new Date(c.expires_at).getTime()
@@ -244,6 +210,7 @@ export function PromoCodesDashboard() {
       totalRedemptions,
       uniqueBenefitedOrgs,
       expiring,
+      expired,
     }
   }, [codes, redemptions])
 
@@ -709,6 +676,36 @@ export function PromoCodesDashboard() {
         </Card>
       </div>
 
+      {/* Alerta Destacada de Promociones Vencidas */}
+      {stats.expired > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/90 p-4 text-xs dark:border-rose-900/50 dark:bg-rose-950/40">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="rounded-xl bg-rose-500/15 p-2 text-rose-600 dark:text-rose-400 shrink-0">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-bold text-sm text-rose-950 dark:text-rose-200">
+                Atención: {stats.expired} {stats.expired === 1 ? 'código promocional vencido' : 'códigos promocionales vencidos'}
+              </p>
+              <p className="text-rose-700/80 dark:text-rose-300/80 mt-0.5">
+                Las empresas clientes no pueden canjear promociones expiradas. Puedes extender su vigencia o pausarlas.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setActiveTab('catalog')
+              setStatusFilter(statusFilter === 'expired' ? 'all' : 'expired')
+            }}
+            className="self-start sm:self-center shrink-0 border-rose-300 text-rose-900 hover:bg-rose-100 dark:border-rose-800 dark:text-rose-200 dark:hover:bg-rose-900/50 font-semibold"
+          >
+            {statusFilter === 'expired' ? 'Ver todos los códigos' : `Filtrar solo vencidos (${stats.expired})`}
+          </Button>
+        </div>
+      )}
+
       {/* Tabs Principales: Catálogo vs Historial Global */}
       <Tabs
         value={activeTab}
@@ -753,18 +750,20 @@ export function PromoCodesDashboard() {
                 )}
               </div>
 
-              {/* Filtros Dropdown */}
+              {/* Filtros Dropdown y Selector de Vista */}
               <div className="flex flex-wrap items-center gap-2">
                 {/* Filtro de Estado */}
                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-                  <SelectTrigger className="h-9 w-36 text-xs">
+                  <SelectTrigger className="h-9 w-38 text-xs">
                     <SelectValue placeholder="Estado" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos los estados</SelectItem>
                     <SelectItem value="active">Solo Vigentes</SelectItem>
                     <SelectItem value="inactive">Inactivos / Pausados</SelectItem>
-                    <SelectItem value="expired">Vencidos</SelectItem>
+                    <SelectItem value="expired">
+                      Vencidos {stats.expired > 0 ? `(${stats.expired}) ⚠️` : ''}
+                    </SelectItem>
                     <SelectItem value="exhausted">Agotados</SelectItem>
                   </SelectContent>
                 </Select>
@@ -812,6 +811,38 @@ export function PromoCodesDashboard() {
                     Restablecer
                   </Button>
                 )}
+
+                {/* Selector de Modo de Vista: Tarjetas vs Lista */}
+                <div className="flex items-center rounded-xl border border-border/70 bg-muted/40 p-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('grid')}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all',
+                      viewMode === 'grid'
+                        ? 'bg-white text-foreground shadow-xs font-bold dark:bg-slate-800'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                    title="Ver en cuadrícula de tarjetas"
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Tarjetas</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('table')}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all',
+                      viewMode === 'table'
+                        ? 'bg-white text-foreground shadow-xs font-bold dark:bg-slate-800'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                    title="Ver en formato lista / tabla detallada"
+                  >
+                    <List className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Lista</span>
+                  </button>
+                </div>
               </div>
             </div>
           </Card>
@@ -860,10 +891,227 @@ export function PromoCodesDashboard() {
                 </Button>
               </CardContent>
             </Card>
+          ) : viewMode === 'table' ? (
+            /* VISTA EN LISTA / TABLA DETALLADA */
+            <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-xs dark:border-white/10 dark:bg-[#0d1117]">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b bg-muted/40 font-semibold text-muted-foreground">
+                    <tr>
+                      <th className="p-3.5">Código Promocional</th>
+                      <th className="p-3.5">Campaña / Descripción</th>
+                      <th className="p-3.5">Beneficio Otorgado</th>
+                      <th className="p-3.5">Estado</th>
+                      <th className="p-3.5">Canjes / Cupo</th>
+                      <th className="p-3.5">Vencimiento</th>
+                      <th className="p-3.5 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {filteredCodes.map((code) => {
+                      const statusMeta = codeStatus(code)
+                      const expNotice = getExpirationNotice(code.expires_at)
+                      const usageRatio = code.max_redemptions
+                        ? Math.min(100, Math.round((code.redemption_count / code.max_redemptions) * 100))
+                        : null
+
+                      return (
+                        <tr
+                          key={code.id}
+                          className={cn(
+                            'hover:bg-muted/30 transition-colors',
+                            expNotice.isExpired && 'bg-rose-50/40 dark:bg-rose-950/20'
+                          )}
+                        >
+                          {/* Código con botón de copia rápido */}
+                          <td className="p-3.5 font-medium whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  'font-mono text-xs font-bold tracking-wider px-2 py-0.5 rounded-md border',
+                                  expNotice.isExpired
+                                    ? 'text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-900/60'
+                                    : 'text-indigo-700 bg-indigo-50 border-indigo-200/60 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-900/60'
+                                )}
+                              >
+                                {code.code}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => void handleCopyCode(code.code, code.id)}
+                                className="p-1 text-muted-foreground hover:text-indigo-600 rounded transition-colors"
+                                title="Copiar código"
+                              >
+                                {copiedId === code.id ? (
+                                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* Nombre y descripción */}
+                          <td className="p-3.5 max-w-xs">
+                            <p className="font-bold text-foreground truncate">{code.name}</p>
+                            <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                              {code.description || benefitLabels[code.benefit_type]}
+                            </p>
+                          </td>
+
+                          {/* Beneficio */}
+                          <td className="p-3.5 whitespace-nowrap">
+                            <Badge variant="outline" className="font-semibold text-[11px] bg-muted/30">
+                              {benefitSummary(code)}
+                            </Badge>
+                          </td>
+
+                          {/* Estado */}
+                          <td className="p-3.5 whitespace-nowrap">
+                            {expNotice.isExpired ? (
+                              <Badge variant="destructive" className="text-[10px] font-bold gap-1 bg-rose-600 hover:bg-rose-600 text-white">
+                                <AlertTriangle className="h-3 w-3" />
+                                Vencido
+                              </Badge>
+                            ) : expNotice.isExpiringSoon ? (
+                              <Badge variant="outline" className="text-[10px] font-bold gap-1 border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                                <Clock className="h-3 w-3" />
+                                Vence pronto
+                              </Badge>
+                            ) : (
+                              <Badge variant={statusMeta.variant} className="text-[10px] font-semibold">
+                                {statusMeta.label}
+                              </Badge>
+                            )}
+                          </td>
+
+                          {/* Usos / Cupo */}
+                          <td className="p-3.5 whitespace-nowrap">
+                            <div className="space-y-1">
+                              <span className="font-medium text-foreground">
+                                {code.redemption_count} / {code.max_redemptions ?? 'Ilimitado'}
+                              </span>
+                              {usageRatio !== null && (
+                                <Progress value={usageRatio} className="h-1 w-20" />
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Vencimiento con alerta clara */}
+                          <td className="p-3.5 whitespace-nowrap">
+                            {expNotice.isExpired ? (
+                              <div className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                <div>
+                                  <p className="font-bold text-xs">{expNotice.label}</p>
+                                  {expNotice.sublabel && (
+                                    <p className="text-[10px] text-muted-foreground">{expNotice.sublabel}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : expNotice.isExpiringSoon ? (
+                              <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                                <Clock className="h-3.5 w-3.5 shrink-0" />
+                                <div>
+                                  <p className="font-bold text-xs">{expNotice.label}</p>
+                                  {expNotice.sublabel && (
+                                    <p className="text-[10px] text-muted-foreground">{expNotice.sublabel}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="font-medium text-foreground">{expNotice.label}</p>
+                                {expNotice.sublabel && (
+                                  <p className="text-[10px] text-muted-foreground">{expNotice.sublabel}</p>
+                                )}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Acciones */}
+                          <td className="p-3.5 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Switch
+                                checked={code.is_active}
+                                onCheckedChange={() => void toggleCode(code)}
+                                aria-label={`Alternar estado de ${code.code}`}
+                                title={code.is_active ? 'Desactivar' : 'Activar'}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setDetailCode(code)}
+                                className="h-7 px-2 text-[11px] gap-1"
+                                title="Ver organizaciones que usaron el código"
+                              >
+                                <Building2 className="h-3 w-3" />
+                                {code.redemption_count}
+                              </Button>
+                              <Button
+                                size="sm"
+                                disabled={statusMeta.label !== 'Vigente'}
+                                onClick={() => {
+                                  setApplyCode(code)
+                                  setSelectedOrgId('')
+                                  setOrgSearch('')
+                                }}
+                                className="h-7 px-2 text-[11px] gap-1 bg-indigo-600 hover:bg-indigo-700 text-white"
+                              >
+                                <BadgePercent className="h-3 w-3" />
+                                Aplicar
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                                    <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-44 text-xs">
+                                  <DropdownMenuItem onClick={() => openEditModal(code)}>
+                                    <Edit3 className="mr-2 h-3.5 w-3.5" />
+                                    Editar detalles
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => setDetailCode(code)}>
+                                    <Building2 className="mr-2 h-3.5 w-3.5" />
+                                    Ver organizaciones ({code.redemption_count})
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    disabled={statusMeta.label !== 'Vigente'}
+                                    onClick={() => {
+                                      setApplyCode(code)
+                                      setSelectedOrgId('')
+                                      setOrgSearch('')
+                                    }}
+                                  >
+                                    <BadgePercent className="mr-2 h-3.5 w-3.5 text-indigo-600" />
+                                    Aplicar a organización
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => setDeleteCode(code)}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                    Eliminar código
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           ) : (
+            /* VISTA EN TARJETAS */
             <div className="grid gap-4 md:grid-cols-2">
               {filteredCodes.map((code) => {
                 const statusMeta = codeStatus(code)
+                const expNotice = getExpirationNotice(code.expires_at)
                 const usageRatio = code.max_redemptions
                   ? Math.min(100, Math.round((code.redemption_count / code.max_redemptions) * 100))
                   : null
@@ -873,7 +1121,9 @@ export function PromoCodesDashboard() {
                     key={code.id}
                     className={cn(
                       'group rounded-2xl border transition-all duration-200 hover:shadow-md',
-                      statusMeta.tone === 'active'
+                      expNotice.isExpired
+                        ? 'border-rose-300/80 bg-rose-50/20 dark:border-rose-900/50 dark:bg-rose-950/10'
+                        : statusMeta.tone === 'active'
                         ? 'border-slate-200/80 bg-white dark:border-white/10 dark:bg-[#0d1117]'
                         : 'border-slate-200/50 bg-slate-50/50 dark:border-white/5 dark:bg-slate-900/20 opacity-85'
                     )}
@@ -885,9 +1135,21 @@ export function PromoCodesDashboard() {
                             <CardTitle className="text-base font-bold text-foreground truncate">
                               {code.name}
                             </CardTitle>
-                            <Badge variant={statusMeta.variant} className="text-[10px] font-semibold">
-                              {statusMeta.label}
-                            </Badge>
+                            {expNotice.isExpired ? (
+                              <Badge variant="destructive" className="text-[10px] font-bold gap-1 bg-rose-600 hover:bg-rose-600 text-white">
+                                <AlertTriangle className="h-3 w-3" />
+                                Vencido
+                              </Badge>
+                            ) : expNotice.isExpiringSoon ? (
+                              <Badge variant="outline" className="text-[10px] font-bold gap-1 border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                                <Clock className="h-3 w-3" />
+                                Vence pronto
+                              </Badge>
+                            ) : (
+                              <Badge variant={statusMeta.variant} className="text-[10px] font-semibold">
+                                {statusMeta.label}
+                              </Badge>
+                            )}
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
                             {code.description || benefitLabels[code.benefit_type]}
@@ -1003,20 +1265,51 @@ export function PromoCodesDashboard() {
                           )}
                         </div>
 
-                        <div className="rounded-xl border border-border/40 bg-muted/20 p-2.5">
-                          <p className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
-                            <Clock className="h-3 w-3 text-indigo-500" />
+                        {/* Vencimiento con alerta destacada */}
+                        <div
+                          className={cn(
+                            'rounded-xl border p-2.5',
+                            expNotice.isExpired
+                              ? 'border-rose-300/80 bg-rose-50/70 dark:border-rose-900/60 dark:bg-rose-950/40'
+                              : expNotice.isExpiringSoon
+                              ? 'border-amber-300/80 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/40'
+                              : 'border-border/40 bg-muted/20'
+                          )}
+                        >
+                          <p
+                            className={cn(
+                              'text-[11px] font-medium flex items-center gap-1',
+                              expNotice.isExpired
+                                ? 'text-rose-700 dark:text-rose-400 font-bold'
+                                : expNotice.isExpiringSoon
+                                ? 'text-amber-700 dark:text-amber-400 font-bold'
+                                : 'text-muted-foreground'
+                            )}
+                          >
+                            {expNotice.isExpired ? (
+                              <AlertTriangle className="h-3 w-3" />
+                            ) : (
+                              <Clock className="h-3 w-3 text-indigo-500" />
+                            )}
                             Vencimiento
                           </p>
-                          <p className="mt-1 font-semibold text-foreground truncate">
-                            {code.expires_at
-                              ? new Date(code.expires_at).toLocaleDateString('es-PY', {
-                                  day: '2-digit',
-                                  month: '2-digit',
-                                  year: 'numeric',
-                                })
-                              : 'Sin vencimiento'}
+                          <p
+                            className={cn(
+                              'mt-1 font-semibold truncate',
+                              expNotice.isExpired
+                                ? 'text-rose-700 dark:text-rose-300'
+                                : expNotice.isExpiringSoon
+                                ? 'text-amber-700 dark:text-amber-300'
+                                : 'text-foreground'
+                            )}
+                          >
+                            {expNotice.label}
                           </p>
+                          {expNotice.sublabel && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                              {expNotice.sublabel}
+                            </p>
+                          )}
                         </div>
 
                         <div className="rounded-xl border border-border/40 bg-muted/20 p-2.5">
