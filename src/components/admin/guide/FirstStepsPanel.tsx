@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, ArrowRight, CheckCircle2, Circle, RefreshCw, Rocket } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Circle,
+  Filter,
+  PartyPopper,
+  RefreshCw,
+  Rocket,
+  Sparkles,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -13,18 +23,11 @@ import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { assessFirstSteps, filterFirstSteps, summarizeFirstSteps, type FirstStepsInput } from '@/lib/guide/first-steps'
 import { cn } from '@/lib/utils'
 
-/**
- * El primer paso de una organización nueva, medido con sus propios datos.
- *
- * El onboarding decía «completado» y la empresa seguía sin productos, sin caja
- * y sin ventas: esa era justamente la pantalla que faltaba.
- */
 type LoadResult =
   | { kind: 'ready'; input: FirstStepsInput }
   | { kind: 'empty' }
   | { kind: 'error' }
 
-/** Fuera del componente: así no toca el estado y el efecto queda limpio. */
 async function loadFirstSteps(): Promise<LoadResult> {
   try {
     const response = await fetch('/api/admin/guide/first-steps', { cache: 'no-store' })
@@ -37,10 +40,14 @@ async function loadFirstSteps(): Promise<LoadResult> {
   }
 }
 
+export type StepFilter = 'all' | 'pending' | 'completed'
+
 export function FirstStepsPanel() {
   const [input, setInput] = useState<FirstStepsInput | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'empty'>('loading')
   const [reloads, setReloads] = useState(0)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [stepFilter, setStepFilter] = useState<StepFilter>('all')
   const { hasPermission, isAdmin } = useAuth()
   const { effectiveModules } = useSubscriptionStatus()
 
@@ -51,6 +58,7 @@ export function FirstStepsPanel() {
       if (!vigente) return
       if (result.kind === 'ready') setInput(result.input)
       setStatus(result.kind === 'ready' ? 'ready' : result.kind)
+      setIsRefreshing(false)
     })()
     return () => {
       vigente = false
@@ -58,7 +66,7 @@ export function FirstStepsPanel() {
   }, [reloads])
 
   const refresh = useCallback(() => {
-    setStatus('loading')
+    setIsRefreshing(true)
     setReloads((count) => count + 1)
   }, [])
 
@@ -68,7 +76,17 @@ export function FirstStepsPanel() {
     return summarizeFirstSteps(filterFirstSteps(all, { hasPermission, isAdmin, modules: effectiveModules }))
   }, [input, hasPermission, isAdmin, effectiveModules])
 
+  const visibleSteps = useMemo(() => {
+    if (!assessment) return []
+    if (stepFilter === 'pending') return assessment.steps.filter((s) => !s.done)
+    if (stepFilter === 'completed') return assessment.steps.filter((s) => s.done)
+    return assessment.steps
+  }, [assessment, stepFilter])
+
   if (status === 'empty') return null
+
+  const pendingCount = assessment ? assessment.total - assessment.done : 0
+  const isAllDone = assessment ? assessment.done === assessment.total && assessment.total > 0 : false
 
   return (
     <Card className="border-l-4 border-l-primary shadow-sm">
@@ -84,7 +102,7 @@ export function FirstStepsPanel() {
             </CardDescription>
           </div>
           {status === 'ready' && assessment && (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               {assessment.readyToSell ? (
                 <Badge className="bg-emerald-600 hover:bg-emerald-600">Listo para vender</Badge>
               ) : (
@@ -92,8 +110,15 @@ export function FirstStepsPanel() {
                   Falta lo esencial
                 </Badge>
               )}
-              <Button variant="ghost" size="icon" onClick={refresh} aria-label="Actualizar el avance">
-                <RefreshCw className="h-4 w-4" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={refresh}
+                disabled={isRefreshing}
+                aria-label="Actualizar el avance"
+                title="Actualizar estado en tiempo real"
+              >
+                <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin text-primary')} />
               </Button>
             </div>
           )}
@@ -124,67 +149,136 @@ export function FirstStepsPanel() {
 
         {status === 'ready' && assessment && (
           <>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium text-foreground">
                   {assessment.done} de {assessment.total} pasos
                 </span>
-                <span className="tabular-nums text-muted-foreground">{assessment.percent}%</span>
+                <span className="font-semibold tabular-nums text-primary">{assessment.percent}%</span>
               </div>
               <Progress value={assessment.percent} className="h-2" />
             </div>
 
+            {isAllDone && (
+              <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200">
+                <PartyPopper className="h-5 w-5 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div className="min-w-0 flex-1 text-sm">
+                  <p className="font-semibold">¡Completaste todos los primeros pasos iniciales!</p>
+                  <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                    Tu organización cuenta con catálogo, caja, equipo y tienda listos para operar a toda velocidad.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Filtros de pasos */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Filter className="h-3.5 w-3.5" />
+                <span>Mostrar:</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  onClick={() => setStepFilter('all')}
+                  className={cn(
+                    'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
+                    stepFilter === 'all'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )}
+                >
+                  Todos ({assessment.total})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStepFilter('pending')}
+                  className={cn(
+                    'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
+                    stepFilter === 'pending'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )}
+                >
+                  Pendientes ({pendingCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStepFilter('completed')}
+                  className={cn(
+                    'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
+                    stepFilter === 'completed'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )}
+                >
+                  Listos ({assessment.done})
+                </button>
+              </div>
+            </div>
+
             <ul className="space-y-2">
-              {assessment.steps.map((step) => {
-                const isNext = assessment.next?.key === step.key
-                return (
-                  <li
-                    key={step.key}
-                    className={cn(
-                      'rounded-xl border p-3 transition-colors',
-                      step.done
-                        ? 'border-border bg-card'
-                        : isNext
-                          ? 'border-primary/40 bg-primary/5'
-                          : 'border-border bg-card',
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      {step.done ? (
-                        <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-                      ) : (
-                        <Circle className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden />
+              {visibleSteps.length === 0 ? (
+                <li className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                  No hay pasos en esta vista.
+                </li>
+              ) : (
+                visibleSteps.map((step) => {
+                  const isNext = assessment.next?.key === step.key
+                  return (
+                    <li
+                      key={step.key}
+                      className={cn(
+                        'rounded-xl border p-3.5 transition-all duration-200',
+                        step.done
+                          ? 'border-border/70 bg-card/60'
+                          : isNext
+                            ? 'border-primary/40 bg-primary/5 shadow-sm ring-1 ring-primary/20'
+                            : 'border-border bg-card',
                       )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className={cn('text-sm font-medium', step.done ? 'text-muted-foreground' : 'text-foreground')}>
-                            {step.label}
-                          </p>
-                          {isNext && <Badge variant="secondary" className="text-[10px]">Seguí por acá</Badge>}
-                          {!step.done && step.essential && (
-                            <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                              Imprescindible
-                            </Badge>
+                    >
+                      <div className="flex items-start gap-3">
+                        {step.done ? (
+                          <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                        ) : (
+                          <Circle className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className={cn('text-sm font-medium', step.done ? 'text-muted-foreground' : 'text-foreground')}>
+                              {step.label}
+                            </p>
+                            {isNext && (
+                              <Badge variant="secondary" className="flex items-center gap-1 bg-primary/10 text-[10px] text-primary">
+                                <Sparkles className="h-3 w-3" />
+                                Seguí por acá
+                              </Badge>
+                            )}
+                            {!step.done && step.essential && (
+                              <Badge variant="outline" className="border-amber-400 text-[10px] text-amber-700 uppercase tracking-wide dark:border-amber-700 dark:text-amber-400">
+                                Imprescindible
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="mt-0.5 text-sm text-muted-foreground">{step.detail}</p>
+                          {!step.done && (
+                            <>
+                              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{step.why}</p>
+                              <Link
+                                href={step.action.href}
+                                className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 hover:underline"
+                              >
+                                {step.action.label}
+                                <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                              </Link>
+                            </>
                           )}
                         </div>
-                        <p className="mt-0.5 text-sm text-muted-foreground">{step.detail}</p>
-                        {!step.done && (
-                          <>
-                            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{step.why}</p>
-                            <Link
-                              href={step.action.href}
-                              className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                            >
-                              {step.action.label}
-                              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-                            </Link>
-                          </>
-                        )}
                       </div>
-                    </div>
-                  </li>
-                )
-              })}
+                    </li>
+                  )
+                })
+              )}
             </ul>
           </>
         )}

@@ -246,4 +246,49 @@ describe('pantalla de la guía', () => {
     expect(screen.queryByText('Seguridad')).not.toBeInTheDocument()
     expect(screen.getByText('Usuarios')).toBeInTheDocument()
   })
+
+  it('permite filtrar por categorías y preguntas frecuentes', async () => {
+    const { GuideView } = await import('@/components/admin/guide/GuideView')
+    const { fireEvent } = await import('@testing-library/react')
+    render(<GuideView />)
+
+    // Botones de filtro de categoría presentes
+    expect(screen.getByRole('button', { name: /Todos/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Primeros pasos/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Preguntas Frecuentes/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Imprimir/ })).toBeInTheDocument()
+
+    // Cambiar a la pestaña de FAQ
+    fireEvent.click(screen.getByRole('button', { name: /Preguntas Frecuentes/ }))
+    expect(screen.getByRole('heading', { name: 'Preguntas Frecuentes', level: 2 })).toBeInTheDocument()
+  })
+})
+
+describe('exportación e impresión de la guía', () => {
+  it('genera un documento HTML estructurado para imprimir', async () => {
+    const { printAdminGuide } = await import('@/lib/guide/guide-printer')
+    const mockDocument = {
+      write: vi.fn(),
+      close: vi.fn(),
+    }
+    const mockWindow = {
+      document: mockDocument,
+      focus: vi.fn(),
+    }
+    vi.stubGlobal('open', vi.fn(() => mockWindow))
+
+    printAdminGuide(GUIDE_SECTIONS.slice(0, 3), {
+      companyName: 'Test Empresa',
+      title: 'Manual de Prueba',
+    })
+
+    expect(window.open).toHaveBeenCalledWith('', '_blank')
+    expect(mockDocument.write).toHaveBeenCalled()
+    const htmlWritten = mockDocument.write.mock.calls[0][0] as string
+    expect(htmlWritten).toContain('Manual de Prueba')
+    expect(htmlWritten).toContain('Test Empresa')
+    expect(htmlWritten).toContain('window.print()')
+    expect(mockDocument.close).toHaveBeenCalled()
+    expect(mockWindow.focus).toHaveBeenCalled()
+  })
 })
