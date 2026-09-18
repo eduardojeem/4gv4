@@ -28,6 +28,11 @@ export type LabelFields = {
   showSku: boolean
   /** Nombre del negocio arriba de la etiqueta. */
   storeName?: string | null
+  /**
+   * Si la persona pidió el nombre del negocio. La hoja mira `storeName`: este
+   * campo existe para recordar la elección entre una impresión y la siguiente.
+   */
+  showStoreName?: boolean
   /** Borde punteado para probar la alineación en papel común antes de gastar el pliego. */
   showGuides?: boolean
 }
@@ -129,7 +134,9 @@ const mm = (value: number): string => `${Number(value.toFixed(2))}mm`
 function labelHtml(label: PreparedLabel, layout: LabelLayout, fields: LabelFields): string {
   const parts: string[] = []
 
-  if (fields.storeName?.trim() && !layout.compact) {
+  // Antes se escondía en las etiquetas chicas, pero ahora es una opción que la
+  // persona marca: si la pidió, va, aunque quede al ras.
+  if (fields.storeName?.trim()) {
     parts.push(`<div class="store">${escapeHtml(fields.storeName.trim())}</div>`)
   }
   if (fields.showName) {

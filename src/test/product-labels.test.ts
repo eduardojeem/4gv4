@@ -90,10 +90,16 @@ describe('el dibujo del código', () => {
 })
 
 describe('formatos de etiqueta', () => {
-  it('el rollo es continuo y la hoja tiene grilla', () => {
+  /**
+   * En el rollo cada etiqueta es una página: el papel mide 50 × 25 mm. Cuando
+   * iban todas en una sola página, el navegador las cortaba al pasar de hoja y
+   * el rollo salía desalineado.
+   */
+  it('el rollo imprime una etiqueta por página y la tira no tiene largo fijo', () => {
     const rollo = layoutOrDefault('termica-50x25')
     expect(rollo.media).toBe('thermal')
-    expect(labelsPerPage(rollo)).toBeNull()
+    expect(labelsPerPage(rollo)).toBe(1)
+    expect(labelsPerPage(layoutOrDefault('termica-80mm'))).toBeNull()
 
     const hoja = layoutOrDefault('a4-24')
     expect(labelsPerPage(hoja)).toBe(24)
@@ -125,7 +131,13 @@ describe('formatos de etiqueta', () => {
     expect(hojas[0]).toHaveLength(24)
     expect(hojas[1]).toHaveLength(6)
 
-    expect(paginateLabels(etiquetas, layoutOrDefault('termica-50x25'))).toHaveLength(1)
+    // Cada etiqueta del rollo es su propia página.
+    const rollo = paginateLabels(etiquetas, layoutOrDefault('termica-50x25'))
+    expect(rollo).toHaveLength(30)
+    expect(rollo[0]).toHaveLength(1)
+
+    // La tira de la impresora de tickets sale de corrido.
+    expect(paginateLabels(etiquetas, layoutOrDefault('termica-80mm'))).toHaveLength(1)
   })
 })
 
@@ -194,6 +206,16 @@ describe('la hoja imprimible', () => {
     expect(html).toContain('@page { size: 50mm 25mm; margin: 0; }')
   })
 
+  it('tres etiquetas del rollo son tres páginas, no tres pegadas en una', () => {
+    const html = buildLabelSheetHtml(
+      [etiqueta(), etiqueta(), etiqueta()],
+      layoutOrDefault('termica-50x25'),
+      CAMPOS,
+    )
+    expect(html.match(/class="page"/g)).toHaveLength(3)
+    expect(html.match(/class="label"/g)).toHaveLength(3)
+  })
+
   it('la tira de la impresora de tickets no fija el largo del papel', () => {
     const html = buildLabelSheetHtml([etiqueta()], layoutOrDefault('termica-80mm'), CAMPOS)
     expect(html).toContain('@page { size: 80mm auto; margin: 0; }')
@@ -237,6 +259,15 @@ describe('la hoja imprimible', () => {
     const conGuias = buildLabelSheetHtml([etiqueta()], layoutOrDefault('a4-24'), { ...CAMPOS, showGuides: true })
     expect(conGuias).toContain('dashed')
     expect(buildLabelSheetHtml([etiqueta()], layoutOrDefault('a4-24'), CAMPOS)).not.toContain('dashed')
+  })
+
+  /** Antes se escondía en las etiquetas chicas, aunque la persona lo pidiera. */
+  it('el nombre del negocio va también en la etiqueta más chica', () => {
+    const html = buildLabelSheetHtml([etiqueta()], layoutOrDefault('termica-50x25'), {
+      ...CAMPOS,
+      storeName: '4G Celulares',
+    })
+    expect(html).toContain('class="store">4G Celulares<')
   })
 
   it('el SKU no se repite cuando es el mismo código', () => {

@@ -64,17 +64,25 @@ export async function printProductLabels(
   return { ok: true, printed: labels.length, withoutCode, truncated }
 }
 
-/** El mismo documento, para verlo dentro del diálogo antes de imprimir. */
+/**
+ * El mismo documento, para verlo dentro del diálogo antes de imprimir.
+ *
+ * `maxLabels` corta la muestra: dibujar 500 códigos para una vista previa que
+ * solo se mira de a una hoja trababa el diálogo en cada tecla.
+ */
 export async function buildLabelPreview(
   products: readonly LabelProduct[],
   layoutId: string,
   fields: LabelFields,
-): Promise<{ html: string; labels: number; withoutCode: string[]; truncated: boolean }> {
+  options: { maxLabels?: number } = {},
+): Promise<{ html: string; labels: number; shown: number; withoutCode: string[]; truncated: boolean }> {
   const layout = layoutOrDefault(layoutId)
   const { labels, withoutCode, truncated } = await prepareLabels(products, layout)
+  const shown = typeof options.maxLabels === 'number' ? labels.slice(0, Math.max(0, options.maxLabels)) : labels
   return {
-    html: buildLabelSheetHtml(labels, layout, fields),
+    html: buildLabelSheetHtml(shown, layout, fields),
     labels: labels.length,
+    shown: shown.length,
     withoutCode,
     truncated,
   }

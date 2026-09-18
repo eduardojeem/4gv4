@@ -12,6 +12,8 @@ export type LabelMedia = 'thermal' | 'sheet'
 export type LabelLayout = {
   id: string
   label: string
+  /** Nombre corto, para la tarjeta donde se elige el formato. */
+  short: string
   media: LabelMedia
   /** Cuándo conviene este formato, en una frase. */
   hint: string
@@ -40,6 +42,7 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
   {
     id: 'termica-50x25',
     label: 'Rollo térmico 50 × 25 mm',
+    short: '50 × 25 mm',
     media: 'thermal',
     hint: 'El más común para góndola y estante. Una etiqueta por vez.',
     pageWidthMm: 50,
@@ -58,6 +61,7 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
   {
     id: 'termica-40x30',
     label: 'Rollo térmico 40 × 30 mm',
+    short: '40 × 30 mm',
     media: 'thermal',
     hint: 'Etiqueta angosta y alta: entra el nombre en dos líneas.',
     pageWidthMm: 40,
@@ -76,6 +80,7 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
   {
     id: 'termica-60x40',
     label: 'Rollo térmico 60 × 40 mm',
+    short: '60 × 40 mm',
     media: 'thermal',
     hint: 'La más cómoda de leer: nombre completo, precio grande y código.',
     pageWidthMm: 60,
@@ -93,6 +98,7 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
   {
     id: 'termica-80mm',
     label: 'Impresora de tickets 80 mm',
+    short: 'Tira de 80 mm',
     media: 'thermal',
     hint: 'Para quien solo tiene la impresora del POS: sale una tira de etiquetas para cortar.',
     pageWidthMm: 80,
@@ -110,6 +116,7 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
   {
     id: 'a4-24',
     label: 'Hoja A4 — 24 etiquetas (70 × 37 mm)',
+    short: '24 por hoja',
     media: 'sheet',
     hint: '3 columnas × 8 filas. El pliego autoadhesivo más vendido.',
     pageWidthMm: 210,
@@ -127,6 +134,7 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
   {
     id: 'a4-40',
     label: 'Hoja A4 — 40 etiquetas (52,5 × 29,7 mm)',
+    short: '40 por hoja',
     media: 'sheet',
     hint: '4 columnas × 10 filas. Rinde más por hoja, con menos lugar para el nombre.',
     pageWidthMm: 210,
@@ -145,6 +153,7 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
   {
     id: 'a4-14',
     label: 'Hoja A4 — 14 etiquetas (99,1 × 38,1 mm)',
+    short: '14 por hoja',
     media: 'sheet',
     hint: '2 columnas × 7 filas. Etiqueta grande, para productos con nombre largo.',
     pageWidthMm: 210,
@@ -171,10 +180,36 @@ export function layoutOrDefault(id: string | null | undefined): LabelLayout {
   return layoutById(id) ?? layoutById(DEFAULT_LABEL_LAYOUT_ID)!
 }
 
-/** Cuántas etiquetas entran en una hoja. `null` en un rollo continuo. */
+/**
+ * El tamaño de lo que se pega: en el rollo es el papel entero, y en la hoja
+ * A4 es la celda del adhesivo. Se usa para dibujar la proporción al elegir.
+ */
+export function mediaSizeMm(layout: LabelLayout): { widthMm: number; heightMm: number } {
+  if (layout.media === 'thermal') {
+    return {
+      widthMm: layout.pageWidthMm,
+      heightMm: layout.pageHeightMm ?? layout.labelHeightMm + layout.marginYMm * 2,
+    }
+  }
+  return { widthMm: layout.labelWidthMm, heightMm: layout.labelHeightMm }
+}
+
+/**
+ * Cuántas etiquetas entran en una página impresa. `null` sólo en la tira
+ * continua, que no tiene largo fijo.
+ *
+ * En el rollo va **una por página**: el papel mide 50 × 25 mm, así que cada
+ * etiqueta es una página. Antes iban todas en una sola y el navegador las
+ * cortaba por la mitad al pasar de página: el rollo salía desalineado.
+ */
 export function labelsPerPage(layout: LabelLayout): number | null {
-  if (layout.rows === null) return null
-  return layout.columns * layout.rows
+  if (layout.rows !== null) return layout.columns * layout.rows
+  return layout.pageHeightMm === null ? null : 1
+}
+
+/** Si el formato imprime una hoja con varias etiquetas (y no una por vez). */
+export function isSheetMedia(layout: LabelLayout): boolean {
+  return layout.media === 'sheet'
 }
 
 /** Cuántas hojas se van a gastar, para avisarlo antes de imprimir. */
