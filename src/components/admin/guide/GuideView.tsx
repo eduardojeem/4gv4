@@ -29,14 +29,14 @@ function iconFor(section: GuideSection): LucideIcon {
 
 export function GuideView() {
   const [query, setQuery] = useState('')
-  const { hasPermission } = useAuth()
+  const { hasPermission, isAdmin } = useAuth()
   const { effectiveModules, businessVertical } = useSubscriptionStatus()
 
   // Sin esto la guía explica funciones que el plan no trae y manda a pantallas
   // que el menú no muestra.
   const available = useMemo(
-    () => filterGuideSections(GUIDE_SECTIONS, { hasPermission, modules: effectiveModules }),
-    [hasPermission, effectiveModules],
+    () => filterGuideSections(GUIDE_SECTIONS, { hasPermission, isAdmin, modules: effectiveModules }),
+    [hasPermission, isAdmin, effectiveModules],
   )
 
   const results = useMemo(() => searchGuideSections(available, query), [available, query])

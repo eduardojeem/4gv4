@@ -172,6 +172,32 @@ describe('contenido de la guía', () => {
     expect(searchGuideSections(GUIDE_SECTIONS, '').length).toBe(GUIDE_SECTIONS.length)
   })
 
+  /**
+   * El menú le muestra todo al admin sin mirar permisos; `hasPermission`
+   * devuelve false cuando la organización le listó permisos explícitos, así que
+   * sin esta regla la guía escondía secciones que el menú sí mostraba.
+   */
+  it('un admin ve todo lo que el plan incluye, igual que en el menú', () => {
+    const sinPermisos = () => false
+    const comoAdmin = filterGuideSections(GUIDE_SECTIONS, { hasPermission: sinPermisos, isAdmin: true, modules: MODULOS })
+    expect(comoAdmin.length).toBe(GUIDE_SECTIONS.length)
+
+    const sinRol = filterGuideSections(GUIDE_SECTIONS, { hasPermission: sinPermisos, isAdmin: false, modules: MODULOS })
+    expect(sinRol.map((section) => section.id)).not.toContain('users')
+
+    // El plan manda igual: ser admin no desbloquea un módulo que no está.
+    expect(filterGuideSections(GUIDE_SECTIONS, { isAdmin: true, modules: ['pos'] }).map((s) => s.id))
+      .not.toContain('analytics')
+
+    // Y los pasos siguen la misma regla.
+    const pasos = filterFirstSteps(assessFirstSteps(vacia()).steps, {
+      hasPermission: sinPermisos,
+      isAdmin: true,
+      modules: MODULOS,
+    })
+    expect(pasos).toHaveLength(6)
+  })
+
   it('no explica secciones que el plan no incluye', () => {
     const sinAnalitica = filterGuideSections(GUIDE_SECTIONS, { modules: ['inventory', 'pos'] })
     expect(sinAnalitica.map((section) => section.id)).not.toContain('analytics')

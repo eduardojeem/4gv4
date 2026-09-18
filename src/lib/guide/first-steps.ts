@@ -169,13 +169,19 @@ export function assessFirstSteps(input: FirstStepsInput): FirstStepsAssessment {
 /**
  * Deja solo los pasos que la persona puede hacer con su plan y sus permisos.
  * Un taller sin POS no tiene que ver «creá tu caja» como una tarea pendiente.
+ * Como en el menú, un admin ve todo lo que el plan incluye.
  */
 export function filterFirstSteps(
   steps: readonly FirstStep[],
-  options: { hasPermission?: (permission: string) => boolean; modules?: readonly string[] },
+  options: {
+    hasPermission?: (permission: string) => boolean
+    modules?: readonly string[]
+    isAdmin?: boolean
+  },
 ): FirstStep[] {
   return steps.filter((step) => {
     if (step.module && options.modules && !options.modules.includes(step.module)) return false
+    if (options.isAdmin) return true
     if (step.permission && options.hasPermission && !options.hasPermission(step.permission)) return false
     return true
   })

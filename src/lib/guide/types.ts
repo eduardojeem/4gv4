@@ -66,13 +66,23 @@ export const GUIDE_GROUPS: { id: GuideGroupId; label: string; description: strin
 /**
  * Deja solo lo que la persona puede usar: sin esto la guía enseña funciones que
  * el plan no trae y manda a pantallas que el menú ni muestra.
+ *
+ * Sigue la misma regla que el menú: un admin ve todo lo que el plan incluye.
+ * `hasPermission` devuelve false para los permisos que la organización no le
+ * listó explícitamente, y sin esta salvedad la guía escondía secciones que el
+ * menú del mismo usuario sí muestra.
  */
 export function filterGuideSections(
   sections: readonly GuideSection[],
-  options: { hasPermission?: (permission: string) => boolean; modules?: readonly string[] },
+  options: {
+    hasPermission?: (permission: string) => boolean
+    modules?: readonly string[]
+    isAdmin?: boolean
+  },
 ): GuideSection[] {
   return sections.filter((section) => {
     if (section.module && options.modules && !options.modules.includes(section.module)) return false
+    if (options.isAdmin) return true
     if (section.permissions?.length && options.hasPermission) {
       return section.permissions.some((permission) => options.hasPermission!(permission))
     }

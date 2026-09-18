@@ -41,7 +41,7 @@ export function FirstStepsPanel() {
   const [input, setInput] = useState<FirstStepsInput | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'empty'>('loading')
   const [reloads, setReloads] = useState(0)
-  const { hasPermission } = useAuth()
+  const { hasPermission, isAdmin } = useAuth()
   const { effectiveModules } = useSubscriptionStatus()
 
   useEffect(() => {
@@ -65,8 +65,8 @@ export function FirstStepsPanel() {
   const assessment = useMemo(() => {
     if (!input) return null
     const all = assessFirstSteps(input).steps
-    return summarizeFirstSteps(filterFirstSteps(all, { hasPermission, modules: effectiveModules }))
-  }, [input, hasPermission, effectiveModules])
+    return summarizeFirstSteps(filterFirstSteps(all, { hasPermission, isAdmin, modules: effectiveModules }))
+  }, [input, hasPermission, isAdmin, effectiveModules])
 
   if (status === 'empty') return null
 
