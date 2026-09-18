@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { Product } from "@/types/product-unified";
 import { SectionGuideButton } from "@/components/dashboard/common/SectionGuideButton";
+import { PrintLabelsDialog } from "@/components/dashboard/products/labels/PrintLabelsDialog";
 import { PRODUCTS_GUIDE } from "@/components/dashboard/common/section-guides-data";
 import {
   MetricsGrid,
@@ -167,6 +168,7 @@ export default function ProductsPage() {
   const [serverSearch, setServerSearch] = useState("");
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const [labelsDialogOpen, setLabelsDialogOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(true);
 
   const normalizedAlerts = useMemo(() => {
@@ -583,6 +585,21 @@ export default function ProductsPage() {
     clearSelection();
   };
 
+  const productsForLabels = useMemo(
+    () =>
+      products
+        .filter((product) => selectedProductIds.includes(product.id))
+        .map((product) => ({
+          id: product.id,
+          name: product.name,
+          sku: product.sku,
+          barcode: product.barcode ?? null,
+          price: product.sale_price ?? null,
+          stock: product.stock_quantity ?? null,
+        })),
+    [products, selectedProductIds],
+  );
+
   const handleBulkExport = () => {
     const selectedProducts = products.filter((p) =>
       selectedProductIds.includes(p.id),
@@ -997,6 +1014,7 @@ export default function ProductsPage() {
           onBulkActivate={handleBulkActivate}
           onBulkDeactivate={handleBulkDeactivate}
           onBulkExport={handleBulkExport}
+          onBulkPrintLabels={() => setLabelsDialogOpen(true)}
         />
       </div>
 
@@ -1039,6 +1057,13 @@ export default function ProductsPage() {
           }}
         />
       )}
+
+      {/* Etiquetas con codigo de barras de los productos elegidos */}
+      <PrintLabelsDialog
+        open={labelsDialogOpen}
+        onOpenChange={setLabelsDialogOpen}
+        products={productsForLabels}
+      />
 
       {/* Quick-view modal */}
       <ProductQuickViewModal

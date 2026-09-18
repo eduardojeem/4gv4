@@ -70,6 +70,7 @@ import { logger } from '@/lib/logger'
 import type { Database } from '@/lib/supabase/types'
 import type { Product } from '@/types/product-unified'
 import { ProductModal } from '@/components/dashboard/product-modal'
+import { PrintLabelsDialog } from '@/components/dashboard/products/labels/PrintLabelsDialog'
 import { resolveProductImageUrl } from '@/lib/images'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { cn } from '@/lib/utils'
@@ -155,6 +156,7 @@ export default function ProductDetailPage() {
   } = useProductsSupabase()
 
   const [product, setProduct] = useState<ProductWithInstallments | null>(null)
+  const [labelsDialogOpen, setLabelsDialogOpen] = useState(false)
   const [loadingProduct, setLoadingProduct] = useState(true)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -1154,6 +1156,18 @@ export default function ProductDetailPage() {
                           >
                             <Copy className="h-3.5 w-3.5" />
                             Copiar
+                          </Button>
+                          {/* Se podia copiar el numero y buscarlo en Google,
+                              pero no imprimir la etiqueta del estante. */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setLabelsDialogOpen(true)}
+                            className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1"
+                          >
+                            <Tag className="h-3.5 w-3.5" />
+                            Imprimir etiqueta
                           </Button>
                           <Button
                             type="button"
@@ -2330,6 +2344,21 @@ export default function ProductDetailPage() {
         </div>
 
         {/* ── Modals ─────────────────────────────────────────────────── */}
+
+        {product && (
+          <PrintLabelsDialog
+            open={labelsDialogOpen}
+            onOpenChange={setLabelsDialogOpen}
+            products={[{
+              id: product.id,
+              name: product.name,
+              sku: product.sku,
+              barcode: product.barcode ?? null,
+              price: product.sale_price ?? null,
+              stock: product.stock_quantity ?? null,
+            }]}
+          />
+        )}
 
         {editModalOpen && (
           <ProductModal
