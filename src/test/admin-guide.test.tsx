@@ -12,7 +12,21 @@ import {
   type FirstStepsInput,
 } from '@/lib/guide/first-steps'
 
-const MODULOS = ['inventory', 'inventory_admin', 'pos', 'crm', 'orders', 'ecommerce', 'analytics', 'security']
+const MODULOS = [
+  'inventory',
+  'inventory_admin',
+  'pos',
+  'crm',
+  'orders',
+  'ecommerce',
+  'analytics',
+  'security',
+  'repairs',
+  'promotions',
+  'credits',
+  'services',
+  'delivery',
+]
 
 vi.mock('@/contexts/auth-context', () => ({
   useAuth: () => ({ user: { id: 'admin-1', role: 'admin' }, isAdmin: true, hasPermission: () => true }),

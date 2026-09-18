@@ -247,6 +247,301 @@ export const GUIDE_SECTIONS: GuideSection[] = [
 
   // ── Operaciones ───────────────────────────────────────────────────────────
   {
+    id: 'pos',
+    title: 'Punto de Venta (POS)',
+    summary: 'Cobro ágil en mostrador con lectores de código de barras, comprobantes y múltiples métodos de pago.',
+    group: 'operations',
+    href: '/dashboard/pos',
+    module: 'pos',
+    keywords: ['pos', 'punto de venta', 'vender', 'cobrar', 'ticket', 'lector', 'codigo de barras', 'caja rapida'],
+    steps: [
+      {
+        title: 'Abrir turno en la caja',
+        description: 'Al iniciar la jornada, seleccionás la caja habilitada en tu sucursal e ingresás el monto inicial en efectivo.',
+      },
+      {
+        title: 'Escanear o buscar productos',
+        description: 'Podés usar una pistola lectora de código de barras o escribir las primeras letras del nombre o modelo.',
+      },
+      {
+        title: 'Elegir el método de pago',
+        description: 'El sistema permite cobrar en efectivo, transferencia bancaria, código QR, tarjetas de débito/crédito o combinar varios métodos en un mismo cobro.',
+      },
+      {
+        title: 'Emitir comprobante y finalizar',
+        description: 'Se imprime el ticket o se envía por WhatsApp al cliente, y el inventario descuenta las cantidades de forma automática.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Cobrar una venta rápida combinando efectivo y transferencia',
+        setup: [
+          'Escaneás los productos en el POS.',
+          'Seleccionás pago mixto: indicás Gs. 50.000 en efectivo y el saldo en transferencia bancaria.',
+          'Confirmás la recepción de la transferencia y finalizás la venta.',
+        ],
+        result: 'El stock se descuenta al instante y la caja registra con exactitud qué ingresó en billetes y qué en el banco.',
+      },
+    ],
+    tips: [
+      'Podés usar atajos de teclado para buscar artículos rápidamente y agilizar la fila de clientes en horas pico.',
+    ],
+    faq: [
+      {
+        question: '¿Puedo aplicar un descuento al momento de cobrar?',
+        answer: 'Sí, podés aplicar descuentos en porcentaje o monto directo si tu rol cuenta con el permiso correspondiente.',
+      },
+    ],
+  },
+  {
+    id: 'caja',
+    title: 'Cajas y Arqueos Diarios',
+    summary: 'Control de apertura con fondo fijo, registro de salidas por gastos y arqueo ciego al cerrar el día.',
+    group: 'operations',
+    href: '/dashboard/pos/caja',
+    module: 'pos',
+    keywords: ['caja', 'cajas', 'arqueo', 'cierre', 'apertura', 'fondo fijo', 'turno', 'sobrante', 'faltante', 'caja chica'],
+    steps: [
+      {
+        title: 'Apertura con fondo fijo',
+        description: 'Declarás el dinero en billetes chicos y monedas con el que arranca el cajero para dar vuelto.',
+      },
+      {
+        title: 'Registrar movimientos de caja',
+        description: 'Cualquier salida de dinero para fletes, compras menores o adelantos se registra como egreso con su motivo.',
+      },
+      {
+        title: 'Arqueo ciego al cierre',
+        description: 'El cajero cuenta el dinero físico y declara lo contado sin ver previamente lo que el sistema esperaba, evitando omisiones.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Pagar un gasto menor del local con dinero de la caja sin descuadrar el turno',
+        setup: [
+          'Entrás a Cajas y seleccionás «Movimiento de Caja / Egreso».',
+          'Anotás el motivo: «Compra de insumos de limpieza» y el importe exacto.',
+          'Guardás el ticket o recibo en el cajón de dinero.',
+        ],
+        result: 'Al cerrar el turno, el balance cuadra perfecto porque la salida de dinero quedó formalmente anotada.',
+      },
+    ],
+    tips: [
+      'Cerrá siempre las cajas al terminar la jornada laboral; no las dejes abiertas de un día para el otro para no arrastrar errores.',
+    ],
+  },
+  {
+    id: 'customers',
+    title: 'Clientes y CRM',
+    summary: 'Historial de compras, cuenta corriente, límites de crédito y contacto directo por WhatsApp.',
+    group: 'operations',
+    href: '/dashboard/customers',
+    module: 'crm',
+    keywords: ['clientes', 'crm', 'cuenta corriente', 'whatsapp', 'deuda', 'limite de credito', 'historial'],
+    steps: [
+      {
+        title: 'Cargar la ficha del cliente',
+        description: 'Nombre completo, documento o RUC, número de teléfono con WhatsApp y dirección para entregas.',
+      },
+      {
+        title: 'Asociar compras en el POS',
+        description: 'Al identificar al cliente en cada venta, el sistema acumula su historial de compras, frecuencia y preferencias.',
+      },
+      {
+        title: 'Gestionar créditos y cobranzas',
+        description: 'Podés habilitar cuenta corriente con límite de crédito máximo y monitorear los saldos pendientes.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Saber qué compró un cliente habitual para recomendarle repuestos o accesorios compatibles',
+        setup: [
+          'Buscás al cliente por su número de teléfono o nombre.',
+          'Abrís su historial de compras en su perfil.',
+          'Revisás el modelo exacto que adquirió anteriormente.',
+        ],
+        result: 'Le ofrecés el accesorio o servicio que calza a la perfección sin tener que preguntarle nuevamente los detalles.',
+      },
+    ],
+    tips: [
+      'Pedir siempre el número de WhatsApp al momento de la venta permite enviar presupuestos, comprobantes y ofertas personalizadas.',
+    ],
+  },
+  {
+    id: 'orders',
+    title: 'Pedidos y Entregas (Delivery)',
+    summary: 'Recepción de pedidos de la tienda online o WhatsApp, estados de preparación y despacho.',
+    group: 'operations',
+    href: '/dashboard/orders',
+    module: 'orders',
+    keywords: ['pedidos', 'delivery', 'despacho', 'tienda online', 'preparacion', 'envios', 'ordenes'],
+    steps: [
+      {
+        title: 'Recepción del pedido',
+        description: 'Las compras generadas en la tienda web o coordinadas por WhatsApp ingresan al panel en estado Pendiente.',
+      },
+      {
+        title: 'Separación y empaquetado',
+        description: 'Se apartan las prendas o artículos del depósito y se pasa el pedido a estado «En preparación».',
+      },
+      {
+        title: 'Despacho y entrega',
+        description: 'Se coordina el repartidor y al confirmar la entrega y el cobro se marca el pedido como «Completado».',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Gestionar un pedido web con entrega por motodelivery',
+        setup: [
+          'Entrás a Pedidos y revisás los productos solicitados y la dirección del cliente.',
+          'Cambiás el estado a «En preparación» y armás el paquete.',
+          'Asignás la entrega al repartidor y marcás «Completado» al recibir el cobro.',
+        ],
+        result: 'El cliente recibe su paquete rápidamente y el inventario queda descontado en tiempo real.',
+      },
+    ],
+  },
+  {
+    id: 'repairs',
+    title: 'Reparaciones y Servicio Técnico',
+    summary: 'Órdenes de servicio técnico con ticket QR, diagnóstico, repuestos utilizados y avisos automáticos.',
+    group: 'operations',
+    href: '/dashboard/repairs',
+    module: 'repairs',
+    keywords: ['reparaciones', 'servicio tecnico', 'taller', 'orden de trabajo', 'diagnostico', 'repuestos', 'tecnico'],
+    steps: [
+      {
+        title: 'Ingreso del equipo',
+        description: 'Se registra marca, modelo, número de serie/IMEI, patrón de desbloqueo, accesorios y falla declarada.',
+      },
+      {
+        title: 'Diagnóstico y presupuesto',
+        description: 'El técnico asignado detalla los repuestos a utilizar y el costo de mano de obra para que el cliente lo apruebe.',
+      },
+      {
+        title: 'Seguimiento y aviso por WhatsApp',
+        description: 'El cliente puede escanear su ticket con código QR para ver el avance, o recibir un mensaje automático cuando esté listo.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Presupuestar una reparación de celular separando repuesto y mano de obra',
+        setup: [
+          'El técnico abre la orden de trabajo en Reparaciones.',
+          'Agrega el módulo de repuesto desde el inventario y carga el costo de servicio técnico.',
+          'Le envía el presupuesto por WhatsApp con un solo clic al cliente.',
+        ],
+        result: 'El cliente aprueba con claridad y el repuesto queda descontado del stock del taller.',
+        vertical: 'electronics',
+      },
+    ],
+    tips: [
+      'Imprimir el ticket con código QR de la orden de reparación genera confianza y evita que los clientes llamen reiteradamente a preguntar el estado.',
+    ],
+  },
+  {
+    id: 'promotions',
+    title: 'Promociones y Descuentos',
+    summary: 'Cupones de descuento, combos de productos, ofertas 2x1 y liquidaciones por temporada.',
+    group: 'operations',
+    href: '/dashboard/promotions',
+    module: 'promotions',
+    keywords: ['promociones', 'descuentos', 'cupones', 'combos', '2x1', 'ofertas', 'liquidaciones'],
+    steps: [
+      {
+        title: 'Crear la regla promocional',
+        description: 'Elegís si es un porcentaje de descuento, monto fijo, combo de artículos asociados o precio especial.',
+      },
+      {
+        title: 'Definir vigencia y condiciones',
+        description: 'Configurás la fecha de inicio, vencimiento y límites de canje para mantener el control de rentabilidad.',
+      },
+      {
+        title: 'Aplicación automática en mostrador',
+        description: 'Al escanear los productos incluidos en el POS, el descuento se calcula de forma automática sin intervención del cajero.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Lanzar un combo de temporada con 20% de descuento durante el fin de semana',
+        setup: [
+          'En Promociones creás la regla asociando los dos artículos que componen el combo.',
+          'Fijás el descuento y establecés la fecha de vencimiento para el domingo a la noche.',
+          'Activás la promoción.',
+        ],
+        result: 'En el POS el sistema aplica la rebaja en automático cuando el vendedor pasa ambos artículos.',
+      },
+    ],
+  },
+  {
+    id: 'credits',
+    title: 'Créditos y Financiación',
+    summary: 'Ventas en cuotas, cálculo de intereses, calendario de vencimientos y seguimiento de cobranzas.',
+    group: 'operations',
+    href: '/dashboard/credits',
+    module: 'credits',
+    keywords: ['creditos', 'cuotas', 'financiacion', 'cobranzas', 'intereses', 'vencimientos', 'pagares'],
+    steps: [
+      {
+        title: 'Venta a crédito en el mostrador',
+        description: 'Al finalizar la venta en el POS, seleccionás la modalidad Crédito y definís la cantidad de cuotas.',
+      },
+      {
+        title: 'Plan de pagos y pagarés',
+        description: 'El sistema calcula las fechas de vencimiento de cada cuota y emite el cronograma de pago.',
+      },
+      {
+        title: 'Cobro de cuotas y recibos',
+        description: 'A medida que el cliente se acerca a abonar, se ingresa el cobro en la caja y se descuenta del saldo pendiente.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Financiar un electrodoméstico o equipo en 3 cuotas mensuales',
+        setup: [
+          'En el POS seleccionás al cliente y elegís la forma de pago Crédito.',
+          'Establecés 3 cuotas con vencimiento a 30, 60 y 90 días.',
+          'Confirmás y le entregás su comprobante con el cronograma de cuotas.',
+        ],
+        result: 'El cliente retira el equipo y el sistema te avisa mes a mes qué cuotas vencen para gestionar la cobranza.',
+      },
+    ],
+  },
+  {
+    id: 'suppliers',
+    title: 'Proveedores y Compras',
+    summary: 'Registro de distribuidores, facturas de compra y actualización automática de stock y costos.',
+    group: 'operations',
+    href: '/dashboard/suppliers',
+    module: 'inventory',
+    keywords: ['proveedores', 'compras', 'facturas', 'costos', 'recepcion', 'mercaderia', 'distribuidores'],
+    steps: [
+      {
+        title: 'Ficha del proveedor',
+        description: 'Registrás nombre de la distribuidora, teléfono de los viajantes o vendedores y condiciones de pago.',
+      },
+      {
+        title: 'Cargar la factura de compra',
+        description: 'Ingresás las cantidades recibidas y los costos de cada producto para mantener actualizado el costo medio.',
+      },
+      {
+        title: 'Ingreso inmediato al inventario',
+        description: 'El stock disponible en el depósito o sucursal aumenta automáticamente al confirmar la recepción.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Recibir una caja de 40 unidades de cargadores y actualizar el costo de compra',
+        setup: [
+          'En Proveedores creás el comprobante de compra seleccionando al distribuidor.',
+          'Cargás el nuevo costo unitario de la factura y las 40 unidades ingresadas.',
+          'Confirmás el ingreso.',
+        ],
+        result: 'El stock disponible aumenta en 40 unidades y tus reportes financieros calculan la ganancia con el costo real actualizado.',
+      },
+    ],
+  },
+  {
     id: 'cash-monitor',
     navKey: 'cash-monitor',
     title: 'Monitor de cajas',

@@ -17,6 +17,7 @@ import {
   HelpCircle,
   LayoutDashboard,
   Lightbulb,
+  Package,
   Printer,
   RotateCcw,
   Search,
@@ -28,6 +29,7 @@ import {
   Sunrise,
   Sunset,
   Target,
+  Users,
   Wrench,
   X,
   type LucideIcon,
@@ -58,6 +60,14 @@ const CONCEPT_ICONS: Record<string, LucideIcon> = {
   plataforma: Building2,
   roles: ShieldCheck,
   plan: CreditCard,
+  pos: ShoppingBag,
+  caja: CreditCard,
+  customers: Users,
+  orders: Package,
+  repairs: Wrench,
+  promotions: Sparkles,
+  credits: CreditCard,
+  suppliers: Store,
 }
 
 const VERTICAL_OPTIONS: { id: BusinessVertical; label: string; icon: string }[] = [
@@ -71,7 +81,19 @@ const VERTICAL_OPTIONS: { id: BusinessVertical; label: string; icon: string }[] 
 
 const QUICK_SEARCH_CHIPS = ['caja', 'stock', 'roles', 'transferencia', 'publicar tienda', 'reportes']
 
-const DASHBOARD_SECTION_IDS = ['cash-monitor', 'inventory', 'reports']
+const DASHBOARD_SECTION_IDS = [
+  'pos',
+  'caja',
+  'inventory',
+  'customers',
+  'orders',
+  'repairs',
+  'promotions',
+  'credits',
+  'suppliers',
+  'cash-monitor',
+  'reports',
+]
 
 function iconFor(section: GuideSection): LucideIcon {
   if (section.navKey) {
