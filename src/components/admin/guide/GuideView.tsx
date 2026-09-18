@@ -1,30 +1,45 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import {
+  AlertTriangle,
+  ArrowRight,
   ArrowUpRight,
   BookOpen,
+  Briefcase,
   Building2,
   CheckCircle2,
   ChevronsDown,
   ChevronsUp,
+  Clock,
   CreditCard,
-  FileText,
+  ExternalLink,
   HelpCircle,
-  Layers,
+  LayoutDashboard,
+  Lightbulb,
+  Monitor,
+  Package,
   Printer,
   RotateCcw,
   Search,
+  Settings,
   ShieldCheck,
+  ShoppingBag,
   Sparkles,
   Store,
+  Sun,
+  Sunrise,
+  Sunset,
+  Target,
+  Users,
+  Wrench,
   X,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import {
   Select,
   SelectContent,
@@ -38,6 +53,7 @@ import { getNavItemByKey } from '@/config/admin-navigation'
 import { GUIDE_SECTIONS } from '@/lib/guide/content'
 import { GUIDE_GROUPS, filterGuideSections, searchGuideSections, type GuideSection } from '@/lib/guide/types'
 import { printAdminGuide } from '@/lib/guide/guide-printer'
+import { getVerticalRecommendation, type VerticalRecommendation } from '@/lib/guide/vertical-recommendations'
 import type { BusinessVertical } from '@/lib/organization/business-profile'
 import { cn } from '@/lib/utils'
 import { FirstStepsPanel } from './FirstStepsPanel'
@@ -60,6 +76,9 @@ const VERTICAL_OPTIONS: { id: BusinessVertical; label: string }[] = [
 
 const POPULAR_SEARCH_TAGS = ['caja', 'stock', 'roles', 'transferencia', 'publicar tienda', 'reportes', 'permisos']
 
+// Secciones que corresponden al ámbito Operativo / Dashboard (día a día)
+const DASHBOARD_SECTION_IDS = ['cash-monitor', 'inventory', 'reports']
+
 function iconFor(section: GuideSection): LucideIcon {
   if (section.navKey) {
     const item = getNavItemByKey(section.navKey)
@@ -68,11 +87,11 @@ function iconFor(section: GuideSection): LucideIcon {
   return CONCEPT_ICONS[section.id] ?? Sparkles
 }
 
-export type GuideCategoryTab = 'all' | 'first-steps' | 'sistema' | 'operations' | 'analytics' | 'administration' | 'faq'
+export type MainGuideTab = 'all' | 'dashboard' | 'admin' | 'rubro' | 'first-steps' | 'faq'
 
 export function GuideView() {
   const [query, setQuery] = useState('')
-  const [activeTab, setActiveTab] = useState<GuideCategoryTab>('all')
+  const [activeTab, setActiveTab] = useState<MainGuideTab>('all')
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({})
   const [readSections, setReadSections] = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -97,7 +116,7 @@ export function GuideView() {
     }
   }, [businessVertical])
 
-  // Atajos de teclado: '/' para enfocar búsqueda, 'Esc' para limpiar
+  // Atajos de teclado: '/' para buscar, 'Esc' para limpiar
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const targetTag = (e.target as HTMLElement)?.tagName
@@ -131,7 +150,7 @@ export function GuideView() {
     } catch {}
   }
 
-  // Filtrado según módulos y permisos del usuario
+  // Filtrado según módulos del plan y permisos
   const available = useMemo(
     () => filterGuideSections(GUIDE_SECTIONS, { hasPermission, isAdmin, modules: effectiveModules }),
     [hasPermission, isAdmin, effectiveModules],
@@ -140,33 +159,52 @@ export function GuideView() {
   const results = useMemo(() => searchGuideSections(available, query), [available, query])
   const searching = query.trim().length > 0
 
-  // Secciones a mostrar según la pestaña elegida
-  const filteredSections = useMemo(() => {
-    if (activeTab === 'all' || activeTab === 'first-steps' || activeTab === 'faq') return results
-    return results.filter((sec) => sec.group === activeTab)
-  }, [results, activeTab])
+  // Separación por ámbito: Dashboard (Día a día) vs Admin (Gestión/Control)
+  const dashboardSections = useMemo(
+    () => results.filter((s) => DASHBOARD_SECTION_IDS.includes(s.id)),
+    [results],
+  )
 
-  // Agrupación de secciones
+  const adminSections = useMemo(
+    () => results.filter((s) => !DASHBOARD_SECTION_IDS.includes(s.id)),
+    [results],
+  )
+
+  // Conteos para los botones
+  const dashboardCount = useMemo(
+    () => available.filter((s) => DASHBOARD_SECTION_IDS.includes(s.id)).length,
+    [available],
+  )
+  const adminCount = useMemo(
+    () => available.filter((s) => !DASHBOARD_SECTION_IDS.includes(s.id)).length,
+    [available],
+  )
+  const faqCount = useMemo(
+    () => available.reduce((acc, s) => acc + (s.faq?.length ?? 0), 0),
+    [available],
+  )
+
+  // Secciones a mostrar según la pestaña activa
+  const visibleSections = useMemo(() => {
+    if (activeTab === 'dashboard') return dashboardSections
+    if (activeTab === 'admin') return adminSections
+    return results
+  }, [activeTab, dashboardSections, adminSections, results])
+
+  // Agrupamiento de secciones visibles
   const groups = useMemo(
     () =>
       GUIDE_GROUPS.map((group) => ({
         ...group,
-        sections: filteredSections.filter((section) => section.group === group.id),
+        sections: visibleSections.filter((section) => section.group === group.id),
       })).filter((group) => group.sections.length > 0),
-    [filteredSections],
+    [visibleSections],
   )
 
-  // Conteos para los badges de las pestañas
-  const groupCounts = useMemo(() => {
-    return {
-      all: available.length,
-      sistema: available.filter((s) => s.group === 'sistema').length,
-      operations: available.filter((s) => s.group === 'operations').length,
-      analytics: available.filter((s) => s.group === 'analytics').length,
-      administration: available.filter((s) => s.group === 'administration').length,
-      faq: available.reduce((acc, s) => acc + (s.faq?.length ?? 0), 0),
-    }
-  }, [available])
+  // Recomendaciones específicas para el rubro seleccionado
+  const verticalRec: VerticalRecommendation = useMemo(() => {
+    return getVerticalRecommendation(selectedVertical)
+  }, [selectedVertical])
 
   // FAQs consolidadas para el FAQ Hub
   const allFaqs = useMemo(() => {
@@ -234,7 +272,7 @@ export function GuideView() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Selector compacto de Rubro */}
+            {/* Selector de Rubro */}
             <div className="flex items-center gap-1.5">
               <span className="hidden text-xs text-muted-foreground sm:inline-block">Rubro:</span>
               <Select value={selectedVertical} onValueChange={(val) => setSelectedVertical(val as BusinessVertical)}>
@@ -266,7 +304,7 @@ export function GuideView() {
           </div>
         </div>
 
-        {/* ── Buscador y Atajos ── */}
+        {/* ── Buscador ── */}
         <div className="space-y-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -297,7 +335,6 @@ export function GuideView() {
             </div>
           </div>
 
-          {/* Chips de Búsqueda Rápida */}
           {!searching && (
             <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
               <span className="flex items-center gap-1 font-medium text-foreground/70">
@@ -318,9 +355,64 @@ export function GuideView() {
           )}
         </div>
 
-        {/* ── Barra de Navegación por Pestañas y Controles ── */}
+        {/* ── Las 3 Secciones Principales solicitadas + Pestañas de Apoyo ── */}
         <div className="flex flex-col gap-2.5 border-b border-border/70 pb-3 sm:flex-row sm:items-center sm:justify-between">
           <nav aria-label="Temas de la guía" className="flex flex-wrap items-center gap-1.5">
+            {/* 1. Dashboard / Operaciones */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+                activeTab === 'dashboard'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              <span>Dashboard / Operaciones</span>
+              <span className={cn('rounded px-1 text-[10px] tabular-nums', activeTab === 'dashboard' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground')}>
+                {dashboardCount}
+              </span>
+            </button>
+
+            {/* 2. Admin / Gestión */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('admin')}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+                activeTab === 'admin'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span>Admin / Gestión</span>
+              <span className={cn('rounded px-1 text-[10px] tabular-nums', activeTab === 'admin' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground')}>
+                {adminCount}
+              </span>
+            </button>
+
+            {/* 3. Inicio por Rubro */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('rubro')}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+                activeTab === 'rubro'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <Store className="h-3.5 w-3.5" />
+              <span>Inicio por Rubro</span>
+              <Badge variant="secondary" className="h-4 border-transparent bg-amber-100 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                Guía a medida
+              </Badge>
+            </button>
+
+            {/* Todos los temas */}
             <button
               type="button"
               onClick={() => setActiveTab('all')}
@@ -333,10 +425,11 @@ export function GuideView() {
             >
               <span>Todos</span>
               <span className={cn('rounded px-1 text-[10px] tabular-nums', activeTab === 'all' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground')}>
-                {groupCounts.all}
+                {available.length}
               </span>
             </button>
 
+            {/* Primeros pasos */}
             <button
               type="button"
               onClick={() => setActiveTab('first-steps')}
@@ -350,31 +443,8 @@ export function GuideView() {
               <span>🚀 Primeros pasos</span>
             </button>
 
-            {GUIDE_GROUPS.map((group) => {
-              const count = groupCounts[group.id] ?? 0
-              if (count === 0) return null
-              const isSelected = activeTab === group.id
-              return (
-                <button
-                  key={group.id}
-                  type="button"
-                  onClick={() => setActiveTab(group.id as GuideCategoryTab)}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
-                    isSelected
-                      ? 'bg-primary text-primary-foreground shadow-xs'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                  )}
-                >
-                  <span>{group.label}</span>
-                  <span className={cn('rounded px-1 text-[10px] tabular-nums', isSelected ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground')}>
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
-
-            {groupCounts.faq > 0 && (
+            {/* FAQ */}
+            {faqCount > 0 && (
               <button
                 type="button"
                 onClick={() => setActiveTab('faq')}
@@ -387,13 +457,13 @@ export function GuideView() {
               >
                 <span>Preguntas Frecuentes</span>
                 <span className={cn('rounded px-1 text-[10px] tabular-nums', activeTab === 'faq' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground')}>
-                  {groupCounts.faq}
+                  {faqCount}
                 </span>
               </button>
             )}
           </nav>
 
-          {/* Mini lectura y controles de expandir/colapsar */}
+          {/* Mini lectura y controles */}
           <div className="flex items-center justify-between gap-3 sm:justify-end">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>{readPercent}% leído</span>
@@ -402,14 +472,14 @@ export function GuideView() {
                   type="button"
                   onClick={resetReadProgress}
                   className="text-muted-foreground hover:text-foreground"
-                  title="Reiniciar progreso de lectura"
+                  title="Reiniciar progreso"
                 >
                   <RotateCcw className="h-3 w-3" />
                 </button>
               )}
             </div>
 
-            {activeTab !== 'first-steps' && activeTab !== 'faq' && (
+            {activeTab !== 'first-steps' && activeTab !== 'faq' && activeTab !== 'rubro' && (
               <div className="flex items-center gap-1">
                 <Button
                   type="button"
@@ -437,24 +507,286 @@ export function GuideView() {
             )}
           </div>
         </div>
-
-        {/* ── Índice rápido de anclas cuando se ve 'Todos' ── */}
-        {activeTab === 'all' && !searching && (
-          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-            <span className="font-medium text-muted-foreground">Ir directo a:</span>
-            {groups.map((group) => (
-              <a
-                key={group.id}
-                href={`#guia-grupo-${group.id}`}
-                className="inline-flex items-center gap-1 rounded-md border border-border/80 bg-card px-2.5 py-1 font-medium text-foreground transition-colors hover:border-primary/50 hover:text-primary"
-              >
-                <span>{group.label}</span>
-                <ArrowUpRight className="h-3 w-3 text-muted-foreground" />
-              </a>
-            ))}
-          </div>
-        )}
       </header>
+
+      {/* ── Banner contextual según sección activa ── */}
+      {activeTab === 'dashboard' && !searching && (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-xs">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <LayoutDashboard className="h-4 w-4 text-primary" />
+                <h2 className="text-sm font-bold text-foreground sm:text-base">
+                  Panel de Operaciones (El día a día del negocio)
+                </h2>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                Acá trabajan cajeros, vendedores y encargados: registrar ventas en el punto de venta (POS), abrir y cerrar caja, controlar stock y pedidos.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/dashboard/pos"
+                className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 shadow-xs"
+              >
+                <span>Abrir POS</span>
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+              <Link
+                href="/dashboard/products"
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-xs"
+              >
+                <span>Catálogo</span>
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'admin' && !searching && (
+        <div className="rounded-2xl border border-border bg-muted/20 p-4 shadow-xs">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                <h2 className="text-sm font-bold text-foreground sm:text-base">
+                  Panel de Administración (Gestión, Equipo y Control)
+                </h2>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                Herramientas del propietario y administradores: invitar colaboradores con roles, ver finanzas y gastos, sucursales, tienda web, seguridad y reportes.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/admin/users"
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-xs"
+              >
+                <span>Equipo</span>
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+              <Link
+                href="/admin/finances"
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-xs"
+              >
+                <span>Finanzas</span>
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+              <Link
+                href="/admin/website"
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-xs"
+              >
+                <span>Tienda Web</span>
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 3. VISTA DEDICADA: INICIO POR RUBRO Y RECOMENDACIONES ── */}
+      {activeTab === 'rubro' && !searching ? (
+        <div className="space-y-6">
+          {/* Tarjeta de encabezado del rubro */}
+          <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5 shadow-xs">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-primary text-primary-foreground">{verticalRec.badge}</Badge>
+                  <span className="text-xs text-muted-foreground">• Rubro seleccionado</span>
+                </div>
+                <h2 className="mt-1.5 text-lg font-bold text-foreground sm:text-xl">{verticalRec.title}</h2>
+                <p className="mt-0.5 text-xs font-medium text-primary sm:text-sm">{verticalRec.subtitle}</p>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                  {verticalRec.description}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border/70 bg-card p-2">
+                <span className="text-xs font-medium text-muted-foreground">Cambiar rubro:</span>
+                <div className="flex flex-wrap gap-1">
+                  {VERTICAL_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setSelectedVertical(opt.id)}
+                      className={cn(
+                        'rounded-md px-2 py-0.5 text-xs font-medium transition-colors',
+                        selectedVertical === opt.id
+                          ? 'bg-primary text-primary-foreground shadow-xs'
+                          : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Fase 1: Cómo empezar a usar el sistema en tu rubro */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 border-b border-border/70 pb-2">
+              <Sparkles className="h-4 w-4 text-amber-500" />
+              <h3 className="text-base font-bold text-foreground">
+                Plan de Inicio: 4 pasos para poner a punto {verticalRec.title}
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {verticalRec.startingSteps.map((step) => (
+                <div key={step.step} className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                        {step.step}
+                      </span>
+                      <h4 className="text-sm font-semibold text-foreground">{step.title}</h4>
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                      {step.description}
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-2">
+                    <Link
+                      href={step.actionHref}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                    >
+                      <span>{step.actionLabel}</span>
+                      <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Fase 2: Rutina diaria recomendada */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 border-b border-border/70 pb-2">
+              <Clock className="h-4 w-4 text-primary" />
+              <h3 className="text-base font-bold text-foreground">
+                Rutina Diaria Recomendada para {verticalRec.title}
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-xs">
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                  <Sunrise className="h-4 w-4" />
+                  <span className="text-xs font-bold uppercase tracking-wider">1. Apertura</span>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {verticalRec.dailyRoutine.opening}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-xs">
+                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                  <ShoppingBag className="h-4 w-4" />
+                  <span className="text-xs font-bold uppercase tracking-wider">2. Mostrador & Ventas</span>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {verticalRec.dailyRoutine.sales}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-xs">
+                <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
+                  <Sun className="h-4 w-4" />
+                  <span className="text-xs font-bold uppercase tracking-wider">3. Control Mediodía</span>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {verticalRec.dailyRoutine.midday}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-xs">
+                <div className="flex items-center gap-2 text-purple-600 dark:text-purple-400">
+                  <Sunset className="h-4 w-4" />
+                  <span className="text-xs font-bold uppercase tracking-wider">4. Cierre & Arqueo</span>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {verticalRec.dailyRoutine.closing}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Fase 3: Configuraciones clave del sistema para este rubro */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 border-b border-border/70 pb-2">
+              <Target className="h-4 w-4 text-primary" />
+              <h3 className="text-base font-bold text-foreground">
+                Configuraciones Clave en el Sistema
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {verticalRec.keySettings.map((sett) => (
+                <div key={sett.title} className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">{sett.title}</h4>
+                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                      {sett.reason}
+                    </p>
+                  </div>
+                  <div className="mt-3 pt-2">
+                    <Link
+                      href={sett.href}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                    >
+                      <span>Abrir módulo</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Fase 4: Errores comunes a evitar y Consejo Pro */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 p-4 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <h4 className="text-sm font-bold">Errores comunes a evitar en tu rubro</h4>
+              </div>
+              <ul className="mt-2.5 space-y-2 pl-2 text-xs leading-relaxed">
+                {verticalRec.pitfallsToAvoid.map((pit, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="font-bold text-amber-600">•</span>
+                    <span>{pit}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-xl border border-emerald-300/60 bg-emerald-50/70 p-4 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-200">
+              <div className="flex items-center gap-2">
+                <Lightbulb className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <h4 className="text-sm font-bold">Consejo de Oro para vender más</h4>
+              </div>
+              <p className="mt-2.5 text-xs leading-relaxed sm:text-sm">
+                {verticalRec.proTip}
+              </p>
+              <div className="mt-4">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setActiveTab('dashboard')}
+                  className="h-8 gap-1 border-emerald-400 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300"
+                >
+                  <span>Explorar Operaciones</span>
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* ── Panel de Primeros Pasos ── */}
       {(activeTab === 'all' || activeTab === 'first-steps') && !searching && <FirstStepsPanel />}
@@ -468,7 +800,7 @@ export function GuideView() {
               : `${results.length} ${results.length === 1 ? 'sección encontrada' : 'secciones encontradas'} con «${query.trim()}»`}
           </span>
           {results.length > 0 && (
-            <span className="text-xs text-muted-foreground">Coincidencias resaltadas en amarillo</span>
+            <span className="text-xs text-muted-foreground">Coincidencias resaltadas</span>
           )}
         </div>
       )}
@@ -508,8 +840,8 @@ export function GuideView() {
             )}
           </div>
         </section>
-      ) : (
-        /* ── Lista de Grupos y Secciones de la Guía ── */
+      ) : activeTab !== 'rubro' ? (
+        /* ── Lista de Secciones (según ámbito activo: Todos, Dashboard o Admin) ── */
         groups.map((group) => (
           <section key={group.id} id={`guia-grupo-${group.id}`} className="space-y-3.5 scroll-mt-20">
             <div className="border-b border-border/60 pb-2">
@@ -546,7 +878,7 @@ export function GuideView() {
             </div>
           </section>
         ))
-      )}
+      ) : null}
     </div>
   )
 }

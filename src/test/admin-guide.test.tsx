@@ -254,6 +254,9 @@ describe('pantalla de la guía', () => {
 
     // Botones de filtro de categoría presentes
     expect(screen.getByRole('button', { name: /Todos/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Dashboard \/ Operaciones/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Admin \/ Gestión/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Inicio por Rubro/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Primeros pasos/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Preguntas Frecuentes/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Imprimir/ })).toBeInTheDocument()
@@ -261,6 +264,31 @@ describe('pantalla de la guía', () => {
     // Cambiar a la pestaña de FAQ
     fireEvent.click(screen.getByRole('button', { name: /Preguntas Frecuentes/ }))
     expect(screen.getByRole('heading', { name: 'Preguntas Frecuentes', level: 2 })).toBeInTheDocument()
+
+    // Cambiar a la pestaña de Inicio por Rubro
+    fireEvent.click(screen.getByRole('button', { name: /Inicio por Rubro/ }))
+    expect(screen.getByText(/Plan de Inicio: 4 pasos para poner a punto/)).toBeInTheDocument()
+    expect(screen.getByText(/Rutina Diaria Recomendada para/)).toBeInTheDocument()
+  })
+})
+
+describe('recomendaciones estratégicas por rubro', () => {
+  it('provee planes y rutinas detalladas para cada rubro', async () => {
+    const { getVerticalRecommendation } = await import('@/lib/guide/vertical-recommendations')
+    
+    const electronics = getVerticalRecommendation('electronics')
+    expect(electronics.title).toContain('Tecnología')
+    expect(electronics.startingSteps.length).toBe(4)
+    expect(electronics.dailyRoutine.opening).toBeDefined()
+    expect(electronics.dailyRoutine.closing).toBeDefined()
+    expect(electronics.pitfallsToAvoid.length).toBeGreaterThan(0)
+
+    const clothing = getVerticalRecommendation('clothing')
+    expect(clothing.title).toContain('Indumentaria')
+    expect(clothing.startingSteps.length).toBe(4)
+
+    const fallback = getVerticalRecommendation('inexistente' as any)
+    expect(fallback.title).toContain('Comercio General')
   })
 })
 
