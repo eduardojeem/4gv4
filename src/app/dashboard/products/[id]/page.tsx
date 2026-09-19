@@ -2392,6 +2392,10 @@ export default function ProductDetailPage() {
               price: product.sale_price ?? null,
               stock: product.stock_quantity ?? null,
             }]}
+            onBarcodesGenerated={(assigned) => {
+              const nuevo = assigned.find((item) => item.id === product.id)
+              if (nuevo) setProduct((current) => (current ? { ...current, barcode: nuevo.barcode } : current))
+            }}
           />
         )}
 

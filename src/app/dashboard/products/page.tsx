@@ -1075,6 +1075,10 @@ export default function ProductsPage() {
           if (!open) setLabelsTarget(null);
         }}
         products={labelsTarget ?? []}
+        onBarcodesGenerated={(assigned) => {
+          // El listado tiene el producto sin codigo: hay que traerlo de nuevo.
+          if (assigned.length > 0) void refreshData();
+        }}
       />
 
       {/* Quick-view modal */}

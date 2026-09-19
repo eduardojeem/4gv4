@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  Barcode,
   Building2,
   Layers,
   Loader2,
@@ -40,6 +41,13 @@ import {
 import { MAX_LABELS, type LabelFields } from '@/lib/labels/label-sheet'
 import { buildLabelPreview, printProductLabels } from '@/lib/labels/print-labels'
 import { resolveLabelCode } from '@/lib/labels/barcode-format'
+import {
+  MIN_MODULE_MM,
+  maxCode128Length,
+  rateScannability,
+  smallestLayoutThatFits,
+  type ScanLevel,
+} from '@/lib/labels/scannability'
 import { cn } from '@/lib/utils'
 
 /**
@@ -103,6 +111,9 @@ function saveSettings(settings: Settings): void {
   }
 }
 
+/** Milímetros como se escriben acá: con coma. */
+const formatMm = (value: number): string => value.toFixed(2).replace('.', ',')
+
 /** Cuántas etiquetas se dibujan en la muestra: una hoja, o unas pocas del rollo. */
 function previewSize(layout: LabelLayout): number {
   if (isSheetMedia(layout)) return labelsPerPage(layout) ?? 3
@@ -115,11 +126,14 @@ export function PrintLabelsDialog({
   onOpenChange,
   products,
   storeName,
+  onBarcodesGenerated,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   products: LabelDialogProduct[]
   storeName?: string | null
+  /** Se avisa cuando se guardaron códigos nuevos, para refrescar el listado. */
+  onBarcodesGenerated?: (assigned: { id: string; barcode: string }[]) => void
 }) {
   // La impresora no cambia todos los días: se recuerda la última elección.
   const [settings, setSettings] = useState<Settings>(readSettings)
@@ -130,6 +144,9 @@ export function PrintLabelsDialog({
   const [printing, setPrinting] = useState<'all' | 'test' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [frameWidth, setFrameWidth] = useState(0)
+  /** Códigos recién generados, para usarlos sin esperar que recargue el listado. */
+  const [generated, setGenerated] = useState<Record<string, string>>({})
+  const [generating, setGenerating] = useState(false)
   const frameBox = useRef<HTMLDivElement | null>(null)
 
   const { user } = useAuth()
@@ -140,8 +157,15 @@ export function PrintLabelsDialog({
   const layout = layoutOrDefault(settings.layoutId)
   const fields = settings.fields
 
-  const withoutCode = useMemo(() => products.filter((product) => !resolveLabelCode(product)), [products])
-  const printable = useMemo(() => products.filter((product) => resolveLabelCode(product)), [products])
+  // El código recién generado pisa al que vino en la lista: el listado todavía
+  // no se recargó y la etiqueta tiene que salir con el nuevo.
+  const withBarcodes = useMemo(
+    () => products.map((product) => (generated[product.id] ? { ...product, barcode: generated[product.id] } : product)),
+    [products, generated],
+  )
+
+  const withoutCode = useMemo(() => withBarcodes.filter((product) => !resolveLabelCode(product)), [withBarcodes])
+  const printable = useMemo(() => withBarcodes.filter((product) => resolveLabelCode(product)), [withBarcodes])
 
   const items = useMemo(
     () => printable.map((product) => ({ ...product, quantity: quantities[product.id] ?? 1 })),
@@ -163,6 +187,84 @@ export function PrintLabelsDialog({
     () => ({ ...fields, storeName: fields.showStoreName ? business : null }),
     [fields, business],
   )
+
+  /**
+   * Qué tan finas salen las barras de cada producto en el formato elegido.
+   * Un SKU de 18 caracteres en el rollo de 50 × 25 baja de 0,19 mm y el lector
+   * no lo toma: antes eso se descubría con el pliego ya impreso.
+   */
+  const ratings = useMemo(() => {
+    const map = new Map<string, { level: ScanLevel; moduleMm: number }>()
+    for (const product of printable) {
+      const code = resolveLabelCode(product)
+      if (!code) continue
+      const rating = rateScannability(code.value, layout, code.format)
+      if (rating) map.set(product.id, { level: rating.level, moduleMm: rating.moduleMm })
+    }
+    return map
+  }, [printable, layout])
+
+  const risky = useMemo(
+    () => printable.filter(
+      (product) => (quantities[product.id] ?? 1) > 0 && ratings.get(product.id)?.level === 'risky',
+    ),
+    [printable, ratings, quantities],
+  )
+
+  /** De los ilegibles, los que se arreglan con un código propio. */
+  const riskyWithoutBarcode = useMemo(
+    () => risky.filter((product) => !(product.barcode ?? '').trim()),
+    [risky],
+  )
+
+  /** El peor caso es el que hay que contar, no el primero de la lista. */
+  const worstModuleMm = useMemo(
+    () => risky.reduce((worst, product) => Math.min(worst, ratings.get(product.id)?.moduleMm ?? worst), Infinity),
+    [risky, ratings],
+  )
+
+  /** El formato más chico donde el peor de los códigos sí se lee. */
+  const betterLayout = useMemo(() => {
+    type Code = NonNullable<ReturnType<typeof resolveLabelCode>>
+    const codes = risky.map((product) => resolveLabelCode(product)).filter((code): code is Code => code !== null)
+    const worst = [...codes].sort((a, b) => b.value.length - a.value.length)[0]
+    return worst ? smallestLayoutThatFits(worst.value, LABEL_LAYOUTS, worst.format) : null
+  }, [risky])
+
+  const generateBarcodes = async () => {
+    const targets = riskyWithoutBarcode.length > 0
+      ? riskyWithoutBarcode
+      : printable.filter((product) => !(product.barcode ?? '').trim())
+    if (targets.length === 0) return
+
+    setGenerating(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/products/barcodes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: targets.map((product) => product.id) }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) {
+        setError(payload?.error ?? 'No se pudieron generar los códigos.')
+        return
+      }
+      const assigned: { id: string; barcode: string }[] = payload.data?.assigned ?? []
+      setGenerated((current) => ({
+        ...current,
+        ...Object.fromEntries(assigned.map((item) => [item.id, item.barcode])),
+      }))
+      onBarcodesGenerated?.(assigned)
+      if (assigned.length === 0) {
+        setError('No se pudo generar ningún código nuevo.')
+      }
+    } catch {
+      setError('No se pudieron generar los códigos.')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   // La muestra se rearma sola, con un respiro: si no, cada tecla apretada en
   // las cantidades vuelve a dibujar todos los códigos.
@@ -417,10 +519,13 @@ export function PrintLabelsDialog({
                       )}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-foreground">{product.name}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate text-sm text-foreground">{product.name}</p>
+                          <ScanBadge level={ratings.get(product.id)?.level} />
+                        </div>
                         <p className="truncate font-mono text-xs text-muted-foreground">
                           {code?.value}
-                          {code?.format === 'CODE128' && !product.barcode?.trim() ? ' · SKU' : ''}
+                          {generated[product.id] ? ' · código nuevo' : code?.format === 'CODE128' && !product.barcode?.trim() ? ' · SKU' : ''}
                           {typeof product.stock === 'number' ? ` · ${product.stock} en stock` : ''}
                         </p>
                       </div>
@@ -479,6 +584,49 @@ export function PrintLabelsDialog({
                     ? `«${withoutCode[0].name}» no tiene código de barras ni SKU, así que queda afuera.`
                     : `${withoutCode.length} productos quedan afuera porque no tienen código de barras ni SKU.`}
                 </Notice>
+              )}
+
+              {risky.length > 0 && (
+                <div className="space-y-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3">
+                  <p className="flex gap-2 text-xs text-foreground">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" aria-hidden />
+                    <span>
+                      {risky.length === 1
+                        ? `El código de «${risky[0].name}» es largo para esta etiqueta: `
+                        : `${risky.length} productos tienen el código largo para esta etiqueta: `}
+                      las barras quedan en{' '}
+                      <strong className="tabular-nums">{formatMm(worstModuleMm)} mm</strong> y el lector
+                      necesita al menos {formatMm(MIN_MODULE_MM)} mm. En {layout.short} entran hasta{' '}
+                      {maxCode128Length(layout)} caracteres.
+                    </span>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {riskyWithoutBarcode.length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 gap-1.5 text-xs"
+                        onClick={() => void generateBarcodes()}
+                        disabled={generating}
+                        title="Genera un EAN-13 propio y lo guarda en el producto"
+                      >
+                        {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Barcode className="h-3.5 w-3.5" />}
+                        Generar código para {riskyWithoutBarcode.length}
+                      </Button>
+                    )}
+                    {betterLayout && betterLayout.id !== layout.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1.5 text-xs"
+                        onClick={() => updateLayout(betterLayout.id)}
+                      >
+                        <Layers className="h-3.5 w-3.5" />
+                        Usar {betterLayout.short}
+                      </Button>
+                    )}
+                  </div>
+                </div>
               )}
             </section>
           </div>
@@ -709,6 +857,29 @@ function FieldToggle({
         {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       </div>
     </div>
+  )
+}
+
+/** Señala de un vistazo el producto cuyo código va a salir demasiado fino. */
+function ScanBadge({ level }: { level?: ScanLevel }) {
+  if (!level || level === 'ok') return null
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        'flex-shrink-0 text-[10px]',
+        level === 'risky'
+          ? 'border-destructive/50 text-destructive'
+          : 'border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300',
+      )}
+      title={
+        level === 'risky'
+          ? 'Las barras salen demasiado finas para el lector'
+          : 'Las barras salen al límite de lo que lee un lector de mostrador'
+      }
+    >
+      {level === 'risky' ? 'No va a leer' : 'Justo'}
+    </Badge>
   )
 }
 
