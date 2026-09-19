@@ -319,7 +319,7 @@ export function OfferDetailModal({
               {/* Overlay sin stock */}
               {!effectiveInStock && selectionComplete && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-[2px] z-20">
-                  <span className="rounded-full bg-destructive/90 px-4 py-1.5 text-xs font-extrabold uppercase tracking-widest text-destructive-foreground shadow-md">
+                  <span className="rounded-full bg-red-700/95 px-4 py-1.5 text-xs font-extrabold uppercase tracking-widest text-white shadow-md">
                     Sin stock
                   </span>
                 </div>

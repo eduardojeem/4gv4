@@ -323,7 +323,9 @@ export function ProductCard(props: ProductCardProps) {
                 'rounded-full px-4 py-1.5 text-[11px] font-black uppercase tracking-widest shadow-md',
                 storefrontStyle === 'fashion'
                   ? 'bg-foreground text-background'
-                  : 'bg-destructive/90 text-destructive-foreground'
+                  // Rojo fijo: el `destructive` del tema se aclara en oscuro y
+                  // el blanco encima quedaba en 4,07 (hace falta 4,5).
+                  : 'bg-red-700/95 text-white'
               )}>
                 Agotado
               </span>
@@ -474,7 +476,7 @@ export function ProductCard(props: ProductCardProps) {
                 {/* Out-of-stock overlay */}
                 {!isInStock && (
                   <div className="absolute inset-0 flex items-center justify-center bg-background/65 backdrop-blur-[2px]">
-                    <span className="rounded-full bg-destructive/90 px-5 py-2 text-sm font-bold text-destructive-foreground shadow">
+                    <span className="rounded-full bg-red-700/95 px-5 py-2 text-sm font-bold text-white shadow">
                       Agotado
                     </span>
                   </div>

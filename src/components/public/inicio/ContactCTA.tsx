@@ -117,7 +117,7 @@ export function ContactCTA({ companyInfo, brand, phoneClean, contactHref }: Cont
               <Button
                 asChild
                 size="lg"
-                className="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md shadow-emerald-600/20 gap-2"
+                className="w-full sm:w-auto rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-md shadow-emerald-700/20 gap-2"
               >
                 <a
                   href={contactHref}

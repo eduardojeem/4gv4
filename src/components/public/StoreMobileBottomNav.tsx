@@ -75,7 +75,7 @@ export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?:
               className={cn(
                 'group flex flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-semibold transition-all select-none',
                 tab.emphasized
-                  ? 'font-bold text-rose-600 dark:text-rose-400'
+                  ? 'font-bold text-rose-700 dark:text-rose-400'
                   : tab.isActive
                   ? 'text-primary'
                   : 'text-muted-foreground hover:text-foreground'
