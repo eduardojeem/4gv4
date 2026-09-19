@@ -62,6 +62,9 @@ import { useBranch } from "@/contexts/branch-context";
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 type Json = Database["public"]["Tables"]["products"]["Row"]["dimensions"];
 
+/** Con lo que abre el listado: productos físicos, sin los servicios. */
+const PRODUCTS_ONLY_FILTERS = { quick_filter: "products" } as const;
+
 export default function ProductsPage() {
   const router = useRouter();
   const { hasPermission } = usePermissions();
@@ -138,6 +141,9 @@ export default function ProductsPage() {
     alerts,
     serverPaginated: true,
     serverTotalItems: totalProducts,
+    // La pantalla es de productos: los servicios (mano de obra, reparaciones)
+    // se miran aparte y antes venían mezclados en la misma lista.
+    initialFilters: PRODUCTS_ONLY_FILTERS,
   });
 
   const [isPending, startTransition] = useTransition();
@@ -249,6 +255,15 @@ export default function ProductsPage() {
           ? false
           : undefined;
 
+    // Productos o servicios lo resuelve el servidor: asi el total y las paginas
+    // coinciden con lo que se ve.
+    const quickFilterCatalogKind =
+      filters.quick_filter === "products"
+        ? ("part" as const)
+        : filters.quick_filter === "services"
+          ? ("service" as const)
+          : undefined;
+
     return {
       search: serverSearch || "",
       category: filters.category_id || "",
@@ -269,6 +284,7 @@ export default function ProductsPage() {
         quickFilterIsActive !== undefined
           ? quickFilterIsActive
           : filters.is_active,
+      catalogKind: quickFilterCatalogKind,
     };
   }, [filters, serverSearch]);
 

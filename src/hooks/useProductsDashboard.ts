@@ -20,6 +20,8 @@ interface UseProductsDashboardProps {
   alerts: ProductAlert[]
   serverPaginated?: boolean
   serverTotalItems?: number
+  /** Con qué filtro abre la pantalla. Sin esto, abría con todo mezclado. */
+  initialFilters?: DashboardFilters
 }
 
 interface UseProductsDashboardReturn {
@@ -66,6 +68,7 @@ export function useProductsDashboard({
   alerts,
   serverPaginated = false,
   serverTotalItems = 0,
+  initialFilters,
 }: UseProductsDashboardProps): UseProductsDashboardReturn {
   // UI State
   const [viewMode, setViewMode] = useState<ViewMode>('table')
@@ -73,7 +76,7 @@ export function useProductsDashboard({
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
-  const [filters, setFilters] = useState<DashboardFilters>({})
+  const [filters, setFilters] = useState<DashboardFilters>(initialFilters ?? {})
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: 'name',
     direction: 'asc'
@@ -184,10 +187,12 @@ export function useProductsDashboard({
 
   // Clear filters
   const clearFilters = useCallback(() => {
-    setFilters({})
+    // Vuelve al filtro con el que abre la pantalla: si el listado arranca en
+    // «solo productos», limpiar no tiene por qué mezclar los servicios.
+    setFilters(initialFilters ?? {})
     setSearchQuery('')
     setDebouncedSearchQuery('')
-  }, [])
+  }, [initialFilters])
 
   // Clear selection
   const clearSelection = useCallback(() => {

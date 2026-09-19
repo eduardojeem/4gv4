@@ -22,6 +22,11 @@ interface ProductFilters {
   priceMax?: number
   isActive?: boolean
   featured?: boolean
+  /**
+   * Productos fisicos o servicios. El servidor filtra y cuenta: si se filtrara
+   * en el navegador, la pagina mostraria menos filas de las que dice el total.
+   */
+  catalogKind?: 'part' | 'service'
 }
 
 interface ProductSort {
@@ -257,6 +262,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       if (activeFilters.priceMax !== undefined) params.set('price_max', String(activeFilters.priceMax))
       if (activeFilters.isActive !== undefined) params.set('is_active', String(activeFilters.isActive))
       if (activeFilters.featured !== undefined) params.set('featured', String(activeFilters.featured))
+      if (activeFilters.catalogKind) params.set('catalog_kind', activeFilters.catalogKind)
       if (selectedBranchId) params.set('strict_branch_stock', 'true')
 
       const response = await fetch(`/api/products?${params.toString()}`, {
