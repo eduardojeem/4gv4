@@ -715,11 +715,24 @@ html .text-primary {
       color 0.3s ease;
   }
 
+  /* Acompaña el cambio de tema, y solo mientras dura: la clase la pone y la
+     saca quien cambia el tema. Cuando vivía fija en el <body>, cambiar de modo
+     bloqueaba el hilo 140-240 ms en vez de 40, porque animaba de una todos los
+     elementos de la página; y de paso le metía 300 ms a cada hover.
+     Sin `border-color` (es lo que más repinta y lo que menos se nota) y sin
+     `!important`, para no anular las transiciones propias de los componentes. */
+  .theme-transition,
   .theme-transition * {
     transition:
-      background-color 0.3s ease,
-      border-color 0.3s ease,
-      color 0.3s ease !important;
+      background-color 0.25s ease,
+      color 0.25s ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .theme-transition,
+    .theme-transition * {
+      transition: none;
+    }
   }
 
   /* Safe area insets for mobile devices */

@@ -232,7 +232,10 @@ export default function UICustomization() {
 
   const applyCustomThemeToCSSVariables = (theme: ThemeConfig) => {
     const root = document.documentElement
+    // Se saca al terminar: quedaba puesta para siempre y dejaba todo el
+    // documento con una transicion de color en cada cambio.
     root.classList.add('theme-transition')
+    window.setTimeout(() => root.classList.remove('theme-transition'), 320)
     root.style.setProperty('--background', theme.colors.background)
     root.style.setProperty('--foreground', theme.colors.text)
     root.style.setProperty('--card', theme.colors.surface)
