@@ -147,3 +147,45 @@ describe('el rojo de «sin stock»', () => {
     expect(tarjeta).not.toContain('bg-destructive/90 text-destructive-foreground')
   })
 })
+
+/**
+ * Marketplace y /saas: medido en el navegador, el marketplace tenia 79 textos
+ * por debajo del minimo en claro y 45 en oscuro; /saas, 2 y 6. Ahora son 0 en
+ * los cuatro casos. Estas comprobaciones fijan los tonos que lo resolvieron.
+ */
+describe('marketplace y saas', () => {
+  const marketplace = readFileSync(resolve(process.cwd(), 'src/app/marketplace/page.tsx'), 'utf8')
+  const grilla = readFileSync(resolve(process.cwd(), 'src/components/public/MarketplaceOrgProductGrid.tsx'), 'utf8')
+  const barra = readFileSync(resolve(process.cwd(), 'src/components/public/CompactCategoryBar.tsx'), 'utf8')
+  const buscador = readFileSync(resolve(process.cwd(), 'src/components/public/MarketplaceSearchBox.tsx'), 'utf8')
+
+  /** Era un boton `outline`: pintaba su fondo claro y el texto blanco encima. */
+  it('«Ver planes» no queda blanco sobre blanco', () => {
+    expect(marketplace).toContain('bg-transparent text-white')
+    expect(marketplace).not.toContain('border-white/40 text-white hover:bg-white/10')
+  })
+
+  it('la etiqueta OFERTA y los datos de contacto tienen tono legible', () => {
+    expect(grilla).toContain('bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white')
+    expect(grilla).toContain('text-emerald-700 hover:underline')
+    expect(grilla).toContain('text-pink-700 hover:text-pink-800')
+  })
+
+  it('la barra de categorías: píldora activa, contador y «Ver todas»', () => {
+    expect(barra).toContain('border-cyan-700 bg-cyan-700 text-white')
+    expect(barra).toContain('bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')
+    expect(barra).not.toContain('text-slate-400 transition-colors')
+  })
+
+  /** El color del boton es fijo; el del texto salia del tema y en oscuro se oscurecia. */
+  it('el botón de buscar lleva su texto explícito', () => {
+    expect(buscador).toContain("'shrink-0 bg-cyan-700 text-white hover:bg-cyan-800'")
+  })
+
+  it('en /saas, las etiquetas del panel no dependen del gris apagado', () => {
+    const planes = readFileSync(resolve(process.cwd(), 'src/components/saas/landing/saas-plans-section.tsx'), 'utf8')
+    expect(planes).toContain('text-[10px] text-slate-600 dark:text-slate-300')
+    const hero = readFileSync(resolve(process.cwd(), 'src/components/saas/landing/saas-hero-section.tsx'), 'utf8')
+    expect(hero).toContain('px-2 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300')
+  })
+})

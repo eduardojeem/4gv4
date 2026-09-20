@@ -284,7 +284,7 @@ export function MarketplaceProductCarousel({
                         className={cn(
                           'text-base sm:text-lg font-bold tabular-nums leading-none',
                           hasOffer
-                            ? 'text-rose-600 dark:text-rose-400'
+                            ? 'text-rose-700 dark:text-rose-400'
                             : isFeatured
                               ? 'text-amber-700 dark:text-amber-300 font-extrabold'
                               : 'text-foreground'

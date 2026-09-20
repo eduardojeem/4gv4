@@ -102,7 +102,7 @@ function OrgProductCard({
       {/* Badge de Oferta */}
       {hasDiscount && (
         <div className="absolute left-2 top-2 z-20">
-          <span className="inline-flex items-center rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+          <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
             OFERTA
           </span>
         </div>
@@ -323,7 +323,7 @@ function OrgProductSection({
                       rel="noopener noreferrer"
                       title={`WhatsApp de ${org.name}`}
                       aria-label={`WhatsApp de ${org.name}`}
-                      className="inline-flex items-center gap-1 font-semibold text-emerald-600 hover:underline dark:text-emerald-400"
+                      className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
                     >
                       <MessageCircle className="h-3 w-3" />
                       <span>WhatsApp</span>
@@ -344,8 +344,8 @@ function OrgProductSection({
                         aria-label={`${social.label} de ${org.name}: ${social.handle}`}
                         className={cn(
                           'inline-flex items-center gap-1 font-semibold transition-colors hover:underline',
-                          social.platform === 'instagram' && 'text-pink-600 hover:text-pink-700 dark:text-pink-400',
-                          social.platform === 'facebook' && 'text-blue-600 hover:text-blue-700 dark:text-blue-400',
+                          social.platform === 'instagram' && 'text-pink-700 hover:text-pink-800 dark:text-pink-400',
+                          social.platform === 'facebook' && 'text-blue-700 hover:text-blue-800 dark:text-blue-400',
                           social.platform === 'tiktok' && 'text-foreground hover:text-foreground/80 dark:text-zinc-200'
                         )}
                       >

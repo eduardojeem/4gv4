@@ -147,7 +147,7 @@ export default async function MarketplacePage() {
                   Productos destacados
                 </h2>
               </div>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 Catálogo público de todas las empresas
               </p>
             </div>
@@ -184,7 +184,7 @@ export default async function MarketplacePage() {
                   Crear mi tienda
                 </Link>
               </Button>
-              <Button asChild size="sm" variant="outline" className="border-white/40 text-white hover:bg-white/10">
+              <Button asChild size="sm" variant="outline" className="border-white/60 bg-transparent text-white hover:bg-white/15 hover:text-white">
                 <Link href="/saas">Ver planes</Link>
               </Button>
             </div>
@@ -203,7 +203,7 @@ export default async function MarketplacePage() {
                   Empresas asociadas
                 </h2>
               </div>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 Tiendas con catálogo público activo
               </p>
             </div>

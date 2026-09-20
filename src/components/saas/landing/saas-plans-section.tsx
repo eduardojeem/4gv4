@@ -324,11 +324,11 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
                     <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-400">
                       <div className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-center">
                         <span className="block font-bold text-slate-900 dark:text-slate-200">{formatPlanLimit(plan.limits.users)}</span>
-                        <span className="text-[10px] text-muted-foreground">Usuarios</span>
+                        <span className="text-[10px] text-slate-600 dark:text-slate-300">Usuarios</span>
                       </div>
                       <div className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-center">
                         <span className="block font-bold text-slate-900 dark:text-slate-200">{formatPlanLimit(plan.limits.products)}</span>
-                        <span className="text-[10px] text-muted-foreground">Catálogo</span>
+                        <span className="text-[10px] text-slate-600 dark:text-slate-300">Catálogo</span>
                       </div>
                     </div>
                   )}

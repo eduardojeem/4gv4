@@ -39,7 +39,7 @@ export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
         <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
             <span className="text-sm font-semibold">Así se organiza tu negocio</span>
-            <span className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">Vista ilustrativa</span>
+            <span className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">Vista ilustrativa</span>
           </div>
           <div className="p-5 sm:p-6">
             <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Un panel, distintas herramientas</p>

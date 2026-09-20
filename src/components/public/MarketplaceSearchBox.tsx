@@ -104,7 +104,9 @@ export function MarketplaceSearchBox({
       <Button
         type="submit"
         size={compact ? 'sm' : 'default'}
-        className={cn('shrink-0 bg-cyan-600 hover:bg-cyan-700', buttonClassName)}
+        // El texto va explicito: el color del boton es fijo, pero el del texto salia
+        // del tema y en oscuro quedaba oscuro sobre cian (3,55).
+        className={cn('shrink-0 bg-cyan-700 text-white hover:bg-cyan-800', buttonClassName)}
       >
         Buscar
       </Button>
