@@ -198,9 +198,31 @@ const validateProductVariants = (
 
 export const productSchema = productBaseSchema.superRefine(validateProductVariants)
 
-export const productUpdateSchema = productBaseSchema.partial().extend({
-  id: z.string().uuid('El producto seleccionado no es válido')
-}).superRefine(validateProductVariants)
+/**
+ * Actualizar un producto: solo lo que viene en el pedido.
+ *
+ * `partial()` vuelve opcional cada campo, pero **no** desactiva su `default()`.
+ * Al mandar solo la visibilidad, el esquema devolvía además `stock_quantity: 0`,
+ * `min_stock: 0`, `is_active: true`, `unit_measure: 'unidad'` y `variants: []`,
+ * y la API escribía todo eso: ocultar un producto del catálogo le vaciaba el
+ * inventario, y activar o desactivar en lote se lo vaciaba a cada seleccionado.
+ * Por eso los campos con valor por defecto se redeclaran sin él.
+ */
+export const productUpdateSchema = productBaseSchema
+  .extend({
+    stock_quantity: productBaseSchema.shape.stock_quantity.removeDefault(),
+    min_stock: productBaseSchema.shape.min_stock.removeDefault(),
+    is_active: productBaseSchema.shape.is_active.removeDefault(),
+    unit_measure: productBaseSchema.shape.unit_measure.removeDefault(),
+    has_variants: productBaseSchema.shape.has_variants.removeDefault(),
+    variant_attribute_config: productBaseSchema.shape.variant_attribute_config.removeDefault(),
+    variants: productBaseSchema.shape.variants.removeDefault(),
+  })
+  .partial()
+  .extend({
+    id: z.string().uuid('El producto seleccionado no es válido'),
+  })
+  .superRefine(validateProductVariants)
 
 // ============================================================================
 // Sale Item Schema

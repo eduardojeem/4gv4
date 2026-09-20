@@ -24,6 +24,7 @@ import {
   PrintLabelsDialog,
   type LabelDialogProduct,
 } from "@/components/dashboard/products/labels/PrintLabelsDialog";
+import { duplicatedFields } from "@/lib/products/duplicate";
 import { PRODUCTS_GUIDE } from "@/components/dashboard/common/section-guides-data";
 import {
   MetricsGrid,
@@ -369,13 +370,33 @@ export default function ProductsPage() {
 
   const confirmDelete = async () => {
     if (!productToDelete) return;
+    const targetProduct = productToDelete;
 
-    const result = await deleteProduct(productToDelete.id);
+    const result = await deleteProduct(targetProduct.id);
     if (result.success) {
-      toast.success("Producto eliminado");
+      toast.success(`"${targetProduct.name}" eliminado exitosamente`);
       clearSelection();
     } else {
-      toast.error(result.error || "Error al eliminar");
+      if (result.code === 'PRODUCT_HAS_TRANSACTIONS' || result.status === 409) {
+        toast.warning(`No se puede eliminar "${targetProduct.name}"`, {
+          description: "Tiene ventas o reparaciones registradas. Podés desactivarlo para que no figure en catálogo ni ventas.",
+          duration: 10000,
+          action: {
+            label: "Desactivar",
+            onClick: async () => {
+              const res = await updateProduct(targetProduct.id, { is_active: false, visibility: 'hidden' });
+              if (res.success) {
+                toast.success(`"${targetProduct.name}" se desactivó y ocultó del catálogo.`);
+                void refreshData();
+              } else {
+                toast.error(res.error || 'Error al desactivar el producto');
+              }
+            },
+          },
+        });
+      } else {
+        toast.error(result.error || "Error al eliminar el producto", { duration: 6000 });
+      }
     }
     setDeleteDialogOpen(false);
     setProductToDelete(null);
@@ -403,8 +424,9 @@ export default function ProductsPage() {
 
     const duplicatedData = {
       ...rest,
-      sku: `DUP-${product.sku}-${Math.floor(Math.random() * 1000)}`,
-      name: `${product.name} (Copia)`,
+      // El codigo, el nombre y el stock de la copia: sin encadenar prefijos,
+      // sin arrastrar el codigo de barras del original y con el stock en cero.
+      ...duplicatedFields(product),
       dimensions: parseDimensions(product.dimensions),
     };
 
@@ -427,15 +449,20 @@ export default function ProductsPage() {
     router.push(`/dashboard/products/${product.id}`);
   };
 
-  // Handle visibility toggle
+  // Handle visibility toggle (Catálogo Público vs Oculto)
   const handleToggleActive = async (product: Product, newValue: boolean) => {
-    const updatePayload: any = { is_active: newValue }
-    if (newValue && (product as any).visibility === 'hidden') {
-      updatePayload.visibility = 'public'
-    }
+    const nextVisibility = newValue ? 'public' : 'hidden';
+    const updatePayload: any = {
+      visibility: nextVisibility,
+      ...(newValue && !product.is_active ? { is_active: true } : {}),
+    };
     const result = await updateProduct(product.id, updatePayload);
     if (result.success) {
-      toast.success(newValue ? `"${product.name}" ahora es visible en el catálogo` : `"${product.name}" ocultado del catálogo`);
+      toast.success(
+        newValue
+          ? `"${product.name}" ahora es visible en el catálogo público`
+          : `"${product.name}" ocultado del catálogo (sigue activo en inventario)`
+      );
     } else {
       toast.error(result.error || 'Error al actualizar visibilidad');
       throw new Error(result.error); // lets the card revert optimistic state
@@ -1117,12 +1144,12 @@ export default function ProductsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar producto?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="text-slate-600 dark:text-slate-300">
               ¿Estás seguro de que quieres eliminar{" "}
-              <span className="font-semibold">"{productToDelete?.name}"</span>?
-              <br className="my-2" />
-              Esta acción no se puede deshacer y eliminará permanentemente el
-              producto de la base de datos.
+              <span className="font-semibold text-slate-900 dark:text-white">"{productToDelete?.name}"</span>?
+              <span className="block mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Esta acción es permanente. Si el producto ya cuenta con ventas o reparaciones en el historial, el sistema te ofrecerá desactivarlo para proteger tus registros contables.
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
