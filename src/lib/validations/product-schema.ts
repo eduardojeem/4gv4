@@ -124,7 +124,8 @@ export const productSchema = z
       .number()
       .int()
       .min(0, "El stock minimo no puede ser negativo"),
-    // max_stock is UI-only and is not persisted in DB.
+    // El stock maximo si se guarda: la API lo escribe en products.max_stock
+    // y el filtro de stock alto del listado lo lee.
     max_stock: z
       .coerce
       .number()
@@ -260,7 +261,7 @@ export const productSchema = z
       })
     }
 
-    // max_stock checks (UI-only)
+    // Coherencia entre stock maximo y minimo.
     if (data.max_stock && data.max_stock > 0) {
       if (data.max_stock <= data.min_stock) {
         ctx.addIssue({

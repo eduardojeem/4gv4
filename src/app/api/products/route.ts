@@ -14,6 +14,8 @@ import { filterProductsByCatalogKind, parseProductCatalogKind } from '@/lib/prod
 import { ProductVariantsPayloadSchema } from '@/lib/products/variant-contract'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 import { planVariantStockAdjustments } from '@/lib/products/variant-stock-sync'
+import { conflictMessage, findProductConflict } from '@/lib/products/uniqueness'
+import { recordStockAdjustment } from '@/lib/products/stock-movements'
 
 function revalidateProductStorefront(organizationSlug?: string | null, organizationId?: string | null, productId?: string | null) {
   try {
@@ -457,6 +459,20 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       )
     }
 
+    const conflictoAlCrear = await findProductConflict(supabase as never, {
+      organizationId: organization.id,
+      sku: validated.sku,
+      barcode: validated.barcode,
+    })
+    if (conflictoAlCrear) {
+      return NextResponse.json({
+        success: false,
+        error: conflictMessage(conflictoAlCrear),
+        code: 'DUPLICATE_CODE',
+        field: conflictoAlCrear.field,
+      }, { status: 409 })
+    }
+
     if (validated.has_variants) {
       const rawAttrs = validated.variant_attribute_config ?? []
       const effectiveAttrs = (Array.isArray(rawAttrs) && rawAttrs.length > 0)
@@ -749,6 +765,21 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       )
     }
 
+    // Dos productos con el mismo codigo llevan la misma etiqueta, y en el
+    // mostrador el lector no puede distinguirlos.
+    const conflictoAlEditar = await findProductConflict(supabase as never, {
+      organizationId: organization.id,
+      sku: validated.sku,
+      barcode: validated.barcode,
+      excludeId: validated.id,
+    })
+    if (conflictoAlEditar) {
+      return NextResponse.json(
+        { success: false, error: conflictMessage(conflictoAlEditar), code: 'DUPLICATE_CODE', field: conflictoAlEditar.field },
+        { status: 409 },
+      )
+    }
+
     if (validated.has_variants !== undefined && (validated.has_variants || existingProduct.has_variants)) {
       const rawAttrs = validated.variant_attribute_config ?? existingProduct.variant_attribute_config ?? []
       const effectiveAttrs = (Array.isArray(rawAttrs) && rawAttrs.length > 0)
@@ -1000,6 +1031,28 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         productId: validated.id,
         stockQuantity: Number(desiredStockQuantity),
       })
+    }
+
+    // El stock ya quedo guardado; el historial es lo que permite reconstruir
+    // despues por que un producto aparecio en cero. Si falla, se avisa pero no
+    // se revierte el guardado.
+    if (desiredStockQuantity !== undefined) {
+      try {
+        await recordStockAdjustment(createAdminSupabase() as never, {
+          organizationId: organization.id,
+          productId: validated.id,
+          branchId: branchScope.branchId ?? null,
+          previousStock: Number(existingProduct.stock_quantity ?? 0),
+          nextStock: Number(desiredStockQuantity),
+          userId: user.id,
+          notes: 'Ajuste desde la edicion del producto',
+        })
+      } catch (movementError) {
+        logger.error('No se pudo registrar el movimiento de stock', {
+          productId: validated.id,
+          error: movementError instanceof Error ? movementError.message : String(movementError),
+        })
+      }
     }
 
     const { data: refreshedProduct, error: refreshedProductError } = await supabase
